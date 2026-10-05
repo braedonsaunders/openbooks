@@ -1073,6 +1073,10 @@
           "label": "Crescimento — janela de tendência (meses)",
           "help": "Meses por lado ao comparar a janela recente com a anterior"
         },
+        "yoyRecentMonths": {
+          "label": "Crescimento — janela anual (meses)",
+          "help": "Meses recentes comparados com os mesmos meses do ano anterior"
+        },
         "cohortActiveMonths": {
           "label": "Coortes — ativo em (meses)",
           "help": "Um cliente com pedido nestes meses conta como ativo"
@@ -1113,6 +1117,7 @@
       "payment": "Pagamento",
       "projectedClv": "CLV projetado",
       "recommendation": "Recomendação",
+      "download": "Exportar CSV",
       "segment": "Segmento"
     },
     "customersCount": "{count} clientes",
@@ -1207,7 +1212,7 @@
       "atRiskCustomers": "Clientes em risco ({count})",
       "atRiskHint": "Escore de churn: recentidade 0–{recMax} (>{highDays}d/>{medDays}d/>{lowDays}d) + queda de ritmo 0–{cadMax} ({highX}×/{lowX}× da própria média) + baixo engajamento 0–{engMax} (≤{singleTxns}/≤{fewTxns} pedidos)",
       "clvRanking": "Ranking de valor do ciclo de vida",
-      "cohortHint": "Por ano do primeiro pedido · ativo = pediu nos últimos {months} meses",
+      "cohortHint": "Por ano fiscal do primeiro pedido · ativo = pediu nos últimos {months} meses",
       "cohortRetention": "Retenção de coortes",
       "customerHealth": "Saúde de clientes ({count})",
       "customerHealthHint": "Ponderado {recency} % recência · {frequency} % frequência · {monetary} % valor · {payment} % pagamentos, menos atrito",
@@ -1325,7 +1330,7 @@
     },
     "sources": {
       "cohortsBold": "Coortes:",
-      "cohortsTail": " histórico de faturas vitalício agrupado por ano do primeiro pedido; ativo = pediu nos últimos 6 meses.",
+      "cohortsTail": " histórico de faturas vitalício agrupado por ano fiscal do primeiro pedido; ativo = pediu nos últimos 6 meses.",
       "frictionBold": "Atrito:",
       "frictionTail": " apenas notas de crédito — este razão não tem documentos de autorização de devolução, então o componente de devolução é sempre 0.",
       "intelligenceBold": "Escore de inteligência:",
@@ -1431,7 +1436,8 @@
     "txnsCount": "{count} transações",
     "errors": {
       "paymentStatsUnavailable": "As estatísticas de pagamento de clientes não foram carregadas. Recarregue este painel.",
-      "scoringWeightsInvalid": "Os pesos {keys} somam {actual}, não {total} — corrija na Configuração deste painel.",
+      "scoringWeightsInvalid": "Os pesos {keys} somam {actual}, não {total} — corrija em Inteligência de clientes → Configuração.",
+      "scoringWeightsUnreadable": "Os pesos {keys} não são todos números — corrija em Inteligência de clientes → Configuração.",
       "intelligenceUnavailable": "Nenhum indicador de inteligência de clientes pontua com os pesos configurados — corrija na Configuração deste painel."
     },
     "rating": {

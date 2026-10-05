@@ -42,8 +42,8 @@ export interface CustomerStrings {
   recWinBack: string;
   recNurture: string;
   recOnboard: string;
-  /** `marginPct` is pre-rendered ("12.3", matching the legacy toFixed(1)). */
-  recReprice(marginPct: string): string;
+  /** `marginPct` renders with one decimal in the request locale. */
+  recReprice(marginPct: number): string;
   recReview: string;
   /** The shared A+/A/B/C/D/F grade ladder, read from the scoring config. */
   intelligenceScore(score: number, grades: GradeLadder): { label: string; grade: string };
@@ -52,14 +52,17 @@ export interface CustomerStrings {
   churnRisk(count: number, revenue: string): CustomerInsightText;
   champions(count: number, revenue: string): CustomerInsightText;
   /** `share` is pre-rendered (legacy toFixed(1)). */
-  concentration(share: string, hhi: number): CustomerInsightText;
+  /** Both figures render in the request locale: share with one decimal, HHI grouped. */
+  concentration(share: number, hhi: number): CustomerInsightText;
   declining(growth: number): CustomerInsightText;
   growing(growth: number, newCustomers: number): CustomerInsightText;
   overdue(count: number): CustomerInsightText;
   /** Loader refusal when the settlement pipeline yields no payment statistics. */
   paymentStatsUnavailable(): string;
   /** Loader refusal when a hand-edited weight group no longer sums to 100. */
-  scoringWeightsInvalid(keys: string, total: number, actual: number): string;
+  scoringWeightsInvalid(keys: string[], total: number, actual: number): string;
+  /** Loader refusal when a hand-edited weight is missing or not a number. */
+  scoringWeightsUnreadable(keys: string[]): string;
   /** Loader refusal when no intelligence term carries weight under the configured weights. */
   intelligenceUnavailable(): string;
 }
@@ -67,6 +70,19 @@ export interface CustomerStrings {
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function customerStrings(t: CatalogMessageFn, locale: string): CustomerStrings {
   const monthLabel = catalogMonthLabel(t);
+  // Percents render in the request locale (12,3 not 12.3): numeric args
+  // arrive unformatted and cross here, never via toFixed upstream.
+  const pct1 = (value: number): string =>
+    new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+  const int0 = (value: number): string =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+  const fieldLabel = (key: string): string => {
+    try {
+      return t(`customer.config.fields.${key}.label` as Parameters<typeof t>[0]);
+    } catch {
+      return key;
+    }
+  };
   return {
     locale,
     monthLabel,
@@ -83,7 +99,7 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
     recWinBack: t("customer.insights.recWinBack"),
     recNurture: t("customer.insights.recNurture"),
     recOnboard: t("customer.insights.recOnboard"),
-    recReprice: (marginPct) => t("customer.insights.recReprice", { pct: marginPct }),
+    recReprice: (marginPct) => t("customer.insights.recReprice", { pct: pct1(marginPct) }),
     recReview: t("customer.insights.recReview"),
     intelligenceScore: (score, grades) => {
       if (score >= grades.aPlus) return { label: t("customer.insights.scoreExcellent"), grade: "A+" };
@@ -109,7 +125,7 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
     }),
     concentration: (share, hhi) => ({
       title: t("customer.insights.concentration.title"),
-      message: t("customer.insights.concentration.message", { share, hhi }),
+      message: t("customer.insights.concentration.message", { share: pct1(share), hhi: int0(hhi) }),
       action: t("customer.insights.concentration.action"),
     }),
     declining: (growth) => ({
@@ -128,7 +144,16 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
     }),
     paymentStatsUnavailable: () => t("customer.errors.paymentStatsUnavailable"),
     scoringWeightsInvalid: (keys, total, actual) =>
-      t("customer.errors.scoringWeightsInvalid", { keys, total, actual }),
+      t("customer.errors.scoringWeightsInvalid", {
+        // Operators fix fields by their translated editor labels, never by
+        // the camelCase storage keys — an unknown key renders raw rather
+        // than dropping the refusal.
+        keys: keys.map(fieldLabel).join(", "),
+        total,
+        actual,
+      }),
+    scoringWeightsUnreadable: (keys) =>
+      t("customer.errors.scoringWeightsUnreadable", { keys: keys.map(fieldLabel).join(", ") }),
     intelligenceUnavailable: () => t("customer.errors.intelligenceUnavailable"),
   };
 }

@@ -1073,6 +1073,10 @@
           "label": "Crecimiento — ventana de tendencia (meses)",
           "help": "Meses por lado al comparar la ventana reciente con la anterior"
         },
+        "yoyRecentMonths": {
+          "label": "Crecimiento — ventana interanual (meses)",
+          "help": "Meses recientes comparados con los mismos meses del año anterior"
+        },
         "cohortActiveMonths": {
           "label": "Cohortes — activo en (meses)",
           "help": "Un cliente con pedido en estos meses cuenta como activo"
@@ -1113,6 +1117,7 @@
       "payment": "Pago",
       "projectedClv": "CLV proyectado",
       "recommendation": "Recomendación",
+      "download": "Exportar CSV",
       "segment": "Segmento"
     },
     "customersCount": "{count} clientes",
@@ -1207,7 +1212,7 @@
       "atRiskCustomers": "Clientes en riesgo ({count})",
       "atRiskHint": "Puntuación de fuga: antigüedad 0–{recMax} (>{highDays} d/>{medDays} d/>{lowDays} d) + caída de cadencia 0–{cadMax} ({highX}×/{lowX}× su media) + bajo compromiso 0–{engMax} (≤{singleTxns}/≤{fewTxns} pedidos)",
       "clvRanking": "Clasificación por valor de vida",
-      "cohortHint": "Por año del primer pedido · activo = pidió en los últimos {months} meses",
+      "cohortHint": "Por año fiscal del primer pedido · activo = pidió en los últimos {months} meses",
       "cohortRetention": "Retención por cohorte",
       "customerHealth": "Salud del cliente ({count})",
       "customerHealthHint": "Ponderado {recency} % recencia · {frequency} % frecuencia · {monetary} % valor · {payment} % pagos, menos fricción",
@@ -1325,7 +1330,7 @@
     },
     "sources": {
       "cohortsBold": "Cohortes:",
-      "cohortsTail": " historial de facturas de vida agrupado por año del primer pedido; activo = pidió en los últimos 6 meses.",
+      "cohortsTail": " historial de facturas de vida agrupado por año fiscal del primer pedido; activo = pidió en los últimos 6 meses.",
       "frictionBold": "Fricción:",
       "frictionTail": " solo notas de crédito — este libro mayor no tiene documentos de autorización de devolución, así que el componente de devoluciones siempre es 0.",
       "intelligenceBold": "Puntuación de inteligencia:",
@@ -1431,7 +1436,8 @@
     "txnsCount": "{count} trans.",
     "errors": {
       "paymentStatsUnavailable": "No se cargaron las estadísticas de pago de clientes. Vuelve a cargar este panel.",
-      "scoringWeightsInvalid": "Las ponderaciones {keys} suman {actual}, no {total}: corrígelas en la Configuración de este panel.",
+      "scoringWeightsInvalid": "Las ponderaciones {keys} suman {actual}, no {total}: corrígelas en Inteligencia de clientes → Configuración.",
+      "scoringWeightsUnreadable": "Las ponderaciones {keys} no son todas números: corrígelas en Inteligencia de clientes → Configuración.",
       "intelligenceUnavailable": "Ningún indicador de inteligencia de clientes puntúa con las ponderaciones configuradas: corrígelas en la Configuración de este panel."
     },
     "rating": {

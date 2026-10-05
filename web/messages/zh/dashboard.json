@@ -322,7 +322,9 @@
     "moderate": "中等",
     "high": "高"
   },
-  "concentrationHint": "{level}·最大占比 {share}",
+  "concentrationHint": "{level}·前5大 {share}·{period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "近期收入（{period}）",
   "atRiskCount": "{count, plural, one {# 家客户} other {# 家客户}}",
   "concentrationNoRevenue": "{period}没有已确认客户收入",
   "churnScore": "流失评分 {score}",

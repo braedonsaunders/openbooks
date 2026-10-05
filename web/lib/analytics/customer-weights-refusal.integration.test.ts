@@ -30,8 +30,9 @@ test('customer loaders refuse a broken weight sum in the payload, never a throw'
     await pinClock('2026-07-15', async () => {
       const full = await withOrgContext(scratch.orgId, () => customerData(period, scratch.orgId, null))
       assert.ok(full.weightsError, 'the full loader must carry the refusal')
-      assert.ok(full.weightsError.includes('healthWeightRecency'), `the refusal must name the broken group, got: ${full.weightsError}`)
-      assert.ok(full.weightsError.includes('Configuration'), `the refusal must name the reachable remedy, got: ${full.weightsError}`)
+      assert.ok(full.weightsError.includes('Health — recency weight (%)'), `the refusal must name the broken group by label, got: ${full.weightsError}`)
+      assert.ok(!full.weightsError.includes('healthWeightRecency'), `no raw storage key may reach the operator, got: ${full.weightsError}`)
+      assert.ok(full.weightsError.includes('Customer Intelligence → Configuration'), `the refusal must name the reachable remedy, got: ${full.weightsError}`)
       assert.deepEqual(full.rows, [])
       assert.equal(full.config.healthWeightRecency, 24)
       const summary = await withOrgContext(scratch.orgId, () => customerSummaryData(period, scratch.orgId, null))

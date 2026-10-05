@@ -2,11 +2,13 @@ import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
 import {
   concentrationOf,
-  customerData,
-  rankAtRiskCustomers,
+  customerSummaryData,
   type ConcentrationSummary,
 } from '@/lib/analytics/customer-data'
-import { customerStrings } from '@/lib/analytics/customer-strings'
+
+/** The tile states the period beside the figure: a share without one misleads. */
+type WithPeriod<T> = T & { period: string }
+import { customerStrings as buildCustomerStrings } from '@/lib/analytics/customer-strings'
 import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
@@ -15,32 +17,36 @@ import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
  * Dashboard widget readers for Customer Intelligence: revenue
  * concentration, customers at churn risk, and the highest-risk list.
  *
- * Every figure is the Customer Intelligence engine's own for the period the
- * dashboard opens on: one engine run per request feeds the concentration,
- * at-risk and list widgets, so a tile and its dashboard can never disagree.
- * Each field is read only when a visible widget lists it in
- * WIDGET_METRIC_FIELDS (_metrics.ts): a denied or absent widget's reader
- * never runs.
+ * Every figure is the Customer Intelligence preview's own for the period
+ * the dashboard opens on: one narrow engine run per request — churn and
+ * concentration off the same base the dashboard scores, without lifetime
+ * cohorts, settlement detail, project profitability, DSO statistics or the
+ * intelligence composite — feeds all three widgets, so a tile and its
+ * dashboard can never disagree. Each field is read only when a visible
+ * widget lists it in WIDGET_METRIC_FIELDS (_metrics.ts): a denied or
+ * absent widget's reader never runs.
  */
 export type AtRiskSummary = {
   /** Customers at or above the configured high-churn score. */
   count: number
   /** Their trailing revenue, an exact decimal string in presentation currency. */
   revenue: string
+  /** The period label the revenue trails, rendered on the tile. */
+  period: string
 }
 
 export type AtRiskCustomer = {
   id: string
   name: string
   churnLevel: 'critical' | 'high'
-  /** Churn points, higher is riskier; the list ranks by this. */
+  /** Churn points, higher is riskier; the engine ranks by this. */
   churnScore: number
   /** Trailing revenue, an exact decimal string in presentation currency. */
   revenue: string
 }
 
 export type CustomerWidgetMetrics = {
-  concentration: WidgetValue<ConcentrationSummary> | null
+  concentration: WidgetValue<WithPeriod<ConcentrationSummary>> | null
   atRisk: WidgetValue<AtRiskSummary> | null
   atRiskCustomers: WidgetValue<AtRiskCustomer[]> | null
 }
@@ -82,8 +88,8 @@ export async function loadCustomerWidgetMetrics(
       getTranslations('dashboard'),
       getLocale(),
     ])
-    const strings = customerStrings((key, values) => t(key, values), locale)
-    const data = await customerData(
+    const strings = buildCustomerStrings((key, values) => t(key, values), locale)
+    const data = await customerSummaryData(
       { from: period.from, to: period.to, label: period.label },
       ctx.orgId,
       ctx.allowedSubsidiaryIds,
@@ -108,23 +114,22 @@ export async function loadCustomerWidgetMetrics(
       const summary = concentrationOf(data.kpis)
       out.concentration = summary === null
         ? { available: false, reason: td('concentrationNoRevenue', { period: period.label }) }
-        : { available: true, value: summary }
+        : { available: true, value: { ...summary, period: period.label } }
     }
     if (wantAtRisk) {
       out.atRisk = {
         available: true,
-        value: { count: data.kpis.atRiskCount, revenue: data.kpis.atRiskRevenue },
+        value: { count: data.kpis.atRiskCount, revenue: data.kpis.atRiskRevenue, period: period.label },
       }
     }
     if (wantList) {
       // Ranked in the engine; the tile renders the order it is given.
-      const ranked = rankAtRiskCustomers(data.rows)
       out.atRiskCustomers = {
         available: true,
-        value: ranked.map((r) => ({
+        value: data.atRisk.map((r) => ({
           id: r.id,
           name: r.name,
-          churnLevel: r.churnLevel as 'critical' | 'high',
+          churnLevel: r.churnLevel,
           churnScore: r.churnScore,
           revenue: r.revenue,
         })),

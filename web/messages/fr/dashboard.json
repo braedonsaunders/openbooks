@@ -322,7 +322,9 @@
     "moderate": "Modérée",
     "high": "Élevée"
   },
-  "concentrationHint": "{level} · premier {share}",
+  "concentrationHint": "{level} · 5 premiers {share} · {period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "Chiffre d’affaires récent, {period}",
   "atRiskCount": "{count, plural, one {# client} other {# clients}}",
   "concentrationNoRevenue": "Aucun chiffre d’affaires client comptabilisé sur {period}",
   "churnScore": "score d’attrition {score}",

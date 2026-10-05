@@ -322,7 +322,9 @@
     "moderate": "Moderate",
     "high": "High"
   },
-  "concentrationHint": "{level} · top {share}",
+  "concentrationHint": "{level} · top 5 {share} · {period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "Trailing revenue, {period}",
   "atRiskCount": "{count, plural, one {# customer} other {# customers}}",
   "concentrationNoRevenue": "No recognized customer revenue in {period}",
   "churnScore": "churn score {score}",

@@ -1073,6 +1073,10 @@
           "label": "增长 — 趋势窗口（月）",
           "help": "比较近期与前期窗口时每侧的月数"
         },
+        "yoyRecentMonths": {
+          "label": "增长 — 同比窗口（月）",
+          "help": "与上年相同月份比较的最近月数"
+        },
         "cohortActiveMonths": {
           "label": "同期群 — 活跃期（月）",
           "help": "在此月数内下过单的客户计为活跃"
@@ -1113,6 +1117,7 @@
       "payment": "回款",
       "projectedClv": "预测CLV",
       "recommendation": "建议措施",
+      "download": "导出CSV",
       "segment": "细分"
     },
     "customersCount": "{count}个客户",
@@ -1207,7 +1212,7 @@
       "atRiskCustomers": "高风险客户（{count}）",
       "atRiskHint": "流失评分：近期性0–{recMax}（超{highDays}天/超{medDays}天/超{lowDays}天）+频率下滑0–{cadMax}（自身均值的{highX}倍/{lowX}倍）+低互动0–{engMax}（≤{singleTxns}/≤{fewTxns}单）",
       "clvRanking": "生命周期价值排名",
-      "cohortHint": "按首次下单年份 · 活跃=近{months}个月内下过单",
+      "cohortHint": "按首次下单财年 · 活跃=近{months}个月内下过单",
       "cohortRetention": "同期群留存",
       "customerHealth": "客户健康度（{count}）",
       "customerHealthHint": "加权：近度{recency}％・频度{frequency}％・金额{monetary}％・回款{payment}％并扣除摩擦分",
@@ -1325,7 +1330,7 @@
     },
     "sources": {
       "cohortsBold": "同期群：",
-      "cohortsTail": " 按首次下单年份分组的终身发票历史；活跃=近6个月内下过单。",
+      "cohortsTail": " 按首次下单财年分组的终身发票历史；活跃=近6个月内下过单。",
       "frictionBold": "摩擦：",
       "frictionTail": " 仅贷项——本账簿没有退货授权单据，因此退货项恒为0。",
       "intelligenceBold": "智能评分：",
@@ -1431,7 +1436,8 @@
     "txnsCount": "{count}笔交易",
     "errors": {
       "paymentStatsUnavailable": "未能加载客户付款统计信息。请重新加载此仪表板。",
-      "scoringWeightsInvalid": "权重{keys}合计为{actual}而非{total}，请在此仪表板的配置中修正。",
+      "scoringWeightsInvalid": "权重{keys}合计为{actual}而非{total}。请在客户智能 → 配置中修正。",
+      "scoringWeightsUnreadable": "权重{keys}并非全为数字。请在客户智能 → 配置中修正。",
       "intelligenceUnavailable": "按配置的权重，没有客户智能输入被评分，请在此仪表板的配置中修正。"
     },
     "rating": {

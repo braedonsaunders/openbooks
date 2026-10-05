@@ -322,7 +322,9 @@
     "moderate": "Moderada",
     "high": "Alta"
   },
-  "concentrationHint": "{level} · maior {share}",
+  "concentrationHint": "{level} · 5 maiores {share} · {period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "Receita recente, {period}",
   "atRiskCount": "{count, plural, one {# cliente} other {# clientes}}",
   "concentrationNoRevenue": "Sem receita reconhecida de clientes em {period}",
   "churnScore": "pontuação de evasão {score}",

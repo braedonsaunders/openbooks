@@ -16,3 +16,18 @@ export function exactMarginPercent(profit: string, revenue: string): number | nu
   if (value === null) throw new Error("CUSTOMER_MARGIN_RATIO_UNDEFINED");
   return Number(value);
 }
+
+/**
+ * The ONE at-risk ordering, shared by the dashboard's churn table and the
+ * home dashboard's list: highest churn score first, score ties broken by
+ * trailing revenue (exact), revenue ties by name. Two surfaces sorting two
+ * ways would show the same customers in different orders — ties are common,
+ * so the comparator lives in this client-safe pure module, next to the
+ * other customer math both sides may import.
+ */
+export function compareAtRiskCustomers(
+  a: { churnScore: number; revenue: string; name: string },
+  b: { churnScore: number; revenue: string; name: string },
+): number {
+  return b.churnScore - a.churnScore || cmp(b.revenue, a.revenue) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+}

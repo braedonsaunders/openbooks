@@ -53,8 +53,9 @@ test('a broken weight sum refuses by name with the reachable remedy, never a thr
   const broken = { ...ANALYTICS_CONFIG.customerIntelligence.defaults, healthWeightRecency: 24 }
   const refusal = weightsRefusal(broken, strings)
   assert.ok(refusal, 'a hand-edited weight group that no longer sums to 100 must refuse')
-  assert.ok(refusal.includes('healthWeightRecency'), `the refusal must name the broken group, got: ${refusal}`)
-  assert.ok(refusal.includes('Configuration'), `the refusal must name the reachable remedy, got: ${refusal}`)
+  assert.ok(refusal.includes('Health — recency weight (%)'), `the refusal must name the broken group by label, got: ${refusal}`)
+  assert.ok(!refusal.includes('healthWeightRecency'), `no raw storage key may reach the operator, got: ${refusal}`)
+  assert.ok(refusal.includes('Customer Intelligence → Configuration'), `the refusal must name the reachable remedy, got: ${refusal}`)
 })
 
 test('no term left means no score, never a 0 that grades as F', () => {
@@ -107,24 +108,26 @@ test('at-risk is critical or high churn only: medium and low stay off the widget
 
 test('the at-risk list ranks the five highest churn scores, medium and low never included', () => {
   const rows = [
-    { id: 'a', name: 'A', churnLevel: 'high', churnScore: 60 },
-    { id: 'b', name: 'B', churnLevel: 'critical', churnScore: 95 },
-    { id: 'c', name: 'C', churnLevel: 'medium', churnScore: 99 },
-    { id: 'd', name: 'D', churnLevel: 'critical', churnScore: 80 },
-    { id: 'e', name: 'E', churnLevel: 'high', churnScore: 70 },
-    { id: 'f', name: 'F', churnLevel: 'low', churnScore: 5 },
-    { id: 'g', name: 'G', churnLevel: 'critical', churnScore: 75 },
-    { id: 'h', name: 'H', churnLevel: 'high', churnScore: 65 },
+    { id: 'a', name: 'A', churnLevel: 'high', churnScore: 60, revenue: '10' },
+    { id: 'b', name: 'B', churnLevel: 'critical', churnScore: 95, revenue: '10' },
+    { id: 'c', name: 'C', churnLevel: 'medium', churnScore: 99, revenue: '10' },
+    { id: 'd', name: 'D', churnLevel: 'critical', churnScore: 80, revenue: '10' },
+    { id: 'e', name: 'Zulu', churnLevel: 'high', churnScore: 70, revenue: '900' },
+    { id: 'f', name: 'F', churnLevel: 'low', churnScore: 5, revenue: '10' },
+    { id: 'g', name: 'G', churnLevel: 'critical', churnScore: 75, revenue: '10' },
+    { id: 'h', name: 'Alpha', churnLevel: 'high', churnScore: 70, revenue: '100' },
   ] as CustomerRow[]
   // Highest churn first; the medium 99 and the low stay off the tile even
-  // though the medium outscores every at-risk row.
+  // though the medium outscores every at-risk row. The Zulu/Alpha tie
+  // breaks by trailing revenue (900 before 100), proving the shared
+  // comparator the dashboard table sorts by.
   assert.deepEqual(rankAtRiskCustomers(rows).map((r) => r.id), ['b', 'd', 'g', 'e', 'h'])
 })
 
 test('concentration reads the dashboard KPIs, never a recomputation', () => {
-  const kpis = { totalRevenue: '1000', hhiScaled: 2450, hhiLevel: 'moderate', customersFor80Pct: 3, topCustomerShare: 42.5 } as CustomerData['kpis']
+  const kpis = { totalRevenue: '1000', hhiScaled: 2450, hhiLevel: 'moderate', customersFor80Pct: 3, top5SharePct: 46 } as CustomerData['kpis']
   assert.deepEqual(concentrationOf(kpis), {
-    hhi: 2450, level: 'moderate', customersFor80Pct: 3, topSharePct: 42.5,
+    hhi: 2450, level: 'moderate', customersFor80Pct: 3, top5SharePct: 46,
   })
 })
 

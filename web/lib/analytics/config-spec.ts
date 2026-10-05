@@ -288,6 +288,7 @@ export const ANALYTICS_CONFIG = {
       growthMomCapDown: 80,
       growthTrendPct: 10,
       growthTrendWindowMonths: 6,
+      yoyRecentMonths: 3,
       cohortActiveMonths: 6,
       overdueInsightCount: 5,
     },
@@ -379,6 +380,7 @@ export const ANALYTICS_CONFIG = {
       num("growthMomCapDown", "analytics.customer.config.fields.growthMomCapDown", 0, 1000),
       pct("growthTrendPct", "analytics.customer.config.fields.growthTrendPct"),
       num("growthTrendWindowMonths", "analytics.customer.config.fields.growthTrendWindowMonths", 2, 12),
+      num("yoyRecentMonths", "analytics.customer.config.fields.yoyRecentMonths", 1, 12),
       num("cohortActiveMonths", "analytics.customer.config.fields.cohortActiveMonths", 1, 24),
       num("overdueInsightCount", "analytics.customer.config.fields.overdueInsightCount", 1, 1000),
     ],
@@ -425,7 +427,7 @@ export const ANALYTICS_CONFIG = {
       { labelKey: "analytics.customer.config.groups.concentration", fields: ["hhiWarning", "hhiCritical", "concentrationCriticalShare", "concentrationHighShare", "concentrationMediumShare", "concentrationCoverageShare", "topSharePct", "concentrationHealthHigh", "concentrationHealthModerate", "concentrationHealthLow"] },
       { labelKey: "analytics.customer.config.groups.friction", fields: ["frictionPointsPerCredit", "frictionCriticalPoints", "frictionHighPoints", "frictionMediumPoints", "frictionPenaltyCritical", "frictionPenaltyHigh", "frictionPenaltyMedium", "frictionCriticalRate", "frictionHighRate", "frictionMediumRate"] },
       { labelKey: "analytics.customer.config.groups.profit", fields: ["profitHighMargin", "profitMediumMargin", "profitLowMargin", "profitLeakMarginTarget", "profitLeakRevenueSharePct"] },
-      { labelKey: "analytics.customer.config.groups.growth", fields: ["growthMaturityFloorPct", "growthMomCapUp", "growthMomCapDown", "growthTrendPct", "growthTrendWindowMonths", "cohortActiveMonths", "overdueInsightCount"] },
+      { labelKey: "analytics.customer.config.groups.growth", fields: ["growthMaturityFloorPct", "growthMomCapUp", "growthMomCapDown", "growthTrendPct", "growthTrendWindowMonths", "yoyRecentMonths", "cohortActiveMonths", "overdueInsightCount"] },
     ],
   },
   utilization: {
@@ -626,6 +628,8 @@ export interface SumsToViolation {
   keys: readonly string[];
   total: number;
   actual: number;
+  /** A listed key is missing or not a finite number: no sum exists to state. */
+  unreadable?: boolean;
 }
 
 /**
@@ -649,7 +653,13 @@ export function checkSumsTo(
       }
       actual += value;
     }
-    if (readable && Math.abs(actual - rule.total) > 1e-9) {
+    // An unreadable key refuses like a broken sum: a hand-edited blob
+    // bypasses the write validation that would have caught the wrong type,
+    // so passing it here would silently rescale every figure below.
+    if (!readable) {
+      return { keys: rule.keys, total: rule.total, actual: Number.NaN, unreadable: true };
+    }
+    if (Math.abs(actual - rule.total) > 1e-9) {
       return { keys: rule.keys, total: rule.total, actual };
     }
   }

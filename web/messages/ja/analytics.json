@@ -1073,6 +1073,10 @@
           "label": "成長 — トレンド期間（月）",
           "help": "直近と前期を比較する片側の月数"
         },
+        "yoyRecentMonths": {
+          "label": "成長 — 前年同月比の期間（月）",
+          "help": "前年同月と比較する直近月数"
+        },
         "cohortActiveMonths": {
           "label": "コホート — アクティブ期間（月）",
           "help": "この月数以内に注文した顧客はアクティブ"
@@ -1113,6 +1117,7 @@
       "payment": "支払",
       "projectedClv": "予測CLV",
       "recommendation": "推奨対応",
+      "download": "CSVをエクスポート",
       "segment": "セグメント"
     },
     "customersCount": "{count}社",
@@ -1207,7 +1212,7 @@
       "atRiskCustomers": "要注意得意先（{count}）",
       "atRiskHint": "離反スコア：レセンシー0–{recMax}（{highDays}日超/{medDays}日超/{lowDays}日超）＋頻度低下0–{cadMax}（自社平均の{highX}倍/{lowX}倍）＋低関与0–{engMax}（{singleTxns}件以下/{fewTxns}件以下）",
       "clvRanking": "生涯価値ランキング",
-      "cohortHint": "初回発注年別 · アクティブ＝過去{months}か月以内に発注",
+      "cohortHint": "初回発注会計年度別 · アクティブ＝過去{months}か月以内に発注",
       "cohortRetention": "コホート維持率",
       "customerHealth": "得意先健全性（{count}）",
       "customerHealthHint": "加重：最新度{recency}％・頻度{frequency}％・金額{monetary}％・入金{payment}％から摩擦分を減点",
@@ -1325,7 +1330,7 @@
     },
     "sources": {
       "cohortsBold": "コホート：",
-      "cohortsTail": " 初回発注年別の生涯請求書履歴。アクティブ＝過去6か月以内に発注。",
+      "cohortsTail": " 初回発注会計年度別の生涯請求書履歴。アクティブ＝過去6か月以内に発注。",
       "frictionBold": "摩擦：",
       "frictionTail": " クレジットメモのみ — この元帳には返品承認書類がないため、返品要素は常に0。",
       "intelligenceBold": "インテリジェンススコア：",
@@ -1431,7 +1436,8 @@
     "txnsCount": "{count}件の取引",
     "errors": {
       "paymentStatsUnavailable": "顧客の支払統計を読み込めませんでした。このダッシュボードを再読み込みしてください。",
-      "scoringWeightsInvalid": "重み{keys}の合計が{actual}で{total}になりません。このダッシュボードの設定で修正してください。",
+      "scoringWeightsInvalid": "重み{keys}の合計が{actual}で{total}になりません。得意先インテリジェンス → 設定で修正してください。",
+      "scoringWeightsUnreadable": "重み{keys}がすべて数値ではありません。得意先インテリジェンス → 設定で修正してください。",
       "intelligenceUnavailable": "設定された重みでは顧客インテリジェンスの入力が何も採点されません。このダッシュボードの設定で修正してください。"
     },
     "rating": {
