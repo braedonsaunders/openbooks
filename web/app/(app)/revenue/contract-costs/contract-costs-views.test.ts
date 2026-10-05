@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-Object.assign(globalThis, { __costViewsOrg: [{ base_currency: 'USD' }] })
+const state = { org: [{ base_currency: 'USD' }] }
+Object.assign(globalThis, { __costViewsState: state })
 const { stubModules } = await import('../../../../testing/stub-modules')
 stubModules({
   intl: true,
@@ -20,7 +21,7 @@ stubModules({
       `if (s.includes('journal_lines')) return { rows: [{ carrying: '0' }] };` +
       `if (s.includes('contract_cost_amortization')) return { rows: [] };` +
       `if (s.includes('from currencies')) return { rows: [{ minor_units: 2 }] };` +
-      `if (s.includes('from orgs')) return { rows: globalThis.__costViewsOrg };` +
+      `if (s.includes('from orgs')) return { rows: globalThis.__costViewsState.org };` +
       `if (s.includes('count(*)')) return { rows: [{ n: '0' }] };` +
       `return { rows: [] } } }`,
     '../../../../lib/setup/ref-options':
@@ -70,7 +71,7 @@ test('contract-costs sibling tabs preserve workspace filters', async () => {
  * name with the account/access remedy.
  */
 test('contract-costs refuses by name when the org is unavailable', async () => {
-  globalThis.__costViewsOrg = []
+  state.org = []
   try {
     await assert.rejects(
       () => loadContractCosts({}),
@@ -83,7 +84,7 @@ test('contract-costs refuses by name when the org is unavailable', async () => {
       },
     )
   } finally {
-    globalThis.__costViewsOrg = [{ base_currency: 'USD' }]
+    state.org = [{ base_currency: 'USD' }]
   }
 })
 

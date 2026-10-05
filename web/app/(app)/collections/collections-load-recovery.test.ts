@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-Object.assign(globalThis, {
+const state = {
   __recoveryCalls: [] as [string, string][],
   __recoveryAttemptId: '11111111-1111-1111-1111-111111111111',
   __recoverySql: [] as string[],
-})
+}
+Object.assign(globalThis, state)
 const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({
   navigation: true,
@@ -62,7 +63,7 @@ const { loadCollections } = await import('./view.ts')
  */
 test('recovery resolves its drill link through the built-in report contract', async () => {
   const data = await loadCollections({})
-  assert.deepEqual(globalThis.__recoveryCalls, [['org-1', 'collection-recovery-rate']])
+  assert.deepEqual(state.__recoveryCalls, [['org-1', 'collection-recovery-rate']])
   assert.equal(data.recovery?.recoveryReportId, 'report-9')
   assert.equal(data.recovery?.canRunReport, true)
   assert.equal(data.onRecovery, true)
@@ -77,12 +78,12 @@ test('recovery resolves its drill link through the built-in report contract', as
  * then creation time, then id — so the loader's first-row win is stable.
  */
 test('expiring rows carry their own party currency, never the book default', async () => {
-  globalThis.__recoverySql.length = 0
+  state.__recoverySql.length = 0
   const data = await loadCollections({})
   const expiring = data.recovery?.expiring ?? []
   assert.equal(expiring.find((row) => row.partyId === 'p1')?.currency, 'EUR')
   assert.equal(expiring.find((row) => row.partyId === 'p2')?.currency, null)
-  const currencyQuery = globalThis.__recoverySql.find((s) => s.includes('customer_invoice'))
+  const currencyQuery = state.__recoverySql.find((s) => s.includes('customer_invoice'))
   assert.ok(currencyQuery, 'the loader reads per-party invoice currencies')
   assert.ok(
     currencyQuery.includes('order by d.document_date desc, d.created_at desc, d.id desc'),
@@ -99,7 +100,7 @@ test('view tabs preserve filters and the attempt drawer closes onto its list', a
   const recoveryTab = filtered.tabs.find((tab) => tab.href.includes('view=recovery'))
   assert.ok(recoveryTab?.href.includes('status=failed'), 'the recovery tab keeps the list filter')
 
-  const withAttempt = await loadCollections({ attempt: globalThis.__recoveryAttemptId })
+  const withAttempt = await loadCollections({ attempt: state.__recoveryAttemptId })
   assert.equal(withAttempt.activeView, 'attempts')
   assert.equal(
     withAttempt.attemptDrawer?.props.drawer.closeHref,

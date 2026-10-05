@@ -41,8 +41,11 @@ for (const failedPath of ['policies', 'suggestions']) {
     const save = [...document.querySelectorAll('button')].find((b) => b.textContent === 'policy.save')
     assert.ok(save && !save.disabled)
     await act(async () => save.click())
-    assert.equal((writes[0] as { leadTimeDays: number }).leadTimeDays, 12)
-    assert.equal((writes[0] as { forecastMethod: string }).forecastMethod, 'seasonal')
+    const saved = writes.at(0)
+    assert.ok(saved && typeof saved === 'object', 'retry saves the restored policy body')
+    assert.ok('leadTimeDays' in saved && 'forecastMethod' in saved)
+    assert.equal(saved.leadTimeDays, 12)
+    assert.equal(saved.forecastMethod, 'seasonal')
   })
 }
 
