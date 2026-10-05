@@ -2,8 +2,8 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { setPostingPolicy } from "@openbooks/engine/src/commerce/posting-policies.ts";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
+import { setPostingPolicy } from "@openbooks/engine/commerce";
+import { CommerceError } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

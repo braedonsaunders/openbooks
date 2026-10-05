@@ -2,14 +2,14 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listChannels } from '@openbooks/engine/src/commerce/channels.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { listChannels } from '@openbooks/engine/commerce'
 import {
   getPostingPolicy,
   listPostingPolicies,
   type ChannelPostingPolicy,
-} from '@openbooks/engine/src/commerce/posting-policies.ts'
-import { isoDateOf } from '@openbooks/engine/src/platform/civil-date.ts'
+} from '@openbooks/engine/commerce'
+import { isoDateOf } from '@openbooks/engine/platform/civil-date'
 import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
