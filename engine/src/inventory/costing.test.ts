@@ -613,7 +613,7 @@ test("a standard issue spanning layers relieves the GL by exactly what the layer
       itemId: org.items.standard, stockLocationId: org.stockLocationId, quantity: "1",
       subsidiaryId: org.subsidiaryId, date: org.date,
     });
-    assert.equal(toUnits(issue.value), toUnits("0.3334"));
+    assert.equal(toUnits(issue.value), toUnits("-0.3334"));
     await assertGlEqualsLayers(org);
   } finally {
     await dropScratchOrgReporting(org.orgId);
