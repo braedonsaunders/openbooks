@@ -24,7 +24,9 @@ import {
   computeUsEmployerWithholding, computeUsWithholding, usSubRegionRateIndex,
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
-import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import {
+  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS,
+} from "./opening-ytd.ts";
 import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { loadUsFilingAccounts, resolveUsEmployerScope, resolveUsStateSuiAccount } from "./employer-scope.ts";
@@ -290,10 +292,19 @@ export async function usEmployeeYtd(
     ? sql`s.filing_account_id is null`
     : sql`s.filing_account_id = any(${`{${scope.stubAccountIds.join(",")}}`}::uuid[])`;
   const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
+  // The per-EIN carry-in for the run's employer (see ./opening-ytd.ts); the
+  // legacy employee-only column beside it is zero whenever this is set.
+  const einCarryIn = (programKey: string) => sql`
+    coalesce((select insurable_ytd from payroll_opening_account_bases
+               where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+                 and tax_year = ${taxYear} and program_key = ${programKey}
+                 and filing_account_id = ${scope.federalAccountId}::uuid
+                 and region is null), 0)`;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + ${einCarryIn(US_FICA_WAGES_ACCOUNT_BASE)}
       + coalesce(sum(s.pensionable_earnings), 0) as fica,
       coalesce((select insurable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
@@ -333,11 +344,7 @@ export async function usEmployeeYtd(
          where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
            and sw.state = ${region}
       ), '0') as "suiOpeningCurrentRegion",
-      coalesce((select insurable_ytd from payroll_opening_account_bases
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-                   and tax_year = ${taxYear} and program_key = 'us_futa'
-                   and filing_account_id = ${scope.federalAccountId}::uuid
-                   and region is null), 0)
+      ${einCarryIn("us_futa")}
       + coalesce(sum(s.insurable_earnings), 0) as "futaCurrentAccount",
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
@@ -369,6 +376,7 @@ export async function usEmployeeYtd(
       ), ARRAY[]::text[]) as "regularWageTaxWithheldKeys",
       coalesce((select ${sql.raw(ficaWithheldColumn)} from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + ${einCarryIn(US_FICA_WITHHELD_ACCOUNT_BASE)}
       + coalesce(sum((s.factors->>'SS')::numeric), 0)
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
       + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax,

@@ -1197,9 +1197,17 @@ export async function saveOpeningBalances(input: {
           const declared = declaredAccountBases.find((field) =>
             field.country === (countryById.get(row.employeePartyId) ?? "") && field.programKey === base.programKey);
           const legacyField = declared?.replacesLegacyField as keyof OpeningBalanceAmounts | undefined;
-          if (legacyField && cmp(amounts[legacyField] ?? "0", "0") !== 0) {
+          // The pack's statutory engine and its year-end slips read the
+          // filing-account column AND the legacy column it replaces, so an
+          // amount in both counts twice; the remedy keeps the scoped column,
+          // the one every reader resolves for the account.
+          if (legacyField && cmp(amounts[legacyField] ?? "0", "0") !== 0
+            && cmp(base.insurableYtd, "0") !== 0) {
+            const legacyLabel = FIELD_BY_KEY.get(legacyField)?.label ?? legacyField;
             throw new PayrollError(
-              `${base.programKey} and employee-only ${legacyField} both carry amounts. Move the prior-provider amount into the filing-account-scoped column to avoid reporting it twice.`,
+              `${declared!.label} and the employee-only ${legacyLabel} carry-in both hold amounts, so the `
+              + `prior-provider amount would count twice. Enter it once: keep it in ${declared!.label} for this `
+              + `filing account and set ${legacyLabel} to zero.`,
             );
           }
         }

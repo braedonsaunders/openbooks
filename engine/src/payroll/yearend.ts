@@ -4,6 +4,7 @@ import { db } from "../platform/db.ts";
 import { openingProgramBasesByEmployee } from "./opening-balances.ts";
 import { add, cmp, mulRate, neg, normalizeMoney } from "../money/money.ts";
 import { ratesForPayDate } from "./us/rates.ts";
+import { US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE } from "./us/opening-ytd.ts";
 import {
   effectiveFilingAccountSql,
   assertPayrollFilingAccountKnown,
@@ -1476,8 +1477,8 @@ export function openingAccountYtdIntoW2Slip(
   const byAccount = (key: string) => values[key]?.find((base) => base.filingAccountId === slip.filingAccountId)?.insurableYtd ?? "0";
   const taxableYtd = byAccount("us_w2_taxable");
   const taxYtd = byAccount("us_w2_tax");
-  const ficaWages = byAccount("us_w2_fica_wages");
-  const ficaWithheld = byAccount("us_w2_fica_withheld");
+  const ficaWages = byAccount(US_FICA_WAGES_ACCOUNT_BASE);
+  const ficaWithheld = byAccount(US_FICA_WITHHELD_ACCOUNT_BASE);
   const split = ficaRates && cmp(ficaWithheld, "0") !== 0
     ? splitFicaWithheld(ficaWithheld, ficaWages, ficaRates)
     : null;
@@ -1699,7 +1700,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // federal boxes (the slip says so).
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
   const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0
-    || (o.accountBasesYtd?.us_w2_fica_withheld ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0))
+    || (o.accountBasesYtd?.[US_FICA_WITHHELD_ACCOUNT_BASE] ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0))
     ? usFicaSplitRates(taxYear)
     : null;
   type StateGroup = {
