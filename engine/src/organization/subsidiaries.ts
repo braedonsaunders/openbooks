@@ -502,6 +502,23 @@ export async function intercompanyBalancingLegs(
       const last = originLegs[originLegs.length - 1]!;
       last.amount = addMoney(last.amount, negMoney(residual));
     }
+    // Absorption is only lawful while it stays rounding: the ledger bounds a
+    // subsidiary's total deviation between each stored amount and its exact
+    // translation round(txn × rate, 4) at half a ledger unit per line. A
+    // larger residual means the line rates do not reproduce the functional
+    // amounts, so it is refused here by name rather than folded into the
+    // due-to/from leg for the database to reject.
+    const originRows = [...lines.filter((line) => line.subsidiaryId === originSubId), ...originLegs];
+    let deviation = 0n;
+    for (const row of originRows) {
+      const gap = toUnits(row.amount) - toUnits(mulRate(row.txnAmount ?? row.amount, row.fxRate ?? "1"));
+      deviation += gap < 0n ? -gap : gap;
+    }
+    if (2n * deviation > BigInt(originRows.length)) {
+      throw new SubsidiaryError(
+        `intercompany translation for "${ctx.byId.get(originSubId)?.name}" leaves ${fromUnits(deviation)} of rounding across ${originRows.length} lines, beyond the bound of 0.00005 per line — the line exchange rates do not reproduce the functional amounts; correct the rates or amounts before posting`,
+      );
+    }
   }
 
   for (const subId of bySub.keys()) {
