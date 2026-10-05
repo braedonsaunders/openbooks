@@ -650,20 +650,21 @@ export async function sentinelData(
         -- the floor below compares translated money with translated money.
         -- Uncovered currencies refuse up front (assertFloorCoverage); a NULL
         -- rate here is unreachable, never a silent drop.
-        select *, round(abs(total) * fx_rate * pres_rate, 4) as pres_amt from (
-          select id, document_number, kind, party_id, memo, reference_number, currency, fx_rate,
-                 abs(total) as amt, round(abs(total) * fx_rate, 4) as func_amt,
+        select *, round(func_raw * pres_rate, 4) as pres_amt from (
+          select d.id, d.document_number, d.kind, d.party_id, d.memo, d.reference_number, d.currency, d.fx_rate,
+                 abs(d.total) as amt, round(abs(d.total) * d.fx_rate, 4) as func_amt,
+                 abs(d.total) * d.fx_rate as func_raw,
                  coalesce(s.base_currency, ${presentationCcy}) as func_ccy,
-                 coalesce(document_date, posting_date) as ddate,
+                 coalesce(d.document_date, d.posting_date) as ddate,
                  case when coalesce(s.base_currency, ${presentationCcy}) = ${presentationCcy} then 1
                       else ${spotRateSql(sql`coalesce(s.base_currency, ${presentationCcy})`, sql`coalesce(d.document_date, d.posting_date)`, presentationCcy, orgId)} end as pres_rate
             from documents d
             left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
-           where org_id = ${orgId} and voided_at is null
-             and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
-             and party_id is not null
-             and coalesce(document_date, posting_date) >= ${DUPLICATE_SCAN_FROM}
-             and coalesce(document_date, posting_date) <= ${DUPLICATE_SCAN_TO}
+           where d.org_id = ${orgId} and d.voided_at is null
+             and d.kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
+             and d.party_id is not null
+             and coalesce(d.document_date, d.posting_date) >= ${DUPLICATE_SCAN_FROM}
+             and coalesce(d.document_date, d.posting_date) <= ${DUPLICATE_SCAN_TO}
         ) base
       ), keyed as (
         select *, lower(trim(coalesce(reference_number, ''))) as refkey from cand
@@ -693,7 +694,7 @@ export async function sentinelData(
           row_number() over (partition by q.party_id, q.kind, q.currency, q.amt, q.refkey
                              order by (((m.m->>'date') between ${from} and ${to})) desc,
                                       (m.m->>'date'), (m.m->>'docId')) as rn_anchor
-        from qualified q, jsonb_array_elements(q.members) as m
+        from qualified q, jsonb_array_elements(q.members) as m(m)
       )
       select 'group' as src, t.party_id, coalesce(p.display_name, 'Unknown') as party_name,
         t.kind, t.currency, t.amt::text as amt, t.refkey, t.cnt, t.first_date::text as first_date,
@@ -711,7 +712,7 @@ export async function sentinelData(
       select 'buckets', null::uuid, null::text, null::text, null::text, null::text, null::text,
         null::int, null::text, null::text, null::int, null::jsonb,
         func_ccy, ddate::text, sum(func_amt)::text, null::text, null::bigint
-      from (select (m->>'funcCcy') as func_ccy, (m->>'date')::text as ddate, (m->>'funcAmount')::numeric as func_amt
+      from (select func_ccy, ddate, func_amt::numeric as func_amt
             from ranked_members where rn_amt > 1) excess
       group by func_ccy, ddate
       union all
