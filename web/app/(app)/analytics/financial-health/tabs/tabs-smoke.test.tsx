@@ -155,6 +155,47 @@ test("drivers render both tables in the reader's language", async () => {
   assert.match(text, /Services/);
 });
 
+test("driver verdicts follow sign times favourability, never the column", async () => {
+  // Each side ranks by absolute movement, so the top revenue row here is a
+  // 10000 decline and the top cost row an 8000 saving: the decline reads
+  // bad and the saving reads good. Table name cells are <td>, so the <p>
+  // lookup below only sees the KPI sub-lines carrying the verdict.
+  const drivers = {
+    revenue: [{ id: "a-services", name: "Services", current: "90000.0000", change: "-10000.0000", changePct: -0.1, contribution: 0.5 }],
+    cost: [{ id: "a-salaries", name: "Salaries", current: "92000.0000", change: "-8000.0000", changePct: -0.08, contribution: 0.5 }],
+  };
+  globalThis.__smRouter = { push() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DriversTab onDrill={() => {}} data={{
+            figures, ratios, bands,
+            monthly: [], pnlSummary: [], marginFlow: [],
+            segments: { department: [], class: [], location: [] },
+            drivers,
+            items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
+            insights: [],
+            budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
+          } as never} />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  const sub = (name: string) => [...host.querySelectorAll("p")].find((p) => (p.textContent ?? "").includes(name));
+  assert.match(sub("Services")?.className ?? "", /text-red-600/, "a revenue decline reads bad");
+  assert.match(sub("Salaries")?.className ?? "", /text-emerald-600/, "a cost saving reads good");
+  await act(async () => {
+    root.unmount();
+  });
+  host.remove();
+});
+
 test("items render the detail table in the reader's language", async () => {
   const row = (id: string) => ({ id, name: id, current: "50000.0000", change: "5000.0000", changePct: 0.1, contribution: 0.25 });
   const text = await mount(
