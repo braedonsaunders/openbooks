@@ -312,18 +312,28 @@ test('fixed and percent fees price ISO fils on BHD', { skip: !DB }, async () => 
     const fixedLines = restockingFeeCreditLines(fixed)
     assert.equal(fixedLines.length, 1)
     assert.equal(fixedLines[0]!.amount, '-23.4000')
-    await insertPolicy(org, actorId, {
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+  // Percent runs in its own org: two open default-scope policies would make
+  // the match ambiguous, so each policy scope gets exactly one candidate.
+  const percentOrg = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableReturns(percentOrg.orgId)
+    const percentActorId = await withBypassContext(async () => (await seedFlowActors(percentOrg.orgId)).adminId)
+    await insertPolicy(percentOrg, percentActorId, {
       kind: 'percent', feePercent: '10', effectiveFrom: '2020-01-01',
     })
-    const percent = await withOrg(org.orgId, () => resolveRestockingFee(db, org.orgId, {
+    const percent = await withOrg(percentOrg.orgId, () => resolveRestockingFee(db, percentOrg.orgId, {
       returnDate: '2026-06-01', currency: 'BHD',
       lines: [{ key: 'l1', itemId: null, itemCategory: null, lineTotalMinor: 123400n }],
       waived: false, canWaive: false,
     }))
     assert.equal(percent.totalMinor, '12340')
+    assert.equal(percent.minorUnits, 3)
     assert.equal(restockingFeeCreditLines(percent)[0]!.amount, '-12.3400')
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(percentOrg.orgId))
   }
 })
 
