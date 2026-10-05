@@ -107,8 +107,11 @@ export function groupByVendor(items: OpenItem[], asOf: Date): VendorPayable[] {
     // lines and the tiles cannot disagree on what "past due" means.
     const basis = agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate });
     if (basis && daysBetween(basis, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
-    if (it.dueDate) {
-      const iso = toISO(it.dueDate);
+    // The oldest date owed — the aging basis, not the due date alone, so
+    // an overdue untermed line sets it instead of leaving overdue money
+    // with a null oldest date.
+    if (basis) {
+      const iso = toISO(basis);
       if (!cur.oldestDue || iso < cur.oldestDue) cur.oldestDue = iso;
     }
     map.set(key, cur);
@@ -164,7 +167,7 @@ export async function apPosition(
   });
 
   const summary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg);
-  const current = summary.buckets.find((b) => b.label === "Current")?.amount ?? ZERO_MONEY;
+  const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY;
   const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
   const overdueCount = apItems.filter((it) => it.dueDate && daysBetween(it.dueDate, grid.asOf) > 0).length;
 
