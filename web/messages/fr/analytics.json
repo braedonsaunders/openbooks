@@ -597,6 +597,13 @@
           "label": "Seuil d’anomalie (σ)",
           "help": "Les mois s’écartant de la moyenne de plus de ce nombre d’écarts-types sont signalés comme anomalies"
         }
+      },
+      "groups": {
+        "profitability": "Objectifs de rentabilité",
+        "liquiditySolvency": "Objectifs de liquidité et de solvabilité",
+        "efficiencyOperating": "Objectifs d’efficacité et d’exploitation",
+        "grading": "Notes et seuils de score",
+        "findings": "Seuils des constats"
       }
     },
     "ratioCard": {

@@ -104,6 +104,7 @@ export const GET = defineRoute({
     defaults: spec.defaults,
     fields: spec.fields,
     ordered: "ordered" in spec ? spec.ordered : [],
+    groups: "groups" in spec ? spec.groups : [],
     currency,
     revision: Number(r.rows[0]?.rev ?? 0),
   });

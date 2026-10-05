@@ -597,6 +597,13 @@
           "label": "Anomaly threshold (σ)",
           "help": "Months beyond this many standard deviations from the mean are reported as anomalies"
         }
+      },
+      "groups": {
+        "profitability": "Profitability targets",
+        "liquiditySolvency": "Liquidity and solvency targets",
+        "efficiencyOperating": "Efficiency and operating targets",
+        "grading": "Grading and score bands",
+        "findings": "Finding thresholds"
       }
     },
     "ratioCard": {

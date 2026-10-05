@@ -597,6 +597,13 @@
           "label": "異常検知のしきい値（σ）",
           "help": "平均からこの標準偏差を超えて乖離した月は異常として報告されます"
         }
+      },
+      "groups": {
+        "profitability": "収益性の目標",
+        "liquiditySolvency": "流動性・安全性の目標",
+        "efficiencyOperating": "効率性・営業の目標",
+        "grading": "評価とスコア帯",
+        "findings": "指摘のしきい値"
       }
     },
     "ratioCard": {
