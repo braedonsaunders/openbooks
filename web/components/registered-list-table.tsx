@@ -40,6 +40,7 @@ export function RegisteredListTable<T>({
   paging = true,
   showPerPage,
   contained = false,
+  resetPageKey,
 }: {
   source: PreparedListSourceKey
   rows: T[]
@@ -63,6 +64,8 @@ export function RegisteredListTable<T>({
   paging?: boolean
   showPerPage?: boolean
   contained?: boolean
+  /** Domain filter changes restart paging while retaining the search query. */
+  resetPageKey?: string
 }) {
   const definition = preparedListSource(source)
   const ids = rows.map(rowKey)
@@ -119,7 +122,7 @@ export function RegisteredListTable<T>({
     <PreparedPagedTable
       source={source}
       contained={contained}
-      resetPageKey={`${sort ?? ""}:${dir ?? "asc"}`}
+      resetPageKey={`${sort ?? ''}:${dir ?? 'asc'}:${resetPageKey ?? ''}`}
       rows={ordered.map((row, index) => ({
         id: rowKey(row, index),
         cells: columns.map((column) => column.cell(row)),

@@ -19,6 +19,7 @@ export async function CompensationCycleRegister({ data }: { data: CompHomeData }
     sortParamKey="cycleSort" dirParamKey="cycleDir" pageParamKey="cyclePage"
     toolbarAfter={<FilterChips label={data.cyclesColumns.status} options={options} basePath="/hrm/compensation"
       currentParams={data.currentParams} paramKey="cycleStatus" pageParamKey="cyclePage" />}
+    resetPageKey={selected ?? ''}
     rows={rows} rowKey={(row) => row.id}
     empty={<EmptyState title={data.cyclesEmpty} />}
     columns={[
@@ -42,6 +43,7 @@ export async function CompensationPlanRegister({ data }: { data: CompHomeData })
     sortParamKey="planSort" dirParamKey="planDir" pageParamKey="planPage"
     toolbarAfter={<FilterChips label={data.plansColumns.status} options={options} basePath="/hrm/compensation"
       currentParams={data.currentParams} paramKey="planStatus" pageParamKey="planPage" />}
+    resetPageKey={selected ?? ''}
     rows={rows} rowKey={(row) => row.id}
     empty={<EmptyState title={data.plansEmpty} />}
     columns={[
