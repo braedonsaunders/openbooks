@@ -238,6 +238,11 @@ test('configuration renders the severity model from the payload', async () => {
     }
     assert.ok(body.includes('Base score: 50'), 'the duplicate base points must render')
     assert.ok(body.includes('Shared reference: 95%'), 'the duplicate reference confidence must render')
+    assert.ok(
+      body.includes('Critical multi-document total (USD) or more: +20'),
+      'the duplicate tier rule must resolve its catalog key, not a missing-key fallback',
+    )
+    assert.ok(!body.includes('scoring.dupValue'), 'no rule may name a catalog key that does not exist')
   } finally {
     await unmount()
   }
