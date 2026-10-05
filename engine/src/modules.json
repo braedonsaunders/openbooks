@@ -594,6 +594,7 @@
         "delivery",
         "flows",
         "fx",
+        "inventory",
         "ledger",
         "payments",
         "platform",

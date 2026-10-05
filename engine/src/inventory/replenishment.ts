@@ -64,7 +64,7 @@ const ZERO = "0.0000";
  * purchase receipt or a bill that received stock — skipping receipts that
  * were reversed.
  */
-async function lastReceiptVendors(
+export async function lastReceiptVendors(
   runner: Runner,
   orgId: string,
   subsidiaryId: string,
