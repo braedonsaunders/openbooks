@@ -3681,6 +3681,7 @@
       "historicalRate": "历史汇率",
       "subsidiaryId": "子公司",
       "subsidiaryIncludeChildren": "包含下级子公司",
+      "noBillableExpectation": "无计费预期",
       "pluralName": "复数名称",
       "sourceKind": "来源",
       "isHierarchical": "层级化",

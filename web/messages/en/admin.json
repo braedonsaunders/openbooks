@@ -3681,6 +3681,7 @@
       "historicalRate": "Historical rate",
       "subsidiaryId": "Subsidiary",
       "subsidiaryIncludeChildren": "Include child subsidiaries",
+      "noBillableExpectation": "No billable expectation",
       "pluralName": "Plural name",
       "sourceKind": "Source",
       "isHierarchical": "Hierarchical",

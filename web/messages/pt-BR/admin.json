@@ -3681,6 +3681,7 @@
       "historicalRate": "Taxa histórica",
       "subsidiaryId": "Subsidiária",
       "subsidiaryIncludeChildren": "Incluir subsidiárias filhas",
+      "noBillableExpectation": "Sem expectativa de faturamento",
       "pluralName": "Nome no plural",
       "sourceKind": "Origem",
       "isHierarchical": "Hierárquico",

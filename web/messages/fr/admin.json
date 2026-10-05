@@ -3557,6 +3557,7 @@
       "historicalRate": "Taux historique",
       "subsidiaryId": "Filiale",
       "subsidiaryIncludeChildren": "Inclure les filiales enfants",
+      "noBillableExpectation": "Sans attente de facturation",
       "pluralName": "Nom au pluriel",
       "sourceKind": "Source",
       "isHierarchical": "Hiérarchique",

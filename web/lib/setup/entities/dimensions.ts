@@ -122,6 +122,7 @@ export const DIMENSION_ENTITIES: SetupEntity[] = [
       { key: 'parentId', kind: 'ref', ref: 'departments' },
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'subsidiaryIncludeChildren', kind: 'boolean' },
+      { key: 'noBillableExpectation', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },

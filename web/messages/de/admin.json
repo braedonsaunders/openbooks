@@ -3681,6 +3681,7 @@
       "historicalRate": "Historischer Kurs",
       "subsidiaryId": "Tochtergesellschaft",
       "subsidiaryIncludeChildren": "Untergeordnete Tochtergesellschaften einbeziehen",
+      "noBillableExpectation": "Keine Abrechnungserwartung",
       "pluralName": "Pluralname",
       "sourceKind": "Quelle",
       "isHierarchical": "Hierarchisch",
