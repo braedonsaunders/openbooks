@@ -98,6 +98,7 @@
         "missing": "a própria folha",
         "components": "componentes de remuneração dos funcionários",
         "componentDefinitions": "cadastro de componentes de remuneração",
+        "compensationPackages": "condições de remuneração aprovadas",
         "derivedRules": "regras de proventos derivados",
         "entitlements": "bancos da folha",
         "workerComp": "alíquotas do seguro de acidentes de trabalho",

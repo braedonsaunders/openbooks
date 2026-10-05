@@ -98,6 +98,7 @@
         "missing": "計算自体",
         "components": "従業員の支給項目",
         "componentDefinitions": "支給項目の設定",
+        "compensationPackages": "承認済みの報酬条件",
         "derivedRules": "派生支給ルール",
         "entitlements": "バンク",
         "workerComp": "労災保険料率",

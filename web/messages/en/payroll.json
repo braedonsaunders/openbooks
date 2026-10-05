@@ -98,6 +98,7 @@
         "missing": "the run itself",
         "components": "employee pay components",
         "componentDefinitions": "pay component setup",
+        "compensationPackages": "approved compensation terms",
         "derivedRules": "derived earnings rules",
         "entitlements": "pay banks",
         "workerComp": "workers' compensation rates",

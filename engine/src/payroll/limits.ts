@@ -208,6 +208,8 @@ export interface BasisCapLine {
 }
 
 export interface BasisCapContext {
+  /** Registered payable quantum; existing native callers retain their two-place policy when omitted. */
+  currencyMinorUnits?: number;
   /** The hours behind the basis. Required when an hours cap is configured;
    *  lines carrying no hours simply cannot be prorated and are never capped. */
   lines?: readonly BasisCapLine[];
@@ -239,11 +241,12 @@ function unitRate(component: BasisCapComponent): { numerator: bigint; denominato
 /**
  * The largest basis whose amount still fits inside `room`. Floored, so the
  * amount computed from it never rounds past the cap: `room` is first truncated
- * to the cent, and rounding a value at or below a whole-cent ceiling to cents
- * can never exceed it.
+ * to the registered payable quantum. Existing callers use whole-cent ceilings;
+ * rounding at that same precision cannot exceed the retained room.
  */
-function basisWithin(room: string, rate: { numerator: bigint; denominator: bigint }): string {
-  const roomUnits = toUnits(floorCents(room));
+function basisWithin(room: string, rate: { numerator: bigint; denominator: bigint }, minorUnits = 2): string {
+  const quantum = 10n ** BigInt(4 - minorUnits);
+  const roomUnits = (toUnits(room) / quantum) * quantum;
   return fromUnits((roomUnits * rate.denominator) / rate.numerator);
 }
 
@@ -257,6 +260,10 @@ export function applyBasisCaps(
   basis: string,
   context: BasisCapContext = {},
 ): string {
+  const minorUnits = Object.hasOwn(context, 'currencyMinorUnits') ? context.currencyMinorUnits : 2;
+  if (typeof minorUnits !== 'number' || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    throw new PayrollLimitError('A component money cap needs supported currency precision — resolve its registered payable quantum before calculating.');
+  }
   let capped = requireNonNegative(basis, "a component basis");
 
   const hoursCap = component.basisCapHoursPerPeriod;
@@ -297,7 +304,7 @@ export function applyBasisCaps(
       if (cap == null) continue;
       const room = atLeastZero(add(requireNonNegative(cap, "an amount cap"),
                                    neg(requireNonNegative(taken, "an amount already taken"))));
-      capped = lesser(capped, basisWithin(room, rate));
+      capped = lesser(capped, basisWithin(room, rate, minorUnits));
     }
   }
   return capped;

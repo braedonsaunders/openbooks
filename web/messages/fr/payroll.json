@@ -98,6 +98,7 @@
         "missing": "la paie elle-même",
         "components": "composantes de paie des employés",
         "componentDefinitions": "paramétrage des composantes de paie",
+        "compensationPackages": "conditions de rémunération approuvées",
         "derivedRules": "règles de gains dérivés",
         "entitlements": "banques de paie",
         "workerComp": "taux d’indemnisation des accidents du travail",
