@@ -1,0 +1,1 @@
+Widens the scheduler_outbox kind constraint and restates the scope constraint by exception with the same meaning for every existing kind. Every existing row satisfies both, so no tenant data is read, rewritten or deleted.
