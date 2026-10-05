@@ -91,7 +91,7 @@ export async function loadFulfillmentDrawerData({
  * off — the drawer keeps its manual carrier fields and no extra queries
  * run for pick lists either.
  */
-async function loadShipmentShipping(
+export async function loadShipmentShipping(
   authz: Authz,
   orgId: string,
 ): Promise<{ enabled: boolean; canBuy: boolean; accounts: ShippingAccountOption[]; presets: PackagePresetOption[] }> {

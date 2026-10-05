@@ -202,6 +202,44 @@
       "void": "ラベルを無効化できませんでした。",
       "tracking": "追跡を更新できませんでした。",
       "validation": "住所を確認できませんでした。"
+    },
+    "bulkAction": "ラベルを購入",
+    "bulk": {
+      "title": "ラベルを購入",
+      "description": "未出荷の出荷を一つの購入ルールで料金算出し、準備できた行をまとめて購入します。",
+      "metaTitle": "ラベルを購入",
+      "loading": "出荷を読み込み中…",
+      "emptyTitle": "ラベルが必要な出荷はありません",
+      "emptyDescription": "購入済みラベルのない未出荷が出荷がここに表示されます。",
+      "backToShipments": "出荷に戻る",
+      "rule": "購入ルール",
+      "rules": {
+        "cheapest": "最安",
+        "fastest": "最速",
+        "cheapest_by_date": "期日到着の最安"
+      },
+      "promisedDate": "到着期限",
+      "preview": "料金を確認",
+      "selectAll": "すべての出荷を選択",
+      "colShipment": "出荷",
+      "colCustomer": "顧客",
+      "colPromised": "約束日",
+      "previewTitle": "確認 — 準備可: {ready}、要確認: {failed}",
+      "totalLabel": "合計:",
+      "openShipment": "出荷を開く",
+      "buy": "ラベルを購入",
+      "resultTitle": "購入済み",
+      "printMerged": "結合PDFを印刷",
+      "boughtOne": "購入済み",
+      "duplicate": "購入済みのため省略",
+      "bought": "ラベルを購入しました。",
+      "fail": {
+        "candidates": "出荷を読み込めませんでした。",
+        "preview": "料金を確認できませんでした。",
+        "buy": "ラベルを購入できませんでした。",
+        "nothingSelected": "まず出荷を一つ以上選択してください。",
+        "dateRequired": "ラベルの到着期限を選んでください。"
+      }
     }
   }
 }

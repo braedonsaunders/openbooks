@@ -202,6 +202,44 @@
       "void": "The label could not be voided.",
       "tracking": "Tracking could not be refreshed.",
       "validation": "The address could not be checked."
+    },
+    "bulkAction": "Buy labels",
+    "bulk": {
+      "title": "Buy labels",
+      "description": "Price draft shipments under one buying rule and buy the ready rows in one step.",
+      "metaTitle": "Buy labels",
+      "loading": "Loading shipments…",
+      "emptyTitle": "No shipments need labels",
+      "emptyDescription": "Draft shipments without a bought label will appear here.",
+      "backToShipments": "Back to shipments",
+      "rule": "Buying rule",
+      "rules": {
+        "cheapest": "Cheapest",
+        "fastest": "Fastest",
+        "cheapest_by_date": "Cheapest that arrives by date"
+      },
+      "promisedDate": "Must arrive by",
+      "preview": "Preview prices",
+      "selectAll": "Select all shipments",
+      "colShipment": "Shipment",
+      "colCustomer": "Customer",
+      "colPromised": "Promised",
+      "previewTitle": "Preview — ready: {ready}, need attention: {failed}",
+      "totalLabel": "Total:",
+      "openShipment": "Open shipment",
+      "buy": "Buy labels",
+      "resultTitle": "Bought",
+      "printMerged": "Print merged PDF",
+      "boughtOne": "Bought",
+      "duplicate": "already bought",
+      "bought": "Labels bought.",
+      "fail": {
+        "candidates": "Shipments could not be loaded.",
+        "preview": "Prices could not be previewed.",
+        "buy": "Labels could not be bought.",
+        "nothingSelected": "Select at least one shipment first.",
+        "dateRequired": "Pick the date the labels must arrive by."
+      }
     }
   }
 }

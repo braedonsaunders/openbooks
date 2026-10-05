@@ -2680,6 +2680,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/shipments/labels': {
+    route: '/shipments/labels',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/shipments/labels/view')
+      return {
+        load: (input) => m.loadBulkBuy(input.searchParams ?? {}),
+        spec: (data) => m.bulkBuySpec(data as never),
+      }
+    },
+  },
   '/subcontracts': {
     route: '/subcontracts',
     segments: [],
