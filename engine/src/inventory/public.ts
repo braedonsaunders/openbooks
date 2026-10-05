@@ -43,6 +43,25 @@ export {
   type BulkEditVariantsInput,
   type ConvertItemInput,
 } from './item-families.ts'
+/** Stable demand forecasting and replenishment planning operations for the planning UI. */
+export {
+  confirmPlanSuggestion,
+  convertTransferSuggestion,
+  DemandPlanningError,
+  dismissPlanSuggestion,
+  forecastAccuracy,
+  getDemandRun,
+  getPlanSuggestion,
+  listDemandPolicies,
+  listDemandRuns,
+  listForecastOverrides,
+  listPlanSuggestions,
+  markBuySuggestionConverted,
+  runDemandPlan,
+  saveDemandPolicy,
+  saveForecastOverride,
+  type DemandPlanningRefusalCode,
+} from './demand-planning.ts'
 export { INVENTORY_ACTION_PERMISSIONS } from './public-contracts.ts'
 /** Stable availability promises: the same computation the native availability report renders. */
 export {

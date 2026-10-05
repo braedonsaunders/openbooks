@@ -57,6 +57,8 @@ import {
 
 export type DemandPlanningRefusalCode =
   | "demand_planning_disabled"
+  | "orders_disabled"
+  | "order_edit_refused"
   | "subsidiary_not_found"
   | "item_not_stocked"
   | "unit_not_convertible"
@@ -992,13 +994,18 @@ export async function listDemandRuns(
   return rows.map((row) => ({ ...row, replayed: false }));
 }
 
-/** One run with its forecasts and supplier-resolved suggestions. */
+export interface DemandHistoryPoint extends DemandWeek {
+  itemId: string;
+  stockLocationId: string;
+}
+
+/** One run with its forecasts, the history behind them, and supplier-resolved suggestions. */
 export async function getDemandRun(
   tx: SqlExecutor,
   orgId: string,
   subsidiaryId: string,
   id: string,
-): Promise<{ run: DemandPlanRun; forecasts: unknown[]; suggestions: PlanSuggestion[] }> {
+): Promise<{ run: DemandPlanRun; forecasts: unknown[]; history: DemandHistoryPoint[]; suggestions: PlanSuggestion[] }> {
   await assertDemandPlanningFeature(tx as Runner, orgId);
   const entity = await availabilityEntity(tx as Runner, orgId, subsidiaryId);
   const run = (await tx.execute<DemandPlanRun>(sql`
@@ -1018,8 +1025,29 @@ export async function getDemandRun(
       join stock_locations sl on sl.org_id = s.org_id and sl.id = s.stock_location_id
      where s.org_id = ${orgId} and s.run_id = ${id}
      order by s.period_start, i.code, sl.code`)).rows;
+  // The drawer's chart re-reads the run's own grid through the same history
+  // reader the run used, so the drawing and the stored forecast agree.
+  const parameters = run.parameters as { asOf?: string; historyWeeks?: number };
+  const asOf = typeof parameters.asOf === "string" ? parameters.asOf : null;
+  const historyWeeks = typeof parameters.historyWeeks === "number" ? parameters.historyWeeks : 0;
+  let history: DemandHistoryPoint[] = [];
+  if (asOf && historyWeeks > 0) {
+    const grid = weekStartsEndingOn(mondayOfIsoWeek(asOf), historyWeeks);
+    const { demand, opening } = await readHistoryRows(tx, orgId, entity.subsidiaryId, grid[0]!, asOf);
+    const pairs = new Map<string, { itemId: string; stockLocationId: string; rows: HistoryRow[] }>();
+    for (const row of demand) {
+      const key = `${row.item_id}:${row.stock_location_id}`;
+      const pair = pairs.get(key) ?? { itemId: row.item_id, stockLocationId: row.stock_location_id, rows: [] };
+      pair.rows.push(row);
+      pairs.set(key, pair);
+    }
+    history = [...pairs.values()].flatMap((pair) =>
+      buildSeries(grid, pair.rows, opening.get(`${pair.itemId}:${pair.stockLocationId}`) ?? ZERO_QTY)
+        .map((week) => ({ ...week, itemId: pair.itemId, stockLocationId: pair.stockLocationId })),
+    );
+  }
   const suggestions = await listPlanSuggestions(tx, orgId, subsidiaryId, "all");
-  return { run: { ...run, replayed: false }, forecasts, suggestions: suggestions.filter((suggestion) => suggestion.runId === id) };
+  return { run: { ...run, replayed: false }, forecasts, history, suggestions: suggestions.filter((suggestion) => suggestion.runId === id) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1050,6 +1078,13 @@ async function lockSuggestion(tx: SqlExecutor, orgId: string, id: string) {
      where s.org_id = ${orgId} and s.id = ${id} for update of s`)).rows[0];
   if (!row) throw new DemandPlanningNotFoundError();
   return row;
+}
+
+/** One suggestion with its run's entity, for subsidiary guarding. */
+export async function getPlanSuggestion(tx: SqlExecutor, orgId: string, id: string) {
+  await assertDemandPlanningFeature(tx as Runner, orgId);
+  const row = await lockSuggestion(tx, orgId, id);
+  return { ...row, subsidiaryId: String(row.parameters.subsidiaryId ?? "") };
 }
 
 /** Move a suggestion to confirmed so it can be converted. */
