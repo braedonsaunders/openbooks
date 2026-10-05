@@ -70,6 +70,7 @@ export interface SalesOrderDrawer {
   backorders: boolean
   pickLists: boolean
   returnAuthorizations: boolean
+  promotionsEnabled: boolean
   dropShipping: boolean
   dropShipLines: OrderDrawerProps['dropShipLines']
   dropShipVendors: OrderDrawerProps['dropShipVendors']
@@ -269,6 +270,7 @@ export async function loadSalesOrders(
           backorders,
           pickLists,
           returnAuthorizations,
+          promotionsEnabled: await isFeatureEnabled(authz.user.orgId, 'promotions'),
           dropShipping,
           dropShipLines,
           dropShipVendors,

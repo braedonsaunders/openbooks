@@ -40,6 +40,18 @@
     "emailReceived": "Enviar recepción por correo",
     "emailDecision": "Enviar decisión final por correo",
     "emailSent": "Correo enviado",
-    "emailFailed": "No se pudo enviar la actualización de devolución"
+    "emailFailed": "No se pudo enviar la actualización de devolución",
+    "fee": {
+      "title": "Cargo por reposición",
+      "preview": "Ver cargo",
+      "previewFailed": "No se pudo mostrar el cargo",
+      "total": "Cargo en este abono: {amount}",
+      "detail": "{count, plural, one {# línea de cargo} other {# líneas de cargo}}",
+      "noPolicy": "Sin regla de cargos",
+      "capped": "limitado al valor abonado",
+      "waive": "Eximir el cargo",
+      "reason": "Motivo de la exención",
+      "reasonPlaceholder": "¿Por qué se exime el cargo?"
+    }
   }
 }

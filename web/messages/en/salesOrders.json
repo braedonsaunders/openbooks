@@ -23,5 +23,17 @@
     "reason": "Assessment reason",
     "propose": "Prepare approval proposal",
     "failed": "The control assessment could not be prepared"
+  },
+  "promotion": {
+    "apply": "Apply promotion",
+    "chip": "Promotion",
+    "selectTitle": "Apply promotion",
+    "selectLabel": "Choose a promotion",
+    "enterCode": "Enter a code…",
+    "codeTitle": "Apply promotion code",
+    "codeLabel": "Promotion code",
+    "applied": "{code} applied: {amount} off across {count, plural, one {# line} other {# lines}}",
+    "loadFailed": "Could not load promotions",
+    "applyFailed": "Could not apply the promotion"
   }
 }

@@ -94,11 +94,13 @@ export async function loadOrder(
            l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount,
            l.tax_amount, l.quantity_billed, l.quantity_fulfilled, l.quantity_cancelled,
            l.department_id, l.project_id, l.stock_location_id, l.extra_dims, l.price_basis,
-           i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code
+           i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code,
+           l.promotion_id, pr.code as promotion_code
       from document_lines l
       left join items i on i.id = l.item_id and i.org_id = l.org_id
       left join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
+      left join promotions pr on pr.id = l.promotion_id and pr.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `))

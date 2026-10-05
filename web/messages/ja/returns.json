@@ -40,6 +40,18 @@
     "emailReceived": "受領をメールで通知",
     "emailDecision": "最終決定をメールで通知",
     "emailSent": "メールを送信しました",
-    "emailFailed": "返品の更新を送信できませんでした"
+    "emailFailed": "返品の更新を送信できませんでした",
+    "fee": {
+      "title": "再入庫手数料",
+      "preview": "手数料を確認",
+      "previewFailed": "手数料を確認できませんでした",
+      "total": "このクレジットの手数料：{amount}",
+      "detail": "{count}件の手数料明細",
+      "noPolicy": "手数料ルールなし",
+      "capped": "返金額を上限とする",
+      "waive": "手数料を免除する",
+      "reason": "免除理由",
+      "reasonPlaceholder": "手数料を免除する理由を入力"
+    }
   }
 }

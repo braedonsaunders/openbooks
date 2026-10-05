@@ -40,6 +40,18 @@
     "emailReceived": "Eingang per E-Mail mitteilen",
     "emailDecision": "Endgültige Entscheidung per E-Mail mitteilen",
     "emailSent": "E-Mail gesendet",
-    "emailFailed": "Rückgabemitteilung konnte nicht gesendet werden"
+    "emailFailed": "Rückgabemitteilung konnte nicht gesendet werden",
+    "fee": {
+      "title": "Wiedereinlagerungsgebühr",
+      "preview": "Gebühr anzeigen",
+      "previewFailed": "Die Gebühr konnte nicht angezeigt werden",
+      "total": "Gebühr auf dieser Gutschrift: {amount}",
+      "detail": "{count, plural, one {# Gebührenzeile} other {# Gebührenzeilen}}",
+      "noPolicy": "Keine Gebührenregel",
+      "capped": "auf Gutschriftswert begrenzt",
+      "waive": "Gebühr erlassen",
+      "reason": "Erlassgrund",
+      "reasonPlaceholder": "Warum wird die Gebühr erlassen?"
+    }
   }
 }

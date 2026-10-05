@@ -40,6 +40,18 @@
     "emailReceived": "Enviar aviso de recebimento",
     "emailDecision": "Enviar decisão final por e-mail",
     "emailSent": "E-mail enviado",
-    "emailFailed": "Não foi possível enviar a atualização da devolução"
+    "emailFailed": "Não foi possível enviar a atualização da devolução",
+    "fee": {
+      "title": "Taxa de reestocagem",
+      "preview": "Ver taxa",
+      "previewFailed": "Não foi possível mostrar a taxa",
+      "total": "Taxa neste crédito: {amount}",
+      "detail": "{count, plural, one {# linha de taxa} other {# linhas de taxa}}",
+      "noPolicy": "Sem regra de taxa",
+      "capped": "limitado ao valor creditado",
+      "waive": "Isentar a taxa",
+      "reason": "Motivo da isenção",
+      "reasonPlaceholder": "Por que a taxa está isenta?"
+    }
   }
 }

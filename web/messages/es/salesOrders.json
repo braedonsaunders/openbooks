@@ -23,5 +23,17 @@
     "reason": "Motivo de la evaluación",
     "propose": "Preparar propuesta de aprobación",
     "failed": "No se pudo preparar la evaluación del control"
+  },
+  "promotion": {
+    "apply": "Aplicar promoción",
+    "chip": "Promoción",
+    "selectTitle": "Aplicar promoción",
+    "selectLabel": "Elige una promoción",
+    "enterCode": "Introducir un código…",
+    "codeTitle": "Aplicar código promocional",
+    "codeLabel": "Código promocional",
+    "applied": "{code} aplicada: {amount} de descuento en {count, plural, one {# línea} other {# líneas}}",
+    "loadFailed": "No se pudieron cargar las promociones",
+    "applyFailed": "No se pudo aplicar la promoción"
   }
 }

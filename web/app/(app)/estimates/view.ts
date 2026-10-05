@@ -64,6 +64,7 @@ export interface EstimateDrawer {
   canOverrideCredit: boolean
   layout: unknown
   barcodeScanningEnabled: boolean
+  promotionsEnabled: boolean
 }
 
 export interface EstimatesData {
@@ -232,6 +233,7 @@ export async function loadEstimates(
           canOverrideCredit: can(authz, 'ar.approve'),
           layout: resolvedForm?.layout,
           barcodeScanningEnabled,
+          promotionsEnabled: await isFeatureEnabled(authz.user.orgId, 'promotions'),
         }
       : null
 

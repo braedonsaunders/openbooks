@@ -13,6 +13,8 @@ const bodySchema = z.object({
     dispositionLocationId: z.string().uuid().nullable(),
     vendorId: z.string().uuid().nullable().optional(),
   })).min(1).max(500),
+  waiveFee: z.boolean().optional(),
+  waiveReason: z.string().max(500).nullable().optional(),
 })
 
 export const POST = defineRoute({
@@ -22,6 +24,7 @@ export const POST = defineRoute({
   body: bodySchema,
   handler: async ({ authz, params: { id }, body }) => {
     assertCan(authz, 'items.post')
+    if (body.waiveFee === true) assertCan(authz, 'returns.waive_fee')
     const current = await findReturnAuthorization(authz.user.orgId, id, authz.allowedSubsidiaryIds)
     if (!current || guardSubsidiaryScope(authz, current.subsidiaryId)) return notFound('return_authorization', id)
     const result = await inspectReturnAuthorization({
@@ -30,6 +33,8 @@ export const POST = defineRoute({
       documentId: id,
       inspectionLines: body.lines,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      waiveFee: body.waiveFee,
+      waiveReason: body.waiveReason ?? null,
     })
     return NextResponse.json(result)
   },
