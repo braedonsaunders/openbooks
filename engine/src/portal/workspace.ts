@@ -65,6 +65,18 @@ export type PortalPrepaidGrant = {
   expiresOn: string | null;
 };
 
+export type PortalAcceptanceProvider = { provider: string };
+
+/** Acceptance-enabled PSP providers for this org, in preference order. */
+export async function portalAcceptanceProviders(orgId: string, runner: SqlExecutor = db): Promise<PortalAcceptanceProvider[]> {
+  const rows = (await runner.execute<{ provider: string }>(sql`
+    select provider from psp_provider_configs
+     where org_id = ${orgId} and is_enabled and acceptance_enabled
+     order by case provider when 'stripe' then 0 when 'adyen' then 1 else 2 end
+  `)).rows;
+  return rows.map((row) => ({ provider: row.provider }));
+}
+
 export type PortalHome = {
   partyName: string;
   email: string;

@@ -13,6 +13,7 @@ export { sealSecret, unsealSecret, unsealLegacyEmailSecret, type SealedSecret } 
 export type { EmailOut }
 export { shipmentTrackingEmail } from './shipment-tracking'
 export { returnReceivedEmail, returnDecisionEmail } from './return-authorization'
+export { portalMagicLinkEmail } from './portal-magic-link'
 
 // --- Flow / approval emails (engine/src/flows) -------------------------------
 //

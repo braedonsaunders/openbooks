@@ -100,3 +100,10 @@ export {
   type PurchaseOrderLineRemainder,
   type SalesOrderLineRemainder,
 } from '../records/order-line-remainders.ts'
+/** Returnable customer shipments behind self-service and operator returns. */
+export {
+  returnableSources,
+  type ReturnableSource,
+  type ReturnableSourcePage,
+  type ReturnableSourceQuery,
+} from './returnable-sources.ts'

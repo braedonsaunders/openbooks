@@ -59,14 +59,28 @@ export type ReturnSourceSelection = {
   serialId?: string | null
 }
 
+/**
+ * Return lines arrive priced (operator drawer) or quantity-only (portal self-
+ * service, after engine validation). Either way the transaction re-derives
+ * account, item, price and tax from the locked source shipment, so no caller
+ * prices the return.
+ */
+export type ReturnLineRequest = DocumentLineInput | { quantity: string };
+
 export async function createReturnAuthorization(input: {
   orgId: string
   actorId: string
   key: string
-  body: DocumentEditInput
+  body: Omit<DocumentEditInput, 'lines'> & { lines?: ReturnLineRequest[] }
   sourceSelections: ReturnSourceSelection[]
   requestBody: unknown
   allowedSubsidiaryIds: ReadonlySet<string> | null
+  /**
+   * Customer scope asserted by the caller (a portal session): the RMA names
+   * this customer party, proven owned before the write, so the draft binds
+   * against the customer instead of the actor's subsidiary roles.
+   */
+  onBehalfOfPartyId?: string | null
 }): Promise<ReturnAuthorization> {
   const result = await withOrgTransaction(input.orgId, async () => {
     const requestedLines = input.body.lines ?? []
@@ -124,6 +138,7 @@ export async function createReturnAuthorization(input: {
       body,
       subsidiaryId: body.subsidiaryId ?? null,
       requestBody: input.requestBody,
+      onBehalfOfPartyId: input.onBehalfOfPartyId ?? null,
     })
     if (draft.status === 'created') {
       await runRecordFlows({ kind: 'on_create', source: 'ui' }, 'rma', draft.id, { orgId: input.orgId, userId: input.actorId })
