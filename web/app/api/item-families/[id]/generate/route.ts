@@ -31,6 +31,10 @@ export const POST = defineRoute({
   scope: 'unrestricted',
   params: familyParams,
   body: generateSchema,
+  opaque: {
+    only: "each chosen combination is matched against the family's declared options in generateFamilyVariants, refusing unknown options",
+    codePattern: "a blank pattern is refused in generateFamilyVariants; the default pattern applies when omitted",
+  },
   handler: async ({ params: { id }, body, authz: gate }) => {
     if (!isUuid(id)) return notFound('record')
     const result = await generateFamilyVariants(gate.user.orgId, gate.user.id, id, {
