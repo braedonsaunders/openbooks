@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { type Authz, can } from '@/lib/authz'
@@ -66,6 +67,19 @@ export type DashboardPlScope = {
   allowed: Set<string> | null
 }
 
+/** Suffix periods.ts appends to this preset's window label, in English for every locale. */
+const PERIOD_TO_DATE_SUFFIX = ' to date'
+
+/**
+ * The accounting-period misconfiguration: today precedes the first
+ * configured period, so no period-to-date window exists. Thrown as a plain
+ * Error from periods.ts — match its one producing phrase, quoted, so any
+ * other failure still throws instead of masquerading as an empty period.
+ */
+function isMissingAccountingPeriodError(e: unknown): e is Error {
+  return e instanceof Error && e.message.includes('precedes the first configured accounting period')
+}
+
 export type DashboardPl = {
   revenue: string
   grossProfit: string
@@ -75,6 +89,13 @@ export type DashboardPl = {
   margin: string | null
   /** The currency the consolidated read returned — the tile labels this, never the org base. */
   currency: string
+  /**
+   * The subsidiary scope the figures cover (the consolidated node's name) —
+   * the tile hint shows it, so a restricted caller scoped to one subtree
+   * never reads a partial figure as the whole company. Null for a
+   * single-subsidiary org, where the scope needs no naming.
+   */
+  scopeLabel: string | null
 }
 
 /**
@@ -118,6 +139,7 @@ export async function dashboardConsolidatedProfitAndLoss(
     netIncome: first(netTotals),
     margin: decimalRatio(grossProfit, revenue),
     currency: resolved.currency ?? await presentationCurrency(orgId),
+    scopeLabel: resolved.label ?? null,
   }
 }
 
@@ -146,10 +168,10 @@ const canonicalMoneyReaders: DashboardMoneyReaders = {
 
 export type DashboardMetrics = {
   /**
-   * Org base currency labelling the cash/AR/AP/runway tiles. Null when the
-   * org has no base currency — a tile that renders money without a currency
-   * is a bug the type system refuses, so tiles render the named refusal
-   * instead of formatting as dollars.
+   * Org base currency labelling the cash/AR/AP/runway tiles. Null only when
+   * no queried widget needs it — a tile that renders money without a
+   * currency is a bug the type system refuses, so tiles render the named
+   * refusal instead of formatting as dollars.
    */
   baseCurrency: string | null
   journalLineCount: number
@@ -184,6 +206,8 @@ export type DashboardMetrics = {
   grossMarginMtd: string | null
   /** Resolved fiscal-period label the P&L tiles cover (the tile hint shows this, never "Month to date"). */
   plPeriodLabel: string | null
+  /** Subsidiary scope the P&L figures cover (the tile hint shows this beside the period). */
+  plScopeLabel: string | null
   /** Currency the consolidated P&L reader returned — the tile labels this, never the org base. */
   plCurrency: string | null
   /**
@@ -503,9 +527,11 @@ export async function loadDashboardMetrics(
     // accounts and added mixed functionals raw (F-u1-P4). Missing FX coverage
     // fails closed inside (the hub contract), never a silently mixed tile.
     wantCash ? readers.bankBalances(today, subIds, orgId) : Promise.resolve([]),
-    // No fabricated default: an org with no base currency refuses by name
-    // on the tiles (null) instead of formatting every figure as dollars.
-    wantMoney ? presentationCurrency(orgId).catch(() => null) : Promise.resolve(EMPTY_METRICS.baseCurrency),
+    // No fabricated default and no swallowed failure: base_currency is NOT
+    // NULL, so a read failure is a real defect that throws — null means the
+    // base was never requested for this layout, and only then do the tiles
+    // refuse by name instead of formatting figures as dollars.
+    wantMoney ? presentationCurrency(orgId) : Promise.resolve(EMPTY_METRICS.baseCurrency),
     // The AR/AP tiles read the shared open-item reader — the same doorway as
     // the /ar and /ap hubs and the aging report — so same-labeled figures tie
     // by construction. Missing FX coverage fails closed inside (the hub
@@ -547,14 +573,38 @@ export async function loadDashboardMetrics(
     // plus the refusal message so the tiles name it, and let anything else
     // throw — an unexpected P&L failure must not masquerade as an empty
     // period. Subsidiary doorway matches the hubs: the caller's allowlist, so
-    // a restricted caller tiles what /reports/pnl shows them.
+    // a restricted caller tiles what /reports/pnl shows them — labelled with
+    // the subtree they see, never as the whole company.
     wantPl
       ? (async () => {
+        const t = await getTranslations('dashboard')
+        const none = (unavailable: string, periodLabel: string | null) => ({
+          revenue: null as string | null,
+          expenses: null as string | null,
+          netIncome: null as string | null,
+          grossProfit: null as string | null,
+          margin: null as string | null,
+          currency: null as string | null,
+          periodLabel,
+          scopeLabel: null as string | null,
+          unavailable,
+        })
         // The org's current fiscal period to date (declared calendars
         // honoured), resolved beside the read so the tiles can label the
-        // exact window they cover.
-        const period = await resolvePeriod('this_period_to_date', { orgId, today })
+        // exact window they cover. The resolution sits inside the try: when
+        // today precedes the first configured accounting period it throws,
+        // and that misconfiguration must refuse on the tiles — never reject
+        // the whole dashboard.
+        let periodLabel: string | null = null
         try {
+          const period = await resolvePeriod('this_period_to_date', { orgId, today })
+          // periods.ts builds this preset's label as `${window} to date` in
+          // English for every locale; strip that suffix and re-render it
+          // through the catalog so the tile hint translates.
+          const windowLabel = period.label.endsWith(PERIOD_TO_DATE_SUFFIX)
+            ? period.label.slice(0, -PERIOD_TO_DATE_SUFFIX.length)
+            : period.label
+          periodLabel = t('metricContext.periodToDate', { label: windowLabel })
           const r = await readers.profitAndLoss(period.from, period.to, period.label, { allowed: authz.allowedSubsidiaryIds }, orgId)
           return {
             revenue: r.revenue,
@@ -563,22 +613,13 @@ export async function loadDashboardMetrics(
             grossProfit: r.grossProfit,
             margin: r.margin,
             currency: r.currency,
-            periodLabel: period.label,
+            periodLabel,
+            scopeLabel: r.scopeLabel,
             unavailable: null as string | null,
           }
         } catch (e: unknown) {
-          if (e instanceof MissingRatesError) {
-            return {
-              revenue: null as string | null,
-              expenses: null as string | null,
-              netIncome: null as string | null,
-              grossProfit: null as string | null,
-              margin: null as string | null,
-              currency: null as string | null,
-              periodLabel: period.label as string | null,
-              unavailable: e.message as string,
-            }
-          }
+          if (e instanceof MissingRatesError) return none(e.message, periodLabel)
+          if (isMissingAccountingPeriodError(e)) return none(e.message, null)
           throw e
         }
       })()
@@ -796,6 +837,7 @@ export async function loadDashboardMetrics(
     grossProfitMtd: pl?.grossProfit ?? null,
     grossMarginMtd: pl?.margin ?? null,
     plPeriodLabel: pl?.periodLabel ?? null,
+    plScopeLabel: pl?.scopeLabel ?? null,
     plCurrency: pl?.currency ?? null,
     plUnavailable: pl?.unavailable ?? null,
     expectedReceipts30d: expectedReceipts,
@@ -823,8 +865,10 @@ export async function loadDashboardMetrics(
       status: r.status,
       lineCount: Number(r.line_count),
       totalDebits: r.total_debits,
-      // The entry entity's functional currency; root-owned entries of a
-      // baseless org carry null and the tile falls back to the formatter.
+      // The entry entity's functional currency; root-owned entries carry
+      // null (the left join misses) and the tile falls back to the org base.
+      // There is no baseless org — base_currency is NOT NULL — so a null
+      // here only means the base was never requested for this layout.
       currency: r.currency ?? baseCurrency,
     })),
     // Both widgets list the same unified worklist the tile counts:
@@ -864,10 +908,10 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables', 'asOfDate'],
   'kpi-open-payables': ['baseCurrency', 'openPayables', 'payablesDpo', 'asOfDate'],
   'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'asOfDate'],
-  'kpi-revenue-mtd': ['plCurrency', 'plPeriodLabel', 'plUnavailable', 'revenueMtd', 'asOfDate'],
-  'kpi-expenses-mtd': ['plCurrency', 'plPeriodLabel', 'plUnavailable', 'expensesMtd', 'asOfDate'],
-  'kpi-net-income-mtd': ['plCurrency', 'plPeriodLabel', 'plUnavailable', 'netIncomeMtd', 'asOfDate'],
-  'kpi-gross-margin-mtd': ['plCurrency', 'plPeriodLabel', 'plUnavailable', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
+  'kpi-revenue-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'revenueMtd', 'asOfDate'],
+  'kpi-expenses-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'expensesMtd', 'asOfDate'],
+  'kpi-net-income-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'netIncomeMtd', 'asOfDate'],
+  'kpi-gross-margin-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
   'kpi-expected-receipts-30d': ['baseCurrency', 'expectedReceipts30d', 'asOfDate'],
   'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'asOfDate'],
   'list-top-customers': ['topCustomers'],
@@ -961,6 +1005,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   grossProfitMtd: null,
   grossMarginMtd: null,
   plPeriodLabel: null,
+  plScopeLabel: null,
   plCurrency: null,
   plUnavailable: null,
   expectedReceipts30d: null,

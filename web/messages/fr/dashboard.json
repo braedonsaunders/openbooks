@@ -94,6 +94,7 @@
     "agentClear": "Rien en attente",
     "asOf": "Au {date}",
     "monthToDate": "Mois en cours",
+    "periodToDate": "{label} à ce jour",
     "noData": "Aucune donnée",
     "noBaseCurrency": "Aucune devise de base configurée",
     "next30Days": "30 prochains jours",

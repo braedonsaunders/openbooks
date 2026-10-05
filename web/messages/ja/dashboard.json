@@ -94,6 +94,7 @@
     "agentLastRun": "前回実行 {date}",
     "agentClear": "問題なし",
     "monthToDate": "月初来",
+    "periodToDate": "{label}（当日まで）",
     "noData": "データなし",
     "noBaseCurrency": "基準通貨が設定されていません",
     "next30Days": "今後30日間",
