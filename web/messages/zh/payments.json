@@ -9,6 +9,25 @@
       "runs": "付款批次"
     }
   },
+  "setup": {
+    "title": "保存付款方式",
+    "intro": "为{party}在{org}保存付款方式。",
+    "providerLine": "通过{provider}安全设置。",
+    "noChargeToday": "今天不会产生任何扣款。今后的发票可以通过此方式自动收取。",
+    "singleUse": "此链接仅可使用一次——若中途离开，请向发件人索取新链接。",
+    "continue": "前往{provider}继续",
+    "continueFailed": "无法开始设置。请检查网络连接后重试，或向发件人索取新链接。",
+    "alreadySaved": "此付款方式已保存。",
+    "alreadySavedDetail": "{brand}（尾号{last4}）已存档，无需其他操作，可以关闭此窗口。",
+    "alreadySavedNoDetail": "您的付款方式已存档，无需其他操作，可以关闭此窗口。",
+    "invalidTitle": "此设置链接无效。",
+    "invalidDetail": "该链接可能已过期或已被使用。请向发件人索取新链接。",
+    "withdrawnTitle": "此设置链接已被撤回。",
+    "withdrawnDetail": "请向发件人索取新链接以保存付款方式。",
+    "savedTitle": "付款方式已保存",
+    "savedDetail": "{brand}（尾号{last4}）已存档至{org}。今后的发票可以自动收取，可以关闭此窗口。",
+    "savedNoDetail": "您的付款方式已存档至{org}。今后的发票可以自动收取，可以关闭此窗口。"
+  },
   "list": {
     "searchPlaceholder": "{side, select, ap {搜索付款、供应商、参考号…} other {搜索付款、客户、参考号…}}",
     "newLabel": "{side, select, ap {新建付款} other {新建客户收款}}",

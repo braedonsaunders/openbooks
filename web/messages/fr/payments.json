@@ -9,6 +9,25 @@
       "runs": "Lots de paiements"
     }
   },
+  "setup": {
+    "title": "Enregistrer un moyen de paiement",
+    "intro": "Enregistrez un moyen de paiement pour {party} auprès de {org}.",
+    "providerLine": "Configuration sécurisée via {provider}.",
+    "noChargeToday": "Aucun prélèvement n'a lieu aujourd'hui. Les factures à venir pourront être prélevées automatiquement sur ce moyen.",
+    "singleUse": "Ce lien est à usage unique — si vous partez avant la fin, demandez un nouveau lien à l'expéditeur.",
+    "continue": "Continuer vers {provider}",
+    "continueFailed": "La configuration n'a pas pu démarrer. Vérifiez votre connexion puis réessayez, ou demandez un nouveau lien à l'expéditeur.",
+    "alreadySaved": "Ce moyen de paiement est déjà enregistré.",
+    "alreadySavedDetail": "{brand} se terminant par {last4} est déjà enregistré. Il n'y a plus rien à faire — vous pouvez fermer cette fenêtre.",
+    "alreadySavedNoDetail": "Votre moyen de paiement est déjà enregistré. Il n'y a plus rien à faire — vous pouvez fermer cette fenêtre.",
+    "invalidTitle": "Ce lien de configuration n'est pas valide.",
+    "invalidDetail": "Le lien a peut-être expiré ou déjà été utilisé. Demandez un nouveau lien à l'expéditeur.",
+    "withdrawnTitle": "Ce lien de configuration a été retiré.",
+    "withdrawnDetail": "Demandez un nouveau lien à l'expéditeur pour enregistrer un moyen de paiement.",
+    "savedTitle": "Moyen de paiement enregistré",
+    "savedDetail": "{brand} se terminant par {last4} est désormais enregistré auprès de {org}. Les factures à venir pourront être prélevées automatiquement. Vous pouvez fermer cette fenêtre.",
+    "savedNoDetail": "Votre moyen de paiement est désormais enregistré auprès de {org}. Les factures à venir pourront être prélevées automatiquement. Vous pouvez fermer cette fenêtre."
+  },
   "list": {
     "searchPlaceholder": "{side, select, ap {Rechercher des paiements, fournisseurs, réf…} other {Rechercher des paiements, clients, réf…}}",
     "newLabel": "{side, select, ap {Nouveau paiement} other {Nouveau paiement client}}",

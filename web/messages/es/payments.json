@@ -9,6 +9,25 @@
       "runs": "Lotes de pagos"
     }
   },
+  "setup": {
+    "title": "Guardar un método de pago",
+    "intro": "Guarde un método de pago para {party} con {org}.",
+    "providerLine": "Configuración segura mediante {provider}.",
+    "noChargeToday": "Hoy no se realiza ningún cargo. Las facturas futuras podrán cobrarse automáticamente con este método.",
+    "singleUse": "Este enlace funciona una vez: si sale antes de terminar, pida al remitente un enlace nuevo.",
+    "continue": "Continuar a {provider}",
+    "continueFailed": "No se pudo iniciar la configuración. Compruebe su conexión e inténtelo de nuevo, o pida al remitente un enlace nuevo.",
+    "alreadySaved": "Este método de pago ya está guardado.",
+    "alreadySavedDetail": "{brand} terminada en {last4} ya está registrada. No queda nada por hacer: puede cerrar esta ventana.",
+    "alreadySavedNoDetail": "Su método de pago ya está registrado. No queda nada por hacer: puede cerrar esta ventana.",
+    "invalidTitle": "Este enlace de configuración no es válido.",
+    "invalidDetail": "Es posible que el enlace haya caducado o ya se haya usado. Pida al remitente un enlace nuevo.",
+    "withdrawnTitle": "Este enlace de configuración fue retirado.",
+    "withdrawnDetail": "Pida al remitente un enlace nuevo para guardar un método de pago.",
+    "savedTitle": "Método de pago guardado",
+    "savedDetail": "{brand} terminada en {last4} ya está registrada con {org}. Las facturas futuras podrán cobrarse automáticamente. Puede cerrar esta ventana.",
+    "savedNoDetail": "Su método de pago ya está registrado con {org}. Las facturas futuras podrán cobrarse automáticamente. Puede cerrar esta ventana."
+  },
   "list": {
     "searchPlaceholder": "{side, select, ap {Buscar pagos, proveedores, refs…} other {Buscar pagos, clientes, refs…}}",
     "newLabel": "{side, select, ap {Nuevo pago} other {Nuevo pago de cliente}}",
