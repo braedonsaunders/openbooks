@@ -6,6 +6,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import {
   claimPaymentFileDelivery,
   generatePaymentFileArtifact,
+  nachaDebit,
   nachaOriginator,
   recordPaymentFileDownload,
   recordPaymentFileSftpDelivery,
@@ -1191,3 +1192,23 @@ test(
     }
   },
 );
+
+test("a NACHA debit file keeps 94-byte records for an accented payer and refuses an unspellable one", () => {
+  const render = (partyName: string) => nachaDebit({
+    run: { id: "run", run_number: "COLL-7", scheduled_for: "2026-10-05" },
+    profile: { id: "profile", name: "Debits", settings: {}, secrets: { ...NACHA_ORIGINATOR, companyName: "Béton Québec" } },
+    format: { id: "format", code: "NACHA-DEBIT", rail: "nacha_debit", extension: "ach", contentType: "text/plain; charset=us-ascii", formatterScript: null },
+    payments: [{
+      id: "p1", amount: "125.50", currency: "USD", partyId: "party", partyName,
+      accountNumber: "000123456", routing: { aba: "021000021" }, reference: "INV-1", mandateReference: "MANDATE-1",
+    }],
+    businessDate: "2026-10-05",
+  }, new Date("2026-10-05T12:00:00Z"), "A");
+  const lines = render("Société Générale Ltée").content.trimEnd().split("\n");
+  for (const line of lines) assert.equal(Buffer.byteLength(line, "utf8"), 94, line);
+  assert.equal(lines[1]!.slice(4, 20), "Beton Quebec    ");
+  assert.equal(lines[2]!.slice(54, 76), "Societe Generale Ltee ");
+  assert.throws(() => render("株式会社"), (error: unknown) =>
+    error instanceof PaymentError && /NACHA individual name "株式会社" contains "株"/.test(error.message)
+    && /Edit the payee's name/.test(error.message));
+});

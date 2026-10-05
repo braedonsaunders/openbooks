@@ -13,7 +13,7 @@ import { businessTimeZone, businessToday, formatInZone } from "../platform/busin
 import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { assertSafePaymentFilename } from "../payments-core/payment-filenames.ts";
-import { assertDeclaredAsciiCharset } from "../payments-core/rail-text.ts";
+import { asciiRailText, assertDeclaredAsciiCharset, ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY } from "../payments-core/rail-text.ts";
 import { decryptAccountNumber, isValidBic, isValidIban } from "../payments-core/rail-settings.ts";
 import { assertPaymentPartiesInScope, lockRunBankEvidence } from "./run-readiness.ts";
 import {
@@ -487,7 +487,7 @@ export async function releasePaymentRunApproval(args: {
   });
 }
 
-interface FormatContext {
+export interface FormatContext {
   run: Record<string, unknown>;
   profile: {
     id: string;
@@ -700,7 +700,8 @@ export function nachaOriginator(secrets: Record<string, unknown>): NachaSettings
   };
 }
 
-function nachaDebit(
+/** Render a NACHA debit (collection) file. Exported for its record-width tests. */
+export function nachaDebit(
   ctx: FormatContext,
   now: Date,
   fileIdModifier?: string,
@@ -718,11 +719,16 @@ function nachaDebit(
   const yymmdd = (d: Date) => `${String(d.getUTCFullYear() % 100).padStart(2, "0")}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
   const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
   const odfi8 = s.odfiRouting.slice(0, 8);
+  // Fixed-width fields count characters, so every text field is folded to
+  // ASCII first: an accented name would otherwise be one byte longer than
+  // its field and shift every field after it.
+  const originatorText = (value: string | undefined, label: string) =>
+    value === undefined ? undefined : asciiRailText(value, "NACHA", label, ORIGINATOR_REMEDY);
   const created = new Date(String(ctx.businessDate) + "T00:00:00Z");
   const effective = new Date(String(ctx.run.scheduled_for ?? ctx.businessDate) + "T00:00:00Z");
   const lines = [
-    "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(created) + hhmm(now) + modifier + "094" + "10" + "1" + field(s.destinationName, 23) + field(s.originName, 23) + field("", 8),
-    "5" + "225" + field(s.companyName, 16) + field("", 20) + field(s.companyId, 10) + field(s.entryClassCode ?? "CCD", 3) + field(s.entryDescription ?? "COLLECT", 10) + field("", 6) + yymmdd(effective) + field("", 3) + "1" + odfi8 + "0000001",
+    "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(created) + hhmm(now) + modifier + "094" + "10" + "1" + field(originatorText(s.destinationName, "destination name"), 23) + field(originatorText(s.originName, "origin name"), 23) + field("", 8),
+    "5" + "225" + field(originatorText(s.companyName, "company name"), 16) + field("", 20) + field(s.companyId, 10) + field(s.entryClassCode ?? "CCD", 3) + field(originatorText(s.entryDescription, "entry description") ?? "COLLECT", 10) + field("", 6) + yymmdd(effective) + field("", 3) + "1" + odfi8 + "0000001",
   ];
   let hash = 0n;
   let total = 0n;
@@ -734,7 +740,7 @@ function nachaDebit(
     hash += BigInt(routing.slice(0, 8));
     total += cents;
     const txn = p.routing.accountType === "savings" ? "37" : "27";
-    lines.push("6" + txn + routing + field(p.accountNumber, 17) + field(cents, 10, true, "0") + field(p.mandateReference, 15) + field(p.partyName, 22) + field("", 2) + "0" + odfi8 + field(i + 1, 7, true, "0"));
+    lines.push("6" + txn + routing + field(p.accountNumber, 17) + field(cents, 10, true, "0") + field(p.mandateReference, 15) + field(asciiRailText(p.partyName, "NACHA", "individual name", PAYEE_NAME_REMEDY), 22) + field("", 2) + "0" + odfi8 + field(i + 1, 7, true, "0"));
   });
   const hashText = String(hash % 10_000_000_000n).padStart(10, "0");
   lines.push("8" + "225" + field(ctx.payments.length, 6, true, "0") + hashText + field(total, 12, true, "0") + field("0", 12, true, "0") + field(s.companyId, 10) + field("", 19) + field("", 6) + odfi8 + "0000001");
