@@ -5,6 +5,7 @@ import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { organizationCurrencyAvailable } from "../../organization/currency-options.ts";
 import { resolveWage, laborCostingSettings, laborFxQuote } from "../../projects/labor-costing.ts";
 import { supersedeLaborCostRate } from "../../projects/labor-cost-rates.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulRate, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
@@ -22,7 +23,10 @@ import {
 import { CompensationError, MERIT_CYCLES_NEED_PAYROLL } from "./errors.ts";
 import {
   compaRatio,
-  evaluateFormula,
+  evaluateExactFormula,
+  exactReviewRating,
+  validateGuidelineFormula,
+  validateMatrixGuideline,
   resolveMatrixGuideline,
   type MatrixGuideline,
 } from "./compensation-math.ts";
@@ -245,6 +249,17 @@ export async function createCycle(query: CreateCycleQuery): Promise<CompCycleDTO
       query.scope?.employerSubsidiaryId ?? null,
       "Compensation cycle",
     );
+    // Retain the feature row lock through the insert so a concurrent switch
+    // change cannot make the currency policy stale between check and save.
+    await lockAndCheckOrgFeature(db, orgId, "multiCurrency");
+    if (!(await organizationCurrencyAvailable(db, orgId, query.currency, query.scope?.employerSubsidiaryId ?? null))) {
+      throw new CompensationError("REFUSED", "choose an enabled currency for the cycle employer — foreign currencies require Company Settings → Features → Multi-currency");
+    }
+    if (query.guidelineKind === "formula") {
+      const expr = query.guideline.expr;
+      if (typeof expr !== "string") throw new CompensationError("REFUSED", "a formula cycle needs guideline.expr — enter a numeric percentage expression before saving the draft");
+      validateGuidelineFormula(expr);
+    } else validateMatrixGuideline(query.guideline);
     const row = (await db.execute<CycleRow>(sql`
       insert into hrm_comp_cycles
         (org_id, name, kind, effective_on, budget_basis, budget_total, currency,
@@ -531,7 +546,7 @@ async function inServiceEmployments(orgId: string, scope: CycleScope, asOf: stri
 }
 
 interface ReviewRating {
-  rating: number;
+  rating: string | null;
   bucket: string | null;
 }
 
@@ -553,25 +568,23 @@ async function latestSharedRating(orgId: string, employmentId: string, before: s
      order by r.shared_at desc nulls last
      limit 1`)).rows[0];
   if (!row) return null;
-  const raw = row.calibrated_rating ?? row.overall_rating;
-  if (raw === null) return { rating: 0, bucket: null };
-  const rating = Number(raw);
-  if (!Number.isFinite(rating)) return { rating: 0, bucket: null };
+  const rating = exactReviewRating(row.calibrated_rating ?? row.overall_rating);
+  if (rating === null) return { rating: null, bucket: null };
   const scale = row.rating_scale;
   const labels = Array.isArray(scale?.labels) ? scale.labels.filter((l) => typeof l === "string") : [];
   if (labels.length === 0 || typeof scale?.min !== "number" || typeof scale?.max !== "number" || !(scale.max > scale.min)) {
-    return { rating, bucket: String(raw) };
+    return { rating, bucket: rating };
   }
   const width = (scale.max - scale.min) / labels.length;
-  const idx = Math.min(labels.length - 1, Math.max(0, Math.floor((rating - scale.min) / width)));
+  const idx = Math.min(labels.length - 1, Math.max(0, Math.floor((Number(rating) - scale.min) / width)));
   return { rating, bucket: labels[idx] ?? null };
 }
 
 interface ResolvedLineGuideline {
   bandId: string | null;
   compaRatio: string | null;
-  guidelineMinPct: number | null;
-  guidelineMaxPct: number | null;
+  guidelineMinPct: string | null;
+  guidelineMaxPct: string | null;
 }
 
 async function resolveLineGuideline(
@@ -650,14 +663,14 @@ async function resolveLineGuideline(
   }
   // The guideline range at open. A line with no band has no guideline:
   // the UI shows "no band", and proposals on it always carry a reason.
-  let guidelineMinPct: number | null = null;
-  let guidelineMaxPct: number | null = null;
+  let guidelineMinPct: string | null = null;
+  let guidelineMaxPct: string | null = null;
   const guideline = cycle.guideline as Record<string, unknown>;
   if (ratio !== null && cycle.guideline_kind === "matrix") {
     const matrix = guideline as unknown as MatrixGuideline;
     const cell = resolveMatrixGuideline(matrix, review?.bucket ?? null, ratio);
-    guidelineMinPct = cell.min;
-    guidelineMaxPct = cell.max;
+    guidelineMinPct = String(cell.min);
+    guidelineMaxPct = String(cell.max);
   } else if (ratio !== null) {
     const expr = (guideline as { expr?: unknown }).expr;
     if (typeof expr !== "string") {
@@ -666,10 +679,10 @@ async function resolveLineGuideline(
         "a formula cycle needs guideline.expr — declare the expression before opening the cycle",
       );
     }
-    const pct = evaluateFormula(expr, {
+    const pct = evaluateExactFormula(expr, {
       rating: review?.rating ?? null,
-      compaRatio: Number(ratio),
-      tenureYears: employment.tenureYears,
+      compaRatio: ratio,
+      tenureYears: String(employment.tenureYears),
     });
     guidelineMinPct = pct;
     guidelineMaxPct = pct;

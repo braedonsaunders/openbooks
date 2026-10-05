@@ -5,6 +5,10 @@ import {
   compaQuartile,
   compaRatio,
   evaluateFormula,
+  evaluateExactFormula,
+  exactReviewRating,
+  validateGuidelineFormula,
+  validateMatrixGuideline,
   fitUnexplainedGap,
   meanAndMedian,
   ordinaryLeastSquares,
@@ -67,6 +71,15 @@ describe("compa-ratio", () => {
 });
 
 describe("matrix guideline", () => {
+  test("incomplete draft matrices refuse pricing by name and declared cells validate exactly", () => {
+    validateMatrixGuideline({});
+    assert.throws(() => resolveMatrixGuideline({} as MatrixGuideline, null, "1"), /matrix has no rows.*declare at least one performance bucket/);
+    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { exceeds: { q3: { min: "1", max: "3" } } } }), /undeclared performance row "exceeds"/);
+    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q4: { min: "1", max: "3" } } } }), /undeclared quartile "q4"/);
+    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "3", max: "1" } } } }), /"meets" \/ q3.*minimum above its maximum/);
+    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "1,25", max: "3" } } } }), /as "1.25"/);
+    assert.deepEqual(resolveMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "1.25", max: "3" } } } }, "meets", "1"), { min: "1.25", max: "3" });
+  });
   const matrix = {
     rows: ["exceeds", "meets"],
     cols: ["q1", "q2", "q3", "q4"],
@@ -120,11 +133,11 @@ describe("formula evaluator", () => {
   });
 
   test("an unknown identifier refuses by name", () => {
-    assert.throws(() => evaluateFormula("salary * 2", { rating: 3, compaRatio: 1, tenureYears: 1 }), /names "salary" — only rating, compa_ratio and tenure_years exist/);
+    assert.throws(() => evaluateFormula("salary * 2", { rating: 3, compaRatio: 1, tenureYears: 1 }), /names "salary".*available inputs are rating, compa_ratio, tenure_years.*choose a declared input/);
   });
 
   test("a function that does not exist refuses", () => {
-    assert.throws(() => evaluateFormula("pow(rating, 2)", { rating: 3, compaRatio: 1, tenureYears: 1 }), /calls "pow" — only min, max and clamp exist/);
+    assert.throws(() => evaluateFormula("pow(rating, 2)", { rating: 3, compaRatio: 1, tenureYears: 1 }), /calls "pow".*available functions are min, max, clamp.*choose one/);
   });
 
   test("property access is not an expression", () => {
@@ -141,6 +154,37 @@ describe("formula evaluator", () => {
 
   test("an empty formula refuses", () => {
     assert.throws(() => evaluateFormula("  ", { rating: 3, compaRatio: 1, tenureYears: 1 }), /formula is empty/);
+  });
+
+  test("stored guidelines carry exact inputs and round only once to six places", () => {
+    const inputs = { rating: "3", compaRatio: "0.9500000001", tenureYears: "2" };
+    assert.equal(evaluateExactFormula("0.1 + 0.2 - 0.3", inputs), "0.000000");
+    assert.equal(evaluateExactFormula("1 / 3 * 3", inputs), "1.000000");
+    assert.equal(evaluateExactFormula("compa_ratio - 0.95", inputs, 10), "0.0000000001");
+    assert.equal(evaluateExactFormula("1.2345675", inputs), "1.234568");
+  });
+
+  test("conditional guidelines use comparisons and keep missing ratings explicit", () => {
+    assert.equal(evaluateExactFormula("if(compa_ratio < 1, 5, 3)", { rating: null, compaRatio: "0.9", tenureYears: "2" }), "5.000000");
+    assert.throws(() => evaluateExactFormula("if(compa_ratio < 1, 5, rating)", { rating: null, compaRatio: "0.9", tenureYears: "2" }), /needs a rating.*share a review/);
+    assert.throws(() => validateGuidelineFormula("compa_ratio < 1"), /must produce a numeric percent/);
+    validateGuidelineFormula("if(compa_ratio < 1, 5, 3)");
+  });
+
+  test("a shared review without a rating stays unrated instead of pricing zero", () => {
+    assert.equal(exactReviewRating(null), null);
+    assert.equal(exactReviewRating("3.50"), "3.5");
+    assert.throws(() => exactReviewRating("NaN"), /shared review rating.*not a number/);
+    assert.throws(() => evaluateExactFormula("rating * 2", { rating: exactReviewRating(null), compaRatio: "1", tenureYears: "2" }), /needs a rating.*share a review/);
+  });
+
+  test("unreadable exact inputs and oversized stored guideline results refuse", () => {
+    assert.throws(() => evaluateExactFormula("compa_ratio", { rating: null, compaRatio: "0,95", tenureYears: "2" }), /as "0.95"/);
+    assert.throws(() => evaluateExactFormula("10000000000000", { rating: null, compaRatio: "1", tenureYears: "2" }), /result exceeds 13 whole digits/);
+    assert.throws(() => evaluateFormula("rating", { rating: NaN, compaRatio: 1, tenureYears: 2 }), /inputs are not finite/);
+    assert.throws(() => evaluateExactFormula("clamp(3, 10, 1)", { rating: null, compaRatio: "1", tenureYears: "2" }), /lower bound above its upper bound/);
+    assert.throws(() => validateGuidelineFormula("10000000000000"), /result exceeds 13 whole digits/);
+    assert.throws(() => validateGuidelineFormula("1 / 0"), /divides by zero/);
   });
 });
 

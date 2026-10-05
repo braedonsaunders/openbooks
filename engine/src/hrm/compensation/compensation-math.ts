@@ -1,5 +1,7 @@
 import { CompensationError } from "./errors.ts";
-import { compareDecimal, divideDecimal, parseExactDecimal } from "../../money/exact-decimal.ts";
+import { compileExpression, ExpressionError, type CompiledExpression } from "../../money/expression.ts";
+import { canonicalDecimal, compareDecimal, divideDecimal, parseExactDecimal } from "../../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
 
 /**
  * Compensation math (HR-12): compa-ratio, guideline resolution, the
@@ -76,8 +78,8 @@ export function compaQuartile(ratio: string): CompaQuartile {
 }
 
 export interface GuidelineCell {
-  readonly min: number;
-  readonly max: number;
+  readonly min: number | string;
+  readonly max: number | string;
 }
 
 export interface MatrixGuideline {
@@ -85,6 +87,51 @@ export interface MatrixGuideline {
   readonly cols: readonly string[];
   readonly cells: Readonly<Record<string, Readonly<Record<string, GuidelineCell>>>>;
   readonly unratedRow?: string;
+}
+
+function matrixPercent(raw: unknown, field: string): string {
+  // Existing matrix documents contain numeric percentages. Read their
+  // finite decimal representation once; all comparisons and storage
+  // calculations below use exact text rather than numeric arithmetic.
+  const text = typeof raw === "number" && Number.isFinite(raw) ? parseExactDecimal(String(raw)) : raw;
+  const exact = canonicalDecimal(text, 6);
+  if (exact === null) throw new CompensationError("REFUSED", decimalNullRefusal(field, "a decimal percentage", text, 6));
+  if (exact.replace(/^-/, "").split(".")[0]!.length > 13) throw new CompensationError("REFUSED", `${field} allows at most 13 whole digits — reduce the percentage before saving`);
+  return exact;
+}
+
+/** Draft matrices may be incomplete; every declared cell must nevertheless be usable and addressable. */
+export function validateMatrixGuideline(guideline: Record<string, unknown>): void {
+  for (const name of ["rows", "cols"] as const) {
+    const values = guideline[name];
+    if (values !== undefined && (!Array.isArray(values) || values.length > 64
+        || values.some((value) => typeof value !== "string" || value.length === 0 || value.length > 64)
+        || new Set(values).size !== values.length)) {
+      throw new CompensationError("REFUSED", `matrix ${name} must be a bounded list of unique, non-empty names — correct the guideline before saving`);
+    }
+  }
+  const rows = (guideline.rows ?? []) as string[];
+  const cols = (guideline.cols ?? []) as string[];
+  if (cols.some((column) => !(COMPA_QUARTILES as readonly string[]).includes(column))) throw new CompensationError("REFUSED", "matrix columns must be q1, q2, q3, or q4 — choose the declared compa-ratio quartiles");
+  if (guideline.unratedRow != null && (typeof guideline.unratedRow !== "string" || !rows.includes(guideline.unratedRow))) {
+    throw new CompensationError("REFUSED", "the matrix unrated row must name one of its declared rows — declare that row or remove the fallback");
+  }
+  const cells = guideline.cells;
+  if (cells === undefined) return;
+  if (!cells || typeof cells !== "object" || Array.isArray(cells)) throw new CompensationError("REFUSED", "matrix cells must be a record keyed by performance row and quartile — correct the guideline before saving");
+  for (const [rowKey, cellsByColumn] of Object.entries(cells)) {
+    if (!rows.includes(rowKey)) throw new CompensationError("REFUSED", `matrix cells name undeclared performance row ${JSON.stringify(rowKey)} — declare it in rows before assigning its cells`);
+    if (!cellsByColumn || typeof cellsByColumn !== "object" || Array.isArray(cellsByColumn)) throw new CompensationError("REFUSED", `matrix row ${JSON.stringify(rowKey)} needs a record of quartile cells — correct the row`);
+    for (const [column, value] of Object.entries(cellsByColumn)) {
+      if (!cols.includes(column)) throw new CompensationError("REFUSED", `matrix row ${JSON.stringify(rowKey)} names undeclared quartile ${JSON.stringify(column)} — declare that column before assigning its cells`);
+      const label = `matrix cell ${JSON.stringify(rowKey)} / ${column}`;
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new CompensationError("REFUSED", `${label} needs minimum and maximum percentages — supply both bounds`);
+      const cell = value as Record<string, unknown>;
+      const minimum = matrixPercent(cell.min, `${label} minimum`);
+      const maximum = matrixPercent(cell.max, `${label} maximum`);
+      if (compareDecimal(minimum, maximum) > 0) throw new CompensationError("REFUSED", `${label} has a minimum above its maximum — put the bounds in ascending order`);
+    }
+  }
 }
 
 /**
@@ -98,10 +145,13 @@ export function resolveMatrixGuideline(
   ratingKey: string | null,
   ratio: string,
 ): GuidelineCell {
+  validateMatrixGuideline(guideline as unknown as Record<string, unknown>);
+  const rows = guideline.rows ?? [];
+  const cols = guideline.cols ?? [];
   const rowKey =
-    (ratingKey !== null && guideline.rows.includes(ratingKey) ? ratingKey : null) ??
+    (ratingKey !== null && rows.includes(ratingKey) ? ratingKey : null) ??
     guideline.unratedRow ??
-    guideline.rows[0];
+    rows[0];
   if (rowKey === undefined) {
     throw new CompensationError(
       "REFUSED",
@@ -112,14 +162,14 @@ export function resolveMatrixGuideline(
   // No column fallback: pricing a q4 compa-ratio from the q1 cell is a
   // wrong-quartile merit figure, so a matrix without the employee's
   // quartile refuses by name (only the row fallback above is documented).
-  if (!guideline.cols.includes(colKey)) {
+  if (!cols.includes(colKey)) {
     throw new CompensationError(
       "REFUSED",
       `the cycle guideline has no column for compa-ratio quartile ${colKey} (performance ${JSON.stringify(rowKey)}) — complete the matrix before opening the cycle`,
     );
   }
-  const cell = guideline.cells[rowKey]?.[colKey];
-  if (!cell || !(cell.min <= cell.max)) {
+  const cell = guideline.cells?.[rowKey]?.[colKey];
+  if (!cell || compareDecimal(matrixPercent(cell.min, "guideline minimum"), matrixPercent(cell.max, "guideline maximum")) > 0) {
     throw new CompensationError(
       "REFUSED",
       `the cycle guideline has no usable cell for performance ${JSON.stringify(rowKey)} in quartile ${colKey} — complete the matrix before opening the cycle`,
@@ -128,266 +178,77 @@ export function resolveMatrixGuideline(
   return { min: cell.min, max: cell.max };
 }
 
-// ---------------------------------------------------------------------------
-// Fixed-grammar formula evaluator.
-//
-// The guideline formula is a declared expression over exactly three
-// variables (rating, compa_ratio, tenure_years) with + - * / parens and
-// min/max/clamp calls. There is deliberately no eval, no Function
-// constructor, no property access, and no other identifier: anything else
-// is a refusal naming what was found. Operator precedence is standard
-// (unary minus binds tightest after calls).
-// ---------------------------------------------------------------------------
-
+/** The same exact expression engine prices payroll rules and compensation guidelines. */
 const FORMULA_IDENTIFIERS = ["rating", "compa_ratio", "tenure_years"] as const;
 export type FormulaIdentifier = (typeof FORMULA_IDENTIFIERS)[number];
 
+/** Existing analytical callers retain their numeric result contract. */
 export interface FormulaInputs {
   readonly rating: number | null;
   readonly compaRatio: number;
   readonly tenureYears: number;
 }
 
-type Token =
-  | { kind: "number"; value: number }
-  | { kind: "ident"; name: string }
-  | { kind: "op"; op: "+" | "-" | "*" | "/" }
-  | { kind: "lparen" }
-  | { kind: "rparen" }
-  | { kind: "comma" };
-
-function tokenize(expr: string): Token[] {
-  const tokens: Token[] = [];
-  let i = 0;
-  while (i < expr.length) {
-    const ch = expr[i]!;
-    if (ch === " " || ch === "\t" || ch === "\n") {
-      i += 1;
-      continue;
-    }
-    if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
-      tokens.push({ kind: "op", op: ch });
-      i += 1;
-      continue;
-    }
-    if (ch === "(") {
-      tokens.push({ kind: "lparen" });
-      i += 1;
-      continue;
-    }
-    if (ch === ")") {
-      tokens.push({ kind: "rparen" });
-      i += 1;
-      continue;
-    }
-    if (ch === ",") {
-      tokens.push({ kind: "comma" });
-      i += 1;
-      continue;
-    }
-    const num = /^[0-9]+(\.[0-9]+)?/.exec(expr.slice(i));
-    if (num) {
-      tokens.push({ kind: "number", value: Number(num[0]) });
-      i += num[0].length;
-      continue;
-    }
-    const ident = /^[A-Za-z_][A-Za-z0-9_]*/.exec(expr.slice(i));
-    if (ident) {
-      tokens.push({ kind: "ident", name: ident[0] });
-      i += ident[0].length;
-      continue;
-    }
-    throw new CompensationError(
-      "REFUSED",
-      `the guideline formula contains ${JSON.stringify(ch)} — only numbers, rating, compa_ratio, tenure_years, + - * /, parens and min/max/clamp are allowed; rewrite the formula instead of guessing`,
-    );
-  }
-  return tokens;
+export interface ExactFormulaInputs {
+  readonly rating: string | null;
+  readonly compaRatio: string;
+  readonly tenureYears: string;
 }
 
-class FormulaParser {
-  private pos = 0;
-  constructor(
-    private readonly tokens: readonly Token[],
-    private readonly inputs: FormulaInputs,
-  ) {}
-
-  parse(): number {
-    const value = this.parseExpr();
-    if (this.pos < this.tokens.length) {
-      throw new CompensationError(
-        "REFUSED",
-        "the guideline formula has trailing input after a complete expression — balance the parens and remove the extra text",
-      );
-    }
-    return value;
-  }
-
-  private peek(): Token | null {
-    return this.tokens[this.pos] ?? null;
-  }
-
-  private parseExpr(): number {
-    let value = this.parseTerm();
-    for (;;) {
-      const t = this.peek();
-      if (t?.kind !== "op" || (t.op !== "+" && t.op !== "-")) return value;
-      this.pos += 1;
-      const rhs = this.parseTerm();
-      value = t.op === "+" ? value + rhs : value - rhs;
-    }
-  }
-
-  private parseTerm(): number {
-    let value = this.parseFactor();
-    for (;;) {
-      const t = this.peek();
-      if (t?.kind !== "op" || (t.op !== "*" && t.op !== "/")) return value;
-      this.pos += 1;
-      const rhs = this.parseFactor();
-      if (t.op === "/") {
-        if (rhs === 0) {
-          throw new CompensationError(
-            "REFUSED",
-            "the guideline formula divides by zero for this line — the formula cannot price this person; correct the formula or set the line by matrix",
-          );
-        }
-        value = value / rhs;
-      } else {
-        value = value * rhs;
-      }
-    }
-  }
-
-  private parseFactor(): number {
-    const t = this.peek();
-    if (t?.kind === "op" && t.op === "-") {
-      this.pos += 1;
-      return -this.parseFactor();
-    }
-    if (t?.kind === "number") {
-      this.pos += 1;
-      return t.value;
-    }
-    if (t?.kind === "ident") {
-      return this.parseIdentOrCall();
-    }
-    if (t?.kind === "lparen") {
-      this.pos += 1;
-      const value = this.parseExpr();
-      const close = this.peek();
-      if (close?.kind !== "rparen") {
-        throw new CompensationError(
-          "REFUSED",
-          "the guideline formula has an unclosed paren — balance the parens instead of guessing where it ends",
-        );
-      }
-      this.pos += 1;
-      return value;
-    }
-    throw new CompensationError(
-      "REFUSED",
-      "the guideline formula ends mid-expression — complete the operand instead of guessing it",
-    );
-  }
-
-  private parseIdentOrCall(): number {
-    const t = this.tokens[this.pos]!;
-    if (t.kind !== "ident") throw new Error("unreachable");
-    this.pos += 1;
-    const next = this.peek();
-    if (next?.kind === "lparen") {
-      if (t.name !== "min" && t.name !== "max" && t.name !== "clamp") {
-        throw new CompensationError(
-          "REFUSED",
-          `the guideline formula calls ${JSON.stringify(t.name)} — only min, max and clamp exist; rewrite the formula instead of guessing`,
-        );
-      }
-      this.pos += 1;
-      const args: number[] = [];
-      if (this.peek()?.kind !== "rparen") {
-        for (;;) {
-          args.push(this.parseExpr());
-          const sep = this.peek();
-          if (sep?.kind === "comma") {
-            this.pos += 1;
-            continue;
-          }
-          break;
-        }
-      }
-      const close = this.peek();
-      if (close?.kind !== "rparen") {
-        throw new CompensationError(
-          "REFUSED",
-          `the guideline formula call to ${t.name} is missing its closing paren — balance the parens instead of guessing`,
-        );
-      }
-      this.pos += 1;
-      if (t.name === "clamp") {
-        if (args.length !== 3) {
-          throw new CompensationError(
-            "REFUSED",
-            `clamp takes exactly three arguments (value, low, high), got ${args.length} — fix the call instead of guessing the bounds`,
-          );
-        }
-        return Math.min(Math.max(args[0]!, args[1]!), args[2]!);
-      }
-      if (args.length === 0) {
-        throw new CompensationError(
-          "REFUSED",
-          `${t.name} needs at least one argument — supply the values instead of guessing them`,
-        );
-      }
-      return t.name === "min" ? Math.min(...args) : Math.max(...args);
-    }
-    if (!(FORMULA_IDENTIFIERS as readonly string[]).includes(t.name)) {
-      throw new CompensationError(
-        "REFUSED",
-        `the guideline formula names ${JSON.stringify(t.name)} — only rating, compa_ratio and tenure_years exist; declare the formula over those instead of guessing`,
-      );
-    }
-    if (t.name === "rating") {
-      const rating = this.inputs.rating;
-      if (rating === null) {
-        throw new CompensationError(
-          "REFUSED",
-          "the guideline formula needs a rating but this line has no shared review — share a review for the cycle window or set the line by matrix",
-        );
-      }
-      return rating;
-    }
-    if (t.name === "compa_ratio") return this.inputs.compaRatio;
-    return this.inputs.tenureYears;
-  }
+/** A shared review without a rating remains unrated, never a synthetic zero. */
+export function exactReviewRating(raw: unknown): string | null {
+  if (raw === null) return null;
+  const rating = canonicalDecimal(raw, 18);
+  if (rating === null) throw new CompensationError("REFUSED", decimalNullRefusal("The shared review rating", "a decimal rating", raw, 18));
+  return rating;
 }
 
-/**
- * Evaluate a declared guideline formula. Returns the percent (a number
- * like 3.5, not a fraction). Refuses anything outside the fixed grammar
- * by name — never eval, never a silent zero.
- */
+function compiledGuideline(expr: string): CompiledExpression {
+  const compiled = compileExpression(expr, FORMULA_IDENTIFIERS.map((name) => ({ name, type: { kind: "scalar" } })));
+  if (compiled.resultType.kind !== "scalar") {
+    throw new CompensationError("REFUSED", "the guideline formula must produce a numeric percent — use if(condition, yes, no) to choose a percentage");
+  }
+  return compiled;
+}
+
+function guidelineRefusal(error: unknown): never {
+  if (error instanceof ExpressionError) throw new CompensationError("REFUSED", error.message);
+  throw error;
+}
+
+/** A persisted guideline is rounded once to its declared numeric(19,6) boundary. */
+export function evaluateExactFormula(expr: string, inputs: ExactFormulaInputs, scale = 6): string {
+  try {
+    const compiled = compiledGuideline(expr);
+    if (compiled.dependencies.includes("rating") && inputs.rating === null) {
+      throw new CompensationError("REFUSED", "the guideline formula needs a rating but this line has no shared review — share a review for the cycle window or set the line by matrix");
+    }
+    const result = compiled.evaluate({ rating: inputs.rating, compa_ratio: inputs.compaRatio, tenure_years: inputs.tenureYears }, {
+      scale, mode: "half_away_from_zero", maxWholeDigits: scale === 6 ? 13 : 15,
+    });
+    return result.value as string;
+  } catch (error) { return guidelineRefusal(error); }
+}
+
+/** Validate a definition without inventing employee values or executing a branch. */
+export function validateGuidelineFormula(expr: string): void {
+  try {
+    const compiled = compiledGuideline(expr);
+    if (compiled.dependencies.length === 0) compiled.evaluate({}, { scale: 6, mode: "half_away_from_zero", maxWholeDigits: 13 });
+  } catch (error) { guidelineRefusal(error); }
+}
+
+/** Compatibility for analytical consumers; stored financial guidelines use evaluateExactFormula. */
 export function evaluateFormula(expr: string, inputs: FormulaInputs): number {
-  if (expr.trim().length === 0) {
-    throw new CompensationError(
-      "REFUSED",
-      "the guideline formula is empty — declare an expression over rating, compa_ratio and tenure_years before opening the cycle",
-    );
+  if (!Number.isFinite(inputs.compaRatio) || !Number.isFinite(inputs.tenureYears)
+      || (inputs.rating !== null && !Number.isFinite(inputs.rating))) {
+    throw new CompensationError("REFUSED", "the guideline formula inputs are not finite — resolve the rating, compa-ratio and tenure before evaluating");
   }
-  if (!Number.isFinite(inputs.compaRatio) || !Number.isFinite(inputs.tenureYears)) {
-    throw new CompensationError(
-      "REFUSED",
-      "the guideline formula inputs are not finite — resolve the compa-ratio and tenure before evaluating",
-    );
-  }
-  const value = new FormulaParser(tokenize(expr), inputs).parse();
-  if (!Number.isFinite(value)) {
-    throw new CompensationError(
-      "REFUSED",
-      "the guideline formula evaluates to a non-finite percent — the formula cannot price this line; correct it or set the line by matrix",
-    );
-  }
-  return value;
+  return Number(evaluateExactFormula(expr, {
+    rating: inputs.rating === null ? null : parseExactDecimal(String(inputs.rating))!,
+    compaRatio: parseExactDecimal(String(inputs.compaRatio))!,
+    tenureYears: parseExactDecimal(String(inputs.tenureYears))!,
+  }, 18));
 }
 
 // ---------------------------------------------------------------------------
