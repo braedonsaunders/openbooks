@@ -147,6 +147,7 @@
     "indirectRate": "间接费率",
     "allowableSpend": "可列支支出",
     "reimbursedAmount": "已报销金额",
+    "reimbursedByOtherGrants": "本基金其他资助已报销金额",
     "remainingAllowable": "剩余可列支支出",
     "drawdownsEmpty": "该补助金暂无支出记录。",
     "createDrawdownAction": "创建支出",

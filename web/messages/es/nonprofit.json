@@ -147,6 +147,7 @@
     "indirectRate": "Tasa indirecta",
     "allowableSpend": "Gasto admisible",
     "reimbursedAmount": "Importe reembolsado",
+    "reimbursedByOtherGrants": "Reembolsado por otras subvenciones de este fondo",
     "remainingAllowable": "Gasto admisible restante",
     "drawdownsEmpty": "Sin disposiciones registradas para esta subvención.",
     "createDrawdownAction": "Crear disposición",

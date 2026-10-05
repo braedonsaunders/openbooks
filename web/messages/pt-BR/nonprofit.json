@@ -147,6 +147,7 @@
     "indirectRate": "Taxa indireta",
     "allowableSpend": "Gasto elegível",
     "reimbursedAmount": "Valor reembolsado",
+    "reimbursedByOtherGrants": "Reembolsado por outras subvenções deste fundo",
     "remainingAllowable": "Gasto elegível restante",
     "drawdownsEmpty": "Sem desembolsos registrados para esta subvenção.",
     "createDrawdownAction": "Criar desembolso",

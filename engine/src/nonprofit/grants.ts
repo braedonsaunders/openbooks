@@ -713,6 +713,12 @@ async function resolveGroupMembers(
   return included;
 }
 
+/**
+ * The grant's allowable direct costs: expense posted to the grant's fund, on
+ * accounts in its allowable-cost group, dated inside its period of
+ * performance. A cost incurred before the award starts or after it ends is
+ * not chargeable to the award, so it never counts toward reimbursement.
+ */
 async function grantExpenseTotal(runner: SqlExecutor, grant: GrantRow): Promise<Money> {
   const grouped = await resolveGroupMembers(runner, grant.org_id, grant.allowable_account_group_id);
   const accountIds = [...grouped].filter(([, type]) => EXPENSE_TYPES.has(type)).map(([id]) => id);
@@ -741,6 +747,7 @@ async function grantExpenseTotal(runner: SqlExecutor, grant: GrantRow): Promise<
        and je.status in ('posted', 'reversed') and a.type in ('cogs', 'expense', 'expense_other')
        and jl.account_id = any(${uuidArray(accountIds)}::uuid[])
        and coalesce(jl.extra_dims->>'fund', ${defaultFund.rows[0]?.id ?? null}) = ${grant.fund_id}
+       and je.posting_date between ${grant.period_from}::date and ${grant.period_to}::date
   `);
   return parseMoney(result.rows[0]?.total ?? "0");
 }
@@ -759,6 +766,79 @@ async function drawdownTotals(runner: SqlExecutor, grant: GrantRow, exceptId?: s
   };
 }
 
+interface FundReimbursementClaims {
+  fundCode: string;
+  /** Reimbursement and final drawdowns, not void, by every grant on the fund. */
+  total: Money;
+  /** The part of `total` claimed by grants other than the one being measured. */
+  otherGrants: { code: string; amount: Money }[];
+}
+
+/**
+ * Reimbursements already claimed against a fund's costs, across every grant
+ * recorded on that fund. A drawdown counts toward the fund its grant version
+ * named when it was drawn; a grant's fund cannot change once it leaves draft,
+ * so that is the fund whose costs the drawdown claimed.
+ */
+async function fundReimbursementClaims(
+  runner: SqlExecutor,
+  grant: GrantRow,
+  exceptId?: string,
+): Promise<FundReimbursementClaims> {
+  const fund = await runner.execute<{ code: string }>(sql`
+    select sv.code from segment_values sv where sv.org_id = ${grant.org_id} and sv.id = ${grant.fund_id}
+  `);
+  const result = await runner.execute<{ code: string; amount: string }>(sql`
+    select g.code, sum(d.amount)::text as amount
+      from grant_drawdowns d join grants g on g.org_id = d.org_id and g.id = d.grant_id
+     where d.org_id = ${grant.org_id} and g.fund_id = ${grant.fund_id}
+       and d.status <> 'void' and d.kind in ('reimbursement', 'final')
+       and (${exceptId ?? null}::uuid is null or d.id <> ${exceptId ?? null}::uuid)
+     group by g.code
+     order by g.code
+  `);
+  let total = parseMoney("0");
+  const otherGrants: { code: string; amount: Money }[] = [];
+  for (const row of result.rows) {
+    const amount = parseMoney(row.amount);
+    total = addMoney(total, amount);
+    if (row.code !== grant.code && cmpMoney(amount, "0.0000") !== 0) otherGrants.push({ code: row.code, amount });
+  }
+  return { fundCode: fund.rows[0]?.code ?? grant.fund_id, total, otherGrants };
+}
+
+/**
+ * Serializes every reimbursement measured against one fund. Two grants may
+ * share a fund, and each drawdown locks only its own grant, so without this
+ * lock two drawdowns on different grants could each measure the same unclaimed
+ * costs and both succeed. FOR NO KEY UPDATE conflicts with itself, which is
+ * all the serialization needs, while still letting other transactions insert
+ * rows that merely reference the fund.
+ */
+async function lockFundForReimbursement(runner: SqlExecutor, grant: GrantRow): Promise<void> {
+  const locked = await runner.execute<{ id: string }>(sql`
+    select id from funds where org_id = ${grant.org_id} and id = ${grant.fund_id} for no key update
+  `);
+  if (locked.rows.length !== 1) {
+    throw refusal({
+      message: `Grant ${grant.code}'s fund is no longer a fund in this organization, so its costs cannot be measured.`,
+      code: "grant_fund_invalid",
+      remedy: "Review the grant's fund in fund accounting before retrying the reimbursement.",
+      status: 409,
+    });
+  }
+}
+
+/**
+ * A reimbursement may claim only allowable spend that no reimbursement has
+ * claimed before. Allowable spend is measured for this grant (its fund,
+ * allowable-cost group and period of performance, plus indirect cost), and
+ * every reimbursement already drawn by ANY grant on the same fund is netted
+ * against it, because the ledger records costs by fund, not by grant: a cost
+ * on a shared fund cannot be attributed to one award, so it is reimbursed at
+ * most once across all of them. Advances claim no costs and are limited only
+ * by the remaining award.
+ */
 async function requireDrawdownCapacity(
   runner: SqlExecutor,
   grant: GrantRow,
@@ -776,6 +856,7 @@ async function requireDrawdownCapacity(
     });
   }
   if (kind === "advance") return;
+  await lockFundForReimbursement(runner, grant);
   const directCosts = await grantExpenseTotal(runner, grant);
   const allowable = calculateAllowableSpend({
     directCosts,
@@ -783,16 +864,29 @@ async function requireDrawdownCapacity(
     ratePercent: grant.indirect_rate,
     base: grant.indirect_base,
   });
-  const remainingAllowable = addMoney(allowable, negMoney(totals.reimbursements));
+  const claims = await fundReimbursementClaims(runner, grant, exceptId);
+  const remainingAllowable = addMoney(allowable, negMoney(claims.total));
   if (cmpMoney(amount, remainingAllowable) > 0) {
     const group = await runner.execute<{ name: string }>(sql`
       select name from account_groups where org_id = ${grant.org_id} and id = ${grant.allowable_account_group_id}
     `);
     const groupName = group.rows[0]?.name ?? "the grant's allowable-cost account group";
+    const period = `${grant.period_from} to ${grant.period_to}`;
+    if (claims.otherGrants.length > 0) {
+      const others = claims.otherGrants.map((other) => `${other.code} (${other.amount})`).join(", ");
+      throw refusal({
+        message: `Reimbursement ${amount} exceeds allowable spend remaining of ${remainingAllowable} under "${groupName}" for grant ${grant.code}. ` +
+          `Fund ${claims.fundCode} is shared with other grants, and its costs are reimbursed only once across all of them; ` +
+          `reimbursements already claimed on this fund by other grants: ${others}.`,
+        code: "grant_drawdown_over_allowable_spend",
+        remedy: `Reduce the reimbursement to no more than ${remainingAllowable}. If another grant's reimbursement claimed these costs in error, void that drawdown on its grant first; ` +
+          `otherwise post further qualifying expenses to fund ${claims.fundCode} dated within ${period}.`,
+      });
+    }
     throw refusal({
-      message: `Reimbursement ${amount} exceeds allowable spend remaining of ${remainingAllowable} under "${groupName}".`,
+      message: `Reimbursement ${amount} exceeds allowable spend remaining of ${remainingAllowable} under "${groupName}" for grant ${grant.code}.`,
       code: "grant_drawdown_over_allowable_spend",
-      remedy: "Reduce the reimbursement or post qualifying grant-fund expenses to accounts in the allowable-cost group.",
+      remedy: `Reduce the reimbursement or post qualifying expenses to fund ${claims.fundCode} on accounts in the allowable-cost group, dated within ${period}.`,
     });
   }
 }
@@ -1504,6 +1598,8 @@ export async function getGrantBudget(orgId: string, grantId: string): Promise<{
   indirectCost: string;
   allowableSpend: string;
   reimbursedAmount: string;
+  /** Reimbursements by other grants on the same fund, which consume the same costs. */
+  reimbursedByOtherGrants: string;
   remainingAllowableSpend: string;
 }> {
   return withGrantRead(orgId, async (runner) => {
@@ -1512,6 +1608,7 @@ export async function getGrantBudget(orgId: string, grantId: string): Promise<{
     const direct = await grantExpenseTotal(runner, grant);
     const allowable = calculateAllowableSpend({ directCosts: direct, modifiedTotalDirect: direct, ratePercent: grant.indirect_rate, base: grant.indirect_base });
     const indirect = addMoney(allowable, negMoney(direct));
+    const claims = await fundReimbursementClaims(runner, grant);
     return {
       awardAmount: grant.award_amount,
       drawnAmount: totals.all,
@@ -1520,7 +1617,8 @@ export async function getGrantBudget(orgId: string, grantId: string): Promise<{
       indirectCost: indirect,
       allowableSpend: allowable,
       reimbursedAmount: totals.reimbursements,
-      remainingAllowableSpend: addMoney(allowable, negMoney(totals.reimbursements)),
+      reimbursedByOtherGrants: addMoney(claims.total, negMoney(totals.reimbursements)),
+      remainingAllowableSpend: addMoney(allowable, negMoney(claims.total)),
     };
   });
 }

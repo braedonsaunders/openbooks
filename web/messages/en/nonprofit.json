@@ -147,6 +147,7 @@
     "indirectRate": "Indirect rate",
     "allowableSpend": "Allowable spend",
     "reimbursedAmount": "Reimbursed amount",
+    "reimbursedByOtherGrants": "Reimbursed by other grants on this fund",
     "remainingAllowable": "Remaining allowable spend",
     "drawdownsEmpty": "No drawdowns recorded for this grant.",
     "createDrawdownAction": "Create drawdown",
