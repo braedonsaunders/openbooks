@@ -323,6 +323,7 @@
     "code": "编码",
     "description": "每个选项矩阵一行 — 尺码和颜色作为独立物料销售。",
     "empty": "暂无产品系列",
+    "emptyDescription": "创建系列并添加选项后，所有组合都会显示在这里，可定价、可备货。",
     "newFamily": "新建系列",
     "drawerTitle": "产品系列",
     "created": "系列已创建",

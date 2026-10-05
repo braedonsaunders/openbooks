@@ -3,6 +3,8 @@
     "title": "Facturas de cliente",
     "cashTitle": "Ventas en efectivo",
     "cashDescription": "Recibos pagados al momento y reembolsos — dinero en caja, sin cuentas por cobrar.",
+    "cashEmptyTitle": "Aún no hay ventas en efectivo",
+    "cashEmptyDescription": "Registre el primer recibo pagado al momento: medios de pago, tarjetas regalo y cambio quedan en la venta, sin factura abierta.",
     "description": "Facturas y notas de crédito de cliente — sus cuentas por cobrar: borrador → aprobación → contabilizadas.",
     "searchPlaceholder": "Buscar facturas, notas de crédito, clientes, referencias…",
     "emptyTitle": "Aún no hay facturas de cliente",

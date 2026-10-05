@@ -200,6 +200,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
         drawer={nativeDrawer ? undefined : slot(props.drawer)}
         nativeDrawer={nativeDrawer}
+        emptyTitle={str(props, 'emptyTitle')}
+        emptyDescription={str(props, 'emptyDescription')}
         emptyAction={slot(props.emptyAction)}
         renderRowActions={
           rowActionsRenderer

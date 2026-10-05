@@ -3,6 +3,8 @@
     "title": "請求書",
     "cashTitle": "現金売上",
     "cashDescription": "その場で支払われる売上レシートと返金 — 売掛金なし。",
+    "cashEmptyTitle": "現金売上はまだありません",
+    "cashEmptyDescription": "最初の店頭売上レシートを登録 — 支払方法、ギフトカード、お釣りは売上に記録され、請求書は残りません。",
     "description": "得意先請求書と貸方票 — あなたの売掛金: 下書き → 承認 → 記帳。",
     "searchPlaceholder": "請求書、貸方票、得意先、参照番号を検索…",
     "emptyTitle": "請求書はまだありません",

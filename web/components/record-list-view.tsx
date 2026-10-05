@@ -16,7 +16,7 @@ import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
 import { DocTypeBadge } from './doc-type-badge'
 import { docTypeMeta } from './doc-type-badge'
-import { buildListDrawerHref, parseListParams, pickString } from '../lib/list-params'
+import { buildListDrawerHref, hasActiveListFilters, parseListParams, pickString } from '../lib/list-params'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
@@ -79,6 +79,8 @@ export async function RecordListView({
   sp,
   drawer,
   nativeDrawer,
+  emptyTitle,
+  emptyDescription,
   emptyAction,
   renderRowActions,
 }: {
@@ -91,6 +93,9 @@ export async function RecordListView({
   /** Page-resolved flyout (rendered when e.g. ?doc=/?payment= is set). */
   drawer?: ReactNode
   nativeDrawer?: NativeListDrawerData | null
+  /** Teaching copy for the genuinely-empty list; the filtered-empty state keeps the shared generic. */
+  emptyTitle?: string
+  emptyDescription?: string
   /** Action shown in the empty state (usually the New button). */
   emptyAction?: ReactNode
   /** Per-row actions for the `_actions` column, if the view includes it. */
@@ -213,6 +218,12 @@ export async function RecordListView({
   const rows = rowsRes.rows as Record<string, unknown>[]
   const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
+  // The genuinely-empty list teaches; a filtered one keeps the shared generic.
+  const filtersActive = hasActiveListFilters({
+    q: params.q,
+    quickValues: { status, kind, from, to, ...extraQuickValues },
+    savedViewFilterCount: view.filters.length,
+  })
 
   const statusOptions = statusCounts.rows.map((r) => ({
     value: String(r.status),
@@ -392,8 +403,8 @@ export async function RecordListView({
       {total === 0 ? (
         <div className="mt-4">
           <EmptyState
-            title={tCommon('empty.title')}
-            description={tCommon('empty.description')}
+            title={filtersActive ? tCommon('empty.title') : (emptyTitle ?? tCommon('empty.title'))}
+            description={filtersActive ? tCommon('empty.description') : (emptyDescription ?? tCommon('empty.description'))}
             action={emptyAction}
           />
         </div>

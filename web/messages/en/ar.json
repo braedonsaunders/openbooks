@@ -3,6 +3,8 @@
     "title": "Invoices",
     "cashTitle": "Cash sales",
     "cashDescription": "Paid-at-sale receipts and refunds — money in the till, no receivable: draft → tendered → posted.",
+    "cashEmptyTitle": "No cash sales yet",
+    "cashEmptyDescription": "Ring up the first paid-at-sale receipt — tenders, gift cards and change are recorded on the sale, with no invoice left open.",
     "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted.",
     "searchPlaceholder": "Search invoices, credits, customers, refs…",
     "emptyTitle": "No invoices yet",

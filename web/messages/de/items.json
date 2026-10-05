@@ -336,6 +336,7 @@
     "code": "Code",
     "description": "Eine Zeile pro Optionsmatrix – Größen und Farben, die als eigene Artikel verkaufen.",
     "empty": "Noch keine Produktfamilien",
+    "emptyDescription": "Legen Sie eine Familie an, fügen Sie Optionen hinzu — jede Kombination erscheint hier, bereit zur Bepreisung und Lagerung.",
     "newFamily": "Neue Familie",
     "drawerTitle": "Produktfamilie",
     "created": "Familie angelegt",
