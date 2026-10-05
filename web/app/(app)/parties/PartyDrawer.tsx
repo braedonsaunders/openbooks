@@ -4,6 +4,7 @@ import { type Opt, type AddressApiRecord, type ContactApiRecord, type PartyPaylo
 import { PartyReadOnlyField, PartySummary, SublistHeading, SublistEmpty, ReadOnlyLineSublist } from './PartySummary'
 import { ContactForm, AddressForm } from './PartyContactForms'
 import { BankAccountsPanel } from './PartyBankAccountsPanel'
+import { PartyPaymentMethodsPanel } from './PartyPaymentMethodsPanel'
 import { EmployeeBenefitsPanel } from './EmployeeBenefitsPanel'
 import { ActivitySublist } from './PartyActivitySublist'
 import { TransactionSublist } from './PartyTransactionSublist'
@@ -68,6 +69,7 @@ export function PartyDrawer({
   compliance = null,
   hrm = null,
   role,
+  autopay = null,
   initialTab = 'overview',
   initialMode = 'view',
   basePath = '/parties',
@@ -136,6 +138,10 @@ export function PartyDrawer({
    *  multi-role party model stays hidden from end users — and saving always
    *  keeps that role enabled. Omitted on the unified /parties directory. */
   role?: 'customer' | 'vendor' | 'employee'
+  /** Stored payment methods and autopay for a customer drawer. Null = gated
+   *  (the autopay feature is off or the viewer lacks payment_methods.read),
+   *  so the tab never renders without the read surface behind it. */
+  autopay?: { canManageMethods: boolean; canManageAutopay: boolean } | null
   initialTab?: PartyTab
   initialMode?: DrawerMode
   basePath?: string
@@ -177,6 +183,11 @@ export function PartyDrawer({
   const showWagesTab = role === 'employee' && canManageWages && payload.employee != null
   const showBenefitsTab = role === 'employee' && canReadBenefits && payload.employee != null
   const showPayrollTab = role === 'employee' && canManagePayroll && payload.employee != null
+  // The Payment methods tab needs a customer drawer whose viewer holds the
+  // stored-methods read surface — the loader passes null unless the autopay
+  // feature is on and payment_methods.read holds, so the same predicate
+  // gates the tab button and the deep-link like Compliance.
+  const showPaymentMethodsTab = (role === 'customer' || (!role && payload.customer != null)) && autopay != null
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
   const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
@@ -207,6 +218,7 @@ export function PartyDrawer({
     (initialTab === 'relationship' && !showRelationshipTab) ||
     (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
     (initialTab === 'compliance' && !showComplianceTab) ||
+    (initialTab === 'paymentMethods' && !showPaymentMethodsTab) ||
     (initialTab === 'employment' && !showEmploymentTab)
       ? 'overview'
       : initialTab
@@ -933,6 +945,7 @@ export function PartyDrawer({
     // out of the crowded overview.
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
     ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pricing' as const, label: t('tabs.pricing') }] : []),
+    ...(showPaymentMethodsTab ? [{ key: 'paymentMethods' as const, label: t('tabs.paymentMethods') }] : []),
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
     ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
@@ -1557,6 +1570,14 @@ export function PartyDrawer({
         ) : null}
         {tab === 'pricing' && role === 'customer' && !isPlaceholderName ? (
           <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} editable={editable} />
+        ) : null}
+        {tab === 'paymentMethods' && showPaymentMethodsTab && !createMode ? (
+          <PartyPaymentMethodsPanel
+            partyId={String(p.id)}
+            canManageMethods={autopay?.canManageMethods ?? false}
+            canManageAutopay={autopay?.canManageAutopay ?? false}
+            defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
+          />
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}

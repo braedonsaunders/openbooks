@@ -189,6 +189,7 @@ export async function loadParties(
     requestedPartyTab === 'accounting' ||
     requestedPartyTab === 'compliance' ||
     requestedPartyTab === 'relationship' ||
+    requestedPartyTab === 'paymentMethods' ||
     requestedPartyTab === 'wages'
       ? requestedPartyTab
       : 'overview'
@@ -267,6 +268,7 @@ export async function loadParties(
     multiCurrency,
     crmEnabled,
     complianceEnabled,
+    autopayEnabled,
   ] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
@@ -315,6 +317,7 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'multiCurrency'),
     isFeatureEnabled(orgId, 'crm'),
     isFeatureEnabled(orgId, 'subcontractorCompliance'),
+    isFeatureEnabled(orgId, 'autopay'),
   ])
   const resolvedPartyForm =
     (openParty || creating) && pickers && role
@@ -408,6 +411,16 @@ export async function loadParties(
           canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
           canManageWages: can(authz, 'admin.setup.manage'),
           payrollEnabled,
+          // Stored methods ride the autopay feature plus the read grant;
+          // null hides the tab even on a customer drawer.
+          autopay: autopayEnabled
+            && can(authz, 'payment_methods.read')
+            && (role === 'customer' || (!role && openParty?.customer != null))
+            ? {
+                canManageMethods: can(authz, 'payment_methods.manage'),
+                canManageAutopay: can(authz, 'autopay.manage'),
+              }
+            : null,
           multiCurrency,
           complianceEnabled,
           canManageCompliance: can(authz, 'compliance.manage'),
