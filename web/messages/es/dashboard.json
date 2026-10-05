@@ -95,6 +95,8 @@
     "asOf": "Al {date}",
     "monthToDate": "Mes hasta la fecha",
     "periodToDate": "{label} hasta la fecha",
+    "noAccountingPeriod": "El día hábil {date} es anterior al primer período contable {period} — configura un período que lo cubra en Close Setup",
+    "consolidatedScope": "{name} (consolidado)",
     "noData": "Sin datos",
     "noBaseCurrency": "Sin moneda base configurada",
     "next30Days": "Próximos 30 días",

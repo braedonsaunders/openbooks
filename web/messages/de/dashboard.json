@@ -95,6 +95,8 @@
     "agentClear": "Alles in Ordnung",
     "monthToDate": "Seit Monatsbeginn",
     "periodToDate": "{label} bis heute",
+    "noAccountingPeriod": "Der Geschäftstag {date} liegt vor der ersten Buchungsperiode {period} — richte in Close Setup eine abdeckende Periode ein",
+    "consolidatedScope": "{name} (konsolidiert)",
     "noData": "Keine Daten",
     "noBaseCurrency": "Keine Basiswährung konfiguriert",
     "next30Days": "Nächste 30 Tage",

@@ -95,6 +95,8 @@
     "agentClear": "Tudo certo",
     "monthToDate": "Mês até a data",
     "periodToDate": "{label} até a data",
+    "noAccountingPeriod": "A data comercial {date} é anterior ao primeiro período contábil {period} — configure um período de cobertura no Close Setup",
+    "consolidatedScope": "{name} (consolidado)",
     "noData": "Sem dados",
     "noBaseCurrency": "Sem moeda base configurada",
     "next30Days": "Próximos 30 dias",
