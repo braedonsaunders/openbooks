@@ -49,9 +49,10 @@ async function configureDuplicateFloor(orgId: string) {
         || jsonb_build_object('sentinel', '{"duplicateMinAmount": "1.00", "duplicateDays": 14}'::jsonb))
       where id = ${orgId}`)
     // A fixture write that no read can observe is not a setup: prove the
-    // reader resolves the floor before any scenario runs.
+    // reader resolves the floor before any scenario runs. The reader
+    // canonicalizes money to four decimals, so '1.00' reads back '1.0000'.
     const cfg = await analyticsConfig(orgId, 'sentinel')
-    assert.equal(cfg.duplicateMinAmount, '1.00')
+    assert.equal(cfg.duplicateMinAmount, '1.0000')
   })
 }
 

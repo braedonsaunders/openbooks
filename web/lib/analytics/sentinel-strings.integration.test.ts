@@ -49,7 +49,9 @@ test('sentinel flag reasons render in the request locale', { skip: !process.env.
         || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
           || jsonb_build_object('sentinel', '{"duplicateMinAmount": "1.00", "duplicateDays": 14}'::jsonb))
         where id = ${org.orgId}`)
-      assert.equal((await analyticsConfig(org.orgId, 'sentinel')).duplicateMinAmount, '1.00')
+      // The reader canonicalizes money to four decimals: '1.00' reads back
+      // '1.0000'. Asserting the canonical form proves the floor resolved.
+      assert.equal((await analyticsConfig(org.orgId, 'sentinel')).duplicateMinAmount, '1.0000')
     })
     const user: SessionUser = { id: actor, orgId: org.orgId, name: 'Forensic reviewer', email: 'forensics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
     const authz: Authz = { user, permissions: new Set(['reports.read', 'admin.audit.read']), allowedSubsidiaryIds: null }
