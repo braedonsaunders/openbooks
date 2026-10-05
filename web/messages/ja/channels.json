@@ -63,7 +63,7 @@
     "marginTitle": "受注の采算",
     "marginHint": "チャネル別・直近30日の貢献利益（発送・手数料後）",
     "marginEmpty": "コスト付きで受注が記帳されるとここにマージンが表示されます。今すぐ作成するには受注を更新してください。",
-    "marginPrecisionUnknown": "{currency}の金額には設定 → 通貨での精度設定が必要です。",
+    "marginPrecisionUnknown": "{currency}の金額は表示できません:{currency}にはISO通貨レジストリ（読み取り専用の参照データ）に精度がありません。コードが誤っている場合は、チャネルを切断してサポートされている3文字のISOコードで再接続してください — 有効なチャネルの通貨は変更できません。",
     "marginReport": "マージンレポート",
     "marginMeta": "受注{orders}件・売上{revenue}・広告費{adSpend}",
     "marginEstimated": "見積もり{count}件",
@@ -367,7 +367,7 @@
   },
   "drawer": {
     "lines": "明細",
-    "unknownPrecision": "{currency}の金額には設定 → 通貨での精度設定が必要です。",
+    "unknownPrecision": "{currency}の金額は表示できません:{currency}にはISO通貨レジストリ（読み取り専用の参照データ）に精度がありません。コードが誤っている場合は、チャネルを切断してサポートされている3文字のISOコードで再接続してください — 有効なチャネルの通貨は変更できません。",
     "tenders": "決済",
     "activity": "履歴",
     "posting": "転記",

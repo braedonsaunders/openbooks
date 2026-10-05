@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { useAppAction } from '@/lib/use-app-action'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { createMoneyFormatter, tryMinorToMajorTextUnits } from '@/lib/money-format'
+import { createMoneyFormatter, displayMinorAmount } from '@/lib/money-format'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { channelRequest } from './channel-client'
@@ -229,11 +229,17 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
   // Precision comes from the authoritative registry via currencyUnits. A
   // missing, malformed, or out-of-range precision renders the named notice
   // for that currency instead of guessing /100 or unmounting the drawer.
+  // The registry exponent rides as both fraction digits: Intl defaults
+  // would otherwise override it for private/custom codes.
   const amountIn = (minor: string, currency: string) => {
-    const major = tryMinorToMajorTextUnits(minor, drawer.currencyUnits[currency])
-    if (major === null) return t('drawer.unknownPrecision', { currency })
+    const display = displayMinorAmount(minor, drawer.currencyUnits[currency])
+    if (display === null) return t('drawer.unknownPrecision', { currency })
     const formatter = currency === drawer.currency ? money : createMoneyFormatter(locale, currency)
-    return formatter.money(major, { currency })
+    return formatter.money(display.major, {
+      currency,
+      minimumFractionDigits: display.digits,
+      maximumFractionDigits: display.digits,
+    })
   }
   const amount = (minor: string) => amountIn(minor, drawer.currency)
 

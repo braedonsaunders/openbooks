@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
-import { createMoneyFormatter, tryMinorToMajorTextUnits } from "@/lib/money-format";
+import { createMoneyFormatter, displayMinorAmount } from "@/lib/money-format";
 import { toast } from "sonner";
 import Link from "next/link";
 import { Layers, Pause, Play, Plug, Unplug } from "lucide-react";
@@ -271,9 +271,13 @@ export function ChannelsConsole() {
                     {marginRows.map((row) => {
                       const money = createMoneyFormatter(locale, row.currency);
                       const formatAmount = (minor: string) => {
-                        const major = tryMinorToMajorTextUnits(minor, row.minorUnits);
-                        if (major === null) return null;
-                        return money.money(major, { currency: row.currency });
+                        const display = displayMinorAmount(minor, row.minorUnits);
+                        if (display === null) return null;
+                        return money.money(display.major, {
+                          currency: row.currency,
+                          minimumFractionDigits: display.digits,
+                          maximumFractionDigits: display.digits,
+                        });
                       };
                       const revenueText = formatAmount(row.revenueMinor);
                       const cm2Text = formatAmount(row.cm2Minor);

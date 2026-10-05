@@ -111,8 +111,11 @@ export function minorToMajorTextUnits(minor: string, minorUnits: number, currenc
   if (major !== null) return major
   const code = typeof currency === 'string' && currency.trim() !== '' ? currency.trim().toUpperCase() : null
   if (!Number.isInteger(minorUnits) || (minorUnits as number) < 0 || (minorUnits as number) > 4) {
+    // The ISO currency registry is read-only platform reference data: there
+    // is no Setup edit that grants a currency its precision. The operator
+    // path is a supported code from the registry.
     throw new Error(
-      `unsupported currency precision "${String(minorUnits)}"${code ? ` for ${code}` : ''}: configure minor units for the currency in Setup → Currencies`,
+      `unsupported currency precision "${String(minorUnits)}"${code ? ` for ${code}` : ''}: choose a supported currency code from the ISO currency registry`,
     )
   }
   throw new Error(
@@ -127,10 +130,22 @@ export function minorToMajorTextUnits(minor: string, minorUnits: number, currenc
  * never a throw that unmounts the surrounding view.
  */
 export function tryMinorToMajorTextUnits(minor: unknown, minorUnits: unknown): string | null {
+  return displayMinorAmount(minor, minorUnits)?.major ?? null
+}
+
+/**
+ * Display-ready minor-unit amount with its authoritative precision: the
+ * shared formatter must render exactly `digits` fraction digits (via
+ * minimum/maximumFractionDigits), because Intl defaults follow the
+ * code's built-in metadata and override the registry for private/custom
+ * codes. Null whenever tryMinorToMajorTextUnits refuses.
+ */
+export function displayMinorAmount(minor: unknown, minorUnits: unknown): { major: string; digits: number } | null {
   if (typeof minor !== 'string' || minor.trim() === '') return null
   if (typeof minorUnits !== 'number') return null
   const major = minorToMajor(minor, minorUnits)
-  return major
+  if (major === null) return null
+  return { major, digits: minorUnits }
 }
 
 /** Locale-aware decimal presentation that preserves exact numeric strings. */

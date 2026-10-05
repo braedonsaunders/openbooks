@@ -3,7 +3,7 @@ import { globSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createMoneyFormatter, formatDecimal, minorToMajorText, minorToMajorTextUnits, tryMinorToMajorTextUnits } from './money-format.ts'
+import { createMoneyFormatter, displayMinorAmount, formatDecimal, minorToMajorText, minorToMajorTextUnits, tryMinorToMajorTextUnits } from './money-format.ts'
 import { minorToMajor } from './setup/money-fields.ts'
 import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
 
@@ -81,9 +81,15 @@ test('unknown currency precision refuses by name with the remedy', () => {
   for (const units of [Number.NaN, 1.5, -1, 5]) {
     assert.throws(() => minorToMajorTextUnits('100', units), /unsupported currency precision/)
   }
+  // The ISO registry is read-only reference data: the remedy names a
+  // supported code, never a Setup edit that cannot exist.
   assert.throws(
     () => minorToMajorTextUnits('100', Number.NaN),
-    /Setup → Currencies/,
+    /ISO currency registry/,
+  )
+  assert.throws(
+    () => minorToMajorTextUnits('100', Number.NaN),
+    /supported currency code/,
   )
   assert.throws(() => minorToMajorTextUnits('100', Number.NaN, 'bhd'), /BHD/)
 })
@@ -111,6 +117,31 @@ test('display conversion returns null instead of guessing or throwing', () => {
   assert.equal(tryMinorToMajorTextUnits(null, 2), null)
   assert.equal(tryMinorToMajorTextUnits('', 2), null)
   assert.equal(tryMinorToMajorTextUnits('12x', 2), null)
+})
+
+test('display amounts carry the registry exponent for the formatter', () => {
+  // The formatter must render exactly the registry digits: Intl defaults
+  // follow the code's built-in metadata and override private/custom codes.
+  assert.deepEqual(displayMinorAmount('10450', 2), { major: '104.50', digits: 2 })
+  assert.deepEqual(displayMinorAmount('1234', 0), { major: '1234', digits: 0 })
+  assert.deepEqual(displayMinorAmount('1234', 3), { major: '1.234', digits: 3 })
+  assert.deepEqual(displayMinorAmount('100', null), null)
+  assert.deepEqual(displayMinorAmount('100', 5), null)
+  assert.deepEqual(displayMinorAmount(undefined, 2), null)
+  const format = createMoneyFormatter('en-US', 'XX9')
+  const shown = displayMinorAmount('1234', 3)
+  assert.notEqual(shown, null)
+  // A custom code defaults to two fraction digits in Intl; the registry
+  // exponent wins. (Unknown codes render in the existing number-then-code
+  // fallback shape; the property under test is the three digits.)
+  assert.equal(
+    format.money(shown!.major, {
+      currency: 'XX9',
+      minimumFractionDigits: shown!.digits,
+      maximumFractionDigits: shown!.digits,
+    }),
+    '1.234 XX9',
+  )
 })
 
 test('decimal strings never cross the binary floating-point boundary', () => {
