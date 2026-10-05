@@ -98,6 +98,12 @@ export interface PspSettlementsData {
    *  active/non-summary population the import validates against, so a picked
    *  account cannot strand the draft at posting. */
   accounts: PspAccountOption[]
+  /** Loader-resolved setup grant for the scheduled-pull toggles: flipping
+   *  pullEnabled POSTs saveConfig with admin.setup.manage. */
+  canSetup: boolean
+  /** Provider pull toggles, unrestricted callers only — the toggle writes
+   *  org-wide provider configuration, never a subsidiary record. */
+  configs: { provider: string; displayName: string; pullEnabled: boolean }[]
 }
 
 interface BatchRow extends Record<string, unknown> {
@@ -168,10 +174,21 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   const settlementDateLabel = (value: string) => dateLabel(new Date(`${value}T12:00:00Z`), locale)
   const isZeroAmount = (value: string) => Number(value) === 0
 
+  const providerConfigs = !authz.allowedSubsidiaryIds
+    ? (await db.execute<{ provider: string; displayName: string; pullEnabled: boolean }>(sql`
+        select provider, display_name as "displayName", pull_enabled as "pullEnabled"
+          from psp_provider_configs
+         where org_id = ${authz.user.orgId} and is_enabled
+         order by provider
+      `)).rows
+    : []
+
   return {
     title: t('title'),
     description: t('description'),
     canReconcile: can(authz, 'banking.reconcile'),
+    canSetup: can(authz, 'admin.setup.manage'),
+    configs: providerConfigs,
     strings: {
       acceptanceNote: t('acceptanceNote'),
       acceptanceLink: t('acceptanceLink'),
@@ -272,10 +289,12 @@ export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
             // properly is a separate cleanup — this only stops pretending it
             // is already wired.
             canReconcile: data.canReconcile,
+            canSetup: data.canSetup,
             strings: data.strings,
             initialRows: data.rows,
             initialSubsidiaries: data.subsidiaries,
             initialAccounts: data.accounts,
+            initialConfigs: data.configs,
           }),
         ],
         { className: 'space-y-6' },

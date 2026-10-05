@@ -432,6 +432,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'payment-schedule-next-run',
   'payments-section',
   'payments-view-tabs',
+  'payouts-console',
   'payroll-accounts-tab',
   'payroll-anomaly-drawer',
   'payroll-anomaly-scan',
