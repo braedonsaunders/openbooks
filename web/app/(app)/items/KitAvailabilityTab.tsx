@@ -63,19 +63,33 @@ export function KitAvailabilityTab({ itemId }: { itemId: string }) {
     queueMicrotask(() => { void load() })
   }, [load])
 
+  // Rows key on storage identity, never display labels: two items can
+  // share a name and two locations a code, but warehouse and item ids are
+  // unique per measured stock row.
   const rows = useMemo(() => {
     if (!availability) return []
     return availability.warehouses.flatMap((warehouse) =>
-      (warehouse.kit ? [{ warehouse: warehouse.warehouseCode, ...warehouse.kit }] : []).concat(
+      (warehouse.kit
+        ? [{
+            warehouseId: warehouse.warehouseId,
+            warehouse: warehouse.warehouseCode,
+            ...warehouse.kit,
+          }]
+        : []
+      ).concat(
         warehouse.components
           .filter((component) => component !== null)
-          .map((component) => ({ warehouse: warehouse.warehouseCode, ...component! })),
+          .map((component) => ({
+            warehouseId: warehouse.warehouseId,
+            warehouse: warehouse.warehouseCode,
+            ...component!,
+          })),
       ),
     )
   }, [availability])
 
   const columns = useMemo<
-    LineGridColumn<{ warehouse: string; itemLabel: string; onHand: string; committed: string; available: string }>[]
+    LineGridColumn<{ warehouseId: string; warehouse: string; itemId: string; itemLabel: string; onHand: string; committed: string; available: string }>[]
   >(
     () => [
       { key: 'warehouse', label: tCommon('labels.warehouse'), width: '110px', type: 'readonly' },
@@ -122,8 +136,8 @@ export function KitAvailabilityTab({ itemId }: { itemId: string }) {
         columns={columns}
         rows={rows}
         onRowsChange={() => undefined}
-        emptyRow={() => ({ warehouse: '', itemLabel: '', onHand: '', committed: '', available: '' })}
-        getRowKey={(row) => `${row.warehouse}:${row.itemLabel}`}
+        emptyRow={() => ({ warehouseId: '', warehouse: '', itemId: '', itemLabel: '', onHand: '', committed: '', available: '' })}
+        getRowKey={(row) => `${row.warehouseId}:${row.itemId}`}
         readOnly
       />
     </div>
