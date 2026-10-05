@@ -8,7 +8,7 @@ import type { PageLayoutPrefs } from "@openbooks/schema";
 import { getAuthz } from "../../../../lib/authz";
 
 const requestBodySchema = z.object({
-  page: z.enum(["banking-cash", "banking-accounts"]),
+  page: z.enum(["banking-cash", "banking-accounts", "analytics"]),
   layout: z.object({
     order: z.array(z.string().max(64)).max(300).optional(),
     hidden: z.array(z.string().max(64)).max(300).optional(),
@@ -22,7 +22,7 @@ const requestBodySchema = z.object({
 export const runtime = "nodejs";
 
 /** Stable page keys that accept per-user layout prefs (grow as cockpits adopt it). */
-const PAGES = new Set(["banking-cash", "banking-accounts"]);
+const PAGES = new Set(["banking-cash", "banking-accounts", "analytics"]);
 /** Roster surfaces store row ids (an org can have dozens of card accounts). */
 const MAX_KEYS = 300;
 
@@ -149,6 +149,9 @@ export const PUT = defineRoute({
     // request can therefore never commit over a newer save that advanced the
     // exact revision while this request was in flight.
     const outcome = await db.transaction(async (tx) => {
+      // Row locks cannot fence a first save when no row exists yet. Serialize
+      // that creation with later replacements for this exact user's page.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`page-layout:${user.orgId}:${user.id}:${page}`}, 0))`);
       const current = await readCurrent(
         (query) => tx.execute(query),
         user.orgId,

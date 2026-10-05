@@ -1,8 +1,8 @@
 import "server-only";
-import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { timeStatsSource, fetchHistoryHours } from "./utilization-history";
 import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/database";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { flowRates } from "../fx-presentation";
@@ -126,6 +126,7 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
   // scan arrives per (group, functional) and each cost leg translates to
   // presentation at its latest worked date before merging. Hours are
   // currency-blind: splitting then re-adding them is exact.
+  const source = timeStatsSource(orgId, from, to, allowed);
   const res = await db.execute<RawStatRow>(sql`
     select
       t.employee_party_id as employee,
@@ -139,19 +140,12 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
       sum(t.hours) as total_hours,
       coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
       coalesce(sum(coalesce(t.cost_rate, 0) * t.hours) filter (where not t.is_billable), 0) as non_billable_cost
-    from time_entries t
-    left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
-    left join projects project on project.id = t.project_id and project.org_id = t.org_id
+    from ${source.from}
     left join departments d on d.id = t.department_id and d.org_id = t.org_id
     left join items i on i.id = t.item_id and i.org_id = t.org_id
     left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
     join orgs o on o.id = t.org_id
-    where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
-      -- Draft, submitted and rejected hours are not worked reality (rejected
-      -- hours never will be) — the same approved-only rule as project
-      -- profitability hours and the time drill-down.
-      and t.status = 'approved'
-      ${subsidiaryVisibleFilter(sql`coalesce(project.subsidiary_id, p.subsidiary_id)`, allowed)}
+    where ${source.where}
     group by 1, 2, 3, 4, 5, 6, 7
   `);
   const ctx = await flowRates(orgId, res.rows.map((r) => ({
@@ -310,10 +304,10 @@ export async function utilizationData(
     histPlans.push({ start: ymd(pStart), end: ymd(pEnd), label });
   }
 
-  const [curr, prior, ...histStats] = await Promise.all([
+  const [curr, prior, histStats] = await Promise.all([
     fetchTimeStats(orgId, period.from, period.to, allowed),
     fetchTimeStats(orgId, priorFrom, priorTo, allowed),
-    ...histPlans.map((p) => fetchTimeStats(orgId, p.start, p.end, allowed)),
+    fetchHistoryHours(orgId, histPlans, allowed),
   ]);
 
   // noBillable departments: zero billable hours across current + prior.

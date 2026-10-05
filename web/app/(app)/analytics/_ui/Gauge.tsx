@@ -18,6 +18,8 @@ export function Gauge({
   showTicks = true,
   showValue = true,
   className,
+  goodWhenHigh = true,
+  ariaLabel,
 }: {
   value: number
   label?: string
@@ -27,9 +29,11 @@ export function Gauge({
   /** Hide the centred score text — for small gauges whose value renders beside them. */
   showValue?: boolean
   className?: string
+  goodWhenHigh?: boolean
+  ariaLabel?: string
 }) {
   const v = Math.min(100, Math.max(0, value))
-  const tone = scoreTone(v)
+  const tone = scoreTone(goodWhenHigh ? v : 100 - v)
   const gradId = useId()
 
   const w = size
@@ -52,7 +56,7 @@ export function Gauge({
 
   return (
     <div className={cn('flex flex-col items-center', className)}>
-      <svg width={w} height={height} viewBox={`0 0 ${w} ${height}`} role="img" aria-label={`Score ${Math.round(v)} of 100`}>
+      <svg width={w} height={height} viewBox={`0 0 ${w} ${height}`} role="img" aria-label={ariaLabel ?? `Score ${Math.round(v)} of 100`}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor={tone.hex} stopOpacity={0.65} />

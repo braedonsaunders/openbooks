@@ -251,12 +251,20 @@ export function defineRoute(options: LooseOptions) {
         body = parsedBody.data;
       }
 
-      return await options.handler({
+      const response = await options.handler({
         request,
         authz: authz as never,
         params: params as never,
         body: body as never,
       });
+      // Organization mutations expire preview summaries on a bounded window;
+      // coalescing prevents continuous posting from causing repeated cold
+      // calculations. Personal layout writes do not change the source data.
+      if (authz && response.ok && !["GET", "HEAD", "OPTIONS"].includes(request.method) && !new URL(request.url).pathname.startsWith("/api/me/")) {
+        const { invalidateAnalyticsPreviews } = await import("@/lib/analytics/preview-invalidation");
+        await invalidateAnalyticsPreviews(authz.user.orgId);
+      }
+      return response;
     } catch (error) {
       // Status-less engine refusals map first; anything unrecognized keeps
       // the unknown-error path below (rethrow: the edge request id lands in

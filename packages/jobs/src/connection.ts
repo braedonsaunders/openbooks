@@ -10,6 +10,8 @@ import { getRedisUrl } from './config'
 
 let producerConnection: Redis | undefined
 let blockingConnection: Redis | undefined
+let readCacheConnection: Redis | undefined
+let readCacheReady: Promise<void> | undefined
 const WORKER_HEARTBEAT_KEY = 'openbooks:worker:heartbeat'
 
 export function getConnection(): ConnectionOptions {
@@ -30,6 +32,25 @@ export function getBlockingConnection(): ConnectionOptions {
   return blockingConnection as unknown as ConnectionOptions
 }
 
+/** Optional read caching has its own bounded transport: a cache outage must
+ * neither queue thousands of offline commands nor change worker semantics. */
+export async function getReadCacheConnection(): Promise<Redis | undefined> {
+  if (!readCacheConnection) {
+    readCacheConnection = new Redis(getRedisUrl(), {
+      lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 1,
+      connectTimeout: 250, commandTimeout: 250,
+      retryStrategy: () => 1000,
+    })
+    // Unavailability is returned to the caller, which reads the source data.
+    readCacheConnection.on('error', () => {})
+  }
+  if (readCacheConnection.status === 'wait' && !readCacheReady) {
+    readCacheReady = readCacheConnection.connect().catch(() => {}).finally(() => { readCacheReady = undefined })
+  }
+  if (readCacheReady) await readCacheReady
+  return readCacheConnection.status === 'ready' ? readCacheConnection : undefined
+}
+
 /** Refresh the deployment-wide worker heartbeat with a short expiry. */
 export async function markWorkerHeartbeat(now = new Date()): Promise<void> {
   const connection = getConnection() as unknown as Redis
@@ -44,9 +65,11 @@ export async function getWorkerHeartbeat(): Promise<string | null> {
 
 /** Close both shared clients after BullMQ workers have finished draining. */
 export async function closeJobConnections(): Promise<void> {
-  const connections = [producerConnection, blockingConnection].filter((c): c is Redis => Boolean(c))
+  const connections = [producerConnection, blockingConnection, readCacheConnection].filter((c): c is Redis => Boolean(c))
   producerConnection = undefined
   blockingConnection = undefined
+  readCacheConnection = undefined
+  readCacheReady = undefined
   await Promise.allSettled(
     connections.map(async (connection) => {
       if (connection.status === 'wait') {

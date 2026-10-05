@@ -1042,6 +1042,14 @@
       "payout_reconciliation": {
         "label": "ペイアウト照合",
         "description": "各ペイアウトを精算明細に分解し、紐付け証憑・銀行入金・仕掛引当とともに、ペイアウトの状態と差額付きで1明細1行で表示します。"
+      },
+      "manufacturing_work_orders": {
+        "label": "Manufacturing work orders",
+        "description": "Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units."
+      },
+      "managed_property_portfolio": {
+        "label": "Managed properties",
+        "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
       }
     },
     "columns": {
@@ -1378,7 +1386,8 @@
         "employer_cost": "事業主負担額",
         "vacation_accrued": "付与済み有給休暇",
         "pensionable": "年金対象報酬",
-        "insurable": "保険対象報酬"
+        "insurable": "保険対象報酬",
+        "currency": "給与通貨"
       },
       "pay_stub_lines": {
         "employee": "従業員",
@@ -2639,6 +2648,17 @@
         "deposit_total": "入金合計",
         "gap": "差額",
         "accrued_amount": "引当額"
+      },
+      "manufacturing_work_orders": {
+        "number": "Order number",
+        "status": "Status",
+        "planned_start": "Planned start",
+        "planned_end": "Planned end"
+      },
+      "managed_property_portfolio": {
+        "code": "Property code",
+        "name": "Property",
+        "status": "Status"
       }
     },
     "enumValues": {
@@ -2987,6 +3007,38 @@
     "usage-billing-detail": {
       "name": "従量課金明細",
       "description": "メーター、評価実行、プラン版、元レコードの追跡情報とともに、評価済みの従量課金請求明細をすべて表示します。"
+    },
+    "analytics-project-portfolio": {
+      "name": "Project portfolio",
+      "description": "Current project lifecycle: active work, quotations, awards and closed projects."
+    },
+    "analytics-asset-lifecycle": {
+      "name": "Asset lifecycle",
+      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+    },
+    "analytics-production": {
+      "name": "Production overview",
+      "description": "Current production orders: released, in progress, on hold and completed."
+    },
+    "analytics-property-portfolio": {
+      "name": "Property portfolio",
+      "description": "Current managed-property portfolio: active, inactive, sold and total properties."
+    },
+    "analytics-grant-portfolio": {
+      "name": "Grant portfolio",
+      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+    },
+    "analytics-allocation-controls": {
+      "name": "Allocation controls",
+      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+    },
+    "analytics-payroll-reconciliation": {
+      "name": "Payroll reconciliation",
+      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+    },
+    "analytics-workforce-capacity": {
+      "name": "Workforce capacity",
+      "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
     }
   },
   "generalLedger": {

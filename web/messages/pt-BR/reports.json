@@ -1042,6 +1042,14 @@
       "payout_reconciliation": {
         "label": "Conciliação de repasses",
         "description": "Cada repasse do provedor detalhado em linhas de liquidação com seu documento vinculado, seu depósito bancário e sua provisão em trânsito — uma linha por lançamento com a situação e a diferença do repasse."
+      },
+      "manufacturing_work_orders": {
+        "label": "Manufacturing work orders",
+        "description": "Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units."
+      },
+      "managed_property_portfolio": {
+        "label": "Managed properties",
+        "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
       }
     },
     "columns": {
@@ -1378,7 +1386,8 @@
         "employer_cost": "Custo do empregador",
         "vacation_accrued": "Férias acumuladas",
         "pensionable": "Ganhos previdenciários",
-        "insurable": "Ganhos seguráveis"
+        "insurable": "Ganhos seguráveis",
+        "currency": "Moeda da folha"
       },
       "pay_stub_lines": {
         "employee": "Funcionário",
@@ -2639,6 +2648,17 @@
         "deposit_total": "Total do depósito",
         "gap": "Diferença",
         "accrued_amount": "Provisionado"
+      },
+      "manufacturing_work_orders": {
+        "number": "Order number",
+        "status": "Status",
+        "planned_start": "Planned start",
+        "planned_end": "Planned end"
+      },
+      "managed_property_portfolio": {
+        "code": "Property code",
+        "name": "Property",
+        "status": "Status"
       }
     },
     "enumValues": {
@@ -2987,6 +3007,38 @@
     "usage-billing-detail": {
       "name": "Detalhes da cobrança por uso",
       "description": "Lista cada linha de fatura tarifada por uso com o medidor, a execução de tarifação, a versão do plano e a rastreabilidade dos registros de origem."
+    },
+    "analytics-project-portfolio": {
+      "name": "Project portfolio",
+      "description": "Current project lifecycle: active work, quotations, awards and closed projects."
+    },
+    "analytics-asset-lifecycle": {
+      "name": "Asset lifecycle",
+      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+    },
+    "analytics-production": {
+      "name": "Production overview",
+      "description": "Current production orders: released, in progress, on hold and completed."
+    },
+    "analytics-property-portfolio": {
+      "name": "Property portfolio",
+      "description": "Current managed-property portfolio: active, inactive, sold and total properties."
+    },
+    "analytics-grant-portfolio": {
+      "name": "Grant portfolio",
+      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+    },
+    "analytics-allocation-controls": {
+      "name": "Allocation controls",
+      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+    },
+    "analytics-payroll-reconciliation": {
+      "name": "Payroll reconciliation",
+      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+    },
+    "analytics-workforce-capacity": {
+      "name": "Workforce capacity",
+      "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
     }
   },
   "generalLedger": {
