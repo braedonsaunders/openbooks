@@ -11,7 +11,7 @@ import { db } from "../platform/db.ts";
 import { cmp, neg, sum } from "../money/money.ts";
 import { AU_PACK_RATES } from "./au/rates.ts";
 import { setPackSlotAccount } from "./packs.ts";
-import { payrollStatutoryRateGaps } from "./readiness.ts";
+import { payRunReadiness, payrollStatutoryRateGaps } from "./readiness.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { calculatePayRun } from "./run-calculation.ts";
@@ -155,6 +155,20 @@ test(
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
+      // An SG record filed under the retired running year-to-date blocks the
+      // run by name before Calculate, and clears once re-declared.
+      const legacySg = (answers: string) => db.execute(sql`
+        update employee_tax_certificates set answers = ${answers}::jsonb
+         where org_id = ${org.orgId} and employee_party_id = ${nswEmployeeId}
+           and certificate_key = 'au_sg_administration'`);
+      await legacySg('{"qualifying_ytd": "150000.00"}');
+      const retired = (await payRunReadiness(org.orgId, run.documentId)).items
+        .filter((item) => item.severity === "blocker" && /retired "qualifying_ytd"/.test(item.detail ?? ""));
+      assert.deepEqual(retired.map((item) => item.employees.map((employee) => employee.name)), [["Sydney Worker"]]);
+      assert.match(retired[0]!.detail!, /^Sydney Worker's SG facts .*Re-declare "Opening qualifying earnings year-to-date"/);
+      await legacySg('{"qualifying_ytd": "150000.00", "opening_qualifying_ytd": "0"}');
+      assert.ok(!(await payRunReadiness(org.orgId, run.documentId)).items
+        .some((item) => /qualifying_ytd/.test(item.detail ?? "")));
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.equal(result.employees, 3);
       assert.deepEqual(result.errors, []);

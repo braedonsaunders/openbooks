@@ -23,6 +23,8 @@ import { type Au2027Input, calculateAu2027, computeAuStatutory } from "./compute
 import { toUnits } from "../../money/money.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { AU_PAYROLL_PACK } from "./pack.ts";
+import { AU_CERTIFICATES } from "./jurisdictions.ts";
+import { resolveCertificate, retiredCertificateAnswerProblem } from "../certificates.ts";
 import {
   AU_SCHEDULE1_SCALE1_2027,
   AU_SCHEDULE1_SCALE1_STSL_2027,
@@ -294,6 +296,45 @@ test("SG stops at the maximum contributions base using this employer's committed
   assert.equal(await sg("266666.6400", "0"), "499.6000");
   assert.equal(await sg("299999.9700", "0"), "0.0000");
   assert.equal(await sg("166666.6400", "100000.00"), "499.6000");
+});
+
+test("an SG record still holding the retired qualifying_ytd refuses by name until re-declared", async () => {
+  // The retired answer counted runs committed here, which the engine now
+  // adds itself: reading it as the opening carry-in would count them twice,
+  // and ignoring it would drop the carry-in from the cap. Neither is safe.
+  const sgFacts = AU_CERTIFICATES.certificates.find((certificate) => certificate.key === "au_sg_administration")!;
+  const sgFor = (rows: { answers: Record<string, string>; effectiveFrom: string; supersededOn?: string }[]) =>
+    resolveCertificate({
+      certificate: sgFacts, asOf: "2026-09-30",
+      stored: rows.map((row) => ({ certificateKey: sgFacts.key, ...row })),
+    });
+  const run = (sg: ReturnType<typeof sgFor>) => {
+    const tfn = stubCtx().ctx.certificateFor("au_tfn_declaration");
+    return computeAuStatutory(stubCtx({
+      employeeName: "Olivia Opening",
+      certificateFor: (key: string) => (key === "au_sg_administration" ? sg : tfn),
+    }).ctx);
+  };
+  const legacy = sgFor([{ answers: { qualifying_ytd: "150000.00" }, effectiveFrom: "2026-07-01" }]);
+  await assert.rejects(run(legacy), (error: Error) => {
+    assert.match(error.message, /^Olivia Opening's SG facts \(qualifying year-to-date\) still holds 150000\.00 under the retired "qualifying_ytd" answer/);
+    assert.match(error.message, /the old figure included runs committed here/);
+    assert.match(error.message, /Re-declare "Opening qualifying earnings year-to-date" on the employee's Payroll tab before calculating\.$/);
+    return true;
+  });
+  // The run readiness check reads the same row through the same function.
+  assert.match(retiredCertificateAnswerProblem(legacy, "Olivia Opening") ?? "", /retired "qualifying_ytd"/);
+  // Re-declared — on the same row or on a newer one — the opening figure is read.
+  for (const redeclared of [
+    sgFor([{ answers: { qualifying_ytd: "150000.00", opening_qualifying_ytd: "0" }, effectiveFrom: "2026-07-01" }]),
+    sgFor([
+      { answers: { qualifying_ytd: "150000.00" }, effectiveFrom: "2026-07-01", supersededOn: "2026-09-01" },
+      { answers: { opening_qualifying_ytd: "0" }, effectiveFrom: "2026-09-01" },
+    ]),
+  ]) {
+    assert.equal(retiredCertificateAnswerProblem(redeclared, "Olivia Opening"), null);
+    await run(redeclared);
+  }
 });
 
 test("computeStatutory refuses untranscribed tax years by name", async () => {

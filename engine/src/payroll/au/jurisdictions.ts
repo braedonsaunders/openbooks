@@ -223,6 +223,18 @@ const SG_ADMINISTRATION: PayrollCertificate = {
         + "default exists, so the engine refuses to accrue SG without it.",
     },
   ],
+  // The field was once the running year-to-date, which included this
+  // employer's committed runs; the engine now adds those runs itself, so
+  // carrying the old figure across would count them twice.
+  retiredFields: [
+    {
+      key: "qualifying_ytd",
+      replacedBy: "opening_qualifying_ytd",
+      notCarriedBecause: "the old figure included runs committed here, which the calculation now adds itself "
+        + "(counting them twice would understate super). Enter only the qualifying earnings paid this financial "
+        + "year before payroll ran here — zero when none",
+    },
+  ],
 };
 
 export const AU_CERTIFICATES: PayrollPackCertificates = {

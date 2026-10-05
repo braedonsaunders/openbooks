@@ -56,6 +56,13 @@ import {
   packPayableProblem,
 } from "./employee-facts.ts";
 import { employeePayrollProfiles } from "@openbooks/schema";
+import {
+  declaredPayrollCertificates,
+  resolveCertificate,
+  retiredCertificateAnswerProblem,
+  type PayrollCertificate,
+  type StoredCertificate,
+} from "./certificates.ts";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -928,6 +935,7 @@ export async function payRunReadiness(
   // product's job is to make the operator see the question once, on the one
   // run where it is still cheap to answer.
   await flagMissingOpeningBalances({ orgId, documentId, run, people, flag });
+  await flagRetiredCertificateAnswers({ orgId, run, people, flag });
   await flagMissingEntitlementOpenings({ orgId, documentId, run, people, flag });
 
   // A retro run carries its own control set (source period voided or moved,
@@ -1061,6 +1069,67 @@ async function unconfiguredRatesForRun(
     ));
   }
   return found;
+}
+
+/**
+ * A tax certificate filed under a field the pack has since retired — the
+ * row holds the old answer and none for its replacement — refuses at
+ * calculation by name (`retiredCertificateAnswerProblem`). Readiness raises
+ * the same message as a blocker so the operator re-declares it before
+ * pressing Calculate. Pack-declared: only certificates that list retired
+ * fields are read.
+ */
+async function flagRetiredCertificateAnswers(args: {
+  orgId: string;
+  run: RunRow;
+  people: ScopeRow[];
+  flag: (
+    severity: ReadinessSeverity,
+    code: string,
+    employees?: ScopeRow[],
+    extra?: { detail?: string; href?: string },
+  ) => void;
+}): Promise<void> {
+  const { orgId, run, people, flag } = args;
+  const declared = new Map<string, PayrollCertificate[]>();
+  for (const country of new Set(people.map((person) => person.country))) {
+    // A country with no certificate declaration has no retired fields; the
+    // calculation and the tax-year blocker name a missing pack themselves.
+    const withRetired = (declaredPayrollCertificates().find((entry) => entry.country === country)?.certificates ?? [])
+      .filter((certificate) => (certificate.retiredFields ?? []).length > 0);
+    if (withRetired.length > 0) declared.set(country, withRetired);
+  }
+  const subjects = people.filter((person) => declared.has(person.country));
+  if (subjects.length === 0) return;
+  const keys = [...new Set([...declared.values()].flat().map((certificate) => certificate.key))];
+  const rows = (await db.execute<{
+    employee_party_id: string; country: string; certificate_key: string;
+    answers: Record<string, string> | null; effective_from: string | null; superseded_on: string | null;
+  }>(sql`
+    select employee_party_id, country, certificate_key, answers,
+           effective_from::text as effective_from, superseded_on::text as superseded_on
+      from employee_tax_certificates
+     where org_id = ${orgId}
+       and employee_party_id in (${sql.join(subjects.map((person) => sql`${person.employee_party_id}`), sql`, `)})
+       and certificate_key in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})
+  `)).rows;
+  for (const person of subjects) {
+    const stored: StoredCertificate[] = rows
+      .filter((row) => row.employee_party_id === person.employee_party_id && row.country === person.country)
+      .map((row) => ({
+        certificateKey: row.certificate_key,
+        answers: row.answers ?? {},
+        effectiveFrom: row.effective_from,
+        supersededOn: row.superseded_on,
+      }));
+    for (const certificate of declared.get(person.country) ?? []) {
+      const problem = retiredCertificateAnswerProblem(
+        resolveCertificate({ certificate, stored, asOf: run.pay_date }),
+        person.name,
+      );
+      if (problem) flag("blocker", "employee.missingFact", [person], { detail: problem, href: "/entities/employees" });
+    }
+  }
 }
 
 /**

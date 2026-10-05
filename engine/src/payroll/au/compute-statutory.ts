@@ -50,6 +50,7 @@ import { rate6 } from "../../money/payroll-decimal.ts";
 import type { Money } from "../../money/brands.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { retiredCertificateAnswerProblem } from "../certificates.ts";
 import {
   AU_SCHEDULE1_SCALE1_2027,
   AU_SCHEDULE1_SCALE1_STSL_2027,
@@ -354,6 +355,8 @@ export async function computeAuStatutory(
   // a running total by hand. An undeclared carry-in refuses (see
   // calculateAu2027) rather than posting uncapped SG.
   const sgAdmin = certificateFor("au_sg_administration");
+  const retired = sgAdmin ? retiredCertificateAnswerProblem(sgAdmin, ctx.employeeName) : null;
+  if (retired) throw new PayrollPackError(retired);
   const openingRaw = sgAdmin?.answers["opening_qualifying_ytd"] ?? null;
   let ytdQualifying: string | null = null;
   if (openingRaw !== null && openingRaw !== "") {
