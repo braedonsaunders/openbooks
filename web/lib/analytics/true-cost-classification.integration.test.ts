@@ -183,15 +183,15 @@ test('true cost cascading refuses by name with no costed labor and no base rate'
   })
   try {
     await withOrgContext(org.orgId, async () => {
-      await assert.rejects(
-        trueCostData(org.orgId, JULY, null),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.match(error.message, /needs a labor rate/);
-          assert.match(error.message, /base labor rate/);
-          return true;
-        },
-      )
+      // The refusal lands at the composite level: the payload, categories
+      // and config still render, and only the composite figures are void.
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.compositeRefusal?.code, 'cascadingNoLabor');
+      assert.ok(data.compositeRefusal?.message.includes('base labor rate'), 'the refusal must name the remedy');
+      assert.equal(data.kpis.compositeRate, null);
+      assert.equal(data.totals.overall, null);
+      assert.equal(data.categories.length, 1);
+      assert.equal(data.config.compositeMethod, 'cascading');
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
@@ -200,9 +200,10 @@ test('true cost cascading refuses by name with no costed labor and no base rate'
 
 /**
  * Per-FTE display multiplies the hourly rate by measured annual hours: with
- * the employee's labor cost rate carrying 2000 annual hours, an 800 burden
- * over 8 billed hours (100/hr) displays 200000 per FTE — never 208000 from
- * an assumed 2080.
+ * the employee's year-basis labor cost rate carrying 2000 annual hours, an
+ * 800 burden over 8 billed hours (100/hr) displays 200000 per FTE — never
+ * 208000 from an assumed 2080. Hourly rows carry the column default, never
+ * a divisor, so the seed uses a year-basis row like the product writes.
  */
 test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
@@ -218,7 +219,7 @@ test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPEN
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
     await db.execute(sql`insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from)
-      values (${org.orgId}, ${emp}, 'CAD', 40, 'hour', 2000, '2026-01-01')`)
+      values (${org.orgId}, ${emp}, 'CAD', 80000, 'year', 2000, '2026-01-01')`)
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
@@ -282,15 +283,131 @@ test('true cost per-FTE refuses by name with no annual hours', { skip: !env.OPEN
   })
   try {
     await withOrgContext(org.orgId, async () => {
-      await assert.rejects(
-        trueCostData(org.orgId, JULY, null),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.match(error.message, /"Rent"/);
-          assert.match(error.message, /annual FTE hours/);
-          assert.match(error.message, /labor cost rates/);
-          return true;
-        },
+      // The refusal lands at the composite level naming the category (by
+      // name, never UUID): the category still renders with its expense, and
+      // only its rate and the composite figures are void.
+      const data = await trueCostData(org.orgId, JULY, null)
+      const rent = data.categories.find((c) => c.key === 'rent')!
+      assert.ok(rent, 'rent category present')
+      assert.equal(data.compositeRefusal?.code, 'perFteNoHours');
+      assert.ok(data.compositeRefusal?.message.includes('Rent'), 'the refusal must name the category');
+      assert.ok(data.compositeRefusal?.message.includes('annual FTE hours'), 'the refusal must name the missing input');
+      assert.ok(data.compositeRefusal?.message.includes('labor cost rates'), 'the refusal must name the remedy');
+      assert.equal(rent.rate, null);
+      assert.equal(data.kpis.compositeRate, null);
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * A department with no resolvable annual hours refuses by department name
+ * while the Overall headline still computes: the Field employee's
+ * year-basis rate resolves the Overall divisor, the Shop employee carries
+ * no rate and no schedule, so only the Shop scope voids.
+ */
+test('true cost per-FTE refusal names the department for a department without hours', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const field = randomUUID()
+  const shop = randomUUID()
+  const empField = randomUUID()
+  const empShop = randomUUID()
+  const groupId = randomUUID()
+  const rentAccount = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${field}, ${org.orgId}, 'Field', true, '{}'::jsonb),
+             (${shop}, ${org.orgId}, 'Shop', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${empField}, ${org.orgId}, 'employee', 'Field Worker', ${org.subsidiaryId}, true, '{}'::jsonb),
+             (${empShop}, ${org.orgId}, 'employee', 'Shop Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${empField}, ${D}, '8.0000', 'approved', true, ${field}, null, null, null, '{}'::jsonb),
+             (${randomUUID()}, ${org.orgId}, ${empShop}, ${D}, '8.0000', 'approved', true, ${shop}, null, null, null, '{}'::jsonb)`)
+    await db.execute(sql`insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from)
+      values (${org.orgId}, ${empField}, 'CAD', 80000, 'year', 2000, '2026-01-01')`)
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
+    const entry = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'FTE-3', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${entry}, 1, ${rentAccount}, ${org.subsidiaryId}, ${field}, '800', 'CAD', '800', '1'),
+             (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${field}, '-800', 'CAD', '-800', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+    await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ analytics: { trueCost: { activeProfileId: 'p1', profiles: [{ id: 'p1', name: 'FTE', color: null, compositeMethod: 'sum', baseLaborRate: '', fringeRate: '0.25', categorySettings: { [groupId]: { rateFormat: 'per_fte' } }, customCategories: [], baseOverrides: {} }] } } })}::jsonb
+      where id = ${org.orgId}`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.compositeRefusal?.code, 'perFteNoHoursDept');
+      assert.ok(data.compositeRefusal?.message.includes('Shop'), 'the refusal must name the department, never its UUID');
+      assert.ok(!(data.compositeRefusal?.message ?? '').includes(shop), 'the refusal must not leak the department UUID');
+      assert.ok(data.compositeRefusal?.message.includes('Rent'), 'the refusal must name the category');
+      // The Overall headline and the Field scope stay priced.
+      assert.notEqual(data.kpis.compositeRate, null);
+      const shopDept = data.departments.find((d) => d.id === shop)!
+      assert.ok(shopDept, 'shop department present')
+      assert.equal(shopDept.composite, null);
+      assert.equal(data.totals.byDept[shop], null);
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * A work schedule annualizes from its own cycle: a 40-hour week on a 7-day
+ * cycle resolves 40 × 365 ÷ 7 = 2085.7143 annual hours — never 2080 from a
+ * bare ×52, which assumes a 364-day year.
+ */
+test('true cost per-FTE annualizes a work schedule from its own cycle', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const dept = randomUUID()
+  const emp = randomUUID()
+  const groupId = randomUUID()
+  const rentAccount = randomUUID()
+  const scheduleId = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'employee', 'Schedule Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
+    await db.execute(sql`insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days, cycle_anchor, effective_from, is_active, created_by, updated_by)
+      values (${scheduleId}, ${org.orgId}, 'Full time', ${emp}, 'cycle', 7, '2026-01-04', '2026-01-01', true, null, null)`)
+    for (const dayIndex of [1, 2, 3, 4, 5]) {
+      await db.execute(sql`insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
+        values (${org.orgId}, ${scheduleId}, ${dayIndex}, '8', null, null)`)
+    }
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
+    const entry = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'FTE-4', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${entry}, 1, ${rentAccount}, ${org.subsidiaryId}, ${dept}, '800', 'CAD', '800', '1'),
+             (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${dept}, '-800', 'CAD', '-800', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+    await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ analytics: { trueCost: { activeProfileId: 'p1', profiles: [{ id: 'p1', name: 'FTE', color: null, compositeMethod: 'sum', baseLaborRate: '', fringeRate: '0.25', categorySettings: { [groupId]: { rateFormat: 'per_fte' } }, customCategories: [], baseOverrides: {} }] } } })}::jsonb
+      where id = ${org.orgId}`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      const rent = data.categories.find((c) => c.key === 'rent')!
+      assert.ok(rent, 'rent category present')
+      assert.equal(
+        rent.byDept[dept]?.rate,
+        208571.43,
+        'per-FTE rate must be 100/hr x 40×365÷7 annual hours, not 208000 from a bare ×52',
       )
     })
   } finally {

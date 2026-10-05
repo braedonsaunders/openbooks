@@ -2223,6 +2223,17 @@
       "absorptionNoAccount": "未配置间接费用应用科目 — 请在 Setup → Overhead 中设置。",
       "absorptionNoPostings": "配置的间接费用应用科目在本期间没有已应用分录。"
     },
+    "refusals": {
+      "mixedUnits": "无法在同一综合费率中混合{formats}（{categories}） — 请在Setup → Overhead Model中为每个包含的类别设置相同的费率格式，或将异常类别从综合费率中排除。",
+      "cascadingNoLabor": "级联综合费率需要劳务费率，但本期无已计成本的劳务时间且配置文件未设置基准劳务费率 — 请批准本期的已计成本时间，或在Setup → Overhead Model → Configuration中设置基准劳务费率。",
+      "cascadingNoLaborDept": "级联综合费率需要{dept}的劳务费率，但本期该部门无已计成本的劳务时间且配置文件未设置基准劳务费率 — 请批准本期的已计成本时间，或在Setup → Overhead Model → Configuration中设置基准劳务费率。",
+      "perFteNoHours": "“{category}”使用货币/FTE，但无法结算年度FTE工时 — 请在员工劳务成本费率中登记年度工时，或在工作时间表中登记周工时。",
+      "perFteNoHoursDept": "“{category}”使用货币/FTE，但无法结算{dept}的年度FTE工时 — 请在该部门劳务成本费率中登记年度工时，或在工作时间表中登记周工时。",
+      "missingBase": "“{category}”无法计算{format}：其{base}基准缺失或非正数 — 请检查类别的分配基准与本期记账。",
+      "formulaReference": "“{category}”引用了{reference}，无法结算 — 请在Setup → Overhead Model → Configuration中修正公式或派生项。",
+      "formulaNegative": "“{category}”计算结果为{amount}，间接费用类别不能为负 — 请在Setup → Overhead Model → Configuration中修正公式。",
+      "unreadableAmount": "“{category}”含有无法读取的已保存金额 — 请在Setup → Overhead Model → Configuration中修正类别金额。"
+    },
     "formats": {
       "perHour": "{amount}/小时"
     },
@@ -2567,7 +2578,11 @@
       "howLabourRates": "人工费率",
       "howLabourRatesBody": "使用每条工时表记录的成本费率，而不是单一的员工主数据字段。",
       "howGapModeler": "缺口建模器",
-      "howGapModelerBody": "四项回收措施针对基于利用率计算的缺口；当间接费用负担 GL 科目存在过账记录时，吸收额会自动切换为实际分摊金额。"
+      "howGapModelerBody": "四项回收措施针对基于利用率计算的缺口；当间接费用负担 GL 科目存在过账记录时，吸收额会自动切换为实际分摊金额。",
+      "baseLaborRate": "基准劳务费率（每小时）",
+      "baseLaborRateHelp": "本期无已计成本劳务时间时的备选小时费率。留空则拒绝，而非假设费率。",
+      "baseLaborRatePlaceholder": "例如：45.00",
+      "baseLaborRateSave": "保存费率"
     },
     "custom": {
       "remove": "移除",

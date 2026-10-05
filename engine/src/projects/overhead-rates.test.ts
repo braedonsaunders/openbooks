@@ -210,6 +210,7 @@ test("cascading without a labor rate refuses by name instead of assuming one", (
       }),
     (error: unknown) => {
       assert.ok(error instanceof OverheadCalculationError);
+      assert.equal(error.code, "cascadingNoLabor");
       assert.match(error.message, /needs a labor rate/);
       assert.match(error.message, /base labor rate/);
       return true;
@@ -222,6 +223,7 @@ test("per_fte without resolved annual hours refuses by name instead of assuming 
     () => deriveOverheadDisplayRate({ rawRate: "25.0000", expense: "100.0000", rateFormat: "per_fte" }),
     (error: unknown) => {
       assert.ok(error instanceof OverheadCalculationError);
+      assert.equal(error.code, "perFteNoHours");
       assert.match(error.message, /annual FTE hours/);
       assert.match(error.message, /labor cost rates/);
       return true;
@@ -246,6 +248,7 @@ test("sum and weighted refuse mixed units with the categories named", () => {
         }),
       (error: unknown) => {
         assert.ok(error instanceof OverheadCalculationError);
+        assert.equal(error.code, "mixedUnits");
         assert.match(error.message, /Rent/);
         assert.match(error.message, /Benefits/);
         assert.match(error.message, /per_hour/);

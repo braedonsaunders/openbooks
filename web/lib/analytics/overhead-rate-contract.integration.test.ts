@@ -118,7 +118,7 @@ test('auto-publish runs the cascading composite over untagged expense exactly',{
   }finally{await dropScratchOrg(seeded.org.orgId);}
 });
 
-test('preview and auto-publish refuse a mixed-unit composite by name (finding 6.6)',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+test('a mixed-unit composite refuses at the composite level while the payload and editors stay rendered',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const seeded=await seedOverheadOrg({
     expenses:[
       {number:'6601',name:'Office rent',amount:'100',dept:true},
@@ -128,9 +128,11 @@ test('preview and auto-publish refuse a mixed-unit composite by name (finding 6.
   });
   try{
     // The rent category reports as % of labor while wages stays money — a
-    // second unit in the sum composite, refused in preview and publish. The
-    // labor base comes from a separate direct-labor account: pinning wages
-    // itself would exclude it from burden, leaving nothing to blend.
+    // second unit in the sum composite, refused at the composite level while
+    // categories, departments and the profile config stay rendered (the
+    // refusal must not hide the screens that fix it). The labor base comes
+    // from a separate direct-labor account: pinning wages itself would
+    // exclude it from burden, leaving nothing to blend.
     const poolGroup=randomUUID();
     const crewAccount=randomUUID();
     await db.execute(sql`insert into accounts(id,org_id,number,name,type) values (${crewAccount},${seeded.org.orgId},'6603','Crew labor','expense')`);
@@ -143,16 +145,18 @@ test('preview and auto-publish refuse a mixed-unit composite by name (finding 6.
       (${seeded.org.orgId},${crewEntry},2,${seeded.org.accounts.bank},${seeded.org.subsidiaryId},${seeded.department},-50::numeric,'CAD',-50::numeric,1)`);
     await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${crewEntry}`);
     await setTrueCostProfile(seeded.org.orgId,{categorySettings:{[seeded.groups[0]!.group]:{allocationBase:'labor_dollars',rateFormat:'percent_labor',includeInComposite:true}}});
-    await assert.rejects(
-      trueCostData(seeded.org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'July 2026'},null),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message,/Cannot blend rate formats/);
-        assert.match(error.message,/Office rent/);
-        assert.match(error.message,/percent_labor/);
-        return true;
-      },
-    );
+    const data=await trueCostData(seeded.org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'July 2026'},null);
+    // The refusal is typed and names both units in translated labels — never
+    // raw enum keys — while every category still renders with its own rate.
+    assert.equal(data.compositeRefusal?.code,'mixedUnits');
+    assert.ok((data.compositeRefusal?.message ?? '').includes('Office rent'),'the refusal must name the category');
+    assert.ok(!(data.compositeRefusal?.message ?? '').includes('percent_labor'),'the message must carry translated format labels, not raw enum keys');
+    assert.equal(data.kpis.compositeRate,null);
+    assert.equal(data.totals.overall,null);
+    assert.equal(data.categories.length,2);
+    assert.ok(data.categories.every((c) => c.rate !== null),'each category keeps its own rate');
+    assert.equal(data.config.compositeMethod,'sum');
+    assert.equal(data.departments.length,1);
     await assert.rejects(computeLiveOverheadRates(seeded.org.orgId),/percent_labor/);
   }finally{await dropScratchOrg(seeded.org.orgId);}
 });

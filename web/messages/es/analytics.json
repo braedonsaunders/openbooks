@@ -2223,6 +2223,17 @@
       "absorptionNoAccount": "No hay ninguna cuenta de aplicación de costos indirectos configurada — configure una en Setup → Overhead.",
       "absorptionNoPostings": "La cuenta de aplicación de costos indirectos configurada no tiene asientos aplicados en este período."
     },
+    "refusals": {
+      "mixedUnits": "No se pueden combinar {formats} en un mismo compuesto ({categories}) — asigna el mismo formato de tarifa a cada categoría incluida o excluye las distintas del compuesto en Setup → Overhead Model.",
+      "cascadingNoLabor": "El compuesto en cascada necesita una tarifa laboral, pero el período no tiene mano de obra valorizada y el perfil no define una tarifa laboral base — aprueba tiempo valorizado para el período o define una tarifa laboral base en Setup → Overhead Model → Configuration.",
+      "cascadingNoLaborDept": "El compuesto en cascada necesita una tarifa laboral para {dept}, pero el período no tiene mano de obra valorizada allí y el perfil no define una tarifa laboral base — aprueba tiempo valorizado para el período o define una tarifa laboral base en Setup → Overhead Model → Configuration.",
+      "perFteNoHours": "«{category}» usa Moneda/FTE, pero no se resuelven horas FTE anuales — registra las horas anuales en las tarifas de costo laboral de los empleados o las horas semanales en sus horarios de trabajo.",
+      "perFteNoHoursDept": "«{category}» usa Moneda/FTE, pero no se resuelven horas FTE anuales para {dept} — registra las horas anuales en las tarifas de costo laboral de ese departamento o las horas semanales en sus horarios de trabajo.",
+      "missingBase": "«{category}» no puede calcular {format}: su base de {base} falta o no es positiva — revisa la base de asignación de la categoría y las contabilizaciones del período.",
+      "formulaReference": "«{category}» hace referencia a {reference}, que no se resuelve — corrige la fórmula o derivación en Setup → Overhead Model → Configuration.",
+      "formulaNegative": "«{category}» resulta en {amount}, y una categoría de costos indirectos no puede ser negativa — corrige la fórmula en Setup → Overhead Model → Configuration.",
+      "unreadableAmount": "«{category}» contiene un importe guardado ilegible — corrige el importe de la categoría en Setup → Overhead Model → Configuration."
+    },
     "formats": {
       "perHour": "{amount}/h"
     },
@@ -2567,7 +2578,11 @@
       "howLabourRates": "Tasas de mano de obra",
       "howLabourRatesBody": "tasas de costo por entrada de la hoja de horas, no un único campo maestro del empleado.",
       "howGapModeler": "Modelador de brechas",
-      "howGapModelerBody": "las cuatro palancas de recuperación se aplican a la brecha basada en la utilización; cuando la cuenta GL de carga de gastos generales contiene asientos, la absorción cambia automáticamente a los importes reales aplicados."
+      "howGapModelerBody": "las cuatro palancas de recuperación se aplican a la brecha basada en la utilización; cuando la cuenta GL de carga de gastos generales contiene asientos, la absorción cambia automáticamente a los importes reales aplicados.",
+      "baseLaborRate": "Tarifa laboral base por hora",
+      "baseLaborRateHelp": "Tarifa por hora alternativa cuando el período no tiene mano de obra valorizada. Déjala vacía para rechazar en lugar de suponer una tarifa.",
+      "baseLaborRatePlaceholder": "p. ej. 45,00",
+      "baseLaborRateSave": "Guardar tarifa"
     },
     "custom": {
       "remove": "Eliminar",

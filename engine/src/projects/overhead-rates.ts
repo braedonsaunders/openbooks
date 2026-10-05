@@ -350,11 +350,31 @@ export function deriveOverheadOverallRate(
   }).Overall!;
 }
 
+/**
+ * Machine-readable refusal codes for the composite/KPI-level refusals the
+ * True Cost loader surfaces without blanking the dashboard. The message
+ * stays the human-readable English diagnostic the engine contract tests
+ * pin; the loader maps the code to a catalogued translation carrying the
+ * real category and department names.
+ */
+export type OverheadRefusalCode =
+  | "mixedUnits"
+  | "cascadingNoLabor"
+  | "perFteNoHours"
+  | "missingBase"
+  | "formulaReference"
+  | "formulaNegative"
+  | "unreadableAmount";
+
 export class OverheadCalculationError extends Error {
   readonly status = 422;
-  constructor(message: string) {
+  readonly code?: OverheadRefusalCode;
+  readonly values?: Record<string, string>;
+  constructor(message: string, code?: OverheadRefusalCode, values?: Record<string, string>) {
     super(message);
     this.name = "OverheadCalculationError";
+    this.code = code;
+    this.values = values;
   }
 }
 
@@ -378,6 +398,7 @@ export function deriveOverheadDisplayRate(input: {
     if (input.annualFteHours === undefined || input.annualFteHours === null || String(input.annualFteHours).trim() === "")
       throw new OverheadCalculationError(
         "Cannot calculate Currency/FTE: no annual FTE hours were resolved — record annual hours on the employees' labor cost rates or weekly hours on their work schedules.",
+        "perFteNoHours",
       );
     return fromUnits(
       roundDiv(
@@ -427,6 +448,7 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
       throw new OverheadCalculationError(
         `Cannot blend rate formats in one ${input.compositeMethod} composite: ${parts.join("; ")} — ` +
           `give every included category the same rate format, or exclude the odd ones from the composite.`,
+        "mixedUnits",
       );
     }
   }
@@ -448,6 +470,7 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
       if (input.baseLaborRate === undefined || input.baseLaborRate === null || String(input.baseLaborRate).trim() === "")
         throw new OverheadCalculationError(
           "The cascading composite needs a labor rate but the period has no costed labor and the profile sets no base labor rate — approve costed time for the period or set a base labor rate on the True Cost profile.",
+          "cascadingNoLabor",
         );
       const base = normalizeMoney(input.baseLaborRate);
       const baseUnits = toUnits(base);
