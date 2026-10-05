@@ -64,7 +64,7 @@ export async function ProgramWorkspace({ authz, workspace, sp }: {
     </div>
   }
   const nativeEntity = program.nativeKind === 'insured'
-    ? program.type === 'health' || program.type === 'retirement' ? benefitPlanPresentation(program.type) : BENEFIT_PLANS_ENTITY
+    ? program.type === 'health' || program.type === 'retirement' ? benefitPlanPresentation(program.type, false) : BENEFIT_PLANS_ENTITY
     : program.type === 'recovery' ? {...SETUP_ENTITY_BY_KEY.get('entitlement-plans')!,singularTitleKey:'benefitBuilder.recovery.title'} : benefitEntitlementPresentation(SETUP_ENTITY_BY_KEY.get('entitlement-plans')!)
   const tabs = [
     {key:'participants',label:t('programWorkspace.participants'),content:participants},
