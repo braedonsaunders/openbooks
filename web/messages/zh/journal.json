@@ -83,6 +83,6 @@
       "credit": "贷方"
     },
     "budgetaryControlWarning": "预算{scenario}超出拨款：{account}、基金{fund}、{subsidiary}{dimensions}，可用额度{available}，超支{amountOver}。",
-    "budgetaryControlRemedy": "请通过预算审批流程修改预算，或将该实际数关联至指定的预留款。"
+    "budgetaryControlRemedy": "请通过预算审批流程修改预算：将已批准的预算复制为草稿，在工作表中提高该基金下此科目的金额，批准副本并归档被取代的预算。或将该实际数关联至预留它的未结预留款。"
   }
 }

@@ -83,6 +83,6 @@
       "credit": "Crédit"
     },
     "budgetaryControlWarning": "Le budget {scenario} dépasse la dotation pour {account}, fonds {fund}, {subsidiary}{dimensions} : disponible {available}, dépassement de {amountOver}.",
-    "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation, ou liez ce montant à l''engagement nommé."
+    "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation : copiez le budget approuvé en brouillon, augmentez le montant de ce compte pour le fonds dans la feuille de calcul, approuvez la copie et archivez le budget remplacé. Ou liez ce montant à l''engagement ouvert qui l''a réservé."
   }
 }
