@@ -12,6 +12,7 @@ function keyedPost(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
   entryNumber: string,
   idempotencyKey: string,
+  amount = "10",
 ) {
   return withOrgContext(org.orgId, () => postEntry(db, {
     orgId: org.orgId,
@@ -25,8 +26,8 @@ function keyedPost(
     closeModules: ["gl"],
     idempotencyKey,
     lines: [
-      { accountId: org.accounts.bank, amount: "-10" },
-      { accountId: org.accounts.cogs, amount: "10" },
+      { accountId: org.accounts.bank, amount: `-${amount}` },
+      { accountId: org.accounts.cogs, amount },
     ],
   }));
 }
@@ -120,6 +121,27 @@ test(
         ],
       }));
       assert.notEqual(one.entryId, two.entryId);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a reused idempotency key returns the original only for an identical posting",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const key = `idem-${randomUUID()}`;
+      const first = await keyedPost(org, `IDEM-${randomUUID().slice(0, 8)}`, key);
+      // A retry may allocate a fresh entry number and pad amounts differently.
+      const retry = await keyedPost(org, `IDEM-${randomUUID().slice(0, 8)}`, key, "10.00");
+      assert.equal(retry.entryId, first.entryId);
+      await assert.rejects(
+        () => keyedPost(org, `IDEM-${randomUUID().slice(0, 8)}`, key, "25"),
+        new RegExp(`this idempotency key was already used for a different entry \\(entry ${first.entryId}\\)`),
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
