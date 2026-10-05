@@ -11,7 +11,7 @@ import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Tabl
 import { cn } from '@openbooks/ui'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
 import { concentrationVerdict } from '../../../../lib/analytics/vendor-concentration'
-import { Gauge } from '../_ui/Gauge'
+import { Gauge, NEUTRAL_GAUGE_BANDS } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
@@ -83,7 +83,7 @@ export function VendorView({ data: initialData }: { data: VendorData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <Gauge value={diversification} label={t(verdict.gaugeKey)} size={132} thickness={12} showTicks={false} />
+          <Gauge value={diversification} label={t(verdict.gaugeKey)} size={132} thickness={12} showTicks={false} bands={NEUTRAL_GAUGE_BANDS} />
         </div>
         <KpiCard icon={Truck} accent="sky" label={t('kpi.activeVendors')} value={String(totals.vendors)} sub={t('sub.inPeriod')} />
         <KpiCard icon={DollarSign} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: fmtPct(totals.yoyPct) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
