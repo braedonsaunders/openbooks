@@ -105,6 +105,10 @@
     "statesShown": "表示するライフサイクル状態",
     "calculatedAt": "{time} 時点"
   },
+  "preview": {
+    "busy": "分析メトリクスを計算中です。しばらくしてから再試行してください。",
+    "unavailable": "分析ダッシュボードのプレビューは利用できません"
+  },
   "financialHealth": {
     "title": "財務健全性",
     "description": "総合的な健全性スコアを備えた収益性、効率性、営業比率。",
