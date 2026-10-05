@@ -1,0 +1,1 @@
+Creates three new tables (portal magic-link tokens, effective-dated portal settings, immutable portal audit events) with no backfill: there are no existing portal rows to migrate, and no tenant data is read, rewritten or deleted.

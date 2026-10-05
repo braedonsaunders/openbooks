@@ -238,6 +238,9 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "channel_ad_spend", reason: "imported marketing spend; no person link. Finance remit." },
   { table: "channel_order_events", reason: "storefront order events; customer counterparty. Finance remit." },
   { table: "channel_daily_summaries", reason: "aggregated storefront sales batches; no person link. Finance remit." },
+  { table: "customer_portal_links", reason: "portal access tokens; customer counterparty. Finance remit." },
+  { table: "customer_portal_events", reason: "portal action history; customer counterparty. Finance remit." },
+  { table: "customer_portal_settings", reason: "portal configuration; no person link. Finance remit." },
   { table: "sales_channel_posting_policies", reason: "merchant posting configuration; no person link. Finance remit." },
   { table: "usage_prepaid_grants", reason: "prepaid balances; customer counterparty." },
   {

@@ -29,6 +29,7 @@ export * from "./resourcing";
 export * from "./field-tickets";
 export * from "./billing";
 export * from "./commerce";
+export * from "./customer-portal";
 export * from "./dunning";
 export * from "./autopay";
 export * from "./construction";

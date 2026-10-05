@@ -80,6 +80,10 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["customer_billing_relationships", "bill_to_party_id"],
   ["customer_billing_relationships", "child_party_id"],
   ["customer_billing_relationships", "payer_party_id"],
+  // Customer portal links and audit events follow the surviving customer
+  // party wholesale: uniqueness on both tables is id-only, so no collision.
+  ["customer_portal_events", "party_id"],
+  ["customer_portal_links", "party_id"],
   ["customer_roles", "sales_rep_id"],
   ["document_lines", "employee_id"],
   ["document_lines", "party_id"],
