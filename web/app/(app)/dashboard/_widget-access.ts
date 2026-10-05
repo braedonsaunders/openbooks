@@ -98,6 +98,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-cash-lowest-point': ['reports.read'],
   'kpi-cash-burn': ['reports.read'],
   'kpi-cash-coverage': ['reports.read'],
+  'kpi-cash-settlement-days': ['reports.read'],
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   // Customer figures, like the top-customers list: AR visibility, not GL.

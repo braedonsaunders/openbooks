@@ -40,19 +40,25 @@ export type CashWidgetMetrics = {
   cashLowest: WidgetValue<CashLowestPoint> | null
   cashBurn: WidgetValue<CashBurn> | null
   cashCoverage: WidgetValue<CashCoverage> | null
+  /** Mean days to collect (null = no collection history). */
+  cashCollectDays: WidgetValue<number | null> | null
+  /** Mean days to pay (null = no payment history). */
+  cashPayDays: WidgetValue<number | null> | null
 }
 
 export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
   cashLowest: null,
   cashBurn: null,
   cashCoverage: null,
+  cashCollectDays: null,
+  cashPayDays: null,
 }
 
 export async function loadCashWidgetMetrics(
   ctx: DashboardWidgetContext,
   need: (...fields: (keyof CashWidgetMetrics)[]) => boolean,
 ): Promise<Partial<CashWidgetMetrics>> {
-  if (!need('cashLowest', 'cashBurn', 'cashCoverage')) return {}
+  if (!need('cashLowest', 'cashBurn', 'cashCoverage', 'cashCollectDays', 'cashPayDays')) return {}
   const read = ctx.cashPosition
   if (!read) return {}
   let position
@@ -68,6 +74,8 @@ export async function loadCashWidgetMetrics(
       if (need('cashLowest')) out.cashLowest = refused
       if (need('cashBurn')) out.cashBurn = refused
       if (need('cashCoverage')) out.cashCoverage = refused
+      if (need('cashCollectDays')) out.cashCollectDays = refused
+      if (need('cashPayDays')) out.cashPayDays = refused
       return out
     }
     throw error
@@ -93,6 +101,12 @@ export async function loadCashWidgetMetrics(
         horizonWeeks: position.horizonWeeks,
       },
     }
+  }
+  if (need('cashCollectDays')) {
+    out.cashCollectDays = { available: true, value: position.dso }
+  }
+  if (need('cashPayDays')) {
+    out.cashPayDays = { available: true, value: position.dpo }
   }
   if (need('cashCoverage')) {
     // No AP outstanding means no coverage ratio exists — the tile names

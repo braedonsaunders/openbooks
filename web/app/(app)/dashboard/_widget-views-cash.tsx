@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { Flame, ShieldCheck, TrendingDown } from 'lucide-react'
+import { Flame, RefreshCw, ShieldCheck, TrendingDown } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { formatExactRatio } from '../analytics/_ui/format'
@@ -98,6 +98,72 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
           value={`${formatExactRatio(coverage.value.ratio)}×`}
           href={HREF}
           tone={coverage.value.covered ? 'emerald' : 'amber'}
+        />
+      )
+    }
+    case 'kpi-cash-settlement-days': {
+      // Each side names itself when its history is missing: a side with no
+      // payment history renders nothing for that side and says which.
+      const collect = data.cashCollectDays
+      const pay = data.cashPayDays
+      if (!collect || !pay || !collect.available || !pay.available) {
+        const reason = [collect, pay]
+          .filter((side) => side?.available === false)
+          .map((side) => (side as { available: false; reason: string }).reason)
+          .join(' · ')
+        return (
+          <MetricTile
+            icon={<RefreshCw size={15} />}
+            label={t('widgets.cashSettlementDays')}
+            value="—"
+            href={HREF}
+            tone="slate"
+            hint={reason || t('analytics.loading')}
+          />
+        )
+      }
+      const collectDays = collect.value
+      const payDays = pay.value
+      if (collectDays === null) {
+        return payDays === null ? (
+          <MetricTile
+            icon={<RefreshCw size={15} />}
+            label={t('widgets.cashSettlementDays')}
+            value="—"
+            href={HREF}
+            tone="slate"
+            hint={`${t('analytics.noCollectHistory')} · ${t('analytics.noPayHistory')}`}
+          />
+        ) : (
+          <MetricTile
+            icon={<RefreshCw size={15} />}
+            label={t('widgets.cashSettlementDays')}
+            value={t('widgets.cashSettlementDaysPayOnly', { pay: payDays })}
+            href={HREF}
+            tone="slate"
+            hint={t('analytics.noCollectHistory')}
+          />
+        )
+      }
+      if (payDays === null) {
+        return (
+          <MetricTile
+            icon={<RefreshCw size={15} />}
+            label={t('widgets.cashSettlementDays')}
+            value={t('widgets.cashSettlementDaysCollectOnly', { collect: collectDays })}
+            href={HREF}
+            tone="slate"
+            hint={t('analytics.noPayHistory')}
+          />
+        )
+      }
+      return (
+        <MetricTile
+          icon={<RefreshCw size={15} />}
+          label={t('widgets.cashSettlementDays')}
+          value={t('widgets.cashSettlementDaysValue', { collect: collectDays, pay: payDays })}
+          href={HREF}
+          tone="teal"
         />
       )
     }
