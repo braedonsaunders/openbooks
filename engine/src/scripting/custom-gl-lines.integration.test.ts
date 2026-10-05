@@ -594,6 +594,24 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
          where org_id = ${org.orgId} and contributor_kind = 'script'`),
     );
     assert.equal(lines.rows[0]!.n, 2, "the gl.post holder's contributions land");
+
+    // A system posting has no caller: the script's run-as user answers for its lines.
+    const system = await withOrgContext(org.orgId, () =>
+      seedBalancedDraftJournal(org, "JE-CGL-SYSTEM", posterId),
+    );
+    await assert.rejects(
+      postJournal(org, system, null),
+      /custom_gl_lines script "custom gl": this run has no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/,
+    );
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update user_scripts set run_as_user_id = ${posterId} where org_id = ${org.orgId}`));
+    await postJournal(org, system, null);
+    const afterSystem = await withOrgContext(org.orgId, () =>
+      db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_lines
+         where org_id = ${org.orgId} and contributor_kind = 'script'`),
+    );
+    assert.equal(afterSystem.rows[0]!.n, 4, "the run-as user's authority covers the system posting");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

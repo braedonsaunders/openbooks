@@ -9,8 +9,8 @@ import {
 
 // Unit tests for the installed script-journal writer seam. The production
 // runner and real QuickJS realm, no database: the
-// missing-writer refusal fires before any authorization I/O, and the fake
-// writer below stands in for the ledger without touching it.
+// missing-writer refusal fires before any authorization I/O, and a run with
+// no accountable user is refused before the fake writer is ever reached.
 
 const context: ScriptContext = {
   trigger: "scheduled",
@@ -30,23 +30,16 @@ test("journal.create without an installed writer refuses by name, never no-ops",
   assert.match(outcome.abortReason ?? "", /installEngineSeams/);
 });
 
-test("an installed writer is invoked inline and its journal returned", async () => {
-  const calls: { orgId: unknown; actorId: unknown; input: unknown; post: unknown }[] = [];
-  registerScriptJournalWriter(async (orgId, actorId, input, opts) => {
-    calls.push({ orgId, actorId, input, post: opts?.post });
+test("an unattended run with no accountable user never reaches the installed writer", async () => {
+  const calls: unknown[] = [];
+  registerScriptJournalWriter(async (orgId) => {
+    calls.push(orgId);
     return { id: "j1", documentNumber: "JE-0001" };
   });
   const outcome = await runScript(CREATE_SOURCE, context, 2_000, {});
-  assert.equal(outcome.status, "ok");
-  assert.deepEqual(outcome.returned, { id: "j1", documentNumber: "JE-0001" });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0]!.orgId, "not-a-database-tenant");
-  assert.equal(calls[0]!.actorId, null);
-  assert.equal(
-    (calls[0]!.input as { memo?: unknown }).memo,
-    "m",
-  );
-  assert.equal(calls[0]!.post, false);
+  assert.equal(outcome.status, "error");
+  assert.match(outcome.abortReason ?? "", /no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/);
+  assert.deepEqual(calls, []);
 });
 
 test("installEngineSeams is idempotent", async () => {

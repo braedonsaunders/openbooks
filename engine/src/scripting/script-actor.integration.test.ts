@@ -62,15 +62,22 @@ async function seedScript(
   org: ScratchOrg,
   triggerPoint: "bulk" | "scheduled",
   source: string,
-  opts: { cron?: string; nextRunAt?: Date } = {},
+  opts: { cron?: string; nextRunAt?: Date; runAsUserId?: string } = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into user_scripts (id, org_id, name, trigger_point, source, timeout_ms,
-                              is_active, cron, next_run_at)
+                              is_active, cron, next_run_at, run_as_user_id)
     values (${id}, ${org.orgId}, ${"probe-" + id.slice(0, 8)}, ${triggerPoint}, ${source},
-            2000, true, ${opts.cron ?? null}, ${opts.nextRunAt ?? null})`);
+            2000, true, ${opts.cron ?? null}, ${opts.nextRunAt ?? null}, ${opts.runAsUserId ?? null})`);
   return id;
+}
+
+/** The user who saved an unattended script: their gl.post authorizes its journal writes. */
+async function seedSaver(org: ScratchOrg): Promise<string> {
+  const saverId = await withBypass(() => createScratchUser(org.orgId, "Script saver", "saver"));
+  await grantGlPost(org.orgId, "saver");
+  return saverId;
 }
 
 /** Attribution evidence of the newest script_runs row for one script. */
@@ -234,6 +241,7 @@ test("true cron ticks stay explicitly system-attributed with durable scheduler s
     const scriptId = await seedScript(org, "scheduled", JOURNAL_DRAFT_SOURCE, {
       cron: "* * * * *",
       nextRunAt: duePast,
+      runAsUserId: await seedSaver(org),
     });
 
     // No options object is exactly how engine/src/scheduling/scheduler.ts invokes the
@@ -283,7 +291,7 @@ test("system-attributed cron journals carry provenance markers instead of an act
   const org = await withBypass(() => createScratchOrg());
   try {
     await enableScriptsFeature(org.orgId);
-    const scriptId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE);
+    const scriptId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE, { runAsUserId: await seedSaver(org) });
 
     // A worker pickup whose payload has no actorId (cron-shaped) writes a
     // system journal: created_by NULL, durable custom markers, no actor guess.

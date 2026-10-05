@@ -15,7 +15,7 @@ import { CronExpressionParser } from "cron-parser";
 import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import type { ScriptJournalResult } from "../journal/script-journal-contract.ts";
 import { installedScriptJournalWriter } from "./journal-writer.ts";
-import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELD_SET } from "../platform/payment-system-fields.ts";
@@ -43,17 +43,17 @@ import { isUuid } from "../platform/uuid.ts";
  *   ob.query(sql)            run a SELECT through the read-only role -> rows[]
  *                            (ob.record.load / ob.search are sugar over it).
  *                            Raw SQL over the governed catalog cannot apply a
- *                            subsidiary allowlist, so an ATTRIBUTED caller must
+ *                            subsidiary allowlist, so the ACCOUNTABLE user must
  *                            satisfy exactly what /api/query demands: the
  *                            queryConsole feature, sql.execute, and an
  *                            unrestricted subsidiary scope — a restlet is never
  *                            a way to read past the query console's gates.
- *                            Actor-less runs (scheduled/bulk cron ticks) keep
- *                            the documented system path. Human-driven
+ *                            The accountable user is the signed-in caller when
+ *                            there is one, else the script's run-as user (who
+ *                            last saved it), evaluated live; with neither, the
+ *                            call is refused by name. Human-driven
  *                            submit/post/void callers MUST thread ctx.user so
- *                            these gates apply — an omitted user is the system
- *                            path, never a silent downgrade of a signed-in
- *                            principal.
+ *                            the caller, not the saver, is held to account.
  *   ob.runtime               { org, trigger, user } -- read-only context info
  *   ob.record.load(t, id)    load one row by id (convenience over ob.query)
  *   ob.search(t, filters)    search rows by key=value filters
@@ -65,12 +65,13 @@ import { isUuid } from "../platform/uuid.ts";
  *                            while another document is mid-post). The acting
  *                            user needs gl.post for draft AND post — the same
  *                            permission every HTTP journal boundary demands
- *                            (fnd_mt97va1e_kiv9jd: an endpoint script may not
- *                            launder a journal write past role permissions).
- *                            Runs without a signed-in user (scheduled/bulk
- *                            cron ticks) keep the documented system-
- *                            provenance path. Human-driven submit/post/void
- *                            must pass ctx.user so gl.post is re-resolved.
+ *                            (an endpoint script may not launder a journal
+ *                            write past role permissions), and the write is
+ *                            confined to that user's entity scope. Runs without
+ *                            a signed-in user (scheduled/bulk ticks, system
+ *                            postings) are authorized as the script's run-as
+ *                            user and still post under system provenance;
+ *                            with no run-as user they are refused by name.
  *
  * Return contract (before_post only):
  *   return { set: { field: value } }  to mutate whitelisted header fields
@@ -196,26 +197,103 @@ export function mergeBeforePostCustomMutation(
 }
 
 /**
- * The refusal an attributed caller gets from ob.query, or null when the call
- * may proceed. Mirrors web/app/api/query/route.ts gate-for-gate:
+ * The user held to account for a run's privileged host calls: the signed-in
+ * caller when one drives the run, else the stored script's run-as user — the
+ * user who last saved or promoted it. Their permissions and entity scope are
+ * always read LIVE, so revoking a role revokes what their scripts can do.
+ */
+export interface ScriptAuthority {
+  userId: string;
+  kind: "caller" | "run_as";
+}
+
+export function scriptAuthority(
+  ctx: Pick<ScriptContext, "user">,
+  runAsUserId: string | null | undefined,
+): ScriptAuthority | null {
+  if (ctx.user?.id) return { userId: ctx.user.id, kind: "caller" };
+  if (runAsUserId) return { userId: runAsUserId, kind: "run_as" };
+  return null;
+}
+
+/**
+ * The refusal for a privileged host call that no accountable user covers, or
+ * null when the authority holds `permission`. A run-as user who left the
+ * organization or lost the permission is named as such, with the remedy.
+ */
+async function scriptAuthorityRefusal(
+  orgId: string,
+  authority: ScriptAuthority | null,
+  permission: string,
+): Promise<string | null> {
+  if (!authority) {
+    return `this run has no signed-in user and the script has no run-as user; save the script again as a user who holds ${permission} so its unattended runs act under that user's permissions`;
+  }
+  if (authority.kind === "run_as" && !(await actorIdentity(db, orgId, authority.userId))?.isActive) {
+    return `the script's run-as user is no longer an active user of this organization; save the script again as an active user who holds ${permission}`;
+  }
+  if (!(await actorHasPermission(db, orgId, authority.userId, permission))) {
+    return authority.kind === "caller"
+      ? `missing permission: ${permission}`
+      : `missing permission: ${permission} (the script's run-as user lacks it; save the script again as a user who holds it)`;
+  }
+  return null;
+}
+
+/**
+ * The refusal ob.query gets, or null when the call may proceed. Mirrors
+ * web/app/api/query/route.ts gate-for-gate:
  * guardFeaturePermission("sql.execute", "queryConsole") and
- * hasUnrestrictedQueryScope. Resolved live against the tenant (ctx.user's
- * roles array is display data), and only for a signed-in principal —
- * system-driven runs have no caller to authorize and remain governed by the
- * scripts feature alone.
+ * hasUnrestrictedQueryScope, evaluated for the accountable user (see
+ * scriptAuthority) and resolved live against the tenant — ctx.user's roles
+ * array is display data. A run with no accountable user is refused.
  */
 export async function scriptQueryRefusal(
   ctx: Pick<ScriptContext, "org" | "user">,
+  runAsUserId?: string | null,
 ): Promise<string | null> {
-  const userId = ctx.user?.id;
-  if (!userId) return null;
+  const authority = scriptAuthority(ctx, runAsUserId);
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
   if (!(await orgFeatureEnabled(ctx.org.id, "queryConsole"))) return "queryConsole feature is disabled";
-  if (!(await actorHasPermission(db, ctx.org.id, userId, "sql.execute"))) {
-    return "missing permission: sql.execute";
+  const refusal = await scriptAuthorityRefusal(ctx.org.id, authority, "sql.execute");
+  if (refusal) return refusal;
+  if ((await actorAllowedSubsidiaryIds(db, ctx.org.id, authority!.userId)) !== null) {
+    return authority!.kind === "caller"
+      ? "raw queries require unrestricted subsidiary access"
+      : "raw queries require unrestricted subsidiary access (the script's run-as user is restricted to some entities)";
   }
-  if ((await actorAllowedSubsidiaryIds(db, ctx.org.id, userId)) !== null) {
-    return "raw queries require unrestricted subsidiary access";
+  return null;
+}
+
+/** Host calls a script source plainly reaches for: catalog reads and ledger writes. */
+const SCRIPT_QUERY_CALL = /\bob\s*\.\s*(?:query|search|record)\b|\b__(?:query|search)\b/;
+const SCRIPT_JOURNAL_CALL = /\bob\s*\.\s*journal\b|\b__journal_create\b/;
+
+/**
+ * Save-time check: a script that will run under its saver's authority must
+ * not be saved by someone who could not make its privileged calls. This is
+ * the early, explanatory refusal; the boundary is the live check at run time,
+ * which also covers calls this source scan cannot see.
+ */
+export async function scriptSaveRefusal(
+  orgId: string,
+  saverId: string,
+  source: string,
+): Promise<string | null> {
+  const authority: ScriptAuthority = { userId: saverId, kind: "caller" };
+  if (SCRIPT_QUERY_CALL.test(source)) {
+    if (!(await orgFeatureEnabled(orgId, "queryConsole"))) {
+      return "this script reads with ob.query, ob.search or ob.record, which need the queryConsole feature";
+    }
+    const refusal = await scriptAuthorityRefusal(orgId, authority, "sql.execute");
+    if (refusal) return `this script reads with ob.query, ob.search or ob.record and runs under your permissions: ${refusal}`;
+    if ((await actorAllowedSubsidiaryIds(db, orgId, saverId)) !== null) {
+      return "this script reads with ob.query, ob.search or ob.record and runs under your permissions: raw queries require unrestricted subsidiary access";
+    }
+  }
+  if (SCRIPT_JOURNAL_CALL.test(source)) {
+    const refusal = await scriptAuthorityRefusal(orgId, authority, "gl.post");
+    if (refusal) return `this script writes journals with ob.journal.create and runs under your permissions: ${refusal}`;
   }
   return null;
 }
@@ -252,6 +330,12 @@ export interface RunScriptOptions {
    * write stands alone (callers with no stable retry identity).
    */
   idempotencyNamespace?: string;
+  /**
+   * The stored script's run-as user (user_scripts.run_as_user_id). Governs
+   * privileged host calls when ctx carries no signed-in user; omitted or null
+   * means such calls are refused.
+   */
+  runAsUserId?: string | null;
 }
 
 /**
@@ -715,7 +799,7 @@ export async function runScript(
         // is host I/O too — Asyncify cannot observe the deadline while
         // those reads are pending, so they share this race with the SELECT.
         const outcome = await withScriptHostDeadline(deadline, async () => {
-          queryRefusal ??= scriptQueryRefusal(ctx);
+          queryRefusal ??= scriptQueryRefusal(ctx, opts.runAsUserId);
           const refusal = await queryRefusal;
           if (refusal) return { kind: "refused" as const, refusal };
           const result = await runUserSql(sqlText, {
@@ -765,7 +849,7 @@ export async function runScript(
       }
       try {
         const outcome = await withScriptHostDeadline(deadline, async () => {
-          queryRefusal ??= scriptQueryRefusal(ctx);
+          queryRefusal ??= scriptQueryRefusal(ctx, opts.runAsUserId);
           const refusal = await queryRefusal;
           if (refusal) return { kind: "refused" as const, refusal };
           searchSchema ??= new Map(
@@ -792,10 +876,11 @@ export async function runScript(
 
     // Governed ledger write. post:true is refused inside before_* triggers —
     // the posting engine is already mid-flight for the triggering document.
-    // An attributed caller (endpoint scripts run under a signed-in user) must
-    // hold gl.post like they would at any HTTP journal boundary; the roles
-    // array on ctx is display data, so the live tenant authorization is
-    // re-resolved here rather than trusted from the context.
+    // The accountable user (the signed-in caller, else the script's run-as
+    // user) must hold gl.post like they would at any HTTP journal boundary,
+    // and the write is confined to their entity scope; the roles array on
+    // ctx is display data, so the live tenant authorization is re-resolved
+    // here rather than trusted from the context.
     // The journal.create call ordinal within this run: with an idempotency
     // namespace, call N writes under `${namespace}#${N}` so a retry of the
     // same logical run observes the first execution's document.
@@ -846,13 +931,11 @@ export async function runScript(
               if (!writer) {
                 return { kind: "refused" as const, refusal: "journal.create: journal writes are not installed in this process (call installEngineSeams())" };
               }
-              if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
-                return { kind: "refused" as const, refusal: "journal.create: missing permission: gl.post" };
-              }
+              const authority = scriptAuthority(ctx, opts.runAsUserId);
+              const refusal = await scriptAuthorityRefusal(ctx.org.id, authority, "gl.post");
+              if (refusal) return { kind: "refused" as const, refusal: `journal.create: ${refusal}` };
               const input = JSON.parse(String(vm.dump(inputH)));
-              const allowedSubsidiaryIds = ctx.user?.id
-                ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
-                : null;
+              const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, ctx.org.id, authority!.userId);
               const created = await writer(
                 ctx.org.id,
                 ctx.user?.id ?? null,
@@ -1088,6 +1171,7 @@ export async function runTriggerScripts(
     // deadline fencing still guarantees a timed-out write commits nothing.
     const res = await runScript(s.source, { ...ctx, trigger }, s.timeoutMs, {
       idempotencyNamespace: `trigger/${trigger}/${targetId}/${triggerTargetStamp(ctx.document)}/${s.id}`,
+      runAsUserId: s.runAsUserId,
     });
     const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
     outcomes.push(outcome);
@@ -1167,6 +1251,7 @@ export async function runScheduledScript(
   const scope = opts.idempotencyScope ?? `minute-${new Date().toISOString().slice(0, 16)}`;
   const res = await runScript(s.source, ctx, s.timeoutMs, {
     idempotencyNamespace: `scheduled/${s.id}/${scope}`,
+    runAsUserId: s.runAsUserId,
   });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 
@@ -1233,6 +1318,7 @@ export async function runEndpointScript(
   // HTTP idempotency-key layer, not here; timeout retries rely on fencing.
   const res = await runScript(s.source, ctx, s.timeoutMs, {
     idempotencyNamespace: `endpoint/${s.id}/req-${randomUUID()}`,
+    runAsUserId: s.runAsUserId,
   });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 
@@ -1308,6 +1394,7 @@ export async function runBulkScript(
   const scope = opts.idempotencyScope ?? `run-${randomUUID()}`;
   const res = await runScript(s.source, ctx, BULK_TIMEOUT_MS, {
     idempotencyNamespace: `bulk/${s.id}/${scope}`,
+    runAsUserId: s.runAsUserId,
   });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 
@@ -1675,8 +1762,9 @@ export async function runCustomGlLineScripts(
 
   // The posting caller needs gl.post, re-resolved live against its roles —
   // the same pattern as ob.journal.create. The ctx user object is display
-  // data; the tenant authorization below is authoritative. Actor-less runs
-  // keep the documented system-provenance path.
+  // data; the tenant authorization below is authoritative. A system posting
+  // has no caller, so each script is authorized as its run-as user instead
+  // (checked per script below) and refused by name when it has none.
   const user = await resolveScriptUser(req.orgId, req.actorId);
   if (
     user &&
@@ -1693,12 +1781,12 @@ export async function runCustomGlLineScripts(
     .where(eq(schema.orgs.id, req.orgId));
   if (!org) throw new CustomGlLinesError("custom_gl_lines: organization not found");
 
-  // The same live allowlist __journal_create passes into createScriptJournal.
-  // Actor-less (system) runs stay unrestricted; an attributed poster cannot
-  // contribute lines onto a sibling they are not allowed to see.
-  const allowedSubsidiaryIds = user
+  // The same live allowlist __journal_create passes into createScriptJournal:
+  // an attributed poster cannot contribute lines onto a sibling they are not
+  // allowed to see, and neither can a system posting's run-as user.
+  const callerSubsidiaryIds = user
     ? await actorAllowedSubsidiaryIds(db, req.orgId, user.id)
-    : null;
+    : undefined;
 
   const out: ContributedLine[] = [];
   // In-memory twin of every script_runs row inserted above, in run order.
@@ -1709,6 +1797,15 @@ export async function runCustomGlLineScripts(
   // fine, the post is what was refused.
   const completed: CustomGlLineRunEvidence[] = [];
   for (const s of scripts) {
+    let allowedSubsidiaryIds = callerSubsidiaryIds;
+    if (allowedSubsidiaryIds === undefined) {
+      const authority = scriptAuthority({}, s.runAsUserId);
+      const refusal = await scriptAuthorityRefusal(req.orgId, authority, "gl.post");
+      if (refusal) {
+        throw new CustomGlLinesError(`custom_gl_lines script "${s.name}": ${refusal}`, [...completed]);
+      }
+      allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, req.orgId, authority!.userId);
+    }
     const ctx: ScriptContext = {
       trigger: CUSTOM_GL_LINES_TRIGGER,
       document: req.document,

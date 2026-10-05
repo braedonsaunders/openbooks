@@ -1,12 +1,9 @@
 // Run with:  node --import tsx --import ./engine/src/testing/database-bypass.ts --test engine/src/scripting/permissions.integration.test.ts   (from repo root)
 //
-// Regression coverage for fnd_mt97va1e_kiv9jd: the user-script runtime exposed
-// ob.journal.create to ANY attributed caller (endpoint scripts ran with only
-// scripts.execute), letting a scripts.execute-only principal create and post
-// journals under its own identity. The runtime now demands the caller's
-// gl.post before every governed ledger write, exactly like every HTTP journal
-// boundary (guardPermission('gl.post')); system actors (scheduled/bulk/engine
-// triggers have no signed-in user) keep the documented system-provenance path.
+// The user-script runtime demands the accountable user's gl.post before every
+// governed ledger write, exactly like every HTTP journal boundary
+// (guardPermission('gl.post')): the signed-in caller when there is one, else
+// the script's run-as user. Runs with neither are refused by name.
 // Skipped unless OPENBOOKS_DB_URL is set.
 
 import { randomUUID } from "node:crypto";
@@ -244,11 +241,9 @@ test("wildcard grants and platform super admins are authorized; a deny override 
   }
 });
 
-test("system actors are untouched: an actor-less scheduled script still posts under system provenance", { skip: !DB }, async () => {
+test("an unattended scheduled script posts only as an accountable run-as user, confined to that user's entities", { skip: !DB }, async () => {
   const seeded = await seedScriptOrg();
   try {
-    // The same ob.journal.create host call, but runScheduledScript supplies no
-    // ctx.user — the documented system-provenance path must keep working.
     const scheduledSource = `
 function main(ctx) {
   return ob.journal.create({
@@ -265,16 +260,35 @@ function main(ctx) {
     await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, cron, next_run_at, source)
       values (${scriptId}, ${seeded.org.orgId}, 'nightly', 'scheduled', '* * * * *', now(), ${scheduledSource})`);
+    const runAs = (userId: string | null) => db.execute(sql`
+      update user_scripts set run_as_user_id = ${userId} where id = ${scriptId} and org_id = ${seeded.org.orgId}`);
+    const before = await ledgerRowCounts(seeded.org.orgId);
 
-    const outcome = await runScheduledScript(scriptId, seeded.org.orgId);
-    assert.equal(outcome.status, "ok");
+    // No signed-in user and no saver on record: nobody is accountable, so nothing posts.
+    const orphan = await runScheduledScript(scriptId, seeded.org.orgId, { idempotencyScope: "orphan" });
+    assert.equal(orphan.status, "error");
+    assert.match(orphan.abortReason ?? "", /journal\.create: this run has no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/);
+    // A saver without gl.post cannot post through the schedule either.
+    await runAs(seeded.clerkId);
+    const clerk = await runScheduledScript(scriptId, seeded.org.orgId, { idempotencyScope: "clerk" });
+    assert.equal(clerk.status, "error");
+    assert.match(clerk.abortReason ?? "", /missing permission: gl\.post \(the script's run-as user lacks it/);
+    assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), before);
+
+    // A run-as user restricted to a child entity posts there, never into the root.
+    const childId = await seedChildSubsidiary(seeded.org.orgId, seeded.org.subsidiaryId);
+    await restrictRole(seeded.org.orgId, "poster", [childId]);
+    await runAs(seeded.posterId);
+    const outcome = await runScheduledScript(scriptId, seeded.org.orgId, { idempotencyScope: "poster" });
+    assert.equal(outcome.status, "ok", outcome.abortReason ?? "");
     const result = outcome.returned as { entryId?: string };
-    assert.ok(result.entryId, "actor-less posting still works");
+    assert.ok(result.entryId);
+    assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
     const docRow = (await db.execute<{ created_by: string | null; custom: Record<string, string> }>(sql`
       select d.created_by::text as created_by, d.custom
         from journal_entries e join documents d on d.id = e.source_document_id
        where e.id = ${result.entryId!} and e.org_id = ${seeded.org.orgId}`)).rows[0];
-    // There is no signed-in user to authorize here; documented system provenance applies.
+    // The write keeps system provenance; the run-as user is who authorized it.
     assert.equal(docRow!.created_by, null);
     assert.equal(docRow!.custom.actorKind, "system");
   } finally {
@@ -524,16 +538,32 @@ test("ob.query honours the queryConsole feature and the unrestricted-scope rule 
   }
 });
 
-test("system-driven runs keep ob.query: an actor-less scheduled script still reads", { skip: !DB }, async () => {
+test("an unattended ob.query reads only under a live run-as user who passes the query console's gates", { skip: !DB }, async () => {
   const seeded = await seedScriptOrg();
   try {
+    await setQueryConsole(seeded.org.orgId, true);
+    const analystId = await createScratchUser(seeded.org.orgId, "Analyst", "analyst");
+    await db.execute(sql`
+      update app_roles set permissions = '["sql.execute"]'::jsonb
+       where org_id = ${seeded.org.orgId} and key = 'analyst'`);
     const scriptId = randomUUID();
     await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, cron, next_run_at, source)
       values (${scriptId}, ${seeded.org.orgId}, 'nightly-read', 'scheduled', '* * * * *', now(), ${QUERY_SCRIPT})`);
+    const orphan = await runScheduledScript(scriptId, seeded.org.orgId);
+    assert.equal(orphan.status, "error");
+    assert.match(orphan.abortReason ?? "", /query: this run has no signed-in user and the script has no run-as user; save the script again as a user who holds sql\.execute/);
+
+    await db.execute(sql`update user_scripts set run_as_user_id = ${analystId} where id = ${scriptId} and org_id = ${seeded.org.orgId}`);
     const outcome = await runScheduledScript(scriptId, seeded.org.orgId);
     assert.equal(outcome.status, "ok", outcome.abortReason ?? "");
     assert.deepEqual(outcome.returned, [{ n: 0 }]);
+
+    // Authority is read live: a deactivated saver no longer covers the schedule.
+    await db.execute(sql`update users set is_active = false where id = ${analystId} and org_id = ${seeded.org.orgId}`);
+    const departed = await runScheduledScript(scriptId, seeded.org.orgId);
+    assert.equal(departed.status, "error");
+    assert.match(departed.abortReason ?? "", /run-as user is no longer an active user of this organization/);
   } finally {
     await dropScratchOrgReporting(seeded.org.orgId);
   }
