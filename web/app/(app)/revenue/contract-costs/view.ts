@@ -202,12 +202,14 @@ export async function loadContractCosts(
   const org = (await db.execute<{ base_currency: string }>(sql`
     select base_currency from orgs where id = ${orgId}`)).rows[0];
   // The workspace totals in the organization's own base currency — never a
-  // USD guess. The column is NOT NULL, so absence means the org row itself
-  // is gone and the page refuses by name with the real remedy.
-  if (!org?.base_currency) {
-    throw new ContractCostError("No base currency is set for this organization.", {
-      code: "contract_cost_base_currency_missing",
-      remedy: "Set the base currency on the company record in Company Settings before opening the contract-cost workspace.",
+  // USD guess. The column is NOT NULL, so an empty read means this account
+  // cannot see the organization at all (missing or out of scope), not that
+  // configuration is absent: the remedy is access, never editing a company
+  // record the reader cannot see.
+  if (!org) {
+    throw new ContractCostError("This organization is not available to the current account.", {
+      code: "contract_cost_org_unavailable",
+      remedy: "Sign in with an account that belongs to this organization, or ask an administrator for access, then reopen the contract-cost workspace.",
     });
   }
   const baseCurrency = org.base_currency;

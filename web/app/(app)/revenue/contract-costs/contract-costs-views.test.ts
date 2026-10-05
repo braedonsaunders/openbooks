@@ -65,19 +65,20 @@ test('contract-costs sibling tabs preserve workspace filters', async () => {
 })
 
 /**
- * The workspace totals in the org base currency, never a USD guess: without
- * one the page refuses by name with the Company Settings remedy.
+ * An organization the account cannot see is an access refusal, never an
+ * invitation to configure: without a visible org row the page refuses by
+ * name with the account/access remedy.
  */
-test('contract-costs refuses by name without an org base currency', async () => {
+test('contract-costs refuses by name when the org is unavailable', async () => {
   globalThis.__costViewsOrg = []
   try {
     await assert.rejects(
       () => loadContractCosts({}),
       (error: unknown) => {
         const named = error as { code?: string; remedy?: string; message?: string }
-        assert.equal(named.code, 'contract_cost_base_currency_missing')
-        assert.match(named.message ?? '', /base currency/)
-        assert.match(named.remedy ?? '', /Company Settings/)
+        assert.equal(named.code, 'contract_cost_org_unavailable')
+        assert.match(named.message ?? '', /not available/)
+        assert.match(named.remedy ?? '', /administrator for access/)
         return true
       },
     )

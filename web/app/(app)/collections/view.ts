@@ -219,7 +219,7 @@ async function loadRecovery(orgId: string, opts?: { canRunReport?: boolean }): P
         from documents d
        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
          and d.party_id = any(${partyIds})
-       order by d.document_date desc
+       order by d.document_date desc, d.created_at desc, d.id desc
     `)).rows
     for (const row of currencyRows) {
       if (!partyCurrency.has(row.partyId)) partyCurrency.set(row.partyId, row.currency)
