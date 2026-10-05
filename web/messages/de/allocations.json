@@ -587,7 +587,7 @@
     },
     "review": {
       "title": "Diese Regel anlegen?",
-      "description": "Dies legt dieselbe versionierte Regel an, die danach bearbeitet werden kann. Alles lässt sich nachträglich ändern.",
+      "description": "Prüfen Sie Geltungsbereich, Ziele und Gültigkeitsdaten. Veröffentlichte Versionen sind gesperrt; Änderungen erfolgen in einer neuen Version.",
       "when": "Greift {mode}",
       "sourceAnyKind": "Trifft jede Transaktionsart",
       "sourceKinds": "Trifft {kinds}",

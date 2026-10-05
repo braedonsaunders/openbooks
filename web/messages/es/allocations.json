@@ -587,7 +587,7 @@
     },
     "review": {
       "title": "¿Crear esta regla?",
-      "description": "Esto escribe la misma regla versionada que edita el panel. Puede cambiar todo después.",
+      "description": "Revise el alcance, los destinos y las fechas de vigencia. Las versiones publicadas están bloqueadas; cree una nueva versión para modificarlas.",
       "when": "Actúa {mode}",
       "sourceAnyKind": "Coincide con todo tipo de transacción",
       "sourceKinds": "Coincide con {kinds}",

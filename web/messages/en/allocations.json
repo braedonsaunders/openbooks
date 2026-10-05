@@ -587,7 +587,7 @@
     },
     "review": {
       "title": "Create this rule?",
-      "description": "This writes the same versioned rule the drawer edits. You can change anything after.",
+      "description": "Review the scope, destinations and effective dates. Published versions are locked; revise them by creating a new version.",
       "when": "Fires {mode}",
       "sourceAnyKind": "Matches every transaction type",
       "sourceKinds": "Matches {kinds}",

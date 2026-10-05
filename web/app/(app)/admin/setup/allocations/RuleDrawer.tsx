@@ -4,6 +4,7 @@ import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import {
   Badge,
@@ -18,6 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TagInput,
   UrlDrawer,
 } from '@openbooks/ui'
 import { SplitLinesEditor } from '../../../../../components/allocations/SplitLinesEditor'
@@ -113,45 +115,19 @@ async function fetchJson(url: string, init?: RequestInit): Promise<{ status: num
   }
 }
 
-/** Checkbox list for id-array fields (books, accounts, dimension filters). */
-function MultiCheck({
-  options,
-  values,
-  onChange,
-  ariaLabel,
-}: {
+/** Native searchable multi-value picker for reference fields. */
+function MultiCheck({ options, values, onChange, ariaLabel, disabled = false }: {
   options: { value: string; label: string }[]
   values: string[]
   onChange: (next: string[]) => void
   ariaLabel: string
+  disabled?: boolean
 }) {
-  const selected = new Set(values)
   const t = useTranslations('allocations')
-  // SetupDrawer multiref precedent: an empty options list renders the muted
-  // none-state line, never a collapsed empty box.
-  if (options.length === 0) {
+  if (options.length === 0 && values.length === 0) {
     return <p className="text-xs text-slate-400">{t('rules.definition.noOptions')}</p>
   }
-  return (
-    <div aria-label={ariaLabel} className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-800">
-      {options.map((option) => (
-        <label key={option.value} className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className={CHECKBOX_CLASS}
-            checked={selected.has(option.value)}
-            onChange={(e) => {
-              const next = new Set(selected)
-              if (e.target.checked) next.add(option.value)
-              else next.delete(option.value)
-              onChange([...next])
-            }}
-          />
-          <span className="min-w-0 flex-1 truncate">{option.label}</span>
-        </label>
-      ))}
-    </div>
-  )
+  return <TagInput value={values} onChange={onChange} options={options} ariaLabel={ariaLabel} placeholder={ariaLabel} allowNew={false} disabled={disabled} />
 }
 
 /**
@@ -278,6 +254,7 @@ interface SegmentOption {
 
 interface PickerOptions {
   accounts: Option[]
+  expenseAccounts: Option[]
   payComponents: Option[]
   departments: Option[]
   locations: Option[]
@@ -296,6 +273,10 @@ interface PickerOptions {
 /** Edit mode: loads head + versions + pickers once, then one tab body at a time. */
 function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: string }) {
   const t = useTranslations('allocations')
+  const router = useRouter()
+  const notFoundMessage = t('rules.drawer.notFound')
+  const loadErrorMessage = t('rules.errors.load')
+  const driversErrorMessage = t('drivers.loadFailed')
   const [tab, setTab] = useState<DrawerTab>('general')
   const [detail, setDetail] = useState<RuleDetail | null>(null)
   const [options, setOptions] = useState<PickerOptions | null>(null)
@@ -319,11 +300,11 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       ])
       if (!live) return
       if (detailRes.status === 404) {
-        setError(t('rules.drawer.notFound'))
+        setError(notFoundMessage)
         return
       }
       if (detailRes.status !== 200 || optionsRes.status !== 200) {
-        setError(apiError(detailRes.status, detailRes.body, t('rules.errors.load')).message)
+        setError(apiError(detailRes.status, detailRes.body, loadErrorMessage).message)
         return
       }
       setDetail(detailRes.body as RuleDetail)
@@ -332,6 +313,7 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       const rawSegments = (payload['segments'] ?? []) as unknown as SegmentOption[]
       setOptions({
         accounts: payload['accounts'] ?? [],
+        expenseAccounts: payload['expenseAccounts'] ?? [],
         payComponents: payload['payComponents'] ?? [],
         departments: payload['departments'] ?? [],
         locations: payload['locations'] ?? [],
@@ -355,23 +337,24 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       if (driversRes.status === 200) {
         setDrivers((driversRes.body as { drivers?: typeof drivers })?.drivers ?? [])
       } else {
-        setDriversError(apiError(driversRes.status, driversRes.body, t('drivers.loadFailed')).message)
+        setDriversError(apiError(driversRes.status, driversRes.body, driversErrorMessage).message)
       }
     }
     void load().catch((loadError: unknown) => {
       if (live && !(loadError instanceof DOMException && loadError.name === 'AbortError')) {
-        setError(loadError instanceof Error ? loadError.message : t('rules.errors.load'))
+        setError(loadError instanceof Error ? loadError.message : loadErrorMessage)
       }
     })
     return () => {
       live = false
       controller.abort()
     }
-  }, [ruleId, requestKey, t])
+  }, [ruleId, requestKey, notFoundMessage, loadErrorMessage, driversErrorMessage])
 
   const reload = () => {
     setDetail(null)
     setRequestKey((key) => key + 1)
+    router.refresh()
   }
 
   return (
@@ -388,7 +371,7 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       ) : detail === null || options === null ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.drawer.loading')}</p>
       ) : tab === 'general' ? (
-        <GeneralTab detail={detail} onSaved={setDetail} onStale={reload} />
+        <GeneralTab detail={detail} onSaved={(next) => { setDetail(next); router.refresh() }} onStale={reload} />
       ) : tab === 'definition' ? (
         <DefinitionTab ruleId={ruleId} detail={detail} options={options} drivers={drivers} driversError={driversError} onChanged={reload} />
       ) : tab === 'versions' ? (
@@ -500,6 +483,7 @@ function DefinitionTab({
 }) {
   const t = useTranslations('allocations')
   const tc = useTranslations('common')
+  const loadErrorMessage = t('rules.errors.load')
   const defaultVersionId =
     detail.versions.find((entry) => entry.version.id === (detail.rule as { currentVersionId?: string }).currentVersionId)?.version.id
     ?? detail.versions.find((entry) => entry.version.status === 'draft')?.version.id
@@ -527,7 +511,7 @@ function DefinitionTab({
       ({ status, body }) => {
         if (!live) return
         if (status !== 200) {
-          setError(apiError(status, body, t('rules.errors.load')).message)
+          setError(apiError(status, body, loadErrorMessage).message)
           return
         }
         const payload = body as VersionDetail
@@ -537,7 +521,7 @@ function DefinitionTab({
       },
       (fetchError: unknown) => {
         if (live && !(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
-          setError(fetchError instanceof Error ? fetchError.message : t('rules.errors.load'))
+          setError(fetchError instanceof Error ? fetchError.message : loadErrorMessage)
         }
       },
     )
@@ -545,7 +529,7 @@ function DefinitionTab({
       live = false
       controller.abort()
     }
-  }, [ruleId, versionId, t])
+  }, [ruleId, versionId, loadErrorMessage])
 
   const isDraft = (loaded?.version?.status as string | undefined) === 'draft'
   const set = <K extends keyof DefinitionForm>(key: K, value: DefinitionForm[K]) => {
@@ -584,10 +568,13 @@ function DefinitionTab({
         return
       }
       revision = (replaced.body as { revision?: string })?.revision ?? revision
+      const targets = (replaced.body as { targets: VersionDetail['targets'] }).targets
+      setLoaded({ ...loaded, revision, targets })
+      setLines((targets as Parameters<typeof targetToLine>[0][]).map(targetToLine))
     }
     setSaving(false)
     setSaved(true)
-    setLoaded({ ...loaded, revision })
+    if (form.targetKind !== 'explicit') setLoaded({ ...loaded, revision })
   }
 
   const filterLabels: Record<string, string> = {
@@ -605,7 +592,7 @@ function DefinitionTab({
     employee: t('rules.definition.partyRoles.employee'),
     other: t('rules.definition.partyRoles.other'),
   }
-  const accountOptions = options.accounts.map((account) => ({ value: account.id, label: account.label }))
+  const accountOptions = (form.payrollExpensesOnly ? options.expenseAccounts : options.accounts).map((account) => ({ value: account.id, label: account.label }))
   const driverOptions = [
     ...drivers.map((driver) => ({ value: driver.id, label: `${driver.key} · ${driver.name}` })),
     ...(form.driverId !== '' && !drivers.some((driver) => driver.id === form.driverId)
@@ -693,6 +680,7 @@ function DefinitionTab({
             </Field>
             {form.bookScope === 'books' ? (
               <MultiCheck
+                disabled={!isDraft}
                 ariaLabel={t('rules.definition.bookScope')}
                 options={options.books.map((book) => ({ value: book.id, label: book.label }))}
                 values={form.bookIds}
@@ -747,6 +735,7 @@ function DefinitionTab({
             </Field>
             {form.accountScopeKind === 'accounts' ? (
               <MultiCheck
+                disabled={!isDraft}
                 ariaLabel={t('rules.definition.accountScope')}
                 options={accountOptions}
                 values={form.accountIds}
@@ -766,7 +755,7 @@ function DefinitionTab({
             <div>
               <Label>{t('rules.definition.filtersHeading')}</Label>
               <div className="space-y-2">
-                {EDITABLE_FILTER_DIMS.map((dim) => {
+                {EDITABLE_FILTER_DIMS.filter((dim) => dim !== 'subsidiary' || options.subsidiaries.length > 1).map((dim) => {
                   const source: Record<string, Option[]> = {
                     department: options.departments,
                     location: options.locations,
@@ -779,6 +768,7 @@ function DefinitionTab({
                     <div key={dim}>
                       <Label>{filterLabels[dim]}</Label>
                       <MultiCheck
+                        disabled={!isDraft}
                         ariaLabel={filterLabels[dim] ?? dim}
                         options={(source[dim] ?? []).map((item) => ({ value: item.id, label: item.label }))}
                         values={form[filterKey] as string[]}
@@ -788,13 +778,14 @@ function DefinitionTab({
                   )
                 })}
               </div>
-              <div>
+              {!form.payrollExpensesOnly && <div>
                 <Label>{filterLabels['party']}</Label>
                 <div className="space-y-2">
                   {partyGroups.map((group) => (
                     <div key={group.role}>
                       <Label>{group.label}</Label>
                       <MultiCheck
+                        disabled={!isDraft}
                         ariaLabel={group.label}
                         options={group.parties.map((item) => ({ value: item.id, label: item.label }))}
                         values={form.filterPartyIds}
@@ -804,6 +795,7 @@ function DefinitionTab({
                   ))}
                   {partyGroups.length === 0 ? (
                     <MultiCheck
+                      disabled={!isDraft}
                       ariaLabel={filterLabels['party'] ?? 'party'}
                       options={[]}
                       values={form.filterPartyIds}
@@ -811,20 +803,22 @@ function DefinitionTab({
                     />
                   ) : null}
                 </div>
-              </div>
-              <div>
+              </div>}
+              {!form.payrollExpensesOnly && <div>
                 <Label>{filterLabels['item']}</Label>
                 <MultiCheck
+                  disabled={!isDraft}
                   ariaLabel={filterLabels['item'] ?? 'item'}
                   options={options.items.map((item) => ({ value: item.id, label: item.label }))}
                   values={form.filterItemIds}
                   onChange={(next) => set('filterItemIds', next)}
                 />
-              </div>
+              </div>}
               {form.payrollExpensesOnly && (
                 <div>
                   <Label>{t('rules.definition.filters.payComponent')}</Label>
                   <MultiCheck
+                    disabled={!isDraft}
                     ariaLabel={t('rules.definition.filters.payComponent')}
                     options={(options.payComponents ?? []).map((item) => ({ value: item.id, label: item.label }))}
                     values={form.filterPayComponentIds}
@@ -836,6 +830,7 @@ function DefinitionTab({
                 <div key={segment.key}>
                   <Label>{segment.label}</Label>
                   <MultiCheck
+                    disabled={!isDraft}
                     ariaLabel={segment.label}
                     options={segment.values.map((item) => ({ value: item.id, label: item.label }))}
                     values={form.filterExtraDims[segment.key] ?? []}
@@ -1033,6 +1028,7 @@ function DefinitionTab({
                 <div>
                   <Label>{t('rules.definition.dynamicInclude')}</Label>
                   <MultiCheck
+                    disabled={!isDraft}
                     ariaLabel={t('rules.definition.dynamicInclude')}
                     options={dynamicValues}
                     values={form.dynamicInclude}
@@ -1042,6 +1038,7 @@ function DefinitionTab({
                 <div>
                   <Label>{t('rules.definition.dynamicExclude')}</Label>
                   <MultiCheck
+                    disabled={!isDraft}
                     ariaLabel={t('rules.definition.dynamicExclude')}
                     options={dynamicValues}
                     values={form.dynamicExclude}

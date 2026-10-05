@@ -587,7 +587,7 @@
     },
     "review": {
       "title": "创建这条规则？",
-      "description": "这将写入抽屉所编辑的同一版本化规则，之后仍可修改任何内容。",
+      "description": "检查适用范围、目标和生效日期。已发布版本会被锁定；如需修改，请创建新版本。",
       "when": "在{mode}触发",
       "sourceAnyKind": "匹配所有交易类型",
       "sourceKinds": "匹配{kinds}",

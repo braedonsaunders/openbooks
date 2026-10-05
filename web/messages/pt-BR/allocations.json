@@ -587,7 +587,7 @@
     },
     "review": {
       "title": "Criar esta regra?",
-      "description": "Isto grava a mesma regra versionada que o painel edita. Dá para mudar tudo depois.",
+      "description": "Revise o escopo, os destinos e as datas de vigência. Versões publicadas são bloqueadas; crie uma nova versão para alterá-las.",
       "when": "Dispara {mode}",
       "sourceAnyKind": "Coincide com todo tipo de transação",
       "sourceKinds": "Coincide com {kinds}",
