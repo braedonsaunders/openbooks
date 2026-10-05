@@ -262,11 +262,18 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00",
       insurable: "2000.00", qpipInsurable: "2500.00" },
     expected: { ei: "26.00", qpip: "10.75", qpipEmployer: "15.05" } },
-  { year: 2026, label: "tax-exempt (claim code E) still pays the Ontario Health Premium",
-    citation: `hand-worked, ${ED[122]}`,
-    input: { payDate: "2026-02-13", province: "ON", periodsPerYear: 26, income: "2000.00", taxExempt: true },
-    expected: { periodicTax: "23.08", cpp: "110.99", ei: "32.60" },
-    expectedFactors: { T1: "0.00", T4: "0.00", V2: "600.00" } },
+  // Claim code E: no federal or provincial tax is deducted, and the Ontario
+  // Health Premium is part of provincial tax; CPP and EI still apply.
+  { year: 2026, label: "tax-exempt (claim code E) withholds no Ontario Health Premium",
+    citation: `claim code E, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "ON", periodsPerYear: 26, income: "2500.00", taxExempt: true },
+    expected: { periodicTax: "0.00", bonusTax: "0.00", cpp: "140.74", ei: "40.75" },
+    expectedFactors: { T1: "0.00", T4: "0.00", V2: "0.00", T2: "0.00" } },
+  { year: 2026, label: "tax-exempt (claim code E) withholds nothing from a small-income bonus",
+    citation: `claim code E, ${ED[122]}`,
+    input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, income: "50.00",
+      nonPeriodic: "1000.00", taxExempt: true },
+    expected: { bonusTax: "0.00", periodicTax: "0.00", totalTax: "0.00" } },
   { year: 2026, label: "Manitoba BPAMB income phase-out", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-01-30", province: "MB", periodsPerYear: 12, federalClaimCode: 1, income: "20000.00" },
     // BPAMB = 15780 − (237,635.04 − 200,000) × 15780/200000.

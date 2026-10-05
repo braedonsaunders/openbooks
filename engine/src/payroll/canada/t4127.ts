@@ -556,8 +556,11 @@ export function calculateT4127(input: T4127Input): T4127Result {
         if (T4 > th2) V1 += mulRateUnits(T4 - th2, sr2);
       }
 
+      // Claim code E means no income tax is withheld at all, and the Ontario
+      // Health Premium is part of the provincial tax T2 — so an exempt
+      // employee owes no premium through payroll either.
       let V2 = ZERO;
-      if (prov.healthPremium) {
+      if (prov.healthPremium && !input.taxExempt) {
         if (A > U("200000")) V2 = bmin(U("900"), U("750") + mulRateUnits(A - U("200000"), "0.25"));
         else if (A > U("72000")) V2 = bmin(U("750"), U("600") + mulRateUnits(A - U("72000"), "0.25"));
         else if (A > U("48000")) V2 = bmin(U("600"), U("450") + mulRateUnits(A - U("48000"), "0.25"));
@@ -603,7 +606,10 @@ export function calculateT4127(input: T4127Input): T4127Result {
   }
 
   let bonusTax = ZERO;
-  if (bonus > ZERO) {
+  // An exempt employee has no tax withheld from a bonus either: the flat
+  // rate for small annual incomes is a withholding shortcut, not a levy that
+  // survives claim code E.
+  if (bonus > ZERO && !input.taxExempt) {
     if (!averaging && aWithBonus <= U("5000")) {
       bonusTax = mulRateCents(bonus, isQuebec ? "0.10" : "0.15");
     } else {
