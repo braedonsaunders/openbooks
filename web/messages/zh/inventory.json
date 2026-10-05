@@ -212,7 +212,8 @@
       "lot": "批次",
       "expected": "预期数",
       "counted": "实盘数",
-      "movement": "调整"
+      "movement": "调整",
+      "foundUnitCost": "盘盈单位成本"
     },
     "statusNames": {
       "draft": "草稿",

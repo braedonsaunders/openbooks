@@ -212,7 +212,8 @@
       "lot": "Lote",
       "expected": "Previsto",
       "counted": "Contado",
-      "movement": "Ajuste"
+      "movement": "Ajuste",
+      "foundUnitCost": "Custo unitário encontrado"
     },
     "statusNames": {
       "draft": "Rascunho",

@@ -212,7 +212,8 @@
       "lot": "Charge",
       "expected": "Sollmenge",
       "counted": "Zählmenge",
-      "movement": "Anpassung"
+      "movement": "Anpassung",
+      "foundUnitCost": "Stückkosten Mehrbestand"
     },
     "statusNames": {
       "draft": "Entwurf",

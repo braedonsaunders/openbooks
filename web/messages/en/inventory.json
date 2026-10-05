@@ -212,7 +212,8 @@
       "lot": "Lot",
       "expected": "Expected",
       "counted": "Counted",
-      "movement": "Adjustment"
+      "movement": "Adjustment",
+      "foundUnitCost": "Found unit cost"
     },
     "statusNames": {
       "draft": "Draft",
