@@ -124,11 +124,29 @@ function put(body: Record<string, unknown>): Promise<Response> {
   );
 }
 
+// Whole-object saves must name every threshold the sentinel spec declares;
+// this mirrors the spec defaults (config-spec.ts), not a hand-picked subset.
 const VALID = {
   duplicateDays: 14,
-  duplicateMinAmount: 100,
+  duplicateMinAmount: "100.0000",
   sequentialMinCount: 3,
   sequentialMinDays: 7,
+  moderateRiskAmount: "1000.0000",
+  highRiskAmount: "10000.0000",
+  criticalRiskAmount: "25000.0000",
+  aggregateHighAmount: "50000.0000",
+  aggregateCriticalAmount: "100000.0000",
+  rsfBaselineFloor: "100.0000",
+  zscoreSigmaFloor: "10.0000",
+  zscoreThreshold: 3,
+  zscoreMinBaseline: 5,
+  rsfThreshold: 10,
+  baselineMonths: 36,
+  sequentialHighRiskDays: 30,
+  benfordMinSample: 50,
+  trapBandPercent: 5,
+  duplicateAreaMin: 10,
+  ghostNameMinLength: 7,
 };
 
 test("restricted actors cannot write org-wide analytics settings", async () => {
