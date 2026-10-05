@@ -19,6 +19,7 @@ import { notFound } from "@/lib/api/responses";
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { emitCustomerUpdated } from '@openbooks/engine/webhooks'
 import { wholeDigits } from '@openbooks/engine/money'
+import { assignEmployeeWorkerCompGroup } from '@openbooks/engine/payroll/setup'
 
 
 export const runtime = 'nodejs'
@@ -291,7 +292,8 @@ export const PATCH = defineRoute({
            jsonb_build_object(
              'party', to_jsonb(p),
              'customerRole', case when cr.id is null then null else to_jsonb(cr) end,
-             'vendorRole', case when vr.id is null then null else to_jsonb(vr) end
+             'vendorRole', case when vr.id is null then null else to_jsonb(vr) end,
+             'employeeRole', (select to_jsonb(er) from employee_roles er where er.org_id=p.org_id and er.party_id=p.id)
            ) as before
       from parties p
       left join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id
@@ -769,18 +771,26 @@ export const PATCH = defineRoute({
             insert into employee_roles (org_id, party_id, employee_number, job_title, department_id, trade_id,
                                         worker_comp_group_id, hired_on, created_by, updated_by)
             values (${user.orgId}, ${id}, ${strOrNull(e.employeeNumber)}, ${strOrNull(e.jobTitle)?.slice(0, 160) ?? null}, ${departmentId}, ${tradeId},
-                    ${workerCompGroupId !== undefined ? workerCompGroupId : null}, ${hiredOn}, ${user.id}, ${user.id})
+                    null, ${hiredOn}, ${user.id}, ${user.id})
             on conflict (party_id) do update set
               employee_number = excluded.employee_number,
               job_title = excluded.job_title,
               department_id = excluded.department_id,
               trade_id = excluded.trade_id,
-              worker_comp_group_id = ${workerCompGroupId !== undefined ? workerCompGroupId : sql`employee_roles.worker_comp_group_id`},
+              worker_comp_group_id = employee_roles.worker_comp_group_id,
               hired_on = excluded.hired_on,
               is_active = true,
               updated_at = now(), updated_by = ${user.id}
             where employee_roles.org_id = ${user.orgId}
           `)
+          if (workerCompGroupId !== undefined) {
+            await assignEmployeeWorkerCompGroup({
+              orgId: user.orgId, actorId: user.id, employeePartyId: id, groupId: workerCompGroupId,
+              expectedGroupId: (existingParty.before.employeeRole as { worker_comp_group_id?: string | null } | null)?.worker_comp_group_id ?? null,
+              reason: changeReason || 'Employee worker-compensation classification updated',
+              dryRun: false, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            }, tx)
+          }
         }
       }
 
@@ -884,7 +894,8 @@ export const PATCH = defineRoute({
               select jsonb_build_object(
                 'party', to_jsonb(party),
                 'customerRole', case when customer_role.id is null then null else to_jsonb(customer_role) end,
-                'vendorRole', case when vendor_role.id is null then null else to_jsonb(vendor_role) end
+                'vendorRole', case when vendor_role.id is null then null else to_jsonb(vendor_role) end,
+                'employeeRole', (select to_jsonb(employee_role) from employee_roles employee_role where employee_role.org_id=party.org_id and employee_role.party_id=party.id)
               )
                 from parties party
                 left join customer_roles customer_role
