@@ -240,6 +240,52 @@ test('the configuration tab renders the fixed scoring rubric read-only', async (
   }
 })
 
+test('detector details never double the percent sign and name trends in words', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    const data = fixture()
+    data.boilingFrog.accounts = [
+      {
+        accountId: 'a-creep', accountName: 'Creeping SaaS', monotonicRatio: 80, avgMonthlyIncrease: 2.5,
+        totalCreep: 25, startAmount: '100.0000', endAmount: '125.0000', monthCount: 10,
+        annualizedCreep: '30.0000', monthlyAmounts: [], severity: 'critical',
+      },
+    ]
+    data.concentration.accounts = [
+      {
+        id: 'a-big', name: 'Big Vendor Acct', entityType: 'account', totalSpend: '5000.0000',
+        totalBills: '0', totalExpenses: '0', totalOther: '0', billPct: 0, expensePct: 0,
+        transactionCount: 3, monthCount: 3, velocity: 30, acceleration: 5, trend: 'accelerating',
+        latestSpend: '0', previousSpend: '0', avgMonthlySpend: '0', monthlyAmounts: [], monthLabels: [],
+        spendShare: 35.5,
+      },
+    ]
+    await act(async () => {
+      root.render(providers(<SpendVelocityView data={data} />))
+      await tick()
+    })
+    await tick()
+    const detectorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Detectors'))
+    assert.ok(detectorsTab, 'the detectors tab must exist')
+    await click(detectorsTab)
+    assert.ok(
+      !host.textContent?.includes('%%'),
+      `no detail may double the percent sign, got:\n${host.textContent}`,
+    )
+    assert.ok(
+      host.textContent?.includes('Accelerating'),
+      `the concentration trend must read in words, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  }
+})
+
 test('an unconfigured fragmentation detector names its remedy instead of scoring', async () => {
   const host = document.createElement('div')
   document.body.appendChild(host)

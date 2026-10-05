@@ -1825,7 +1825,7 @@
     },
     "chart": {
       "spend": "Dépenses",
-      "tooltipOnTime": "Dans les délais : {pct} %",
+      "tooltipOnTime": "Dans les délais : {pct}",
       "tooltipSpend": "Dépenses : {amount}",
       "xAxis": "Dépenses (log) →",
       "yAxis": "% dans les délais"
@@ -3243,9 +3243,9 @@
       "anomaly": "{sigma}σ de la moyenne en {month}",
       "cliff": "écart {gap} %, ratio {ratio}×",
       "cliffItem": "Vélocité commandes fournisseurs vs commandes clients",
-      "concentration": "{share} % des dépenses, {trend}",
+      "concentration": "{share} des dépenses, {trend}",
       "fragmentation": "{txns} trans./mois, moy. {avg}",
-      "frog": "+{rate} %/mois pendant {months} mois",
+      "frog": "+{rate}/mois pendant {months} mois",
       "seasonal": "{deviation} % vs mois moyen",
       "zombie": "{amount}/mois inchangé pendant {months} mois",
       "cliffNoVelocity": "ratio {ratio}× — vélocités non mesurables"
@@ -3347,9 +3347,9 @@
       "txnsMonths": "{txns} trans. · {months} mois"
     },
     "scatter": {
-      "tooltipAccel": "Accél. : {pct} %",
+      "tooltipAccel": "Accél. : {pct}",
       "tooltipSpend": "Dépenses : {amount}",
-      "tooltipVelocity": "Vélocité : {pct} %",
+      "tooltipVelocity": "Vélocité : {pct}",
       "xAxis": "Vélocité %",
       "yAxis": "Accél."
     },

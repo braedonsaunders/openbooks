@@ -1825,7 +1825,7 @@
     },
     "chart": {
       "spend": "Ausgaben",
-      "tooltipOnTime": "Pünktlich: {pct} %",
+      "tooltipOnTime": "Pünktlich: {pct}",
       "tooltipSpend": "Ausgaben: {amount}",
       "xAxis": "Ausgaben (log) →",
       "yAxis": "% pünktlich"
@@ -3243,9 +3243,9 @@
       "anomaly": "{sigma}σ vom Mittel in {month}",
       "cliff": "Lücke {gap} %, Verhältnis {ratio}×",
       "cliffItem": "Bestell- vs. Auftragsdynamik",
-      "concentration": "{share} % der Ausgaben, {trend}",
+      "concentration": "{share} der Ausgaben, {trend}",
       "fragmentation": "{txns} Trans./Mon., Ø {avg}",
-      "frog": "+{rate} %/Mon. über {months} Monate",
+      "frog": "+{rate}/Mon. über {months} Monate",
       "seasonal": "{deviation} % vs Ø-Monat",
       "zombie": "{amount}/Mon. unverändert über {months} Monate",
       "cliffNoVelocity": "Verhältnis {ratio}× — Dynamik nicht messbar"
@@ -3347,9 +3347,9 @@
       "txnsMonths": "{txns} Buch. · {months} Monate"
     },
     "scatter": {
-      "tooltipAccel": "Beschl.: {pct} %",
+      "tooltipAccel": "Beschl.: {pct}",
       "tooltipSpend": "Ausgaben: {amount}",
-      "tooltipVelocity": "Dynamik: {pct} %",
+      "tooltipVelocity": "Dynamik: {pct}",
       "xAxis": "Dynamik %",
       "yAxis": "Beschl."
     },

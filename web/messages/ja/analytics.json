@@ -1825,7 +1825,7 @@
     },
     "chart": {
       "spend": "支出",
-      "tooltipOnTime": "期日内：{pct}%",
+      "tooltipOnTime": "期日内：{pct}",
       "tooltipSpend": "支出：{amount}",
       "xAxis": "支出（対数）→",
       "yAxis": "期日内率"
@@ -3243,9 +3243,9 @@
       "anomaly": "{month}に平均から{sigma}σ",
       "cliff": "差{gap}%、比率{ratio}倍",
       "cliffItem": "発注・受注の速度",
-      "concentration": "支出の{share}%、{trend}",
+      "concentration": "支出の{share}、{trend}",
       "fragmentation": "月{txns}件、平均{avg}",
-      "frog": "{months}か月間+{rate}%/月",
+      "frog": "{months}か月間+{rate}/月",
       "seasonal": "平均月比{deviation}%",
       "zombie": "{months}か月間{amount}/月で不変",
       "cliffNoVelocity": "比率{ratio}倍 — 速度測定不可"
@@ -3347,9 +3347,9 @@
       "txnsMonths": "{txns}件 · {months}か月"
     },
     "scatter": {
-      "tooltipAccel": "加速度：{pct}%",
+      "tooltipAccel": "加速度：{pct}",
       "tooltipSpend": "支出：{amount}",
-      "tooltipVelocity": "速度：{pct}%",
+      "tooltipVelocity": "速度：{pct}",
       "xAxis": "速度%",
       "yAxis": "加速度"
     },

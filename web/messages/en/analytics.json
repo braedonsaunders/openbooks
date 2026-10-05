@@ -1895,7 +1895,7 @@
       "xAxis": "Spend (log) →",
       "yAxis": "On-time %",
       "tooltipSpend": "Spend: {amount}",
-      "tooltipOnTime": "On-time: {pct}%"
+      "tooltipOnTime": "On-time: {pct}"
     },
     "info": {
       "title": "Not measurable on this ledger:",
@@ -2940,8 +2940,8 @@
     "scatter": {
       "xAxis": "Velocity %",
       "yAxis": "Accel",
-      "tooltipVelocity": "Velocity: {pct}%",
-      "tooltipAccel": "Accel: {pct}%",
+      "tooltipVelocity": "Velocity: {pct}",
+      "tooltipAccel": "Accel: {pct}",
       "tooltipSpend": "Spend: {amount}"
     },
     "chart": {
@@ -3073,10 +3073,10 @@
       }
     },
     "details": {
-      "frog": "+{rate}%/mo for {months} months",
+      "frog": "+{rate}/mo for {months} months",
       "anomaly": "{sigma}σ from mean in {month}",
       "zombie": "{amount}/mo unchanged for {months} months",
-      "concentration": "{share}% of spend, {trend}",
+      "concentration": "{share} of spend, {trend}",
       "fragmentation": "{txns} txns/mo, avg {avg}",
       "seasonal": "{deviation}% vs average month",
       "cliffItem": "PO vs SO velocity",
