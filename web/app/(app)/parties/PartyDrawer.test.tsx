@@ -479,6 +479,136 @@ test("each confidential tab needs its own grant", async (t) => {
   if (prior) t.after(prior);
 });
 
+const CUSTOMER_PAYLOAD = {
+  ...VENDOR_PAYLOAD,
+  customer: { is_active: true },
+  vendor: null,
+};
+
+const AUTOPAY_GRANTS = { autopay: { canManageMethods: true, canManageAutopay: true } };
+
+const METHOD_ROW = {
+  id: "method-1",
+  provider: "stripe",
+  providerCustomerId: "cus_123",
+  providerMethodId: "pm_123",
+  brand: "Visa",
+  last4: "4242",
+  expMonth: 12,
+  expYear: 2028,
+  mandateReference: null,
+  isDefault: true,
+  status: "active",
+};
+
+const CUSTOMER_ENROLLMENT_ROW = {
+  id: "enrollment-1",
+  subscriptionId: null,
+  subscriptionName: null,
+  status: "active",
+  chargeOnIssue: false,
+};
+
+function autopayRoutes(): Record<string, () => Response> {
+  return {
+    "/api/autopay/methods": () => Response.json({ methods: [METHOD_ROW] }),
+    "/api/autopay/enrollments": () => Response.json({ enrollments: [CUSTOMER_ENROLLMENT_ROW] }),
+  };
+}
+
+function renderCustomerDrawer(options: Parameters<typeof renderDrawer>[0] = {}) {
+  return renderDrawer({
+    payload: CUSTOMER_PAYLOAD,
+    role: "customer",
+    recordType: "customer",
+    fetchHandler: routeFetch(autopayRoutes()),
+    ...options,
+  });
+}
+
+async function waitForText(text: string, rounds = 20): Promise<boolean> {
+  for (let round = 0; round < rounds; round += 1) {
+    if (document.body.textContent?.includes(text)) return true;
+    await tick();
+  }
+  return document.body.textContent?.includes(text) ?? false;
+}
+
+test("the customer rail gains a payment-methods tab only with the autopay read surface", async (t) => {
+  const label = en("parties.drawer.tabs.paymentMethods");
+  let prior: (() => Promise<void>) | null = null;
+  const names = async (options: Parameters<typeof renderDrawer>[0]): Promise<string[]> => {
+    if (prior) {
+      const unmount = prior;
+      prior = null;
+      await unmount();
+    }
+    const { done } = await renderCustomerDrawer(options);
+    prior = done;
+    return railTabs().map((button) => button.textContent?.trim() ?? "");
+  };
+
+  const ungranted = await names({});
+  assert.ok(!ungranted.includes(label), "the methods tab stays hidden without the autopay read surface");
+
+  const granted = await names({ grants: AUTOPAY_GRANTS });
+  assert.ok(granted.includes(label), "the read surface opens the methods tab");
+  const tab = railTabNamed(label);
+  assert.ok(tab, "the methods tab must ride the customer rail");
+  await clickTab(tab);
+  assert.ok(await waitForText(en("parties.drawer.autopay.description")), "clicking the rail must open the methods panel");
+
+  const vendor = await names({
+    payload: VENDOR_PAYLOAD,
+    role: "vendor",
+    recordType: "vendor",
+    grants: AUTOPAY_GRANTS,
+  });
+  assert.ok(!vendor.includes(label), "the methods tab never rides a vendor drawer");
+  if (prior) t.after(prior);
+});
+
+test("the payment-methods tab lists stored methods with the default badge", async (t) => {
+  const { done } = await renderCustomerDrawer({ grants: AUTOPAY_GRANTS, initialTab: "paymentMethods" });
+  t.after(done);
+  assert.ok(await waitForText("Visa •••• 4242"), "the stored method must read brand plus last four");
+  const body = document.body.textContent ?? "";
+  assert.ok(body.includes("Visa •••• 4242"), "the stored method must read brand plus last four");
+  assert.ok(body.includes(en("parties.drawer.autopay.defaultBadge")), "the default method wears its badge");
+  assert.ok(
+    !body.includes(en("parties.drawer.autopay.setDefault")),
+    "the default method offers no make-default action",
+  );
+});
+
+test("removing a method asks first and detaches on confirm", async (t) => {
+  const seen: Array<{ url: string; method: string }> = [];
+  const { done } = await renderCustomerDrawer({
+    grants: AUTOPAY_GRANTS,
+    initialTab: "paymentMethods",
+    fetchHandler: (url: string, init?: RequestInit) => {
+      seen.push({ url, method: init?.method ?? "GET" });
+      return routeFetch(autopayRoutes())(url);
+    },
+  });
+  t.after(done);
+  assert.ok(await waitForText("Visa •••• 4242"), "the stored method must render before removal");
+  const remove = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === en("parties.drawer.autopay.remove"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(remove, "a stored method must offer removal");
+  await act(async () => {
+    remove.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  assert.ok(
+    seen.some((request) => request.url === "/api/autopay/methods/method-1" && request.method === "DELETE"),
+    "confirming removal must detach the method",
+  );
+});
+
 test("payroll read mode shows values with no editors", async (t) => {
   const { done } = await renderPayrollDrawer({ bankAccounts: [BANK_ROW] });
   t.after(done);

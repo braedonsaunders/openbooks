@@ -97,6 +97,7 @@ export async function loadEntityRole(
 
   const authz = await requirePermission('parties.read')
   const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
+  const autopayEnabled = await isFeatureEnabled(authz.user.orgId, 'autopay')
   const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
   const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
   const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
@@ -142,6 +143,7 @@ export async function loadEntityRole(
     || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
     || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship'
     || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
+    || requestedPartyTab === 'paymentMethods'
     ? requestedPartyTab
     : 'overview'
   const [openParty, pickers] = await Promise.all([
@@ -291,6 +293,14 @@ export async function loadEntityRole(
           canReadBenefits: hrmEnabled && can(authz, 'hrm.benefits.read'),
           canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),
           payrollEnabled,
+          // Stored methods ride the autopay feature plus the read grant;
+          // null hides the tab even on a customer drawer.
+          autopay: autopayEnabled && role === 'customer' && can(authz, 'payment_methods.read')
+            ? {
+                canManageMethods: can(authz, 'payment_methods.manage'),
+                canManageAutopay: can(authz, 'autopay.manage'),
+              }
+            : null,
           multiCurrency,
           role,
           initialTab: creating ? 'overview' : partyTab,

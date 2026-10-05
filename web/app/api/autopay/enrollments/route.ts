@@ -30,13 +30,16 @@ export const GET = defineRoute({
   handler: async ({ authz, request }) => {
     const partyId = new URL(request.url).searchParams.get('partyId') ?? ''
     if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+    // Subscription rows carry the subscription name: an id alone cannot tell
+    // two enrollments apart on the customer drawer.
     const rows = (await db.execute(sql`
-      select id, party_id as "partyId", subscription_id as "subscriptionId",
-             payment_method_id as "paymentMethodId", status,
-             charge_on_issue as "chargeOnIssue"
-        from autopay_enrollments
-       where org_id = ${authz.user.orgId} and party_id = ${partyId} and status <> 'canceled'
-       order by created_at desc
+      select e.id, e.party_id as "partyId", e.subscription_id as "subscriptionId",
+             e.payment_method_id as "paymentMethodId", e.status,
+             e.charge_on_issue as "chargeOnIssue", s.name as "subscriptionName"
+        from autopay_enrollments e
+        left join subscriptions s on s.id = e.subscription_id and s.org_id = e.org_id
+       where e.org_id = ${authz.user.orgId} and e.party_id = ${partyId} and e.status <> 'canceled'
+       order by e.created_at desc
     `)).rows
     return NextResponse.json({ enrollments: rows })
   },
