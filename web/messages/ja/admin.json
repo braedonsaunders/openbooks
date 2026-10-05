@@ -2888,6 +2888,11 @@
         "title": "為替レート",
         "description": "外貨取引を記帳するために使用される、組織の日次レート。"
       },
+      "fx-rate-age-policies": {
+        "title": "為替レートの有効期間ポリシー",
+        "singular": "為替レートの有効期間ポリシー",
+        "description": "外貨再評価と連結で期間を評価する際に使用できる為替レートの最大経過日数。有効なポリシーがない場合、期末レートと平均レートのいずれも既定値の31日が適用されます。"
+      },
       "consolidated-fx-rates": {
         "title": "連結為替レート",
         "description": "子会社連結に使用される、期末時点、平均、および歴史的レート。"
@@ -3725,6 +3730,7 @@
       "pensionable": "年金対象",
       "periodsPerYear": "年間徴収回数",
       "rateKind": "レート種別",
+      "maxAgeDays": "最大経過日数",
       "registrationNumber": "登録番号",
       "remittancePartyId": "納付先",
       "requiresAdditionalInsured": "追加被保険者が必須",
@@ -4028,6 +4034,7 @@
       "stopSellingAtZero": "ゼロで販売停止"
     },
     "fieldHelp": {
+      "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
       "storedValueLiabilityAccount": "発行時に貸方記入し、利用時に借方記入する貸借対照表勘定。",
       "storedValueBreakageIncomeAccount": "ブレークまたは失効を認識したときに貸方記入する収益勘定。",
       "storedValueBreakagePolicy": "なしはブレークを認識しません。比例配分は利用に応じて認識し、非アクティブ時は休眠残高を認識します。",
@@ -4320,6 +4327,10 @@
         "three_year_average": "3年平均（履歴）",
         "live": "ライブ（実績から再計算）",
         "standard": "標準（発効日付きレートカード）"
+      },
+      "fxRateAgeKind": {
+        "closing": "期末（期末スポット）",
+        "average": "期中平均"
       },
       "fxRateType": {
         "spot": "スポット",
@@ -6052,6 +6063,14 @@
         "apiKey": "APIキー",
         "keyPlaceholder": "プロバイダーのAPIキーを貼り付け",
         "keyKeepPlaceholder": "保存済みキーを維持する場合は空欄",
+        "noRelaySecret": "リレーシークレットなし",
+        "relaySecretGenerate": "リレーシークレットを生成",
+        "relaySecretRotate": "リレーシークレットを更新",
+        "relaySecretRotateConfirm": "{name} のリレーシークレットを更新しますか？送信元が新しいシークレットを使うまで、現在のシークレットで署名された追跡通知は拒否されます。",
+        "relaySecretIssuedTitle": "{name} のリレーシークレット",
+        "relaySecretIssuedHint": "このシークレットを今すぐ追跡通知の送信元に設定してください。表示されるのは一度だけです。有効な署名のない追跡通知は拒否されます。",
+        "relaySecretDismiss": "保存しました",
+        "relaySecretRotated": "{name} のリレーシークレットを更新しました",
         "makeDefault": "新規出荷の既定アカウント",
         "updated": "アカウントを保存しました。",
         "connected": "アカウントを接続しました。",

@@ -12,6 +12,7 @@ export {
   readLabelFile,
   receiveTrackerDelivery,
   refreshLabelTracking,
+  rotateShippingRelaySecret,
   selectRateByRule,
   testShippingConnection,
   validateShipmentAddress,

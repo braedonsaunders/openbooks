@@ -13,10 +13,11 @@ const providerParams = z.object({ provider: z.enum(['easypost', 'shippo']) })
 /**
  * Inbound tracker deliveries from the carrier aggregators. Sessionless by
  * design — providers hold no session — so the engine resolves the owning
- * org from the delivery's own refs, checks the account's relay signature
- * when one is configured, and ALWAYS re-reads the tracker over the sealed
- * API key before any state changes. A bad signature answers 401 with no
- * side effects; an unknown delivery is ignored, never a 500.
+ * org from the delivery's own refs, requires the account's relay signature
+ * (an account without a relay secret refuses every delivery), and ALWAYS
+ * re-reads the tracker over the sealed API key before any state changes. A
+ * missing or bad signature answers 401 with no side effects; an unknown
+ * delivery is ignored, never a 500.
  */
 export const POST = defineRoute({
   public: 'token',
@@ -37,10 +38,11 @@ export const POST = defineRoute({
       const delivered = await receiveTrackerDelivery(provider, headers, bounded.text)
       return NextResponse.json(delivered)
     } catch (error) {
-      if (error instanceof Error && (error as { code?: unknown }).code === 'signature_invalid') {
+      const code = error instanceof Error ? (error as { code?: unknown }).code : undefined
+      if (code === 'signature_invalid' || code === 'signature_required') {
         return NextResponse.json({ error: 'invalid signature' }, { status: 401 })
       }
-      if (error instanceof Error && (error as { code?: unknown }).code === 'feature_disabled') {
+      if (code === 'feature_disabled') {
         return NextResponse.json({ status: 'ignored' })
       }
       throw error

@@ -13,6 +13,7 @@ import {
   buyShipmentLabel,
   getShipmentRates,
   handleTrackerDelivery,
+  rotateShippingRelaySecret,
   sealAccountSecrets,
   ShippingRefusal,
   voidShipmentLabel,
@@ -361,6 +362,24 @@ test("a tracker delivery with a bad signature is refused and changes nothing", {
       })));
     assert.equal(delivered.status, "ok");
     if (delivered.status === "ok") assert.equal(delivered.trackingStatus, "delivered");
+
+    // Rotation retires the old secret at once; the new one verifies.
+    const rotated = await withOrg(org.orgId, () => db.transaction((tx) =>
+      rotateShippingRelaySecret(tx, org.orgId, userId, accountId)));
+    assert.notEqual(rotated.relaySecret, relaySecret);
+    const deliver = (headers: Record<string, string>) => withOrg(org.orgId, () => db.transaction((tx) =>
+      handleTrackerDelivery(tx, org.orgId, userId, { provider: "easypost", headers, rawBody, ...callOpts(baseUrl) })));
+    await assert.rejects(deliver({ "openbooks-signature": goodSignature }), (error: unknown) =>
+      error instanceof ShippingRefusal && error.code === "signature_invalid");
+    const rotatedSignature = `t=${t},v1=${createHmac("sha256", rotated.relaySecret).update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
+    assert.equal((await deliver({ "openbooks-signature": rotatedSignature })).status, "ok");
+
+    // An account with no relay secret refuses every delivery, signed or not.
+    await withBypassContext(() => db.execute(sql`
+      update shipping_accounts set webhook_secret = null where org_id = ${org.orgId} and id = ${accountId}`));
+    await assert.rejects(deliver({}), (error: unknown) =>
+      error instanceof ShippingRefusal && error.code === "signature_required" && error.status === 401
+        && /Generate a relay secret/.test(error.remedy ?? ""));
   } finally {
     await close(server);
     await withBypassContext(() => dropScratchOrg(org.orgId));

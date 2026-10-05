@@ -37,6 +37,7 @@ export type ShippingRefusalCode =
   | "quote_expired"
   | "label_not_voidable"
   | "signature_invalid"
+  | "signature_required"
   | "adjustment_unknown"
   | "invalid_input"
   | "changed_concurrently";
@@ -184,7 +185,7 @@ export async function loadShippingAccount(
         `Carrier account ${row.name} stores a relay secret that cannot be unsealed`,
         "secret_missing",
         422,
-        `Rotate the relay secret on ${row.name} in Setup → Shipping`,
+        `Rotate the relay secret on ${row.name} in Setup → Shipping, then configure the delivery sender with the new secret`,
       );
     }
   }
@@ -206,6 +207,8 @@ export interface ShippingAccountView {
   status: string;
   isDefault: boolean;
   hasKey: boolean;
+  /** Tracker deliveries are accepted only when a relay secret is configured. */
+  hasRelaySecret: boolean;
   lastError: string | null;
   lastCheckedAt: string | null;
 }
@@ -215,9 +218,9 @@ export async function listShippingAccounts(runner: SqlExecutor, orgId: string): 
   await assertShippingFeature(runner, orgId);
   const rows = (await runner.execute<{
     id: string; name: string; provider: string; mode: string; status: string;
-    is_default: boolean; secrets: string | null; last_error: string | null; last_checked_at: string | null;
+    is_default: boolean; secrets: string | null; has_relay_secret: boolean; last_error: string | null; last_checked_at: string | null;
   }>(sql`
-    select id, name, provider, mode, status, is_default, secrets, last_error, last_checked_at
+    select id, name, provider, mode, status, is_default, secrets, webhook_secret is not null as has_relay_secret, last_error, last_checked_at
       from shipping_accounts where org_id = ${orgId} order by name`)).rows;
   return rows.map((row) => ({
     id: row.id,
@@ -227,6 +230,7 @@ export async function listShippingAccounts(runner: SqlExecutor, orgId: string): 
     status: row.status,
     isDefault: row.is_default,
     hasKey: row.secrets != null,
+    hasRelaySecret: row.has_relay_secret,
     lastError: row.last_error,
     lastCheckedAt: row.last_checked_at,
   }));
@@ -260,13 +264,18 @@ export interface ConnectAccountInput {
  * Connect (or reconnect) a carrier account: the API key is sealed on the
  * way in and never stored — or read — in plaintext. Connecting clears a
  * past error and reactivates the account.
+ *
+ * A new account is issued a relay secret (rotated later through
+ * rotateShippingRelaySecret). Tracker deliveries are refused unless signed
+ * with it, so the plain value is returned exactly once, for the operator to
+ * configure on the delivery sender; only the sealed value is stored.
  */
 export async function connectShippingAccount(
   tx: Tx,
   orgId: string,
   actorId: string,
   input: ConnectAccountInput,
-): Promise<{ accountId: string }> {
+): Promise<{ accountId: string; relaySecret: string | null }> {
   await assertShippingFeature(tx, orgId);
   const name = input.name.trim();
   if (!name) throw new ShippingRefusal("Name the carrier account", "invalid_input", 422);
@@ -307,17 +316,18 @@ export async function connectShippingAccount(
       accountMode: input.mode,
       keyReplaced: input.apiKey != null,
     });
-    return { accountId: input.accountId };
+    return { accountId: input.accountId, relaySecret: null };
   }
   if (!input.apiKey) {
     throw new ShippingRefusal("An API key is required to connect an account", "secret_missing", 422);
   }
+  const relay = mintRelaySecret();
   const created = await tx.execute<{ id: string }>(sql`
     insert into shipping_accounts
-      (org_id, name, provider, mode, status, is_default, secrets, created_by, updated_by)
+      (org_id, name, provider, mode, status, is_default, secrets, webhook_secret, created_by, updated_by)
     values (${orgId}, ${name}, ${input.provider}, ${input.mode}, 'active',
             ${input.makeDefault === true}, ${sealAccountSecrets(orgId, input.apiKey.trim())},
-            ${actorId}, ${actorId})
+            ${relay.sealed(orgId)}, ${actorId}, ${actorId})
     returning id`);
   const accountId = created.rows[0]?.id;
   if (!accountId) throw new Error("shipping account was not connected");
@@ -326,8 +336,39 @@ export async function connectShippingAccount(
     name,
     provider: input.provider,
     accountMode: input.mode,
+    relaySecretIssued: true,
   });
-  return { accountId };
+  return { accountId, relaySecret: relay.plain };
+}
+
+/**
+ * Issue (or replace) an account's relay secret. Tracker deliveries signed
+ * with the previous secret are refused from now on. The plain value is
+ * returned once for the operator to configure on the delivery sender; only
+ * the sealed value is stored, and the rotation is audited without it.
+ */
+export async function rotateShippingRelaySecret(
+  tx: Tx,
+  orgId: string,
+  actorId: string,
+  accountId: string,
+): Promise<{ accountId: string; relaySecret: string }> {
+  await assertShippingFeature(tx, orgId);
+  const relay = mintRelaySecret();
+  const updated = await tx.execute<{ id: string; had_secret: boolean }>(sql`
+    update shipping_accounts a
+       set webhook_secret = ${relay.sealed(orgId)}, updated_at = now(), updated_by = ${actorId}
+      from (select id, webhook_secret is not null as had_secret from shipping_accounts
+             where org_id = ${orgId} and id = ${accountId} for update) prior
+     where a.org_id = ${orgId} and a.id = prior.id
+    returning a.id, prior.had_secret`);
+  const row = updated.rows[0];
+  if (!row) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
+  await writeAccountAudit(tx, orgId, actorId, accountId, "update", {
+    mode: "shipping_account_relay_secret",
+    replacedExisting: row.had_secret,
+  });
+  return { accountId, relaySecret: relay.plain };
 }
 
 /** Park an account without deleting its labels, quotes, or cost history. */
@@ -1700,13 +1741,15 @@ export interface TrackerDeliveryInput {
 export const TRACKER_SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
- * Sessionless entry for inbound tracker deliveries: parse the delivery,
- * resolve its owning org by the refs it names, then run the scoped
- * delivery. The org lookup runs bypassed and returns org ids only — an
- * inbound delivery names nothing but its own provider refs and there is
- * no session to scope it by, the same model as provider payment webhooks.
- * Signature verification still runs inside the org scope, before any
- * state changes.
+ * Sessionless entry for inbound tracker deliveries. The delivery names only
+ * provider refs and there is no session, so the candidate orgs holding a
+ * label with those refs are found bypassed (org ids only, in a fixed order)
+ * — the same model as provider payment webhooks. Refs are not unique across
+ * tenants (a sandbox copies its source's labels), so no candidate is trusted
+ * on the refs alone: each is tried in its own org scope, where the delivery
+ * must carry a valid signature from that org's carrier account relay secret
+ * before anything changes. The first org whose secret verifies the delivery
+ * owns it; a delivery no candidate verifies is refused.
  */
 export async function receiveTrackerDelivery(
   provider: string,
@@ -1717,33 +1760,42 @@ export async function receiveTrackerDelivery(
   const parsed = adapter.parseInboundEvent(safeJsonParse(rawBody));
   if (!parsed) return { status: "ignored" };
   // bypass: connector-token — a sessionless tracker delivery names only provider refs; see the docblock above.
-  const orgId = await withBypassContext(() => resolveTrackerOrgId(provider, parsed.tracker));
-  if (!orgId) return { status: "ignored" };
-  return withOrgContext(orgId, () => db.transaction((tx) =>
-    handleTrackerDelivery(tx, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody })),
-  );
+  const orgIds = await withBypassContext(() => trackerCandidateOrgIds(provider, parsed.tracker));
+  let refusal: ShippingRefusal | null = null;
+  for (const orgId of orgIds) {
+    try {
+      const delivered = await withOrgContext(orgId, () => db.transaction((tx) =>
+        handleTrackerDelivery(tx, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody })),
+      );
+      if (delivered.status === "ok") return delivered;
+    } catch (error) {
+      // Not this org's delivery (its secret does not verify it, it has none,
+      // or the org has shipping turned off): nothing was written; try the next.
+      if (error instanceof ShippingRefusal
+        && (error.code === "signature_invalid" || error.code === "signature_required" || error.code === "feature_disabled")) {
+        if (error.code !== "feature_disabled") refusal ??= error;
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (refusal) throw refusal;
+  return { status: "ignored" };
 }
 
-/** Owning org of a tracker delivery, by provider shipment first, then tracking number. */
-async function resolveTrackerOrgId(
+/** Orgs holding a label with the delivery's provider shipment id or tracking number, in a fixed order. */
+async function trackerCandidateOrgIds(
   provider: string,
   tracker: { providerShipmentId?: string; trackingNumber?: string },
-): Promise<string | null> {
-  if (tracker.providerShipmentId) {
-    const byShipment = (await db.execute<{ org_id: string }>(sql`
-      select org_id from shipment_labels
-       where provider = ${provider} and provider_shipment_id = ${tracker.providerShipmentId}
-       limit 1`)).rows[0];
-    if (byShipment) return byShipment.org_id;
-  }
-  if (tracker.trackingNumber) {
-    const byTracking = (await db.execute<{ org_id: string }>(sql`
-      select org_id from shipment_labels
-       where provider = ${provider} and tracking_number = ${tracker.trackingNumber}
-       limit 1`)).rows[0];
-    if (byTracking) return byTracking.org_id;
-  }
-  return null;
+): Promise<string[]> {
+  if (!tracker.providerShipmentId && !tracker.trackingNumber) return [];
+  const rows = (await db.execute<{ org_id: string }>(sql`
+    select distinct org_id from shipment_labels
+     where provider = ${provider}
+       and (${tracker.providerShipmentId ? sql`provider_shipment_id = ${tracker.providerShipmentId}` : sql`false`}
+            or ${tracker.trackingNumber ? sql`tracking_number = ${tracker.trackingNumber}` : sql`false`})
+     order by org_id`)).rows;
+  return rows.map((row) => row.org_id);
 }
 
 export type TrackerDeliveryResult =
@@ -1751,11 +1803,13 @@ export type TrackerDeliveryResult =
   | { status: "ok"; labelId: string; trackingStatus: string; changed: boolean };
 
 /**
- * Handle an inbound tracker delivery. Aggregator callbacks carry no provider
- * signature, so the delivery is NEVER trusted on arrival: the label is
- * resolved locally, the optional relay signature is checked when the account
- * configures one, and the tracker is always re-read over the sealed API key
- * before any state changes. A bad signature is a 401 with no side effects.
+ * Handle an inbound tracker delivery. The delivery is NEVER trusted on
+ * arrival: the label is resolved locally, the delivery must be signed with
+ * the carrier account's relay secret (an account without one refuses every
+ * delivery), and the tracker is always re-read over the sealed API key using
+ * the label's own stored identifiers — never the tracker id or carrier the
+ * delivery names — before any state changes. A missing or bad signature is a
+ * 401 with no side effects.
  */
 export async function handleTrackerDelivery(
   tx: Tx,
@@ -1774,26 +1828,31 @@ export async function handleTrackerDelivery(
   const label = (await findLabelForTracker(tx, orgId, parsed.tracker.providerShipmentId, parsed.tracker.trackingNumber));
   if (!label || label.provider !== adapter.key) return { status: "ignored" };
   const account = await loadShippingAccount(tx, orgId, label.account_id);
-  if (account.webhookSecret) {
-    const signature = input.headers["openbooks-signature"] ?? input.headers["OpenBooks-Signature"] ?? null;
-    if (!verifyRelaySignature(input.rawBody, signature, account.webhookSecret)) {
-      throw new ShippingRefusal(
-        "Tracker delivery signature verification failed",
-        "signature_invalid",
-        401,
-        `Configure the relay secret from ${account.name} on the delivery sender in Setup → Shipping`,
-      );
-    }
+  if (!account.webhookSecret) {
+    throw new ShippingRefusal(
+      `Tracker deliveries for ${account.name} are refused: the account has no relay secret`,
+      "signature_required",
+      401,
+      `Generate a relay secret for ${account.name} in Setup → Shipping and configure the delivery sender with it`,
+    );
+  }
+  const signature = input.headers["openbooks-signature"] ?? input.headers["OpenBooks-Signature"] ?? null;
+  if (!verifyRelaySignature(input.rawBody, signature, account.webhookSecret)) {
+    throw new ShippingRefusal(
+      "Tracker delivery signature verification failed",
+      "signature_invalid",
+      401,
+      `Configure the relay secret from ${account.name} on the delivery sender in Setup → Shipping`,
+    );
   }
   let state;
   try {
     state = await adapter.getTracker(
       { apiKey: account.apiKey, baseUrl: input.baseUrl, transport: input.transport },
       {
-        trackerId: parsed.tracker.trackerId,
-        carrier: parsed.tracker.carrier ?? label.carrier,
-        trackingNumber: parsed.tracker.trackingNumber ?? label.tracking_number ?? undefined,
-        providerShipmentId: parsed.tracker.providerShipmentId ?? label.provider_shipment_id,
+        carrier: label.carrier,
+        trackingNumber: label.tracking_number ?? undefined,
+        providerShipmentId: label.provider_shipment_id,
       },
     );
   } catch (error) {

@@ -2891,6 +2891,11 @@
         "title": "Exchange Rates",
         "description": "Your organization's daily rates used to post foreign-currency transactions."
       },
+      "fx-rate-age-policies": {
+        "title": "FX Rate Age Policies",
+        "singular": "FX rate age policy",
+        "description": "How old an exchange rate may be when FX revaluation and consolidation price a period. With no policy in force, the default is 31 days for both closing and average rates."
+      },
       "consolidated-fx-rates": {
         "title": "Consolidated Exchange Rates",
         "description": "Period current, average, and historical rates used for subsidiary consolidation."
@@ -3673,6 +3678,7 @@
       "orderMultipleQty": "Order multiple quantity",
       "scrapPctPlanned": "Planned scrap percentage",
       "rateKind": "Rate type",
+      "maxAgeDays": "Maximum age (days)",
       "rateBookId": "Rate book",
       "customerId": "Customer",
       "projectId": "Project",
@@ -3983,6 +3989,7 @@
       "stopSellingAtZero": "Stop selling at zero"
     },
     "fieldHelp": {
+      "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
       "storedValueLiabilityAccount": "The balance-sheet account credited when value is issued and debited on redemption.",
       "storedValueBreakageIncomeAccount": "The income account credited when breakage or expiry is recognized.",
       "storedValueBreakagePolicy": "None never recognizes breakage; proportional recognizes it as redemptions occur; remote recognizes dormant balances after the inactivity window.",
@@ -4322,6 +4329,10 @@
       "endOfLife": {
         "fullyDepreciate": "Fully depreciate",
         "retainBalance": "Retain balance"
+      },
+      "fxRateAgeKind": {
+        "closing": "Closing (period-end spot)",
+        "average": "Period average"
       },
       "fxRateType": {
         "spot": "Spot",
@@ -6052,6 +6063,14 @@
         "apiKey": "API key",
         "keyPlaceholder": "Paste the provider API key",
         "keyKeepPlaceholder": "Leave blank to keep the stored key",
+        "noRelaySecret": "No relay secret",
+        "relaySecretGenerate": "Generate relay secret",
+        "relaySecretRotate": "Rotate relay secret",
+        "relaySecretRotateConfirm": "Rotate the relay secret for {name}? Tracker deliveries signed with the current secret are refused until the delivery sender uses the new one.",
+        "relaySecretIssuedTitle": "Relay secret for {name}",
+        "relaySecretIssuedHint": "Configure the tracker delivery sender with this secret now. It is shown only once; tracker deliveries without a valid signature are refused.",
+        "relaySecretDismiss": "I have saved it",
+        "relaySecretRotated": "Relay secret rotated for {name}",
         "makeDefault": "Default account for new shipments",
         "updated": "Account saved.",
         "connected": "Account connected.",

@@ -2759,6 +2759,11 @@
         "title": "Taux de change",
         "description": "Taux quotidiens propres au locataire utilisés pour comptabiliser les transactions en devises."
       },
+      "fx-rate-age-policies": {
+        "title": "Politiques d'ancienneté des taux de change",
+        "singular": "politique d'ancienneté des taux de change",
+        "description": "Ancienneté maximale d'un taux de change lorsque la réévaluation des devises et la consolidation valorisent une période. Sans politique en vigueur, la valeur par défaut est de 31 jours pour les taux de clôture et les taux moyens."
+      },
       "consolidated-fx-rates": {
         "title": "Taux de change consolidés",
         "description": "Taux courants, moyens et historiques par période utilisés pour la consolidation des filiales."
@@ -3549,6 +3554,7 @@
       "orderMultipleQty": "Multiple de commande",
       "scrapPctPlanned": "Taux de rebut planifié (%)",
       "rateKind": "Type de taux",
+      "maxAgeDays": "Ancienneté maximale (jours)",
       "rateBookId": "Grille tarifaire",
       "customerId": "Client",
       "projectId": "Projet",
@@ -3908,6 +3914,7 @@
       "stopSellingAtZero": "Arrêter la vente à zéro"
     },
     "fieldHelp": {
+      "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
       "storedValueLiabilityAccount": "Le compte de bilan crédité à l’émission et débité au rachat.",
       "storedValueBreakageIncomeAccount": "Le compte de produits crédité lorsque le breakage ou l’expiration est constaté.",
       "storedValueBreakagePolicy": "Aucune ne constate jamais de breakage ; proportionnelle le constate au fil des rachats ; sur inactivité constate les soldes dormants après la fenêtre d’inactivité.",
@@ -4195,6 +4202,10 @@
       "endOfLife": {
         "fullyDepreciate": "Amortir entièrement",
         "retainBalance": "Conserver le solde"
+      },
+      "fxRateAgeKind": {
+        "closing": "Clôture (comptant de fin de période)",
+        "average": "Moyenne de la période"
       },
       "fxRateType": {
         "spot": "Comptant",
@@ -6052,6 +6063,14 @@
         "apiKey": "Clé d’API",
         "keyPlaceholder": "Collez la clé d’API du fournisseur",
         "keyKeepPlaceholder": "Laissez vide pour garder la clé enregistrée",
+        "noRelaySecret": "Aucun secret de relais",
+        "relaySecretGenerate": "Générer un secret de relais",
+        "relaySecretRotate": "Renouveler le secret de relais",
+        "relaySecretRotateConfirm": "Renouveler le secret de relais de {name} ? Les livraisons de suivi signées avec le secret actuel seront refusées jusqu'à ce que l'expéditeur utilise le nouveau.",
+        "relaySecretIssuedTitle": "Secret de relais de {name}",
+        "relaySecretIssuedHint": "Configurez dès maintenant l'expéditeur des livraisons de suivi avec ce secret. Il n'est affiché qu'une seule fois ; les livraisons sans signature valide sont refusées.",
+        "relaySecretDismiss": "Je l'ai enregistré",
+        "relaySecretRotated": "Secret de relais renouvelé pour {name}",
         "makeDefault": "Compte par défaut des nouveaux envois",
         "updated": "Compte enregistré.",
         "connected": "Compte connecté.",
