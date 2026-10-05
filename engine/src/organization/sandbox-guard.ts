@@ -111,5 +111,13 @@ export async function neuterSandbox(sandboxOrgId: string): Promise<void> {
        set is_enabled = false, secrets = null, next_sync_at = null,
            last_error = null, updated_at = now()
      where org_id = ${sandboxOrgId}`);
+  // Carrier aggregator credentials buy real labels with real money. Keep the
+  // account rows (rates and history stay testable) but strip both secrets and
+  // park the accounts so a sandbox can never charge the production carrier bill.
+  await db.execute(sql`
+    update shipping_accounts
+       set status = 'disabled', secrets = null, webhook_secret = null,
+           last_error = null, updated_at = now()
+     where org_id = ${sandboxOrgId}`);
   envCache.delete(sandboxOrgId);
 }

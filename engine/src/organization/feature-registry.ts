@@ -153,6 +153,11 @@ export const FEATURES: FeatureDef[] = [
   // Warehousing and fulfillment: warehouse locations, then pick and ship.
   { key: 'warehousing', defaultEnabled: false, category: 'operations', navModules: ['warehouses'], requiresAll: ['inventory'] },
   { key: 'fulfillment', defaultEnabled: false, category: 'operations', navModules: ['picks', 'shipments'], requiresAll: ['orders', 'warehousing'] },
+  // Carrier hub: live rates, labels, tracking, and carrier cost on shipments.
+  // Subordinate to fulfillment — rating a shipment the org cannot ship is
+  // refused, and switching it off hides the surface while keeping labels,
+  // quotes, and posted cost history.
+  { key: 'shippingHub', defaultEnabled: false, category: 'operations', navModules: ['shipments'], parentKey: 'fulfillment' },
   // Distribution extensions: drop shipping, returns, customer part numbers, and barcode scanning.
   { key: 'dropShipping', defaultEnabled: false, category: 'operations', requiresAll: ['orders', 'inventory'] },
   { key: 'returnAuthorizations', defaultEnabled: false, category: 'operations', navModules: ['returns'], requiresAll: ['fulfillment'] },

@@ -1030,6 +1030,7 @@
     "manufacturing_manage": "製造マスターと製造オーダーを管理",
     "orders_fulfill": "受注のピッキング・梱包・出荷",
     "returns_waive_fee": "返品の再入庫手数料を免除する",
+    "shipping_manage": "配送ラベルの見積・購入・無効化",
     "projects_read": "プロジェクトと原価計算を表示",
     "projects_manage": "プロジェクトを作成および編集",
     "resourcing_read": "リソース割り当てと依頼を表示",
@@ -5929,6 +5930,10 @@
     "fulfillment": {
       "title": "出荷処理",
       "description": "倉庫在庫から受注をピッキング・梱包・出荷します。"
+    },
+    "shippingHub": {
+      "title": "配送ハブ",
+      "description": "出荷に対するライブ運賃、ラベル、追跡、配送コストを管理します。"
     },
     "dropShipping": {
       "title": "ドロップシッピング",

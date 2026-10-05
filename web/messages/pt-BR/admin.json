@@ -1041,6 +1041,7 @@
     "manufacturing_manage": "Gerenciar cadastros e ordens de manufatura",
     "orders_fulfill": "Separar, embalar e expedir pedidos",
     "returns_waive_fee": "Isentar taxas de reestocagem em devoluções",
+    "shipping_manage": "Cotar, comprar e anular etiquetas de envio",
     "projects_read": "Ver projetos e apropriação de custos",
     "projects_manage": "Criar e editar projetos",
     "resourcing_read": "Ver alocações e solicitações de recursos",
@@ -5793,6 +5794,10 @@
     "fulfillment": {
       "title": "Atendimento de pedidos",
       "description": "Separe, embale e expeça pedidos de venda a partir do estoque do armazém."
+    },
+    "shippingHub": {
+      "title": "Central de envios",
+      "description": "Tarifas em tempo real, etiquetas, rastreamento e custo de transportadora nos envios."
     },
     "dropShipping": {
       "title": "Envio direto",

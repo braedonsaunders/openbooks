@@ -669,6 +669,21 @@ export const items = pgTable(
      *  project charge and distinct from the debit account. */
     costRecoveryAccountId: uuid("cost_recovery_account_id"),
     unit: text("unit"),
+    /** Shippable weight per unit, with its unit — rating refuses by name
+     *  when a shipped item carries neither this nor a package preset. */
+    weight: numeric("weight", { precision: 19, scale: 4 }),
+    weightUnit: text("weight_unit", { enum: ["g", "kg", "oz", "lb"] }),
+    /** Per-unit parcel dimensions { length, width, height, unit }. */
+    dimensions: jsonb("dimensions").$type<{
+      length: string | null;
+      width: string | null;
+      height: string | null;
+      unit: "cm" | "in";
+    } | null>(),
+    /** Harmonized tariff code for international customs declarations. */
+    hsCode: text("hs_code"),
+    /** ISO 3166-1 alpha-2 manufacturing country for customs declarations. */
+    countryOfOrigin: text("country_of_origin"),
     taxCodeId: uuid("tax_code_id"),
     showOnTimesheet: boolean("show_on_timesheet").notNull().default(false),
 

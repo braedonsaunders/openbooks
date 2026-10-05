@@ -1030,6 +1030,7 @@
     "manufacturing_manage": "Administrar datos maestros y órdenes de fabricación",
     "orders_fulfill": "Preparar, empaquetar y enviar pedidos",
     "returns_waive_fee": "Eximir cargos por reposición en devoluciones",
+    "shipping_manage": "Cotizar, comprar y anular etiquetas de envío",
     "projects_read": "Ver proyectos y costeo de trabajos",
     "projects_manage": "Crear y editar proyectos",
     "resourcing_read": "Ver asignaciones y solicitudes de recursos",
@@ -5785,6 +5786,10 @@
     "fulfillment": {
       "title": "Preparación de pedidos",
       "description": "Prepare, empaquete y envíe pedidos de venta desde las existencias del almacén."
+    },
+    "shippingHub": {
+      "title": "Centro de envíos",
+      "description": "Tarifas en vivo, etiquetas, seguimiento y costos de transportista en los envíos."
     },
     "dropShipping": {
       "title": "Envío directo",

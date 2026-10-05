@@ -1,0 +1,5 @@
+Adds six carrier-hub tables (accounts, package presets, org settings, labels,
+rate quotes, billing adjustments) and five nullable shipping columns on items
+(weight, unit, dimensions, HS code, origin country). No existing row is read,
+rewritten, or deleted; the new columns default to null and the new tables
+start empty.
