@@ -11,7 +11,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -93,6 +93,7 @@ async function seedWcbHarness(
                                            provincial_claim_code, is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
+  await seedVacationTerms(orgId, employmentId, actorId, '0', 'accrue');
   const jobs = { jobA: randomUUID(), jobB: randomUUID(), jobC: randomUUID() };
   for (const [id, name] of [[jobs.jobA, "Job A"], [jobs.jobB, "Job B"], [jobs.jobC, "Job C"]] as const) {
     await db.execute(sql`
@@ -180,6 +181,7 @@ test(
                                                provincial_claim_code, is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 true, ${actorId}, ${actorId})`);
+      await seedVacationTerms(org.orgId, employmentId, actorId, '0', 'accrue');
 
       // 40h on each of two jobs → $1,200 per job, $2,400 gross.
       const jobA = randomUUID();
@@ -620,6 +622,7 @@ test(
                                                provincial_claim_code, is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 true, ${actorId}, ${actorId})`);
+      await seedVacationTerms(org.orgId, employmentId, actorId, '0', 'accrue');
       const jobA = randomUUID();
       await db.execute(sql`
         insert into projects (id, org_id, name, code, is_active, custom)
