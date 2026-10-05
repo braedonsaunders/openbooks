@@ -608,6 +608,7 @@ export const TENANT_TABLE_POLICIES = {
   "stored_value_programs": "clone:catalog-uuid-rebase",
   "external_links": "skip:no-copy",
   "integration_inbound_events": "skip:no-copy",
+  "shopify_catalog_entries": "skip:no-copy",
   "stripe_billing_import_schedules": "clone:catalog-uuid-rebase",
   "stripe_billing_link_skips": "skip:no-copy",
   "subcontract_change_orders": "clone:catalog-uuid-rebase",

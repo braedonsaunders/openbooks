@@ -1,0 +1,1 @@
+Creates one new empty table (shopify_catalog_entries) with org isolation; no tenant data is read, rewritten or deleted.
