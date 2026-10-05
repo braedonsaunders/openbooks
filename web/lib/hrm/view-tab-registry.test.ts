@@ -40,7 +40,7 @@ test("every page in a job shows the job's one strip with its own tab lit", () =>
   assert.deepEqual(strip("/hrm/surveys")?.active, ["home.tabs.surveys"]);
   assert.deepEqual(strip("/hrm/leave?view=calendar")?.active, ["leave.calendarTitle"]);
   for(const view of ["overview","programs","employees","delivery"]) assert.deepEqual(strip(view==="overview"?"/hrm/benefits":`/hrm/benefits?view=${view}`)?.active,[`benefits.workspace.tabs.${view}`]);
-  assert.deepEqual(strip("/hrm/compensation/cycles/c-1")?.active, ["home.tabs.compensation"]);
+  assert.deepEqual(strip("/hrm/compensation/cycles/c-1")?.active, ["compensation.workspace.overview"]);
   assert.deepEqual(strip("/hrm/compensation/equity")?.active, ["equity.title"], "the longer route wins over the prefix");
 
   for (const url of ["/hrm", "/hrm/change-requests", "/hrm/compliance", "/hrm/my-leave", "/entities/vendors"]) {

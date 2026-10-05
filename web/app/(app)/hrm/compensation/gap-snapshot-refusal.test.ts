@@ -1,154 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import React, { Children, isValidElement, type ReactNode } from "react";
 
-// The equity loader must surface a refused
-// latestGapSnapshot read (a scoped reader cannot read org-wide frozen
-// aggregates) as data with the named remedy intact — never a zero
-// joint-flag count or an empty page pretending the read succeeded.
-// Genuinely absent snapshots keep the empty state; unexpected DB/system
-// failures propagate.
-// The architecture Overview reads authorized wage and configuration facts;
-// it does not request a frozen organization-wide pay-gap aggregate.
-//
-// The seams below stub I/O only (feature switches, group tabs, the engine
-// snapshot query and its sibling list reads, the translations loader backed
-// by the REAL en catalog). The refusal classes are the real engine errors,
-// and the authorization context carries explicit grants. The real pure
-// permission checker remains in use; service scope is covered by DB tests.
-const catalog = JSON.parse(
-  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
-) as Record<string, unknown>;
-function lookup(key: string): string {
-  const parts = key.split(".");
-  let node: unknown = catalog;
-  for (const part of parts) {
-    if (node !== null && typeof node === "object") node = (node as Record<string, unknown>)[part];
-    else return key;
-  }
-  return typeof node === "string" ? node : key;
-}
-
-const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ extra: { "../features": "export async function isFeatureEnabled(orgId, key) { const flags = globalThis.__f17Features; if (flags && key in flags) return flags[key]; return true; }" } });
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-
-    const parent = context.parentURL ?? "";
-    // The translations seam must follow the loader's callees, not just the
-    // loader: loadEquity now builds its tab strip through workspace-tabs.ts,
-    // and an import that falls through here resolves next-intl's CLIENT build,
-    // which throws `getTranslations is not supported in Client Components`
-    // from a module this test never meant to exercise.
-    const owned =
-      parent.endsWith("/web/lib/hrm/compensation.ts") ||
-      parent.endsWith("/web/lib/hrm/workspace-tabs.ts");
-    if (owned && specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function getTranslations() { const base = globalThis.__f17t; const t = (key) => base(key); t.has = (key) => base.has(key); return t; } export async function getLocale() { return 'en'; }",
-      };
-    }
-    if (owned && specifier === "../authz") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript," + encodeURIComponent(`export { can } from ${JSON.stringify(new URL("../../../../lib/authz-core.ts", import.meta.url).href)}; export async function getAuthz() { return null; }`),
-      };
-    }
-    // The feature gate is stubbed for EVERY importer, not just the two
-    // loaders under test: the gate is also reached through
-    // ../feature-gates (requireFeatureEnabled) and web/lib/hrm/home.ts,
-    // and a parent-scoped stub lets those edges fall through to the real
-    // `select settings->'features' from orgs` read. The unit partition has
-    // no database, so every such edge must be stubbed. All cases run with
-    // the gates on (the off-switch remedy is pinned by
-    // compensation-page.test.ts); the loaders' real refusal and error
-    // classes stay intact.
-
-    if (specifier === "../feature-gates") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function requireFeatureEnabled() {}",
-      };
-    }
-    if (owned && specifier === "../../components/module-home/group-tabs") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/pay-transparency.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function latestGapSnapshot() { globalThis.__compensationGapReads = (globalThis.__compensationGapReads ?? 0) + 1; const s = globalThis.__f17Gap; if (s && s.error) throw s.error; return s ? s.snapshot : null; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function businessToday() { return '2026-09-22'; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/cycles.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listCycles() { return []; } export async function listCycleLines() { return []; } export async function cyclePacing() { return null; } export async function getCycle() { return null; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/bands.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listPayBands() { return globalThis.__compensationOverview.bands; } export async function compaRatioFor() { return null; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/band-headcounts.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function countBandHolders() { return 0; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/architecture.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listJobLevels() { return globalThis.__compensationOverview.levels; } export async function compensationSettings() { return { comparisonAttributeKey: null, gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/hrm/compensation") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listJobFamilies() { return globalThis.__compensationOverview.families; } export async function listPayBandVersions() { return globalThis.__compensationOverview.versions; } export async function compensationWageSummary(input) { const value = globalThis.__compensationOverview; value.wageInput = input; if (value.error) throw value.error; return value.wages; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/headcount-plans.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listPlans() { return []; } export async function listPlanLines() { return []; }",
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-// The translations stub resolves against the real catalog so refusal titles
-// prove the key ships, not that a double echoes.
-const translate = (key: string) => lookup(key);
-(globalThis as Record<string, unknown>).__f17t = Object.assign(translate, {
-  has: (key: string) => lookup(key) !== key,
-});
+import { installCompensationReadFixture } from '../../../../testing/compensation-read-fixture';
+const fixture = installCompensationReadFixture();
 
 const { loadCompensationHome, loadEquity } = await import("../../../../lib/hrm/compensation.ts");
 const { CompensationError } = await import(
@@ -156,7 +11,6 @@ const { CompensationError } = await import(
 );
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
 
-const gap = globalThis as Record<string, unknown>;
 Object.assign(globalThis, { React });
 const identity = { orgId: "019f655b-2900-7000-8000-000000000001", id: "019f655b-2900-7000-8000-000000000002" };
 const permissions = new Set(["hrm.compensation.read", "hrm.compensation.manage", "admin.setup.manage"]);
@@ -175,8 +29,8 @@ function overviewFixture(empty = false) {
     error: null as Error | null,
     wageInput: null as unknown,
   };
-  gap.__compensationOverview = value;
-  gap.__compensationGapReads = 0;
+  fixture.overview = value;
+  fixture.gapReads = 0;
   return value;
 }
 
@@ -234,7 +88,7 @@ function validSnapshot() {
 }
 
 test("equity surfaces a refused snapshot read with the named remedy, not an empty page", async () => {
-  gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
+  fixture.snapshot = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
   const data = await loadEquity(scopedAuthz);
   assert.ok(data, "the equity loader still resolves");
   assert.equal(data.hasSnapshot, false, "no snapshot is claimed");
@@ -247,7 +101,7 @@ test("equity surfaces a refused snapshot read with the named remedy, not an empt
 });
 
 test("equity surfaces an authorization refusal the same way", async () => {
-  gap.__f17Gap = {
+  fixture.snapshot = {
     error: new HrmAuthorizationError("compensation reads need the hrm.compensation.read grant in this organization."),
   };
   const data = await loadEquity(authz);
@@ -256,7 +110,7 @@ test("equity surfaces an authorization refusal the same way", async () => {
 });
 
 test("equity keeps the genuine no-snapshot empty state", async () => {
-  gap.__f17Gap = { snapshot: null };
+  fixture.snapshot = { snapshot: null };
   const data = await loadEquity(authz);
   assert.ok(data, "the equity loader still resolves");
   assert.equal(data.hasSnapshot, false, "absence is still reported");
@@ -266,7 +120,7 @@ test("equity keeps the genuine no-snapshot empty state", async () => {
 });
 
 test("equity preserves a valid snapshot untouched", async () => {
-  gap.__f17Gap = { snapshot: validSnapshot() };
+  fixture.snapshot = { snapshot: validSnapshot() };
   const data = await loadEquity(authz);
   assert.equal(data?.hasSnapshot, true, "the snapshot is claimed");
   assert.equal(data?.refusal, null, "success carries no refusal");
@@ -277,16 +131,16 @@ test("equity preserves a valid snapshot untouched", async () => {
 });
 
 test("equity propagates an unexpected system failure instead of an empty page", async () => {
-  gap.__f17Gap = { error: new TypeError("connection terminated") };
+  fixture.snapshot = { error: new TypeError("connection terminated") };
   await assert.rejects(loadEquity(authz), /connection terminated/, "the failure reaches the caller, never a null snapshot");
 });
 
 test("the architecture overview never requests a frozen aggregate unavailable to a scoped reader", async () => {
   const facts = overviewFixture();
-  gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
+  fixture.snapshot = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
   const data = await loadCompensationHome(scopedAuthz);
   assert.ok(data, "the home loader still resolves");
-  assert.equal(gap.__compensationGapReads, 0, "the scoped architecture cockpit does not request an organization-wide frozen aggregate");
+  assert.equal(fixture.gapReads, 0, "the scoped architecture cockpit does not request an organization-wide frozen aggregate");
   assert.equal(data.refusal, null, "an unrelated aggregate refusal is not represented as a failed architecture read");
   assert.deepEqual(data.overview?.wages, facts.wages, "the overview retains authorized native wage facts");
   assert.deepEqual(facts.wageInput, { orgId: identity.orgId, actorId: identity.id }, "the native wage reader resolves scope from the attributable actor");
@@ -295,17 +149,17 @@ test("the architecture overview never requests a frozen aggregate unavailable to
 
 test("the architecture overview preserves genuine empty native registers without inventing equity measurements", async () => {
   overviewFixture(true);
-  gap.__f17Gap = { snapshot: null };
+  fixture.snapshot = { snapshot: null };
   const data = await loadCompensationHome(authz);
   assert.equal(data?.refusal, null, "absence is not a refusal");
   assert.deepEqual(data?.tiles.map((tile) => tile.value), ["0", "0", "0", "0"], "zero is supported by the empty worker, family, level and band registers");
   assert.deepEqual(data?.wageTiles, [], "no average is invented without a wage population");
-  assert.equal(gap.__compensationGapReads, 0);
+  assert.equal(fixture.gapReads, 0);
 });
 
 test("the architecture overview measures current wage and architecture facts independently of pay equity", async () => {
   overviewFixture();
-  gap.__f17Gap = { snapshot: validSnapshot() };
+  fixture.snapshot = { snapshot: validSnapshot() };
   const data = await loadCompensationHome(authz);
   assert.equal(data?.refusal, null, "success carries no refusal");
   assert.deepEqual(data?.tiles.map((tile) => tile.value), ["7", "2", "3", "1"]);
@@ -313,7 +167,7 @@ test("the architecture overview measures current wage and architecture facts ind
   assert.equal(data?.wageTiles[0]?.value, "34.50 CAD", "actual wage basis and currency are retained without annualization or FX");
   assert.equal(data?.overview?.wages.missing, 1, "missing wages remain visible rather than becoming nil wages");
   assert.equal(data?.overview?.wages.ambiguous, 1, "overlapping wage facts remain visible rather than being guessed");
-  assert.equal(gap.__compensationGapReads, 0);
+  assert.equal(fixture.gapReads, 0);
 });
 
 test("the architecture overview raises refused or failed native wage reads instead of substituting zero", async () => {
@@ -343,7 +197,7 @@ test("the computed equity refusal reaches the native workspace and suppresses it
   const { EmptyState } = await import("@openbooks/ui");
   const { RegisteredListTable } = await import("../../../../components/registered-list-table");
   const { KpiStrip } = await import("../../../../components/kpi-strip");
-  gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
+  fixture.snapshot = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
   const equity = await loadEquity(authz);
   assert.ok(equity);
   const spec = equitySpec(equity) as { body?: { widget?: string; props?: { data?: unknown } }[] };
@@ -361,7 +215,7 @@ test("genuine no-snapshot equity keeps its table distinct from a refusal", async
   const { EquityWorkspace } = await import("./equity/EquityWorkspace");
   const { RegisteredListTable } = await import("../../../../components/registered-list-table");
   const { EmptyState } = await import("@openbooks/ui");
-  gap.__f17Gap = { snapshot: null };
+  fixture.snapshot = { snapshot: null };
   const equity = await loadEquity(authz);
   assert.ok(equity);
   assert.equal(equity.hasContent, true, "genuine emptiness keeps content");

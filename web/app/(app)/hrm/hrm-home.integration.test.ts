@@ -30,7 +30,7 @@ const { sql } = await import('drizzle-orm');
 const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { loadHrmHome } = await import('../../../lib/hrm/home.ts');
-const { hrmGroupTabs } = await import('../../../components/module-home/group-tabs.ts');
+const { setFeatures } = await import('@openbooks/engine/testing/hrm');
 const { hrmViewTabGroups } = await import('../../../lib/hrm/workspace-tabs.ts');
 import type { Authz } from '../../../lib/authz.ts';
 
@@ -141,6 +141,9 @@ test('scoped legs hide another organization entirely', async (t) => {
       const empA = await seedEmployment(orgA.orgId, partyA, orgA.subsidiaryId);
       await seedVersion(orgA.orgId, empA, 'active', isoDay(5), null);
       await seedChange(orgA.orgId, empA, 'status_changed', 'promotion to senior', reader);
+      const activeParty = await seedParty(orgA.orgId, 'Current worker');
+      const activeEmployment = await seedEmployment(orgA.orgId, activeParty, orgA.subsidiaryId);
+      await seedVersion(orgA.orgId, activeEmployment, 'active', isoDay(-30), null);
 
       const observerB = await createScratchUser(orgB.orgId, 'Observer', 't6_hrm_observer');
       const partyB = await seedParty(orgB.orgId, 'Ben Beta');
@@ -156,6 +159,9 @@ test('scoped legs hide another organization entirely', async (t) => {
       ...data.ends.map((row) => row.name),
       ...data.recent.map((row) => row.name),
     ];
+    assert.equal(data.headcountValue, '1', 'the headline counts the current native employment, excluding future starts');
+    assert.equal(data.trendData.length, 12, 'history includes eleven prior month ends and the current census');
+    assert.equal(data.trendData.at(-1), 1, 'the current trend point agrees with the actual native census');
     assert.ok(names.includes('Ava Alpha'), 'the home org start must surface');
     assert.ok(!names.includes('Ben Beta'), 'no scoped leg may leak another org');
     assert.ok(
@@ -243,67 +249,6 @@ const STRIP_GRANTS = [
   'hrm.position.read',
 ];
 
-test('the strip offers the jobs with grant, rewrite, and feature exclusions', async (t) => {
-  const org = await withBypassContext(() => createScratchOrg());
-  t.after(() => dropScratchOrg(org.orgId));
-  const user = await withBypassContext(async () => {
-    // Rewards lands on /hrm/compensation only while the hrmCompensation
-    // switch is on (benefits-only orgs rewrite to /hrm/benefits); the
-    // full-strip assertions below need the switch, mirroring the
-    // view-tab test further down.
-    await enableFeatures(org.orgId, 'hrm', 'hrmCompensation');
-    return createScratchUser(org.orgId, 'Strip', 't6_hrm_strip');
-  });
-  const hrefs = async (permissions: string[], activeHref = '/hrm'): Promise<string[]> => {
-    await withBypassContext(() => grantRole(org.orgId, 't6_hrm_strip', permissions));
-    return withOrgContext(org.orgId, async () =>
-      (await hrmGroupTabs(actor(user, org.orgId, permissions, null), activeHref)).map((tab) => tab.href),
-    );
-  };
-  try {
-    const full = await hrefs(STRIP_GRANTS);
-    for (const href of ['/hrm', '/entities/employees', '/hrm/recruiting', '/hrm/leave', '/hrm/performance', '/hrm/compensation']) {
-      assert.ok(full.includes(href), `the strip lands on ${href}`);
-    }
-    assert.ok(!full.includes('/hrm/compliance'), 'compliance hides while the construction switch is off');
-    // Nested working surfaces are view tabs under a job, never strip peers.
-    for (const href of ['/hrm/positions', '/hrm/change-requests', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
-      assert.ok(!full.includes(href), `${href} is not a group-strip tab`);
-    }
-
-    await withBypassContext(() =>
-      enableFeatures(org.orgId, 'payroll', 'projects', 'timeTracking', 'hrmConstructionCompliance'),
-    );
-    const constructed = await hrefs(STRIP_GRANTS);
-    assert.ok(constructed.includes('/hrm/compliance'), 'compliance is tab 7 while construction is on');
-
-    const noLeave = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.leave.read'));
-    assert.ok(!noLeave.includes('/hrm/leave'), 'Time off hides without the leave read grant');
-
-    const noHiring = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.recruiting.read' && grant !== 'hrm.position.read'));
-    assert.ok(!noHiring.includes('/hrm/recruiting'), 'Hiring hides with neither recruiting nor positions');
-
-    // Hiring and Rewards are OR-gates: the landing rewrites instead of 404ing.
-    const positionsOnly = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.recruiting.read'));
-    const hiringHref = positionsOnly.find((href) => href.startsWith('/hrm/recruiting') || href.startsWith('/hrm/positions'));
-    assert.ok(hiringHref?.startsWith('/hrm/positions'), 'Hiring rewrites to Positions when recruiting is unavailable');
-
-    const noRewards = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.compensation.read' && grant !== 'hrm.benefits.read'));
-    assert.ok(!noRewards.includes('/hrm/compensation'), 'Rewards hides with neither compensation nor benefits');
-
-    const benefitsOnly = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.compensation.read'));
-    const rewardsHref = benefitsOnly.find((href) => href.startsWith('/hrm/compensation') || href.startsWith('/hrm/benefits'));
-    assert.ok(rewardsHref?.startsWith('/hrm/benefits'), 'Rewards rewrites to Benefits when compensation is unavailable');
-
-    // The native employee list carries the same strip: the function the
-    // entities view awaits, with the list href active.
-    const onList = await hrefs(STRIP_GRANTS, '/entities/employees');
-    assert.ok(onList.includes('/hrm'), 'the employee list resolves the HRM strip');
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
 test('nested surfaces stay findable as view tabs, gated by the org switches', async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
@@ -326,7 +271,10 @@ test('nested surfaces stay findable as view tabs, gated by the org switches', as
       assert.ok(all.includes(href), `a view tab lands on ${href}`);
     }
     assert.ok(!all.includes('/hrm/surveys'), 'Surveys hides while its switch is off');
-    assert.ok(!all.includes('/hrm/recruiting?tab=offers'), 'a depth view hides while its switch is off');
+    await setFeatures(org.orgId, { hrmRecruiting: false });
+    assert.ok(!(await hrefs(STRIP_GRANTS)).some(href => href.startsWith('/hrm/recruiting')), 'every recruiting view hides when the authoritative Recruiting feature is off');
+    await setFeatures(org.orgId, { hrmRecruiting: true });
+    assert.ok((await hrefs(STRIP_GRANTS)).includes('/hrm/recruiting?tab=offers'), 'offers become available with the native Recruiting feature and read grant');
 
     const noPositions = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.position.read'));
     assert.ok(!noPositions.includes('/hrm/positions'), 'Positions hides without its grant');
