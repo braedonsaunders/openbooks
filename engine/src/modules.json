@@ -96,13 +96,20 @@
       ]
     },
     "commerce": {
-      "description": "Storefront channels, the external-identity map, the inbound webhook inbox, and the channel adapter contract.",
+      "description": "Storefront channels, the external-identity map, the inbound webhook inbox, the channel adapter contract, channel order posting, and the Shopify normalizer.",
       "dependsOn": [
         "connectors",
+        "flows",
         "fx",
         "inventory",
+        "ledger",
         "organization",
-        "platform"
+        "payments",
+        "periods",
+        "platform",
+        "records",
+        "sales",
+        "stored-value"
       ]
     },
     "close": {

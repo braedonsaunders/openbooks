@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { channelAdapter } from "./adapters.ts";
+import { postDueDailySummaries } from "./daily-summary.ts";
 import { CommerceError } from "./errors.ts";
+import { postPendingChannelOrders } from "./order-posting.ts";
 import { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 import {
   acquireOrgFeatureGateLock,
@@ -343,9 +345,47 @@ export async function listInboundEvents(orgId: string, channelId: string, limit 
   return rows.map(toRow);
 }
 
-/** The scheduler scan body for kind `commerce_inbound`. */
+/**
+ * The scheduler scan body for kind `commerce_inbound`: the verified inbox
+ * first, then the order queue (pending per-order posts, then due daily
+ * summaries). No new scan kind: the order drain rides the existing inbox
+ * tick, so no scheduler exception is needed.
+ */
 export async function runCommerceInboundScan(): Promise<void> {
   await processPendingEvents(100);
+  await runChannelOrderScan();
+}
+
+/**
+ * Drain one tick of the channel order queue across organizations: pending
+ * per-order posts first, then due daily summaries. An org that throws keeps
+ * its orders pending for the next tick; summaries that throw wait as well.
+ */
+export async function runChannelOrderScan(): Promise<{ posted: number; parked: number }> {
+  let posted = 0;
+  let parked = 0;
+  // bypass: scheduler-tick — the commerce scan drains pending orders across
+  // organizations before each row's organization is known.
+  const orgs = await withBypassContext(() => db.execute<{ org_id: string }>(sql`
+    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`))
+    .then((result) => result.rows);
+  for (const org of orgs) {
+    try {
+      const outcome = await postPendingChannelOrders(org.org_id, null, 100);
+      posted += outcome.posted;
+      parked += outcome.parked;
+    } catch {
+      continue;
+    }
+  }
+  try {
+    const summaries = await postDueDailySummaries();
+    posted += summaries.posted;
+    parked += summaries.parked;
+  } catch {
+    // Summaries wait for the next tick; pending orders keep their state.
+  }
+  return { posted, parked };
 }
 
 export interface ChannelAttention {

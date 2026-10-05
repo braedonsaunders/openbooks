@@ -85,6 +85,8 @@ export interface ChannelOrderLine {
   /** Minor units each, in the shop currency. */
   priceMinor: bigint;
   discountMinor: bigint;
+  /** Storefront discount code, mapped to a promotion at posting time. */
+  discountCode: string | null;
   taxLines: ChannelTaxLine[];
   giftCard: boolean;
   promotionId: string | null;
@@ -117,6 +119,13 @@ export interface ChannelOrder {
   externalId: string;
   number: string;
   customerExternalId: string | null;
+  /** Buyer contact snapshot for customer matching and the exception queue. */
+  customerName: string | null;
+  customerEmail: string | null;
+  customerAddress: Record<string, unknown> | null;
+  /** Storefront tags and source for the channel's exclusion rules. */
+  tags: string[];
+  source: string | null;
   shopCurrency: string;
   presentmentCurrency: string;
   /** Minor units in the shop currency. */
