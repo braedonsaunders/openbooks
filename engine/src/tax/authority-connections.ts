@@ -30,6 +30,12 @@ export interface HmrcClientCredentials {
   scope: string;
 }
 
+/** Sealed HMRC record: client credentials plus the cached access token. */
+export interface StoredHmrcCredentials extends HmrcClientCredentials {
+  accessToken: string | null;
+  tokenExpiresAt: string | null;
+}
+
 export interface AbnCredentials {
   guid: string;
 }
@@ -239,10 +245,8 @@ export async function fetchHmrcAccessToken(
       },
       { describe: "HMRC OAuth", transport },
     );
-  } catch (error) {
-    throw new CrossBorderTaxError(`HMRC OAuth is unreachable: refresh the HMRC token in Tax setup later`, {
-      cause: error,
-    });
+  } catch {
+    throw new CrossBorderTaxError(`HMRC OAuth is unreachable: refresh the HMRC token in Tax setup later`);
   }
   if (!res.ok) {
     throw new CrossBorderTaxError(
@@ -252,10 +256,10 @@ export async function fetchHmrcAccessToken(
   let parsed: Record<string, unknown>;
   try {
     parsed = (await res.json()) as Record<string, unknown>;
-  } catch (error) {
-    throw new CrossBorderTaxError(`HMRC answered the OAuth exchange with an unreadable body; refresh the token in Tax setup later`, {
-      cause: error,
-    });
+  } catch {
+    throw new CrossBorderTaxError(
+      `HMRC answered the OAuth exchange with an unreadable body; refresh the token in Tax setup later`,
+    );
   }
   const accessToken = typeof parsed.access_token === "string" ? parsed.access_token : "";
   const expiresIn = Number(parsed.expires_in ?? 0);
@@ -287,7 +291,7 @@ export async function refreshHmrcToken(
   }
   let stored: HmrcClientCredentials;
   try {
-    stored = unsealAuthorityCredentials<HmrcClientCredentials>(row.sealed_credentials, orgId, "hmrc");
+    stored = unsealAuthorityCredentials<StoredHmrcCredentials>(row.sealed_credentials, orgId, "hmrc");
   } catch (error) {
     await markConnection(runner, orgId, "hmrc", "error", error instanceof Error ? error.message : String(error), false);
     throw error;
@@ -386,7 +390,7 @@ export async function authorityCredentialsForOrg(
   const hmrc = await readConnection(runner, orgId, "hmrc");
   if (hmrc?.sealed_credentials) {
     try {
-      const stored = unsealAuthorityCredentials<HmrcClientCredentials>(hmrc.sealed_credentials, orgId, "hmrc");
+      const stored = unsealAuthorityCredentials<StoredHmrcCredentials>(hmrc.sealed_credentials, orgId, "hmrc");
       const expiry = hmrc.token_expires_at ? Date.parse(hmrc.token_expires_at) : NaN;
       if (stored.accessToken && Number.isFinite(expiry) && expiry > Date.now()) {
         credentials.hmrcAccessToken = stored.accessToken;

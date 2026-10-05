@@ -68,6 +68,7 @@ export {
   checkAbnWithStoredCredentials,
   type TaxAuthority,
   type HmrcClientCredentials,
+  type StoredHmrcCredentials,
   type AbnCredentials,
   type AuthorityConnectionStatus,
 } from './authority-connections.ts';
