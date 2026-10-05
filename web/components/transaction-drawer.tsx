@@ -41,7 +41,7 @@ export interface TransactionDrawerProps {
    * one rail, it is one click away from any field.
    */
   keepChildrenMounted?: boolean
-  /** Keep all or named record panels mounted and hidden so switching retains drafts; other panels stay lazy. */
+  /** Retain all or named record panels after their first visit; unvisited panels stay lazy. */
   keepRecordTabsMounted?: boolean | readonly string[]
   /** Optional controlled tab state for record bodies that render tab-specific content themselves. */
   activeTab?: string
@@ -144,6 +144,22 @@ function TransactionDrawerFrame({
   const activeTab = (!showAttachments && requestedActiveTab === 'attachments') || (!showEvidenceTabs && (requestedActiveTab === 'attachments' || requestedActiveTab === 'audit'))
     ? 'details'
     : requestedActiveTab
+  const [visitedRecordTabs, setVisitedRecordTabs] = useState(() => ({
+    recordId,
+    keys: new Set([activeTab]),
+  }))
+  // Retention protects a visited draft. It must not start another panel's
+  // reads before the operator opens that work area.
+  if (visitedRecordTabs.recordId !== recordId) {
+    setVisitedRecordTabs({ recordId, keys: new Set([activeTab]) })
+  } else if (keepRecordTabsMounted && !visitedRecordTabs.keys.has(activeTab)) {
+    setVisitedRecordTabs({ recordId, keys: new Set([...visitedRecordTabs.keys, activeTab]) })
+  }
+  const shouldMountRecordTab = (key: string) => activeTab === key || (
+    visitedRecordTabs.keys.has(key) && (
+      keepRecordTabsMounted === true || Array.isArray(keepRecordTabsMounted) && keepRecordTabsMounted.includes(key)
+    )
+  )
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
@@ -209,7 +225,7 @@ function TransactionDrawerFrame({
       {keepRecordTabsMounted ? (
         <>
           <div hidden={activeTab !== 'details'}>{children}</div>
-          {detailTabs.map((tab) => (keepRecordTabsMounted === true || keepRecordTabsMounted.includes(tab.key) || activeTab === tab.key) ? (
+          {detailTabs.map((tab) => shouldMountRecordTab(tab.key) ? (
             <div key={tab.key} hidden={activeTab !== tab.key}>{tab.content}</div>
           ) : null)}
           {activeTab === 'attachments' ? (
