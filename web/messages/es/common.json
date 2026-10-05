@@ -185,6 +185,7 @@
     "reversed": "Revertido/a",
     "cancelled": "Cancelado/a",
     "active": "Activo/a",
+    "disabled": "Desactivado/a",
     "inactive": "Inactivo/a",
     "error": "Error",
     "ok": "OK",

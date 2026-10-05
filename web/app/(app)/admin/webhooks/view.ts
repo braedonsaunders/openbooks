@@ -8,7 +8,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { FANOUT_EVENT_TYPES } from '@openbooks/engine/webhooks'
-import type { WebhookEndpointDrawerProps } from './EndpointDrawer'
+import type { EndpointDelivery, WebhookEndpointDrawerProps } from './EndpointDrawer'
 
 /**
  * Settings → Developers → Webhooks: subscriber endpoints for signed domain
@@ -65,7 +65,7 @@ async function loadDeliveries(orgId: string, endpointId: string) {
       from webhook_deliveries d join webhook_events e on e.id = d.event_id and e.org_id = d.org_id
      where d.org_id = ${orgId} and d.endpoint_id = ${endpointId}::uuid
      order by d.created_at desc limit 50
-  `)).rows as WebhookEndpointDrawerProps['deliveries']
+  `)).rows as EndpointDelivery[]
   return rows
 }
 
@@ -75,7 +75,7 @@ export async function loadWebhooks(
   const t = await getTranslations('admin')
   const authz = await requirePermission('webhooks.read')
   await requireFeatureEnabled(authz.user.orgId, 'outboundWebhooks')
-  const canManage = await can('webhooks.manage')
+  const canManage = can(authz, 'webhooks.manage')
   const endpointParam = pickString(sp.endpoint)
   const creating = endpointParam === 'new'
   const endpoint = endpointParam && !creating ? await loadEndpoint(authz.user.orgId, endpointParam) : null

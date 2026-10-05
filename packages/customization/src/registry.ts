@@ -966,7 +966,6 @@ const WEBHOOK_ENDPOINT: RecordTypeMeta = {
   category: "entity",
   featureKey: "outboundWebhooks",
   supportsForms: false,
-  customFieldTable: null,
   customFieldLineTable: null,
   headerFields: [],
   lineFields: [],
@@ -979,7 +978,16 @@ const WEBHOOK_ENDPOINT: RecordTypeMeta = {
     { key: "last_delivery_at", labelKey: "admin.webhooks.columns.lastDelivery", kind: "text", sortable: true, sortKey: "last_delivery" },
   ],
   listFilters: [
-    { key: "status", labelKey: "common.labels.status", kind: "status", operators: OPERATORS_BY_KIND.status, options: ["active", "disabled"] },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "active", labelKey: "common.status.active" },
+        { value: "disabled", labelKey: "common.status.disabled" },
+      ],
+    },
   ],
 };
 

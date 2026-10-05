@@ -185,6 +185,7 @@
     "reversed": "逆仕訳済み",
     "cancelled": "キャンセル済み",
     "active": "有効",
+    "disabled": "無効",
     "inactive": "無効",
     "error": "エラー",
     "ok": "OK",

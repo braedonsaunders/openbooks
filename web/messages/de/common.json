@@ -185,6 +185,7 @@
     "reversed": "Rückgebucht",
     "cancelled": "Abgebrochen",
     "active": "Aktiv",
+    "disabled": "Deaktiviert",
     "inactive": "Inaktiv",
     "error": "Fehler",
     "ok": "OK",
