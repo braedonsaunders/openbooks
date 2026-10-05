@@ -331,8 +331,18 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   // commercial detail (SKUs, amounts, gateways, tender authorization refs —
   // opaque provider tokens, never contact data), engine-written exception
   // prose, and posting state. Buyer contact lives in the masked columns.
+  "channel_ad_spend.currency",
+  "channel_ad_spend.source",
   "channel_daily_summaries.currency",
   "channel_daily_summaries.status",
+  "channel_order_economics.component",
+  "channel_order_economics.currency",
+  "channel_order_economics.line_key",
+  "channel_order_economics.promotion_code",
+  "channel_order_economics.sku",
+  "channel_order_economics.source_kind",
+  "channel_order_economics.source_ref",
+  "channel_order_economics_pending.reason",
   "channel_order_events.exception_code",
   "channel_order_events.exception_reason",
   "channel_order_events.exception_remedy",
