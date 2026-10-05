@@ -7,6 +7,7 @@ import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-f
 import {
   ACCEPTANCE_ADAPTERS,
   configSecrets,
+  defaultFetch,
   resolveAcceptanceProviderApiBase,
   type AcceptanceProvider,
   type FetchFn,
@@ -489,8 +490,8 @@ export async function completeMethodSetup(
     }
     const secrets = configSecrets(config, orgId);
     if (!secrets.apiKey) throw new AutopayError(`${provider} has no API key configured; add it in provider settings first`);
-    const fetch = fetchFn ?? ((url: string, init: { method: string; headers: Record<string, string>; body?: string; redirect: "error" }) => fetch(url, init));
-    const detail = await readCompletedSetup(provider, String(locked.provider_method_id ?? ""), secrets, fetch, setupEvent);
+    const httpFetch = fetchFn ?? defaultFetch;
+    const detail = await readCompletedSetup(provider, String(locked.provider_method_id ?? ""), secrets, httpFetch, setupEvent);
     const updated = (await db.execute(sql`
       update customer_payment_methods
          set provider_customer_id = coalesce(${detail.providerCustomerId}, provider_customer_id),
@@ -1000,7 +1001,9 @@ export async function runAutopayCollectionForOrg(
   });
 }
 
-interface CollectionCandidate {
+// A type alias (not an interface): SQL row types need the implicit index
+// signature only object-literal types carry, or db.execute<T> refuses them.
+type CollectionCandidate = {
   invoiceId: string;
   documentNumber: string;
   openBalance: string;
@@ -1017,7 +1020,7 @@ interface CollectionCandidate {
   providerMethodId: string | null;
   failedPosition?: number | null;
   declineCode?: string | null;
-}
+};
 
 function collectionLockKey(orgId: string, invoiceId: string): string {
   return `autopay-collection:${orgId}:${invoiceId}`;
@@ -1418,7 +1421,7 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     `);
     return payment.id;
   }
-  await postPaymentWithApplications(payment.id, allocations, null);
+  await postPaymentWithApplications(payment.id, allocations, undefined);
   const closed = (await db.execute<{ id: string }>(sql`
     update collection_attempts
        set status = 'succeeded', updated_at = now()
