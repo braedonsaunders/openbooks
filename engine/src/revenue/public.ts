@@ -13,6 +13,7 @@ export {
   projectAmortizationSchedule,
   recognizeContractCostImpairment,
   runContractCostAmortization,
+  minorUnitsToCanonical,
   scheduleForAsset,
   type AssetScheduleLine,
   type AttentionItem,
