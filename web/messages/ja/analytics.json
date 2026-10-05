@@ -1093,7 +1093,8 @@
     },
     "csv": {
       "onTimePct": "期日内率",
-      "sharePct": "シェア率"
+      "sharePct": "シェア率",
+      "export": "CSV"
     },
     "days": "{days}日",
     "drill": {
@@ -2384,7 +2385,8 @@
       },
       "fragmentation": {
         "label": "断片化",
-        "note": "月取引数 / 平均取引サイズ"
+        "note": "月取引数 / 平均取引サイズ",
+        "value": ">{txns}/月 & <{max}"
       },
       "velocityEngine": {
         "label": "速度エンジン",
@@ -2421,7 +2423,8 @@
       "prior": "前期",
       "projected": "予測",
       "twoBack": "前々回",
-      "velocityPctMo": "速度%/月"
+      "velocityPctMo": "速度%/月",
+      "export": "CSV"
     },
     "details": {
       "anomaly": "{month}に平均から{sigma}σ",

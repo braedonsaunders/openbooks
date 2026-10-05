@@ -1093,7 +1093,8 @@
     },
     "csv": {
       "onTimePct": "% em dia",
-      "sharePct": "% participação"
+      "sharePct": "% participação",
+      "export": "CSV"
     },
     "days": "{days} d",
     "drill": {
@@ -2384,7 +2385,8 @@
       },
       "fragmentation": {
         "label": "Fragmentação",
-        "note": "Transações por mês / valor médio por transação"
+        "note": "Transações por mês / valor médio por transação",
+        "value": ">{txns}/mês & <{max}"
       },
       "velocityEngine": {
         "label": "Motor de velocidade",
@@ -2421,7 +2423,8 @@
       "prior": "Anterior",
       "projected": "Projetado",
       "twoBack": "2 atrás",
-      "velocityPctMo": "Velocidade %/mês"
+      "velocityPctMo": "Velocidade %/mês",
+      "export": "CSV"
     },
     "details": {
       "anomaly": "{sigma}σ da média em {month}",
