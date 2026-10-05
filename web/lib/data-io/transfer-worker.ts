@@ -346,11 +346,14 @@ export async function processTransfer(orgId: string, id: string, token: string, 
   })
 }
 
-export async function claimTransfer(): Promise<{ orgId: string; id: string; token: string } | null> {
+/** A targeted claim lets an operator drain one transfer with a matching worker release. */
+export async function claimTransfer(target?: { orgId: string; id: string }): Promise<{ orgId: string; id: string; token: string } | null> {
   // bypass: scheduler-tick — discover only tenant/job identities whose durable work is due.
   const due = await withBypassContext(async () => (await db.execute<{ org_id: string; id: string }>(sql`
     select org_id,id from data_transfer_jobs where state in ('parsing','previewing','committing','exporting')
-    and (claim_until is null or claim_until<now()) order by updated_at,id limit 20`)).rows)
+    and (claim_until is null or claim_until<now())
+    ${target ? sql`and org_id=${target.orgId} and id=${target.id}` : sql``}
+    order by updated_at,id limit 20`)).rows)
   for (const candidate of due) {
     const token = randomUUID()
     const claimed = await independent(candidate.org_id, async () => (await db.execute(sql`
