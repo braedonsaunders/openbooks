@@ -62,6 +62,7 @@ function fixture(): VendorData {
         grade: 'A',
         performance: 88,
         quadrant: 'strategic',
+        unratedReason: null,
       },
     ],
     monthly: [],
@@ -194,6 +195,7 @@ test('vendors without payment history read Unrated, never a neutral score', asyn
       grade: 'D',
       performance: null,
       quadrant: 'unrated',
+      unratedReason: 'no-payments',
     })
     await act(async () => {
       root.render(providers(<VendorView data={data} />))
@@ -206,6 +208,84 @@ test('vendors without payment history read Unrated, never a neutral score', asyn
     assert.ok(
       host.textContent?.includes('Unrated'),
       `an unrated vendor must be named as Unrated, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  }
+})
+
+test('the matrix names each unrated cause with its own remedy', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    const data = fixture()
+    data.rows.push({
+      id: 'v-new',
+      name: 'Brand New Co',
+      spend: '500.0000',
+      priorSpend: '0',
+      yoyPct: null,
+      sharePct: 0.05,
+      bills: 2,
+      avgBill: '250.0000',
+      lastBill: '2026-07-20',
+      recencyDays: 11,
+      tier: 'tail',
+      paidBills: 0,
+      undatedBills: 0,
+      avgDaysToPay: null,
+      onTimePct: null,
+      latePct: null,
+      lateSpend: '0',
+      score: 20,
+      grade: 'D',
+      performance: null,
+      quadrant: 'unrated',
+      unratedReason: 'no-payments',
+    })
+    data.rows.push({
+      id: 'v-undated',
+      name: 'Undated Bills Co',
+      spend: '700.0000',
+      priorSpend: '0',
+      yoyPct: null,
+      sharePct: 0.07,
+      bills: 1,
+      avgBill: '700.0000',
+      lastBill: '2026-07-21',
+      recencyDays: 10,
+      tier: 'tail',
+      paidBills: 1,
+      undatedBills: 1,
+      avgDaysToPay: 9,
+      onTimePct: null,
+      latePct: null,
+      lateSpend: '0',
+      score: 22,
+      grade: 'D',
+      performance: null,
+      quadrant: 'unrated',
+      unratedReason: 'undated',
+    })
+    await act(async () => {
+      root.render(providers(<VendorView data={data} />))
+      await tick()
+    })
+    await tick()
+    const matrixTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Leverage Matrix')
+    assert.ok(matrixTab, 'the matrix tab must exist')
+    await click(matrixTab)
+    assert.ok(
+      host.textContent?.includes('settle bills to rate'),
+      `a vendor with no payments must be told to settle bills, got:\n${host.textContent}`,
+    )
+    assert.ok(
+      host.textContent?.includes('add due dates or payment terms'),
+      `a settled-but-undated vendor must be told to date its bills, got:\n${host.textContent}`,
     )
   } finally {
     await act(async () => {
