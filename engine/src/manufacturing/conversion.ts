@@ -248,8 +248,7 @@ export async function conversionRelief(
            coalesce(sum((custom->>'relieved_overhead')::numeric), 0)::text as relieved_overhead
       from journal_entries where org_id=${orgId} and origin='manufacturing'
        and custom->>'work_order_number'=${order.number}
-       -- Live originals only: a reversed entry is status 'reversed' and its
-       -- reversal carries the same evidence, so both are left out.
+       -- Live entries only: reversal entries repeat the original conversion evidence, so both must be excluded.
        and status='posted' and reverses_entry_id is null`)).rows[0]!;
   const openLabor = add(totals.absorbed_labor, neg(totals.relieved_labor));
   const openOverhead = add(totals.absorbed_overhead, neg(totals.relieved_overhead));

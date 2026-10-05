@@ -146,8 +146,7 @@ async function materialUsageVariance(
     select custom->'material_usage_variance_delta_by_component' as deltas
       from journal_entries where org_id=${orgId} and origin='manufacturing'
         and custom->>'work_order_number'=${order.number}
-        -- Live originals only: a reversed completion is status 'reversed' and its
-        -- reversal carries the same evidence, so neither contributes.
+        -- Live entries only: reversed completions and their reversal evidence must not contribute twice.
         and custom ? 'material_usage_variance_delta_by_component' and status='posted' and reverses_entry_id is null`)).rows;
   for (const row of priorRows) {
     if (!row.deltas || typeof row.deltas !== "object" || Array.isArray(row.deltas)) continue;
@@ -563,6 +562,7 @@ async function liveCompletionsAfter(tx: SqlExecutor, orgId: string, workOrderNum
      where completion.org_id=${orgId} and completion.origin='manufacturing'
        and completion.custom->>'work_order_number'=${workOrderNumber}
        and completion.custom ? 'completion_quantity'
+       -- Live entries only: already reversed completions cannot prevent reversing an earlier live completion.
        and completion.status='posted' and completion.reverses_entry_id is null
        and completion.id<>anchor.id
        and (completion.created_at, completion.id::text) > (anchor.created_at, anchor.id::text)
