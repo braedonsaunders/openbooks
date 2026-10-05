@@ -300,7 +300,8 @@ export interface CustomerData {
     retentionRate: number | null; // avg retention probability
     /** Null with no invoices: never a 0% that reads as "paid nothing". */
     paymentRate: number | null;
-    avgDaysToPay: number;
+    /** Null with no payment history: the engine reports no average instead of an invented one. */
+    avgDaysToPay: number | null;
     top10PctShare: number;
     hhiScaled: number; // 0–10000
     hhiLevel: "high" | "moderate" | "low";
@@ -333,6 +334,12 @@ export interface CustomerData {
    * never its own copies of the constants.
    */
   config: ConfigValuesOf<"customerIntelligence">;
+  /**
+   * Set when a hand-edited weight group no longer sums to 100: every figure
+   * is empty and the view renders this banner with the Configuration tab
+   * still usable. Null on a clean load.
+   */
+  weightsError: string | null;
 }
 
 /* ------------------------------------------------------------ Profitability */
@@ -380,6 +387,11 @@ export interface ProfitabilitySummary {
 export interface Profitability {
   customers: ProfitCustomer[];
   summary: ProfitabilitySummary;
+  /**
+   * Set when a hand-edited weight group no longer sums to 100: the figures
+   * are empty and the view renders this banner instead. Null on a clean load.
+   */
+  weightsError: string | null;
 }
 
 type CustomerSqlNumeric = string | number | null;
@@ -487,29 +499,30 @@ function emptyProfitability(): Profitability {
       fakeChampions: 0,
       tierBreakdown: { high: 0, medium: 0, low: 0, marginal: 0, loss: 0 },
     },
+    weightsError: null,
   };
 }
 
 /**
- * Fail closed on hand-edited weight groups: the write path refuses a broken
- * sum, but a hand-edited settings blob bypasses it — a dashboard running on
- * partial weights would silently rescale every grade. The message names the
- * Configuration tab as the remedy.
+ * Fail closed on hand-edited weight groups without killing the page: the
+ * write path refuses a broken sum, but a hand-edited settings blob bypasses
+ * it. The loaders return this message in the payload so the dashboard renders
+ * a banner over empty figures with the Configuration tab still usable.
+ * Throwing here would kill the page, the hub preview and the assistant tool —
+ * and production would redact the message. The message names the
+ * Configuration tab as the remedy, which stays reachable behind the banner.
  */
-function requireValidWeights(
+export function weightsRefusal(
   cfg: ConfigValuesOf<"customerIntelligence">,
   strings: CustomerStrings,
-): void {
+): string | null {
   const violation = checkSumsTo(ANALYTICS_CONFIG.customerIntelligence, cfg);
-  if (violation) {
-    throw new Error(
-      strings.scoringWeightsInvalid(
-        violation.keys.join(", "),
-        violation.total,
-        Math.round(violation.actual * 100) / 100,
-      ),
-    );
-  }
+  if (!violation) return null;
+  return strings.scoringWeightsInvalid(
+    violation.keys.join(", "),
+    violation.total,
+    Math.round(violation.actual * 100) / 100,
+  );
 }
 
 export async function customerProfitability(
@@ -521,6 +534,11 @@ export async function customerProfitability(
   // Job-costed margins join `projects`. When Projects is off that register is
   // not a live module — an empty result is not "no jobs this period".
   if (!orgId || !(await isFeatureEnabled(orgId, "projects"))) return emptyProfitability();
+  // Refuse before touching the ledger: with broken weights every tier and
+  // leak below would silently rescale, so no query result is usable.
+  const cfg = await analyticsConfig(orgId, "customerIntelligence");
+  const refusal = weightsRefusal(cfg, strings);
+  if (refusal) return { ...emptyProfitability(), weightsError: refusal };
   const { from, to } = period;
   const orgFilter = orgId ? sql`and l.org_id = ${orgId}` : sql``;
   // The entry window materializes first. Joined inline, the planner drives
@@ -605,8 +623,6 @@ export async function customerProfitability(
 
   // Profit tiers and the leak definition read the effective scoring config:
   // tiers and leaks are policy, never absolute amounts in the code.
-  const cfg = await analyticsConfig(orgId, "customerIntelligence");
-  requireValidWeights(cfg, strings);
   const tierCutoffs: ProfitTierCutoffs = {
     high: cfg.profitHighMargin!,
     medium: cfg.profitMediumMargin!,
@@ -647,6 +663,7 @@ export async function customerProfitability(
       fakeChampions: customers.filter((c) => c.isFakeChampion).length,
       tierBreakdown,
     },
+    weightsError: null,
   };
 }
 
@@ -808,6 +825,11 @@ function customerDocumentMovements(
 export interface CustomerSummary {
   kpis: Pick<CustomerData['kpis'], 'totalCustomers' | 'atRiskCount'> & { totalRevenue: string; totalInvoiced: string };
   growth: Pick<CustomerData['growth'], 'monthly'>;
+  /**
+   * Set when a hand-edited weight group no longer sums to 100: the figures
+   * are empty and the hub renders this refusal instead. Null on a clean load.
+   */
+  weightsError: string | null;
 }
 
 export function customerData(
@@ -845,7 +867,62 @@ async function readCustomerData(
 
   // The scoring model (defaults reproduce the standard scoring exactly).
   const cfg = await analyticsConfig(orgId, "customerIntelligence");
-  requireValidWeights(cfg, strings);
+  const refusal = weightsRefusal(cfg, strings);
+  if (refusal) {
+    if (preview) {
+      return {
+        kpis: { totalCustomers: 0, totalRevenue: "0", totalInvoiced: "0", atRiskCount: 0 },
+        growth: { monthly: [] },
+        weightsError: refusal,
+      };
+    }
+    return {
+      period,
+      rows: [],
+      intelligence: { score: null, reason: refusal },
+      kpis: {
+        totalCustomers: 0,
+        totalRevenue: "0",
+        totalInvoiced: "0",
+        avgCustomerValue: "0",
+        projectedClv: "0",
+        avgClv: "0",
+        champions: 0,
+        atRiskCount: 0,
+        atRiskRevenue: "0",
+        retentionRate: null,
+        paymentRate: null,
+        avgDaysToPay: null,
+        top10PctShare: 0,
+        hhiScaled: 0,
+        hhiLevel: "low",
+        customersFor80Pct: 0,
+        topCustomerShare: 0,
+        monthlyGrowth: 0,
+        yoyGrowth: null,
+        newCustomers: 0,
+        overdueInvoices: 0,
+        overdueOrders: 0,
+        criticalFriction: 0,
+        highFriction: 0,
+        fakeChampions: 0,
+      },
+      segments: [],
+      tierBreakdown: [],
+      growth: {
+        monthly: [],
+        yoyGrowth: null,
+        avgMonthlyGrowth: 0,
+        medianMonthlyRevenue: "0",
+        totalNewCustomers: 0,
+        trend: "stable",
+      },
+      cohorts: { list: [], overallRetention: 0 },
+      insights: [],
+      config: cfg,
+      weightsError: refusal,
+    };
+  }
   // mergeConfig always materializes every default key for the dashboard.
   const churnCritical = cfg.churnCriticalScore!;
   const churnHigh = cfg.churnHighScore!;
@@ -1768,6 +1845,7 @@ async function readCustomerData(
       atRiskCount: base.filter((customer) => ["critical", "high"].includes(churnOf(customer).level)).length,
     },
     growth: { monthly },
+    weightsError: null,
   };
   // The metric-only preview above deliberately skips payment statistics.
   // The full dashboard uses the canonical engine DSO, while customer rows
@@ -1962,5 +2040,6 @@ async function readCustomerData(
     cohorts: { list: cohortList, overallRetention },
     insights,
     config: cfg,
+    weightsError: null,
   };
 }
