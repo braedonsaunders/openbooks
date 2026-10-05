@@ -384,7 +384,8 @@ const cases: Case[] = [
       "issue_cost_relieved_to_finished_goods", completionNumber, "Reverse the completion receipts posted after this issue");
     await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Stop the production run"));
     // The named remedy exists: the completion receipt reverses on a held order.
-    await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: await movement(completion.entryId, "assembly_build"), reversalDate: f.postingDate, reason: "Undo the finished-goods receipt" }));
+    const receiptMovement = await movement(completion.entryId, "assembly_build");
+    await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: receiptMovement, reversalDate: f.postingDate, reason: "Undo the finished-goods receipt" }));
     assert.equal(await wip(f, wo.number), "6.0000");
     assert.equal((await getOnHand(f.org.orgId, f.org.items.assembly, f.org.stockLocationId2)).quantity, "0.0000");
     await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: issueMovement, reversalDate: f.postingDate, reason: "Return the over-issue" }));
