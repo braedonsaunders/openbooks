@@ -1516,7 +1516,6 @@ const COGNATES = new Set<string>([
   'de:hrm.recruiting.depth.columns.status|Status',
   'de:hrm.recruiting.interviewKind.assessment|Assessment',
   'de:hrm.recruiting.tabs.interviews|Interviews',
-  'de:hrm.recruiting.tabs.pools|Pools',
   'de:hrm.surveys.author.name|Name',
   'de:hrm.surveys.columns.name|Name',
   'de:hrm.surveys.columns.status|Status',
@@ -1709,21 +1708,18 @@ const COGNATES = new Set<string>([
   'de:admin.webhooks.drawer.keyPlaceholder|crm',
   'de:admin.webhooks.drawer.urlLabel|URL',
   'de:admin.webhooks.list.title|Webhooks',
-  'de:admin.webhooks.title|Webhooks',
   'es:admin.hub.cards.webhooks.title|Webhooks',
   'es:admin.webhooks.columns.url|URL',
   'es:admin.webhooks.deliveries.latencyMs|{ms} ms',
   'es:admin.webhooks.drawer.keyPlaceholder|crm',
   'es:admin.webhooks.drawer.urlLabel|URL',
   'es:admin.webhooks.list.title|Webhooks',
-  'es:admin.webhooks.title|Webhooks',
   'fr:admin.hub.cards.webhooks.title|Webhooks',
   'fr:admin.webhooks.columns.url|URL',
   'fr:admin.webhooks.deliveries.latencyMs|{ms} ms',
   'fr:admin.webhooks.drawer.keyPlaceholder|crm',
   'fr:admin.webhooks.drawer.urlLabel|URL',
   'fr:admin.webhooks.list.title|Webhooks',
-  'fr:admin.webhooks.title|Webhooks',
   'ja:admin.webhooks.columns.url|URL',
   'ja:admin.webhooks.drawer.keyPlaceholder|crm',
   'ja:admin.webhooks.drawer.urlLabel|URL',
@@ -1733,7 +1729,6 @@ const COGNATES = new Set<string>([
   'pt-BR:admin.webhooks.drawer.keyPlaceholder|crm',
   'pt-BR:admin.webhooks.drawer.urlLabel|URL',
   'pt-BR:admin.webhooks.list.title|Webhooks',
-  'pt-BR:admin.webhooks.title|Webhooks',
   'zh:admin.webhooks.columns.url|URL',
   'zh:admin.webhooks.drawer.keyPlaceholder|crm',
   'zh:admin.webhooks.drawer.urlLabel|URL',
@@ -1768,7 +1763,6 @@ const COGNATES = new Set<string>([
   'fr:admin.setup.fields.classification|Classification',
   'fr:admin.setup.fields.clauses|Clauses',
   'fr:admin.setup.fields.code|Code',
-  'fr:admin.setup.fields.convention|Convention',
   'fr:admin.setup.fields.description|Description',
   'fr:admin.setup.fields.parentId|Parent',
   'fr:admin.setup.fields.position|Position',
@@ -2596,13 +2590,11 @@ const COGNATES = new Set<string>([
   'de:common.labels.status|Status',
   'de:common.status.ok|OK',
   'de:common.transactionTypes.journal|Journal',
-  'de:nav.groups.compliance|Compliance',
   'de:nav.groups.pipeline|Pipeline',
   'de:nav.modules.admin|Administration',
   'de:nav.modules.admin-extensions|Apps',
   'de:nav.modules.apps|Apps',
   'de:nav.modules.budgets|Budgets',
-  'de:nav.modules.compliance|Compliance',
   'de:nav.modules.dashboard|Dashboard',
   'de:nav.modules.flows|Flows',
   'de:nav.modules.insights|Dashboards',
@@ -3532,6 +3524,156 @@ COGNATES.add('fr:banking.pspSettlements.detailLineDescription|Description')
 // The number-sign column header is language-neutral (es renders N.º).
 for (const locale of ['de', 'fr', 'ja', 'pt-BR', 'zh']) {
   COGNATES.add(`${locale}:ar.collections.subscriptions.advanced.colNumber|#`)
+}
+// Commerce checkpoint: the PDF download label is the file-format code everywhere.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+  COGNATES.add(`${locale}:continuousClose.narrative.downloadPdf|PDF`)
+}
+// Commerce checkpoint: a bare numeral placeholder and the hours unit abbreviation.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+  COGNATES.add(`${locale}:hrm.portfolio.members.weightPlaceholder|1`)
+}
+for (const locale of ['es', 'fr', 'pt-BR']) {
+  COGNATES.add(`${locale}:hrm.leave.calendarHours|{hours} h`)
+}
+// Commerce checkpoint: Japanese keeps the VAT scheme codes, like the parties taxIds entries.
+COGNATES.add('ja:tax.oss.columns.vat|VAT')
+COGNATES.add('ja:ar.supplyEvidence.vatId|VAT ID {id}')
+COGNATES.add('ja:parties.taxIds.schemes.vies|EU VIES')
+// Commerce checkpoint: German nouns spelled identically (Status, Name, Code,
+// Team(s), Plan, Bank, Problem, Shop, Navigation, Talent, Interviews,
+// Dimension, Minimum, Details, Position, Budget, Agent, Information, Region,
+// Barcode) and the Event/Wallet payment loanwords.
+for (const [key, term] of [
+  ['ar.tenders.kinds.bank', 'Bank'],
+  ['ar.tenders.kinds.wallet', 'Wallet'],
+  ['channels.connect.stepShop', 'Shop'],
+  ['channels.activity.columns.error', 'Problem'],
+  ['hrm.orgChart.labels.team', 'Team'],
+  ['hrm.orgChart.labels.placeholderName', 'Name'],
+  ['nav.modules.hrm-recruiting-interviews', 'Interviews'],
+  ['nav.modules.admin-navigation', 'Navigation'],
+  ['nav.groups.hrm-talent', 'Talent'],
+  ['nav.localWorkspaces.hrm-talent', 'Talent'],
+  ['hrm.enrollmentRecord.plan', 'Plan'],
+  ['laborPricing.adjustmentCode', 'Code'],
+  ['laborPricing.filters.dimension', 'Dimension'],
+  ['laborPricing.categories.minimum', 'Minimum'],
+  ['channels.products.nameLabel', 'Name'],
+  ['laborPricing.name', 'Name'],
+  ['laborPricing.adjustmentName', 'Name'],
+  ['contractCosts.drawer.advancedTitle', 'Details'],
+  ['reports.catalog.columns.contract_balances.position', 'Position'],
+  ['reports.catalog.columns.sales_evidence.event_kind', 'Event'],
+  ['continuousClose.fields.budget', 'Budget'],
+  ['continuousClose.filters.agent', 'Agent'],
+  ['continuousClose.table.agent', 'Agent'],
+  ['continuousClose.severity.info', 'Information'],
+  ['admin.email.providers.fields.mailgunRegion.label', 'Region'],
+  ['items.familyCreate.previewBarcode', 'Barcode'],
+  ['crm.sales.tabs.teams', 'Teams'],
+  ['admin.setup.paymentProviders.billingImport.runStatus', 'Status'],
+  ['ar.collections.attempts.status', 'Status'],
+  ['billingImport.status', 'Status'],
+  ['channels.activity.columnStatus', 'Status'],
+  ['channels.activity.columns.status', 'Status'],
+  ['crm.sales.status', 'Status'],
+  ['hrm.employeeBenefits.status', 'Status'],
+  ['hrm.me.benefits.awards.status', 'Status'],
+  ['hrm.portfolio.columns.status', 'Status'],
+  ['laborPricing.status', 'Status'],
+  ['payroll.openingBalances.workspace.status', 'Status'],
+  ['planning.columns.status', 'Status'],
+  ['reports.catalog.columns.contract_balances.status', 'Status'],
+  ['reports.catalog.columns.contract_cost_rollforward.status', 'Status'],
+  ['tax.activity.columns.status', 'Status'],
+] as const) {
+  COGNATES.add(`de:${key}|${term}`)
+}
+// Commerce checkpoint: French nouns spelled identically (Type, Description,
+// Date, Participants, Documents, Qualifications, Navigation, Section,
+// Position, Obligation, Finance, Agent, Budget, Information, Source, points,
+// Code, Distance, Minimum, Documentation, Dimension, Conditions, Quota(s))
+// and the page counter whose head noun matches.
+for (const [key, term] of [
+  ['hrm.employeeBenefits.type', 'Type'],
+  ['hrm.portfolio.columns.family', 'Type'],
+  ['hrm.recruiting.workspace.poolDescription', 'Description'],
+  ['hrm.portfolio.builder.fields.description', 'Description'],
+  ['hrm.programWorkspace.date', 'Date'],
+  ['hrm.programWorkspace.participants', 'Participants'],
+  ['nav.modules.hrm-documents', 'Documents'],
+  ['nav.modules.hrm-qualifications', 'Qualifications'],
+  ['nav.modules.admin-navigation', 'Navigation'],
+  ['hrm.processes.designer.section', 'Section'],
+  ['reports.catalog.columns.billing_import_reconciliation.section', 'Section'],
+  ['reports.catalog.columns.contract_balances.position', 'Position'],
+  ['reports.catalog.columns.remaining_performance_obligations.obligation', 'Obligation'],
+  ['continuousClose.agents.finance', 'Finance'],
+  ['continuousClose.filters.agent', 'Agent'],
+  ['continuousClose.table.agent', 'Agent'],
+  ['continuousClose.fields.budget', 'Budget'],
+  ['continuousClose.severity.info', 'Information'],
+  ['continuousClose.narrative.sourceLabel', 'Source'],
+  ['continuousClose.fields.points', 'points'],
+  ['laborPricing.adjustmentCode', 'Code'],
+  ['laborPricing.calculations.distance', 'Distance'],
+  ['laborPricing.categories.minimum', 'Minimum'],
+  ['laborPricing.docs', 'Documentation'],
+  ['laborPricing.filters.dimension', 'Dimension'],
+  ['laborPricing.placements.conditions', 'Conditions'],
+  ['crm.sales.quota', 'Quota'],
+  ['crm.sales.tabs.quotas', 'Quotas'],
+  ['ui.pagination.pageOnly', 'Page {page}'],
+] as const) {
+  COGNATES.add(`fr:${key}|${term}`)
+}
+// Commerce checkpoint: leftover identicals in the sales workspace.
+COGNATES.add('de:crm.sales.name|Name')
+COGNATES.add('de:hrm.processes.designer.onboarding|Onboarding')
+COGNATES.add('de:hrm.processes.designer.offboarding|Offboarding')
+COGNATES.add('de:reports.catalog.columns.sales_evidence.team|Team')
+COGNATES.add('fr:hrm.processes.designer.guidance|Instructions')
+COGNATES.add('fr:reports.catalog.columns.sales_quota_attainment.name|Quota')
+COGNATES.add('fr:crm.sales.descriptionLabel|Description')
+COGNATES.add('fr:crm.sales.longitude|Longitude')
+COGNATES.add('fr:crm.sales.latitude|Latitude')
+COGNATES.add('pt-BR:crm.sales.longitude|Longitude')
+COGNATES.add('pt-BR:crm.sales.latitude|Latitude')
+// Commerce checkpoint: Spanish keeps the loanword Manual, the interjection No,
+// the networking Error and the identical Plan.
+COGNATES.add('es:admin.setup.no|No')
+COGNATES.add('es:admin.setup.options.benefitFrequency.manual|Manual')
+COGNATES.add('es:admin.setup.options.contractCostLifeSource.manual|Manual')
+COGNATES.add('es:hrm.portfolio.frequencies.manual|Manual')
+COGNATES.add('es:channels.status.error|Error')
+COGNATES.add('es:hrm.enrollmentRecord.plan|Plan')
+// Commerce checkpoint: Brazilian Portuguese keeps the Status/Manual/Item
+// loanwords, the Impairment accounting term and the Insights product name.
+for (const [key, term] of [
+  ['ar.collections.attempts.status', 'Status'],
+  ['billingImport.status', 'Status'],
+  ['channels.activity.columns.status', 'Status'],
+  ['crm.sales.status', 'Status'],
+  ['hrm.employeeBenefits.status', 'Status'],
+  ['hrm.me.benefits.awards.status', 'Status'],
+  ['laborPricing.status', 'Status'],
+  ['payroll.openingBalances.workspace.status', 'Status'],
+  ['planning.columns.status', 'Status'],
+  ['reports.catalog.columns.contract_balances.status', 'Status'],
+  ['reports.catalog.columns.contract_cost_rollforward.status', 'Status'],
+  ['tax.activity.columns.status', 'Status'],
+  ['admin.setup.options.benefitFrequency.manual', 'Manual'],
+  ['admin.setup.options.contractCostLifeSource.manual', 'Manual'],
+  ['hrm.portfolio.frequencies.manual', 'Manual'],
+  ['channels.products.itemLabel', 'Item'],
+  ['laborPricing.item', 'Item'],
+  ['laborPricing.targetTypes.item', 'Item'],
+  ['planning.columns.item', 'Item'],
+  ['contractCosts.event.contract_cost_impairment', 'Impairment'],
+  ['nav.localWorkspaces.insights-views', 'Insights'],
+] as const) {
+  COGNATES.add(`pt-BR:${key}|${term}`)
 }
 function cognateScope(entry: string): string {
   return entry.slice(0, entry.indexOf('|'))
