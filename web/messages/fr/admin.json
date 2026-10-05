@@ -6060,6 +6060,10 @@
       "title": "Cartes cadeaux et avoirs",
       "description": "Cartes cadeaux et avoirs comptabilisés au passif, avec émission, utilisation, péremption et breakage."
     },
+    "crossBorderTax": {
+      "title": "Fiscalité transfrontalière",
+      "description": "Lieu de prestation déterminé à partir des preuves collectées, validation des numéros de TVA professionnels avec autoliquidation, suivi du seuil européen de ventes à distance et déclarations au guichet unique."
+    },
     "subcontractorCompliance": {
       "title": "Conformité des sous-traitants",
       "description": "Attestations d'assurance, renonciations au privilège et déclarations 1099-NEC/MISC et T4A, avec blocage des paiements lorsque la couverture d'un sous-traitant expire."

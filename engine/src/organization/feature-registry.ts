@@ -219,6 +219,12 @@ export const FEATURES: FeatureDef[] = [
   { key: 'encumbrances', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit', requiresAll: ['budgets'] },
   { key: 'functionalExpenses', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit' },
   { key: 'form990', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit', requiresAll: ['functionalExpenses'] },
+  // Cross-border digital and e-commerce tax: place of supply from collected
+  // evidence, business VAT ID validation with reverse charge, EU distance-sales
+  // threshold monitoring, and One-Stop-Shop returns. Off by default: turning
+  // it on is a deliberate adoption decision (OSS registrations and customer
+  // evidence must be configured first). Data and evidence are kept when off.
+  { key: 'crossBorderTax', defaultEnabled: false, category: 'accounting' },
   // Platform
   // HR-15: the inbox nav module ('approvals') is NO LONGER a flows surface.
   // It is the one place a person completes work — leave requests, checklist

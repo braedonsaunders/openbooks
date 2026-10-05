@@ -6132,6 +6132,10 @@
       "title": "Vales e créditos",
       "description": "Cartões-presente e créditos em loja registrados no passivo, com emissão, resgate, expiração e breakage."
     },
+    "crossBorderTax": {
+      "title": "Fiscalidade transfronteiriça",
+      "description": "Local da prestação apurado a partir de evidências coletadas, validação de números de IVA de empresas com autoliquidação, monitoramento do limite europeu de vendas a distância e declarações do Balcão Único."
+    },
     "subcontractorCompliance": {
       "title": "Conformidade de subcontratados",
       "description": "Certificados de seguro, quitações e declarações informativas 1099-NEC/MISC e T4A, com travas de pagamento quando a cobertura do subcontratado vence."

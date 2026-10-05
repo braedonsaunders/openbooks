@@ -5952,6 +5952,10 @@
       "title": "Guthaben",
       "description": "Geschenkkarten und Ladenguthaben als Verbindlichkeiten, mit Ausgabe, Einlösung, Verfall und Erlöserfassung."
     },
+    "crossBorderTax": {
+      "title": "Grenzüberschreitende Besteuerung",
+      "description": "Leistungsort aus erfassten Nachweisen, Prüfung geschäftlicher USt-IDs mit Reverse-Charge, EU-Schwellenüberwachung und One-Stop-Shop-Meldungen."
+    },
     "advancedClose": {
       "title": "Erweiterte Abschlusssteuerung",
       "description": "Nachweislastige Abschlussblaupausen, unabhängige Genehmigungsrouten, kontrollierte Sperren und geregelte Abschlusspaket-Veröffentlichung. Der Kern-Monatsabschluss bleibt verfügbar, wenn dies aus ist."

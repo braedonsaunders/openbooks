@@ -6132,6 +6132,10 @@
       "title": "储值卡与商店信用",
       "description": "将礼品卡和商店信用记为负债，支持发行、兑换、过期和余值收益确认。"
     },
+    "crossBorderTax": {
+      "title": "跨境税务",
+      "description": "根据所收集证据判定供应地、验证企业增值税号并适用反向征收、监控欧盟远程销售阈值，以及一站式申报。"
+    },
     "subcontractorCompliance": {
       "title": "分包商合规",
       "description": "保险证书、留置权弃权书，以及 1099-NEC/MISC 与 T4A 信息申报表；分包商保障失效时冻结付款。"
