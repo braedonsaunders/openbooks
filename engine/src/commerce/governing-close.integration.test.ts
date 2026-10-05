@@ -41,7 +41,7 @@ interface Fixture {
  * post governed — cash at once plus a draft sales order behind it.
  */
 async function setup(org: ScratchOrg, actor: string): Promise<Fixture> {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true })}::jsonb, true) where id = ${org.orgId}`);
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
     name: "Test Shop",
