@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/database'
 import { requirePermission } from '../../../../../lib/authz'
 import { INDUSTRIES } from '../../../../../lib/industries'
 import {

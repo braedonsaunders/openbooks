@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/database'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref } from '../../../lib/list-params'
 

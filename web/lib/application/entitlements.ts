@@ -1,15 +1,15 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
-import { db, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { db, withOrgContext } from "@openbooks/engine/platform/database";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/authority";
 import {
   EntitlementError,
   checkEntitlement,
   resolveEntitlements,
   type EntitlementVerdict,
   type ResolvedSubscriptionEntitlements,
-} from "@openbooks/engine/src/billing/entitlements.ts";
+} from "@openbooks/engine/billing";
 import { isFeatureEnabled } from "../features";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
