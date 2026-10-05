@@ -18,7 +18,7 @@ import { verifyPdfEncryption } from '@openbooks/pdf'
 import { isFeatureEnabled } from '../features'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { mergeAndPrintPdf } from './render'
-import { resolvePdfTemplate } from './store'
+import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from './store'
 import { loadPdfRecordValues } from './values'
 
 /**
@@ -165,7 +165,13 @@ export async function sendRecordPdfEmail(args: {
   }
 
   const [tpl, record, transport, actor] = await Promise.all([
-    resolvePdfTemplate(args.orgId, args.recordType, args.templateId ?? null),
+    (async () =>
+      resolvePdfTemplate(
+        args.orgId,
+        args.recordType,
+        args.templateId ?? null,
+        await loadRecordDesignatedTemplateName(args.orgId, meta.docKind, args.id),
+      ))(),
     loadPdfRecordValues(args.recordType, args.orgId, args.id, args.scope),
     resolveOrgEmailTransport(args.orgId),
     resolveDeliveryActor(),

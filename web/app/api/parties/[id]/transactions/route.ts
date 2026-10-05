@@ -53,7 +53,14 @@ export const GET = defineRoute({
     ? sql`and d.kind not in (${sql.join(hiddenKinds.map((value) => sql`${value}`), sql`, `)})`
     : sql``
 
-  const where = sql`d.org_id = ${gate.user.orgId} and d.party_id = ${id}
+  // A consolidated invoice names its payer on the header while its lines
+  // keep their service parties, so a service child's history would hide the
+  // activity without the line-level match. Rows arrive tagged with the
+  // party's role on each document (billed, service, or bill-to).
+  const where = sql`d.org_id = ${gate.user.orgId} and (d.party_id = ${id}
+    or exists (select 1 from document_lines l
+                where l.org_id = d.org_id and l.document_id = d.id and l.service_party_id = ${id})
+    or d.custom ->> 'billToPartyId' = ${id})
     ${q ? sql`and (d.document_number ilike ${`%${q}%`} or coalesce(d.reference_number, '') ilike ${`%${q}%`} or coalesce(d.memo, '') ilike ${`%${q}%`})` : sql``}
     ${kind ? sql`and d.kind = ${kind}` : sql``}
     ${status ? sql`and d.status = ${status}` : sql``}
@@ -63,7 +70,10 @@ export const GET = defineRoute({
   const [rows, total, filters] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
-             d.due_date, d.status, d.currency, d.total, d.open_balance, d.memo
+             d.due_date, d.status, d.currency, d.total, d.open_balance, d.memo,
+             case when d.party_id = ${id} then 'billed'
+                  when d.custom ->> 'billToPartyId' = ${id} then 'bill_to'
+                  else 'service' end as party_role
         from documents d where ${where}
        order by d.document_date desc, d.created_at desc
        limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
@@ -72,7 +82,10 @@ export const GET = defineRoute({
       select array_remove(array_agg(distinct d.kind order by d.kind), null) as kinds,
              array_remove(array_agg(distinct d.status order by d.status), null) as statuses
         from documents d
-       where d.org_id = ${gate.user.orgId} and d.party_id = ${id} ${hiddenKindFilter}
+       where d.org_id = ${gate.user.orgId} and (d.party_id = ${id}
+         or exists (select 1 from document_lines l
+                     where l.org_id = d.org_id and l.document_id = d.id and l.service_party_id = ${id})
+         or d.custom ->> 'billToPartyId' = ${id}) ${hiddenKindFilter}
         ${documentScope}`),
   ]))
 

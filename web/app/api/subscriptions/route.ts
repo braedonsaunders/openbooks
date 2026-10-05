@@ -31,7 +31,7 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('deletePlan'), id: z.string().uuid() }),
   z.object({ action: z.literal('addSubscription'), customerId: z.string().uuid(), planId: z.string().uuid(), startOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), firstBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), prorateFirstPeriod: z.boolean().optional(), autoPost: z.boolean().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), memo: z.string().nullable().optional() }),
   z.object({ action: z.literal('changeSubscription'), id: z.string().uuid(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional() }),
-  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional() }),
+  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional(), billToPartyId: z.string().uuid().nullable().optional(), payerPartyId: z.string().uuid().nullable().optional() }),
   z.object({ action: z.literal('billNow'), id: z.string().uuid() }),
 ]);
 
@@ -512,6 +512,35 @@ export const POST = defineRoute({
               skipReason = body.skipReason;
             }
             if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
+            // Per-subscription bill-to/payer overrides: null clears back to
+            // the hierarchy (or self-billing). Each named party must be an
+            // org customer, so an override can never bill a stranger.
+            for (const field of ["billToPartyId", "payerPartyId"] as const) {
+              if (field in body) {
+                const partyId = body[field] as string | null;
+                if (partyId !== null) {
+                  const party = (await db.execute<{ id: string }>(sql`
+                    select p.id from parties p
+                     join customer_roles cr on cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
+                     where p.org_id = ${orgId} and p.id = ${partyId} and p.is_active
+                     limit 1`)).rows[0];
+                  if (!party) {
+                    throw new SubscriptionError(
+                      `${field === "billToPartyId" ? "bill-to" : "payer"} party is not an active org customer; pick a customer or clear the override`,
+                    );
+                  }
+                  sets.push(
+                    field === "billToPartyId"
+                      ? sql`bill_to_party_id = ${partyId}`
+                      : sql`payer_party_id = ${partyId}`,
+                  );
+                } else {
+                  sets.push(
+                    field === "billToPartyId" ? sql`bill_to_party_id = null` : sql`payer_party_id = null`,
+                  );
+                }
+              }
+            }
             if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
             const outcome = await db.transaction(async (tx) => {
               await lockSubscriptionCustomerForScope(tx, orgId, String(body.id), authz.allowedSubsidiaryIds);

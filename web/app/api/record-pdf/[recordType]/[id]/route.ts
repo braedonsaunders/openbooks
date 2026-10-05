@@ -8,7 +8,7 @@ import { pdfResponse, safeName } from "../../../../../lib/export";
 import { isUuid } from "../../../../../lib/list-params";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
-import { resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
+import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
 import { loadPdfRecordValues } from "../../../../../lib/pdf-templates/values";
 import { loadRecordSubsidiaryScope } from "../../lib";
 import { notFound } from "@/lib/api/responses";
@@ -54,7 +54,13 @@ async function renderRecordPdf(
     return NextResponse.json({ error: "template not found" }, { status: 404 });
   }
   const [tpl, record] = await Promise.all([
-    resolvePdfTemplate(user.orgId, recordType, templateId),
+    (async () =>
+      resolvePdfTemplate(
+        user.orgId,
+        recordType,
+        templateId,
+        await loadRecordDesignatedTemplateName(user.orgId, meta.docKind, id),
+      ))(),
     loadPdfRecordValues(recordType, user.orgId, id, gate.allowedSubsidiaryIds ?? null),
   ]);
   if (!tpl) return NextResponse.json({ error: "template not found" }, { status: 404 });

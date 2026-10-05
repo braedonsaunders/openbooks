@@ -30,6 +30,7 @@ interface RouteState {
   subscriptionSubsidiaryId: string | null;
   beforeSubscription: Record<string, unknown> | null;
   guardedThrough: string | null;
+  overridePartyIsCustomer: boolean;
 }
 
 const stateKey = Symbol.for("openbooks.subscription-route-test");
@@ -58,6 +59,7 @@ const routeState: RouteState & {
   subscriptionSubsidiaryId: "subsidiary-a",
   beforeSubscription: null,
   guardedThrough: null,
+  overridePartyIsCustomer: true,
   SubscriptionError,
   assertUnrestrictedScope,
   unrestrictedScopeError: UnrestrictedScopeError,
@@ -138,6 +140,9 @@ stubModules({
         if (text.includes('from fx_rates')) return { rows: state.fxRate ? [{ rate: state.fxRate }] : [] }
         if (text.includes('planCurrency')) return { rows: state.mrrRows }
         if (text.includes('from parties c')) return { rows: [{ subsidiaryId: state.customerSubsidiaryId }] }
+        if (text.includes('from parties p') && text.includes('customer_roles')) {
+          return { rows: state.overridePartyIsCustomer ? [{ id: '00000000-0000-4000-8000-00000000c009' }] : [] }
+        }
         if (text.includes('from subscriptions s') && text.includes('join parties c')) {
           return { rows: [{ subsidiaryId: state.subscriptionSubsidiaryId }] }
         }
@@ -209,6 +214,7 @@ function reset(): void {
   routeState.subscriptionSubsidiaryId = "subsidiary-a";
   routeState.beforeSubscription = null;
   routeState.guardedThrough = null;
+  routeState.overridePartyIsCustomer = true;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -534,4 +540,47 @@ test("updateSubscription accepts a next bill date exactly on the boundary", asyn
   const response = await post({ action: "updateSubscription", id: "00000000-0000-4000-8000-00000000c003", nextBillOn: "2026-04-01" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
+});
+
+test("updateSubscription stores bill-to/payer overrides and clears them back to null", async () => {
+  reset();
+  billedMarchSubscription();
+  const set = await post({
+    action: "updateSubscription",
+    id: "00000000-0000-4000-8000-00000000c003",
+    billToPartyId: "00000000-0000-4000-8000-00000000c009",
+    payerPartyId: "00000000-0000-4000-8000-00000000c009",
+  });
+  assert.equal(set.status, 200);
+  assert.deepEqual(await set.json(), { ok: true });
+  const updateText = routeState.transactionQueries.map(sqlText).find((text) => text.includes("update subscriptions set"));
+  assert.ok(updateText?.includes("bill_to_party_id"), "the bill-to override must reach the update");
+  assert.ok(updateText?.includes("payer_party_id"), "the payer override must reach the update");
+
+  const clear = await post({
+    action: "updateSubscription",
+    id: "00000000-0000-4000-8000-00000000c003",
+    billToPartyId: null,
+  });
+  assert.equal(clear.status, 200);
+});
+
+test("updateSubscription refuses an override naming a non-customer party", async () => {
+  reset();
+  billedMarchSubscription();
+  routeState.overridePartyIsCustomer = false;
+  const response = await post({
+    action: "updateSubscription",
+    id: "00000000-0000-4000-8000-00000000c003",
+    payerPartyId: "00000000-0000-4000-8000-00000000c009",
+  });
+  assert.equal(response.status, 422);
+  assert.match(
+    String((await response.json() as { error: string }).error),
+    /not an active org customer/,
+  );
+  assert.ok(
+    !routeState.transactionQueries.map(sqlText).some((text) => text.includes("update subscriptions set")),
+    "a refused override must not reach the update",
+  );
 });

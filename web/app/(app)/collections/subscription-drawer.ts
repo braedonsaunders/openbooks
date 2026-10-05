@@ -33,6 +33,8 @@ export interface SubscriptionDrawerData {
   lastError: string | null
   canManage: boolean
   closeHref: string
+  /** Active customers for the bill-to/payer pickers (empty without manage). */
+  customers: { id: string; name: string }[]
 }
 
 type SubscriptionDrawerRow = {
@@ -92,6 +94,19 @@ export async function loadSubscriptionDrawer(
   ).rows
   const row = rows[0]
   if (!row) return { drawer: null }
+  // The override editor shares the subscriptions write right (ar.create),
+  // never a second gate: whoever edits subscriptions edits overrides.
+  const canManage = can(authz, 'ar.create')
+  const customers = canManage
+    ? (
+        await db.execute<{ id: string; name: string }>(sql`
+          select p.id, p.display_name as name from parties p
+           where p.org_id = ${orgId} and p.is_active
+             and exists (select 1 from customer_roles cr
+                          where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
+           order by p.display_name limit 500`)
+      ).rows
+    : []
   return {
     drawer: {
       id: row.id,
@@ -118,8 +133,9 @@ export async function loadSubscriptionDrawer(
         ? { id: row.contractId, number: row.contractNumber ?? row.contractId.slice(0, 8) }
         : null,
       lastError: row.lastError,
-      canManage: can(authz, 'ar.manage'),
+      canManage,
       closeHref: mergeHref('/collections', sp, { subscription: undefined, mode: undefined, form: undefined }),
+      customers,
     },
   }
 }
