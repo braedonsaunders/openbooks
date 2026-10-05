@@ -56,6 +56,10 @@
         "title": "Clés API",
         "description": "Créez des clés API à portée restreinte pour les intégrations et consultez les journaux d'utilisation"
       },
+      "webhooks": {
+        "title": "Webhooks",
+        "description": "Livraison signée d’événements de domaine aux destinataires souscrits, avec réessais"
+      },
       "apiDocs": {
         "title": "Documentation de l'API",
         "description": "Parcourez la référence de l'API REST pour chaque type d'enregistrement et de transaction"
@@ -600,6 +604,112 @@
       "rateLimitHint": "Nombre maximal de requêtes que cette clé peut effectuer par minute. Laissez vide pour aucune limite."
     }
   },
+  "webhooks": {
+    "advanced": {
+      "autoDisable": "{failures, plural, one {# échec de suite} other {# échecs de suite}} — le destinataire se désactive automatiquement à {threshold}.",
+      "envelope": "Chaque POST envoie un identifiant, le nom d’événement, l’horodatage et les données utiles avec les en-têtes OpenBooks-Event, OpenBooks-Delivery et OpenBooks-Signature. Les montants sont des unités mineures entières avec une devise.",
+      "retry": "Les tentatives échouées sont réessayées 3 jours avec un backoff exponentiel et de la gigue, puis la livraison est close. Un 410 (Gone) désactive le destinataire aussitôt.",
+      "summary": "Réessais avec backoff pendant 3 jours · désactivation après {threshold} échecs",
+      "title": "Politique de livraison"
+    },
+    "columns": {
+      "events": "Événements",
+      "failures": "Échecs",
+      "key": "Destinataire",
+      "lastDelivery": "Dernière livraison",
+      "url": "URL"
+    },
+    "deliveries": {
+      "attempts": "Tentatives",
+      "back": "Retour aux livraisons",
+      "code": "Réponse",
+      "empty": "Aucune livraison pour l’instant — elles apparaissent ici chaque fois qu’un événement souscrit se produit.",
+      "event": "Événement",
+      "latency": "Durée",
+      "latencyMs": "{ms} ms",
+      "moreActions": "Plus d’actions",
+      "needsAttention": "{count, plural, one {# livraison demande attention} other {# livraisons demandent attention}} — ouvrez-en une pour lire la réponse du récepteur, corrigez-la puis relivrez.",
+      "next": "Prochain essai",
+      "noResponse": "Le récepteur n’a envoyé aucun corps.",
+      "openAria": "Ouvrir la livraison {event}",
+      "payloadTitle": "Contenu de l’événement",
+      "redeliver": "Relivrer",
+      "redeliverFailed": "La livraison n’a pas été relivrée.",
+      "redelivered": "Livraison remise en file et tentée.",
+      "responseTitle": "Réponse du récepteur",
+      "status": "Statut",
+      "view": "Voir le contenu"
+    },
+    "drawer": {
+      "activeHint": "Désactivez depuis l’en-tête pour suspendre la livraison sans supprimer l’historique.",
+      "activeLabel": "Activé",
+      "activeOff": "Désactivé",
+      "activeOn": "Activé",
+      "create": "Créer le destinataire",
+      "created": "Destinataire créé.",
+      "descriptionPlaceholder": "Ce qu’alimente ce destinataire.",
+      "disable": "Désactiver",
+      "disableConfirm": "Désactiver ce destinataire ? Les événements ne sont plus mis en file jusqu’à la réactivation, mais l’historique est conservé.",
+      "disabled": "Destinataire désactivé.",
+      "enable": "Réactiver",
+      "enableConfirm": "Réactiver ce destinataire ? Les événements en file reprennent leur livraison.",
+      "enabled": "Destinataire réactivé.",
+      "eventsHint": "Le destinataire ne reçoit que les types sélectionnés.",
+      "eventsLabel": "Événements souscrits",
+      "healthDisabled": "Désactivé — aucun événement n’est mis en file. Réactivez depuis l’en-tête pour reprendre.",
+      "healthFailing": "En échec — {count, plural, one {# livraison de suite refusée} other {# livraisons de suite refusées}}. Corrigez le récepteur puis relivrez depuis l’onglet Livraisons.",
+      "healthNew": "Le destinataire commencera à recevoir dès sa création.",
+      "healthOk": "Réception en cours. {count, plural, one {# livraison journalisée} other {# livraisons journalisées}}.",
+      "keyHint": "Nom stable par lequel les recettes appellent ce destinataire. Minuscules, chiffres, tirets et soulignés ; ne change jamais.",
+      "keyLabel": "Clé du destinataire",
+      "keyPlaceholder": "crm",
+      "keyRequired": "Saisissez une clé de destinataire.",
+      "newDescription": "Souscrivez une URL aux événements de domaine. Le secret de signature n’est affiché qu’une fois après la création.",
+      "newTitle": "Nouveau destinataire",
+      "saveChanges": "Enregistrer les modifications",
+      "saveFailed": "Le destinataire n’a pas été enregistré.",
+      "secretCreated": "Secret de signature — copiez-le maintenant",
+      "secretCreatedHint": "C’est la seule fois où le secret est affiché. Le récepteur l’utilise pour vérifier l’en-tête OpenBooks-Signature.",
+      "copied": "Secret copié.",
+      "copy": "Copier",
+      "updated": "Destinataire mis à jour.",
+      "urlHint": "URL https:// publique qui reçoit les POST signés.",
+      "urlLabel": "URL",
+      "urlRequired": "Saisissez l’URL souscrite."
+    },
+    "groups": {
+      "catalog": "Articles et stock",
+      "customers": "Clients",
+      "documents": "Commandes et argent"
+    },
+    "list": {
+      "description": "Les destinataires souscrits reçoivent des événements de domaine signés avec une livraison réessayée et observable.",
+      "emptyDescription": "Ajoutez votre premier destinataire pour recevoir les événements signés de commandes, paiements et stock dans vos propres systèmes.",
+      "emptyTitle": "Aucun destinataire pour l’instant",
+      "newButton": "Nouveau destinataire",
+      "title": "Webhooks"
+    },
+    "security": {
+      "overlapBody": "Après une rotation, l’ancien secret reste valable pour les livraisons en cours. La prochaine rotation le remplace.",
+      "overlapOff": "Signature unique — aucune rotation en cours",
+      "overlapOn": "Les deux signatures sont acceptées jusqu’à la prochaine rotation",
+      "overlapTitle": "Chevauchement de rotation",
+      "ping": "Envoyer un événement de test",
+      "pingFailed": "L’événement de test n’a pas été livré.",
+      "pingOk": "Événement de test livré.",
+      "rotate": "Faire pivoter le secret",
+      "rotateConfirm": "Faire pivoter le secret de signature ? Les livraisons portent les deux signatures jusqu’à la prochaine rotation, pour que le récepteur continue de vérifier pendant le basculement.",
+      "rotated": "Secret pivoté — copiez le nouveau maintenant.",
+      "signingBody": "Chaque POST porte un en-tête OpenBooks-Signature calculé avec ce secret. Faites-le pivoter s’il a pu fuiter ; les livraisons portent les deux signatures jusqu’à la prochaine rotation.",
+      "signingTitle": "Secret de signature"
+    },
+    "tabs": {
+      "ariaLabel": "Sections du destinataire",
+      "deliveries": "Livraisons ({count})",
+      "security": "Sécurité",
+      "settings": "Réglages"
+    }
+  },
   "settings": {
     "metaTitle": "Entreprise et comptabilité",
     "title": "Entreprise et comptabilité",
@@ -1069,6 +1179,8 @@
     "admin_backups_manage": "Gérer les sauvegardes de l’organisation",
     "admin_ai_manage": "Gérer les paramètres d'IA",
     "api_keys_manage": "Gérer les clés API",
+    "webhooks_read": "Voir les destinataires et livraisons de webhooks",
+    "webhooks_manage": "Gérer les destinataires, pivoter les secrets et relivrer",
     "assets_read": "Consulter les immobilisations et l’amortissement",
     "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement",
     "documents_read": "Parcourir le gestionnaire de documents",
@@ -6047,6 +6159,10 @@
     "automationWebhooks": {
       "title": "Actions webhook",
       "description": "Appeler des webhooks signés déclarés par l'organisation depuis les recettes."
+    },
+    "outboundWebhooks": {
+      "title": "Webhooks sortants",
+      "description": "Livrez des événements de domaine signés aux destinataires souscrits dans Réglages → Développeurs → Webhooks. Nécessite l’accès API."
     },
     "automationSimulator": {
       "title": "Simulateur",

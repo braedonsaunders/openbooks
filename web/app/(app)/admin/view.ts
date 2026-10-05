@@ -76,6 +76,13 @@ const GROUPS: { key: string; labelKey: string; accent: Accent; cards: Card[] }[]
         featureKey: 'apiAccess',
       },
       {
+        href: '/admin/webhooks',
+        iconKey: 'webhook',
+        cardKey: 'webhooks',
+        permission: 'webhooks.read',
+        featureKey: 'outboundWebhooks',
+      },
+      {
         href: '/api-docs',
         iconKey: 'code-2',
         cardKey: 'apiDocs',

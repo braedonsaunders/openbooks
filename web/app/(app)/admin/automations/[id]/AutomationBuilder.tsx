@@ -60,12 +60,14 @@ const TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'do
 // stages their events, so enabling a recipe on one is refused by the API —
 // offering them would report success for work that never happened.
 const UNAVAILABLE_TRIGGER_KINDS = ['field_change', 'event', 'document'] as const
-// delay, approve_step, start_flow and webhook are not offered: none has
-// real execution semantics (no continuation store, no gate minting, no
-// flow dispatch, no webhook transport), so offering them would report
-// success for work that never happened. The API refuses them at publish
-// with the remedy named; stored legacy rows still render as JSON below.
-const ACTION_KINDS = ['create_task', 'send_email', 'send_notification', 'start_process', 'update_field'] as const
+// delay, approve_step and start_flow are not offered: none has real
+// execution semantics (no continuation store, no gate minting, no flow
+// dispatch), so offering them would report success for work that never
+// happened. The API refuses them at publish with the remedy named; stored
+// legacy rows still render as JSON below. webhook IS offered: it delivers
+// through the signed outbound webhook transport to the subscriber endpoint
+// named by the action's endpointKey (Settings → Developers → Webhooks).
+const ACTION_KINDS = ['create_task', 'send_email', 'send_notification', 'start_process', 'update_field', 'webhook'] as const
 const CONDITION_OPS = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'contains', 'is_null', 'changed_to'] as const
 
 type ConditionLeaf = { field: string; op: string; value: string }

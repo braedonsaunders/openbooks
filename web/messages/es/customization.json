@@ -28,6 +28,7 @@
     "bank_transaction": "Transacción bancaria",
     "inventory_onhand": "Inventario disponible",
     "inventory_movement": "Movimiento de inventario",
+    "webhook_endpoint": "Extremo de webhook",
     "budget_scenario": "Presupuesto",
     "revenue_contract": "Contrato de ingresos",
     "equipment_unit": "Unidad de equipo",

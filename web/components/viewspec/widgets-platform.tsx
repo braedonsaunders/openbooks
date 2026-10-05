@@ -13,6 +13,7 @@ import { InviteUserButton } from '../../app/(app)/admin/users/InviteDialog'
 import { UserIdentityCell, UserRolesCell, UserGrantsCell, UserManageCell } from '../../app/(app)/platform/users/sections'
 import { OrgNameCell, OrgEnvironmentCell, OrgLocaleCell, OrgUsersCell, OrgOpenCell } from '../../app/(app)/platform/organizations/sections'
 import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
+import { NewEndpointButton, WebhookEndpointDrawer } from '../../app/(app)/admin/webhooks/EndpointDrawer'
 import { str, num, type WidgetRenderer } from './widget-props'
 
 /** Platform identity, access and administration adapters. Compose native components without changing their props or boundaries. */
@@ -21,6 +22,12 @@ export const PLATFORM_WIDGETS = {
   'api-key-drawer': (props) => (
     <KeyDrawer keyRow={(props.keyRow as ComponentProps<typeof KeyDrawer>['keyRow']) ?? null} />
   ),
+  'new-webhook-endpoint': () => <NewEndpointButton />,
+  'webhook-endpoint-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof WebhookEndpointDrawer> | null
+    if (!drawer) return null
+    return <WebhookEndpointDrawer {...drawer} />
+  },
 
   /* --- platform user record --------------------------------------------------- */
   //

@@ -15,6 +15,7 @@ import { hrmProcesses } from './articles/hrm-processes'
 import { inboxAndHome } from './articles/inbox-and-home'
 // HR-16 begin
 import { automations } from './articles/automations'
+import { webhooks } from './articles/webhooks'
 import { correctingAndRescinding } from './articles/correcting-and-rescinding'
 // HR-16 end
 import { performanceAndRetention } from './articles/performance-and-retention'
@@ -339,7 +340,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   distributionLabels,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
+  projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, webhooks, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
   busySeasonCapacity,
   staffingBoardEvidence, softHardBookings, retainersDrawdownsRecognition,
   // HR-13 begin

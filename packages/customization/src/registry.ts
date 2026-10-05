@@ -960,6 +960,29 @@ const BANK_TRANSACTION: RecordTypeMeta = {
   ],
 };
 
+const WEBHOOK_ENDPOINT: RecordTypeMeta = {
+  key: "webhook_endpoint",
+  labelKey: "customization.recordTypes.webhook_endpoint",
+  category: "entity",
+  featureKey: "outboundWebhooks",
+  supportsForms: false,
+  customFieldTable: null,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "key", labelKey: "admin.webhooks.columns.key", kind: "text", sortable: true, sortKey: "key", locked: true },
+    { key: "url", labelKey: "admin.webhooks.columns.url", kind: "text", sortable: true, sortKey: "key" },
+    { key: "events_count", labelKey: "admin.webhooks.columns.events", kind: "text", sortable: false },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "consecutive_failures", labelKey: "admin.webhooks.columns.failures", kind: "text", sortable: true, sortKey: "failures" },
+    { key: "last_delivery_at", labelKey: "admin.webhooks.columns.lastDelivery", kind: "text", sortable: true, sortKey: "last_delivery" },
+  ],
+  listFilters: [
+    { key: "status", labelKey: "common.labels.status", kind: "status", operators: OPERATORS_BY_KIND.status, options: ["active", "disabled"] },
+  ],
+};
+
 const INVENTORY_ONHAND: RecordTypeMeta = {
   key: "inventory_onhand",
   labelKey: "customization.recordTypes.inventory_onhand",
@@ -2327,6 +2350,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   BANK_TRANSACTION,
   INVENTORY_ONHAND,
   INVENTORY_MOVEMENT,
+  WEBHOOK_ENDPOINT,
   BUDGET_SCENARIO,
   HRM_PROCESS_TEMPLATE,
   PROVISION_OBLIGATION,

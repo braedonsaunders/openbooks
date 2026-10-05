@@ -25,6 +25,7 @@
     "bank_transaction": "银行交易",
     "inventory_onhand": "现有库存",
     "inventory_movement": "库存移动",
+    "webhook_endpoint": "Webhook 端点",
     "budget_scenario": "预算",
     "revenue_contract": "收入合同",
     "equipment_unit": "设备单元",

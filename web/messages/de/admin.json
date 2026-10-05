@@ -64,6 +64,10 @@
         "title": "API-Schlüssel",
         "description": "Bereichsbezogene API-Schlüssel für Integrationen erstellen und Nutzungsprotokolle anzeigen"
       },
+      "webhooks": {
+        "title": "Webhooks",
+        "description": "Signierte Domänenereignisse an Teilnehmer-Endpunkte zustellen, mit Wiederholungen"
+      },
       "apiDocs": {
         "title": "API-Dokumentation",
         "description": "Durchsuchen Sie die REST-API-Referenz für jeden Datensatz- und Transaktionstyp"
@@ -600,6 +604,112 @@
       "rateLimitHint": "Maximale Anfragen, die dieser Schlüssel pro Minute stellen darf. Leer lassen für kein Limit."
     }
   },
+  "webhooks": {
+    "advanced": {
+      "autoDisable": "{failures, plural, one {# Fehler in Folge} other {# Fehler in Folge}} — der Endpunkt deaktiviert sich automatisch bei {threshold}.",
+      "envelope": "Jeder POST sendet Kennung, Ereignisnamen, Zeitstempel und Nutzdaten mit den Headern OpenBooks-Event, OpenBooks-Delivery und OpenBooks-Signature. Beträge sind ganze kleinere Einheiten mit Währung.",
+      "retry": "Fehlgeschlagene Versuche werden 3 Tage lang mit exponentiellem Backoff und Jitter wiederholt, danach ist die Zustellung erledigt. Eine 410 (Gone) deaktiviert den Endpunkt sofort.",
+      "summary": "Wiederholungen mit Backoff für 3 Tage · deaktiviert nach {threshold} Fehlern",
+      "title": "Zustellrichtlinie"
+    },
+    "columns": {
+      "events": "Ereignisse",
+      "failures": "Fehler",
+      "key": "Endpunkt",
+      "lastDelivery": "Letzte Zustellung",
+      "url": "URL"
+    },
+    "deliveries": {
+      "attempts": "Versuche",
+      "back": "Zurück zu den Zustellungen",
+      "code": "Antwort",
+      "empty": "Noch keine Zustellungen — sie erscheinen hier, sobald ein abonniertes Ereignis eintritt.",
+      "event": "Ereignis",
+      "latency": "Dauer",
+      "latencyMs": "{ms} ms",
+      "moreActions": "Weitere Aktionen",
+      "needsAttention": "{count, plural, one {# Zustellung braucht Aufmerksamkeit} other {# Zustellungen brauchen Aufmerksamkeit}} — öffnen Sie eine, lesen Sie die Antwort des Empfängers, beheben Sie sie und stellen Sie erneut zu.",
+      "next": "Nächster Versuch",
+      "noResponse": "Der Empfänger hat keinen Inhalt gesendet.",
+      "openAria": "Die {event}-Zustellung öffnen",
+      "payloadTitle": "Ereignisnutzdaten",
+      "redeliver": "Erneut zustellen",
+      "redeliverFailed": "Die Zustellung wurde nicht erneut versucht.",
+      "redelivered": "Zustellung erneut eingereiht und versucht.",
+      "responseTitle": "Antwort des Empfängers",
+      "status": "Status",
+      "view": "Nutzdaten ansehen"
+    },
+    "drawer": {
+      "activeHint": "Deaktivieren Sie in der Kopfzeile, um die Zustellung zu pausieren, ohne den Verlauf zu löschen.",
+      "activeLabel": "Aktiviert",
+      "activeOff": "Deaktiviert",
+      "activeOn": "Aktiviert",
+      "create": "Endpunkt erstellen",
+      "created": "Endpunkt erstellt.",
+      "descriptionPlaceholder": "Womit dieser Endpunkt versorgt wird.",
+      "disable": "Deaktivieren",
+      "disableConfirm": "Diesen Endpunkt deaktivieren? Ereignisse werden bis zur Reaktivierung nicht mehr eingereiht, der Verlauf bleibt erhalten.",
+      "disabled": "Endpunkt deaktiviert.",
+      "enable": "Reaktivieren",
+      "enableConfirm": "Diesen Endpunkt reaktivieren? Eingereihte Ereignisse werden wieder zugestellt.",
+      "enabled": "Endpunkt reaktiviert.",
+      "eventsHint": "Der Endpunkt erhält nur die ausgewählten Typen.",
+      "eventsLabel": "Abonnierte Ereignisse",
+      "healthDisabled": "Deaktiviert — es werden keine Ereignisse eingereiht. Reaktivieren Sie in der Kopfzeile, um fortzufahren.",
+      "healthFailing": "Fehlerhaft — {count, plural, one {# Zustellung in Folge abgelehnt} other {# Zustellungen in Folge abgelehnt}}. Beheben Sie den Empfänger und stellen Sie dann über den Reiter „Zustellungen“ erneut zu.",
+      "healthNew": "Der Endpunkt empfängt nach der Erstellung.",
+      "healthOk": "Empfängt Ereignisse. {count, plural, one {# Zustellung protokolliert} other {# Zustellungen protokolliert}}.",
+      "keyHint": "Stabiler Name, unter dem Rezepte diesen Endpunkt ansprechen. Kleinbuchstaben, Ziffern, Bindestriche und Unterstriche; ändert sich nie.",
+      "keyLabel": "Endpunktschlüssel",
+      "keyPlaceholder": "crm",
+      "keyRequired": "Geben Sie einen Endpunktschlüssel ein.",
+      "newDescription": "Melden Sie eine URL für Domänenereignisse an. Das Signaturgeheimnis wird einmalig nach der Erstellung angezeigt.",
+      "newTitle": "Neuer Endpunkt",
+      "saveChanges": "Änderungen speichern",
+      "saveFailed": "Der Endpunkt wurde nicht gespeichert.",
+      "secretCreated": "Signaturgeheimnis — jetzt kopieren",
+      "secretCreatedHint": "Dies ist die einzige Anzeige des Geheimnisses. Der Empfänger prüft damit den OpenBooks-Signature-Header.",
+      "copied": "Geheimnis kopiert.",
+      "copy": "Kopieren",
+      "updated": "Endpunkt aktualisiert.",
+      "urlHint": "Öffentliche https://-URL, die die signierten POSTs empfängt.",
+      "urlLabel": "URL",
+      "urlRequired": "Geben Sie die Teilnehmer-URL ein."
+    },
+    "groups": {
+      "catalog": "Artikel und Bestand",
+      "customers": "Kunden",
+      "documents": "Aufträge und Geld"
+    },
+    "list": {
+      "description": "Teilnehmer-Endpunkte erhalten signierte Domänenereignisse mit wiederholter, nachvollziehbarer Zustellung.",
+      "emptyDescription": "Fügen Sie Ihren ersten Endpunkt hinzu, um signierte Auftrags-, Zahlungs- und Bestandsereignisse in Ihren eigenen Systemen zu empfangen.",
+      "emptyTitle": "Noch keine Endpunkte",
+      "newButton": "Neuer Endpunkt",
+      "title": "Webhooks"
+    },
+    "security": {
+      "overlapBody": "Nach einer Rotation bleibt das alte Geheimnis für laufende Zustellungen gültig. Die nächste Rotation ersetzt es.",
+      "overlapOff": "Einzelne Signatur — keine Rotation aktiv",
+      "overlapOn": "Beide Signaturen werden bis zur nächsten Rotation akzeptiert",
+      "overlapTitle": "Rotationsüberlappung",
+      "ping": "Testereignis senden",
+      "pingFailed": "Das Testereignis wurde nicht zugestellt.",
+      "pingOk": "Testereignis zugestellt.",
+      "rotate": "Geheimnis rotieren",
+      "rotateConfirm": "Das Signaturgeheimnis rotieren? Zustellungen tragen bis zur nächsten Rotation beide Signaturen, sodass der Empfänger während der Umstellung weiter prüft.",
+      "rotated": "Geheimnis rotiert — kopieren Sie das neue jetzt.",
+      "signingBody": "Jeder POST trägt einen mit diesem Geheimnis berechneten OpenBooks-Signature-Header. Rotieren Sie es bei Verdacht auf Kompromittierung; Zustellungen tragen bis zur nächsten Rotation beide Signaturen.",
+      "signingTitle": "Signaturgeheimnis"
+    },
+    "tabs": {
+      "ariaLabel": "Endpunktbereiche",
+      "deliveries": "Zustellungen ({count})",
+      "security": "Sicherheit",
+      "settings": "Einstellungen"
+    }
+  },
   "settings": {
     "metaTitle": "Unternehmen & Buchhaltung",
     "title": "Unternehmen & Buchhaltung",
@@ -1070,6 +1180,8 @@
     "admin_sandboxes_manage": "Sandbox-Umgebungen erstellen und verwalten",
     "admin_backups_manage": "Organisationssicherungen verwalten",
     "api_keys_manage": "API-Schlüssel verwalten",
+    "webhooks_read": "Teilnehmer-Endpunkte und Zustellungen ansehen",
+    "webhooks_manage": "Webhook-Endpunkte verwalten, Geheimnisse rotieren und erneut zustellen",
     "assets_read": "Anlagevermögen und Abschreibung anzeigen",
     "assets_manage": "Anlagen erstellen und bearbeiten, Abschreibung ausführen",
     "documents_read": "Dateiablage durchsuchen",
@@ -6047,6 +6159,10 @@
     "automationWebhooks": {
       "title": "Webhook-Aktionen",
       "description": "Deklarierte signierte Webhook-Endpunkte der Org aus Rezepten aufrufen."
+    },
+    "outboundWebhooks": {
+      "title": "Ausgehende Webhooks",
+      "description": "Signierte Domänenereignisse an Teilnehmer-Endpunkte unter Einstellungen → Entwickler → Webhooks zustellen. Benötigt API-Zugang."
     },
     "automationSimulator": {
       "title": "Simulator",

@@ -46,6 +46,112 @@
       "rateLimitHint": "Solicitudes máximas que esta clave puede realizar por minuto. Déjelo en blanco para ningún límite."
     }
   },
+  "webhooks": {
+    "advanced": {
+      "autoDisable": "{failures, plural, one {# fallo seguido} other {# fallos seguidos}} — el extremo se desactiva solo al llegar a {threshold}.",
+      "envelope": "Cada POST envía un identificador, el nombre del evento, la marca temporal y los datos con las cabeceras OpenBooks-Event, OpenBooks-Delivery y OpenBooks-Signature. Los importes son unidades menores enteras con moneda.",
+      "retry": "Los intentos fallidos se reintentan 3 días con espera exponencial y jitter, y luego la entrega se da por terminada. Un 410 (Gone) desactiva el extremo de inmediato.",
+      "summary": "Reintentos con espera durante 3 días · se desactiva tras {threshold} fallos",
+      "title": "Política de entrega"
+    },
+    "columns": {
+      "events": "Eventos",
+      "failures": "Fallos",
+      "key": "Extremo",
+      "lastDelivery": "Última entrega",
+      "url": "URL"
+    },
+    "deliveries": {
+      "attempts": "Intentos",
+      "back": "Volver a las entregas",
+      "code": "Respuesta",
+      "empty": "Aún no hay entregas — aparecen aquí cada vez que se produce un evento suscrito.",
+      "event": "Evento",
+      "latency": "Duración",
+      "latencyMs": "{ms} ms",
+      "moreActions": "Más acciones",
+      "needsAttention": "{count, plural, one {# entrega necesita atención} other {# entregas necesitan atención}} — abra una para leer la respuesta del receptor, corríjala y reintente.",
+      "next": "Próximo intento",
+      "noResponse": "El receptor no envió cuerpo.",
+      "openAria": "Abrir la entrega {event}",
+      "payloadTitle": "Contenido del evento",
+      "redeliver": "Reintentar",
+      "redeliverFailed": "La entrega no se reintentó.",
+      "redelivered": "Entrega reencolada e intentada.",
+      "responseTitle": "Respuesta del receptor",
+      "status": "Estado",
+      "view": "Ver contenido"
+    },
+    "drawer": {
+      "activeHint": "Desactive desde el encabezado para pausar la entrega sin borrar el historial.",
+      "activeLabel": "Activado",
+      "activeOff": "Desactivado",
+      "activeOn": "Activado",
+      "create": "Crear extremo",
+      "created": "Extremo creado.",
+      "descriptionPlaceholder": "A qué alimenta este extremo.",
+      "disable": "Desactivar",
+      "disableConfirm": "¿Desactivar este extremo? Los eventos dejan de encolarse hasta reactivarlo, pero el historial se conserva.",
+      "disabled": "Extremo desactivado.",
+      "enable": "Reactivar",
+      "enableConfirm": "¿Reactivar este extremo? Los eventos encolados reanudan la entrega.",
+      "enabled": "Extremo reactivado.",
+      "eventsHint": "El extremo solo recibe los tipos seleccionados.",
+      "eventsLabel": "Eventos suscritos",
+      "healthDisabled": "Desactivado — no se encolan eventos. Reactive desde el encabezado para continuar.",
+      "healthFailing": "Fallando — {count, plural, one {# entrega seguida rechazada} other {# entregas seguidas rechazadas}}. Corrija el receptor y reintente desde la pestaña Entregas.",
+      "healthNew": "El extremo empezará a recibir al crearse.",
+      "healthOk": "Recibiendo eventos. {count, plural, one {# entrega registrada} other {# entregas registradas}}.",
+      "keyHint": "Nombre estable con el que las recetas llaman a este extremo. Minúsculas, dígitos, guiones y guiones bajos; nunca cambia.",
+      "keyLabel": "Clave del extremo",
+      "keyPlaceholder": "crm",
+      "keyRequired": "Indique una clave de extremo.",
+      "newDescription": "Suscriba una URL a los eventos de dominio. El secreto de firma se muestra una sola vez tras la creación.",
+      "newTitle": "Nuevo extremo",
+      "saveChanges": "Guardar cambios",
+      "saveFailed": "El extremo no se guardó.",
+      "secretCreated": "Secreto de firma — cópielo ahora",
+      "secretCreatedHint": "Esta es la única vez que se muestra el secreto. El receptor lo usa para verificar la cabecera OpenBooks-Signature.",
+      "copied": "Secreto copiado.",
+      "copy": "Copiar",
+      "updated": "Extremo actualizado.",
+      "urlHint": "URL https:// pública que recibe los POST firmados.",
+      "urlLabel": "URL",
+      "urlRequired": "Indique la URL suscrita."
+    },
+    "groups": {
+      "catalog": "Artículos y existencias",
+      "customers": "Clientes",
+      "documents": "Pedidos y dinero"
+    },
+    "list": {
+      "description": "Los extremos suscritos reciben eventos de dominio firmados con entrega reintentada y observable.",
+      "emptyDescription": "Añada su primer extremo para recibir eventos firmados de pedidos, pagos y existencias en sus propios sistemas.",
+      "emptyTitle": "Aún no hay extremos",
+      "newButton": "Nuevo extremo",
+      "title": "Webhooks"
+    },
+    "security": {
+      "overlapBody": "Tras una rotación, el secreto anterior sigue valiendo para las entregas en curso. La próxima rotación lo sustituye.",
+      "overlapOff": "Firma única — sin rotación en curso",
+      "overlapOn": "Se aceptan ambas firmas hasta la próxima rotación",
+      "overlapTitle": "Solapamiento de rotación",
+      "ping": "Enviar evento de prueba",
+      "pingFailed": "El evento de prueba no se entregó.",
+      "pingOk": "Evento de prueba entregado.",
+      "rotate": "Rotar secreto",
+      "rotateConfirm": "¿Rotar el secreto de firma? Las entregas llevan ambas firmas hasta la próxima rotación, así el receptor sigue verificando durante el cambio.",
+      "rotated": "Secreto rotado — copie el nuevo ahora.",
+      "signingBody": "Cada POST lleva una cabecera OpenBooks-Signature calculada con este secreto. Rótelo si pudo filtrarse; las entregas llevan ambas firmas hasta la próxima rotación.",
+      "signingTitle": "Secreto de firma"
+    },
+    "tabs": {
+      "ariaLabel": "Secciones del extremo",
+      "deliveries": "Entregas ({count})",
+      "security": "Seguridad",
+      "settings": "Ajustes"
+    }
+  },
   "hub": {
     "metaTitle": "Centro de administración",
     "title": "Centro de administración",
@@ -62,6 +168,10 @@
       "apiKeys": {
         "title": "Claves API",
         "description": "Cree claves API con permisos específicos para integraciones y consulte los registros de uso"
+      },
+      "webhooks": {
+        "title": "Webhooks",
+        "description": "Entrega firmada de eventos de dominio a extremos suscritos, con reintentos"
       },
       "apiDocs": {
         "title": "Documentación de API",
@@ -1069,6 +1179,8 @@
     "admin_backups_manage": "Gestionar las copias de seguridad de la organización",
     "admin_ai_manage": "Gestionar la configuración de IA",
     "api_keys_manage": "Gestionar las claves API",
+    "webhooks_read": "Ver extremos y entregas de webhooks",
+    "webhooks_manage": "Gestionar extremos, rotar secretos y reintentar entregas",
     "assets_read": "Ver activos fijos y depreciación",
     "assets_manage": "Crear y editar activos, ejecutar depreciación",
     "documents_read": "Explorar el gestor de documentos",
@@ -6047,6 +6159,10 @@
     "automationWebhooks": {
       "title": "Acciones webhook",
       "description": "Llamar a webhooks firmados declarados por la organización desde las recetas."
+    },
+    "outboundWebhooks": {
+      "title": "Webhooks salientes",
+      "description": "Entregue eventos de dominio firmados a extremos suscritos en Ajustes → Desarrolladores → Webhooks. Necesita acceso API."
     },
     "automationSimulator": {
       "title": "Simulador",

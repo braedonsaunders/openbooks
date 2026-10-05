@@ -359,6 +359,40 @@ const provisionStatus = sql`case when review.id is null then 'unassessed'
   when review.result->>'recognized'='true' then 'recognized' else 'contingent' end`
 
 const SOURCES: Record<string, EntityListSource> = {
+  webhook_endpoint: {
+    recordType: 'webhook_endpoint', table: 'webhook_endpoints', alias: 'e', readPermission: 'webhooks.read',
+    baseJoins: sql``, countJoins: sql``,
+    builtInExpr: {
+      key: sql`e.key`, url: sql`e.url`, description: sql`e.description`,
+      events_count: sql`coalesce(cardinality(e.events), 0)`,
+      status: sql`e.status`, consecutive_failures: sql`e.consecutive_failures`,
+      auto_disabled: sql`(e.status = 'disabled' and e.disabled_reason is not null and e.disabled_reason <> 'Disabled by the operator.')`,
+      last_delivery_at: sql`to_char(e.last_delivery_at, 'YYYY-MM-DD HH24:MI')`,
+      last_delivery_status: sql`e.last_delivery_status`,
+    },
+    sorts: {
+      key: sql`e.key`, status: sql`e.status`, failures: sql`e.consecutive_failures`,
+      last_delivery: sql`e.last_delivery_at`,
+    },
+    defaultSort: sql`e.key`,
+    statusExpr: sql`e.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId) => {
+      const parts: SQL[] = [sql`e.org_id=${orgId}`]
+      for (const filter of view.filters) {
+        if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, sql`e.status`, ['active', 'disabled'])
+        else parts.push(sql`and false`)
+      }
+      if (adhoc.q) parts.push(sql`and (e.key ilike ${`%${adhoc.q}%`} or e.url ilike ${`%${adhoc.q}%`} or e.description ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters?.status) parts.push(sql`and e.status=${adhoc.filters.status}`)
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'endpoint', basePath: '/admin/webhooks',
+    statusVariant: (row, value) => value === 'active'
+      ? (Number(row.consecutive_failures ?? 0) > 0 ? 'warning' : 'success')
+      : row.auto_disabled ? 'destructive' : 'secondary',
+  },
+
   provision_obligation: {
     recordType: 'provision_obligation', table: 'provision_obligations', alias: 'p', readPermission: 'gl.read', currencyField: 'currency',
     baseJoins: provisionJoins, countJoins: provisionJoins,

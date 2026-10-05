@@ -544,6 +544,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'view-scope-cell': { props: ['defaultLabel', 'scopeLabel', 'scopeVariant', 'showDefault'] },
   'view-studio': { props: ['studio'] },
   'viz-cell': { props: ['label', 'vizType'] },
+  'new-webhook-endpoint': { props: [] },
+  'webhook-endpoint-drawer': { props: ['drawer'] },
   'waiver-number-cell': { props: ['directionLabel', 'href', 'waiverNumber'] },
   'waivers-panel': { props: ['actionHref', 'actionLabel', 'empty', 'hint', 'rows', 'title'] },
   'warehouses-panel': { props: ['canManage', 'controlDrill', 'controlLabel', 'currentParams', 'differenceIsZero', 'differenceLabel', 'layerTotalLabel', 'rows'] },
