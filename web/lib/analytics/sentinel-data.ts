@@ -166,8 +166,8 @@ export const RISK_SCORING: Record<
     rules: {
       flaggedHigh: { labelKey: "analytics.sentinel.scoring.summaryVolume", params: { countKey: "summaryFlaggedHigh", points: 15 }, points: 15 },
       flaggedMedium: { labelKey: "analytics.sentinel.scoring.summaryVolume", params: { countKey: "summaryFlaggedMedium", points: 10 }, points: 10 },
-      dupCritical: { labelKey: "analytics.sentinel.scoring.dupValue", params: { tierKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.label", points: 20 }, points: 20 },
-      dupHigh: { labelKey: "analytics.sentinel.scoring.dupValue", params: { tierKey: "analytics.sentinel.config.fields.aggregateHighAmount.label", points: 15 }, points: 15 },
+      dupCritical: { labelKey: "analytics.sentinel.scoring.tierBump", params: { tierKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.label", points: 20 }, points: 20 },
+      dupHigh: { labelKey: "analytics.sentinel.scoring.tierBump", params: { tierKey: "analytics.sentinel.config.fields.aggregateHighAmount.label", points: 15 }, points: 15 },
       ghostAny: { labelKey: "analytics.sentinel.scoring.ghostAny", params: { points: 25 }, points: 25 },
       sequentialAny: { labelKey: "analytics.sentinel.scoring.sequentialAny", params: { points: 15 }, points: 15 },
       benford: { labelKey: "analytics.sentinel.scoring.benfordNonconforming", params: { points: 15 }, points: 15 },
