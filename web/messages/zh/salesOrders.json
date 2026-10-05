@@ -33,7 +33,7 @@
     "codeTitle": "应用促销代码",
     "codeLabel": "促销代码",
     "applied": "已应用 {code}：{amount}折扣，共{count}行",
-    "precisionUnknown": "折扣已应用，但无法显示{currency}的折扣金额。请查看单据上的促销行。",
+    "precisionUnknown": "折扣已应用，但无法显示{currency}的折扣金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。请查看单据上的促销行。",
     "loadFailed": "无法加载促销",
     "applyFailed": "无法应用促销"
   }

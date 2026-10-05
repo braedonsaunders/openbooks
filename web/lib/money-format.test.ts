@@ -81,22 +81,23 @@ test('unknown currency precision refuses by name with the remedy', () => {
   for (const units of [Number.NaN, 1.5, -1, 5]) {
     assert.throws(() => minorToMajorTextUnits('100', units), /unsupported currency precision/)
   }
-  // The ISO registry is read-only reference data: the remedy names a
-  // supported code, never a Setup edit that cannot exist.
+  // The ISO registry is read-only reference data: the remedy names the
+  // platform currency seed, never a Setup edit that cannot exist and never
+  // an arbitrary code substitution.
   assert.throws(
     () => minorToMajorTextUnits('100', Number.NaN),
     /ISO currency registry/,
   )
   assert.throws(
     () => minorToMajorTextUnits('100', Number.NaN),
-    /supported currency code/,
+    /platform currency seed/,
   )
   assert.throws(() => minorToMajorTextUnits('100', Number.NaN, 'bhd'), /BHD/)
 })
 
-test('malformed stored amounts refuse with the replay remedy', () => {
+test('malformed stored amounts refuse with review, never a rewrite promise', () => {
   assert.throws(() => minorToMajorTextUnits('12x', 2, 'USD'), /unreadable minor-unit amount "12x"/)
-  assert.throws(() => minorToMajorTextUnits('12x', 2, 'USD'), /replay/)
+  assert.throws(() => minorToMajorTextUnits('12x', 2, 'USD'), /reviewed before any correction/)
 })
 
 test('display conversion returns null instead of guessing or throwing', () => {
