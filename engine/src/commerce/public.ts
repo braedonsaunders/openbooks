@@ -89,10 +89,12 @@ export { SHOPIFY_WEBHOOK_TOPICS } from "./shopify/subscriptions.ts";
 export { loadShopifyChannel, type ShopifyChannelAccess } from "./shopify/channel-access.ts";
 export { importShopifyLocations } from "./shopify/locations.ts";
 export { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
-export { loadChannelOrder } from "./orders.ts";
+export { loadChannelOrder, listChannelOrderEvents } from "./orders.ts";
+export { reviveFulfilmentPayload } from "./fulfilments.ts";
+export { reviveRefundPayload } from "./refunds.ts";
 export { getPostingPolicy, listPostingPolicies, setPostingPolicy } from "./posting-policies.ts";
 export type { ChannelPostingPolicy } from "./posting-policies.ts";
-export { replayChannelExceptions } from "./exceptions.ts";
+export { replayChannelExceptions, replayChannelEventExceptions } from "./exceptions.ts";
 export { postChannelOrder } from "./order-posting.ts";
 export {
   decimalToMinorUnits,

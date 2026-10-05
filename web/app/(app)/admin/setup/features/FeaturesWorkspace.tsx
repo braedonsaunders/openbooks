@@ -66,7 +66,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button, PageHeader, cn } from '@openbooks/ui'
-import { FEATURE_CATEGORIES, type FeatureCategory } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { FEATURE_CATEGORIES, type FeatureCategory } from '@openbooks/engine/organization/feature-catalog'
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import { SearchInput } from '@/components/search-input'
 import { Switch } from '@/components/switch'

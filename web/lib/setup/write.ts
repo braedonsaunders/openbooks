@@ -66,7 +66,7 @@ import {
 } from '@openbooks/engine/src/billing/usage/records.ts'
 import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
 import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
-import { EntitlementError, createSaasFeature, updateSaasFeature, type SaasFeatureType } from '@openbooks/engine/src/billing/entitlements.ts'
+import { EntitlementError, createSaasFeature, updateSaasFeature, type SaasFeatureType } from '@openbooks/engine/billing'
 import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'

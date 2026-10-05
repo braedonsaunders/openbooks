@@ -1,10 +1,9 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { loadPaymentDocument, openItemsForParty } from '@openbooks/engine/src/payments/payment-queries.ts'
-import { PAYMENT_KIND_SIDE, type PaymentKind } from '@openbooks/engine/src/payments/payment-contracts.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { loadPaymentDocument, openItemsForParty, PAYMENT_KIND_SIDE, type PaymentKind } from '@openbooks/engine/payments/documents'
+import { businessToday } from '@openbooks/engine/platform/business-date'
 import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { resolveFormLayout } from '@/lib/customization/resolve'
 import type { FormLayoutConfig } from '@openbooks/customization'

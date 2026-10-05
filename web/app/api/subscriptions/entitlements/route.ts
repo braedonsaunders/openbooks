@@ -10,7 +10,7 @@ import {
   listSaasFeatures,
   savePlanVersionEntitlements,
   saveSubscriptionOverride,
-} from "@openbooks/engine/src/billing/entitlements.ts";
+} from "@openbooks/engine/billing";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

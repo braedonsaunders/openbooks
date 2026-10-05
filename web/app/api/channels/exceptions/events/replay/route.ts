@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { replayChannelEventExceptions } from "@openbooks/engine/src/commerce/exceptions.ts";
+import { replayChannelEventExceptions } from "@openbooks/engine/commerce";
 import { guardUnrestrictedScope } from "@/lib/authz";
 import { guardChannelScope } from "@/lib/channel-scope";
 
