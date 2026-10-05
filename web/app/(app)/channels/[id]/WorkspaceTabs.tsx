@@ -29,26 +29,29 @@ export function WorkspaceTabs({
 
 /**
  * Settings subsections ride the URL (`?tab=settings&section=`), so each
- * entity section keeps its own addressable body. Switching sections drops
- * row params, exactly like switching workspace tabs closes drawers.
+ * concept keeps its own addressable body. Hrefs arrive prebuilt with
+ * unrelated filters preserved; switching sections drops row params,
+ * exactly like switching workspace tabs closes drawers.
  */
 export function SettingsSubTabs({
-  channelId,
   activeSection,
   sections,
   ariaLabel,
 }: {
-  channelId: string;
   activeSection: string;
-  sections: { key: string; label: string }[];
+  sections: { key: string; label: string; href: string }[];
   ariaLabel: string;
 }) {
   const router = useRouter();
+  const byKey = new Map(sections.map((section) => [section.key, section.href]));
   return (
     <DrawerTabStrip
       tabs={sections}
       activeKey={activeSection}
-      onSelect={(key) => router.push(`/channels/${channelId}?tab=settings&section=${encodeURIComponent(key)}`)}
+      onSelect={(key) => {
+        const href = byKey.get(key);
+        if (href) router.push(href);
+      }}
       ariaLabel={ariaLabel}
     />
   );
