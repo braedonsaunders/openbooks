@@ -17,7 +17,7 @@ import { healthStrings, type HealthStrings } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { analyticsConfig } from "./config";
-import { analyticsConfigSpec } from "./config-spec";
+import { analyticsConfigSpec, FORECAST_ADJUSTMENTS } from "./config-spec";
 import { isFeatureEnabled } from "../features";
 import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalRatio } from "../reports/decimals";
@@ -1108,18 +1108,19 @@ async function fiscalPeriodsPerYear(orgId: string, asOf: string): Promise<number
 }
 
 /**
- * Macro-adjustment factor behind a forecast adjustment code, derived from
- * the code itself (`neg10` is −10%, `pos05` is +5%, `zero` is none): a new
- * spec option following the same naming prices without a code change. A
- * code outside the naming fails loudly, naming the convention, rather than
- * pricing a band the organization never asked for. Exported for unit tests.
+ * Macro-adjustment factor behind a forecast adjustment code, read from the
+ * single FORECAST_ADJUSTMENTS table in config-spec — the same table the
+ * threshold editor's select options are derived from, so an offered option
+ * always prices and a code outside the table fails loudly by name rather
+ * than pricing a band the organization never asked for. Exported for tests.
  */
 export function forecastAdjustmentValue(code: string): number {
-  if (code === "zero") return 0;
-  const match = /^(neg|pos)(\d+)$/.exec(code);
-  if (!match) throw new Error(`unknown forecast adjustment code "${code}" — use neg<percent>, pos<percent> or zero`);
-  const magnitude = Number(match[2]) / 100;
-  return match[1] === "neg" ? -magnitude : magnitude;
+  const row = FORECAST_ADJUSTMENTS.find((a) => a.code === code);
+  if (!row) {
+    const known = FORECAST_ADJUSTMENTS.map((a) => a.code).join(", ");
+    throw new Error(`unknown forecast adjustment code "${code}" — known codes: ${known}`);
+  }
+  return row.factor;
 }
 
 /**

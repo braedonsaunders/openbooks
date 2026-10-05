@@ -4,9 +4,9 @@ import {
   applyForecastMethod,
   checkSignDomain,
   forecastETS,
-  zScoreForConfidence,
   type ForecastModelParams,
 } from './forecast'
+import { zScoreForConfidence } from '../../../../lib/analytics/forecast-levels'
 import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
 
 // A metric's sign domain: revenue cannot go negative, so a projection that

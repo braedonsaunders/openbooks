@@ -11,7 +11,8 @@ import { Panel, SegToggle } from '../../_ui/Panel'
 import { ForecastChart } from '../../_ui/charts'
 import { useAnalyticsMoney, toChartNumber } from '../../_ui/format'
 import { cmp } from '@openbooks/engine/money'
-import { applyForecastAdjustment, applyForecastMethod, checkSignDomain, diagnostics, UnknownConfidenceError, type ForecastMethod, type Seasonality, type SignDomain } from '../../_ui/forecast'
+import { applyForecastAdjustment, applyForecastMethod, checkSignDomain, diagnostics, type ForecastMethod, type Seasonality, type SignDomain } from '../../_ui/forecast'
+import { UnknownConfidenceError } from '../../../../../lib/analytics/forecast-levels'
 
 type Metric = 'revenue' | 'gm' | 'opinc'
 const METRIC_KEY: Record<Metric, 'revenue' | 'grossProfit' | 'operatingIncome'> = {

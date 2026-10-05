@@ -34,12 +34,12 @@ test("segment health grades against the configured target, never a fixed cut-off
   assert.equal(gradeSegmentHealth(null, policy), null);
 });
 
-test("every configured adjustment option derives its factor from its code", () => {
+test("every configured adjustment option prices from the single adjustment table", () => {
   const fields = new Map(ANALYTICS_CONFIG.financialHealth.fields.map((f) => [f.key, f]));
   const options = fields.get("forecastAdjustment")?.options ?? [];
   assert.deepEqual([...options].sort(), ["neg05", "neg10", "pos05", "pos10", "zero"]);
   const priced = Object.fromEntries(options.map((code) => [code, forecastAdjustmentValue(code)]));
   assert.deepEqual(priced, { neg10: -0.1, neg05: -0.05, zero: 0, pos05: 0.05, pos10: 0.1 });
-  // A code outside the naming fails loudly, naming the convention.
+  // A code outside the table fails loudly by name, never a silent band.
   assert.throws(() => forecastAdjustmentValue("turbo"), /unknown forecast adjustment code "turbo"/);
 });
