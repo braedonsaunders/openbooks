@@ -121,6 +121,12 @@ const bypassLongPool = bypassDatabaseUrl ? new pg.Pool({
 basePool.on("error", (err) => {
   console.error("[pg pool] transient client error (ignored, will reconnect):", (err as Error).message);
 });
+bypassPool?.on("error", (err) => {
+  console.error("[pg trusted pool] transient client error (ignored, will reconnect):", (err as Error).message);
+});
+bypassLongPool?.on("error", (err) => {
+  console.error("[pg trusted maintenance pool] transient client error (ignored, will reconnect):", (err as Error).message);
+});
 
 // Governed ad-hoc SQL must never compete with request transactions for the
 // same clients. A lifecycle command can hold one request client and a row lock
