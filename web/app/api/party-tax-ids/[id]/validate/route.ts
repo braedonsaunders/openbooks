@@ -27,7 +27,12 @@ export const POST = defineRoute({
       return NextResponse.json({ ok: true, ...result })
     } catch (e: unknown) {
       if (e instanceof VatValidationError) {
-        return NextResponse.json({ error: e.message }, { status: 422 })
+        // The authority's reply can quote the submitted number back, so the
+        // engine message stays server-side; the drawer retries the validation.
+        return NextResponse.json(
+          { error: "the tax authority could not confirm this number; check the number and retry the validation" },
+          { status: 422 },
+        )
       }
       return apiErrorResponse(e, { safeStatus: 422 })
     }
