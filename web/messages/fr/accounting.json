@@ -26,6 +26,7 @@
       "close": "Avancement clôture",
       "closeSub": "{period}",
       "closeUnavailable": "Indisponible",
+      "closeOrgWide": "Les diagnostics de clôture couvrent toute l'organisation — demandez à un administrateur disposant d'un accès sans restriction aux filiales de les lister",
       "noClose": "—",
       "noCloseSub": "Aucune clôture lancée",
       "draftJournals": "Écritures en brouillon",

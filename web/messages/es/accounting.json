@@ -26,6 +26,7 @@
       "close": "Avance del cierre",
       "closeSub": "{period}",
       "closeUnavailable": "No disponible",
+      "closeOrgWide": "Los diagnósticos de cierre abarcan toda la organización — pida a un administrador con visibilidad de filiales sin restricción que los liste",
       "noClose": "—",
       "noCloseSub": "Sin cierre iniciado",
       "draftJournals": "Asientos en borrador",
