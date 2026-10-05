@@ -324,6 +324,8 @@
     "save": "Enregistrer la règle de comptabilisation",
     "saved": "Règle enregistrée, en vigueur depuis {date}. Les commandes déjà comptabilisées gardent leurs documents.",
     "history": "Historique des règles",
-    "noPolicy": "Ce canal n'a pas encore de règle de comptabilisation. Les commandes attendent votre choix de mode."
+    "noPolicy": "Ce canal n'a pas encore de règle de comptabilisation. Les commandes attendent votre choix de mode.",
+    "advanced": "Avancé",
+    "advancedSummary": "Fuseau horaire de clôture, tags et sources exclus, et historique des règles."
   }
 }

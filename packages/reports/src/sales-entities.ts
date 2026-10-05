@@ -17,6 +17,12 @@ const cashShared = {
   requiredPermission: "sales.cash.read",
   currencyColumn: "currency",
 };
+const channelShared = {
+  category: "orders" as const,
+  featureKey: "salesChannels",
+  requiredPermission: "channels.read",
+  currencyColumn: "currency",
+};
 export const SALES_REPORT_ENTITIES: ReportEntity[] = [
   {
     ...shared,
@@ -295,6 +301,77 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
       },
       { key: "reference", label: "Reference", kind: "text", expr: "t.reference" },
       { key: "external_ref", label: "Provider ref", kind: "text", expr: "t.external_ref" },
+    ],
+  },
+  {
+    ...channelShared,
+    key: "channel_sales",
+    label: "Channel sales",
+    description:
+      "Storefront orders by channel, day, item, location and tender — one row per order line with the order's posting status and document. The location is the summary's stock location for summarized orders, else the channel's single fulfilment location.",
+    // One row per normalized order line. Stored minors are JSON strings, so
+    // every money column scales through the shop currency's own minor units;
+    // every join stays inside the base organization so a restricted
+    // subsidiary scope cannot leak rows. Channel orders carry no subsidiary,
+    // so this entity is org-scoped by design.
+    from: `channel_orders o join sales_channels c on c.org_id=o.org_id and c.id=o.channel_id
+      left join documents d on d.org_id=o.org_id and d.id=o.posting_document_id
+      left join channel_daily_summaries s on s.org_id=o.org_id and s.id=o.summary_id
+      left join stock_locations sl on sl.org_id=o.org_id and sl.id=s.stock_location_id
+      left join currencies cur on cur.code=o.shop_currency
+      left join lateral jsonb_to_recordset(o.lines) as li(title text, sku text, quantity text, "priceMinor" text, "discountMinor" text) on true`,
+    orgColumn: "o.org_id",
+    defaultSort: { column: "ordered_day", direction: "desc" },
+    columns: [
+      { key: "channel", label: "Channel", kind: "text", expr: "c.name" },
+      { key: "ordered_day", label: "Ordered day", kind: "date", expr: "o.ordered_at::date" },
+      { key: "order_number", label: "Order", kind: "text", expr: "o.external_number" },
+      { key: "customer", label: "Customer", kind: "text", expr: "coalesce(nullif(o.customer_email, ''), o.customer_name, '')" },
+      { key: "currency", label: "Currency", kind: "text", expr: "o.shop_currency" },
+      { key: "item", label: "Item", kind: "text", expr: "li.title" },
+      { key: "sku", label: "SKU", kind: "text", expr: "li.sku" },
+      { key: "quantity", label: "Quantity", kind: "number", expr: "li.quantity::numeric" },
+      {
+        key: "unit_price",
+        label: "Unit price",
+        kind: "money",
+        expr: `li."priceMinor"::numeric / (10 ^ cur.minor_units)`,
+        txnCurrency: true,
+      },
+      {
+        key: "discount",
+        label: "Discount",
+        kind: "money",
+        expr: `coalesce(li."discountMinor"::numeric, 0) / (10 ^ cur.minor_units)`,
+        txnCurrency: true,
+      },
+      {
+        key: "line_total",
+        label: "Line total",
+        kind: "money",
+        expr: `(li."priceMinor"::numeric * li.quantity::numeric - coalesce(li."discountMinor"::numeric, 0)) / (10 ^ cur.minor_units)`,
+        txnCurrency: true,
+      },
+      {
+        key: "tenders",
+        label: "Tenders",
+        kind: "text",
+        expr: `(select string_agg(distinct t->>'gateway', ', ') from jsonb_array_elements(o.tenders) as t)`,
+      },
+      {
+        key: "location",
+        label: "Location",
+        kind: "text",
+        expr: `coalesce(sl.name, (select l2.name from sales_channel_locations m join stock_locations l2 on l2.org_id=m.org_id and l2.id=m.stock_location_id where m.org_id=o.org_id and m.channel_id=o.channel_id and m.fulfils_orders and m.stock_location_id is not null group by l2.name having count(*) = 1))`,
+      },
+      {
+        key: "posting_status",
+        label: "Posting status",
+        kind: "enum",
+        expr: "o.posting_status",
+        options: ["pending", "posted", "summarized", "exception", "excluded"],
+      },
+      { key: "document_number", label: "Document", kind: "text", expr: "d.document_number" },
     ],
   },
 ];

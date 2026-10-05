@@ -38,6 +38,9 @@ import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
 import Link from 'next/link'
 import { DemandPlanActions } from '../../app/(app)/inventory/planning/DemandPlanActions'
 import { DemandSuggestionDrawer } from '../../app/(app)/inventory/planning/DemandSuggestionDrawer'
+import { ChannelOrderDrawerSlot, ChannelReplayAll } from '../../app/(app)/channels/ChannelWidgets'
+import { ChannelPostingForm } from '../../app/(app)/channels/ChannelPostingForm'
+import type { ChannelOrderDrawerData } from '../../app/(app)/channels/order-detail'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Commerce adapters. Compose native components without changing their props or boundaries. */
@@ -381,6 +384,34 @@ export const COMMERCE_WIDGETS = {
       />
     )
   },
+
+  /* --- channel orders ------------------------------------------------------- */
+  /** One drawer shell per channel order: normalized lines, tenders and the
+   *  posting outcome with replay and fix-all-similar. Null when no order
+   *  is open. */
+  'channel-order-drawer': (props) => {
+    const drawer = props.drawer as ChannelOrderDrawerData | null
+    if (!drawer) return null
+    return <ChannelOrderDrawerSlot drawer={drawer} closeHref={str(props, 'closeHref') ?? '/channels/orders'} />
+  },
+  /** Fix-all-similar: replay every exception, or every one with one cause. */
+  'channel-replay-all': (props) => (
+    <ChannelReplayAll
+      channelId={str(props, 'channelId')}
+      code={str(props, 'code')}
+    />
+  ),
+  /** Per-channel posting policies with effective dating and history. */
+  'channel-posting-form': (props) => (
+    <ChannelPostingForm
+      canManage={props.canManage === true}
+      today={str(props, 'today') ?? ''}
+      channels={(props.channels as ComponentProps<typeof ChannelPostingForm>['channels']) ?? []}
+      policies={(props.policies as ComponentProps<typeof ChannelPostingForm>['policies']) ?? {}}
+      history={(props.history as ComponentProps<typeof ChannelPostingForm>['history']) ?? {}}
+      customers={(props.customers as ComponentProps<typeof ChannelPostingForm>['customers']) ?? []}
+    />
+  ),
 
   /* --- projects ----------------------------------------------------------- */
   'new-project': () => <NewProjectButton />,
