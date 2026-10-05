@@ -27,6 +27,8 @@ export const customerPaymentMethods = pgTable(
     providerMethodId: text("provider_method_id"),
     brand: text("brand"),
     last4: text("last4"),
+    tokenHash: text("token_hash"),
+    setupRedirectUrl: text("setup_redirect_url"),
     expMonth: smallint("exp_month"),
     expYear: smallint("exp_year"),
     mandateReference: text("mandate_reference"),
