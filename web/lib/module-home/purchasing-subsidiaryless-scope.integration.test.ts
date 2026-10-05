@@ -10,6 +10,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
+const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -78,9 +79,9 @@ test('restricted spend excludes subsidiary-less bills', { skip: !process.env.OPE
       await withBypassContext(() => seedPostedBill(org, actorId, { number: 'BILL-NOSUB', subsidiaryId: null, total: '500' }))
 
       const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId, [branchId], undefined, { ap: true, orders: true, expenses: true, parties: true }))
-      assert.equal(home.spend30d, 100, 'branch scope sees only the branch bill')
+      assert.equal(toUnits(home.spend30d), toUnits(100), 'branch scope sees only the branch bill')
       const all = await withOrgContext(org.orgId, () => purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true }))
-      assert.equal(all.spend30d, 600, 'unrestricted callers still see everything')
+      assert.equal(toUnits(all.spend30d), toUnits(600), 'unrestricted callers still see everything')
     })
   } finally {
     await dropScratchOrg(org.orgId)
