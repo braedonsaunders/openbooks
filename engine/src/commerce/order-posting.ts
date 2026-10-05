@@ -439,8 +439,9 @@ async function resolveLineTaxes(
  * bases then net to the discounted amount in every return — those summing line
  * amounts by tax code and those summing component taxable amounts — while the
  * zero tax amounts leave the journal and the line tax crossfoot untouched.
+ * Refunds reverse a discount with the same treatment.
  */
-function discountTaxes(taxes: ResolvedTax[]): ResolvedTax[] {
+export function discountTaxes<T extends { amountMinor: bigint }>(taxes: readonly T[]): T[] {
   return taxes.map((tax) => ({ ...tax, amountMinor: 0n }));
 }
 
