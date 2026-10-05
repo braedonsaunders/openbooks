@@ -184,6 +184,40 @@
         "stagflation": "Stagflation"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "Bruttomarge",
+        "operatingMargin": "Betriebsmarge",
+        "netMargin": "Nettomarge",
+        "cogsRatio": "COGS-Quote"
+      },
+      "flow": "Margenfluss-Analyse",
+      "flowHint": "Erlöse → Nettoergebnis",
+      "summary": "Margenübersicht",
+      "bridge": "Vorjahres-Margenbrücke",
+      "bridgeHint": "Volumen = ΔErlöse × Vorjahres-Bruttomarge · Rate = Erlöse × ΔBruttomarge ({from} → {to})",
+      "bridgeNoPrior": "Für die Volumen-/Ratenteilung braucht es Erlöse in der aktuellen und der Vorperiode.",
+      "bridgeSteps": {
+        "prior": "Vorjahres-Bruttoergebnis",
+        "volume": "Volumeneffekt",
+        "rate": "Rateneffekt",
+        "current": "Aktuelles Bruttoergebnis",
+        "residual": "Rundungsrest"
+      },
+      "trends": "Margentrends (12 Mo.)",
+      "series": {
+        "gross": "Brutto",
+        "operating": "Betrieb"
+      },
+      "allocation": "Erlösaufteilung",
+      "allocationNames": {
+        "cogs": "COGS",
+        "opex": "Betriebsausgaben",
+        "other": "Sonstiger Aufwand",
+        "net": "Nettoergebnis"
+      },
+      "noAllocation": "Keine Aufteilungsdaten."
+    },
     "kpi": {
       "revenue": "Umsatz",
       "grossMargin": "Bruttomarge",

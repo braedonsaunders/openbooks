@@ -184,6 +184,40 @@
         "stagflation": "Estanflación"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "Margen bruto",
+        "operatingMargin": "Margen operativo",
+        "netMargin": "Margen neto",
+        "cogsRatio": "Ratio COGS"
+      },
+      "flow": "Análisis del flujo de márgenes",
+      "flowHint": "Ingresos → Resultado neto",
+      "summary": "Resumen de márgenes",
+      "bridge": "Puente de márgenes interanual",
+      "bridgeHint": "Volumen = Δingresos × MB previo · Tasa = ingresos × ΔMB ({from} → {to})",
+      "bridgeNoPrior": "Se necesitan ingresos en el periodo actual y en el anterior para separar volumen y tasa.",
+      "bridgeSteps": {
+        "prior": "MB previo",
+        "volume": "Efecto volumen",
+        "rate": "Efecto tasa",
+        "current": "MB actual",
+        "residual": "Residuo de redondeo"
+      },
+      "trends": "Tendencias de margen (12 m.)",
+      "series": {
+        "gross": "Bruto",
+        "operating": "Operativo"
+      },
+      "allocation": "Asignación de ingresos",
+      "allocationNames": {
+        "cogs": "COGS",
+        "opex": "Gastos operativos",
+        "other": "Otro gasto",
+        "net": "Resultado neto"
+      },
+      "noAllocation": "Sin datos de asignación."
+    },
     "kpi": {
       "revenue": "Ingresos",
       "grossMargin": "Margen bruto",
