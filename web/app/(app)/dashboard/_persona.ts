@@ -182,49 +182,38 @@ export async function loadPersonaMetrics(
         select pay_date::text as pay_date from pay_stubs
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by pay_date desc limit 1`),
+      // The EMPLOYEE's own schedule from their active payroll profile — the
+      // org default is wrong wherever colleagues pay on different
+      // frequencies. First active profile wins; the tile names one date.
       db.execute<{ anchor: string; frequency: string; offset: number }>(sql`
-        select anchor_period_end::text as anchor, frequency, pay_date_offset_days as offset
-          from pay_schedules
-         where org_id = ${orgId} and is_active and is_default
-         order by created_at limit 1`),
+        select s.anchor_period_end::text as anchor, s.frequency, s.pay_date_offset_days as offset
+          from employee_payroll_profiles pr
+          join pay_schedules s on s.id = pr.pay_schedule_id and s.org_id = pr.org_id
+         where pr.org_id = ${orgId} and pr.employee_party_id = ${partyId} and pr.is_active and s.is_active
+         order by pr.created_at limit 1`),
     ])
     const lastPayDate = stub.rows[0]?.pay_date ?? null
     let nextPayDate: string | null = null
     const row = schedule.rows[0]
     if (row) {
-      if (row.frequency === 'semi_monthly') {
-        // Semi-monthly halves follow the calendar month, never a fixed
-        // 15-day step (which drifts against month boundaries): derive the
-        // next period end from the payroll calendar — the same call the
-        // run-creation preview uses — then apply the pay-date offset.
-        try {
-          const next = nextPeriodAfter(
-            { frequency: 'semi_monthly' as const, anchor_period_end: row.anchor },
-            today,
-          )
-          const payDate = new Date(`${next.periodEnd}T00:00:00Z`)
-          payDate.setUTCDate(payDate.getUTCDate() + (row.offset ?? 0))
-          nextPayDate = payDate.toISOString().slice(0, 10)
-        } catch {
-          // An anchor the calendar rejects leaves nextPayDate null; the
-          // tile still shows the last pay date instead of failing the
-          // dashboard. Anchor validity is enforced at schedule setup.
-        }
-      }
-      const stepDays =
-        row.frequency === 'weekly' ? 7 : row.frequency === 'biweekly' ? 14 : row.frequency === 'monthly' ? 0 : 15
-      if (stepDays > 0 && row.frequency !== 'semi_monthly') {
-        let cursor = new Date(`${row.anchor}T12:00:00Z`).getTime()
-        const horizon = new Date(`${today}T12:00:00Z`).getTime() + 370 * 86_400_000
-        while (cursor <= new Date(`${today}T12:00:00Z`).getTime() && cursor < horizon) cursor += stepDays * 86_400_000
-        if (cursor < horizon) {
-          nextPayDate = new Date(cursor + (row.offset ?? 0) * 86_400_000).toISOString().slice(0, 10)
-        }
-      } else {
-        const [year = 0, month = 0] = today.split('-').map(Number)
-        const anchorDay = Number(row.anchor.slice(8, 10))
-        const candidate = `${year}-${String(month).padStart(2, '0')}-${String(Math.min(anchorDay, 28)).padStart(2, '0')}`
-        nextPayDate = candidate > today ? candidate : `${month === 12 ? year + 1 : year}-${String(month === 12 ? 1 : month + 1).padStart(2, '0')}-${String(Math.min(anchorDay, 28)).padStart(2, '0')}`
+      try {
+        // Every frequency through the payroll calendar — the same call the
+        // run-creation preview uses — then the schedule's pay-date offset.
+        // No fixed day-steps (they drift against month boundaries), no
+        // 28th clamp (month-end pay stays month-end: the calendar clamps to
+        // the month's last day), and the offset applies to every frequency.
+        // Frequency is check-constrained to the four the calendar knows; a
+        // rejected anchor leaves nextPayDate null and the tile still shows
+        // the last pay date instead of failing the dashboard.
+        const next = nextPeriodAfter(
+          { frequency: row.frequency, anchor_period_end: row.anchor },
+          today,
+        )
+        const payDate = new Date(`${next.periodEnd}T00:00:00Z`)
+        payDate.setUTCDate(payDate.getUTCDate() + (row.offset ?? 0))
+        nextPayDate = payDate.toISOString().slice(0, 10)
+      } catch {
+        // Anchor validity is enforced at schedule setup.
       }
     }
     out.payTile = lastPayDate === null && nextPayDate === null ? null : { nextPayDate, lastPayDate, slipHref: '/payroll' }
