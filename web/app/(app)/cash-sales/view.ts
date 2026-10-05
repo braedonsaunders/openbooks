@@ -72,6 +72,8 @@ export interface CashSalesDrawer {
 export interface CashSalesData {
   title: string
   description: string
+  emptyTitle: string
+  emptyDescription: string
   canCreate: boolean
   canPost: boolean
   currentParams: Record<string, string | string[] | undefined>
@@ -404,6 +406,8 @@ export async function loadCashSales(
   return {
     title: tAr('list.cashTitle'),
     description: tAr('list.cashDescription'),
+    emptyTitle: tAr('list.cashEmptyTitle'),
+    emptyDescription: tAr('list.cashEmptyDescription'),
     currentParams: sp,
     canCreate,
     canPost,
@@ -439,6 +443,8 @@ export function cashSalesSpec(data: CashSalesData): PageSpec {
         basePath: BASE_PATH,
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
+        emptyTitle: f('emptyTitle'),
+        emptyDescription: f('emptyDescription'),
         emptyAction: data.canCreate ? newDocument : null,
         rowActions: { widget: 'document-row-actions', props: { basePath: BASE_PATH, canPost: data.canPost } },
       }),

@@ -323,6 +323,7 @@
     "code": "Código",
     "description": "Uma linha por matriz de opções — tamanhos e cores que vendem como itens individuais.",
     "empty": "Ainda não há famílias de produtos",
+    "emptyDescription": "Crie uma família, adicione suas opções e cada combinação aparece aqui pronta para precificar e estocar.",
     "newFamily": "Nova família",
     "drawerTitle": "Família de produtos",
     "created": "Família criada",

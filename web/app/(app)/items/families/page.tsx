@@ -39,7 +39,8 @@ export default async function FamiliesPage({ searchParams }: { searchParams: Pro
   return <ListPageLayout header={<PageHeader title={t('title')} description={t('description')}
     actions={<>{canManage ? <Button asChild><Link href="/items/families?family=new"><Plus size={15} /> {t('newFamily')}</Link></Button> : null}<ModuleHomeTabs tabs={tabs} /></>} />}>
     <EntityListView recordType="item_family" orgId={auth.user.orgId} userId={auth.user.id}
-      canManage={false} sp={sp} emptyTitle={t('empty')} drawer={selected ? <UrlDrawer open title={selected === 'new' ? t('newFamily') : t('drawerTitle')}
+      canManage={false} sp={sp} emptyTitle={t('empty')} emptyDescription={t('emptyDescription')}
+      emptyAction={canManage ? <Button asChild><Link href="/items/families?family=new"><Plus size={15} /> {t('newFamily')}</Link></Button> : undefined} drawer={selected ? <UrlDrawer open title={selected === 'new' ? t('newFamily') : t('drawerTitle')}
         closeHref={mergeHref('/items/families', sp, { family: undefined, drawerReturn: undefined })} size="2xl">
         <FamilyDrawer familyId={selected} canManage={canManage} />
       </UrlDrawer> : undefined} />

@@ -333,6 +333,7 @@
     "code": "Code",
     "description": "Une ligne par matrice d'options — des tailles et couleurs qui se vendent comme des articles à part entière.",
     "empty": "Aucune famille de produits",
+    "emptyDescription": "Créez une famille, ajoutez ses options, et chaque combinaison apparaîtra ici, prête à tarifer et stocker.",
     "newFamily": "Nouvelle famille",
     "drawerTitle": "Famille de produits",
     "created": "Famille créée",

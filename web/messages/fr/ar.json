@@ -3,6 +3,8 @@
     "title": "Factures clients",
     "cashTitle": "Ventes au comptant",
     "cashDescription": "Reçus payés immédiatement et remboursements — de l’argent en caisse, sans créances.",
+    "cashEmptyTitle": "Aucune vente au comptant",
+    "cashEmptyDescription": "Enregistrez le premier reçu payé comptant — moyens de paiement, cartes cadeaux et monnaie figurent sur la vente, sans facture ouverte.",
     "description": "Factures et notes de crédit clients — vos comptes clients : brouillon → approbation → comptabilisées.",
     "searchPlaceholder": "Rechercher factures, notes de crédit, clients, réf.…",
     "emptyTitle": "Aucune facture client pour l’instant",

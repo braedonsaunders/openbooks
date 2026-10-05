@@ -3,6 +3,8 @@
     "title": "Ausgangsrechnungen",
     "cashTitle": "Barverkäufe",
     "cashDescription": "Bezahlte Kassenzettel und Erstattungen — Geld in der Kasse, keine Debitoren: Entwurf → Zahlungsaufteilung → Buchung.",
+    "cashEmptyTitle": "Noch keine Kassenzettel",
+    "cashEmptyDescription": "Erfassen Sie den ersten Barverkauf — Zahlungsmittel, Gutscheine und Wechselgeld stehen auf dem Beleg, ohne offene Rechnung.",
     "description": "Kundenrechnungen und Gutschriften — Ihre Forderungen: Entwurf → Genehmigung → gebucht.",
     "searchPlaceholder": "Rechnungen, Gutschriften, Kunden, Referenzen durchsuchen…",
     "emptyTitle": "Noch keine Ausgangsrechnungen",

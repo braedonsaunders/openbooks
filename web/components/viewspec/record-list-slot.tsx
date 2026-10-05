@@ -25,6 +25,8 @@ export async function RecordListSlot({
   sp,
   drawer,
   nativeDrawer,
+  emptyTitle,
+  emptyDescription,
   emptyAction,
   renderRowActions,
 }: {
@@ -33,6 +35,8 @@ export async function RecordListSlot({
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   nativeDrawer?: NativeListDrawerData | null
+  emptyTitle?: string
+  emptyDescription?: string
   emptyAction?: ReactNode
   renderRowActions?: Parameters<typeof RecordListView>[0]['renderRowActions']
 }) {
@@ -48,6 +52,8 @@ export async function RecordListSlot({
       sp={sp}
       drawer={drawer}
       nativeDrawer={nativeDrawer}
+      emptyTitle={emptyTitle}
+      emptyDescription={emptyDescription}
       emptyAction={emptyAction}
       renderRowActions={renderRowActions}
     />

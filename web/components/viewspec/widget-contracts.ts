@@ -468,7 +468,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'reconciliation-note': { props: ['label', 'reconciled', 'status'] },
   'record-count-cell': { props: ['count', 'href', 'linked'] },
   'record-drawer': { props: ['drawer'] },
-  'record-list-view': { props: ['basePath', 'drawer', 'emptyAction', 'recordType', 'rowActions', 'sp'], open: true },
+  'record-list-view': { props: ['basePath', 'drawer', 'emptyAction', 'emptyDescription', 'emptyTitle', 'recordType', 'rowActions', 'sp'], open: true },
   'recovery-dashboard': { props: ['data', 'notice'] },
   'registered-record-list': { props: ['source', 'table', 'toolbar'] },
   'related-txn-drawer': { props: ['drawer'] },

@@ -3,6 +3,8 @@
     "title": "发票",
     "cashTitle": "现金销售",
     "cashDescription": "收款时即付清的销售小票与退款 — 现金入库，不经过应收账款。",
+    "cashEmptyTitle": "暂无现金销售",
+    "cashEmptyDescription": "开出第一张现销小票——付款方式、礼品卡和找零都记在销售单上，不留下未结发票。",
     "description": "客户发票与贷项通知单——您的应收账款：草稿 → 审批 → 过账。",
     "searchPlaceholder": "搜索发票、贷项、客户、参考号……",
     "emptyTitle": "暂无发票",

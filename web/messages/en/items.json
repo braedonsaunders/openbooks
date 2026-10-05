@@ -384,6 +384,7 @@
     "code": "Code",
     "description": "One row per option matrix — sizes and colors that sell as individual items.",
     "empty": "No product families yet",
+    "emptyDescription": "Create a family, add its options, and every combination appears here ready to price and stock.",
     "newFamily": "New family",
     "drawerTitle": "Product family",
     "created": "Family created",

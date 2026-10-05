@@ -90,6 +90,8 @@ export interface StoredValueIssueData {
 export interface StoredValueData {
   title: string
   description: string
+  emptyTitle: string
+  emptyDescription: string
   issueLabel: string
   currentParams: Record<string, string | string[] | undefined>
   canManage: boolean
@@ -263,6 +265,8 @@ export async function loadStoredValuePage(
     title: t('list.title'),
     description: t('list.description'),
     issueLabel: t('list.emptyAction'),
+    emptyTitle: t('list.emptyTitle'),
+    emptyDescription: t('list.emptyDescription'),
     currentParams: sp,
     canManage,
     kpis: [
@@ -314,6 +318,8 @@ export function storedValueSpec(data: StoredValueData): PageSpec {
           recordType: 'stored_value_account',
           sp: data.currentParams,
           drawer: data.drawer ? { widget: 'stored-value-drawer', props: { drawer: data.drawer } } : null,
+          emptyTitle: f('emptyTitle'),
+          emptyDescription: f('emptyDescription'),
           emptyAction: data.canManage
             ? { widget: 'link-button', props: { href: '/stored-value?issue=1', label: data.issueLabel } }
             : null,

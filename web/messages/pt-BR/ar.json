@@ -3,6 +3,8 @@
     "title": "Faturas",
     "cashTitle": "Vendas à vista",
     "cashDescription": "Recibos pagos no ato e reembolsos — dinheiro em caixa, sem contas a receber.",
+    "cashEmptyTitle": "Ainda não há vendas em dinheiro",
+    "cashEmptyDescription": "Registre o primeiro recibo pago no ato — meios de pagamento, vales-presente e troco ficam na venda, sem fatura em aberto.",
     "description": "Faturas de clientes e notas de crédito — seu contas a receber: rascunho → aprovação → aprovadas.",
     "searchPlaceholder": "Buscar faturas, créditos, clientes, refs…",
     "emptyTitle": "Nenhuma fatura ainda",
