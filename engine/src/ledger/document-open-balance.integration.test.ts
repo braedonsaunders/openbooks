@@ -41,7 +41,9 @@ async function payment(org: ScratchOrg, actor: string, line: string, partial = f
   await updateDraftPayment(result.id, { bankAccountId: org.accounts.bank, allocations: [{ openLineId: line,
     sourceTransactionAmount: currency === "CAD" ? "100" : partial ? "40" : "80",
     targetTransactionAmount: partial ? "50" : "100", settlementRate: currency === "CAD" ? "1" : "1.25",
-    settlementRateSource: currency === "CAD" ? "same_currency" : "manual", settlementRateReference: "BALANCE-REGRESSION" }] }, actor, org.orgId);
+    settlementRateSource: currency === "CAD" ? "same_currency" : "manual", settlementRateReference: "BALANCE-REGRESSION" }] }, actor, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
   await db.execute(sql`update documents set status = 'approved', submitted_by = ${actor}, submitted_at = now() where id = ${result.id}`);
   await postPaymentWithApplications(result.id, undefined, actor);
   return result.id;

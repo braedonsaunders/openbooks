@@ -83,7 +83,9 @@ async function nativeInvoice(f: Awaited<ReturnType<typeof fixture>>, currency: "
       sourceTransactionAmount: currency === "EUR" ? (partial ? "40" : "80") : (partial ? "50" : "100"),
       targetTransactionAmount: partial ? "50" : "100", settlementRate: currency === "EUR" ? "1.25" : "1",
       settlementRateSource: currency === "EUR" ? "manual" : "same_currency",
-      settlementRateReference: "FX-CORRECTION-TEST" }], bankAccountId: f.accounts.bank }, f.actorId, f.orgId);
+      settlementRateReference: "FX-CORRECTION-TEST" }], bankAccountId: f.accounts.bank }, f.actorId, f.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`update documents set status='approved',submitted_by=${f.actorId},submitted_at=now(),posting_period_id=${periodId}
       where org_id=${f.orgId} and id=${payment.id}`);
     await postPaymentWithApplications(payment.id, undefined, f.actorId);

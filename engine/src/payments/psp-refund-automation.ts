@@ -475,6 +475,9 @@ async function postAppliedReceipt(
     },
     actorId,
     orgId,
+    // PSP automation on its own receipt draft: no actor entity set is
+    // resolved here, so explicit null names the unrestricted grant outright.
+    { allowedSubsidiaryIds: null },
   );
   const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, actorId);
   if (submission.flowError) {

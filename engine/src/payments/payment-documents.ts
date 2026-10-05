@@ -144,9 +144,15 @@ export async function updateDraftPayment(
   orgId: string,
   options: { expectedRevision?: string; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<Awaited<ReturnType<typeof loadPaymentDocument>>> {
+  // A draft save is an actor write: an unresolved scope fails closed here,
+  // before the document lock and before any tender discovery below. Explicit
+  // null stays the unrestricted grant (unrestricted actors and documented
+  // system paths name it outright); it is never inferred from an omission.
+  const actorScope = options.allowedSubsidiaryIds;
+  if (actorScope === undefined) throw new PaymentError("draft save requires the caller's subsidiary scope");
   return withOrgTransaction(orgId, async () => {
     const doc = await lockEditablePaymentDocument(id, orgId, {
-      allowedSubsidiaryIds: options.allowedSubsidiaryIds,
+      allowedSubsidiaryIds: actorScope,
     });
     if (!isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
 
@@ -239,15 +245,16 @@ export async function updateDraftPayment(
       for (const tender of patch.storedValueTenders) {
         const tenderUnits = persistPaymentMoney(tender.amount, "stored-value tender amount");
         if (tenderUnits <= 0n) throw new PaymentError("stored-value tender amount must be positive");
-        // Draft validation inside the posting path: explicit null is the
-        // intentional system sentinel — posting re-locks each account and
-        // re-verifies entity, balance, currency, and status.
+        // Tender discovery runs under the same actor scope as the save: a
+        // hidden account resolves exactly like an unknown code, and an
+        // unknown scope already failed closed above. Posting re-locks each
+        // account and re-verifies entity, balance, currency, and status.
         const resolved = "code" in tender && tender.code
-          ? await resolveStoredValueTender(doc.orgId, tender.code, null)
+          ? await resolveStoredValueTender(doc.orgId, tender.code, actorScope)
           : await loadStoredValueTenderAccount(
             doc.orgId,
             "accountId" in tender && typeof tender.accountId === "string" ? tender.accountId : "",
-            null,
+            actorScope,
           );
         if (!resolved) throw new PaymentError("stored-value code not found; check the code and retry");
         if (resolved.status !== "active") {

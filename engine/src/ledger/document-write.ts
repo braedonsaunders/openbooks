@@ -2104,7 +2104,10 @@ export async function applyDocumentEdit(
       if (tenderInputs !== undefined) {
         try {
           await replaceDocumentTenders(
-            tx as unknown as SqlExecutor, orgId, id, tenderInputs, { actorId: userId },
+            tx as unknown as SqlExecutor, orgId, id, tenderInputs,
+            // The edit's own authority flows through: an explicit scope wins,
+            // otherwise the writer resolves the actor's live grants itself.
+            { actorId: userId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds },
           )
         } catch (error) {
           if (error instanceof TenderRefusal) throw new DocumentEditError(error.status, error.message)

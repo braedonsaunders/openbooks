@@ -11,6 +11,7 @@ import { sameCurrencyAllocation } from "@openbooks/engine/src/payments/settlemen
 import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { hashStoredValueCode } from "@openbooks/engine/stored-value";
 import {
   lookupStoredValueByCode,
   resolveStoredValueTender,
@@ -101,7 +102,25 @@ export async function redeemStoredValueForInvoice(
     context,
     operation: "stored_value.redeem",
     idempotencyKey: input.idempotencyKey,
-    request: { code: "***", amount: input.amount, invoiceId: input.invoiceId },
+    // The secret code never persists here: the org-bound digest identifies
+    // the tender, so tendering a different code under the same key hashes
+    // differently and fails closed instead of replaying another card.
+    request: { codeHash: hashStoredValueCode(orgId, code), amount: input.amount, invoiceId: input.invoiceId },
+    // A stored receipt replays only while the actor still sees both sides:
+    // losing invoice or account visibility refuses without ever returning
+    // the original receipt.
+    authorizeReplay: async () => {
+      await withOrgContext(orgId, async () => {
+        const again = await resolveStoredValueTender(orgId, code, context.authz.allowedSubsidiaryIds);
+        if (!again) throw notFound("stored value");
+        const replayInvoice = (await db.execute<{ subsidiaryId: string | null }>(sql`
+          select subsidiary_id as "subsidiaryId" from documents
+           where id = ${input.invoiceId} and org_id = ${orgId} and kind = 'customer_invoice'
+        `)).rows[0];
+        if (!replayInvoice) throw notFound("invoice");
+        assertSubsidiaryAccess(context, replayInvoice.subsidiaryId);
+      });
+    },
     execute: async () => {
       try {
         return await withOrgTransaction(orgId, async () => {
@@ -116,10 +135,12 @@ export async function redeemStoredValueForInvoice(
              limit 1
           `)).rows[0];
           if (!invoice) throw notFound("invoice");
+          // Scope before lifecycle: a foreign invoice refuses here, before
+          // its status or open balance can leak through a named refusal.
+          assertSubsidiaryAccess(context, invoice.subsidiaryId);
           if (invoice.status !== "posted" && invoice.status !== "approved") {
             throw invalidInput(`invoice is ${invoice.status}; only an open invoice can be paid with stored value`);
           }
-          assertSubsidiaryAccess(context, invoice.subsidiaryId);
           // The receipt applies against the invoice's open AR line, not the
           // document: the settlement kernel allocates per open-item line with
           // rate evidence, so a document reference alone no longer addresses
@@ -171,12 +192,17 @@ export async function redeemStoredValueForInvoice(
           const balance = (await db.execute<{ balance: string }>(sql`
             select balance_minor::text as balance from stored_value_accounts
              where id = ${resolved.accountId} and org_id = ${orgId}`)).rows[0];
+          // The receipt carries the posted balance: an unreadable row
+          // refuses by name instead of fabricating a zero success.
+          if (!balance) {
+            throw invalidInput("The stored-value receipt posted but its balance is no longer readable; have the stored-value entry history reviewed before retrying.");
+          }
           return {
             status: "posted" as const,
             paymentId: created.id,
             entryId: posted.entryId,
             accountId: resolved.accountId,
-            balance: balance?.balance ?? "0",
+            balance: balance.balance,
           };
         });
       } catch (error) {

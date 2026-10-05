@@ -101,6 +101,7 @@ test(
           },
           actorId,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         );
         await db.execute(sql`
           update documents
@@ -290,6 +291,7 @@ test(
           },
           actorId,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         );
         await db.execute(sql`
           update documents
@@ -1027,7 +1029,7 @@ test(
         );
         await assert.rejects(
           withOrgContext(org.orgId, () =>
-            updateDraftPayment(payment.id, c.patch as never, actorId, org.orgId),
+            updateDraftPayment(payment.id, c.patch as never, actorId, org.orgId, { allowedSubsidiaryIds: null }),
           ),
           (e: Error) => e instanceof PaymentError,
           c.label,
@@ -1106,6 +1108,7 @@ test(
           },
           actorId,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         );
         await db.execute(sql`
           update documents

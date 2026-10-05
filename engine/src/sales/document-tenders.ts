@@ -4,6 +4,8 @@ import { fromUnits, toUnits } from "../money/money.ts";
 import type { Money } from "../money/brands.ts";
 import type { CashPostingTender } from "../journal/posting-contracts.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import {
   loadStoredValueProgram,
   programLiabilityAccount,
@@ -53,6 +55,7 @@ export type TenderRefusalCode =
   | "account_invalid"
   | "stored_value_unknown"
   | "stored_value_unusable"
+  | "stored_value_cross_entity"
   | "stored_value_currency_mismatch"
   | "stored_value_insufficient_balance"
   | "stored_value_wrong_customer"
@@ -112,6 +115,7 @@ type TenderParent = {
   kind: string;
   status: string;
   currency: string;
+  subsidiaryId: string | null;
   partyId: string | null;
   custom: unknown;
 };
@@ -122,7 +126,8 @@ async function loadParent(
   documentId: string,
 ): Promise<TenderParent> {
   const rows = (await runner.execute<TenderParent>(sql`
-    select id, kind, status, currency, party_id as "partyId", custom
+    select id, kind, status, currency, subsidiary_id as "subsidiaryId",
+           party_id as "partyId", custom
       from documents
      where org_id = ${orgId} and id = ${documentId}
      for update
@@ -204,15 +209,23 @@ type StoredValueAccountView = {
   kind: string;
   customerPartyId: string | null;
   currency: string;
+  subsidiaryId: string;
   status: string;
   codeLast4: string;
   balanceMinor: bigint;
 };
 
+/**
+ * Lock every tendered stored-value account under the caller's scope. A
+ * hidden account refuses exactly like a missing one — the lock, not a later
+ * lifecycle check, is the visibility boundary, so no status, currency, or
+ * balance of an invisible card can reach a refusal.
+ */
 async function lockTenderStoredValueAccounts(
   runner: SqlExecutor,
   orgId: string,
   accountIds: string[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<Map<string, StoredValueAccountView>> {
   const byId = new Map<string, StoredValueAccountView>();
   // Lock in id order so concurrent tender writes cannot deadlock.
@@ -223,18 +236,20 @@ async function lockTenderStoredValueAccounts(
       kind: string;
       customerPartyId: string | null;
       currency: string;
+      subsidiaryId: string;
       status: string;
       codeLast4: string;
       balanceMinorRaw: string;
     }>(sql`
       select id, program_id as "programId", kind, customer_party_id as "customerPartyId",
-             currency, status, code_last4 as "codeLast4", balance_minor::text as "balanceMinorRaw"
+             currency, subsidiary_id as "subsidiaryId", status,
+             code_last4 as "codeLast4", balance_minor::text as "balanceMinorRaw"
         from stored_value_accounts
        where org_id = ${orgId} and id = ${accountId}
        for update
     `)).rows;
     const row = rows[0];
-    if (!row) {
+    if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) {
       throw refusal(
         "A tender names a stored-value account that does not exist in this organization.",
         "stored_value_unknown",
@@ -248,6 +263,7 @@ async function lockTenderStoredValueAccounts(
       kind: row.kind,
       customerPartyId: row.customerPartyId,
       currency: row.currency,
+      subsidiaryId: row.subsidiaryId,
       status: row.status,
       codeLast4: row.codeLast4,
       balanceMinor: BigInt(row.balanceMinorRaw),
@@ -316,9 +332,27 @@ export async function replaceDocumentTenders(
   orgId: string,
   documentId: string,
   inputs: TenderInput[],
-  options: { actorId?: string | null },
+  options: { actorId?: string | null; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DocumentTenderRow[]> {
+  // Authority resolves once, before any tender lock: an explicit scope wins,
+  // otherwise the actor's live grants through the canonical machinery. A
+  // scope-less call without an actor reads nothing — explicit null stays the
+  // only unrestricted grant, named outright by documented system paths.
+  let tenderScope = options.allowedSubsidiaryIds;
+  if (tenderScope === undefined) {
+    tenderScope = options.actorId
+      ? await actorAllowedSubsidiaryIds(runner, orgId, options.actorId)
+      : new Set<string>();
+  }
   const parent = await loadParent(runner, orgId, documentId);
+  if (!subsidiaryScopeAllows(tenderScope, parent.subsidiaryId)) {
+    throw refusal(
+      "The tendered document does not exist in this organization.",
+      "not_found",
+      404,
+      "Reload the document list and retry.",
+    );
+  }
   checkParentForTenders(parent);
   const isSale = parent.kind === "cash_sale";
   if (inputs.length === 0) {
@@ -342,7 +376,7 @@ export async function replaceDocumentTenders(
   const storedValueIds = inputs
     .filter((input) => input.kind === "stored_value" && typeof input.storedValueAccountId === "string")
     .map((input) => input.storedValueAccountId as string);
-  const storedValueById = await lockTenderStoredValueAccounts(runner, orgId, storedValueIds);
+  const storedValueById = await lockTenderStoredValueAccounts(runner, orgId, storedValueIds, tenderScope);
   type PreparedTender = {
     kind: string;
     methodLabel: string;
@@ -435,6 +469,26 @@ export async function replaceDocumentTenders(
           "stored_value_currency_mismatch",
           422,
           `Tender in ${storedValueAccount.currency}, or choose stored value in ${parent.currency}.`,
+        );
+      }
+      // One entity cannot relieve another's debt: the tendered account must
+      // sit in the document's own entity at save time, not only at posting.
+      // Both records are already proven visible above, so naming them leaks
+      // nothing hidden.
+      if (storedValueAccount.subsidiaryId !== parent.subsidiaryId) {
+        const ids = [storedValueAccount.subsidiaryId, parent.subsidiaryId]
+          .filter((id): id is string => id !== null);
+        const names = await runner.execute<{ id: string; name: string }>(sql`
+          select id, name from subsidiaries
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`);
+        const byId = new Map(names.rows.map((row) => [row.id, row.name]));
+        const accountSub = byId.get(storedValueAccount.subsidiaryId) ?? storedValueAccount.subsidiaryId;
+        const docSub = (parent.subsidiaryId && byId.get(parent.subsidiaryId)) ?? parent.subsidiaryId ?? "no legal entity";
+        throw refusal(
+          `${label} stored value …${storedValueAccount.codeLast4} belongs to ${accountSub}, but the document posts to ${docSub}: one entity cannot relieve another's debt.`,
+          "stored_value_cross_entity",
+          409,
+          `Tender …${storedValueAccount.codeLast4} on a ${accountSub} document.`,
         );
       }
       if (storedValueAccount.status !== "active") {
@@ -630,7 +684,7 @@ export async function redeemCashSaleTenders(
         orgId,
         accountId: row.storedValueAccountId as string,
         // Posting-commit step on the already-gated sale: explicit null is
-        // the intentional system sentinel; same-entity is refused by name.
+        // the unrestricted grant named outright; same-entity is refused by name.
         allowedSubsidiaryIds: null,
         amountMinor: row.amountMinor,
         documentId,
@@ -728,7 +782,7 @@ export async function settleCashRefundTenders(
       loaded = await attachDocumentLoad({
         orgId,
         // Posting-commit step on the already-gated refund: explicit null is
-        // the intentional system sentinel; the top-up asserts the entity.
+        // the unrestricted grant named outright; the top-up asserts the entity.
         allowedSubsidiaryIds: null,
         accountId: row.storedValueAccountId,
         programId: row.storedValueAccountId ? null : programId,

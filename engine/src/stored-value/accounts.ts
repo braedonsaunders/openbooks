@@ -534,9 +534,9 @@ function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string)
 
 /**
  * Lock one account row for a mutation. The FOR UPDATE lock serializes
- * concurrent redemptions of the same balance; the row-count check turns an
- * RLS-unscoped or raced write into a refusal instead of silent success. When
- * several accounts lock in one unit of work, callers sort by id first.
+ * concurrent redemptions of the same balance; a lock that matches nothing —
+ * absent, cross-org, or raced — reads as missing instead of silent success.
+ * When several accounts lock in one unit of work, callers sort by id first.
  */
 type StoredValueAccountRaw = {
   id: string; orgId: string; programId: string; kind: StoredValueKind;
@@ -549,7 +549,7 @@ type StoredValueAccountRaw = {
 /**
  * Actor entity visibility for one locked account. Unknown scope (undefined)
  * fails closed exactly like a denial — it is never coalesced to the
- * unrestricted null, which stays an explicit system-only sentinel the caller
+ * unrestricted null, which stays an explicit grant the caller names outright (unrestricted actors and documented paths alike)
  * writes out. Runs under the account's row lock, BEFORE any
  * balance/status/party refusal downstream, so a hidden record's state can
  * never leak through a named error: out-of-scope reads as missing.
@@ -565,7 +565,7 @@ function assertStoredValueVisible(
 export async function lockStoredValueAccount(
   orgId: string,
   accountId: string,
-  /** REQUIRED actor scope; explicit null only for system flows acting on a document-anchored entity. */
+  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright by paths acting on their own document-anchored entity. */
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<StoredValueAccountRow> {
   const rows = (await db.execute<StoredValueAccountRaw>(sql`
@@ -581,23 +581,10 @@ export async function lockStoredValueAccount(
      for update
   `)).rows;
   const row = rows[0];
-  if (!row) {
-    const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from stored_value_accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
-    if (count?.n === 0) {
-      throw storedValueRefusal({
-        message: "The stored-value account does not exist in this organization.",
-        code: "stored_value_account_missing",
-        remedy: "Look the account up by code or from the Stored value list, then retry.",
-        status: 409,
-      });
-    }
-    throw storedValueRefusal({
-      message: "The stored-value account cannot be locked in this organization.",
-      code: "stored_value_account_unreadable",
-      remedy: "Retry the operation.",
-    });
-  }
+  // Absent, cross-org, and out-of-scope read identically: no existence probe
+  // distinguishes them, so a hidden record is indistinguishable from a
+  // missing one before any lifecycle or balance refusal below.
+  if (!row) throw new ScopeNotFoundError();
   // Locked, then scoped: the check sees the latest committed entity under
   // the row lock, so a concurrent rehome cannot move the account between the
   // read and the mutation. Out-of-scope reads as missing, before any named
@@ -820,7 +807,7 @@ export interface IssueInput {
   amountMinor: bigint;
   currency: string;
   /**
-   * REQUIRED actor scope (explicit null only for system flows): a restricted
+   * REQUIRED actor scope (explicit null is the unrestricted grant, named outright): a restricted
    * caller's issue lands in their single allowed entity, or refuses by name
    * asking for a visible entity — the org root is never assigned on their
    * behalf. Validated BEFORE numbering, mint, or journal.
@@ -857,15 +844,47 @@ export interface IssueResult {
  * issue names its debit account; a sale-driven issue attaches to the sale's
  * journal instead (attachSaleIssue) so the sale still posts exactly once.
  */
+/**
+ * Replay identity for an issuance: the retried request must agree with the
+ * recorded effect on every material input — entity, program, currency, and
+ * customer (kind and amount are fingerprinted by priorStoredValueEntry
+ * before this runs). A changed body is a reused key, refused by name instead
+ * of answered with another effect's receipt; an unchanged retry replays
+ * without re-checking the program's live config, so a later deactivation
+ * cannot turn a completed issue into a refusal. Compares persisted rows
+ * only — no shadow copy of the request is kept anywhere.
+ */
+async function assertIssueReplayIntent(
+  input: IssueInput,
+  priorAccount: StoredValueAccountRow,
+  resolvedSubsidiaryId: string | null,
+): Promise<void> {
+  let expectedSubsidiary = resolvedSubsidiaryId;
+  if (expectedSubsidiary === null) {
+    expectedSubsidiary = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${input.orgId} and is_active and not is_elimination and parent_id is null
+       limit 1 for share
+    `)).rows[0]?.id ?? null;
+  }
+  const mismatches = [
+    priorAccount.subsidiaryId !== expectedSubsidiary ? "issuing entity" : null,
+    priorAccount.programId !== input.programId ? "program" : null,
+    priorAccount.currency !== input.currency ? "currency" : null,
+    (priorAccount.customerPartyId ?? null) !== (input.customerPartyId ?? null) ? "customer" : null,
+  ].filter((value): value is string => value !== null);
+  if (mismatches.length > 0) {
+    throw storedValueRefusal({
+      message: `Idempotency key ${input.idempotencyKey} already recorded a different stored-value effect: ${mismatches.join(", ")} differ.`,
+      code: "stored_value_idempotency_conflict",
+      remedy: "Retry with the original request unchanged, or send a new idempotency key for a different operation.",
+      status: 409,
+    });
+  }
+}
+
 export async function issueStoredValue(input: IssueInput): Promise<IssueResult> {
   await requireStoredValueFeature(db, input.orgId);
-  const prior = await priorStoredValueEntry(input.orgId, `stored-value:issue-entry:${input.idempotencyKey}`, {
-    kind: "issue",
-    amountMinor: input.amountMinor,
-  });
-  if (prior) {
-    return { accountId: prior.accountId, code: null, entryId: prior.entryId, journalEntryId: prior.journalEntryId, replayed: true };
-  }
   // The issuing entity resolves from the actor's scope BEFORE any program,
   // currency, or amount refusal: a caller naming a foreign entity is told
   // which entities they may use, and an unknown scope never becomes the
@@ -888,6 +907,31 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
           field: "subsidiaryId",
         },
     );
+  }
+  const replayKey = `stored-value:issue-entry:${input.idempotencyKey}`;
+  const replayedRef = (await db.execute<{ account_id: string }>(sql`
+    select account_id from stored_value_entries
+     where org_id = ${input.orgId} and idempotency_key = ${replayKey}
+  `)).rows[0];
+  if (replayedRef) {
+    // The prior account locks under the actor's scope BEFORE any fingerprint
+    // or amount message: a hidden original reads as missing and no hidden
+    // account, entry, or journal id ever reaches a receipt.
+    const priorAccount = await lockStoredValueAccount(input.orgId, replayedRef.account_id, input.allowedSubsidiaryIds);
+    const prior = await priorStoredValueEntry(input.orgId, replayKey, {
+      accountId: priorAccount.id,
+      kind: "issue",
+      amountMinor: input.amountMinor,
+    });
+    if (!prior) {
+      throw storedValueRefusal({
+        message: "The stored-value entry could not be recorded.",
+        code: "stored_value_entry_unrecorded",
+        remedy: "Retry the operation; the idempotency key prevents a duplicate.",
+      });
+    }
+    await assertIssueReplayIntent(input, priorAccount, resolvedSubsidiary.subsidiaryId);
+    return { accountId: prior.accountId, code: null, entryId: prior.entryId, journalEntryId: prior.journalEntryId, replayed: true };
   }
   const program = await loadStoredValueProgram(input.orgId, input.programId);
   if (!program.isActive) {
@@ -920,15 +964,20 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
     });
   }
   if (input.customerPartyId) {
-    const party = (await db.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${input.orgId} and id = ${input.customerPartyId} and is_active
+    // The customer is a subject, not just an existence check: a hidden or
+    // missing party reads identically as missing. Parties carry org-wide
+    // identity, so org-wide (null-subsidiary) parties stay eligible to every
+    // caller while entity-bound parties stay inside their entity.
+    const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from parties
+       where org_id = ${input.orgId} and id = ${input.customerPartyId} and is_active
     `)).rows[0];
-    if (!party) {
-      throw storedValueRefusal({
-        message: "The store-credit customer does not exist in this organization.",
-        code: "stored_value_customer_missing",
-        remedy: "Select an active customer, then retry.",
-      });
+    if (
+      !party ||
+      input.allowedSubsidiaryIds === undefined ||
+      !subsidiaryScopeAllows(input.allowedSubsidiaryIds, party.subsidiaryId, { orgWideNull: true })
+    ) {
+      throw new ScopeNotFoundError();
     }
   }
   const liabilityAccountId = await programLiabilityAccount(input.orgId, program);
@@ -1028,7 +1077,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
 export interface RedeemInput {
   orgId: string;
   accountId: string;
-  /** REQUIRED actor scope; explicit null only for posting-commit steps whose document entity was already gated at draft creation. */
+  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright by posting-commit steps whose document entity was already gated at draft creation. */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Minor units, must be positive and within the available balance. */
   amountMinor: bigint;
@@ -1239,7 +1288,7 @@ async function priceRedemption(
 export interface AdjustInput {
   orgId: string;
   accountId: string;
-  /** REQUIRED actor scope; explicit null only for system flows. Visibility is enforced under the row lock before any named refusal. */
+  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright. Visibility is enforced under the row lock before any named refusal. */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Signed minor units: positive raises the balance, negative lowers it. */
   deltaMinor: bigint;
@@ -1387,7 +1436,7 @@ const STATUS_TRANSITIONS: Record<StoredValueStatus, readonly StoredValueStatus[]
 export async function setStoredValueStatus(input: {
   orgId: string;
   accountId: string;
-  /** REQUIRED actor scope; explicit null only for system flows. Visibility is enforced under the row lock before any named refusal. */
+  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright. Visibility is enforced under the row lock before any named refusal. */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   to: StoredValueStatus;
   reason?: string | null;
@@ -1455,7 +1504,7 @@ export interface BalanceView {
 export async function lookupStoredValueByCode(
   orgId: string,
   code: string,
-  /** REQUIRED actor scope; explicit null only for code-Bearer [REDACTED] flows where the code itself is the credential. */
+  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright by code-Bearer [REDACTED] flows where the code itself is the credential. */
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<BalanceView | null> {
   const normalized = normalizeStoredValueCode(code);
@@ -1515,7 +1564,7 @@ export interface TenderResolution {
 export async function resolveStoredValueTender(
   orgId: string,
   code: string,
-  /** REQUIRED actor scope; draft validation inside a posting commit passes explicit null and posting re-locks. */
+  /** REQUIRED actor scope; draft validation inside a posting commit names explicit null outright and posting re-locks. */
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<TenderResolution | null> {
   const normalized = normalizeStoredValueCode(code);
@@ -1562,7 +1611,7 @@ export async function resolveStoredValueTender(
 export async function loadStoredValueTenderAccount(
   orgId: string,
   accountId: string,
-  /** REQUIRED actor scope; draft validation inside a posting commit passes explicit null and posting re-locks. */
+  /** REQUIRED actor scope; draft validation inside a posting commit names explicit null outright and posting re-locks. */
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<TenderResolution | null> {
   if (allowedSubsidiaryIds === undefined) return null;
@@ -1732,7 +1781,7 @@ export async function attachDocumentIssue(input: DocumentIssueInput): Promise<Is
 export async function expireStoredValueAccount(input: {
   orgId: string;
   accountId: string;
-  /** REQUIRED actor scope; the scheduled scan passes explicit null as the intentional system sentinel. */
+  /** REQUIRED actor scope; the scheduled scan names explicit null outright as its unrestricted grant over every entity. */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   postingDate: string;
   idempotencyKey: string;

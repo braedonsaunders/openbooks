@@ -2593,6 +2593,9 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     },
     null,
     orgId,
+    // Automated collection on the run's own receipt: no actor entity set
+    // exists, so explicit null names the unrestricted grant outright.
+    { allowedSubsidiaryIds: null },
   );
   const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, null);
   if (submission.flowError) {

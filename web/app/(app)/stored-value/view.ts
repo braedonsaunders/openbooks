@@ -10,6 +10,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { StoredValueError } from '@openbooks/engine/stored-value'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 
 /**
@@ -160,7 +161,10 @@ export async function loadStoredValuePage(
 
   // KPIs count base-currency accounts only: foreign-currency balances cannot
   // be summed without a rate, and a converted total would misstate the debt.
-  const [summary, open, pickers, issuePickers] = await Promise.all([
+  // The fan-out reads run in one repeatable-read snapshot: every query still
+  // carries its own visibility predicate, and the snapshot pins the state so
+  // a concurrent entity rehome cannot mix visibility across the reads.
+  const [summary, open, pickers, issuePickers] = await withScopeSnapshot(orgId, () => Promise.all([
     db.execute<KpiRow>(sql`
       select coalesce((select sum(balance_minor) from stored_value_accounts
         where org_id = ${orgId} and currency = ${baseCurrency} and status in ('active','frozen')
@@ -228,9 +232,15 @@ export async function loadStoredValuePage(
         db.execute<{ id: string; name: string; kind: string; currency: string }>(sql`
           select id, name, kind, currency from stored_value_programs
            where org_id = ${orgId} and is_active order by name`),
+        // Customer choices follow the shared org-wide party rule: parties
+        // without an entity stay eligible to every caller, while entity-bound
+        // parties stay inside their entity — no foreign customer names leak
+        // into the picker.
         db.execute<{ id: string; name: string }>(sql`
           select id, display_name as name from parties
-           where org_id = ${orgId} and is_active order by display_name limit 2000`),
+           where org_id = ${orgId} and is_active
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope, { orgWideNull: true })}
+           order by display_name limit 2000`),
         db.execute<{ id: string; name: string }>(sql`
           select id, concat_ws(' · ', number, name) as name from accounts
            where org_id = ${orgId} and is_active and not is_summary
@@ -244,7 +254,7 @@ export async function loadStoredValuePage(
            order by name`),
       ])
       : null,
-  ])
+  ]))
 
   const closeHref = mergeHref('/stored-value', sp, { account: undefined, issue: undefined })
   const row = open?.rows[0] ?? null

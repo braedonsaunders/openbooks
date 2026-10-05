@@ -67,7 +67,7 @@ test("editing a payment claimed by an open run refuses; a closed run releases it
     const userId = await withBypass(() => createScratchUser(org.orgId, "Treasurer", "admin"));
     const open = await seedClaimedDraft(org, userId, "generated", "25.0000", "25.0000");
     await assert.rejects(
-      updateDraftPayment(open.paymentId, { memo: "edit under a live run" }, userId, org.orgId),
+      updateDraftPayment(open.paymentId, { memo: "edit under a live run" }, userId, org.orgId, { allowedSubsidiaryIds: null }),
       (error: unknown) => {
         assert.ok(error instanceof PaymentError);
         assert.match(error.message, /claimed by open payment run/);
@@ -101,6 +101,7 @@ test("editing a payment claimed by an open run refuses; a closed run releases it
       { memo: "edit after the run closed" },
       userId,
       org.orgId,
+      { allowedSubsidiaryIds: null },
     );
     assert.ok(edited, "expected the released payment to save");
     assert.equal(edited.doc.memo, "edit after the run closed");

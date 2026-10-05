@@ -71,7 +71,7 @@ async function usdReceipt(org: Awaited<ReturnType<typeof createScratchOrg>>, use
   const item = openItems.find((i) => i.documentId === invoiceId);
   assert.ok(item, "invoice open item exists");
   const allocations = [sameCurrencyAllocation(item.lineId, "100")];
-  await updateDraftPayment(payment.id, { allocations, referenceNumber: "fx-receipt" }, userId, org.orgId);
+  await updateDraftPayment(payment.id, { allocations, referenceNumber: "fx-receipt" }, userId, org.orgId, { allowedSubsidiaryIds: null });
   const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, userId);
   assert.equal(submission.gated, false);
   await postPaymentWithApplications(payment.id, allocations, userId, "api");

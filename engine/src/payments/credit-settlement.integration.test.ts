@@ -694,7 +694,9 @@ test("voiding a payment releases the credits it applied, and only then may they 
         partyId: org.customerId, bankAccountId: org.accounts.bank,
         allocations: [sameCurrencyAllocation(invoiceLine, "200")],
         creditAllocations: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
-      }, userId, org.orgId);
+      }, userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
       await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
       await postPaymentWithApplications(payment.id, undefined, userId);
       return payment.id;

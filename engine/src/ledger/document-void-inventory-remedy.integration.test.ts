@@ -400,7 +400,9 @@ test("partial credit plus cash with full adjust-out leaves exactly the residual 
     await updateDraftPayment(payment.id, {
       allocations: [sameCurrencyAllocation(billLine, "2")],
       creditAllocations: [{ fromLineId: creditLine, toLineId: billLine, amount: "8", sourceDocumentId: creditId }],
-    }, actor, org.orgId);
+    }, actor, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
     await postPaymentWithApplications(payment.id, undefined, actor);
     const applied = (await db.execute<{ n: number }>(sql`

@@ -242,7 +242,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   const payment = await withOrgTransaction(org.orgId, () => createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: 'vendor_payment', createdBy: actor,
     partyId: org.vendorId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: 'CAD' }));
   if (path === 'service') {
-    await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, { allocations: [sameCurrencyAllocation(lineId, '100')] }, actor, org.orgId));
+    await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, { allocations: [sameCurrencyAllocation(lineId, '100')] }, actor, org.orgId, { allowedSubsidiaryIds: null }));
     await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${payment.id}`));
   }
   routeAuth.user = { orgId: org.orgId, id: actor };

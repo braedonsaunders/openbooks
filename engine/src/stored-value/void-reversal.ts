@@ -55,7 +55,7 @@ export async function reverseStoredValueForVoidedDocument(input: {
   // voids and redemptions of the same cards cannot deadlock.
   for (const accountId of [...byAccount.keys()].sort()) {
     // The void reverses the document's own effects: explicit null is the
-    // intentional system sentinel, and each touched account keeps its entity.
+    // unrestricted grant named outright, and each touched account keeps its entity.
     const account = await lockStoredValueAccount(input.orgId, accountId, null);
     let balance = account.balanceMinor;
     let issued = account.issuedMinor;

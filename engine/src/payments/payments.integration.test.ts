@@ -339,7 +339,9 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
         settlementRateReference: "BANK-SETTLEMENT-42",
       }],
       bankAccountId: org.accounts.bank,
-    }, userId, org.orgId);
+    }, userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`
       update documents
          set status = 'approved', submitted_by = ${userId}, submitted_at = now()
@@ -619,7 +621,9 @@ test("a bill reserved by a delivered payment run cannot also be paid by hand", {
         await updateDraftPayment(payment.id, {
           partyId: org.vendorId, bankAccountId: org.accounts.bank,
           allocations: [sameCurrencyAllocation(billLineId, "125")],
-        }, options.actorId, org.orgId);
+        }, options.actorId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
         return payment.id;
       };
       // A clerk drafts and approves a manual payment of the bill...
@@ -2492,7 +2496,9 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     const initialRevision = await revision();
     await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {
       ...allocationSave,
-    }, userId, org.orgId, { expectedRevision: initialRevision }));
+    }, userId, org.orgId, { expectedRevision: initialRevision },
+  { allowedSubsidiaryIds: null },
+));
     const afterSave = await revision();
     assert.notEqual(afterSave, initialRevision);
 
@@ -2501,7 +2507,9 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     await assert.rejects(
       withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {}, userId, org.orgId, {
         expectedRevision: initialRevision,
-      })),
+      },
+  { allowedSubsidiaryIds: null },
+)),
       (error: unknown) => error instanceof PaymentRevisionConflictError,
     );
     const afterConflict = await revision();
@@ -2511,7 +2519,9 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     // creation); the API contract requires one — covered by the route.
     await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {
       memo: "internal unfenced save",
-    }, userId, org.orgId));
+    }, userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+));
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -2537,6 +2547,7 @@ test("customer-payment surcharge posting rejects a non-income fee account", { sk
         { feeAmount: "1", feeIncomeAccountId: org.accounts.cogs },
         userId,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       ),
       (error: unknown) => error instanceof PaymentError && /fee income account/.test(error.message),
     );
@@ -2600,6 +2611,7 @@ test("draft allocation shape validation fails closed before any open-item read",
           { allocations: (Array.isArray(allocations) ? allocations : [shape(allocations)]) as never },
           userId,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         ),
         (error: unknown) => error instanceof PaymentError && message.test(error.message),
         name,
@@ -2608,7 +2620,7 @@ test("draft allocation shape validation fails closed before any open-item read",
     // A well-formed shape clears validation and dies later at the open-item
     // lookup, proving the guards above are ordered before it.
     await assert.rejects(
-      updateDraftPayment(payment.id, { allocations: [shape({})] }, userId, org.orgId),
+      updateDraftPayment(payment.id, { allocations: [shape({})] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
       (error: unknown) => error instanceof PaymentError && /not an open item for this party/.test(error.message),
     );
   } finally {
@@ -2675,7 +2687,7 @@ test("settlement evidence must cross-foot and match the currency rules", { skip:
     ];
     for (const [name, allocation, message] of cases) {
       await assert.rejects(
-        updateDraftPayment(payment.id, { allocations: [evidence(allocation)] }, userId, org.orgId),
+        updateDraftPayment(payment.id, { allocations: [evidence(allocation)] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
         (error: unknown) => error instanceof PaymentError && message.test(error.message),
         name,
       );
@@ -2727,12 +2739,12 @@ test("settlement evidence must cross-foot and match the currency rules", { skip:
       ...overrides,
     });
     await assert.rejects(
-      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "same_currency" })] }, userId, org.orgId),
+      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "same_currency" })] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
       (error: unknown) => error instanceof PaymentError && /require explicit settlement-rate evidence/.test(error.message),
       "cross-currency pair without explicit evidence",
     );
     await assert.rejects(
-      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "provider" })] }, userId, org.orgId),
+      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "provider" })] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
       (error: unknown) => error instanceof PaymentError && /requires an FX rate observation/.test(error.message),
       "provider evidence without an observation",
     );
@@ -2801,7 +2813,9 @@ test("posting compares allocations against the approved snapshot", { skip: !DB }
         partyId: org.customerId,
         bankAccountId: org.accounts.bank,
         allocations: [stored(openLineIds[i]!, "100")],
-      }, userId, org.orgId);
+      }, userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
       // The drawer renders the returned document: a loader that answers
       // null for a just-saved draft breaks the round trip.
       assert.ok(saved, "draft save returns the document");
@@ -2899,6 +2913,7 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
         },
         userId,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       ),
       (error: unknown) => error instanceof PaymentError && /discounts only apply to vendor payments/.test(error.message),
     );

@@ -155,7 +155,7 @@ async function payManually(fixture: AutopayFixture, invoiceId: string): Promise<
     currency: invoice.currency,
   });
   const allocations = [sameCurrencyAllocation(item.lineId, invoice.open_balance)];
-  await updateDraftPayment(payment.id, { allocations, onAccountAmount: "0.0000" }, userId, org.orgId);
+  await updateDraftPayment(payment.id, { allocations, onAccountAmount: "0.0000" }, userId, org.orgId, { allowedSubsidiaryIds: null });
   const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, userId);
   assert.equal(submission.gated, false);
   await postPaymentWithApplications(payment.id, allocations, userId);

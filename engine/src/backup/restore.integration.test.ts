@@ -329,7 +329,9 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
         settlementRateReference: "DRILL",
       }],
       bankAccountId: source.accounts.bank,
-    }, actorId, source.orgId);
+    }, actorId, source.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${source.orgId}`);
     await postPaymentWithApplications(payment.id, undefined, actorId);
     // The kernel records the payment-settles-invoice source link itself as

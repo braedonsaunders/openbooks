@@ -708,6 +708,7 @@ test(
           { memo: 'waiting writer' },
           actor,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         ),
       )
       let waiting = false

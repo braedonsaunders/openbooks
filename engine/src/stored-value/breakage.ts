@@ -265,7 +265,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
   `)).rows;
   for (const row of expired) {
     // The scheduled scan acts on every entity: explicit null is the
-    // intentional system sentinel.
+    // unrestricted grant named outright.
     await expireStoredValueAccount({ orgId, accountId: row.id, allowedSubsidiaryIds: null, postingDate: today, idempotencyKey: row.id });
     recognized++;
   }

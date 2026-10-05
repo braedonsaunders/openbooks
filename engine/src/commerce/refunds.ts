@@ -1242,7 +1242,10 @@ export async function postCashRefundDraft(
       amount: minorToLedger(tender.amountMinor, currency),
       reference: null,
     }));
-  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor });
+  // Refund automation on its own just-created draft: the refund — not an
+  // actor entity set — is the authority, named here as unrestricted. Tender
+  // accounts still scope-gate neutrally and must match the document entity.
+  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
   let lineNumber = 0;
   for (const line of draft.lines) {
     lineNumber += 1;
