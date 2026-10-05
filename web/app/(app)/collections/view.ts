@@ -53,6 +53,7 @@ export interface RecoveryDashboardData {
     invoicesWithFailures: number
     recoveredInvoices: number
     recoveredAmount: string
+    recoveredByCurrency: { currency: string; amount: string }[]
     recoveryRate: number | null
     churnPrevented: number
     awaitingAuthentication: number
@@ -183,6 +184,7 @@ async function loadRecovery(orgId: string): Promise<RecoveryDashboardData> {
       invoicesWithFailures: metrics.invoicesWithFailures,
       recoveredInvoices: metrics.recoveredInvoices,
       recoveredAmount: metrics.recoveredAmount,
+      recoveredByCurrency: metrics.recoveredByCurrency,
       recoveryRate: metrics.recoveryRate,
       churnPrevented: metrics.churnPrevented,
       awaitingAuthentication: metrics.awaitingAuthentication,
