@@ -213,6 +213,11 @@ const mockSources = new Map<string, string>([
         id: 'template-1',
         provenance: { templateId: 'template-1', revision: 7, contentHash: 'deadbeef' },
       }
+    }
+    // No designated template on the tested records: null selects the
+    // default template, mirroring the real store contract.
+    export async function loadRecordDesignatedTemplateName() {
+      return null
     }`,
   ],
   [
