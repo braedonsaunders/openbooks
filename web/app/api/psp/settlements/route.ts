@@ -9,12 +9,16 @@ import {
   PspSettlementConflictError,
   importSettlementBatch,
   parseChargebeeSettlement,
+  parsePaypalSettlementCsv,
+  parsePaypalTransactions,
   parseRecurlySettlement,
+  parseShopifyPaymentsPayout,
   parseStripeBalanceTransactions,
   postSettlementBatch,
   reverseSettlementBatch,
   savePspProviderConfig,
   summarizeSettlement,
+  type ParsedSettlement,
 } from "@openbooks/engine/src/payments/psp-settlement.ts";
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import {
@@ -33,8 +37,20 @@ import {
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 import { exactMoney, isoDate } from "@/lib/api/json";
-const provider = z.enum(["stripe", "recurly", "chargebee"]);
+// Settlement-side provider configuration spans payout import, not hosted
+// checkout: every settlement provider takes defaults, including the two
+// acceptance-only providers whose payouts never import.
+const configProvider = z.enum([
+  "stripe",
+  "adyen",
+  "gocardless",
+  "recurly",
+  "chargebee",
+  "shopify_payments",
+  "paypal",
+]);
 const accountReference = z.uuid().nullable().optional();
+const refundPolicy = z.enum(["automatic", "review"]);
 const subsidiaryReference = z.uuid().nullable().optional();
 const calendarDateShape = isoDate("must be a valid calendar date");
 const providerCurrency = z.string().trim().regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code");
@@ -96,6 +112,60 @@ const importAccountReferences = {
   subsidiaryId: subsidiaryReference,
 };
 
+/** Cross-currency evidence for one batch: the provider's own rate, never an
+ *  assumed one. The engine re-validates the shape and refuses a missing rate
+ *  naming the field, so the boundary stays permissive about JSON numbers. */
+const fxEvidence = z.strictObject({
+  sourceCurrency: providerCurrency,
+  rate: z.union([z.string().trim().min(1), z.number()]),
+  rateSource: z.string().trim().min(1, "rate source is required"),
+  payoutRate: z.union([z.string().trim().min(1), z.number()]).optional(),
+  payoutRateSource: z.string().trim().min(1).optional(),
+});
+
+// Provider payloads evolve independently of this product, so the two newest
+// shapes stay loose objects: unknown provider fields ride through to the
+// engine, which validates the semantics it posts. Only the three original
+// shapes keep their strict contracts.
+const decimalAmount = z.union([z.string().trim().min(1), z.number()]);
+
+const shopifyPayout = z.object({
+  id: z.string().trim().min(1, "Shopify Payments payout id is required"),
+  currency: providerCurrency.optional().nullable(),
+  amount: decimalAmount.optional().nullable(),
+  net: decimalAmount.optional().nullable(),
+  issuedAt: z.string().optional().nullable(),
+});
+
+const shopifyTransaction = z.object({
+  id: z.string().optional().nullable(),
+  type: z.string().trim().min(1, "balance transaction type is required"),
+  amount: decimalAmount,
+  fee: decimalAmount.optional().nullable(),
+  net: decimalAmount.optional().nullable(),
+  currency: providerCurrency.optional().nullable(),
+  exchange_rate: decimalAmount.optional().nullable(),
+  sourceOrderId: z.string().optional().nullable(),
+});
+
+const paypalMoney = z.object({
+  currency_code: z.string().optional().nullable(),
+  value: decimalAmount.optional().nullable(),
+});
+
+const paypalTransactionInfo = z.object({
+  transaction_id: z.string().optional().nullable(),
+  transaction_event_code: z.string().optional().nullable(),
+  transaction_initiated_date: z.string().optional().nullable(),
+  transaction_updated_date: z.string().optional().nullable(),
+  transaction_amount: paypalMoney.optional().nullable(),
+  fee_amount: paypalMoney.optional().nullable(),
+});
+
+const paypalTransaction = z.object({
+  transaction_info: paypalTransactionInfo.optional().nullable(),
+});
+
 const importBody = z.discriminatedUnion("provider", [
   z.strictObject({
     action: z.literal("import"),
@@ -104,6 +174,7 @@ const importBody = z.discriminatedUnion("provider", [
     payoutId: z.string().trim().min(1).optional(),
     settlementDate: calendarDateShape.optional(),
     transactions: z.array(stripeTransaction).min(1, "at least one Stripe transaction is required"),
+    fx: fxEvidence.optional(),
     ...importAccountReferences,
   }).refine((body) => Boolean(body.externalRef ?? body.payoutId), {
     path: ["externalRef"],
@@ -114,6 +185,7 @@ const importBody = z.discriminatedUnion("provider", [
     provider: z.literal("recurly"),
     settlementDate: calendarDateShape.optional(),
     payload: recurlyPayload,
+    fx: fxEvidence.optional(),
     ...importAccountReferences,
   }),
   z.strictObject({
@@ -121,14 +193,43 @@ const importBody = z.discriminatedUnion("provider", [
     provider: z.literal("chargebee"),
     settlementDate: calendarDateShape.optional(),
     payload: chargebeePayload,
+    fx: fxEvidence.optional(),
     ...importAccountReferences,
+  }),
+  z.strictObject({
+    action: z.literal("import"),
+    provider: z.literal("shopify_payments"),
+    externalRef: z.string().trim().min(1).optional(),
+    settlementDate: calendarDateShape.optional(),
+    payout: shopifyPayout,
+    transactions: z.array(shopifyTransaction).min(1, "at least one Shopify balance transaction is required"),
+    fx: fxEvidence.optional(),
+    ...importAccountReferences,
+  }),
+  z.strictObject({
+    action: z.literal("import"),
+    provider: z.literal("paypal"),
+    // A Transaction Search export carries no natural reference: the operator
+    // names the export (statement week, settlement id) so the batch stays
+    // idempotent on (provider, external ref).
+    externalRef: z.string().trim().min(1, "externalRef names this PayPal export"),
+    settlementDate: calendarDateShape.optional(),
+    payload: z.object({
+      transactions: z.array(paypalTransaction).min(1, "at least one PayPal transaction is required"),
+    }).optional(),
+    // PayPal settlement report (STL) CSV text, header row included.
+    csv: z.string().min(1).optional(),
+    fx: fxEvidence.optional(),
+    ...importAccountReferences,
+  }).refine((body) => body.payload !== undefined || body.csv !== undefined, {
+    message: "payload or csv is required",
   }),
 ]);
 
 const postBodySchema0 = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("saveConfig"),
-    provider,
+    provider: configProvider,
     displayName: z.string().trim().min(1).optional(),
     isEnabled: z.boolean({ error: "isEnabled must be a boolean" }).optional(),
     defaultBankAccountId: accountReference,
@@ -136,6 +237,11 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     defaultDisputeAccountId: accountReference,
     defaultFxAccountId: accountReference,
     defaultClearingAccountId: accountReference,
+    defaultDisputedFundsAccountId: accountReference,
+    defaultChargebackLossAccountId: accountReference,
+    defaultDisputeFeeAccountId: accountReference,
+    refundPolicy: refundPolicy.optional(),
+    pullEnabled: z.boolean({ error: "pullEnabled must be a boolean" }).optional(),
     apiKey: z.string().nullable().optional(),
   }),
   importBody,
@@ -153,11 +259,78 @@ const postBodySchema0 = z.discriminatedUnion("action", [
 
 export const runtime = "nodejs";
 
+/**
+ * Provider exports use explicit nulls where the engine's parser inputs use
+ * absent optionals. Normalizing once at the boundary keeps every dispatch
+ * below free of per-field null handling the engine never observes.
+ */
+type NullsToUndefined<T> = T extends null
+  ? undefined
+  : T extends Array<infer Item>
+    ? Array<NullsToUndefined<Item>>
+    : T extends Record<string, unknown>
+      ? { [Key in keyof T]: NullsToUndefined<T[Key]> }
+      : T;
+
+function nullsToUndefined<T>(value: T): NullsToUndefined<T> {
+  if (Array.isArray(value)) {
+    return value.map(nullsToUndefined) as NullsToUndefined<T>;
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        entry === null ? undefined : nullsToUndefined(entry),
+      ]),
+    ) as NullsToUndefined<T>;
+  }
+  return value as NullsToUndefined<T>;
+}
+
 export const GET = defineRoute({
   permission: "banking.read",
   feature: "banking",
-  handler: async ({ authz: gate }) => {
+  handler: async ({ request: req, authz: gate }) => {
     const orgId = gate.user.orgId;
+    // Settlement detail for the reconciliation drawer: one batch with its
+    // evidence lines and the linked receipt numbers, under the same scope as
+    // the list. A malformed id is a tenant-opaque 404, never a uuid cast 500.
+    const batchId = new URL(req.url).searchParams.get("batchId");
+    if (batchId !== null) {
+      if (!isUuid(batchId)) return notFound("record");
+      const scopedBatch = gate.allowedSubsidiaryIds
+        ? gate.allowedSubsidiaryIds.size > 0
+          ? sql` and b.subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+          : sql` and false`
+        : sql``;
+      const batch = await db.execute(sql`
+        select b.id, b.provider, b.external_ref as "externalRef", b.status, b.currency,
+               b.source_currency as "sourceCurrency", b.conversion_rate::text as "conversionRate",
+               b.conversion_rate_source as "conversionRateSource", b.payout_rate::text as "payoutRate",
+               b.payout_rate_source as "payoutRateSource",
+               b.gross_amount as "grossAmount", b.fee_amount as "feeAmount",
+               b.refund_amount as "refundAmount", b.dispute_amount as "disputeAmount",
+               b.adjustment_amount as "adjustmentAmount", b.fx_amount as "fxAmount",
+               b.net_amount as "netAmount", b.settlement_date::text as "settlementDate",
+               b.journal_entry_id as "journalEntryId", b.reversal_entry_id as "reversalEntryId",
+               b.reversal_reason as "reversalReason", b.memo, b.line_count as "lineCount"
+          from psp_settlement_batches b
+         where b.org_id = ${orgId} and b.id = ${batchId}${scopedBatch}
+         limit 1
+      `);
+      const row = batch.rows[0] as Record<string, unknown> | undefined;
+      if (!row) return notFound("record");
+      const lines = await db.execute(sql`
+        select l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
+               l.description, l.amount, l.currency, l.document_id as "documentId",
+               d.kind as "documentKind", d.document_number as "documentNumber"
+          from psp_settlement_lines l
+          left join documents d on d.org_id = l.org_id and d.id = l.document_id
+         where l.org_id = ${orgId} and l.batch_id = ${batchId}
+         order by l.line_number
+      `);
+      return NextResponse.json({ batch: row, lines: lines.rows });
+    }
     const subsidiaryFilter = gate.allowedSubsidiaryIds
       ? gate.allowedSubsidiaryIds.size > 0
         ? sql` and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
@@ -183,7 +356,10 @@ export const GET = defineRoute({
     const [batches, configs] = await Promise.all([
       db.execute(sql`
       select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
-             fee_amount as "feeAmount", settlement_date as "settlementDate", journal_entry_id as "journalEntryId",
+             fee_amount as "feeAmount", gross_amount as "grossAmount", refund_amount as "refundAmount",
+             dispute_amount as "disputeAmount", adjustment_amount as "adjustmentAmount",
+             fx_amount as "fxAmount", source_currency as "sourceCurrency",
+             settlement_date as "settlementDate", journal_entry_id as "journalEntryId",
              reversal_entry_id as "reversalEntryId", reversal_reason as "reversalReason",
              reversed_at as "reversedAt", reversed_by as "reversedBy",
              memo, line_count as "lineCount"
@@ -197,9 +373,15 @@ export const GET = defineRoute({
         ? Promise.resolve({ rows: [] })
         : db.execute(sql`
       select id, provider, display_name as "displayName", is_enabled as "isEnabled",
+             refund_policy as "refundPolicy", pull_enabled as "pullEnabled",
              default_bank_account_id as "defaultBankAccountId",
              default_fee_account_id as "defaultFeeAccountId",
-             default_clearing_account_id as "defaultClearingAccountId"
+             default_dispute_account_id as "defaultDisputeAccountId",
+             default_fx_account_id as "defaultFxAccountId",
+             default_clearing_account_id as "defaultClearingAccountId",
+             default_disputed_funds_account_id as "defaultDisputedFundsAccountId",
+             default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
+             default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
         from psp_provider_configs where org_id = ${orgId}
     `),
     ]);
@@ -248,6 +430,11 @@ export const POST = defineRoute({
               defaultDisputeAccountId: body.defaultDisputeAccountId ?? null,
               defaultFxAccountId: body.defaultFxAccountId ?? null,
               defaultClearingAccountId: body.defaultClearingAccountId ?? null,
+              defaultDisputedFundsAccountId: body.defaultDisputedFundsAccountId ?? null,
+              defaultChargebackLossAccountId: body.defaultChargebackLossAccountId ?? null,
+              defaultDisputeFeeAccountId: body.defaultDisputeFeeAccountId ?? null,
+              refundPolicy: body.refundPolicy ?? undefined,
+              pullEnabled: body.pullEnabled ?? undefined,
               apiKey: body.apiKey ?? null,
             },
             userId,
@@ -259,23 +446,51 @@ export const POST = defineRoute({
           const denied = guardSubsidiaryScope(authz, body.subsidiaryId ?? null);
           if (denied) return denied;
           const fallbackDate = body.settlementDate ?? (await businessToday(orgId));
-          let parsed;
-          if (body.provider === "stripe") {
-            parsed = parseStripeBalanceTransactions(
-              body.transactions,
-              body.externalRef ?? body.payoutId ?? "",
-              fallbackDate,
-            );
-          } else if (body.provider === "recurly") {
-            parsed = parseRecurlySettlement(
-              body.payload,
-              fallbackDate,
-            );
-          } else {
-            parsed = parseChargebeeSettlement(
-              body.payload,
-              fallbackDate,
-            );
+          // One branch per settlement provider: adding a provider is a schema
+          // variant above plus one case here, and the engine's parser
+          // registry stays the single list of supported providers.
+          let parsed: ParsedSettlement;
+          switch (body.provider) {
+            case "stripe":
+              parsed = parseStripeBalanceTransactions(
+                body.transactions,
+                body.externalRef ?? body.payoutId ?? "",
+                fallbackDate,
+              );
+              break;
+            case "recurly":
+              parsed = parseRecurlySettlement(body.payload, fallbackDate);
+              break;
+            case "chargebee":
+              parsed = parseChargebeeSettlement(body.payload, fallbackDate);
+              break;
+            case "shopify_payments":
+              parsed = parseShopifyPaymentsPayout(
+                nullsToUndefined(body.payout),
+                nullsToUndefined(body.transactions),
+                fallbackDate,
+              );
+              break;
+            case "paypal":
+              parsed = body.csv !== undefined
+                ? parsePaypalSettlementCsv(body.csv, body.externalRef, fallbackDate)
+                : parsePaypalTransactions(
+                    nullsToUndefined({
+                      reference: body.externalRef,
+                      transactions: body.payload!.transactions,
+                    }),
+                    fallbackDate,
+                  );
+              break;
+          }
+          if (body.fx) {
+            parsed.fx = {
+              sourceCurrency: body.fx.sourceCurrency,
+              rate: String(body.fx.rate),
+              rateSource: body.fx.rateSource,
+              payoutRate: body.fx.payoutRate === undefined ? null : String(body.fx.payoutRate),
+              payoutRateSource: body.fx.payoutRateSource ?? null,
+            };
           }
           if (!parsed.externalRef)
             return NextResponse.json(

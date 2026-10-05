@@ -14,6 +14,7 @@ interface PspRouteState {
   allowedSubsidiaryIds: Set<string> | null;
   batchSubsidiaryId: string | null | undefined;
   batchRows: Array<Record<string, unknown>>;
+  lineRows: Array<Record<string, unknown>>;
   subsidiaryRows: Array<Record<string, unknown>>;
   multiSubsidiary: boolean;
   permissionChecks: string[];
@@ -26,6 +27,7 @@ const routeState: PspRouteState = {
   allowedSubsidiaryIds: null,
   batchSubsidiaryId: undefined,
   batchRows: [],
+  lineRows: [],
   subsidiaryRows: [],
   multiSubsidiary: true,
   permissionChecks: [],
@@ -63,6 +65,9 @@ const mockSources = new Map<string, string>([
               return { rows: state.batchRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }
             }
             return { rows: state.batchRows }
+          }
+          if (text.includes('from psp_settlement_lines')) {
+            return { rows: state.lineRows }
           }
           return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
         }
@@ -158,6 +163,39 @@ const mockSources = new Map<string, string>([
         throw new Error('unexpected Chargebee parse')
       }
 
+      export function parseShopifyPaymentsPayout(payout, transactions, settlementDate) {
+        return {
+          provider: 'shopify_payments',
+          externalRef: payout.id,
+          settlementDate,
+          currency: 'USD',
+          lines: [{ kind: 'charge', amount: '1.0000' }],
+          raw: { receivedTransactions: transactions.length },
+        }
+      }
+
+      export function parsePaypalTransactions(input, settlementDate) {
+        return {
+          provider: 'paypal',
+          externalRef: input.reference,
+          settlementDate,
+          currency: 'USD',
+          lines: [{ kind: 'charge', amount: '1.0000' }],
+          raw: { receivedTransactions: input.transactions.length },
+        }
+      }
+
+      export function parsePaypalSettlementCsv(csv, reference, settlementDate) {
+        return {
+          provider: 'paypal',
+          externalRef: reference,
+          settlementDate,
+          currency: 'USD',
+          lines: [{ kind: 'charge', amount: '1.0000' }],
+          raw: { receivedCsvLength: csv.length },
+        }
+      }
+
       export function summarizeSettlement() {
         return {
           grossAmount: '1.0000',
@@ -228,6 +266,7 @@ function reset(permissions: string[]): void {
   routeState.allowedSubsidiaryIds = null;
   routeState.batchSubsidiaryId = undefined;
   routeState.batchRows = [];
+  routeState.lineRows = [];
   routeState.subsidiaryRows = [];
   routeState.multiSubsidiary = true;
   routeState.permissionChecks.length = 0;
@@ -333,9 +372,51 @@ test("saveConfig accepts setup authority without reconciliation authority", asyn
       defaultDisputeAccountId: null,
       defaultFxAccountId: null,
       defaultClearingAccountId: null,
+      defaultDisputedFundsAccountId: null,
+      defaultChargebackLossAccountId: null,
+      defaultDisputeFeeAccountId: null,
+      refundPolicy: undefined,
+      pullEnabled: undefined,
       apiKey: null,
     },
   });
+});
+
+test("saveConfig stores the refund policy and dispute accounts for PayPal", async () => {
+  reset(["admin.setup.manage"]);
+
+  const response = await post({
+    action: "saveConfig",
+    provider: "paypal",
+    displayName: "PayPal",
+    isEnabled: true,
+    refundPolicy: "review",
+    defaultDisputedFundsAccountId: "00000000-0000-4000-8000-0000000000c1",
+    defaultChargebackLossAccountId: "00000000-0000-4000-8000-0000000000c2",
+    defaultDisputeFeeAccountId: "00000000-0000-4000-8000-0000000000c3",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((routeState.domainCalls[0]?.input as { provider?: string }).provider, "paypal");
+  assert.deepEqual(
+    (routeState.domainCalls[0]?.input as Record<string, unknown>),
+    {
+      provider: "paypal",
+      displayName: "PayPal",
+      isEnabled: true,
+      defaultBankAccountId: null,
+      defaultFeeAccountId: null,
+      defaultDisputeAccountId: null,
+      defaultFxAccountId: null,
+      defaultClearingAccountId: null,
+      defaultDisputedFundsAccountId: "00000000-0000-4000-8000-0000000000c1",
+      defaultChargebackLossAccountId: "00000000-0000-4000-8000-0000000000c2",
+      defaultDisputeFeeAccountId: "00000000-0000-4000-8000-0000000000c3",
+      refundPolicy: "review",
+      pullEnabled: undefined,
+      apiKey: null,
+    },
+  );
 });
 
 test("saveConfig rejects truthy text instead of enabling the provider", async () => {
@@ -478,3 +559,146 @@ for (const action of ["post", "reverse"] as const) {
     assert.deepEqual(routeState.domainCalls, []);
   });
 }
+
+test("shopify_payments import dispatches the payout and its balance transactions", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "shopify_payments",
+    settlementDate: "2026-08-24",
+    payout: { id: "payout-9", currency: "USD", issuedAt: "2026-08-24" },
+    transactions: [
+      { id: "txn-1", type: "charge", amount: "104.50", fee: "3.10", net: "101.40", currency: "USD", sourceOrderId: "1001" },
+    ],
+  });
+
+  assert.equal(response.status, 200);
+  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; externalRef: string; raw: { receivedTransactions: number } } }).parsed;
+  assert.equal(parsed.provider, "shopify_payments");
+  assert.equal(parsed.externalRef, "payout-9");
+  assert.equal(parsed.raw.receivedTransactions, 1);
+});
+
+test("paypal import dispatches the Transaction Search export under the operator's reference", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "paypal",
+    externalRef: "week-34",
+    settlementDate: "2026-08-24",
+    payload: {
+      transactions: [
+        {
+          transaction_info: {
+            transaction_id: "txn-1",
+            transaction_event_code: "T0000",
+            transaction_amount: { currency_code: "USD", value: "50.00" },
+            fee_amount: { currency_code: "USD", value: "1.75" },
+          },
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; externalRef: string; raw: { receivedTransactions: number } } }).parsed;
+  assert.equal(parsed.provider, "paypal");
+  assert.equal(parsed.externalRef, "week-34");
+  assert.equal(parsed.raw.receivedTransactions, 1);
+});
+
+test("paypal import accepts the settlement report CSV instead of JSON", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "paypal",
+    externalRef: "stl-august",
+    settlementDate: "2026-08-24",
+    csv: "Transaction ID,Event Code\ntxn-1,T0000\n",
+  });
+
+  assert.equal(response.status, 200);
+  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; raw: { receivedCsvLength: number } } }).parsed;
+  assert.equal(parsed.provider, "paypal");
+  assert.ok(parsed.raw.receivedCsvLength > 0);
+});
+
+test("paypal import without evidence names the missing half", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "paypal",
+    externalRef: "week-34",
+    settlementDate: "2026-08-24",
+  });
+
+  assert.equal(response.status, 400);
+  assert.match((await response.json() as { error: string }).error, /payload or csv is required/);
+  assert.deepEqual(routeState.domainCalls, []);
+});
+
+test("import attaches cross-currency evidence instead of assuming a rate", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "stripe",
+    externalRef: "payout-fx",
+    settlementDate: "2026-08-24",
+    transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "EUR" }],
+    fx: { sourceCurrency: "EUR", rate: "1.0842", rateSource: "Stripe balance transaction exchange_rate" },
+  });
+
+  assert.equal(response.status, 200);
+  const parsed = (routeState.domainCalls[0]?.input as { parsed: { fx: { sourceCurrency: string; rate: string } } }).parsed;
+  assert.deepEqual(parsed.fx, {
+    sourceCurrency: "EUR",
+    rate: "1.0842",
+    rateSource: "Stripe balance transaction exchange_rate",
+    payoutRate: null,
+    payoutRateSource: null,
+  });
+});
+
+test("settlement detail refuses a malformed batch id without reaching storage", async () => {
+  reset(["banking.read"]);
+
+  const response = await GET(new Request("http://openbooks.test/api/psp/settlements?batchId=not-a-uuid"));
+
+  assert.equal(response.status, 404);
+});
+
+test("settlement detail returns the batch with its evidence lines", async () => {
+  reset(["banking.read"]);
+  routeState.batchRows = [{ id: "00000000-0000-4000-8000-0000000000b1", externalRef: "payout-1" }];
+  routeState.lineRows = [
+    { lineNumber: 1, kind: "charge", externalRef: "txn-1", description: "Visa", amount: "100.0000", currency: "USD", documentId: null, documentKind: null, documentNumber: null },
+  ];
+
+  const response = await GET(
+    new Request("http://openbooks.test/api/psp/settlements?batchId=00000000-0000-4000-8000-0000000000b1"),
+  );
+
+  assert.equal(response.status, 200);
+  const payload = (await response.json()) as {
+    batch: { id: string };
+    lines: Array<{ lineNumber: number }>;
+  };
+  assert.equal(payload.batch.id, "00000000-0000-4000-8000-0000000000b1");
+  assert.deepEqual(payload.lines.map((line) => line.lineNumber), [1]);
+});
+
+test("settlement detail of another tenant's batch is a 404", async () => {
+  reset(["banking.read"]);
+  routeState.batchRows = [];
+
+  const response = await GET(
+    new Request("http://openbooks.test/api/psp/settlements?batchId=00000000-0000-4000-8000-0000000000b1"),
+  );
+
+  assert.equal(response.status, 404);
+});
