@@ -187,155 +187,74 @@ test('spend velocity CSV exports retain account amount decimals', async () => {
   }
 })
 
-test('an unconfigured cliff names its remedy instead of scoring without a floor', async () => {
+/** Render the view, optionally on a named tab, and hand back its text plus cleanup. */
+async function renderText(data: SpendVelocityData, tab?: string): Promise<{ text: string; cleanup: () => Promise<void> }> {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
-  try {
-    await act(async () => {
-      root.render(providers(<SpendVelocityView data={fixture()} />))
-      await tick()
-    })
+  await act(async () => {
+    root.render(providers(<SpendVelocityView data={data} />))
     await tick()
-    const detectorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Detectors'))
-    assert.ok(detectorsTab, 'the detectors tab must exist')
-    await click(detectorsTab)
-    assert.ok(
-      host.textContent?.includes('Set the minimum base in Spend Velocity → Configuration'),
-      `the cliff tile must name its remedy, got:\n${host.textContent}`,
-    )
+  })
+  await tick()
+  if (tab) {
+    const tabButton = [...host.querySelectorAll('button')].find((b) => b.textContent === tab || b.textContent?.startsWith(tab))
+    assert.ok(tabButton, `the ${tab} tab must exist`)
+    await click(tabButton)
+  }
+  const text = host.textContent ?? ''
+  return {
+    text,
+    cleanup: async () => {
+      await act(async () => {
+        root.unmount()
+      })
+      host.remove()
+    },
+  }
+}
+
+function alertFixture(): SpendVelocityData {
+  const data = fixture()
+  data.boilingFrog.accounts = [
+    { accountId: 'a-creep', accountName: 'Creeping SaaS', monotonicRatio: 80, avgMonthlyIncrease: 2.5, totalCreep: 25, startAmount: '100.0000', endAmount: '125.0000', monthCount: 10, annualizedCreep: '30.0000', monthlyAmounts: [], severity: 'critical' },
+  ]
+  data.concentration.accounts = [
+    { id: 'a-big', name: 'Big Vendor Acct', entityType: 'account', totalSpend: '5000.0000', totalBills: '0', totalExpenses: '0', totalOther: '0', billPct: 0, expensePct: 0, transactionCount: 3, monthCount: 3, velocity: 30, acceleration: 5, trend: 'accelerating', latestSpend: '0', previousSpend: '0', avgMonthlySpend: '0', monthlyAmounts: [], monthLabels: [], spendShare: 35.5 },
+  ]
+  return data
+}
+
+test('unconfigured detectors name remedies with single percents and worded trends', async () => {
+  const { text, cleanup } = await renderText(alertFixture(), 'Detectors')
+  try {
+    assert.ok(text.includes('Set the minimum base in Spend Velocity → Configuration'), `the cliff tile must name its remedy, got:\n${text}`)
+    assert.ok(text.includes('Set the fragmentation size cap in Spend Velocity → Configuration'), `the fragmentation tile must name its remedy, got:\n${text}`)
+    assert.ok(!text.includes('%%'), `no detail may double the percent sign, got:\n${text}`)
+    assert.ok(text.includes('Accelerating'), `the concentration trend must read in words, got:\n${text}`)
   } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+    await cleanup()
   }
 })
 
 test('the configuration tab renders the fixed scoring rubric read-only', async () => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  const { text, cleanup } = await renderText(fixture(), 'Configuration')
   try {
-    await act(async () => {
-      root.render(providers(<SpendVelocityView data={fixture()} />))
-      await tick()
-    })
-    await tick()
-    const configTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Configuration')
-    assert.ok(configTab, 'the configuration tab must exist')
-    await click(configTab)
-    assert.ok(
-      host.textContent?.includes('Scoring model'),
-      `the rubric panel must render, got:\n${host.textContent}`,
-    )
-    assert.ok(
-      host.textContent?.includes('Deduction cap'),
-      `the rubric rows must name their weights, got:\n${host.textContent}`,
-    )
-    assert.ok(
-      host.textContent?.includes('(<10%)'),
-      `the frog note must show the configured step cap, got:\n${host.textContent}`,
-    )
+    assert.ok(text.includes('Scoring model'), `the rubric panel must render, got:\n${text}`)
+    assert.ok(text.includes('Deduction cap'), `the rubric rows must name their weights, got:\n${text}`)
+    assert.ok(text.includes('(<10%)'), `the frog note must show the configured step cap, got:\n${text}`)
   } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  }
-})
-
-test('detector details never double the percent sign and name trends in words', async () => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
-  try {
-    const data = fixture()
-    data.boilingFrog.accounts = [
-      {
-        accountId: 'a-creep', accountName: 'Creeping SaaS', monotonicRatio: 80, avgMonthlyIncrease: 2.5,
-        totalCreep: 25, startAmount: '100.0000', endAmount: '125.0000', monthCount: 10,
-        annualizedCreep: '30.0000', monthlyAmounts: [], severity: 'critical',
-      },
-    ]
-    data.concentration.accounts = [
-      {
-        id: 'a-big', name: 'Big Vendor Acct', entityType: 'account', totalSpend: '5000.0000',
-        totalBills: '0', totalExpenses: '0', totalOther: '0', billPct: 0, expensePct: 0,
-        transactionCount: 3, monthCount: 3, velocity: 30, acceleration: 5, trend: 'accelerating',
-        latestSpend: '0', previousSpend: '0', avgMonthlySpend: '0', monthlyAmounts: [], monthLabels: [],
-        spendShare: 35.5,
-      },
-    ]
-    await act(async () => {
-      root.render(providers(<SpendVelocityView data={data} />))
-      await tick()
-    })
-    await tick()
-    const detectorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Detectors'))
-    assert.ok(detectorsTab, 'the detectors tab must exist')
-    await click(detectorsTab)
-    assert.ok(
-      !host.textContent?.includes('%%'),
-      `no detail may double the percent sign, got:\n${host.textContent}`,
-    )
-    assert.ok(
-      host.textContent?.includes('Accelerating'),
-      `the concentration trend must read in words, got:\n${host.textContent}`,
-    )
-  } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+    await cleanup()
   }
 })
 
 test('the headlines caveat the detectors the score omits', async () => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  // The fixture leaves fragmentation unconfigured: the gauge and the
+  // alerts headline must carry its remedy, not a clean bill of health.
+  const { text, cleanup } = await renderText(fixture())
   try {
-    await act(async () => {
-      root.render(providers(<SpendVelocityView data={fixture()} />))
-      await tick()
-    })
-    await tick()
-    // The fixture leaves fragmentation unconfigured: the gauge and the
-    // alerts headline must carry its remedy, not a clean bill of health.
-    assert.ok(
-      host.textContent?.includes('Set the fragmentation size cap in Spend Velocity → Configuration'),
-      `the headlines must caveat the omitted detector, got:\n${host.textContent}`,
-    )
+    assert.ok(text.includes('Set the fragmentation size cap in Spend Velocity → Configuration'), `the headlines must caveat the omitted detector, got:\n${text}`)
   } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  }
-})
-
-test('an unconfigured fragmentation detector names its remedy instead of scoring', async () => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
-  try {
-    await act(async () => {
-      root.render(providers(<SpendVelocityView data={fixture()} />))
-      await tick()
-    })
-    await tick()
-    const detectorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Detectors'))
-    assert.ok(detectorsTab, 'the detectors tab must exist')
-    await click(detectorsTab)
-    assert.ok(
-      host.textContent?.includes('Set the fragmentation size cap in Spend Velocity → Configuration'),
-      `the fragmentation tile must name its remedy, got:\n${host.textContent}`,
-    )
-  } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+    await cleanup()
   }
 })
