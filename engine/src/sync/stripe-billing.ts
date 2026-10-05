@@ -429,10 +429,11 @@ export async function linkStripeCustomer(
 ): Promise<void> {
   await requireUsageFeature(orgId);
   const stripe = await stripeAccount(orgId, transport);
+  const customerScope = subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true });
   const customer = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     select p.id from parties p
      where p.org_id = ${orgId} and p.id = ${customerId} and p.kind = 'customer'
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`))).rows[0];
+       ${customerScope}`))).rows[0];
   if (!customer) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "customer", requiredString(stripeCustomerId, "customer id"), customer.id);
 }
@@ -448,11 +449,12 @@ export async function linkStripeSubscription(
 ): Promise<void> {
   await requireUsageFeature(orgId);
   const stripe = await stripeAccount(orgId, transport);
+  const subscriptionScope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true });
   const subscription = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     select s.id from subscriptions s
       join parties c on c.org_id = s.org_id and c.id = s.customer_id
      where s.org_id = ${orgId} and s.id = ${subscriptionId}
-       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+       ${subscriptionScope}`))).rows[0];
   if (!subscription) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "subscription", requiredString(stripeSubscriptionId, "subscription id"), subscription.id);
 }

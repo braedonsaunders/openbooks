@@ -58,8 +58,8 @@ test("Stripe billing imports draft price models and replays usage idempotently",
       await db.execute(sql`insert into subscription_plans (id,org_id,name,amount,currency_code,interval,interval_count,is_active,created_by,updated_by) values (${planId},${org.orgId},'Stripe test plan','0','CAD','monthly',1,true,${actor},${actor})`);
       await db.execute(sql`insert into subscriptions (id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,current_period_start,created_by,updated_by) values (${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active',${org.date},${org.date},${org.date},${actor},${actor})`);
     });
-    await linkStripeCustomer(org.orgId, actor, "cus_linked", org.customerId, { fetch });
-    await linkStripeSubscription(org.orgId, actor, "sub_linked", subscriptionId, { fetch });
+    await linkStripeCustomer(org.orgId, actor, "cus_linked", org.customerId, null, { fetch });
+    await linkStripeSubscription(org.orgId, actor, "sub_linked", subscriptionId, null, { fetch });
     const run = () => importStripeBilling(org.orgId, actor, { since: org.date, until: org.date }, { fetch });
     const first = await run();
     const second = await run();
