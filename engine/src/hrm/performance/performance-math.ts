@@ -1,3 +1,4 @@
+import { canonicalDecimal, fixedDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 /**
  * Pure performance and retention math (0196, HR-7). No server imports, so
@@ -30,22 +31,9 @@ export function parseCivilDay(value: unknown, field: string): string {
   return value;
 }
 
-/**
- * The engine's decimal recognition, shared by readers (parseRatingScale)
- * and input boundaries (the setup review-template fold): one classifier,
- * never two. A bound the reader accepts must normalize; anything else is
- * refused by name before the write.
- */
-export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
-const PERSISTED_DECIMAL_RE = /^-?\d+(\.\d{1,4})?$/;
-
-/** Scale a decimal string to a bigint at 4 fractional digits (exact, never float). */
+/** Scale a validated decimal string to exact integer rating units. */
 function scale4(value: string): bigint {
-  const neg = value.startsWith("-");
-  const digits = neg ? value.slice(1) : value;
-  const [whole, frac = ""] = digits.split(".");
-  const padded = (frac + "0000").slice(0, 4);
-  return BigInt((neg ? "-" : "") + whole + padded);
+  return BigInt(fixedDecimal(value, 4).replace(".", ""));
 }
 
 /**
@@ -69,12 +57,12 @@ export function parseRatingScale(value: unknown): RatingScale {
   }
   const minStr = String(min);
   const maxStr = String(max);
-  if (!DECIMAL_RE.test(minStr) || !DECIMAL_RE.test(maxStr)) {
+  if (canonicalDecimal(minStr, Infinity) === null || canonicalDecimal(maxStr, Infinity) === null) {
     throw new PerformanceMathError(
       `the review template scale bounds must be decimal numbers, got min ${JSON.stringify(min)} max ${JSON.stringify(max)} — fix the template before opening the cycle`,
     );
   }
-  if (!PERSISTED_DECIMAL_RE.test(minStr) || !PERSISTED_DECIMAL_RE.test(maxStr)) {
+  if (canonicalDecimal(minStr, 4) === null || canonicalDecimal(maxStr, 4) === null) {
     throw new PerformanceMathError(
       `the review template scale bounds may have at most four decimal places because ratings persist at scale 4 — fix the template before opening the cycle`,
     );
@@ -103,12 +91,12 @@ export function parseRatingScale(value: unknown): RatingScale {
  * prompt travels in the refusal so the reviewer knows which answer to fix.
  */
 export function assertRatingInScale(scale: RatingScale, rating: string, questionPrompt: string): void {
-  if (!DECIMAL_RE.test(rating)) {
+  if (canonicalDecimal(rating, Infinity) === null) {
     throw new PerformanceMathError(
       `the answer to ${JSON.stringify(questionPrompt)} must be a decimal rating, got ${JSON.stringify(rating)}`,
     );
   }
-  if (!PERSISTED_DECIMAL_RE.test(rating)) {
+  if (canonicalDecimal(rating, 4) === null) {
     throw new PerformanceMathError(
       `the answer to ${JSON.stringify(questionPrompt)} has more than four decimal places, but ratings persist at scale 4 — enter a rating with at most four decimal places`,
     );

@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
 import {
@@ -159,7 +160,7 @@ export function assertRulesForBasis(basis: PerDiemBasis, rules: Record<string, u
     throw new HrmConstructionError("Policy rules must be a JSON object.");
   }
   if (basis === "flat_daily") {
-    if (typeof rules.amount !== "string" || !/^\d+(\.\d{1,4})?$/.test(rules.amount)) {
+    if (typeof rules.amount !== "string" || canonicalNonNegativeDecimal(rules.amount, 4) === null) {
       throw new HrmConstructionError("A flat-daily policy needs rules.amount as a non-negative decimal string.");
     }
     return;
@@ -172,7 +173,7 @@ export function assertRulesForBasis(basis: PerDiemBasis, rules: Record<string, u
       if (typeof bracket.min_km !== "number" || (bracket.max_km !== null && typeof bracket.max_km !== "number")) {
         throw new HrmConstructionError("Every distance bracket needs min_km and max_km (null for open-ended) as numbers.");
       }
-      if (typeof bracket.amount !== "string" || !/^\d+(\.\d{1,4})?$/.test(bracket.amount)) {
+      if (typeof bracket.amount !== "string" || canonicalNonNegativeDecimal(bracket.amount, 4) === null) {
         throw new HrmConstructionError("Every distance bracket needs amount as a non-negative decimal string.");
       }
     }

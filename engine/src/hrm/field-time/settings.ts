@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * Field time feature key and org settings.
  *
@@ -73,7 +74,7 @@ export function validateFieldTimeSettings(raw: unknown): FieldTimeSettings {
     );
   }
   const tol = rec.equipmentToleranceHours;
-  if (tol !== undefined && (typeof tol !== "string" || !/^\d+(?:\.\d{1,4})?$/.test(tol))) {
+  if (tol !== undefined && (typeof tol !== "string" || canonicalNonNegativeDecimal(tol, 4) === null)) {
     throw new FieldTimeError(
       "equipment_tolerance_not_declared",
       "Equipment tolerance is not a valid hours value — set it in Timesheets setup before posting equipment time",

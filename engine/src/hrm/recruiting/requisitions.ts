@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal, compareDecimal, isPositiveDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import {
@@ -143,11 +144,6 @@ async function allocateRequisitionNumber(exec: SqlExecutor, orgId: string): Prom
   return `${seq.prefix}${String(seq.next_number).padStart(seq.padding, "0")}`;
 }
 
-/** Exact positive-decimal test without floating point (FTE wire shape). */
-function isPositiveDecimal(value: string): boolean {
-  return !value.startsWith("-") && !/^0(\.0+)?$/.test(value);
-}
-
 async function assertRefVisible(
   exec: SqlExecutor,
   orgId: string,
@@ -180,7 +176,7 @@ function requireHeadcount(value: unknown): number {
   return value;
 }
 
-const DECIMAL_4 = /^\d+(\.\d{1,4})?$/;
+
 
 export function requireCompensation(value: unknown): RequisitionCompensation | null {
   if (value === undefined || value === null) return null;
@@ -188,17 +184,13 @@ export function requireCompensation(value: unknown): RequisitionCompensation | n
     throw new RecruitingError("INVALID_INPUT", "compensation travels as an all-or-nothing range (min, max, currency, basis) — send all four or none");
   }
   const { min, max, currency, basis } = value as Record<string, unknown>;
-  if (typeof min !== "string" || !DECIMAL_4.test(min)) {
+  if (typeof min !== "string" || canonicalNonNegativeDecimal(min, 4) === null) {
     throw new RecruitingError("INVALID_INPUT", "compensation min must be a decimal with up to 4 fraction digits");
   }
-  if (typeof max !== "string" || !DECIMAL_4.test(max)) {
+  if (typeof max !== "string" || canonicalNonNegativeDecimal(max, 4) === null) {
     throw new RecruitingError("INVALID_INPUT", "compensation max must be a decimal with up to 4 fraction digits");
   }
-  const scaled = (amount: string): bigint => {
-    const [whole, fraction = ""] = amount.split(".");
-    return BigInt(`${whole}${fraction.padEnd(4, "0")}`);
-  };
-  if (scaled(min) > scaled(max)) {
+  if (compareDecimal(canonicalNonNegativeDecimal(min, 4)!, canonicalNonNegativeDecimal(max, 4)!) > 0) {
     throw new RecruitingError("INVALID_INPUT", "compensation min exceeds max — enter a range where the minimum is no greater than the maximum");
   }
   if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) {

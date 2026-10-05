@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * CRA T4127 payroll deductions engine — Option 1 (periodic method), Option 2
  * cumulative averaging, plus the bonus /
@@ -288,7 +289,7 @@ function assertEiEmployerMultiple(value: string | undefined, fallback: string): 
     const multiple = rate6(candidate);
     return multiple >= rate6("1") && multiple <= rate6("1.4");
   };
-  let valid = /^\d(\.\d{1,4})?$/.test(raw);
+  let valid = canonicalNonNegativeDecimal(raw, 4) !== null;
   if (valid) {
     try {
       valid = inRange(raw);

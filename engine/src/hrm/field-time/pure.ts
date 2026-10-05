@@ -9,6 +9,7 @@
 import { FieldTimeError } from "./errors.ts";
 import { canonicalTimeZone } from "../../platform/time-zone.ts";
 import { apportion } from "../../money/money.ts";
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { utcDateFromParts } from "../../platform/civil-date.ts";
 
 export type RoundingMode = "nearest" | "up" | "down";
@@ -22,10 +23,10 @@ export interface RoundingRule {
 const SCALE = 10_000n;
 
 function parseTenThousandths(hours: string): bigint {
-  const m = /^(\d+)(?:\.(\d{1,4}))?$/.exec(hours.trim());
-  if (!m) throw new FieldTimeError("invalid_hours", `Hours ${JSON.stringify(hours)} are not a non-negative number with at most 4 decimals — re-enter the hours`);
-  const frac = (m[2] ?? "").padEnd(4, "0");
-  return BigInt(m[1]!) * SCALE + BigInt(frac);
+  const canonical = canonicalNonNegativeDecimal(hours,4);
+  if (canonical === null) throw new FieldTimeError("invalid_hours", `Hours ${JSON.stringify(hours)} are not a non-negative number with at most 4 decimals — re-enter the hours`);
+  const [whole = "0", fraction = ""] = canonical.split(".");
+  return BigInt(whole) * SCALE + BigInt(fraction.padEnd(4, "0"));
 }
 
 function formatTenThousandths(v: bigint): string {

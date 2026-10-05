@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * Phase 9 — BR pack statutory pass: 2026 INSS + IRRF + employer cost.
  *
@@ -61,26 +62,24 @@ function centsOf2dp(value: string): bigint {
   if (whole === undefined || hundredths === undefined) {
     fail(`internal error: expected 2dp amount, got "${value}"`);
   }
-  return BigInt(whole) * 100n + BigInt(hundredths);
+  return BigInt(whole!) * 100n + BigInt(hundredths);
 }
 
 /** Parse an exact percent string ("2", "1.50") to a rational. */
 function percentParts(percent: string, what: string): { num: bigint; den: bigint } {
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(percent.trim());
-  const whole = match?.[1];
-  if (whole === undefined) fail(`${what} is not a percent: "${percent}"`);
-  const frac = match?.[2] ?? "";
+  const canonical = canonicalNonNegativeDecimal(percent, Infinity);
+  if (canonical === null) fail(`${what} is not a percent: "${percent}"`);
+  const [whole, frac = ""] = canonical.split(".");
   const den = 10n ** BigInt(frac.length);
-  return { num: BigInt(whole) * den + BigInt(frac || "0"), den: den * 100n };
+  return { num: BigInt(whole!) * den + BigInt(frac || "0"), den: den * 100n };
 }
 
 /** Parse an exact factor string ("1.5", "0.5000") to a rational. */
 function factorParts(factor: string, what: string): { num: bigint; den: bigint } {
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(factor.trim());
-  const whole = match?.[1];
-  if (whole === undefined) fail(`${what} is not a factor: "${factor}"`);
-  const frac = match?.[2] ?? "";
-  return { num: BigInt(whole) * 10n ** BigInt(frac.length) + BigInt(frac || "0"), den: 10n ** BigInt(frac.length) };
+  const canonical = canonicalNonNegativeDecimal(factor, Infinity);
+  if (canonical === null) fail(`${what} is not a factor: "${factor}"`);
+  const [whole, frac = ""] = canonical.split(".");
+  return { num: BigInt(whole!) * 10n ** BigInt(frac.length) + BigInt(frac || "0"), den: 10n ** BigInt(frac.length) };
 }
 
 /** Truncate an exact rational of centavos toward zero (all inputs ≥ 0). */

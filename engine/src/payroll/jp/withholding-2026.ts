@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * The JP pack's pure 2026 calculators: NTA 月額表 lookup, pension grade
  * pricing, and social-insurance contribution arithmetic. Proven by goldens; the adapter
@@ -248,10 +249,11 @@ export function pensionGradeForPay(payYen: bigint): (typeof JP_PENSION_GRADES_20
  */
 export function healthHalfShare(standardYen: bigint, ratePercent: string): bigint {
   needIntYen(standardYen, "標準報酬月額");
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(ratePercent.trim());
-  if (!match) fail(`health rate "${ratePercent}" is not a percent number (9.85 for 9.85%)`);
-  const digits = (match[1] ?? "") + (match[2] ?? "");
-  const decimals = (match[2] ?? "").length;
+  const canonical = canonicalNonNegativeDecimal(ratePercent, Infinity);
+  if (canonical === null) fail(`health rate "${ratePercent}" is not a percent number (9.85 for 9.85%)`);
+  const [whole, fraction = ""] = canonical.split(".");
+  const digits = whole! + fraction;
+  const decimals = fraction.length;
   // half premium in sen (1/100 yen): standard × p/q ÷ 2 × 100 = standard × p / (2q).
   const num = BigInt(standardYen) * BigInt(digits);
   const den = 2n * 10n ** BigInt(decimals);

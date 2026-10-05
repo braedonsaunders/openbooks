@@ -2,15 +2,16 @@ import { sql } from 'drizzle-orm';
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween, isIsoCalendarDate, parseIsoDate } from '../platform/civil-date.ts';
 import { db } from '../platform/db.ts';
 import { isUuid } from '../platform/uuid.ts';
-import { canonicalDecimal } from '../money/exact-decimal.ts';
+import { canonicalDecimal, canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";;
 import { decimalNullRefusal } from '../money/decimal-refusal.ts';
 import { PayrollError } from './error.ts';
 import { monthsOfService } from './entitlements-service-tiers.ts';
 
 const SCALE = 10n ** 16n;
 function units(value: string): bigint {
-  if (!/^\d+(?:\.\d{1,16})?$/.test(value)) throw new PayrollError('Credited service must be a nonnegative decimal with at most sixteen decimal places.');
-  const [whole, fraction = ''] = value.split('.');
+  const canonical = canonicalNonNegativeDecimal(value,16);
+  if (canonical === null) throw new PayrollError('Credited service must be a nonnegative decimal with at most sixteen decimal places.');
+  const [whole, fraction = ''] = canonical.split('.');
   return BigInt(whole!) * SCALE + BigInt(fraction.padEnd(16, '0'));
 }
 function decimal(value: bigint): string {

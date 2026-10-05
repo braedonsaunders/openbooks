@@ -33,6 +33,7 @@ test("the rounding is single: ledger precision never double-rounds", () => {
   // 83.3333 × 0.01206 = 1.004999598 — a round-to-4dp-first path prints
   // 1.0050 and then 1.01; the true half-up cent is 1.00.
   assert.equal(assessAuWorkersComp("83.3333", "0.01206", "0").amount, "1.0000");
+  assert.equal(assessAuWorkersComp("1000000", "0.0100009", "0").amount, "10000.9000");
 });
 
 test("zero gross prices nothing", () => {
@@ -49,6 +50,7 @@ test("non-OTE wages contribute gross but do not generate SG for the levy base", 
 });
 
 test("a rate above 100% is refused by name, never priced", () => {
+  assert.throws(() => assessAuWorkersComp("2400", "1.0000001", "0"), /exceeds 1 \(100%\)/);
   assert.throws(
     () => assessAuWorkersComp("2400.0000", "1.5", "2400.0000"),
     (error: unknown) =>

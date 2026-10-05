@@ -3,10 +3,10 @@
 // submitted 0.30000000000000004 is measured as sixteen places (and refused
 // over a 2-place scale) instead of being quietly rounded.
 //
-// The grammar mirrors engine/src/money/exact-decimal.ts (canonicalDecimal /
-// parseExactDecimal), which this package cannot import: engine/src/flows
-// imports forms-core, so the dependency must point the other way. Keep the
-// two in lockstep — same acceptance grammar, same normalization.
+// This is the shared decimal grammar for forms and the accounting engine.
+// Financial request boundaries use canonicalPlainDecimal, which requires
+// text and refuses scientific notation; general form fields may normalize
+// an existing JSON number or an explicitly supplied scientific spelling.
 
 /** An exact decimal as scaled units plus its scale (fraction digits). */
 export type ExactDecimal = { units: bigint; scale: number }
@@ -22,9 +22,9 @@ const MAX_EXACT_EXPONENT = 10_000
  * symbols, hex, Infinity, and NaN are not decimal notations and are refused
  * — never coerced through Number.
  */
-export function parseExactDecimalParts(raw: string): ExactDecimal | null {
+export function parseExactDecimalParts(raw: string, allowScientific = true): ExactDecimal | null {
   const match = EXACT_DECIMAL_RE.exec(raw.trim())
-  if (!match) return null
+  if (!match || (!allowScientific && match[3] !== undefined)) return null
   const negative = match[1] === '-'
   const [intPart = '', fracPart = ''] = match[2]!.split('.')
   const exponent = match[3] === undefined ? 0 : Number(match[3])
@@ -70,6 +70,17 @@ export function canonicalDecimal(value: unknown, maxScale = 4): string | null {
       : typeof value === 'string'
         ? parseExactDecimalParts(value)
         : null
+  if (!parts || maxScale < 0 || parts.scale > maxScale) return null
+  return renderExactDecimal(parts.units, parts.scale)
+}
+
+/**
+ * Financial inputs require plain decimal text. A JSON number has already
+ * crossed IEEE-754 and cannot recover the operator's original spelling.
+ */
+export function canonicalPlainDecimal(value: unknown, maxScale = 4): string | null {
+  if (typeof value !== 'string') return null
+  const parts = parseExactDecimalParts(value, false)
   if (!parts || maxScale < 0 || parts.scale > maxScale) return null
   return renderExactDecimal(parts.units, parts.scale)
 }

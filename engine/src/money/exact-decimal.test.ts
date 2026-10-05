@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canonicalDecimal,
+  canonicalNonNegativeDecimal,
   compareDecimal,
   divideDecimal,
   fixedDecimal,
@@ -9,6 +10,7 @@ import {
   isZeroDecimal,
   parseExactDecimal,
 } from "./exact-decimal.ts";
+import { canonicalDecimal as canonicalFormDecimal, canonicalPlainDecimal } from "@openbooks/forms-core/decimals";
 import { normalizeMoney } from "./money.ts";
 import { decimalNullCause, decimalNullRefusal } from "./decimal-refusal.ts";
 
@@ -48,6 +50,7 @@ test("canonicalDecimal strips padding and signs without floats", () => {
     [100.25, 4, null],
   ];
   for (const [input, scale, expected] of cases) {
+    assert.equal(canonicalPlainDecimal(input, scale), expected);
     assert.equal(canonicalDecimal(input, scale), expected, `canonicalDecimal(${String(input)}, ${scale})`);
   }
 });
@@ -68,6 +71,10 @@ test("boundary and kernel agree on dot spellings and garbage stays refused", () 
     assert.equal(canonicalDecimal(garbage, 4), null, `${garbage} is refused`);
   }
   assert.equal(canonicalDecimal(100.25, 4), null, "JSON numbers are refused rather than stringified");
+  assert.equal(canonicalFormDecimal(100.25, 4), "100.25");
+  assert.equal(canonicalFormDecimal(0.30000000000000004, 2), null);
+  assert.equal(canonicalFormDecimal("1e-7", 7), "0.0000001");
+  assert.equal(canonicalPlainDecimal("1e-7", 7), null);
 });
 
 test("JSON numeric input gets a named decimal-string remedy", () => {
@@ -126,6 +133,17 @@ test("parseExactDecimal accepts finite decimals without Number and refuses the r
   for (const bad of ["abc", "", "1.2.3", "--1", "0x10", "Infinity", "NaN", null, undefined, 12]) {
     assert.equal(parseExactDecimal(bad), null, `parseExactDecimal(${String(bad)})`);
   }
+});
+
+test("non-negative request decimals preserve exact values and refuse unreadable inputs", () => {
+  for (const [input,expected] of [['9007199254740993.1234','9007199254740993.1234'],[' +.50 ','0.5'],['-0.0000','0'],['0012.3400','12.34']] as const) {
+    assert.equal(canonicalNonNegativeDecimal(input,4),expected);
+  }
+  for (const input of ['-0.0001','1.00001','12,34','1,234','1.234,56','1e3','€12','NaN','']) {
+    assert.equal(canonicalNonNegativeDecimal(input,4),null,input);
+  }
+  assert.equal(canonicalNonNegativeDecimal('0.1234567890',10),'0.123456789');
+  assert.equal(canonicalNonNegativeDecimal(12.34,4),null);
 });
 
 test("divideDecimal divides exactly with halves away from zero", () => {

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, mulDecimalFactors, sum } from "../money/money.ts";
 import type { db } from "../platform/db.ts";
 import type { PayrollWorkAllocation } from "./statutory-context.ts";
@@ -32,11 +33,11 @@ interface SourceAllocation {
 
 const SHARE_SCALE = 10n ** 10n;
 function shareUnits(value: string): bigint {
-  const match = /^([+-]?)(\d+)(?:\.(\d{1,10}))?$/.exec(value);
-  if (!match) throw new Error(`invalid work allocation share "${value}"`);
-  const fraction = (match[3] ?? "").padEnd(10, "0");
-  const magnitude = BigInt(match[2]!) * SHARE_SCALE + BigInt(fraction);
-  return match[1] === "-" ? -magnitude : magnitude;
+  const canonical = canonicalDecimal(value, 10);
+  if (canonical === null) throw new Error(`invalid work allocation share "${value}"`);
+  const [whole, fraction = ""] = canonical.replace(/^-/, "").split(".");
+  const magnitude = BigInt(whole!) * SHARE_SCALE + BigInt(fraction.padEnd(10, "0"));
+  return canonical.startsWith("-") ? -magnitude : magnitude;
 }
 function shareText(units: bigint): string {
   const whole = units / SHARE_SCALE;

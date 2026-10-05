@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * INSS for a transcribed year — the pure employee-contribution calculator
  * with the tables passed in.
@@ -33,17 +34,14 @@ function truncCents(numerator: bigint, denominator: bigint): bigint {
 
 /** Parse "1234.56" (or "1234") to exact centavos, refusing anything else. */
 function toCents(value: string, what: string, tag: string): bigint {
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
-  if (!match) {
+  const canonical = canonicalNonNegativeDecimal(value, 2);
+  if (canonical === null) {
     throw new PayrollPackError(
       `${tag} needs ${what} as a non-negative decimal amount, got "${value}"`,
     );
   }
-  const whole = match[1];
-  if (whole === undefined) {
-    throw new PayrollPackError(`${tag}: unparsed amount "${value}"`);
-  }
-  return BigInt(whole) * 100n + BigInt((match[2] ?? "00").padEnd(2, "0"));
+  const [whole, fraction = ""] = canonical.split(".");
+  return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
 }
 
 function fromCents(cents: bigint): string {

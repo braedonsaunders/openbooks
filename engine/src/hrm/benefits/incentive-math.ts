@@ -50,9 +50,8 @@ function requireDay(value: string, label: string): string {
 }
 
 /**
- * Public exact-decimal contract: canonicalDecimal's plain grammar first
- * (rejects scientific exponents, signs, and padded forms that the ledger
- * kernel would otherwise accept), then the kernel normalizer. Anything the
+ * Public exact-decimal contract: the shared plain grammar first, then the
+ * kernel normalizer. Anything the
  * first gate refuses is named here with the remedy — never rounded, never
  * coerced.
  */
@@ -60,7 +59,7 @@ function requireCanonicalDecimal(value: string, label: string): string {
   if (canonicalDecimal(value, 4) === null) {
     throw new BenefitsError(
       "INVALID_INPUT",
-      `${label} ${JSON.stringify(value)} is not an exact plain decimal — record digits like "1234.56" with at most 4 fraction digits, never exponents, signs, separators, or symbols`,
+      `${label} ${JSON.stringify(value)} is not an exact plain decimal — record digits like "1234.56" with at most 4 fraction digits, never exponents, separators, or symbols`,
     );
   }
   try {
@@ -641,16 +640,15 @@ function describeShareSpan(share: IncentiveMemberShare | undefined): string {
 }
 
 function requirePlainPercent(rate: string): { units: bigint; scale: bigint } {
-  const match = /^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/.exec(rate.trim());
-  const fraction = match?.[3] ?? match?.[4] ?? "";
-  if (!match || fraction.length > 10) {
+  const canonical = canonicalDecimal(rate, 10);
+  if (canonical === null) {
     throw new BenefitsError(
       "INVALID_INPUT",
       `percent rate ${JSON.stringify(rate)} is not a plain percentage — record digits like "2.5" for two and a half percent, never symbols or fractions`,
     );
   }
-  const whole = (match[2]!.split(".")[0] || "0").replace(/^0+(?=\d)/, "");
-  const units = BigInt(`${match[1] === "-" ? "-" : ""}${whole}${fraction}` || "0");
+  const [whole, fraction = ""] = canonical.split(".");
+  const units = BigInt(`${whole}${fraction}`);
   if (units <= 0n) {
     throw new BenefitsError(
       "INVALID_INPUT",

@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -123,7 +124,7 @@ async function requireOfferManage(
   }
 }
 
-const DECIMAL = /^\d+(\.\d{1,4})?$/;
+
 
 export interface CreateOfferQuery {
   readonly orgId: string;
@@ -157,7 +158,7 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     throw new RecruitingError("INVALID_INPUT", "jobTitle must be non-blank");
   }
   const proposedStartOn = requireCivilDate(query.proposedStartOn, "proposedStartOn");
-  if (typeof query.compensationAmount !== "string" || !DECIMAL.test(query.compensationAmount)) {
+  if (typeof query.compensationAmount !== "string" || canonicalNonNegativeDecimal(query.compensationAmount, 4) === null) {
     throw new RecruitingError("INVALID_INPUT", "compensationAmount must be a decimal with up to 4 fraction digits");
   }
   if (typeof query.compensationCurrency !== "string" || !/^[A-Z]{3}$/.test(query.compensationCurrency)) {

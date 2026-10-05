@@ -1,25 +1,18 @@
+import { canonicalPlainDecimal, parseExactDecimalParts } from "@openbooks/forms-core/decimals";
+
 /** Exact decimal validation/comparison for request boundaries. Accounting
  * engines retain their own fixed-scale helpers; this module prevents API and
  * form coercion from crossing JavaScript's binary floating-point boundary. */
 
+/** Financial boundaries require text and refuse scientific notation. */
 export function canonicalDecimal(value: unknown, maxScale = 4): string | null {
-  // One grammar with the money kernel (money.ts toUnits/parseExactDecimal):
-  // an optional sign, digits with an optional fraction, or a leading-dot
-  // fraction (".5" normalizes to "0.5"). A trailing dot ("5.") is the
-  // zero-length fraction the kernel accepts and normalizes to "5".
-  // JSON numbers have already crossed IEEE-754 before this boundary sees
-  // them. Converting with String() would make the rounded value look exact;
-  // callers must provide the decimal spelling as text.
-  if (typeof value !== "string") return null;
-  const raw = value.trim();
-  const match = raw.match(/^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/);
-  const fractionRaw = match?.[3] ?? match?.[4] ?? "";
-  if (!match || maxScale < 0 || fractionRaw.length > maxScale) return null;
-  const negative = match[1] === "-";
-  const whole = (match[2]!.split(".")[0] || "0").replace(/^0+(?=\d)/, "");
-  const fraction = fractionRaw.replace(/0+$/, "");
-  const zero = /^0+$/.test(whole) && fraction === "";
-  return `${negative && !zero ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+  return canonicalPlainDecimal(value, maxScale);
+}
+
+/** The shared request grammar constrained to a non-negative exact value. */
+export function canonicalNonNegativeDecimal(value: unknown, maxScale = 4): string | null {
+  const canonical = canonicalDecimal(value, maxScale);
+  return canonical === null || compareDecimal(canonical, "0") < 0 ? null : canonical;
 }
 
 function units(value: string, scale: number): bigint {
@@ -53,26 +46,9 @@ export function fixedDecimal(value: string, scale: number): string {
   return `${negative ? "-" : ""}${whole}.${fraction.padEnd(scale, "0")}`;
 }
 
-const EXACT_DECIMAL_RE = /^([+-]?)(\d+(?:\.\d*)?|\.\d+)(?:[eE]([+-]?\d+))?$/;
-
-/** Cap exact scientific expansion so a hostile exponent cannot force a giant allocation. */
-const MAX_EXACT_EXPONENT = 10_000;
-
 function toScaled(value: string): { unscaled: bigint; scale: number } | null {
-  const match = EXACT_DECIMAL_RE.exec(value.trim());
-  if (!match) return null;
-  const negative = match[1] === "-";
-  const [intPart = "", fracPart = ""] = match[2]!.split(".");
-  const exponent = match[3] === undefined ? 0 : Number(match[3]);
-  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > MAX_EXACT_EXPONENT) return null;
-  let digits = `${intPart}${fracPart}`.replace(/^0+/, "") || "0";
-  let scale = fracPart.length - exponent;
-  if (scale < 0) {
-    digits += "0".repeat(-scale);
-    scale = 0;
-  }
-  const unscaled = BigInt(digits);
-  return { unscaled: negative ? -unscaled : unscaled, scale };
+  const parts = parseExactDecimalParts(value);
+  return parts ? { unscaled: parts.units, scale: parts.scale } : null;
 }
 
 /**

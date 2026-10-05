@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
@@ -155,7 +156,7 @@ export async function createGoal(args: {
   }
   const dueOn = args.dueOn == null ? null : mathRefusal("INVALID_INPUT", () => parseCivilDay(args.dueOn as string, "due date"));
   const weight = args.weight == null || String(args.weight).trim().length === 0 ? null : String(args.weight).trim();
-  if (weight !== null && !/^\d+(\.\d+)?$/.test(weight)) {
+  if (weight !== null && canonicalNonNegativeDecimal(weight, Infinity) === null) {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
       `weight must be a non-negative decimal, got ${JSON.stringify(args.weight)}`,

@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
@@ -1106,7 +1107,7 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
     throw new CompensationError("INVALID_INPUT", "propose exactly one of proposedPct or proposedRate — the other derives, never both typed");
   }
   const pct6: string | null = hasPct ? pctInput6(query.proposedPct as string) : null;
-  if (hasRate && !/^\d+(\.\d{1,4})?$/.test(query.proposedRate as string)) {
+  if (hasRate && canonicalNonNegativeDecimal(query.proposedRate as string, 4) === null) {
     throw new CompensationError("INVALID_INPUT", "proposedRate must be a positive amount with at most 4 decimals");
   }
   return withOrgTransaction(orgId, async () => {
@@ -1731,7 +1732,7 @@ export async function setCycleBudgets(query: {
       if (!/^[A-Z]{3}$/.test(budget.currency)) {
         throw new CompensationError("INVALID_INPUT", "budget currency must be an ISO 4217 code");
       }
-      if (!/^\d+(\.\d{1,4})?$/.test(budget.amount)) {
+      if (canonicalNonNegativeDecimal(budget.amount, 4) === null) {
         throw new CompensationError("INVALID_INPUT", "budget amount must be a non-negative amount with at most 4 decimals");
       }
     }

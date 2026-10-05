@@ -1,9 +1,9 @@
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "../platform/civil-date.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { parseCivilDate } from "./temporal.ts";
 
 /**
- * Pure leave time-balance and overlap math (HR-5). Zero imports beyond the
- * civil-date parser: every function here is unit-tested without a database,
+ * Pure leave time-balance and overlap math. Every function here is tested without a database,
  * and no test doubles it (a pure function has nothing to isolate — mock the
  * database, never this).
  *
@@ -25,16 +25,15 @@ export class LeaveMathError extends Error {
 
 /** Parse an exact decimal hour string (up to 2 fraction digits) to cents. */
 export function parseHoursToCents(value: string): HourCents {
-  const match = /^(-)?(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
-  if (!match) {
+  const canonical = canonicalDecimal(value, 2);
+  if (canonical === null) {
     throw new LeaveMathError(
       `invalid hours ${JSON.stringify(value)}: use an exact decimal with at most 2 fraction digits`,
     );
   }
-  const sign = match[1] ? -1n : 1n;
-  const whole = BigInt(match[2] ?? "0");
-  const frac = BigInt((match[3] ?? "").padEnd(2, "0"));
-  return sign * (whole * 100n + frac);
+  const [whole, fraction = ""] = canonical.replace(/^-/, "").split(".");
+  const magnitude = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
+  return canonical.startsWith("-") ? -magnitude : magnitude;
 }
 
 /** Format cents back to a minimal exact decimal string. */

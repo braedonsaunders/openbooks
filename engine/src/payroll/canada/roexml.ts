@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -326,8 +327,8 @@ const reasonCode = (code: RoeReasonCode): string => ({
 })[code];
 
 function ceilWhole(decimal: string): string {
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(decimal);
-  if (!match) throw new PayrollError("ROE Block 15A hours are not a nonnegative decimal");
-  const fraction = match[2] ?? "";
-  return (BigInt(match[1]!) + (/[1-9]/.test(fraction) ? 1n : 0n)).toString();
+  const canonical = canonicalNonNegativeDecimal(decimal, Infinity);
+  if (canonical === null) throw new PayrollError("ROE Block 15A hours are not a nonnegative decimal");
+  const [whole, fraction = ""] = canonical.split(".");
+  return (BigInt(whole!) + (/[1-9]/.test(fraction) ? 1n : 0n)).toString();
 }
