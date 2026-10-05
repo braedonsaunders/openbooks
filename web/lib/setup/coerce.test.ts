@@ -136,6 +136,18 @@ test('number-sequence creation uses declared numeric defaults without masking in
   assert.deepEqual(buildRow(entity, { documentKind: 'journal', nextNumber: 'invalid' }, { forCreate: true }), { error: 'nextNumber must be a whole number' })
 })
 
+test('partial setup updates preserve omitted financial settings and allow explicit clearing', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('pay-components')!
+  const built = buildRow(entity, { code: '120', name: 'Travel', kind: 'earning', basis: 'fixed_amount', unitOfMeasure: 'quantity' }, { forCreate: false })
+  assert.ok('cols' in built)
+  assert.deepEqual(built.cols.map((column) => column.column), ['name', 'kind', 'basis', 'unit_of_measure'])
+  for (const key of ['expenseAccountId', 'liabilityAccountId', 'country', 'protectionClass']) {
+    const cleared = buildRow(entity, { [key]: null }, { forCreate: false })
+    assert.ok('cols' in cleared)
+    assert.deepEqual(cleared.cols, [{ column: key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value: null }])
+  }
+})
+
 test('setup updates distinguish omitted boolean controls from explicit changes', () => {
   const entity = SETUP_ENTITY_BY_KEY.get('pay-components')!
   const built = buildRow(entity, { name: 'Metadata update', kind: 'earning', taxable: false, nonPeriodic: true }, { forCreate: false })

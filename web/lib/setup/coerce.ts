@@ -308,9 +308,9 @@ export function buildRow(
     if (covered?.has(field.key)) continue
     // On edit, natural-key / immutable columns are never rewritten.
     if (!opts.forCreate && field.lockedOnEdit) continue
-    // Omission is not a negative policy choice. Apply declared defaults only
-    // on creation; an update without a boolean leaves its stored value alone.
-    if (!opts.forCreate && field.kind === 'boolean' && body[field.key] === undefined) continue
+    // A partial update changes only supplied fields. Clearing an account,
+    // amount or policy requires an explicit empty value; omission preserves it.
+    if (!opts.forCreate && body[field.key] === undefined) continue
     const raw = opts.forCreate && body[field.key] === undefined
       ? field.defaultValue
       : body[field.key]
