@@ -90,6 +90,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "usage_rating",
   "tax_provider_commit",
   "commerce_inbound",
+  "commerce_channel_sync",
   "demand_forecast",
   "tax_id_revalidation",
   "consolidated_billing",
@@ -754,6 +755,11 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       problems,
       unattributed: [],
     });
+    return;
+  }
+  if (row.kind === "commerce_channel_sync") {
+    const { runCommerceChannelSyncScan } = await import("../commerce/inventory-sync.ts");
+    await runCommerceChannelSyncScan();
     return;
   }
   if (row.kind === "tax_id_revalidation") {
