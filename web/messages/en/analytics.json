@@ -184,6 +184,40 @@
         "stagflation": "Stagflation"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "Gross Margin",
+        "operatingMargin": "Operating Margin",
+        "netMargin": "Net Margin",
+        "cogsRatio": "COGS Ratio"
+      },
+      "flow": "Margin Flow Analysis",
+      "flowHint": "Revenue → Net Income",
+      "summary": "Margin Summary",
+      "bridge": "YoY Margin Bridge",
+      "bridgeHint": "Volume = ΔRevenue × prior GM% · Rate = revenue × ΔGM% ({from} → {to})",
+      "bridgeNoPrior": "Needs revenue in the current and prior periods to split volume and rate effects.",
+      "bridgeSteps": {
+        "prior": "Prior GM",
+        "volume": "Volume Effect",
+        "rate": "Rate Effect",
+        "current": "Current GM",
+        "residual": "Rounding residual"
+      },
+      "trends": "Margin Trends (12mo)",
+      "series": {
+        "gross": "Gross",
+        "operating": "Operating"
+      },
+      "allocation": "Revenue Allocation",
+      "allocationNames": {
+        "cogs": "COGS",
+        "opex": "Operating Expenses",
+        "other": "Other Expense",
+        "net": "Net Income"
+      },
+      "noAllocation": "No allocation data."
+    },
     "kpi": {
       "revenue": "Revenue",
       "grossMargin": "Gross Margin",

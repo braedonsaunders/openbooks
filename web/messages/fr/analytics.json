@@ -184,6 +184,40 @@
         "stagflation": "Stagflation"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "Marge brute",
+        "operatingMargin": "Marge opérationnelle",
+        "netMargin": "Marge nette",
+        "cogsRatio": "Ratio COGS"
+      },
+      "flow": "Analyse du flux de marges",
+      "flowHint": "Chiffre d’affaires → Résultat net",
+      "summary": "Synthèse des marges",
+      "bridge": "Passerelle de marges annuelle",
+      "bridgeHint": "Volume = ΔCA × marge brute N-1 · Taux = CA × Δmarge ({from} → {to})",
+      "bridgeNoPrior": "Le partage volume/taux exige du chiffre d’affaires sur la période et la précédente.",
+      "bridgeSteps": {
+        "prior": "MB N-1",
+        "volume": "Effet volume",
+        "rate": "Effet taux",
+        "current": "MB actuelle",
+        "residual": "Écart d’arrondi"
+      },
+      "trends": "Tendances des marges (12 m.)",
+      "series": {
+        "gross": "Brute",
+        "operating": "Opérationnelle"
+      },
+      "allocation": "Répartition du chiffre d’affaires",
+      "allocationNames": {
+        "cogs": "COGS",
+        "opex": "Charges d’exploitation",
+        "other": "Autre charge",
+        "net": "Résultat net"
+      },
+      "noAllocation": "Aucune donnée de répartition."
+    },
     "kpi": {
       "revenue": "Chiffre d'affaires",
       "grossMargin": "Marge brute",

@@ -184,6 +184,40 @@
         "stagflation": "スタグフレーション"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "粗利益率",
+        "operatingMargin": "営業利益率",
+        "netMargin": "純利益率",
+        "cogsRatio": "COGS比率"
+      },
+      "flow": "マージンフロー分析",
+      "flowHint": "収益 → 純利益",
+      "summary": "マージン概要",
+      "bridge": "前年比マージンブリッジ",
+      "bridgeHint": "数量差＝Δ収益×前期粗利益率・率差＝収益×Δ粗利益率（{from} → {to}）",
+      "bridgeNoPrior": "数量差と率差の分解には当期と前期の収益が必要です。",
+      "bridgeSteps": {
+        "prior": "前期粗利益",
+        "volume": "数量差",
+        "rate": "率差",
+        "current": "当期粗利益",
+        "residual": "丸め残差"
+      },
+      "trends": "マージン推移（12か月）",
+      "series": {
+        "gross": "粗利",
+        "operating": "営業"
+      },
+      "allocation": "収益配分",
+      "allocationNames": {
+        "cogs": "COGS",
+        "opex": "販管費",
+        "other": "その他費用",
+        "net": "純利益"
+      },
+      "noAllocation": "配分データがありません。"
+    },
     "kpi": {
       "revenue": "売上高",
       "grossMargin": "売上総利益率",

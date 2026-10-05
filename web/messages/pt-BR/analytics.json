@@ -184,6 +184,40 @@
         "stagflation": "Estagflação"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "Margem bruta",
+        "operatingMargin": "Margem operacional",
+        "netMargin": "Margem líquida",
+        "cogsRatio": "Índice COGS"
+      },
+      "flow": "Análise do fluxo de margens",
+      "flowHint": "Receita → Resultado líquido",
+      "summary": "Resumo de margens",
+      "bridge": "Ponte de margens anual",
+      "bridgeHint": "Volume = Δreceita × MB anterior · Taxa = receita × ΔMB ({from} → {to})",
+      "bridgeNoPrior": "É necessária receita no período atual e no anterior para separar volume e taxa.",
+      "bridgeSteps": {
+        "prior": "LB anterior",
+        "volume": "Efeito volume",
+        "rate": "Efeito taxa",
+        "current": "LB atual",
+        "residual": "Resíduo de arredondamento"
+      },
+      "trends": "Tendências de margem (12 m.)",
+      "series": {
+        "gross": "Bruta",
+        "operating": "Operacional"
+      },
+      "allocation": "Alocação da receita",
+      "allocationNames": {
+        "cogs": "COGS",
+        "opex": "Despesas operacionais",
+        "other": "Outra despesa",
+        "net": "Resultado líquido"
+      },
+      "noAllocation": "Sem dados de alocação."
+    },
     "kpi": {
       "revenue": "Receita",
       "grossMargin": "Margem bruta",

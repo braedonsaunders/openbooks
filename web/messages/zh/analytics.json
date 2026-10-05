@@ -184,6 +184,40 @@
         "stagflation": "滞胀"
       }
     },
+    "margin": {
+      "kpi": {
+        "grossMargin": "毛利率",
+        "operatingMargin": "营业利润率",
+        "netMargin": "净利润率",
+        "cogsRatio": "销售成本率"
+      },
+      "flow": "利润流分析",
+      "flowHint": "收入 → 净利润",
+      "summary": "利润概要",
+      "bridge": "同比利润桥",
+      "bridgeHint": "销量差＝Δ收入×上期毛利率・利率差＝收入×Δ毛利率（{from} → {to}）",
+      "bridgeNoPrior": "分解销量差与利率差需要当期和上期收入。",
+      "bridgeSteps": {
+        "prior": "上期毛利",
+        "volume": "销量差",
+        "rate": "利率差",
+        "current": "当期毛利",
+        "residual": "舍入残差"
+      },
+      "trends": "利润趋势（12个月）",
+      "series": {
+        "gross": "毛利",
+        "operating": "营业"
+      },
+      "allocation": "收入分配",
+      "allocationNames": {
+        "cogs": "销售成本",
+        "opex": "运营费用",
+        "other": "其他费用",
+        "net": "净利润"
+      },
+      "noAllocation": "无分配数据。"
+    },
     "kpi": {
       "revenue": "收入",
       "grossMargin": "毛利率",
