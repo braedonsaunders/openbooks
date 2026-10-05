@@ -5,7 +5,7 @@
  * composes these with posting + matching primitives.
  */
 
-import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
+import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 // ---------------------------------------------------------------------------
 // Condition model
@@ -208,9 +208,11 @@ export function firstMatchingRule(line: BankLine, accountId: string, rules: Rule
  * absolute amount; fixed lines a set magnitude; the (single) remainder line
  * absorbs whatever is left, keeping the entry balanced exactly at the ledger's
  * numeric(19,4) scale — cents-only rounding here could strand sub-cent deltas
- * outside the posting. If no remainder line exists, the last line absorbs the
- * rounding delta. Portions that over-allocate the line total throw instead of
- * booking a flipped-sign remainder.
+ * outside the posting. If no remainder line exists, the portions must cover
+ * the whole line: the last line absorbs only the percent-rounding delta, and
+ * an under-allocation larger than rounding (Meals 50% + Travel 30%) refuses
+ * rather than silently landing on the last line. Portions that over-allocate
+ * the line total throw instead of booking a flipped-sign remainder.
  */
 export function resolveSplitAmounts(
   bankAmount: string,
@@ -245,6 +247,14 @@ export function resolveSplitAmounts(
   if (cmp(remainderMagnitude, '0') < 0) {
     throw new Error(
       `bank rule over-allocates the line total of ${formatMoney(absGross, 4)} by ${formatMoney(moneyAbs(remainderMagnitude), 4)} — reduce fixed or percent portions`,
+    )
+  }
+  // Each percent share rounds half-up at the ledger's 4 decimals, so without a
+  // remainder line at most half a unit per percent line may be left over.
+  const percentLines = lines.filter((line) => line.portion.kind === 'percent').length
+  if (remainderIdx < 0 && toUnits(remainderMagnitude) * 2n > BigInt(percentLines)) {
+    throw new Error(
+      `bank rule allocates only ${formatMoney(sum(allocated), 4)} of the line total of ${formatMoney(absGross, 4)} and has no remainder line — make the portions total 100% or add a remainder line`,
     )
   }
   if (remainderIdx >= 0) {

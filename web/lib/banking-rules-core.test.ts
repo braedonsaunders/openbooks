@@ -152,6 +152,23 @@ test('split: no remainder folds rounding into the last line', () => {
   assert.equal(Math.round(sum * 100) / 100, -100) // still balances despite rounding
 })
 
+test('split: an under-allocated split without a remainder line refuses instead of loading the last line', () => {
+  const lines: RuleSplitLine[] = [
+    { accountId: 'meals', portion: { kind: 'percent', value: 50 } },
+    { accountId: 'travel', portion: { kind: 'percent', value: 30 } },
+  ]
+  assert.throws(() => resolveSplitAmounts('100', lines), /allocates only 80\.0000 of the line total of 100\.0000 and has no remainder line — make the portions total 100% or add a remainder line/)
+  const fixedShort: RuleSplitLine[] = [{ accountId: 'a', portion: { kind: 'fixed', value: 40 } }]
+  assert.throws(() => resolveSplitAmounts('100', fixedShort), /has no remainder line/)
+  // Rounding dust from exact-100 percent splits still folds into the last line.
+  const thirds: RuleSplitLine[] = [
+    { accountId: 'a', portion: { kind: 'percent', value: '33.33' } },
+    { accountId: 'b', portion: { kind: 'percent', value: '33.33' } },
+    { accountId: 'c', portion: { kind: 'percent', value: '33.34' } },
+  ]
+  assert.deepEqual(resolveSplitAmounts('0.0007', thirds).map((r) => r.amount), ['-0.0002', '-0.0002', '-0.0003'])
+})
+
 test('split: over-allocated percents refuse instead of flipping the remainder', () => {
   const lines: RuleSplitLine[] = [
     { accountId: 'a', portion: { kind: 'percent', value: 60 } },

@@ -89,4 +89,16 @@ test('outcomes reject percent portions totalling more than 100', () => {
   assert.equal(validateOutcome(exactDecimals).ok, true)
   const singleHundred = outcome([{ accountId, portion: { kind: 'percent', value: 100 } }])
   assert.equal(validateOutcome(singleHundred).ok, true)
+  // Under 100 with nothing to absorb the rest would post the gap to the last line.
+  const under = validateOutcome(outcome([
+    { accountId, portion: { kind: 'percent', value: 50 } },
+    { accountId, portion: { kind: 'percent', value: 30 } },
+  ]))
+  assert.equal(under.ok, false)
+  assert.match(!under.ok ? under.error : '', /must total exactly 100 unless one line is the remainder/)
+  assert.equal(validateOutcome(outcome([
+    { accountId, portion: { kind: 'percent', value: 50 } },
+    { accountId, portion: { kind: 'percent', value: 30 } },
+    { accountId, portion: { kind: 'remainder' } },
+  ])).ok, true)
 })
