@@ -100,6 +100,7 @@
     "kpiSpendVelocityHint": "{savings} potential savings · {period}",
     "forensicRisk": "Forensic risk",
     "forensicRiskHint": "{flagged} flagged · {value} at risk · {period}",
+    "forensicRiskExcluded": "Excludes unconfigured: {detectors}",
     "duplicatePayments": "Duplicate payments",
     "duplicatePaymentsHint": "{value} at risk · {period}"
   },

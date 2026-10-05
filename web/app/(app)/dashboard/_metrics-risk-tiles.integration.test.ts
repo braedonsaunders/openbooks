@@ -82,12 +82,14 @@ test("risk widget reader returns the dashboard's own figures", { skip: !env.OPEN
       loadRiskWidgetMetrics(ctx, () => true),
       sentinelData(org.orgId, P, ctx.authz),
     ]));
-    assert.ok(metrics.forensicRisk !== null && metrics.forensicRisk !== undefined);
-    assert.equal(metrics.forensicRisk.score, data.summary.overallRiskScore);
-    assert.equal(metrics.forensicRisk.flagged, data.summary.flaggedCount);
-    assert.equal(metrics.forensicRisk.value, data.summary.totalAtRisk);
-    assert.equal(metrics.forensicRisk.currency, data.meta.presentationCurrency);
-    assert.equal(metrics.forensicRisk.periodLabel, P.label);
+    const risk = metrics.forensicRisk;
+    assert.ok(risk !== null && risk !== undefined && risk.available);
+    assert.equal(risk.value.score, data.summary.overallRiskScore);
+    assert.equal(risk.value.flagged, data.summary.flaggedCount);
+    assert.equal(risk.value.value, data.summary.totalAtRisk);
+    assert.equal(risk.value.currency, data.meta.presentationCurrency);
+    assert.equal(risk.value.periodLabel, P.label);
+    assert.deepEqual(risk.value.excluded, data.summary.excludedDetectors);
     const dup = metrics.duplicatePayments;
     assert.ok(dup !== null && dup !== undefined && dup.available);
     assert.equal(dup.value.groups, 1);
@@ -109,7 +111,8 @@ test("risk widget reader refuses the duplicate tile by name when the floor is un
     await seedDuplicateBills(org.orgId, org.subsidiaryId);
     const ctx = ctxFor(org.orgId);
     const metrics = await withOrgContext(org.orgId, () => loadRiskWidgetMetrics(ctx, () => true));
-    assert.ok(metrics.forensicRisk !== null && metrics.forensicRisk !== undefined);
+    const risk2 = metrics.forensicRisk;
+    assert.ok(risk2 !== null && risk2 !== undefined && risk2.available);
     const dup = metrics.duplicatePayments;
     assert.ok(dup !== null && dup !== undefined && !dup.available);
     assert.equal(typeof dup.reason, "string");

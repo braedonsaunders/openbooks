@@ -1,5 +1,6 @@
 import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
+import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import { sentinelRiskSummary } from '@/lib/analytics/sentinel-data'
 import { sentinelStrings } from '@/lib/analytics/sentinel-strings'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
@@ -22,6 +23,8 @@ export type ForensicRiskTile = {
   value: string
   currency: string
   periodLabel: string
+  /** Translated names of scoring sources skipped for lack of configuration. */
+  excluded: string[]
 }
 
 export type DuplicatePaymentsTile = {
@@ -33,13 +36,21 @@ export type DuplicatePaymentsTile = {
 }
 
 export type RiskWidgetMetrics = {
-  forensicRisk: ForensicRiskTile | null
+  forensicRisk: WidgetValue<ForensicRiskTile> | null
   duplicatePayments: WidgetValue<DuplicatePaymentsTile> | null
 }
 
 export const EMPTY_RISK_WIDGET_METRICS: RiskWidgetMetrics = {
   forensicRisk: null,
   duplicatePayments: null,
+}
+
+/** The declared refusals a scope can hit, surfaced on the tile with their message. */
+function refusal(error: unknown): { available: false; reason: string } {
+  if (error instanceof MissingExchangeRateError) {
+    return { available: false, reason: error.message }
+  }
+  throw error
 }
 
 export async function loadRiskWidgetMetrics(
@@ -52,35 +63,47 @@ export async function loadRiskWidgetMetrics(
   // locale — the same locale the dashboard statements use.
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
   const strings = sentinelStrings((key, values) => tc(key, values), locale)
-  const summary = await sentinelRiskSummary(
+  // A scope without exchange coverage refuses instead of failing the whole
+  // dashboard Promise.all — the tile carries the refusal like any other.
+  const summary = await (async () => sentinelRiskSummary(
     ctx.orgId,
     { from: period.from, to: period.to, label: period.label },
     ctx.authz,
     strings,
-  )
+  ))().then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
   const out: Partial<RiskWidgetMetrics> = {}
   if (need('forensicRisk')) {
-    out.forensicRisk = {
-      score: summary.overallRiskScore,
-      flagged: summary.flaggedCount,
-      value: summary.totalAtRisk,
-      currency: summary.presentationCurrency,
-      periodLabel: summary.periodLabel,
-    }
-  }
-  if (need('duplicatePayments')) {
-    const reason = summary.duplicateUnavailableReason
-    out.duplicatePayments = reason === null
-      ? {
+    out.forensicRisk = !summary.ok
+      ? refusal(summary.error)
+      : {
         available: true,
         value: {
-          groups: summary.duplicateCount,
-          value: summary.duplicateValue,
-          currency: summary.presentationCurrency,
-          periodLabel: summary.periodLabel,
+          score: summary.data.overallRiskScore,
+          flagged: summary.data.flaggedCount,
+          value: summary.data.totalAtRisk,
+          currency: summary.data.presentationCurrency,
+          periodLabel: summary.data.periodLabel,
+          excluded: summary.data.excludedDetectors,
         },
       }
-      : { available: false, reason }
+  }
+  if (need('duplicatePayments')) {
+    if (!summary.ok) {
+      out.duplicatePayments = refusal(summary.error)
+    } else {
+      const reason = summary.data.duplicateUnavailableReason
+      out.duplicatePayments = reason === null
+        ? {
+          available: true,
+          value: {
+            groups: summary.data.duplicateCount,
+            value: summary.data.duplicateValue,
+            currency: summary.data.presentationCurrency,
+            periodLabel: summary.data.periodLabel,
+          },
+        }
+        : { available: false, reason }
+    }
   }
   return out
 }

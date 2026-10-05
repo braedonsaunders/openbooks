@@ -1615,6 +1615,8 @@ export interface SentinelRiskSummary {
   duplicateConfigured: boolean;
   /** Translated reason naming the missing duplicate floor; null when configured. */
   duplicateUnavailableReason: string | null;
+  /** Translated names of skipped scoring sources (unset floors/limits/tiers). */
+  excludedDetectors: string[];
   presentationCurrency: string;
 }
 
@@ -1634,6 +1636,7 @@ export async function sentinelRiskSummary(
     duplicateValue: data.summary.totalDuplicateAmount,
     duplicateConfigured: data.duplicates.unavailable === null,
     duplicateUnavailableReason: data.duplicates.unavailable,
+    excludedDetectors: data.summary.excludedDetectors,
     presentationCurrency: data.meta.presentationCurrency,
   };
 }

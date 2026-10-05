@@ -100,6 +100,7 @@
     "kpiSpendVelocityHint": "節約余地{savings} · {period}",
     "forensicRisk": "フォレンジックリスク",
     "forensicRiskHint": "{flagged} 件のフラグ · {value} のリスク額 · {period}",
+    "forensicRiskExcluded": "未設定を除外: {detectors}",
     "duplicatePayments": "重複支払",
     "duplicatePaymentsHint": "{value} のリスク額 · {period}"
   },

@@ -100,6 +100,7 @@
     "kpiSpendVelocityHint": "潜在节约{savings} · {period}",
     "forensicRisk": "法证风险",
     "forensicRiskHint": "{flagged} 条已标记 · {value} 风险敞口 · {period}",
+    "forensicRiskExcluded": "不含未配置项:{detectors}",
     "duplicatePayments": "重复付款",
     "duplicatePaymentsHint": "{value} 风险敞口 · {period}"
   },

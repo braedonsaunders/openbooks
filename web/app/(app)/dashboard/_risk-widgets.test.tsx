@@ -24,7 +24,10 @@ const catalog = (locale: string): Record<string, unknown> =>
 // refusal when the floor is unset.
 function riskData() {
   return {
-    forensicRisk: { score: 42, flagged: 7, value: '1234.56', currency: 'USD', periodLabel: 'July 2026' },
+    forensicRisk: {
+      available: true,
+      value: { score: 42, flagged: 7, value: '1234.56', currency: 'USD', periodLabel: 'July 2026', excluded: ['Duplicates'] },
+    },
     duplicatePayments: {
       available: true,
       value: { groups: 3, value: '250.00', currency: 'USD', periodLabel: 'July 2026' },
@@ -34,7 +37,7 @@ function riskData() {
 
 function unconfiguredData() {
   return {
-    forensicRisk: { score: 0, flagged: 0, value: '0.00', currency: 'USD', periodLabel: 'July 2026' },
+    forensicRisk: { available: false, reason: 'No approval amount limits in Flows' },
     duplicatePayments: { available: false, reason: 'Set the duplicate minimum in Sentinel \u2192 Configuration' },
   } as unknown as DashboardMetrics
 }
@@ -70,6 +73,32 @@ test('duplicate-payments tile shows the groups with their translated value', asy
     assert.ok(html.includes('href="/analytics/sentinel"'), 'the tile links to its dashboard')
   } finally {
     await unmount()
+  }
+})
+
+test('forensic-risk tile names skipped detectors and refuses without coverage', async () => {
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-forensic-risk" data={riskData()} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    assert.ok(
+      host.innerHTML.includes('Excludes unconfigured: Duplicates'),
+      'the tile hint names the skipped scoring sources',
+    )
+  } finally {
+    await unmount()
+  }
+  const refused = await mountDashboard(
+    <WidgetCard widgetId="kpi-forensic-risk" data={unconfiguredData()} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    assert.ok(refused.host.innerHTML.includes('Forensic risk'), 'the tile keeps its title with no coverage')
+    assert.ok(refused.host.innerHTML.includes('No approval amount limits in Flows'), 'the refusal reaches the operator')
+    assert.ok(!refused.host.innerHTML.includes('>0<'), 'a refused scope never renders a zero score that reads as a fact')
+  } finally {
+    await refused.unmount()
   }
 })
 
