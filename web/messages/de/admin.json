@@ -1147,6 +1147,7 @@
     "items_post": "Lagerbewegungen buchen",
     "items_reverse": "Lagerbewegungen stornieren",
     "items_warehouses": "Lager und Lagerplätze verwalten",
+    "inventory_plan": "Bedarfspläne ausführen und Planungsrichtlinien bearbeiten",
     "manufacturing_read": "Fertigungsdaten anzeigen",
     "manufacturing_manage": "Fertigungsstammdaten und Fertigungsaufträge verwalten",
     "orders_fulfill": "Aufträge kommissionieren, verpacken und versenden",
@@ -6150,6 +6151,10 @@
     "itemVariants": {
       "title": "Artikelvarianten",
       "description": "Produkte in Optionen wie Größe und Farbe verkaufen, wobei jede Kombination ein eigener Artikel für Bestand, Preise und Verkäufe ist."
+    },
+    "demandPlanning": {
+      "title": "Bedarfsplanung",
+      "description": "Statistische Prognosen je Artikel und Standort, mit prüfbaren Bestell- und Umlagervorschlägen."
     },
     "manufacturing": {
       "title": "Fertigung",

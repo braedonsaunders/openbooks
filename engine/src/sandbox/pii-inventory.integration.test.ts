@@ -1368,6 +1368,21 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "managed_properties.status",
   "marketplace_facilitators.collection_mode",
   "marketplace_facilitators.name",
+  // Demand planning values are merchant-authored planning facts: service
+  // levels, lot sizes, run numbers, forecast bands and method names identify
+  // nobody. Override and dismissal reasons are operational notes, the same
+  // shape as the manufacturing dismissal reason below.
+  "demand_item_policies.forecast_method",
+  "demand_forecast_runs.number",
+  "demand_forecast_runs.parameters",
+  "demand_forecast_runs.status",
+  "demand_forecasts.period_grain",
+  "demand_forecasts.method",
+  "demand_forecasts.explanation",
+  "demand_plan_suggestions.action",
+  "demand_plan_suggestions.status",
+  "demand_plan_suggestions.dismiss_reason",
+  "demand_forecast_overrides.reason",
   "mfg_item_policies.supply_method",
   "mfg_mrp_runs.number",
   "mfg_mrp_runs.parameters",

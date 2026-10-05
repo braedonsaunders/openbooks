@@ -178,6 +178,11 @@ export const FEATURES: FeatureDef[] = [
   // Item variants: product families with ordered options whose combinations
   // become ordinary variant items. Needs the item catalog's stocked kinds.
   { key: 'itemVariants', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
+  // Demand planning: statistical forecasts per item and location with
+  // stockout correction, feeding reviewable purchase and transfer
+  // suggestions. Needs stocked items and their movements. Off by default —
+  // planning suggestions stay out of the way until the org wants them.
+  { key: 'demandPlanning', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
   // Manufacturing: building finished goods from inventory components.
   { key: 'manufacturing', defaultEnabled: false, category: 'operations', navModules: ['manufacturing'], requiresAll: ['inventory'] },
   { key: 'manufacturingMrp', defaultEnabled: false, category: 'operations', parentKey: 'manufacturing', recommends: ['orders'] },

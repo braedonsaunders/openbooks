@@ -119,6 +119,10 @@ export const PERMISSION_CATALOGUE = [
   // Warehousing: maintain warehouse locations. A catalog fact like
   // items.manage, so it carries no posting authority of its own.
   "items.warehouses",
+  // Demand planning: run forecasts and maintain planning policies. Planning
+  // proposes purchase and transfer quantities; creating the orders still
+  // demands ap.create / items.post, so this grant never moves value itself.
+  "inventory.plan",
   // Manufacturing master data, planning, and shop-floor records are separate
   // from inventory posting authority; posting still requires items.post.
   "manufacturing.read",
@@ -537,6 +541,7 @@ export const PERMISSION_GROUPS: {
       { key: "items.post", labelKey: permissionLabelKey("items.post") },
       { key: "items.reverse", labelKey: permissionLabelKey("items.reverse") },
       { key: "items.warehouses", labelKey: permissionLabelKey("items.warehouses") },
+      { key: "inventory.plan", labelKey: permissionLabelKey("inventory.plan") },
     ],
   },
   {
@@ -908,6 +913,7 @@ export const BUILT_IN_ROLES: Record<
       "items.post",
       "items.reverse",
       "items.warehouses",
+      "inventory.plan",
       "manufacturing.read",
       "manufacturing.manage",
       "orders.fulfill",
@@ -1020,6 +1026,7 @@ export const BUILT_IN_ROLES: Record<
       // reversal stays with the controller (maker/checker on posted value).
       "items.post",
       "items.warehouses",
+      "inventory.plan",
       "orders.fulfill",
       "returns.waive_fee",
       "shipping.manage",

@@ -1158,6 +1158,7 @@
     "items_post": "Lançar movimentações de estoque",
     "items_reverse": "Estornar movimentações de estoque",
     "items_warehouses": "Gerenciar armazéns e endereços",
+    "inventory_plan": "Executar planos de demanda e editar políticas de planejamento",
     "manufacturing_read": "Visualizar registros de manufatura",
     "manufacturing_manage": "Gerenciar cadastros e ordens de manufatura",
     "orders_fulfill": "Separar, embalar e expedir pedidos",
@@ -6010,6 +6011,10 @@
     "itemVariants": {
       "title": "Variações de item",
       "description": "Venda produtos com opções como tamanho e cor, com cada combinação como um item próprio para estoque, preços e vendas."
+    },
+    "demandPlanning": {
+      "title": "Planejamento de demanda",
+      "description": "Previsões estatísticas por item e local, com sugestões revisáveis de compra e transferência."
     },
     "manufacturing": {
       "title": "Manufatura",

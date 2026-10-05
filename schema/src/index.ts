@@ -14,6 +14,7 @@ export * from "./tax";
 export * from "./depreciation-conventions";
 export * from "./extension";
 export * from "./inventory";
+export * from "./demand-planning";
 export * from "./item-families";
 export * from "./manufacturing";
 export * from "./warehouses";

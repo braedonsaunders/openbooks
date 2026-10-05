@@ -149,6 +149,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason: "customer tax identifiers and their validation evidence are counterparty business records; finance remit.",
   },
   {
+    table: "demand_item_policies",
+    reason: "replenishment planning facts with a vendor counterparty link; vendor remit.",
+  },
+  {
     table: "promotions",
     reason: "merchant-authored discount offers are commercial configuration, not personal records.",
   },
