@@ -49,7 +49,8 @@
     "shipment": "出荷",
     "rma": "返品承認",
     "fund": "資金",
-    "fund_release": "資金リリース"
+    "fund_release": "資金リリース",
+    "collection_attempt": "回収試行"
   },
   "resourcing": {
     "fields": {

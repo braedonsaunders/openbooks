@@ -7,6 +7,7 @@ import { SubcontractsWorkspace } from '../../app/(app)/subcontracts/Subcontracts
 import { ApCockpit } from '../../app/(app)/ap/cockpit/ApCockpit'
 import { ApHeaderActions } from '../../app/(app)/ap/sections'
 import { CollectionsShell } from '../../app/(app)/collections/sections'
+import { AttemptDrawer } from '../../app/(app)/collections/AttemptDrawer'
 import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
 import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
@@ -81,6 +82,14 @@ export const COMMERCE_WIDGETS = {
       incomeAccounts={(props.incomeAccounts as ComponentProps<typeof CollectionsShell>['incomeAccounts']) ?? []}
     />
   ),
+  /** One collection attempt with its retry action. Null (no attempt open)
+   *  renders nothing — the list owns the empty state, never the drawer. */
+  'collection-attempt-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof AttemptDrawer>['drawer'] & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <AttemptDrawer key={remountKey} drawer={rest} />
+  },
 
   /* --- expenses cockpit ------------------------------------------------------------- */
   'expenses-dashboard': (props) => (

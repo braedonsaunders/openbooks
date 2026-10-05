@@ -1431,6 +1431,52 @@ const SOURCES: Record<string, EntityListSource> = {
     basePath: '/nonprofit/grants',
     statusVariant: (row) => row.status === 'active' ? 'success' : row.status === 'awarded' ? 'warning' : row.status === 'void' ? 'outline' : 'secondary',
   },
+  collection_attempt: {
+    // Automatic collection charges: one row per (invoice, retry position)
+    // with the provider outcome, decline reason and next retry. The invoice
+    // join scopes subsidiary visibility the way encumbrances do.
+    recordType: 'collection_attempt',
+    table: 'collection_attempts',
+    alias: 'a',
+    baseJoins: sql`join documents d on d.org_id = a.org_id and d.id = a.invoice_id
+      join parties p on p.org_id = a.org_id and p.id = d.party_id`,
+    builtInExpr: {
+      invoice: sql`d.document_number`,
+      customer: sql`p.display_name`,
+      amount: sql`a.amount`,
+      currency: sql`a.currency`,
+      provider: sql`a.provider`,
+      decline_code: sql`a.decline_code`,
+      next_retry_on: sql`a.next_retry_on`,
+      retry_position: sql`a.retry_position`,
+      created_at: sql`a.created_at`,
+      status: sql`a.status`,
+    },
+    sorts: {
+      invoice: sql`d.document_number`,
+      customer: sql`p.display_name`,
+      amount: sql`a.amount`,
+      decline_code: sql`a.decline_code`,
+      next_retry_on: sql`a.next_retry_on`,
+      created_at: sql`a.created_at`,
+      status: sql`a.status`,
+    },
+    defaultSort: sql`a.created_at desc`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => {
+      const resolvedScope = allowedSubsidiaryIds === undefined ? new Set<string>() : allowedSubsidiaryIds, parts = [sql`a.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`d.subsidiary_id`, resolvedScope)]
+      if (adhoc.q) parts.push(sql`and (d.document_number ilike ${`%${adhoc.q}%`} or p.display_name ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters?.status) parts.push(sql`and a.status = ${adhoc.filters.status}`)
+      for (const filter of view.filters) {
+        if (pushCustomFieldFilter(parts, filter, 'a')) continue
+        parts.push(sql`and false`)
+      }
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'attempt',
+    basePath: '/collections',
+    statusVariant: (row) => row.status === 'succeeded' ? 'success' : row.status === 'failed' ? 'destructive' : row.status === 'processing' ? 'warning' : row.status === 'initiated' ? 'secondary' : 'outline',
+  },
   encumbrance: {
     recordType: 'encumbrance',
     table: 'encumbrances',

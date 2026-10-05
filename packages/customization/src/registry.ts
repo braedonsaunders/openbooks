@@ -2324,6 +2324,34 @@ const ENCUMBRANCE: RecordTypeMeta = {
   listFilters: [{ key: "status", labelKey: "nonprofit.encumbrances.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["open", "closed", "void"].map((value) => ({ value })) }],
   defaultSort: { sortKey: "number", dir: "asc" },
 };
+/**
+ * Collection attempts are the autopay charge ledger: one row per (invoice,
+ * retry position) with the provider outcome. The universal list is the
+ * operator's collection queue; retrying happens in the attempt drawer.
+ */
+const COLLECTION_ATTEMPT: RecordTypeMeta = {
+  key: "collection_attempt",
+  labelKey: "customization.recordTypes.collection_attempt",
+  category: "entity",
+  featureKey: "autopay",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "invoice", labelKey: "ar.collections.attempts.invoice", kind: "reference", sortable: true, sortKey: "invoice", locked: true },
+    { key: "customer", labelKey: "ar.collections.attempts.customer", kind: "text", sortable: true, sortKey: "customer" },
+    { key: "amount", labelKey: "ar.collections.attempts.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
+    { key: "provider", labelKey: "ar.collections.attempts.provider", kind: "text", sortable: true, sortKey: "provider" },
+    { key: "decline_code", labelKey: "ar.collections.attempts.decline", kind: "text", sortable: true, sortKey: "decline_code" },
+    { key: "next_retry_on", labelKey: "ar.collections.attempts.nextRetry", kind: "date", sortable: true, sortKey: "next_retry_on", defaultWidth: 120 },
+    { key: "created_at", labelKey: "ar.collections.attempts.attemptedAt", kind: "date", sortable: true, sortKey: "created_at", defaultWidth: 120 },
+    { key: "status", labelKey: "ar.collections.attempts.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [{ key: "status", labelKey: "ar.collections.attempts.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["initiated", "processing", "succeeded", "failed", "canceled"].map((value) => ({ value })) }],
+  defaultSort: { sortKey: "created_at", dir: "desc" },
+};
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -2383,6 +2411,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   FUND_RELEASE,
   GRANT,
   ENCUMBRANCE,
+  COLLECTION_ATTEMPT,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = RECORD_TYPES.reduce(

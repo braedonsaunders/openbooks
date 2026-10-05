@@ -49,7 +49,8 @@
     "shipment": "Remessa",
     "rma": "Autorização de devolução",
     "fund": "Fundo",
-    "fund_release": "Liberação de fundos"
+    "fund_release": "Liberação de fundos",
+    "collection_attempt": "Tentativa de cobrança"
   },
   "resourcing": {
     "fields": {
