@@ -1607,12 +1607,12 @@ export function DocumentDrawer({
 
   // Who collects the line's tax: the merchant, or a marketplace facilitator
   // (whose share posts to its clearing account, never the tax liability).
-  // Sales kinds only — customer invoices and credits today; cash documents
-  // join when their drawer exists. The engine kind map is the server's copy
-  // of this set. No facilitators configured, no column: with nothing to
-  // choose, the choice is not offered.
+  // Paid-at-sale kinds ride alongside invoices and credits. The engine kind
+  // map is the server's copy of this set. No facilitators configured, no
+  // column: with nothing to choose, the choice is not offered.
   const marketplaceColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
-    if (config.kind !== 'customer_invoice' && config.kind !== 'customer_credit') return null
+    if (config.kind !== 'customer_invoice' && config.kind !== 'customer_credit'
+      && config.kind !== 'cash_sale' && config.kind !== 'cash_refund') return null
     if (marketplaceFacilitators.length === 0) return null
     return {
       key: 'marketplaceFacilitator',

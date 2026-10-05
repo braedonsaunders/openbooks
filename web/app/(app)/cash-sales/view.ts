@@ -18,6 +18,9 @@ import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../lib/features'
 import { readCashSalesSettings } from '../../../lib/company-settings'
 import type { DocumentDrawer } from '../../../components/document-drawer'
+import { readProviderTransactionsForDocument } from '@openbooks/engine/tax'
+import type { TaxProviderChipRow } from '../../../components/tax-provider-chip'
+import { TAX_FILING_WRITE_PERMISSION } from '../../../lib/tax-filing-permission'
 
 /**
  * Cash sales + cash refunds, split into a loader and a spec.
@@ -58,6 +61,12 @@ export interface CashSalesDrawer {
   tenderAccounts: DocumentDrawerProps['tenderAccounts']
   refundHref: DocumentDrawerProps['refundHref']
   defaultTenderAccountId: DocumentDrawerProps['defaultTenderAccountId']
+  /** Provider commit rows for a posted cash document; null while the
+   *  document is a draft or has nothing to commit to. */
+  taxProvider: { documentNumber: string; provider: string; rows: TaxProviderChipRow[]; canRetry: boolean } | null
+  /** Active marketplace facilitators for the per-line "tax collected by"
+   *  column. Empty hides the column. */
+  marketplaceFacilitators: { name: string }[]
 }
 
 export interface CashSalesData {
@@ -79,6 +88,7 @@ async function returnableSaleLines(orgId: string, saleId: string) {
     lineId: string; itemId: string | null; accountId: string; amount: string;
     quantity: string; unitPrice: string | null; description: string | null;
     taxCodeId: string | null; stockLocationId: string | null;
+    marketplaceFacilitator: string | null;
     issueMovementId: string | null; shipped: string | null; returned: string;
   }>(sql`
     with shipped as (
@@ -114,6 +124,7 @@ async function returnableSaleLines(orgId: string, saleId: string) {
                 else greatest(s.shipped_qty - coalesce(r.qty, 0), 0) end::text as quantity,
            l.unit_price::text as "unitPrice", l.description,
            l.tax_code_id as "taxCodeId", l.stock_location_id as "stockLocationId",
+           l.marketplace_facilitator as "marketplaceFacilitator",
            s.movement_id as "issueMovementId", s.shipped_qty::text as shipped,
            coalesce(r.qty, 0)::text as returned
       from document_lines l
@@ -288,6 +299,9 @@ export async function loadCashSales(
       description: line.description,
       tax_code_id: line.taxCodeId,
       stock_location_id: line.stockLocationId,
+      // The refund returns the sale's own tax treatment: a marketplace-collected
+      // line stays marketplace-collected, so the collector is proposed, not dropped.
+      marketplace_facilitator: line.marketplaceFacilitator,
       ...(line.issueMovementId
         ? { custom: { inventoryReturn: { sourceIssueMovementId: line.issueMovementId } } }
         : {}),
@@ -308,6 +322,31 @@ export async function loadCashSales(
     (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
   }
   const drawerPayload = openDoc ?? createSeed
+  // Provider commit rows for a posted cash document: posting enqueues them
+  // in its own transaction, so by the time the drawer opens they are here.
+  // Facilitator names load for every open drawer — the collector choice is
+  // made on the draft, before posting.
+  const providerRows = drawerOpen && openDoc && !isCreate && String(openDoc.doc.status) === 'posted'
+    ? await readProviderTransactionsForDocument(authz.user.orgId, String(openDoc.doc.id))
+    : []
+  const taxProvider = providerRows.length > 0 && openDoc
+    ? {
+        documentNumber: String(openDoc.doc.document_number),
+        provider: String(providerRows[0]!.provider),
+        rows: providerRows.map((row): TaxProviderChipRow => ({
+          id: String(row.id),
+          status: String(row.status),
+          lastError: row.lastError,
+        })),
+        canRetry: can(authz, TAX_FILING_WRITE_PERMISSION),
+      }
+    : null
+  const facilitatorRows = drawerOpen
+    ? (await db.execute<{ name: string }>(sql`
+        select name from marketplace_facilitators
+         where org_id = ${authz.user.orgId} and is_active
+         order by name`)).rows
+    : []
   const tenderAccountOptions = (pickers?.[8] ?? []) as { id: string; number: string | null; name: string | null }[]
   const defaultTenderAccountId = tillDefaults?.defaultCashAccountId
     ?? tenderAccountOptions[0]?.id ?? null
@@ -341,6 +380,8 @@ export async function loadCashSales(
               ? `${BASE_PATH}?doc=new&kind=cash_refund&refundFrom=${openDoc.doc.id}`
               : null,
           defaultTenderAccountId,
+          taxProvider,
+          marketplaceFacilitators: facilitatorRows,
         }
       : null
   return {
