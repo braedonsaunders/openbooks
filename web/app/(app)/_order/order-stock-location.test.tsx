@@ -15,6 +15,8 @@ import type { OrderPayload } from './OrderDrawer'
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
 const { OrderDrawer } = await import('./OrderDrawer')
+const { TransactionDrawer } = await import('../../../components/transaction-drawer')
+const { useEffect, useState } = await import('react')
 const messages = (await import('../../../messages/en')).default as Record<string, unknown>
 
 const DRAFT_ID = '77777777-7777-4777-8777-777777777777'
@@ -276,4 +278,48 @@ test('sales-order routing stays on its parent line and related records use their
   await click(detailsTab)
   assert.equal(document.querySelector('[role="dialog"]'), dialog)
   assert.equal(writes.length, 1, 'tab changes must not write')
+})
+
+
+test('retained record tabs load on first visit and preserve their draft in the same dialog', async (t) => {
+  let panelLoads = 0
+  function DraftPanel() {
+    const [draft, setDraft] = useState(0)
+    useEffect(() => { panelLoads += 1 }, [])
+    return <>
+      <input aria-label="Retained draft" value={draft} readOnly />
+      <button onClick={() => setDraft((value) => value + 1)}>Change retained draft</button>
+    </>
+  }
+  function Record() {
+    const [activeTab, setActiveTab] = useState('details')
+    return <TransactionDrawer
+      recordId={DRAFT_ID}
+      title="Draft retention"
+      closeHref="/estimates"
+      showEvidenceTabs={false}
+      activeTab={activeTab}
+      onActiveTabChange={setActiveTab}
+      keepRecordTabsMounted={['subscription']}
+      detailTabs={[{ key: 'subscription', label: 'Subscription', content: <DraftPanel /> }]}
+    >Record details</TransactionDrawer>
+  }
+  const { unmount } = await mountDashboard(<Record />, messages)
+  t.after(unmount)
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog, 'the record must open its native dialog')
+  assert.equal(panelLoads, 0, 'an unvisited retained tab must not load its record panel')
+  await click(buttonsNamed('Subscription')[0]!)
+  assert.equal(panelLoads, 1, 'the first visit must load the panel once')
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Retained draft"]')
+  assert.ok(input, 'the visited panel must expose its draft')
+  await click(buttonsNamed('Change retained draft')[0]!)
+  assert.equal(input.value, '1')
+  await click(buttonsNamed('Details')[0]!)
+  assert.ok(input.closest('[hidden]'), 'the draft must stay mounted but hidden under Details')
+  await click(buttonsNamed('Subscription')[0]!)
+  assert.equal(document.querySelector('input[aria-label="Retained draft"]'), input)
+  assert.equal(input.value, '1', 'returning to the panel must preserve its draft')
+  assert.equal(panelLoads, 1, 'returning must not reload the retained panel')
+  assert.equal(document.querySelector('[role="dialog"]'), dialog, 'switching must preserve the dialog shell')
 })
