@@ -80,6 +80,21 @@ test('setup decimal and percent fields canonicalize without crossing IEEE-754', 
   assert.match((coerceField(money, 'not-a-number') as { error: string }).error, /decimal number.*not a number/)
 })
 
+test('setup money fields store whole minor units, refusing scientific and hex spellings', () => {
+  // The storage boundary judges whole minors through the shared plain
+  // grammar at scale zero: plain text and safe-integer JSON numbers pass,
+  // while the spellings Number() would silently admit are refused.
+  const amount: SetupField = { key: 'amountMinor', kind: 'money', min: 0 }
+  assert.deepEqual(coerceField(amount, 12050), { column: 'amount_minor', value: 12050 })
+  assert.deepEqual(coerceField(amount, '12050'), { column: 'amount_minor', value: 12050 })
+  assert.deepEqual(coerceField(amount, ''), { column: 'amount_minor', value: null })
+  assert.match((coerceField(amount, '1e3') as { error: string }).error, /whole number of minor units/)
+  assert.match((coerceField(amount, '0x10') as { error: string }).error, /whole number of minor units/)
+  assert.match((coerceField(amount, '120.50') as { error: string }).error, /whole number of minor units/)
+  assert.match((coerceField(amount, 120.5) as { error: string }).error, /whole number of minor units/)
+  assert.match((coerceField(amount, -5) as { error: string }).error, /at least 0/)
+})
+
 test('number-sequence record choices store stable kind tokens without requiring UUIDs', () => {
   const field: SetupField = {
     key: 'documentKind',
