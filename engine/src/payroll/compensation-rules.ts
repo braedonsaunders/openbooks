@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { compileExpression, ExpressionError, type CompiledExpression, type ExpressionInput, type ExpressionRounding } from "../money/expression.ts";
-import { compareDecimal } from "../money/exact-decimal.ts";
+import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PayrollError } from "./error.ts";
+import { applyBasisCaps, type BasisCapContext } from './limits.ts';
 
 /** Employer component formulas and their explicit rounding policies. */
 export interface CompensationRule {
@@ -45,14 +46,32 @@ export interface CompensationRuleResult {
     readonly rounding: ExpressionRounding;
     readonly amountInputs: Readonly<Record<string, string | boolean>>;
     readonly conditionInputs: Readonly<Record<string, string | boolean>>;
+    readonly settlement?: {
+      readonly requestedAmount: string;
+      readonly amountCaps: CompensationRuleAmountCaps | null;
+      readonly inputCeilings: Readonly<Record<string, string>>;
+      readonly capRounding: ExpressionRounding | null;
+    };
   };
+}
+
+/** Native caps may reduce amount inputs and payable money; eligibility keeps the original facts. */
+export interface CompensationRuleSettlement {
+  readonly inputCeilings?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  readonly amountCaps?: Readonly<Record<string, CompensationRuleAmountCaps>>;
+}
+export interface CompensationRuleAmountCaps {
+  readonly hoursCap?: string | null;
+  readonly periodCap?: string | null;
+  readonly yearCap?: string | null;
+  readonly context: BasisCapContext;
 }
 
 export interface CompiledCompensationRules {
   readonly definitionHash: string;
   readonly requiredInputs: readonly string[];
   readonly evaluationOrder: readonly string[];
-  evaluate(inputs: Readonly<Record<string, unknown>>): {
+  evaluate(inputs: Readonly<Record<string, unknown>>, settlement?: CompensationRuleSettlement): {
     readonly algorithm: "compensation-rules-v1";
     readonly definitionHash: string;
     readonly inputs: Readonly<Record<string, string | boolean>>;
@@ -174,8 +193,11 @@ export function compileCompensationRules(
   const definitionHash = compensationRuleDefinitionHash({ ...definition, rules });
   return Object.freeze({
     definitionHash, requiredInputs, evaluationOrder: Object.freeze(order),
-    evaluate(rawInputs: Readonly<Record<string, unknown>>) {
+    evaluate(rawInputs: Readonly<Record<string, unknown>>, settlement?: CompensationRuleSettlement) {
       if (!rawInputs || typeof rawInputs !== "object" || Array.isArray(rawInputs)) throw new PayrollError("Compensation rule inputs must be a record of declared values — supply every required input before calculating.");
+      for (const componentId of new Set([...Object.keys(settlement?.inputCeilings ?? {}), ...Object.keys(settlement?.amountCaps ?? {})])) {
+        if (!targets.has(componentId)) throw new PayrollError('A native compensation cap names an unrelated component — reload the package calculation sources before retrying.');
+      }
       const values: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
       const inputEvidence: Record<string, string | boolean> = Object.create(null) as Record<string, string | boolean>;
       // Caller values cannot override derived components or flow into result evidence unused.
@@ -196,17 +218,58 @@ export function compileCompensationRules(
         try {
           const condition = node.condition?.evaluate(values, MONEY_ROUNDING) ?? null;
           const applicable = condition?.value !== false;
-          const calculated = applicable ? node.amount.evaluate(values, node.rule.rounding) : null;
+          const inputCeilings = settlement?.inputCeilings?.[node.rule.componentId] ?? {};
+          const amountValues = { ...values };
+          for (const [name, ceiling] of Object.entries(inputCeilings)) {
+            const input = definition.inputs.find(input => input.name === name);
+            if (!input || !['money', 'hours'].includes(input.type.kind) || !node.amount.dependencies.includes(name)
+              || canonicalDecimal(ceiling, 18) === null || compareDecimal(ceiling, '0') < 0) {
+              throw new PayrollError(`Compensation rule ${JSON.stringify(key)} has an invalid native basis cap — reload its native money or hours sources before retrying.`);
+            }
+            if (compareDecimal(values[name] as string, ceiling) > 0) amountValues[name] = ceiling;
+          }
+          const calculated = applicable ? node.amount.evaluate(amountValues, node.rule.rounding) : null;
           const rawAmount = calculated?.value ?? "0.0000";
           if (typeof rawAmount !== "string") throw new PayrollError(`Compensation rule ${JSON.stringify(key)} produced a boolean amount — correct its expression.`);
           if (compareDecimal(rawAmount, "0") < 0) throw new PayrollError(`Compensation rule ${JSON.stringify(key)} produced a negative amount — correct the rule; use a controlled payroll adjustment for a correction.`);
           // Components feed dependants at their actual payable amount, after their own rounding boundary.
-          const canonical = fromUnits(toUnits(rawAmount));
+          const configuredCaps = settlement?.amountCaps?.[node.rule.componentId] ?? null;
+          const amountCaps = configuredCaps ? Object.freeze({
+            hoursCap: configuredCaps.hoursCap ?? null, periodCap: configuredCaps.periodCap ?? null, yearCap: configuredCaps.yearCap ?? null,
+            context: Object.freeze({
+              ...(configuredCaps.hoursCap != null ? { lines: configuredCaps.context.lines ? Object.freeze(configuredCaps.context.lines.map(line => Object.freeze({ hours: line.hours,
+                ...(line.amount !== undefined ? { amount: line.amount } : {}), ...(line.exemptFromHoursCap !== undefined ? { exemptFromHoursCap: line.exemptFromHoursCap } : {}) }))) : undefined } : {}),
+              ...(configuredCaps.periodCap != null ? { periodToDate: configuredCaps.context.periodToDate } : {}),
+              ...(configuredCaps.yearCap != null ? { yearToDate: configuredCaps.context.yearToDate } : {}),
+            }),
+          }) : null;
+          if (amountCaps?.hoursCap != null && (canonicalDecimal(amountCaps.hoursCap, 4) === null
+            || compareDecimal(amountCaps.hoursCap, '0') < 0 || !amountCaps.context.lines)) {
+            throw new PayrollError(`Compensation rule ${JSON.stringify(key)} needs its native hours cap and earning lines — reload its payroll basis before retrying.`);
+          }
+          if (amountCaps) for (const [cap, prior] of [[amountCaps.periodCap, amountCaps.context.periodToDate], [amountCaps.yearCap, amountCaps.context.yearToDate]]) {
+            if (cap != null && (canonicalDecimal(cap, 4) === null || compareDecimal(cap, '0') < 0
+              || canonicalDecimal(prior, 4) === null || compareDecimal(prior!, '0') < 0)) {
+              throw new PayrollError(`Compensation rule ${JSON.stringify(key)} needs its exact native cap and consumed amount — reload its period and opening-inclusive annual limits before retrying; missing consumption never becomes zero.`);
+            }
+          }
+          // The expression has already produced money, so native amount limits use a unit rate of one.
+          const settledAmount = amountCaps ? applyBasisCaps({ basis: 'fixed_amount',
+            basisCapHoursPerPeriod: amountCaps.hoursCap, basisCapAmountPerPeriod: amountCaps.periodCap,
+            basisCapAmountPerYear: amountCaps.yearCap }, rawAmount, amountCaps.context) : rawAmount;
+          const capRounding = amountCaps && compareDecimal(settledAmount, rawAmount) < 0
+            ? Object.freeze({ ...node.rule.rounding, mode: 'towards_zero' as const }) : null;
+          const capped = capRounding ? compileExpression('bounded_amount', [{ name: 'bounded_amount', type: { kind: 'money', currency: definition.currency } }])
+            .evaluate({ bounded_amount: settledAmount }, capRounding).value : settledAmount;
+          if (typeof capped !== 'string') throw new PayrollError('A native compensation cap did not produce money — reload its payroll calculation sources before retrying.');
+          const canonical = fromUnits(toUnits(capped));
           values[key] = canonical;
           lines.push(Object.freeze({
             key, componentId: node.rule.componentId, applicable, amount: canonical,
             evidence: Object.freeze({ expression: node.rule.expression, condition: node.rule.condition ?? null, rounding: node.rule.rounding,
-              amountInputs: calculated?.inputs ?? Object.freeze({}), conditionInputs: condition?.inputs ?? Object.freeze({}) }),
+              amountInputs: calculated?.inputs ?? Object.freeze({}), conditionInputs: condition?.inputs ?? Object.freeze({}),
+              ...(amountCaps !== null || Object.keys(inputCeilings).length ? { settlement: Object.freeze({ requestedAmount: fromUnits(toUnits(rawAmount)),
+                amountCaps, inputCeilings: Object.freeze({ ...inputCeilings }), capRounding }) } : {}) }),
           }));
         } catch (error) { namedRuleError(key, error); }
       }

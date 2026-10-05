@@ -3,6 +3,7 @@ import { compensationPackageSchemaRefusal } from './compensation-package-error.t
 import test from "node:test";
 import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
 import { PayrollError } from "./error.ts";
+import { validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
 
 const orgId = "10000000-0000-4000-8000-000000000001";
 const componentId = "10000000-0000-4000-8000-000000000002";
@@ -44,6 +45,17 @@ test("dependent components consume actual rounded pay and cannot prorate it twic
   assert.equal(result.lines.length, 1);
   assert.equal(result.lines[0]!.componentId, bonusId);
   assert.equal(result.lines[0]!.amount, "20.0000");
+});
+
+test('package dependencies respect earnings and protected deduction settlement boundaries', () => {
+  const native = components.map(component => ({ ...component, basis: 'fixed_amount' as const, basisCapHoursPerPeriod: null,
+    basisCapAmountPerPeriod: null, basisCapAmountPerYear: null, protectionBase: 'none', protectionClass: null }));
+  const laterRule = { key: 'later', componentId: bonusId, expression: 'travel * 0.1', rounding, proration: 'none' as const };
+  const valid = { ...definition, rules: [...definition.rules, laterRule] };
+  validateCompensationPackagePayrollPolicy(valid, [native[0]!, { ...native[1]!, kind: 'deduction' }]);
+  const reversed = { ...valid, rules: [{ ...definition.rules[0]!, expression: 'later * 2', proration: 'none' as const }, { ...laterRule, expression: 'allowance' }] };
+  assert.throws(() => validateCompensationPackagePayrollPolicy(reversed, [native[0]!, { ...native[1]!, kind: 'deduction' }]), /earning travel.*later.*after earnings.*move the later dependency/);
+  assert.throws(() => validateCompensationPackagePayrollPolicy(valid, [{ ...native[0]!, kind: 'deduction', protectionBase: 'net_pay' }, { ...native[1]!, kind: 'employer_contribution' }]), /later.*protected component TRAVEL.*remove that dependency/);
 });
 
 test("replacement-only defaults need no missing assignment values and never pay twice", () => {
