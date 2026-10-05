@@ -1627,7 +1627,8 @@
       "logic": "预测逻辑",
       "perWeek": "每周(平均)",
       "horizonTotal": "期合计",
-      "unavailable": "类别不可用：{detail}"
+      "unavailableCardThreshold": "信用卡分类“{name}”没有任何付款历史，也没有设置大额付款阈值 — 请在分类编辑器中设置一个，以便预测知道哪些付款算作最后一笔付款",
+      "unavailableMissingRate": "{date}或之前没有{func}→{base}的即期汇率 — 请在Setup → 汇率中添加，以便折算历史数据"
     },
     "toggle": {
       "outflowsAp": "流出 (AP)",

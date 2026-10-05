@@ -1627,7 +1627,8 @@
       "logic": "予測ロジック",
       "perWeek": "週平均",
       "horizonTotal": "期間合計",
-      "unavailable": "カテゴリを利用できません: {detail}"
+      "unavailableCardThreshold": "クレジットカードカテゴリ「{name}」には支払履歴も重要支払しきい値もありません — 最終支払とみなす支払を予測が判断できるよう、カテゴリエディタで設定してください",
+      "unavailableMissingRate": "{date}以前の{func}→{base}のスポットレートがありません — 履歴を換算できるよう、Setup → 為替レートで追加してください"
     },
     "toggle": {
       "outflowsAp": "流出 (AP)",

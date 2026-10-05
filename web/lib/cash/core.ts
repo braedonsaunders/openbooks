@@ -314,9 +314,15 @@ export interface CategoryWeekly {
   /**
    * Set when the category refused to forecast: weekly[] is zeros and total
    * is zero, so the timeline still sums honestly, while the UI names the
-   * reason instead of the figure. Absent = forecast as usual.
+   * reason instead of the figure. Absent = forecast as usual. The client
+   * renders the catalog message selected by code with params — the English
+   * message stays server-side for logs only, never rendered.
    */
-  unavailable?: { code: "card-threshold-missing" | "missing-exchange-rate"; message: string };
+  unavailable?: {
+    code: "card-threshold-missing" | "missing-exchange-rate";
+    message: string;
+    params: Record<string, string | number>;
+  };
 }
 
 /**
@@ -328,13 +334,31 @@ export interface CategoryWeekly {
 export class CategoryForecastRefusal extends Error {
   readonly code = "card-threshold-missing" as const;
   readonly categoryId: string;
+  readonly categoryName: string;
   constructor(categoryId: string, categoryName: string) {
     super(
       `credit card category "${categoryName}" has no payment history and no significant payment threshold — set one in the category editor so the forecast knows which payments count as the last payment`,
     );
     this.name = "CategoryForecastRefusal";
     this.categoryId = categoryId;
+    this.categoryName = categoryName;
   }
+}
+
+/** A category that refused to forecast, for banners and tile hints. */
+export type RefusedCategory = {
+  id: string;
+  name: string;
+  code: "card-threshold-missing" | "missing-exchange-rate";
+  message: string;
+  params: Record<string, string | number>;
+};
+
+/** Every refusing category in a forecast, in forecast order. */
+export function refusedCategories(categories: readonly CategoryWeekly[]): RefusedCategory[] {
+  return categories.flatMap((c) =>
+    c.unavailable ? [{ id: c.id, name: c.name, code: c.unavailable.code, message: c.unavailable.message, params: c.unavailable.params }] : [],
+  );
 }
 
 /**
@@ -347,25 +371,39 @@ export function toUnavailableCategory(
   weekCount: number,
   e: unknown,
 ): CategoryWeekly | null {
-  const code =
-    e instanceof CategoryForecastRefusal
-      ? ("card-threshold-missing" as const)
-      : e instanceof MissingExchangeRateError
-        ? ("missing-exchange-rate" as const)
-        : null;
-  if (code === null) return null;
-  return {
-    id: cat.id,
-    name: cat.name,
-    direction: cat.direction,
-    method: cat.method,
-    weekly: Array<Money>(weekCount).fill(ZERO_MONEY),
-    total: ZERO_MONEY,
-    logic: "",
-    meta: { method: "Unavailable" },
-    breakdown: [],
-    unavailable: { code, message: (e as Error).message },
-  };
+  if (e instanceof CategoryForecastRefusal) {
+    return {
+      id: cat.id,
+      name: cat.name,
+      direction: cat.direction,
+      method: cat.method,
+      weekly: Array<Money>(weekCount).fill(ZERO_MONEY),
+      total: ZERO_MONEY,
+      logic: "",
+      meta: { method: "Unavailable" },
+      breakdown: [],
+      unavailable: { code: e.code, message: e.message, params: { name: e.categoryName } },
+    };
+  }
+  if (e instanceof MissingExchangeRateError) {
+    return {
+      id: cat.id,
+      name: cat.name,
+      direction: cat.direction,
+      method: cat.method,
+      weekly: Array<Money>(weekCount).fill(ZERO_MONEY),
+      total: ZERO_MONEY,
+      logic: "",
+      meta: { method: "Unavailable" },
+      breakdown: [],
+      unavailable: {
+        code: "missing-exchange-rate" as const,
+        message: e.message,
+        params: { func: e.func, base: e.base, date: e.date },
+      },
+    };
+  }
+  return null;
 }
 
 /**

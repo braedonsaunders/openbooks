@@ -197,6 +197,13 @@ export function CategoryTab({ data }: { data: CashflowData }) {
   // transactions just so this tab can total them by counterparty.
   const entries = data.partyTotals[side]
   const total = sumMoney(entries.map((e) => e.amount))
+  // The refusal renders the catalog message selected by its code — the
+  // server's English message stays in logs, never on screen.
+  const refusalText = (c: (typeof data.categories)[number]): string | null => {
+    if (!c.unavailable) return null
+    if (c.unavailable.code === 'card-threshold-missing') return t('catTable.unavailableCardThreshold', { name: c.name })
+    return t('catTable.unavailableMissingRate', c.unavailable.params)
+  }
 
   return (
     <div className="space-y-4">
@@ -220,7 +227,7 @@ export function CategoryTab({ data }: { data: CashflowData }) {
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </SharedTableCell>
                   <SharedTableCell className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{tMethods(`methods.${c.method}.label`)}</span></SharedTableCell>
-                  <SharedTableCell className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.unavailable ? t('catTable.unavailable', { detail: c.unavailable.message }) : c.logic || '—'}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{refusalText(c) ?? (c.logic || '—')}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(divideMoney(c.total, String(Math.max(1, c.weekly.length))))}</SharedTableCell>
                   <SharedTableCell className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</SharedTableCell>
                 </SharedTableRow>

@@ -161,12 +161,26 @@ test('a refusing category names its reason while the rest still renders', () => 
       logic: '',
       meta: { method: 'Unavailable' },
       breakdown: [],
-      unavailable: { code: 'card-threshold-missing', message: 'no threshold set' },
+      unavailable: { code: 'card-threshold-missing', message: 'no threshold set', params: { name: 'Card' } },
+    },
+    {
+      id: 'cat-fx',
+      name: 'FX blocked',
+      direction: 'inflow',
+      method: 'gl_history_average',
+      weekly: ['0.0000'],
+      total: '0.0000',
+      logic: '',
+      meta: { method: 'Unavailable' },
+      breakdown: [],
+      unavailable: { code: 'missing-exchange-rate', message: 'no spot rate', params: { func: 'USD', base: 'EUR', date: '2026-09-01' } },
     },
   ]
   const html = renderFr(<CategoryTab data={data} />)
-  assert.match(html, /Catégorie indisponible/, 'the row carries the French unavailable frame')
-  assert.match(html, /no threshold set/, 'the row names the refusal reason')
+  assert.match(html, /taux de change/, 'the FX refusal selects the missing-rate catalog message')
+  assert.match(html, /carte de crédit/, 'the row carries the French catalog refusal')
+  assert.match(html, /éditeur de catégories/, 'the refusal names the remedy in French')
+  assert.doesNotMatch(html, /no threshold set/, 'the English server message stays out of the UI')
 })
 
 test('the horizon selector renders from the catalog', () => {

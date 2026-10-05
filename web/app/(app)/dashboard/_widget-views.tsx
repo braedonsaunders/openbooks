@@ -165,7 +165,9 @@ export function WidgetCard({
       const tone = data.runwayStatus === 'critical' ? 'rose' : data.runwayStatus === 'caution' ? 'amber' : 'emerald'
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.runway'), <Hourglass size={15} />, '/banking/cash', tone)
       if (data.projectedCash === null) {
-        return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value="—" href="/banking/cash" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
+        // A refused position names the missing FX coverage instead of
+        // reading as "no data" — the reason reaches the operator.
+        return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value="—" href="/banking/cash" tone="emerald" hint={withAsOf(data.runwayRefusal ?? t('metricContext.noData'))} />
       }
       const state = data.runwayStatus === 'critical'
         ? `${t('metricContext.cashShortfall')} · ${t('metricContext.weekOf', { date: fmtDay(data.lowestCashWeek ?? data.asOfDate) })}`
