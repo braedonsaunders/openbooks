@@ -40,6 +40,16 @@ async function seedVendorBills(orgId: string, subsidiaryId: string, name: string
   return vendorId
 }
 
+// The duplicate detector is excluded by name while its floor is unset, so
+// every scenario below configures one: without it the detector reports
+// nothing and the assertions would pass vacuously.
+async function configureDuplicateFloor(orgId: string) {
+  await withBypass(async () => {
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
+      '{"duplicateMinAmount": "1.00", "duplicateDays": 14}') where id = ${orgId}`)
+  })
+}
+
 async function runSentinel(orgId: string) {
   const authz = {
     user: { orgId, id: randomUUID() },
@@ -65,6 +75,7 @@ test('sentinel duplicates ignore same-amount bills in different currencies', { s
       { num: 'BILL-USD', currency: 'USD', fx: '1.35', total: '100', date: '2026-07-10', ref: 'INV-1' },
       { num: 'BILL-CAD', currency: 'CAD', fx: '1', total: '100', date: '2026-07-10', ref: 'INV-1' },
     ])
+    await configureDuplicateFloor(org.orgId)
     const data = await runSentinel(org.orgId)
     assert.equal(data.duplicates.total, 0)
     assert.equal(groupsOf(data).length, 0)
@@ -85,6 +96,7 @@ test('sentinel duplicates require the same vendor reference', { skip: !env.OPENB
       { num: 'BILL-JUN', currency: 'USD', fx: '1.35', total: '200', date: '2026-07-10', ref: 'INV-101' },
       { num: 'BILL-JUL', currency: 'USD', fx: '1.35', total: '200', date: '2026-07-13', ref: 'INV-102' },
     ])
+    await configureDuplicateFloor(org.orgId)
     const data = await runSentinel(org.orgId)
     assert.equal(data.duplicates.total, 0)
     assert.equal(groupsOf(data).length, 0)
@@ -106,6 +118,7 @@ test('sentinel duplicates report one finding per natural-key group', { skip: !en
       { num: 'BILL-B', currency: 'USD', fx: '1.35', total: '300', date: '2026-07-02', ref: 'INV-9' },
       { num: 'BILL-C', currency: 'USD', fx: '1.35', total: '300', date: '2026-07-06', ref: 'INV-9' },
     ])
+    await configureDuplicateFloor(org.orgId)
     const data = await runSentinel(org.orgId)
     assert.equal(data.duplicates.total, 1)
     const groups = groupsOf(data)
