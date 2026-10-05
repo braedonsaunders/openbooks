@@ -108,9 +108,9 @@ test('a host-owned unified list mounts only the native editor and preserves its 
 })
 
 
-test('contribution children use their own URL state while retaining the benefit program', async () => {
+test('contribution children retain their URL state and inherit the owning benefit program', async () => {
   const entity = SETUP_ENTITY_BY_KEY.get('benefit-contribution-rules')!
-  const tabs = setupRecordTabs({ entity, row: { id: 'rule-id' }, orgId: 'org',
+  const tabs = setupRecordTabs({ entity, row: { id: 'rule-id', plan_id: 'plan-id' }, orgId: 'org',
     sp: { program: 'plan-id', setupTab: 'benefit-contribution-rules', childRow: 'rule-id', childTab: 'benefit-contribution-rule-components' },
     navigationPrefix: 'child', basePath: '/hrm/benefits', canManage: true,
     allowedSubsidiaryIds: null, features: { hrm: true }, t: key => key })
@@ -119,4 +119,20 @@ test('contribution children use their own URL state while retaining the benefit 
   assert.equal(counted.props.rowParam, 'childChildRow')
   assert.equal(counted.props.paramPrefix, 'childChild')
   assert.deepEqual(counted.props.parent, { recordKey: 'benefit-contribution-rules', value: 'rule-id' })
+  assert.deepEqual(counted.props.fixedFilter, { fieldKey: 'planId', value: 'plan-id' })
+  const queries: { sql: string; params: unknown[] }[] = []
+  Object.assign(globalThis, { __setupParentExecute: (query: SQL) => {
+    queries.push(dialect.sqlToQuery(query))
+    return Promise.resolve({ rows: [] })
+  } })
+  const created = await SetupEntitySection({ ...counted.props, searchParams: {
+    program: 'plan-id', setupTab: 'benefit-contribution-rules', childRow: 'rule-id',
+    childTab: 'benefit-contribution-rule-components', childChildRow: 'new',
+  } } as Parameters<typeof SetupEntitySection>[0])
+  const drawer = elements(created).find(node => node.type === SetupDrawer)!
+  assert.deepEqual(drawer.props.fixedValues, { ruleId: 'rule-id', planId: 'plan-id' },
+    'the new child must serialize both its contribution and its inherited program')
+  assert.ok(queries.some(query => query.sql.includes('from hrm_benefit_contribution_rule_components') &&
+    query.params.includes('plan-id') && query.params.includes('rule-id')),
+  'the child list must be constrained by both inherited references')
 })

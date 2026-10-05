@@ -114,6 +114,14 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
     .filter((child) => resolveSetupEntityGate(child, features).enabled)
     .map((child) => {
       const binding = child.parentRecords!.find((owner) => owner.entityKey === entity.key)!
+      const scopeKey = child.fields.find((field) => field.key === binding.fieldKey)?.refScopeField
+      const scopeField = child.fields.find((field) => field.key === scopeKey && field.kind === 'ref')
+      const ownerScopeField = entity.fields.find((field) => field.key === scopeKey && field.kind === 'ref' && field.ref === scopeField?.ref)
+      const scopeValue = scopeKey && ownerScopeField ? row[toSnake(scopeKey)] ?? row[scopeKey] : undefined
+      // A child of a scoped reference inherits that scope from its owning
+      // record. Choosing it again could create a contradictory relationship.
+      const inheritedFilter = scopeField && typeof scopeValue === 'string' && scopeValue
+        ? { fieldKey: scopeField.key, value: scopeValue } : undefined
       return {
         key: child.key,
         label: t(child.titleKey ?? `entities.${child.key}.title`),
@@ -127,6 +135,7 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
             canManage={canManage}
             allowedSubsidiaryIds={allowedSubsidiaryIds}
             parent={{ recordKey: entity.key, value: String(row[binding.valueKey ?? entity.idColumn ?? 'id']) }}
+            fixedFilter={inheritedFilter}
             rowParam={navigation.childRow}
             paramPrefix={navigation.childPrefix}
             stacked
@@ -551,7 +560,10 @@ export async function SetupEntitySection({
           members={[]}
           refOptions={refOptions}
           closeHref={closeHref}
-          fixedValues={parentScope?.fixedValues ?? (fixedFilter ? { [fixedFilter.fieldKey]: fixedFilter.value } : undefined)}
+          fixedValues={parentScope || fixedFilter ? {
+            ...parentScope?.fixedValues,
+            ...(fixedFilter ? { [fixedFilter.fieldKey]: fixedFilter.value } : {}),
+          } : undefined}
           stacked={stacked}
           nestedTabs={groupRuleTabs ? additionalRecordTabs : [...childTabs, ...additionalRecordTabs]}
           ruleTabs={groupRuleTabs ? childTabs : undefined}
