@@ -591,27 +591,33 @@ export async function computeIeStatutory(
     return [w1, w2];
   };
 
+  // Week 1 / month 1 basis (Revenue): every pay day is taxed on its own,
+  // with one period's credits, rate band and USC cut-offs and no reference
+  // to earlier pay or tax in the year — so the period is always priced as
+  // period 1 with no year-to-date figures, whatever the calendar position.
+  const basis = (answer("pay_basis") ?? "cumulative") === "week1" ? "week1" : "cumulative";
+  const isolated = basis === "week1";
   const statutory = calculateIeStatutory({
     payDate,
     periodsPerYear: P,
-    basis: (answer("pay_basis") ?? "cumulative") === "week1" ? "week1" : "cumulative",
+    basis,
     hasRpn,
     taxCreditsAnnual: rpnAmount("tax_credits_total"),
     rateBandAnnual: rpnAmount("rate_band_total"),
     uscCutoffAnnual: rpnAmount("usc_cutoff_total"),
     taxablePayPeriod: taxableBase,
-    taxablePayYtd: add(ytd.taxbase, rpnNum("prior_cumulative_pay")),
+    taxablePayYtd: isolated ? "0" : add(ytd.taxbase, rpnNum("prior_cumulative_pay")),
     // grossYtd reuses the prior taxable pay as the prior-gross proxy: exact
     // when the previous employment had no pre-tax pension deductions.
-    taxPaidYtd: add(ytd.tax, rpnNum("prior_cumulative_tax")),
+    taxPaidYtd: isolated ? "0" : add(ytd.tax, rpnNum("prior_cumulative_tax")),
     reckonablePayPeriod: pensionable,
     reckonablePayWeeks: fortnightWeeks(),
-    grossPayYtd: add(ytd.gross, rpnNum("prior_cumulative_pay")),
-    uscPaidYtd: add(ytd.usc, rpnNum("prior_cumulative_usc")),
+    grossPayYtd: isolated ? "0" : add(ytd.gross, rpnNum("prior_cumulative_pay")),
+    uscPaidYtd: isolated ? "0" : add(ytd.usc, rpnNum("prior_cumulative_usc")),
     uscExempt: hasRpn && (answer("usc_exempt") === "true"),
     uscReducedEligible: false,
     prsiClass: prsiClass ?? "",
-    elapsedPeriods: elapsed,
+    elapsedPeriods: isolated ? 1 : elapsed,
   });
 
   pushStatutory("ie_paye", "deduction", "PAYE income tax", statutory.paye, 110);
