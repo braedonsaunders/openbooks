@@ -3,7 +3,7 @@ import { globSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createMoneyFormatter, formatDecimal } from './money-format.ts'
+import { createMoneyFormatter, formatDecimal, minorToMajorText } from './money-format.ts'
 import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -51,6 +51,14 @@ test('invalid values and malformed currency codes never silently become dollars'
   assert.equal(format.money(null), '')
   assert.equal(format.money('not-a-number'), 'not-a-number')
   assert.equal(format.money(12.5, { currency: 'invalid' }), '12.5 INVALID')
+})
+
+test('minor units convert to an exact major-unit decimal string', () => {
+  assert.equal(minorToMajorText('0'), '0.00')
+  assert.equal(minorToMajorText('5'), '0.05')
+  assert.equal(minorToMajorText('10450'), '104.50')
+  assert.equal(minorToMajorText('-250'), '-2.50')
+  assert.equal(minorToMajorText('900719925474099393'), '9007199254740993.93')
 })
 
 test('decimal strings never cross the binary floating-point boundary', () => {

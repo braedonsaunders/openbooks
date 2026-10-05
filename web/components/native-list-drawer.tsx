@@ -36,10 +36,7 @@ const renderers = {
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, ...rest } = drawer as typeof drawer & {
-      workflowCanWaiveFee?: boolean
-      workflowCurrency?: string | null
-    }
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}

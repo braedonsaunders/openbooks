@@ -84,6 +84,19 @@ function decimalFallback(
   }).format(value as never))
 }
 
+/**
+ * Currency minor units (hundredths of the major unit, as the engine's
+ * toCents produces) to an exact major-unit decimal string for the money
+ * formatter. Exact bigint math in one tested place: a misplaced separator
+ * here is a 100x display error.
+ */
+export function minorToMajorText(minor: string): string {
+  const units = BigInt(minor)
+  const sign = units < 0n ? '-' : ''
+  const abs = units < 0n ? -units : units
+  return `${sign}${(abs / 100n).toString()}.${(abs % 100n).toString().padStart(2, '0')}`
+}
+
 /** Locale-aware decimal presentation that preserves exact numeric strings. */
 export function formatDecimal(locale: string, value: MoneyValue, options: DecimalFormatOptions = {}): string {
   if (value === null || value === undefined || value === '') return ''

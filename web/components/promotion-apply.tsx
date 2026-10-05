@@ -6,17 +6,10 @@ import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { minorToMajorText } from '@/lib/money-format'
 import { promptDialog } from '@/lib/prompt'
 
 type ActivePromotion = { id: string; code: string; name: string; kind: string }
-
-/** Minor units (cents) to an exact major-unit decimal string. */
-function minorToMajor(minor: string): string {
-  const units = BigInt(minor)
-  const sign = units < 0n ? '-' : ''
-  const abs = units < 0n ? -units : units
-  return `${sign}${(abs / 100n).toString()}.${(abs % 100n).toString().padStart(2, '0')}`
-}
 
 async function readJson(res: Response) {
   return (await res.json()) as Record<string, unknown>
@@ -88,7 +81,7 @@ export function PromotionApplyControl({ documentId, currency, disabled, onApplie
       const count = Array.isArray(applied.lines) ? applied.lines.length : 0
       toast.success(t('promotion.applied', {
         code: typeof applied.code === 'string' ? applied.code : code,
-        amount: money(minorToMajor(total)),
+        amount: money(minorToMajorText(total)),
         count,
       }))
       onApplied()
