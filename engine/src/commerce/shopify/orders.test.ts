@@ -151,8 +151,9 @@ test("shopify refund normalizes against its order", () => {
       currency: "USD",
       created_at: "2026-07-16T09:00:00-04:00",
       refund_line_items: [
-        { quantity: 1, subtotal: "25.00", restock: true, line_item: { id: 1, sku: "TEE-RED-M" } },
+        { quantity: 1, subtotal: "25.00", total_tax: "2.16", restock: true, line_item: { id: 1, variant_id: 808, sku: "TEE-RED-M" } },
       ],
+      order_adjustments: [{ kind: "shipping_refund", amount: "0.00" }],
       transactions: [{ gateway: "shopify_payments", amount: "27.16" }],
     },
     "450789469",
@@ -164,5 +165,10 @@ test("shopify refund normalizes against its order", () => {
   assert.equal(refund.totalMinor, 2716n);
   assert.equal(refund.lines.length, 1);
   assert.equal(refund.lines[0]!.sku, "TEE-RED-M");
+  assert.equal(refund.lines[0]!.variantExternalId, "808");
+  assert.equal(refund.lines[0]!.amountMinor, 2500n);
+  assert.equal(refund.lines[0]!.taxMinor, 216n);
+  assert.equal(refund.lines[0]!.restock, true);
+  assert.equal(refund.shippingMinor, 0n);
   assert.equal(refund.tenders[0]!.gateway, "shopify_payments");
 });

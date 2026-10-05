@@ -151,7 +151,19 @@ export interface ChannelRefund {
   restock: boolean;
   /** Minor units refunded, in the shop currency. */
   totalMinor: bigint;
-  lines: Array<{ lineExternalId: string | null; sku: string | null; quantity: string; amountMinor: bigint }>;
+  lines: Array<{
+    lineExternalId: string | null;
+    sku: string | null;
+    variantExternalId: string | null;
+    quantity: string;
+    amountMinor: bigint;
+    /** Merchant tax slice of the line when the provider states it; otherwise pro-rated from the sale. */
+    taxMinor: bigint | null;
+    /** Whether these units go back on the shelf (location-mapped). */
+    restock: boolean;
+  }>;
+  /** Shipping refunded through order adjustments, in the shop currency. */
+  shippingMinor: bigint;
   tenders: Array<{ gateway: string; amountMinor: bigint }>;
   refundedAt: string;
 }

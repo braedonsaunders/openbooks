@@ -8,6 +8,7 @@ import {
   type CashSaleDraft,
   type ResolvedOrder,
 } from "./order-posting.ts";
+import { claimPendingRefundEvents, postDueRefundBatchesForOrg, postRefundBatchDocument } from "./refunds.ts";
 import { loadChannelOrder, markOrderException, markOrderSummarized } from "./orders.ts";
 import { getPostingPolicy } from "./posting-policies.ts";
 import { CommerceError } from "./errors.ts";
@@ -173,7 +174,29 @@ export async function postSummaryBatch(
           throw error;
         }
       }
-      if (resolved.length === 0) return { status: "empty", documentId: null as string | null, summarized: 0, parked, effectsDocumentId: null as string | null };
+      // A day with no sales still owes its refunds: they post as the day's
+      // refund document without a sales batch. The claim skips rows another
+      // worker holds, and each event stays individually idempotent.
+      if (resolved.length === 0) {
+        const refundIds = await claimPendingRefundEvents(orgId, group.channelId, group.day, group.currency, group.cutoffTz);
+        if (refundIds.length === 0) {
+          return { status: "empty", documentId: null as string | null, summarized: 0, parked, effectsDocumentId: null as string | null };
+        }
+        const refunds = await postRefundBatchDocument(orgId, actor, {
+          channelId: group.channelId,
+          provider: group.provider,
+          day: group.day,
+          currency: group.currency,
+          subsidiaryId: group.subsidiaryId,
+        }, refundIds);
+        return {
+          status: refunds.status,
+          documentId: refunds.documentId,
+          summarized: 0,
+          parked: parked + refunds.parked,
+          effectsDocumentId: null as string | null,
+        };
+      }
       // The batch row is the idempotency key: a replayed cut-off observes
       // the open row instead of double-counting its orders. The conflict is
       // expected on replay, so re-read the winner.
@@ -223,6 +246,21 @@ export async function postSummaryBatch(
       }
       for (const orderId of resolvedIds) {
         await markOrderSummarized(orgId, orderId, actor, batch.id);
+      }
+      // Tonight's refunds join the batch they belong to: one refund document
+      // beside the sales document, each event on its own lines. The batch
+      // unit is still open, so the refund effects run inside it — a rollback
+      // retracts the documents with their effects, and the sweep replays.
+      const refundIds = await claimPendingRefundEvents(orgId, group.channelId, group.day, group.currency, group.cutoffTz);
+      if (refundIds.length > 0) {
+        const refunds = await postRefundBatchDocument(orgId, actor, {
+          channelId: group.channelId,
+          provider: group.provider,
+          day: group.day,
+          currency: group.currency,
+          subsidiaryId: group.subsidiaryId,
+        }, refundIds);
+        parked += refunds.parked;
       }
       return { status: "posted", documentId: built.documentId, summarized: resolved.length, parked, effectsDocumentId: built.documentId };
     });
@@ -345,5 +383,11 @@ export async function postDueDailySummariesForOrg(
       parked += outcome.parked;
     }
   }
+  // Refunds behind already-posted sales (a refund-only day, or a refund that
+  // arrived after its sales batch closed) post as their own day documents.
+  // Refunds behind still-pending orders joined the sales batch above.
+  const refunds = await postDueRefundBatchesForOrg(orgId, actor).catch(() => ({ posted: 0, parked: 0 }));
+  posted += refunds.posted;
+  parked += refunds.parked;
   return { posted, parked };
 }
