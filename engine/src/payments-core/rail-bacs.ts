@@ -1,5 +1,6 @@
 import { addCalendarDays, parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText } from "./rail-text.ts";
 
 // ---------------------------------------------------------------------------
 // Bacs (United Kingdom) counterparty coordinates — SHAPE ONLY
@@ -213,11 +214,11 @@ export function buildBacsFile(run: BacsRun): string {
   // a space. This mirrors the channel deterministically — (1) §4.8: lowercase
   // input is converted to blank by Bacs itself — rather than letting the bank
   // mangle names unpredictably. Lengths are the published field widths;
-  // over-length text fails here rather than shifting every field after it.
-  // (Non-ASCII never reaches this writer: the payroll artifact refuses
-  // non-ASCII on fixed-width rails before rendering.)
-  const text = (value: string, len: number, what: string): string => {
-    const mapped = value
+  // over-length text is cut to the field, never shifting the fields after it.
+  // Accents fold to ASCII first (é → E, ß → SS) and a character with no ASCII
+  // spelling is refused by name, so a name is never silently blanked.
+  const text = (value: string, len: number, what: string, remedy: string): string => {
+    const mapped = asciiRailText(value, "Bacs", what, remedy)
       .toUpperCase()
       .replace(/[^A-Z0-9 .&/-]/g, " ")
       .slice(0, len);
@@ -271,7 +272,7 @@ export function buildBacsFile(run: BacsRun): string {
 
   const originSort = sort(s.originatingSortCode, "originating sort code");
   const originAccount = account(s.originatingAccount, "originating account");
-  const userName = text(s.serviceUserName, 18, "service user name");
+  const userName = text(s.serviceUserName, 18, "service user name", ORIGINATOR_REMEDY);
   const creation = yyddd(run.creationDate, "creation date");
   const processing = yyddd(run.processingDate, "processing date");
   // Expiry: "the earliest date at which [the] file may be overwritten" ((2)
@@ -378,8 +379,8 @@ export function buildBacsFile(run: BacsRun): string {
       "    " + // 32–35 free format (see note above)
       pence(p.amountCents, 11, `credit to ${p.accountName}`) + // 36–46
       userName + // 47–64
-      text(p.reference, 18, `reference for ${p.accountName}`) + // 65–82
-      text(p.accountName, 18, "destination account name"); // 83–100
+      text(p.reference, 18, `reference for ${p.accountName}`, "Edit the reference to Latin letters without that character, then generate the file again.") + // 65–82
+      text(p.accountName, 18, "destination account name", PAYEE_NAME_REMEDY); // 83–100
     if (record.length !== 100) throw new PaymentError("internal error: Bacs detail record is not 100 characters");
     return record;
   });
