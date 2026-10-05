@@ -396,6 +396,9 @@ export const GET = defineRoute({
   // falling back to its storage id. The joined row id tells readers
   // whether a catalog row stands behind the line: a null joined id means
   // no readable identity, and the line keeps its stored fields as evidence.
+  // isCurrent applies the same half-open window the kit explosion and the
+  // availability endpoint use, so the reader's current summary never
+  // aggregates an expired window.
   const components = await db.execute<{
     id: string;
     componentItemId: string;
@@ -410,12 +413,15 @@ export const GET = defineRoute({
     name: string | null;
     isActive: boolean | null;
     joinedId: string | null;
+    isCurrent: boolean;
   }>(sql`
     select line.id, line.component_item_id as "componentItemId", line.quantity_per::text as "quantityPer",
            line.sort_order as "sortOrder", line.effective_from::text as "effectiveFrom",
            line.effective_to::text as "effectiveTo", line.operation_seq as "operationSeq",
            line.scrap_pct::text as "scrapPct", line.is_byproduct as "isByproduct",
-           item.code, item.name, item.is_active as "isActive", item.id as "joinedId"
+           item.code, item.name, item.is_active as "isActive", item.id as "joinedId",
+           ((line.effective_from is null or line.effective_from <= current_date)
+            and (line.effective_to is null or current_date < line.effective_to)) as "isCurrent"
       from bom_components line
       left join items item on item.org_id = line.org_id and item.id = line.component_item_id
      where line.org_id = ${gate.user.orgId} and line.assembly_item_id = ${assemblyItemId}

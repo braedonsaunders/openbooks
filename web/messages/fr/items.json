@@ -265,7 +265,11 @@
     "onHand": "En stock",
     "committed": "Engagé",
     "available": "Disponible",
-    "unknownComponent": "Ne figure plus au catalogue"
+    "unknownComponent": "Ne figure plus au catalogue",
+    "effectiveRange": "En vigueur {from} – {to}",
+    "effectiveFrom": "En vigueur depuis {from}",
+    "effectiveEnded": "Terminé {to}",
+    "noCurrentRecipe": "Aucun composant en vigueur aujourd'hui — les lignes ci-dessous sont l'historique."
   },
   "costing": {
     "title": "Valorisation des stocks",

@@ -255,7 +255,11 @@
     "onHand": "在庫",
     "committed": "引当済",
     "available": "販売可能",
-    "unknownComponent": "カタログに存在しません"
+    "unknownComponent": "カタログに存在しません",
+    "effectiveRange": "{from} – {to}に有効",
+    "effectiveFrom": "{from}から有効",
+    "effectiveEnded": "{to}に終了",
+    "noCurrentRecipe": "今日有効な構成品がありません — 下の行は履歴です。"
   },
   "costing": {
     "title": "在庫評価",

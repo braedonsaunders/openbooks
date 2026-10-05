@@ -255,7 +255,11 @@
     "onHand": "Em estoque",
     "committed": "Comprometido",
     "available": "Disponível",
-    "unknownComponent": "Não está mais no catálogo"
+    "unknownComponent": "Não está mais no catálogo",
+    "effectiveRange": "Vigente {from} – {to}",
+    "effectiveFrom": "Vigente desde {from}",
+    "effectiveEnded": "Encerrado {to}",
+    "noCurrentRecipe": "Nenhum componente vigente hoje — as linhas abaixo são histórico."
   },
   "costing": {
     "title": "Custeio de estoque",

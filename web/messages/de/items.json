@@ -268,7 +268,11 @@
     "onHand": "Bestand",
     "committed": "Reserviert",
     "available": "Verfügbar",
-    "unknownComponent": "Nicht mehr im Katalog"
+    "unknownComponent": "Nicht mehr im Katalog",
+    "effectiveRange": "Gültig {from} – {to}",
+    "effectiveFrom": "Gültig ab {from}",
+    "effectiveEnded": "Beendet {to}",
+    "noCurrentRecipe": "Heute ist keine Komponente gültig — die Zeilen unten sind Verlauf."
   },
   "costing": {
     "title": "Bestandsbewertung",
