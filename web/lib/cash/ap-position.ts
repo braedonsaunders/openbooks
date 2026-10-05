@@ -26,6 +26,7 @@ import {
 } from "./core";
 import { buildTimeline, type ApSettings } from "./cash-position";
 import { isCategoryVisibleInScope } from "./core";
+import { agingBasisDate } from "../aging-basis";
 
 export interface ApWeek {
   weekStart: string;
@@ -101,8 +102,11 @@ export function groupByVendor(items: OpenItem[], asOf: Date): VendorPayable[] {
       { partyId: it.partyId, partyName: it.partyName, amount: ZERO_MONEY, count: 0, overdue: ZERO_MONEY, oldestDue: null as string | null };
     cur.amount = addMoney(cur.amount, it.remaining);
     cur.count += 1;
-    const overdue = it.dueDate ? daysBetween(it.dueDate, asOf) > 0 : false;
-    if (overdue) cur.overdue = addMoney(cur.overdue, it.remaining);
+    // Past-due follows the shared aging rule: an item with no due date ages
+    // from its posting date, exactly like the overdue tiles — the vendor
+    // lines and the tiles cannot disagree on what "past due" means.
+    const basis = agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate });
+    if (basis && daysBetween(basis, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
     if (it.dueDate) {
       const iso = toISO(it.dueDate);
       if (!cur.oldestDue || iso < cur.oldestDue) cur.oldestDue = iso;
