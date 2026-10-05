@@ -1048,6 +1048,7 @@ async function importPayment(ctx: PersistContext, payment: {
       select jl.id from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${ctx.orgId} and je.source_document_id = ${invoiceId}
+         -- Live entries only: receipts allocate only to live open items; a reversed invoice authorizes no allocation
          and je.status = 'posted' and jl.is_open_item
        limit 1
     `));

@@ -110,7 +110,7 @@ export async function disassembleAssembly(orgId: string, actorId: string, input:
         throw new InventoryError('The source journal does not contain one complete light-assembly build')
       await assertUnreversed(orgId, sources)
       const journal = (await db.execute<{ book_id: string; custom: { assemblyBuild?: AssemblyBomRevisionEvidence }; origin: string }>(sql`
-        select book_id,custom,origin from journal_entries where org_id=${orgId} and id=${build.journal_entry_id} and status='posted' for share`)).rows[0]
+        select book_id,custom,origin from journal_entries where org_id=${orgId} and id=${build.journal_entry_id} and status='posted' for share -- Live entries only: disassembly consumes the live build journal; a reversed build authorizes no disassembly`)).rows[0]
       const evidence = journal?.custom.assemblyBuild
       if (journal?.origin !== 'inventory' || !evidence || evidence.format !== 'openbooks.inventory-bom.v1' || evidence.assemblyItemId !== build.item_id
           || evidence.revision !== `sha256:${inventoryRequestHash({ format: evidence.format, assemblyItemId: evidence.assemblyItemId, components: evidence.components })}`)
