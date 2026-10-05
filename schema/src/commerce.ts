@@ -17,7 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
 import { orgs } from "./core";
-import { documents } from "./documents";
+import { documents, items } from "./documents";
 import { stockLocations } from "./inventory";
 import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
@@ -671,6 +671,141 @@ export const shopifyCatalogEntries = pgTable(
       name: "shopify_catalog_entries_channel_tenant_fk",
       columns: [t.orgId, t.channelId],
       foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+  ],
+);
+
+export const ECONOMICS_COMPONENTS = [
+  "net_revenue",
+  "discount",
+  "cogs",
+  "processor_fee",
+  "shipping_label",
+  "marketplace_fee",
+  "stored_value_funding",
+  "returns",
+  "restocking_fee",
+  "ad_spend",
+] as const;
+
+export const ECONOMICS_SOURCES = [
+  "posting",
+  "fulfilment",
+  "label",
+  "payout",
+  "refund",
+  "estimate",
+  "import",
+  "manual",
+] as const;
+
+export const channelOrderEconomics = pgTable(
+  "channel_order_economics",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    orderId: uuid("order_id").notNull(),
+    lineKey: text("line_key").notNull(),
+    component: text("component", { enum: ECONOMICS_COMPONENTS }).notNull(),
+    sourceKind: text("source_kind", { enum: ECONOMICS_SOURCES }).notNull(),
+    sourceRef: text("source_ref").notNull().default(""),
+    currency: currencyCode("currency").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    itemId: uuid("item_id"),
+    sku: text("sku"),
+    promotionCode: text("promotion_code"),
+    estimated: boolean("estimated").notNull().default(false),
+    version: integer("version").notNull().default(1),
+    isCurrent: boolean("is_current").notNull().default(true),
+    supersededBy: uuid("superseded_by"),
+    asOf: timestamp("as_of", { withTimezone: true }).notNull().defaultNow(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_order_economics_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_order_economics_current_unique")
+      .on(t.orgId, t.orderId, t.lineKey, t.component, t.sourceKind, t.sourceRef)
+      .where(sql`${t.isCurrent}`),
+    index("channel_order_economics_order_current").on(t.orgId, t.orderId).where(sql`${t.isCurrent}`),
+    index("channel_order_economics_channel_day").on(t.orgId, t.channelId, t.asOf).where(sql`${t.isCurrent}`),
+    check("channel_order_economics_line_key_nonblank", sql`length(btrim(${t.lineKey})) > 0`),
+    check("channel_order_economics_currency_nonblank", sql`length(btrim(${t.currency})) > 0`),
+    check("channel_order_economics_version_valid", sql`${t.version} >= 1`),
+    foreignKey({
+      name: "channel_order_economics_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_order_economics_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_order_economics_order_tenant_fk",
+      columns: [t.orgId, t.orderId],
+      foreignColumns: [channelOrders.orgId, channelOrders.id],
+    }),
+    foreignKey({
+      name: "channel_order_economics_item_tenant_fk",
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+    }),
+  ],
+);
+
+export const channelAdSpend = pgTable(
+  "channel_ad_spend",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    spendDate: date("spend_date").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currency: currencyCode("currency").notNull(),
+    source: text("source").notNull().default(""),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_ad_spend_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_ad_spend_day_unique").on(t.orgId, t.channelId, t.spendDate, t.source),
+    index("channel_ad_spend_channel_day").on(t.orgId, t.channelId, t.spendDate),
+    check("channel_ad_spend_amount_valid", sql`${t.amountMinor} >= 0`),
+    check("channel_ad_spend_currency_nonblank", sql`length(btrim(${t.currency})) > 0`),
+    foreignKey({
+      name: "channel_ad_spend_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_ad_spend_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+  ],
+);
+
+export const channelOrderEconomicsPending = pgTable(
+  "channel_order_economics_pending",
+  {
+    orgId: orgRef(),
+    orderId: uuid("order_id").notNull(),
+    reason: text("reason").notNull(),
+    enqueuedAt: timestamp("enqueued_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("channel_order_economics_pending_unique").on(t.orgId, t.orderId),
+    check("channel_order_economics_pending_reason_nonblank", sql`length(btrim(${t.reason})) > 0`),
+    foreignKey({
+      name: "channel_order_economics_pending_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_order_economics_pending_order_tenant_fk",
+      columns: [t.orgId, t.orderId],
+      foreignColumns: [channelOrders.orgId, channelOrders.id],
     }),
   ],
 );

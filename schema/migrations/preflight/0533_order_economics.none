@@ -1,0 +1,1 @@
+Creates three new empty tables (channel_order_economics, channel_ad_spend, channel_order_economics_pending). No existing row is read, rewritten, or deleted, so there is nothing to probe before install.
