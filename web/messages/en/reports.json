@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "Cash tenders",
+        "description": "How paid-at-sale totals settled — one row per tender with its method, settlement account or stored-value card, and amount — by period, method, and account."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "Benefit payroll inputs",
         "description": "Monthly coverage amounts, employee deductions, employer contributions and consuming payroll runs."
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "Employee",
         "employee_id": "Employee (id)",
+        "employer": "Legal employer",
+        "employment_id": "Employment (id)",
         "plan": "Plan",
         "plan_code": "Plan code",
         "plan_id": "Plan (id)",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "Document date",
+        "document_number": "Document",
+        "document_kind": "Document kind",
+        "document_status": "Document status",
+        "customer": "Customer",
+        "method": "Method",
+        "method_label": "Method label",
+        "account": "Account",
+        "account_number": "Account number",
+        "stored_value_last4": "Card …",
+        "currency": "Currency",
+        "amount": "Amount",
+        "reference": "Reference",
+        "external_ref": "Provider ref"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "Coverage from",

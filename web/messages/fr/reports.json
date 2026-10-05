@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "Moyens de paiement (ventes au comptant)",
+        "description": "Comment les ventes au comptant ont été réglées — une ligne par moyen de paiement avec son mode, son compte de règlement ou sa carte de valeur stockée, et son montant — par période, mode et compte."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "Entrées de paie des avantages",
         "description": "Montants mensuels de couverture, retenues salariales, cotisations patronales et traitements de paie associés."
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "Employé",
         "employee_id": "Employé (id)",
+        "employer": "Employeur légal",
+        "employment_id": "Emploi (id)",
         "plan": "Régime",
         "plan_code": "Code de régime",
         "plan_id": "Régime (id)",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "Date du document",
+        "document_number": "N° de document",
+        "document_kind": "Type de document",
+        "document_status": "Statut du document",
+        "customer": "Client",
+        "method": "Mode",
+        "method_label": "Libellé du mode",
+        "account": "Compte",
+        "account_number": "N° de compte",
+        "stored_value_last4": "Carte (4 derniers)",
+        "currency": "Devise",
+        "amount": "Montant",
+        "reference": "N° de référence",
+        "external_ref": "Référence du fournisseur"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "Début de couverture",

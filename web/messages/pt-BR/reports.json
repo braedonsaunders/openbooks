@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "Meios de pagamento (vendas à vista)",
+        "description": "Como as vendas à vista foram liquidadas — uma linha por meio de pagamento com método, conta de liquidação ou cartão de vale, e valor — por período, método e conta."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "Lançamentos de benefícios na folha",
         "description": "Valores mensais de cobertura, descontos do empregado, contribuições patronais e folhas vinculadas."
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "Funcionário",
         "employee_id": "Funcionário (id)",
+        "employer": "Empregador legal",
+        "employment_id": "Vínculo (id)",
         "plan": "Plano",
         "plan_code": "Código do plano",
         "plan_id": "Plano (id)",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "Data do documento",
+        "document_number": "Nº do documento",
+        "document_kind": "Tipo de documento",
+        "document_status": "Status do documento",
+        "customer": "Cliente",
+        "method": "Método",
+        "method_label": "Rótulo do método",
+        "account": "Conta",
+        "account_number": "Nº da conta",
+        "stored_value_last4": "Cartão (últimos 4)",
+        "currency": "Moeda",
+        "amount": "Valor",
+        "reference": "Nº de referência",
+        "external_ref": "Referência do provedor"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "Início da cobertura",

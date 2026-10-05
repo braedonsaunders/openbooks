@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "Zahlungsmittel (Barverkauf)",
+        "description": "Wie Barverkäufe beglichen wurden — eine Zeile je Zahlungsmittel mit Methode, Verrechnungskonto oder Guthabenkarte und Betrag — nach Zeitraum, Methode und Konto."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "Leistungseingaben für die Lohnabrechnung",
         "description": "Monatliche Deckungsbeträge, Arbeitnehmerabzüge, Arbeitgeberbeiträge und zugehörige Abrechnungsläufe."
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "Mitarbeiter",
         "employee_id": "Mitarbeiter (ID)",
+        "employer": "Rechtlicher Arbeitgeber",
+        "employment_id": "Beschäftigung (ID)",
         "plan": "Plan",
         "plan_code": "Plan-Code",
         "plan_id": "Plan (ID)",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "Belegdatum",
+        "document_number": "Belegnummer",
+        "document_kind": "Belegart",
+        "document_status": "Belegstatus",
+        "customer": "Kunde",
+        "method": "Methode",
+        "method_label": "Methodenbezeichnung",
+        "account": "Konto",
+        "account_number": "Konto Nr.",
+        "stored_value_last4": "Guthabenkarte (letzte 4)",
+        "currency": "Währung",
+        "amount": "Betrag",
+        "reference": "Referenznummer",
+        "external_ref": "Anbieterreferenz"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "Deckung ab",
