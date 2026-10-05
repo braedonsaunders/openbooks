@@ -40,6 +40,27 @@ test("package rules resolve dependencies independently of definition order", () 
   assert.deepEqual(reversed.evaluate({ hours: "7.5", rate: "23.45" }), calculated);
 });
 
+test('native limits settle before dependent amounts without changing eligibility facts', () => {
+  const program = compileCompensationRules(definition([rule('allowance', firstId, 'hours * rate', 'hours >= 8'), rule('bonus', secondId, 'allowance * 0.1')]), components);
+  const limits = { inputCeilings: { [firstId]: { hours: '4' } }, amountCaps: { [firstId]: { yearCap: '100', context: { yearToDate: '70.1234' } } } };
+  const result = program.evaluate({ hours: '8', rate: '25' }, limits);
+  assert.deepEqual(result.lines.map(line => line.amount), ['29.8700', '2.9900']);
+  assert.equal(result.lines[0]!.evidence.conditionInputs.hours, '8');
+  assert.equal(result.lines[0]!.evidence.amountInputs.hours, '4');
+  assert.equal(result.lines[0]!.evidence.settlement!.requestedAmount, '100.0000');
+  assert.equal(result.lines[1]!.evidence.amountInputs.allowance, '29.87');
+  refuses(() => program.evaluate({ hours: '8', rate: '25' }, { inputCeilings: { [firstId]: { allowance: '0' } } }), /invalid native basis cap.*reload/);
+  refuses(() => program.evaluate({ hours: '8', rate: '25' }, { inputCeilings: { [firstId]: { rate: '0' } } }), /invalid native basis cap.*reload/);
+  refuses(() => program.evaluate({ hours: '8', rate: '25' }, { amountCaps: { [otherOrgId]: limits.amountCaps[firstId]! } }), /unrelated component.*reload/);
+  refuses(() => program.evaluate({ hours: '8', rate: '25' }, { amountCaps: { [firstId]: { yearCap: '100', context: {} } } }), /opening-inclusive.*missing consumption never becomes zero/);
+  for (const [scale, expected] of ['29.0000', '29.8000', '29.8800', '29.8800', '29.8800'].entries()) {
+    const coarse = compileCompensationRules(definition([{ ...rule('allowance', firstId, 'base'), rounding: { ...rounding, scale } }]), components);
+    const line = coarse.evaluate({ base: '200' }, { amountCaps: { [firstId]: { yearCap: '130.0045', context: { yearToDate: '100.1234' } } } }).lines[0]!;
+    assert.equal(line.amount, expected, 'cap settlement must respect the component precision without rounding above its remaining room');
+    assert.equal(line.evidence.settlement!.capRounding!.mode, 'towards_zero');
+  }
+});
+
 test("conditional rules leave explicit zero evidence and do not pay an inapplicable component", () => {
   const program = compileCompensationRules(definition([rule("allowance", firstId, "base * 0.1", "eligible")]), components);
   const skipped = program.evaluate({ base: "1000", eligible: false }).lines[0]!;

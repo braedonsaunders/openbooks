@@ -13,7 +13,8 @@ import { payrollPack } from "./packs.ts";
 import { PayrollError } from "./error.ts";
 import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
 import { canonicalCompensationPackageDefinition, compensationPackageAssignmentInputs, evaluateCompensationPackage, validateCompensationPackage, type CompensationPackageDefinition, type CompensationPackageEvaluationContext } from "./compensation-package.ts";
-import type { CompensationRuleComponent } from "./compensation-rules.ts";
+import { compensationPackageComponentSources, type CompensationPackageComponentSource } from './compensation-package-components.ts';
+import { validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
 
 export interface CompensationPackageActor { readonly orgId: string; readonly actorId: string }
 export type CompensationPackageAuthorship = readonly { actorId: string; partyId: string | null }[];
@@ -113,15 +114,16 @@ async function packageRecord(query: CompensationPackageActor, packageId: string,
   await lockActorCommandAuthority(db, query.orgId, query.actorId, row.subsidiaryId, permission);
   return row;
 }
-export async function compensationPackageComponents(tx: SqlExecutor, orgId: string, definition: CompensationPackageDefinition): Promise<CompensationRuleComponent[]> {
+export async function compensationPackageComponents(tx: SqlExecutor, orgId: string, definition: CompensationPackageDefinition): Promise<CompensationPackageComponentSource[]> {
   if (!Array.isArray(definition?.rules) || definition.rules.length < 1 || definition.rules.length > 64) throw new PayrollError("A compensation package needs 1 through 64 component rules — add a rule or reduce the package size.");
   const ids = definition.rules.map((rule) => identifier(rule.componentId, "pay component"));
-  return (await tx.execute<{ [K in keyof CompensationRuleComponent]: CompensationRuleComponent[K] }>(sql`select org_id as "orgId",id,code,kind,country,system_key as "systemKey",is_active as "isActive"
-    from pay_components where org_id=${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) order by id for share`)).rows;
+  return compensationPackageComponentSources(tx, orgId, ids);
 }
 async function checkedDefinition(orgId: string, pack: CompensationPackageRecord, definition: CompensationPackageDefinition): Promise<string> {
   if (definition?.orgId !== orgId || definition.country !== pack.country || definition.currency !== pack.currency) throw new PayrollError("The package definition belongs to a different organization, country or currency — use this package's employer context.");
-  return validateCompensationPackage(definition, await compensationPackageComponents(db, orgId, definition));
+  const components = await compensationPackageComponents(db, orgId, definition);
+  validateCompensationPackagePayrollPolicy(definition, components);
+  return validateCompensationPackage(definition, components);
 }
 async function versionRecord(orgId: string, packageId: string, versionId: string, write = true): Promise<CompensationPackageVersion> {
   return one((await db.execute<CompensationPackageVersion>(sql`select ${VERSION_COLUMNS} from payroll_compensation_versions
@@ -330,6 +332,8 @@ export async function previewCompensationPackageVersion(query: CompensationPacka
     const version = await versionRecord(query.orgId, pack.id, query.versionId, false);
     const context = query.context;
     if (context.effectiveFrom < version.effectiveFrom || (version.effectiveTo !== null && (context.effectiveTo === null || context.effectiveTo > version.effectiveTo))) throw new PayrollError("Preview coverage must fall within the selected package version — choose covered effective dates.");
-    return evaluateCompensationPackage(version.definition, await compensationPackageComponents(db, query.orgId, version.definition), context);
+    const components = await compensationPackageComponents(db, query.orgId, version.definition);
+    validateCompensationPackagePayrollPolicy(version.definition, components);
+    return evaluateCompensationPackage(version.definition, components, context);
   });
 }

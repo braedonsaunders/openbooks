@@ -5,7 +5,7 @@ import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { assignmentCoveredDays } from "./assignment-windows.ts";
-import { compileCompensationRules, compensationRuleDefinitionHash, type CompensationRule, type CompensationRuleComponent, type CompensationRuleDefinition, type CompensationRuleResult } from "./compensation-rules.ts";
+import { compileCompensationRules, compensationRuleDefinitionHash, type CompensationRule, type CompensationRuleComponent, type CompensationRuleDefinition, type CompensationRuleResult, type CompensationRuleSettlement } from "./compensation-rules.ts";
 import { PayrollError } from "./error.ts";
 
 function compileExpression(...args: Parameters<typeof compileExactExpression>): ReturnType<typeof compileExactExpression> {
@@ -141,7 +141,7 @@ export function canonicalCompensationPackageDefinition(definition: CompensationP
 }
 
 /** Preview and payroll share the same pure calculation; supplied replacements never receive a second default. */
-export function evaluateCompensationPackage(definition: CompensationPackageDefinition, components: readonly CompensationRuleComponent[], context: CompensationPackageEvaluationContext): CompensationPackageEvaluation {
+export function evaluateCompensationPackage(definition: CompensationPackageDefinition, components: readonly CompensationRuleComponent[], context: CompensationPackageEvaluationContext, settlement?: CompensationRuleSettlement): CompensationPackageEvaluation {
   const definitionHash = validateCompensationPackage(definition, components);
   for (const date of [context.periodStart, context.periodEnd, context.effectiveFrom, context.effectiveTo]) if (date !== null && !isIsoCalendarDate(date)) throw new PayrollError("A package calculation needs valid calendar dates — correct the period and assignment window.");
   if (context.periodEnd < context.periodStart || (context.effectiveTo !== null && context.effectiveTo < context.effectiveFrom)) throw new PayrollError("A package window ends before it starts — correct its effective dates.");
@@ -186,7 +186,10 @@ export function evaluateCompensationPackage(definition: CompensationPackageDefin
     try { values[name] = checkedInput(input, input.source === "constant" ? input.value : context.values[name]); }
     catch (error) { throw new PayrollError(`Package input ${name}: ${error instanceof Error ? error.message : String(error)}`); }
   }
-  const evaluated = program.evaluate(values);
+  const evaluated = program.evaluate(values, settlement ? {
+    inputCeilings: Object.fromEntries(Object.entries(settlement.inputCeilings ?? {}).filter(([componentId]) => rules.some(rule => rule.componentId === componentId))),
+    amountCaps: Object.fromEntries(Object.entries(settlement.amountCaps ?? {}).filter(([componentId]) => rules.some(rule => rule.componentId === componentId))),
+  } : undefined);
   return { ...empty, inputs: evaluated.inputs, lines: evaluated.lines.filter((line) => !suppressed.has(line.componentId)) };
 }
 

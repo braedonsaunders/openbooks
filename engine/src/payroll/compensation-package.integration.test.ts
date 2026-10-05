@@ -13,6 +13,8 @@ import { compensationPackageDefinitionHash } from "./compensation-package.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { compensationPackageEmploymentSource, compensationPackageRunSource, lockCompensationPackageComponents } from './compensation-package-source.ts';
 import { canonicalJson } from '../platform/canonical-json.ts';
+import { compensationPackageNativeSettlement, validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
+import { evaluateCompensationPackage } from './compensation-package.ts';
 
 const spec = { features: ["payroll", "hrm"], country: "CA", users: [
   { key: "authorId", name: "Package author", handle: "package_author", permissions: ["payroll.manage", "payroll.read", "hrm.compensation.approve"], link: true, partyKey: "authorPartyId" },
@@ -75,6 +77,14 @@ test('payroll package sources require an effective approved employment assignmen
     assert.equal(component.basisCapHoursPerPeriod, '40.25', 'native package hours caps must remain exact decimal text');
     assert.equal(component.basisCapAmountPerPeriod, '1234.5678', 'native package period caps must remain exact decimal text');
     assert.equal(component.basisCapAmountPerYear, '249999.1234', 'native package annual caps must remain exact decimal text');
+    const values = { allowance: '310' };
+    const settlement = compensationPackageNativeSettlement(source.definition, source.components, values,
+      () => ({ lines: [], periodToDate: '0', yearToDate: '249899.124' }));
+    const result = evaluateCompensationPackage(source.definition, source.components, { ...query,
+      effectiveFrom: source.effectiveFrom, effectiveTo: source.effectiveTo, values, occupiedComponentIds: [], replacementComponentIds: [] }, settlement);
+    assert.equal(result.lines[0]!.amount, '99.9900', 'package allowances cannot restore annual room already consumed in native payroll and openings');
+    assert.equal(result.lines[0]!.evidence.settlement!.requestedAmount, '310.0000');
+    assert.throws(() => validateCompensationPackagePayrollPolicy(source.definition, [{ ...component, basis: 'per_hour' }]), /hours-capped.*worked hours.*add that native amount input/);
     assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, allowedSubsidiaryIds: new Set() }), []);
     assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, allowedSubsidiaryIds: new Set([randomUUID()]) }), []);
     assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, employmentId: randomUUID() }), [], 'a different employment never inherits this assignment');
@@ -102,6 +112,16 @@ test('future package proposals and retirement preserve pinned terms while native
     const active = await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
     const query = { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: '2026-01-01', periodEnd: '2026-01-31' };
     const before = await compensationPackageEmploymentSource(db, query);
+    const deductionId = randomUUID();
+    await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,basis,value,is_active)
+      values(${deductionId},${f.org.orgId},'PKG_DEDUCTION','Package deduction','deduction','CA','fixed_amount','0',true)`);
+    await assert.rejects(saveCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id,
+      effectiveFrom: '2026-01-01', effectiveTo: null, definition: { ...f.definition, rules: [
+        { ...f.definition.rules[0]!, expression: 'deduction * 2', proration: 'none' },
+        { key: 'deduction', componentId: deductionId, expression: 'allowance', proration: 'none', rounding: f.definition.rules[0]!.rounding },
+      ] }, reason: 'Invalid cross-stage policy' }), /earning travel.*deduction.*after earnings/);
+    assert.equal((await getCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id })).versions.length, 1,
+      'invalid payroll stage dependencies refuse before saving any draft');
     await saveCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id,
       effectiveFrom: '2026-01-01', effectiveTo: null, definition: { ...f.definition, rules: f.definition.rules.map(rule => ({ ...rule, expression: 'allowance * 2' })) }, reason: 'Separate proposed terms' });
     await updateCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, expectedRevision: 1,
