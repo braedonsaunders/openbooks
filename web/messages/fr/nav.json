@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "Gérer les évaluations",
+    "hrm-performance-goals": "Objectifs",
+    "hrm-performance-conversations": "Entretiens individuels",
+    "hrm-recruiting-openings": "Besoins",
     "warehouses": "Entrepôt",
     "picks": "Listes de préparation",
     "shipments": "Expéditions",
@@ -152,6 +156,10 @@
     "hrm-benefits-delivery": "Exécution"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "Gérer les évaluations",
+    "hrm-performance-goals": "Objectifs",
+    "hrm-performance-conversations": "Entretiens individuels",
+    "hrm-recruiting-openings": "Besoins",
     "ap": "Fournisseurs",
     "ar": "Créances",
     "provisions": "Provisions et éventualités",
@@ -212,6 +220,7 @@
     "hrm-compensation": "Rémunération"
   },
   "localWorkspaces": {
+    "collections-views": "Recouvrement",
     "hrm-people": "Employés",
     "hrm-hiring": "Recrutement",
     "hrm-timeOff": "Congés",

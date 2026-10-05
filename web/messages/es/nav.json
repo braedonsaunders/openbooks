@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "Gestionar evaluaciones",
+    "hrm-performance-goals": "Objetivos",
+    "hrm-performance-conversations": "Conversaciones individuales",
+    "hrm-recruiting-openings": "Vacantes",
     "warehouses": "Almacén",
     "picks": "Listas de picking",
     "shipments": "Envíos",
@@ -152,6 +156,10 @@
     "hrm-benefits-delivery": "Entrega"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "Gestionar evaluaciones",
+    "hrm-performance-goals": "Objetivos",
+    "hrm-performance-conversations": "Conversaciones individuales",
+    "hrm-recruiting-openings": "Vacantes",
     "ap": "Por pagar",
     "ar": "Por cobrar",
     "provisions": "Provisiones y contingencias",
@@ -212,6 +220,7 @@
     "hrm-compensation": "Compensación"
   },
   "localWorkspaces": {
+    "collections-views": "Cobros",
     "hrm-people": "Empleados",
     "hrm-hiring": "Contratación",
     "hrm-timeOff": "Ausencias",

@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "Beurteilungen verwalten",
+    "hrm-performance-goals": "Ziele",
+    "hrm-performance-conversations": "Einzelgespräche",
+    "hrm-recruiting-openings": "Stellen",
     "warehouses": "Lager",
     "picks": "Kommissionierlisten",
     "shipments": "Sendungen",
@@ -206,12 +210,17 @@
     "hrm-compensation": "Vergütung"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "Beurteilungen verwalten",
+    "hrm-performance-goals": "Ziele",
+    "hrm-performance-conversations": "Einzelgespräche",
+    "hrm-recruiting-openings": "Stellen",
     "ap": "Kreditoren",
     "ar": "Debitoren",
     "provisions": "Rückstellungen und Eventualverpflichtungen",
     "stored-value": "Guthaben"
   },
   "localWorkspaces": {
+    "collections-views": "Forderungseinzug",
     "hrm-people": "Mitarbeiter",
     "hrm-hiring": "Personalgewinnung",
     "hrm-timeOff": "Abwesenheiten",

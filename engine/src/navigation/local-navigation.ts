@@ -72,7 +72,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   ],
   hiring: [
     { href: '/hrm/recruiting', iconKey: 'user-search', ns: 'hrm', key: 'talentWorkspace.applications', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['applicationStatus','opening','stage'] },
-    {href:'/hrm/recruiting?tab=openings',iconKey:'briefcase-business',menuKey:'hrm-recruiting-openings',ns:'hrm',key:'recruiting.tabs.openings',permission:'hrm.recruiting.read',feature:'hrmRecruiting',menuParent:'hrm-recruiting',carry:['status']},
+    {href:'/hrm/recruiting?tab=openings',label:'Openings',iconKey:'briefcase-business',menuKey:'hrm-recruiting-openings',ns:'hrm',key:'recruiting.tabs.openings',permission:'hrm.recruiting.read',feature:'hrmRecruiting',menuParent:'hrm-recruiting',carry:['status']},
     ...([['interviews', 'messages-square'], ['offers', 'handshake'], ['postings', 'megaphone'], ['pools', 'users']] as const).map(([tab, iconKey]) => ({
       href: `/hrm/recruiting?tab=${tab}`, iconKey, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
       menuParent: 'hrm-recruiting',
@@ -85,10 +85,10 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   ],
   talent: [
     { href: '/hrm/performance', iconKey: 'chart-no-axes-combined', ns: 'hrm', key: 'talentWorkspace.reviews', feature: 'hrmPerformance' },
-    {href:'/hrm/performance?tab=cycles',iconKey:'calendar-days',menuKey:'hrm-performance-cycles',ns:'hrm',key:'talentWorkspace.manageReviews',permission:'hrm.performance.manage',feature:'hrmPerformance',menuParent:'hrm-performance'},
+    {href:'/hrm/performance?tab=cycles',label:"Manage reviews",iconKey:'calendar-days',menuKey:'hrm-performance-cycles',ns:'hrm',key:'talentWorkspace.manageReviews',permission:'hrm.performance.manage',feature:'hrmPerformance',menuParent:'hrm-performance'},
     { href: '/hrm/performance/templates', iconKey: 'journal', menuKey: 'hrm-performance-templates', ns: 'hrm', key: 'talentWorkspace.templates', permissionsAny: ['admin.setup.manage','hrm.performance.manage'], feature: 'hrmPerformance', menuParent: 'hrm-performance', prefix: true, secondary: true },
-    {href:'/hrm/performance/goals',iconKey:'target',menuKey:'hrm-performance-goals',ns:'hrm',key:'talentWorkspace.goals',feature:'hrmPerformance',menuParent:'hrm-performance'},
-    {href:'/hrm/performance/conversations',iconKey:'messages-square',menuKey:'hrm-performance-conversations',ns:'hrm',key:'talentWorkspace.conversations',feature:'hrmPerformance',menuParent:'hrm-performance'},
+    {href:'/hrm/performance/goals',label:"Goals",iconKey:'target',menuKey:'hrm-performance-goals',ns:'hrm',key:'talentWorkspace.goals',feature:'hrmPerformance',menuParent:'hrm-performance'},
+    {href:'/hrm/performance/conversations',label:"Conversations",iconKey:'messages-square',menuKey:'hrm-performance-conversations',ns:'hrm',key:'talentWorkspace.conversations',feature:'hrmPerformance',menuParent:'hrm-performance'},
     { href: '/hrm/performance?tab=calibration', iconKey: 'sliders-horizontal', menuKey: 'hrm-performance-calibration', ns: 'hrm', key: 'performance.continuous.tabs.calibration', secondary: true, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
     { href: '/hrm/performance?tab=talent', iconKey: 'chart-scatter', menuKey: 'hrm-performance-talent', ns: 'hrm', key: 'performance.workspace.assessments', secondary: true, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
     { href: '/hrm/performance?tab=succession', iconKey: 'git-branch', menuKey: 'hrm-performance-succession', ns: 'hrm', key: 'performance.workspace.succession', secondary: true, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },

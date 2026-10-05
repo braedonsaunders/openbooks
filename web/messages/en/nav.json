@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "Manage reviews",
+    "hrm-performance-goals": "Goals",
+    "hrm-performance-conversations": "Conversations",
+    "hrm-recruiting-openings": "Openings",
     "warehouses": "Warehouse",
     "picks": "Pick Lists",
     "shipments": "Shipments",
@@ -152,6 +156,10 @@
     "hrm-benefits-delivery": "Delivery"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "Manage reviews",
+    "hrm-performance-goals": "Goals",
+    "hrm-performance-conversations": "Conversations",
+    "hrm-recruiting-openings": "Openings",
     "ap": "Payables",
     "ar": "Receivables",
     "provisions": "Provisions and contingencies",
@@ -212,6 +220,7 @@
     "hrm-compensation": "Compensation"
   },
   "localWorkspaces": {
+    "collections-views": "Collections",
     "hrm-people": "Employees",
     "hrm-hiring": "Hiring",
     "hrm-timeOff": "Time Off",
