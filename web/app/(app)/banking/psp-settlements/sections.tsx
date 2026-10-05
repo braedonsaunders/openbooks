@@ -41,6 +41,22 @@ type SettlementProvider = (typeof SETTLEMENT_PROVIDERS)[number]
 type ImportProvider = (typeof IMPORT_PROVIDERS)[number]
 type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number]
 
+/**
+ * Record-drawer address for a settlement line's document: invoices open the
+ * invoice drawer, receipts open the receipt drawer, provider-only lines
+ * have no record and stay plain text.
+ */
+export function settlementDocumentHref(line: {
+  documentId: string | null
+  documentKind: string | null
+  documentNumber: string | null
+}): string | null {
+  if (!line.documentId || !line.documentNumber) return null
+  if (line.documentKind === 'customer_payment') return `/receipts?payment=${encodeURIComponent(line.documentId)}`
+  if (line.documentKind === 'customer_invoice') return `/ar/invoices?doc=${encodeURIComponent(line.documentId)}`
+  return null
+}
+
 export interface PspSettlementRow {
   id: string
   provider: SettlementProvider
@@ -1082,16 +1098,19 @@ function SettlementDetailBody({
                     {money(line.amount, { currency: line.currency ?? currency })}
                   </TableCell>
                   <TableCell>
-                    {line.documentId && line.documentKind === 'customer_invoice' && line.documentNumber ? (
-                      <Link
-                        href={`/ar/invoices?doc=${encodeURIComponent(line.documentId)}`}
-                        className="text-teal-700 hover:underline dark:text-teal-300"
-                      >
-                        {line.documentNumber}
-                      </Link>
-                    ) : (
-                      (line.documentNumber ?? '—')
-                    )}
+                    {(() => {
+                      const href = settlementDocumentHref(line)
+                      return line.documentNumber && href ? (
+                        <Link
+                          href={href}
+                          className="text-teal-700 hover:underline dark:text-teal-300"
+                        >
+                          {line.documentNumber}
+                        </Link>
+                      ) : (
+                        (line.documentNumber ?? '—')
+                      )
+                    })()}
                   </TableCell>
                 </TableRow>
               ))}

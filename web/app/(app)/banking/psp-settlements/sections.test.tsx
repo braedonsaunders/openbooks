@@ -592,6 +592,29 @@ test("settlement detail shows the reconciliation with its lines", async (t) => {
   assert.ok(body.includes("PayPal T2000"), "dispute lines render with their provider description");
 });
 
+/** Receipt and invoice lines address their record drawers; provider-only
+ * lines have no record. (The file's next/link stub renders children without
+ * anchors, so the address logic is asserted directly.) */
+test("settlement lines address the invoice and receipt drawers", async () => {
+  const { settlementDocumentHref } = await import("./sections");
+  assert.equal(
+    settlementDocumentHref({ documentId: "d0000000-0000-0000-0000-000000000011", documentKind: "customer_invoice", documentNumber: "INV-1" }),
+    "/ar/invoices?doc=d0000000-0000-0000-0000-000000000011",
+  );
+  assert.equal(
+    settlementDocumentHref({ documentId: "d0000000-0000-0000-0000-000000000012", documentKind: "customer_payment", documentNumber: "RCPT-1" }),
+    "/receipts?payment=d0000000-0000-0000-0000-000000000012",
+  );
+  assert.equal(
+    settlementDocumentHref({ documentId: null, documentKind: null, documentNumber: null }),
+    null,
+  );
+  assert.equal(
+    settlementDocumentHref({ documentId: "d0000000-0000-0000-0000-000000000013", documentKind: "charge", documentNumber: "txn-9" }),
+    null,
+  );
+});
+
 /** F1T-9: every import/post/reverse mutation POSTs with banking.reconcile,
  * so a read-only operator must not see the import form or the row buttons —
  * only the batch list. Companion: the permitted path still offers all three

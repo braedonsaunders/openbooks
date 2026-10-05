@@ -1,18 +1,12 @@
 import { can, type Authz } from '@/lib/authz'
-import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
 import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { RecordListView } from '../../../components/record-list-view'
 import { isUuid, mergeHref } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
-import { PaymentDrawer, type OpenItemClient } from './PaymentDrawer'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { PaymentDrawer } from './PaymentDrawer'
+import { loadPaymentFlyout } from './payment-flyout'
 import { pickString } from '../../../lib/list-params'
-import { isFeatureEnabled } from '../../../lib/features'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Payment/receipt list, shared by /payments (vendor_payment) and /receipts
@@ -60,8 +54,21 @@ export async function PaymentsSection({
   // this section's `kind` — the surface decides it.
   const creating = pickString(sp.paymentNew) === '1' && canCreate
   const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
-  const loaded = paymentId ? await loadPaymentDocument(paymentId, kind, orgId, authz.allowedSubsidiaryIds) : null
-  const openPayment = loaded ?? null
+  // One shared resolution behind the drawer, whether it opens from this
+  // list, a deep link or another record's reference (see payment-flyout).
+  const flyout =
+    creating || paymentId
+      ? await loadPaymentFlyout({
+          paymentId,
+          creating,
+          kind,
+          orgId,
+          userId,
+          userRoles,
+          authz,
+          formId: pickString(sp.form),
+        })
+      : null
   const closeHref = mergeHref(basePath, sp, {
     payment: undefined,
     paymentNew: undefined,
@@ -69,109 +76,23 @@ export async function PaymentsSection({
     form: undefined,
   })
   let drawer: React.ReactNode = null
-  if (openPayment || creating) {
-    const partyFilter =
-      side === 'ap'
-        ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
-        : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
-    const [parties, banks, defaults] = await Promise.all([
-      db.execute<{ id: string; display_name: string }>(sql`
-        select id, display_name from parties p
-         where p.org_id = ${orgId} and ${partyFilter} and is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
-         order by display_name limit 2000`),
-      db.execute<{ id: string; number: string | null; name: string }>(sql`
-        select id, number, name from accounts
-         where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-         order by number nulls last, name`),
-      // Unsaved-create defaults: today's date plus the org currency.
-      // Read-only lookups — opening the drawer still writes nothing, and no
-      // PAY-/RCPT- number is allocated until the explicit Save commits.
-      creating
-        ? Promise.all([
-            businessToday(orgId),
-            db.execute<{ base_currency: string }>(sql`
-              select base_currency from orgs where id = ${orgId}`),
-          ])
-        : null,
-    ])
-    const openItems: OpenItemClient[] =
-      !creating && openPayment && openPayment.doc.status === 'draft' && openPayment.doc.party_id
-        ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds)
-        : []
-    // Stored-value tenders (receipts only): already-saved snapshots from
-    // the draft plus the receipt party's verified credit for the picker.
-    // Null while the feature is off or unreadable, so the drawer section
-    // never renders without the read surface behind it.
-    const storedValueEnabled =
-      side === 'ar' &&
-      (await isFeatureEnabled(orgId, 'storedValue')) &&
-      can(authz, 'stored_value.read')
-    const storedValueTenders = storedValueEnabled && openPayment
-      ? (((openPayment.doc.custom ?? {}) as { storedValueTenders?: unknown }).storedValueTenders as
-        | { accountId: string; codeLast4: string; amount: string }[] ?? [])
-      : []
-    const storedValueCredits = storedValueEnabled && openPayment?.doc.party_id
-      ? (await db.execute<{ accountId: string; codeLast4: string; currency: string; balance: string }>(sql`
-          select id as "accountId", code_last4 as "codeLast4", currency,
-                 (balance_minor::numeric / 10000)::text as balance
-            from stored_value_accounts
-           where org_id = ${orgId} and customer_party_id = ${openPayment.doc.party_id as string}
-             and status in ('active', 'frozen') and balance_minor > 0
-           order by currency, code_last4`)).rows
-      : []
-    const resolvedForm = await resolveFormLayout({
-      orgId,
-      userId,
-      recordType: kind,
-      userRoles: [...userRoles],
-      headerDefs: [],
-      lineDefs: [],
-      explicitLayoutId: pickString(sp.form),
-    })
-    // The unsaved-create payload: no row exists, so the drawer edits blanks
-    // and posts them once. Draft by default, dated today; party, bank
-    // account, and applications start empty for the operator to fill.
-    const newPaymentPayload = creating
-      ? {
-          doc: {
-            id: '',
-            kind,
-            status: 'draft',
-            currency: defaults?.[1].rows[0]?.base_currency ?? '',
-            total: '0',
-            document_number: null,
-            party_id: null,
-            party_name: null,
-            document_date: defaults?.[0] ?? '',
-            reference_number: null,
-            memo: null,
-            updated_at: '',
-            entry_id: null,
-            bank_account_number: null,
-            bank_account_name: null,
-          },
-          // A sole eligible bank account is an unambiguous draft default;
-          // the shared drawer still requires explicit Save and posting.
-          bankAccountId: banks.rows.length === 1 ? banks.rows[0]!.id : null,
-          allocations: [],
-          applied: [],
-        }
-      : null
+  if (flyout) {
+    const openPayment = flyout.mode === 'record' ? flyout.payment : null
     drawer = (
       <PaymentDrawer
-        payment={(creating ? newPaymentPayload! : openPayment!)}
-        key={creating ? 'new-payment' : String(openPayment!.doc.id)}
+        payment={flyout.payment}
+        key={flyout.mode === 'create' ? 'new-payment' : String(openPayment!.doc.id)}
         initialMode={creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-        initialOpenItems={openItems}
-        parties={parties.rows}
-        bankAccounts={banks.rows}
-        side={side}
+        initialOpenItems={flyout.initialOpenItems}
+        parties={flyout.parties}
+        bankAccounts={flyout.bankAccounts}
+        side={flyout.side}
         basePath={basePath}
-        layout={resolvedForm.layout}
+        layout={flyout.layout}
         createMode={creating}
         closeHref={closeHref}
         createTitle={newLabel}
-        storedValue={storedValueEnabled ? { tenders: storedValueTenders, customerCredits: storedValueCredits } : null}
+        storedValue={flyout.storedValue}
       />
     )
   }
