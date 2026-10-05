@@ -1218,17 +1218,22 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
 
 /**
  * The account a committed stub's wages are filed under on a country's
- * account-grouped periodic return. For the US that is the legal employer's
- * EIN (see us/employer-scope.ts) — the stub may name a state SUI account —
- * so the 941 builder and the subsidiary-scope guard that authorizes its rows
- * resolve a row's source stubs through this one function. Every other
- * country files under the account the stub records.
+ * account-grouped periodic return, read off the pack's declaration. A pack
+ * declaring employer-account filing (the US 941 and W-2 file by EIN, see
+ * us/employer-scope.ts — the stub may name a state SUI account) resolves
+ * through the legal employer's account, with that module's refusals intact;
+ * every other pack files under the account the stub records. The 941
+ * builder and the subsidiary-scope guard that authorizes its rows resolve
+ * a row's source stubs through this one function, so the guard and the
+ * builder cannot disagree.
  */
 export async function periodicReturnAccountResolver(
   orgId: string,
   country: string,
 ): Promise<(stubAccountId: string | null, employeeSubsidiaryId: string | null) => string | null> {
-  if (country !== "US") return (stubAccountId) => stubAccountId;
+  if (!payrollPack(country).periodicReturnFilesByEmployerAccount) {
+    return (stubAccountId) => stubAccountId;
+  }
   const accounts = await loadUsFilingAccounts(db, orgId);
   return (stubAccountId, employeeSubsidiaryId) =>
     resolveUsFederalFilingAccount(accounts, stubAccountId, employeeSubsidiaryId);

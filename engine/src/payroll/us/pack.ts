@@ -354,6 +354,9 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   // Withheld FICA dollars the Massachusetts retirement-contribution
   // subtraction reads for a mid-year adopter.
   openingYtdFields: () => US_OPENING_YTD_FIELDS,
+  // The 941 and W-2 file by EIN: a stub naming a state SUI account still
+  // belongs on its legal employer's return (see employer-scope.ts).
+  periodicReturnFilesByEmployerAccount: true,
   accountOpeningBases: [
     {
       key: "us_futa",

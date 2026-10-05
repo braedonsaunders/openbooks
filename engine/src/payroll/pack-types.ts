@@ -813,6 +813,16 @@ export interface PayrollCountryPack {
    */
   accountOpeningBases?: readonly PayrollAccountOpeningBase[];
   /**
+   * True when the pack's account-grouped periodic return files under the
+   * legal employer's account rather than the account the stub records.
+   * The US 941 and W-2 file by EIN (see us/employer-scope.ts): a stub may
+   * name a state SUI account, but its wages belong on its employer's 941.
+   * OPTIONAL, absent means the stub account is the return account, so the
+   * generic resolver is the identity and no pack inherits another's
+   * employer.
+   */
+  periodicReturnFilesByEmployerAccount?: boolean;
+  /**
    * pay_components.tax_treatment for EMPLOYEE-paid union dues, or null when
    * the pack's statutory engine gives dues no tax treatment at all.
    *
