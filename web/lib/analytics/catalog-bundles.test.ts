@@ -11,7 +11,6 @@ import { spendVelocityStrings } from "./spend-velocity-strings";
 import { trueCostStrings } from "./true-cost-strings";
 import { utilizationStrings } from "./utilization-strings";
 import { vendorStrings } from "./vendor-strings";
-import { calculateScenario } from "./true-cost-engine";
 
 function catalogTranslator(locale: string): CatalogMessageFn {
   const analytics = JSON.parse(
@@ -43,17 +42,6 @@ test("analytics string bundles resolve through each request locale catalog", () 
       assert.notEqual(probe.render(catalogTranslator(locale), locale), englishValue, `${locale} ${probe.name} copy`);
     }
   }
-});
-
-test("true-cost scenario calculations use the supplied catalog bundle", () => {
-  const t = catalogTranslator("fr");
-  const scenario = calculateScenario(
-    { scenarioType: "hire", employeeCount: 2 },
-    { currentRate: 50, currentExpense: 5000, currentHours: 100, currentUtilization: 0.7, fringeRate: 0.25 },
-    (value) => `$${value}`,
-    trueCostStrings(t, "fr"),
-  );
-  assert.equal(scenario.insight, "Ajouter 2 employés à 75 % d'utilisation ajoute 260 heures facturables mensuelles.");
 });
 
 test("audit summaries retain stable action and field data", () => {

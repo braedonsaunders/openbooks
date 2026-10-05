@@ -6,3 +6,5 @@ export { listJobFamilies } from './compensation/architecture.ts'
 export { adoptSourceCompensationCycle, sourceCompensationCycleEvidence, type CompensationCycleEvidence, type SourceCompensationRow } from './compensation/source-cycles.ts'
 export { getCycle, type CompCycleDTO } from './compensation/cycles.ts'
 export { CompensationError } from './compensation/errors.ts'
+/** Burden fraction for analytics consumers: compensation settings first, else labor-costing components. */
+export { burdenRateFor } from './compensation/headcount-plans.ts'

@@ -2,7 +2,7 @@ import { toChartNumber } from '../chart-number';
 /**
  * True Cost rate-engine calculation primitives (ALLOCATION_BASES,
  * calculateRate, formatRate,
- * calculateCompositeRate, category calculators, calculateScenario). Pure
+ * calculateCompositeRate, category calculators). Pure
  * functions, no DB — the data layer fetches the base values and feeds them in.
  *
  * The implementation is deterministic: allocation base × method → raw rate, formatted per
@@ -10,9 +10,6 @@ import { toChartNumber } from '../chart-number';
  * method. Category types beyond expense (time / manual / derived / formula)
  * use the same calculation pipeline.
  */
-
-import { trueCostStrings, type TrueCostStrings } from "./true-cost-strings";
-import { englishCatalogMessage } from "./catalog-strings";
 import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, roundMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   deriveOverheadOverallRate,
@@ -117,8 +114,6 @@ export function getAllocationBaseValue(baseType: AllocationBase, bases: Allocati
       return over ? bases.hours.totalBilled : (bases.hours.byDept[deptId]?.billed ?? 0);
   }
 }
-
-const safeDiv = (a: number, b: number) => (b === 0 || !isFinite(b) ? 0 : a / b);
 
 /* ─────────────────────────────────────────────── rate calculation ── */
 
@@ -674,183 +669,4 @@ export function evaluateExactFormula(expr: string): string | null {
   }
   const result = expression();
   return pos === clean.length && result !== null ? fromUnits(result) : null;
-}
-
-/**
- * Safe arithmetic evaluator for formulas — supports
- * + − × ÷, parentheses, and decimal numbers only. No identifiers, no calls,
- * so a stored formula can't execute code. Returns null on parse failure.
- */
-export function evaluateFormula(expr: string): number | null {
-  const clean = expr.replace(/\s+/g, "");
-  if (!/^[0-9+\-*/().]*$/.test(clean) || clean === "") return null;
-  let pos = 0;
-  const peek = () => clean[pos];
-  const parseNumber = (): number | null => {
-    let s = "";
-    while (pos < clean.length && /[0-9.]/.test(clean[pos]!)) s += clean[pos++];
-    if (s === "" || s === ".") return null;
-    const n = Number(s);
-    return isNaN(n) ? null : n;
-  };
-  const parenOrNum = (): number | null => {
-    if (peek() === "(") {
-      pos++;
-      const v = expression();
-      if (peek() !== ")") return null;
-      pos++;
-      return v;
-    }
-    if (peek() === "-") { pos++; const v = parenOrNum(); return v === null ? null : -v; }
-    if (peek() === "+") { pos++; return parenOrNum(); }
-    return parseNumber();
-  };
-  const term = (): number | null => {
-    let v = parenOrNum();
-    if (v === null) return null;
-    while (peek() === "*" || peek() === "/") {
-      const op = clean[pos++];
-      const r = parenOrNum();
-      if (r === null) return null;
-      v = op === "*" ? v * r : r === 0 ? NaN : v / r;
-    }
-    return v;
-  };
-  function expression(): number | null {
-    let v = term();
-    if (v === null) return null;
-    while (peek() === "+" || peek() === "-") {
-      const op = clean[pos++];
-      const r = term();
-      if (r === null) return null;
-      v = op === "+" ? v + r : v - r;
-    }
-    return v;
-  }
-  const result = expression();
-  return pos === clean.length ? result : null;
-}
-
-/* ─────────────────────────────────────────────── scenario modeler ── */
-
-export type ScenarioType =
-  | "hire" | "terminate" | "win_contract" | "lose_contract" | "cost_change" | "utilization_change";
-
-export interface ScenarioInput {
-  scenarioType: ScenarioType;
-  employeeCount?: number;
-  avgSalary?: number;
-  expectedUtilization?: number; // 0..1
-  annualHours?: number;
-  changeType?: "increase" | "decrease";
-  amount?: number;
-  newUtilization?: number; // 0..1
-}
-
-export interface ScenarioCurrent {
-  currentRate: number;
-  currentExpense: number;
-  currentHours: number; // billed hours (monthly)
-  currentUtilization: number; // 0..1
-  fringeRate: number; // default 0.25
-}
-
-export interface ScenarioImpact {
-  currentRate: number;
-  projectedRate: number;
-  change: number;
-  changePercent: number;
-  insight: string;
-  breakdown: Record<string, number>;
-  breakeven: { hoursNeeded: number; atCurrentHours: number };
-  fringeRate: number;
-}
-
-const round2 = (n: number) => Number(roundMoney(String(n), 2));
-
-/** Calculate six scenario types, including annualized hours and fringe. */
-export function calculateScenario(
-  input: ScenarioInput,
-  cur: ScenarioCurrent,
-  formatCurrency: (value: number) => string = (value) => `${round2(value)} currency units`,
-  strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
-): ScenarioImpact {
-  const { currentRate, currentExpense, currentHours, currentUtilization, fringeRate } = cur;
-  let projectedRate = 0;
-  let insight = "";
-  let breakdown: Record<string, number> = {};
-
-  switch (input.scenarioType) {
-    case "hire": {
-      const count = input.employeeCount || 1;
-      const util = input.expectedUtilization ?? 0.75;
-      const salary = input.avgSalary || 75000;
-      const newHours = (count * util * 2080) / 12;
-      const projectedHours = currentHours + newHours;
-      const fringeCost = (count * salary * fringeRate) / 12;
-      const projectedExpense = currentExpense + fringeCost;
-      projectedRate = safeDiv(projectedExpense, projectedHours);
-      insight = strings.scenarioHire(count, (util * 100).toFixed(0), round2(newHours));
-      breakdown = { hoursChange: newHours, expenseChange: fringeCost, projectedHours, projectedExpense };
-      break;
-    }
-    case "terminate": {
-      const count = input.employeeCount || 1;
-      const util = input.expectedUtilization ?? 0.75;
-      const salary = input.avgSalary || 75000;
-      const lostHours = (count * util * 2080) / 12;
-      const projectedHours = Math.max(currentHours - lostHours, 1);
-      const savings = (count * salary * fringeRate) / 12;
-      const projectedExpense = currentExpense - savings;
-      projectedRate = safeDiv(projectedExpense, projectedHours);
-      insight = strings.scenarioTerminate(count, formatCurrency(savings), round2(lostHours));
-      breakdown = { hoursChange: -lostHours, expenseChange: -savings, projectedHours, projectedExpense };
-      break;
-    }
-    case "win_contract": {
-      const contractHours = (input.annualHours || 0) / 12;
-      const projectedHours = currentHours + contractHours;
-      projectedRate = safeDiv(currentExpense, projectedHours);
-      insight = strings.scenarioWinContract(round2(contractHours));
-      breakdown = { hoursChange: contractHours, projectedHours };
-      break;
-    }
-    case "lose_contract": {
-      const lostHours = (input.annualHours || 0) / 12;
-      const projectedHours = Math.max(currentHours - lostHours, 1);
-      projectedRate = safeDiv(currentExpense, projectedHours);
-      insight = strings.scenarioLoseContract(round2(lostHours));
-      breakdown = { hoursChange: -lostHours, projectedHours };
-      break;
-    }
-    case "cost_change": {
-      const delta = input.changeType === "decrease" ? -(input.amount || 0) : input.amount || 0;
-      const projectedExpense = currentExpense + delta;
-      projectedRate = safeDiv(projectedExpense, currentHours);
-      insight = strings.scenarioCostChange(input.changeType === "decrease" ? "decrease" : "increase", formatCurrency(Math.abs(delta)));
-      breakdown = { expenseChange: delta, projectedExpense };
-      break;
-    }
-    case "utilization_change": {
-      const newUtil = input.newUtilization ?? 0.8;
-      const totalHrs = currentUtilization > 0 ? currentHours / currentUtilization : currentHours;
-      const newBilled = totalHrs * newUtil;
-      projectedRate = safeDiv(currentExpense, newBilled);
-      insight = strings.scenarioUtilizationChange((currentUtilization * 100).toFixed(0), (newUtil * 100).toFixed(0), newUtil > currentUtilization ? "up" : "down");
-      breakdown = { currentUtilization: currentUtilization * 100, newUtilization: newUtil * 100, hoursChange: newBilled - currentHours, totalHrs, newBilledHrs: newBilled };
-      break;
-    }
-  }
-
-  const change = projectedRate - currentRate;
-  return {
-    currentRate,
-    projectedRate,
-    change,
-    changePercent: safeDiv(change, currentRate) * 100,
-    insight,
-    breakdown,
-    breakeven: { hoursNeeded: currentExpense > 0 ? safeDiv(currentExpense, currentRate) : 0, atCurrentHours: currentHours },
-    fringeRate,
-  };
 }

@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getLocale, getTranslations } from "next-intl/server";
 import { withOrg } from "@openbooks/engine/src/platform/db.ts";
+import { burdenRateFor } from "@openbooks/engine/hrm/compensation";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { dateInput, numberValue, capList, decimalText, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { healthData } from "../analytics/health-data";
@@ -490,7 +491,9 @@ const trueCostTool: AssistantToolDef = {
           activeProfileId: r.config.activeProfileId,
           compositeMethod: r.config.compositeMethod,
           baseLaborRate: r.config.baseLaborRate,
-          fringeRate: r.config.fringeRate,
+          // Burden comes from its owner (compensation settings, else
+          // labor-costing components) — never a persisted dashboard rate.
+          burden: await withOrg(authz.user.orgId, () => burdenRateFor(authz.user.orgId)),
           profiles: r.config.profiles,
         },
         href: "/analytics/true-cost",
