@@ -1211,6 +1211,38 @@ const REVENUE_CONTRACT: RecordTypeMeta = {
   ],
 };
 
+const CONTRACT_COST_ASSET: RecordTypeMeta = {
+  key: "contract_cost_asset",
+  labelKey: "customization.recordTypes.contract_cost_asset",
+  category: "entity",
+  featureKey: "contractCosts",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "contract_number", labelKey: "contractCosts.labels.contract", kind: "reference", sortable: true, sortKey: "contract", locked: true },
+    { key: "customer_name", labelKey: "contractCosts.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
+    { key: "sales_rep", labelKey: "contractCosts.labels.salesRep", kind: "text", sortable: true, sortKey: "rep" },
+    { key: "cost_type", labelKey: "contractCosts.labels.costType", kind: "text", sortable: true, sortKey: "type" },
+    { key: "amount", labelKey: "contractCosts.labels.capitalized", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
+    { key: "carrying", labelKey: "contractCosts.labels.carrying", kind: "amount", sortable: true, sortKey: "carrying", defaultWidth: 130 },
+    { key: "capitalized_on", labelKey: "contractCosts.labels.capitalizedOn", kind: "date", sortable: true, sortKey: "capitalized", defaultHidden: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["active", "fully_amortized", "impaired", "expensed"].map((value) => ({ value, labelKey: `contractCosts.status.${value}` })),
+    },
+    {
+      key: "cost_type", labelKey: "contractCosts.labels.costType", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["commission", "fulfilment"].map((value) => ({ value, labelKey: `contractCosts.costType.${value}` })),
+    },
+  ],
+};
+
 const EQUIPMENT_UNIT: RecordTypeMeta = {
   key: "equipment_unit",
   labelKey: "customization.recordTypes.equipment_unit",
@@ -2397,6 +2429,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   LEASE_AGREEMENT,
   FINANCIAL_CHANGE,
   REVENUE_CONTRACT,
+  CONTRACT_COST_ASSET,
   EQUIPMENT_UNIT,
   RESOURCING_ASSIGNMENT,
   RESOURCING_REQUEST,

@@ -3276,6 +3276,10 @@
         "title": "Cargos por reposición",
         "singular": "Cargo por reposición",
         "description": "Reglas de cargos aplicadas a devoluciones inspeccionadas, por artículo, categoría o valor general."
+      },
+      "contract-cost-policy": {
+        "title": "Política de costos de contrato",
+        "description": "Qué costos de adquisición se capitalizan, durante qué período de beneficio y en qué cuentas (ASC 340-40)."
       }
     },
     "fields": {
@@ -3769,7 +3773,16 @@
       "legalEmployer": "Empleador legal",
       "clearingAccountId": "Cuenta de compensación",
       "collectionMode": "Modo de recaudación",
-      "states": "Estados"
+      "states": "Estados",
+      "practicalExpedient": "Expediente práctico (12 meses o menos)",
+      "amortizationExpenseAccountId": "Cuenta de gasto de amortización",
+      "capitalizeCommissions": "Capitalizar comisiones de venta",
+      "capitalizeFulfilment": "Capitalizar costos de cumplimiento",
+      "customerLifeSource": "Fuente de la vida del cliente",
+      "customerLifeMonths": "Vida esperada del cliente (meses)",
+      "renewalCommensurateThresholdPercent": "Umbral de proporcionalidad de renovación",
+      "contractCostBasisLabel": "Base de amortización",
+      "contractCostAssetAccount": "Cuenta de activo de costos del contrato"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
@@ -3894,7 +3907,9 @@
       "unitOfMeasure": "Lo que cuentan las unidades del concepto. Las líneas de horas alimentan toda base de horas: tarifas por hora, bases de horas de beneficios, horas asegurables e informes de horas. Las líneas de cantidad (viajes, comidas, unidades de incentivo) pagan su importe pero nunca cuentan como horas. Los conceptos por hora siempre usan horas.",
       "nonCashAccountId": "Use un activo prepagado, un pasivo de compensación con el proveedor o una cuenta de contrapartida de gasto. La nómina carga el gasto de la prestación y abona esta cuenta; las compras al proveedor deben usar la misma cuenta de compensación para no contar el gasto dos veces. Una contrapartida de gasto (distinta de la cuenta de gasto) sirve para una prestación cuyo coste ya está contabilizado como gasto, como el uso personal de un vehículo de empresa.",
       "zonedDateTime": "Introduzca una fecha y hora ISO con Z o un desplazamiento explícito, como 2026-10-01T09:00:00-04:00. Se conserva el desplazamiento.",
-      "ianaTimezone": "Introduzca una zona horaria IANA, como Europe/Madrid."
+      "ianaTimezone": "Introduzca una zona horaria IANA, como Europe/Madrid.",
+      "contractCostPracticalExpedient": "Cuando está activado, los costos cuyo período de beneficio es de doce meses o menos se llevan a gasto de inmediato en lugar de capitalizarse.",
+      "contractCostCommensurate": "Una comisión de renovación igual o superior a esta parte de la comisión inicial limita la amortización al plazo del contrato, incluso con base de vida del cliente."
     },
     "options": {
       "usageAggregation": {
@@ -4491,6 +4506,14 @@
         "none": "Seguir facturando (sin acción final)",
         "suspend": "Suspender la suscripción",
         "cancel": "Cancelar la suscripción"
+      },
+      "contractCostBasis": {
+        "contractTerm": "Plazo del contrato",
+        "customerLife": "Vida esperada del cliente"
+      },
+      "contractCostLifeSource": {
+        "manual": "Manual",
+        "derived": "Derivado de métricas SaaS"
       }
     },
     "laborCosting": {

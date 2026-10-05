@@ -28,6 +28,7 @@
     "webhook_endpoint": "Extremo de webhook",
     "budget_scenario": "Orçamento",
     "revenue_contract": "Contrato de receita",
+    "contract_cost_asset": "Ativo de custo de contrato",
     "equipment_unit": "Unidade de equipamento",
     "resourcing_assignment": "Alocação de recursos",
     "resourcing_request": "Solicitação de recursos",

@@ -1,0 +1,149 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "on": "on",
+    "off": "off",
+    "derived": "derived from SaaS metrics"
+  },
+  "workspace": {
+    "title": "Contract Costs",
+    "description": "Sales commissions held as an asset and amortized over the contract or customer life.",
+    "assetBalance": "Asset balance",
+    "periodAmortization": "Amortized this period",
+    "unlinked": "Unlinked",
+    "churned": "Churned",
+    "policyTitle": "Capitalization policy",
+    "policySummary": "How costs capitalize and amortize",
+    "policyDetail": "Amortize over {basis}; practical expedient {expedient}; customer life {life}.",
+    "noPolicy": "No policy is in effect. Create one in Setup before capitalizing.",
+    "openPolicy": "Open the policy"
+  },
+  "policy": {
+    "basis": {
+      "contract_term": "the contract term",
+      "customer_life": "the expected customer life"
+    }
+  },
+  "queue": {
+    "title": "Needs attention",
+    "emptyTitle": "Nothing needs attention",
+    "emptyDescription": "Every commission is linked and every active contract carries a healthy balance. Capitalize a commission to grow the asset.",
+    "kind": {
+      "unlinked": "Unlinked",
+      "churned": "Churned"
+    },
+    "unlinkedHint": "Commission from {date} is not linked to a contract yet.",
+    "churnedHint": "Contract {contract} churned with {amount} unamortized.",
+    "linkNow": "Link now",
+    "reviewNow": "Review now"
+  },
+  "status": {
+    "active": "Active",
+    "fully_amortized": "Fully amortized",
+    "impaired": "Impaired",
+    "expensed": "Expensed"
+  },
+  "method": {
+    "straight_line": "Straight-line",
+    "pattern": "Revenue pattern"
+  },
+  "costType": {
+    "commission": "Commission",
+    "fulfilment": "Fulfilment"
+  },
+  "event": {
+    "contract_cost_capitalize": "Capitalized",
+    "contract_cost_amortization": "Amortization",
+    "contract_cost_impairment": "Impairment"
+  },
+  "labels": {
+    "contract": "Contract",
+    "customer": "Customer",
+    "salesRep": "Sales rep",
+    "costType": "Cost type",
+    "capitalized": "Capitalized",
+    "carrying": "Carrying amount",
+    "capitalizedOn": "Capitalized on"
+  },
+  "drawer": {
+    "unlinked": "Unlinked commission",
+    "capitalized": "Capitalized",
+    "carrying": "Carrying",
+    "window": "Window",
+    "method": "Method",
+    "linkHint": "This commission has no contract yet, so nothing amortizes. Link it to schedule amortization.",
+    "impairHint": "The contract churned or shrank. Assess impairment to write the asset down.",
+    "scheduleTitle": "Amortization schedule",
+    "month": "Month",
+    "period": "Period",
+    "planned": "Planned",
+    "posted": "Posted",
+    "viewEntry": "Entry",
+    "entriesTitle": "Journal trail",
+    "advancedTitle": "Details",
+    "advancedSummary": "Rep, dates, policy basis",
+    "salesRep": "Sales rep",
+    "capitalizedOn": "Capitalized on",
+    "policyBasis": "Policy basis",
+    "baseCurrency": "Currency"
+  },
+  "capitalize": {
+    "open": "Capitalize",
+    "title": "Capitalize a commission",
+    "description": "Record the cost as an asset. Costs the policy excludes, or covered by the one-year expedient, expense immediately instead.",
+    "contract": "Revenue contract",
+    "costType": "Cost type",
+    "amount": "Amount ({currency})",
+    "date": "Capitalization date",
+    "expenseAccount": "Original expense account",
+    "preview": "Preview: debit the contract cost asset and credit the original expense for {amount} {currency}.",
+    "failed": "Unable to capitalize the commission.",
+    "saved": "Commission recorded ({status}).",
+    "submit": "Capitalize"
+  },
+  "run": {
+    "open": "Run amortization",
+    "title": "Run amortization",
+    "description": "Posts one amortization line per due asset in the period. Assets already posted skip; closed periods refuse.",
+    "period": "Period",
+    "failed": "Unable to run amortization.",
+    "saved": "Posted {posted}, skipped {skipped}.",
+    "submit": "Run"
+  },
+  "link": {
+    "open": "Link contract",
+    "title": "Link to a contract",
+    "description": "Schedules amortization from the live policy and posts the capitalization journal.",
+    "contract": "Revenue contract",
+    "failed": "Unable to link the commission.",
+    "saved": "Commission linked.",
+    "submit": "Link"
+  },
+  "impair": {
+    "open": "Impair",
+    "title": "Recognize impairment",
+    "description": "Carrying amount {carrying}. Anything above the remaining consideration less unrecognized costs writes down.",
+    "remaining": "Remaining consideration ({currency})",
+    "costs": "Costs not yet recognized ({currency})",
+    "reason": "Reason",
+    "reasonHint": "Customer churned after month one",
+    "date": "Assessment date",
+    "failed": "Unable to recognize the impairment.",
+    "saved": "Impairment posted.",
+    "clean": "No impairment: the asset is recoverable.",
+    "submit": "Recognize"
+  },
+  "import": {
+    "open": "Import",
+    "title": "Import commissions",
+    "description": "One commission per line: {columns}. Amounts post in {currency}. Unknown contracts queue unlinked.",
+    "expenseAccount": "Original expense account",
+    "rows": "Commission rows",
+    "failed": "Unable to import the commission rows.",
+    "saved": "Imported {count} commissions.",
+    "badShape": "Every line needs {columns}, separated by commas.",
+    "rowRef": "import row {index}",
+    "report": "Capitalized or queued {ok}; refused {refused}.",
+    "submit": "Import"
+  }
+}

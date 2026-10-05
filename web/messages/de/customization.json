@@ -28,6 +28,7 @@
     "webhook_endpoint": "Webhook-Endpunkt",
     "budget_scenario": "Budget",
     "revenue_contract": "Erlösvertrag",
+    "contract_cost_asset": "Vertragskostenanlage",
     "equipment_unit": "Geräteeinheit",
     "resourcing_assignment": "Ressourcenzuweisung",
     "resourcing_request": "Ressourcenanfrage",

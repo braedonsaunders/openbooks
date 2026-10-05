@@ -1,0 +1,149 @@
+{
+  "common": {
+    "cancel": "Cancelar",
+    "on": "ativado",
+    "off": "desativado",
+    "derived": "derivado de métricas SaaS"
+  },
+  "workspace": {
+    "title": "Custos de contrato",
+    "description": "Comissões de vendas capitalizadas amortizadas ao longo do contrato ou da vida do cliente.",
+    "assetBalance": "Saldo do ativo",
+    "periodAmortization": "Amortizado no período",
+    "unlinked": "Não vinculado",
+    "churned": "Perdido",
+    "policyTitle": "Política de capitalização",
+    "policySummary": "Como os custos são capitalizados e amortizados",
+    "policyDetail": "Amortizar ao longo de {basis}; expediente prático {expedient}; vida do cliente {life}.",
+    "noPolicy": "Nenhuma política em vigor. Crie uma em Configurações antes de capitalizar.",
+    "openPolicy": "Abrir a política"
+  },
+  "policy": {
+    "basis": {
+      "contract_term": "o prazo do contrato",
+      "customer_life": "a vida esperada do cliente"
+    }
+  },
+  "queue": {
+    "title": "Precisa de atenção",
+    "emptyTitle": "Nada precisa de atenção",
+    "emptyDescription": "Toda comissão está vinculada e todo contrato ativo tem saldo saudável. Capitalize uma comissão para aumentar o ativo.",
+    "kind": {
+      "unlinked": "Não vinculado",
+      "churned": "Perdido"
+    },
+    "unlinkedHint": "A comissão de {date} ainda não está vinculada a um contrato.",
+    "churnedHint": "O contrato {contract} foi perdido com {amount} não amortizado.",
+    "linkNow": "Vincular agora",
+    "reviewNow": "Revisar agora"
+  },
+  "status": {
+    "active": "Ativo",
+    "fully_amortized": "Totalmente amortizado",
+    "impaired": "Com impairment",
+    "expensed": "Levado a despesa"
+  },
+  "method": {
+    "straight_line": "Linear",
+    "pattern": "Padrão de receita"
+  },
+  "costType": {
+    "commission": "Comissão",
+    "fulfilment": "Cumprimento"
+  },
+  "event": {
+    "contract_cost_capitalize": "Capitalizado",
+    "contract_cost_amortization": "Amortização",
+    "contract_cost_impairment": "Impairment"
+  },
+  "labels": {
+    "contract": "Contrato",
+    "customer": "Cliente",
+    "salesRep": "Vendedor",
+    "costType": "Tipo de custo",
+    "capitalized": "Capitalizado",
+    "carrying": "Valor contábil",
+    "capitalizedOn": "Capitalizado em"
+  },
+  "drawer": {
+    "unlinked": "Comissão não vinculada",
+    "capitalized": "Capitalizado",
+    "carrying": "Valor contábil",
+    "window": "Janela",
+    "method": "Método",
+    "linkHint": "Esta comissão ainda não tem contrato, então nada é amortizado. Vincule-a para programar a amortização.",
+    "impairHint": "O contrato foi perdido ou reduzido. Reconheça impairment para reduzir o ativo.",
+    "scheduleTitle": "Cronograma de amortização",
+    "month": "Mês",
+    "period": "Período",
+    "planned": "Previsto",
+    "posted": "Lançado",
+    "viewEntry": "Lançamento",
+    "entriesTitle": "Trilha contábil",
+    "advancedTitle": "Detalhes",
+    "advancedSummary": "Vendedor, datas, base da política",
+    "salesRep": "Vendedor",
+    "capitalizedOn": "Capitalizado em",
+    "policyBasis": "Base da política",
+    "baseCurrency": "Moeda"
+  },
+  "capitalize": {
+    "open": "Capitalizar",
+    "title": "Capitalizar uma comissão",
+    "description": "Registre o custo como ativo. Custos excluídos pela política, ou cobertos pelo expediente de um ano, vão direto a despesa.",
+    "contract": "Contrato de receita",
+    "costType": "Tipo de custo",
+    "amount": "Valor ({currency})",
+    "date": "Data de capitalização",
+    "expenseAccount": "Conta de despesa original",
+    "preview": "Prévia: debite o ativo de custos de contrato e credite a despesa original em {amount} {currency}.",
+    "failed": "Não foi possível capitalizar a comissão.",
+    "saved": "Comissão registrada ({status}).",
+    "submit": "Capitalizar"
+  },
+  "run": {
+    "open": "Executar amortização",
+    "title": "Executar amortização",
+    "description": "Lança uma linha de amortização por ativo vencido no período. O já lançado é ignorado; períodos encerrados são recusados.",
+    "period": "Período",
+    "failed": "Não foi possível executar a amortização.",
+    "saved": "{posted} lançados, {skipped} ignorados.",
+    "submit": "Executar"
+  },
+  "link": {
+    "open": "Vincular contrato",
+    "title": "Vincular a um contrato",
+    "description": "Programa a amortização pela política vigente e lança o diário de capitalização.",
+    "contract": "Contrato de receita",
+    "failed": "Não foi possível vincular a comissão.",
+    "saved": "Comissão vinculada.",
+    "submit": "Vincular"
+  },
+  "impair": {
+    "open": "Impairment",
+    "title": "Reconhecer impairment",
+    "description": "Valor contábil {carrying}. Tudo acima da contraprestação restante menos custos não reconhecidos sofre impairment.",
+    "remaining": "Contraprestação restante ({currency})",
+    "costs": "Custos ainda não reconhecidos ({currency})",
+    "reason": "Motivo",
+    "reasonHint": "Cliente perdido após o primeiro mês",
+    "date": "Data de avaliação",
+    "failed": "Não foi possível reconhecer o impairment.",
+    "saved": "Impairment lançado.",
+    "clean": "Sem impairment: o ativo é recuperável.",
+    "submit": "Reconhecer"
+  },
+  "import": {
+    "open": "Importar",
+    "title": "Importar comissões",
+    "description": "Uma comissão por linha: {columns}. Valores lançados em {currency}. Contratos desconhecidos ficam não vinculados.",
+    "expenseAccount": "Conta de despesa original",
+    "rows": "Linhas de comissões",
+    "failed": "Não foi possível importar as linhas de comissões.",
+    "saved": "{count} comissões importadas.",
+    "badShape": "Cada linha precisa de {columns}, separados por vírgula.",
+    "rowRef": "linha de importação {index}",
+    "report": "{ok} capitalizadas ou na fila; {refused} recusadas.",
+    "submit": "Importar"
+  }
+}

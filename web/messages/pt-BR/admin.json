@@ -3321,6 +3321,10 @@
         "title": "Taxas de reestocagem",
         "singular": "Taxa de reestocagem",
         "description": "Regras de taxas aplicadas a devoluções inspecionadas, por item, categoria ou padrão."
+      },
+      "contract-cost-policy": {
+        "title": "Política de custos de contrato",
+        "description": "Quais custos de aquisição são capitalizados, ao longo de qual período de benefício e em quais contas (ASC 340-40)."
       }
     },
     "fields": {
@@ -3814,7 +3818,16 @@
       "legalEmployer": "Empregador legal",
       "clearingAccountId": "Conta de compensação",
       "collectionMode": "Modo de recolhimento",
-      "states": "Estados"
+      "states": "Estados",
+      "practicalExpedient": "Expediente prático (12 meses ou menos)",
+      "amortizationExpenseAccountId": "Conta de despesa de amortização",
+      "capitalizeCommissions": "Capitalizar comissões de vendas",
+      "capitalizeFulfilment": "Capitalizar custos de cumprimento",
+      "customerLifeSource": "Fonte da vida útil do cliente",
+      "customerLifeMonths": "Vida útil esperada do cliente (meses)",
+      "renewalCommensurateThresholdPercent": "Limite de proporcionalidade da renovação",
+      "contractCostBasisLabel": "Base de amortização",
+      "contractCostAssetAccount": "Conta de ativo de custos do contrato"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
@@ -3939,7 +3952,9 @@
       "unitOfMeasure": "O que as unidades do componente contam. Linhas de horas alimentam toda base de horas — taxas por hora, bases de horas de benefícios, horas seguráveis e relatórios de horas. Linhas de quantidade (viagens, refeições, unidades de incentivo) pagam seu valor, mas nunca contam como horas. Componentes por hora sempre usam horas.",
       "nonCashAccountId": "Use um ativo pré-pago, um passivo de compensação com o fornecedor ou uma conta redutora de despesa. A folha debita a despesa do benefício e credita esta conta; compras do fornecedor devem usar a mesma conta de compensação para não contar a despesa duas vezes. Uma conta redutora de despesa (diferente da conta de despesa) serve para um benefício cujo custo já foi lançado como despesa, como o uso pessoal de um veículo da empresa.",
       "zonedDateTime": "Digite uma data e hora ISO com Z ou deslocamento explícito, como 2026-10-01T09:00:00-04:00. O deslocamento é preservado.",
-      "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo."
+      "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo.",
+      "contractCostPracticalExpedient": "Quando ativado, custos cujo período de benefício é de doze meses ou menos vão direto a despesa em vez de serem capitalizados.",
+      "contractCostCommensurate": "Uma comissão de renovação igual ou superior a esta parcela da comissão inicial limita a amortização ao prazo do contrato, mesmo sob base de vida do cliente."
     },
     "options": {
       "usageAggregation": {
@@ -4536,6 +4551,14 @@
         "none": "Continuar faturando (sem ação final)",
         "suspend": "Suspender a assinatura",
         "cancel": "Cancelar a assinatura"
+      },
+      "contractCostBasis": {
+        "contractTerm": "Prazo do contrato",
+        "customerLife": "Vida esperada do cliente"
+      },
+      "contractCostLifeSource": {
+        "manual": "Manual",
+        "derived": "Derivado de métricas SaaS"
       }
     },
     "payroll": {

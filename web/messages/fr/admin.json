@@ -3276,6 +3276,10 @@
         "title": "Frais de restockage",
         "singular": "Frais de restockage",
         "description": "Règles de frais appliquées aux retours inspectés, par article, catégorie ou défaut."
+      },
+      "contract-cost-policy": {
+        "title": "Méthode des coûts de contrat",
+        "description": "Quels coûts d’acquisition sont capitalisés, sur quelle période d’avantage et dans quels comptes (ASC 340-40)."
       }
     },
     "fields": {
@@ -3769,7 +3773,16 @@
       "legalEmployer": "Employeur légal",
       "clearingAccountId": "Compte de compensation",
       "collectionMode": "Mode de perception",
-      "states": "États"
+      "states": "États",
+      "practicalExpedient": "Mesure de simplification (12 mois au plus)",
+      "amortizationExpenseAccountId": "Compte de charges d'amortissement",
+      "capitalizeCommissions": "Activer les commissions de vente",
+      "capitalizeFulfilment": "Activer les coûts d'exécution",
+      "customerLifeSource": "Source de la durée de vie client",
+      "customerLifeMonths": "Durée de vie client attendue (mois)",
+      "renewalCommensurateThresholdPercent": "Seuil de proportionnalité du renouvellement",
+      "contractCostBasisLabel": "Base d'amortissement",
+      "contractCostAssetAccount": "Compte d'actif des coûts du contrat"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
@@ -3894,7 +3907,9 @@
       "unitOfMeasure": "Ce que comptent les unités de l'élément. Les lignes d'heures alimentent toute base d'heures — taux horaires, bases d'heures des avantages, heures assurables et rapports d'heures. Les lignes de quantité (trajets, repas, unités d'incitation) paient leur montant mais ne comptent jamais comme des heures. Les éléments au taux horaire utilisent toujours les heures.",
       "nonCashAccountId": "Utilisez un actif payé d’avance, un passif de compensation du fournisseur ou un compte de contrepartie de charge. La paie débite la charge d’avantage et crédite ce compte; les achats auprès du fournisseur doivent utiliser le même compte de compensation pour éviter de compter la charge deux fois. Une contrepartie de charge (distincte du compte de charge) convient à un avantage dont le coût est déjà passé en charge, comme l’usage personnel d’un véhicule de l’entreprise.",
       "zonedDateTime": "Saisissez un horodatage ISO avec Z ou un décalage explicite, par exemple 2026-10-01T09:00:00-04:00. Le décalage est conservé.",
-      "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris."
+      "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris.",
+      "contractCostPracticalExpedient": "Quand elle est activée, les coûts dont la période d’avantage est de douze mois ou moins sont passés en charges aussitôt au lieu d’être capitalisés.",
+      "contractCostCommensurate": "Une commission de renouvellement égale ou supérieure à cette part de la commission initiale limite l’amortissement à la durée du contrat, même en base de durée de vie client."
     },
     "options": {
       "usageAggregation": {
@@ -4491,6 +4506,14 @@
         "none": "Continuer à facturer (aucune action finale)",
         "suspend": "Suspendre l’abonnement",
         "cancel": "Résilier l’abonnement"
+      },
+      "contractCostBasis": {
+        "contractTerm": "Durée du contrat",
+        "customerLife": "Durée de vie client attendue"
+      },
+      "contractCostLifeSource": {
+        "manual": "Manuelle",
+        "derived": "Dérivé des métriques SaaS"
       }
     },
     "laborCosting": {

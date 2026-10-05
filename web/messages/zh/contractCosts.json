@@ -1,0 +1,149 @@
+{
+  "common": {
+    "cancel": "取消",
+    "on": "启用",
+    "off": "停用",
+    "derived": "源自SaaS指标"
+  },
+  "workspace": {
+    "title": "合同成本",
+    "description": "在合同期或客户生命周期内摊销的资本化销售佣金。",
+    "assetBalance": "资产余额",
+    "periodAmortization": "本期摊销",
+    "unlinked": "未关联",
+    "churned": "已流失",
+    "policyTitle": "资本化政策",
+    "policySummary": "成本如何资本化与摊销",
+    "policyDetail": "按{basis}摊销；一年实务简化方法{expedient}；客户生命周期{life}。",
+    "noPolicy": "当前没有有效政策。请先在设置中创建，再进行资本化。",
+    "openPolicy": "打开政策"
+  },
+  "policy": {
+    "basis": {
+      "contract_term": "合同期",
+      "customer_life": "预计客户生命周期"
+    }
+  },
+  "queue": {
+    "title": "需要注意",
+    "emptyTitle": "暂无需要注意的事项",
+    "emptyDescription": "每笔佣金均已关联，每份有效合同余额健康。资本化一笔佣金即可增加资产。",
+    "kind": {
+      "unlinked": "未关联",
+      "churned": "已流失"
+    },
+    "unlinkedHint": "{date}的佣金尚未关联到合同。",
+    "churnedHint": "合同{contract}已流失，还有{amount}未摊销。",
+    "linkNow": "立即关联",
+    "reviewNow": "立即复核"
+  },
+  "status": {
+    "active": "有效",
+    "fully_amortized": "已全额摊销",
+    "impaired": "已减值",
+    "expensed": "已费用化"
+  },
+  "method": {
+    "straight_line": "直线法",
+    "pattern": "收入模式"
+  },
+  "costType": {
+    "commission": "佣金",
+    "fulfilment": "履约"
+  },
+  "event": {
+    "contract_cost_capitalize": "已资本化",
+    "contract_cost_amortization": "摊销",
+    "contract_cost_impairment": "减值"
+  },
+  "labels": {
+    "contract": "合同",
+    "customer": "客户",
+    "salesRep": "销售员",
+    "costType": "成本类型",
+    "capitalized": "已资本化",
+    "carrying": "账面金额",
+    "capitalizedOn": "资本化日期"
+  },
+  "drawer": {
+    "unlinked": "未关联的佣金",
+    "capitalized": "已资本化",
+    "carrying": "账面金额",
+    "window": "期间",
+    "method": "方法",
+    "linkHint": "这笔佣金还没有合同，因此不会摊销。请关联合同以安排摊销。",
+    "impairHint": "合同已流失或缩减。请确认减值以调减资产。",
+    "scheduleTitle": "摊销计划",
+    "month": "月份",
+    "period": "会计期间",
+    "planned": "计划",
+    "posted": "已过账",
+    "viewEntry": "分录",
+    "entriesTitle": "日记账轨迹",
+    "advancedTitle": "详细信息",
+    "advancedSummary": "销售员、日期、政策基础",
+    "salesRep": "销售员",
+    "capitalizedOn": "资本化日期",
+    "policyBasis": "政策基础",
+    "baseCurrency": "币种"
+  },
+  "capitalize": {
+    "open": "资本化",
+    "title": "资本化一笔佣金",
+    "description": "将成本记录为资产。政策排除的成本或适用一年简化方法的成本将直接费用化。",
+    "contract": "收入合同",
+    "costType": "成本类型",
+    "amount": "金额({currency})",
+    "date": "资本化日期",
+    "expenseAccount": "原费用科目",
+    "preview": "预览：借记合同成本资产、贷记原费用{amount} {currency}。",
+    "failed": "无法资本化这笔佣金。",
+    "saved": "佣金已记录({status})。",
+    "submit": "资本化"
+  },
+  "run": {
+    "open": "运行摊销",
+    "title": "运行摊销",
+    "description": "为期间内每项到期资产过账一条摊销分录。已过账的跳过；已结期间将被拒绝。",
+    "period": "期间",
+    "failed": "无法运行摊销。",
+    "saved": "已过账{posted}条，跳过{skipped}条。",
+    "submit": "运行"
+  },
+  "link": {
+    "open": "关联合同",
+    "title": "关联到合同",
+    "description": "按现行政策安排摊销，并在资产尚无资本化分录时过账。",
+    "contract": "收入合同",
+    "failed": "无法关联这笔佣金。",
+    "saved": "佣金已关联。",
+    "submit": "关联"
+  },
+  "impair": {
+    "open": "减值",
+    "title": "确认减值",
+    "description": "账面金额{carrying}。超过剩余对价减尚未确认成本的部分予以减值。",
+    "remaining": "剩余对价({currency})",
+    "costs": "尚未确认的成本({currency})",
+    "reason": "原因",
+    "reasonHint": "客户在首月后流失",
+    "date": "评估日期",
+    "failed": "无法确认减值。",
+    "saved": "减值已过账。",
+    "clean": "无需减值：资产可收回。",
+    "submit": "确认"
+  },
+  "import": {
+    "open": "导入",
+    "title": "导入佣金",
+    "description": "每行一笔佣金：{columns}。金额以{currency}过账。未知合同将保持未关联。",
+    "expenseAccount": "原费用科目",
+    "rows": "佣金行",
+    "failed": "无法导入佣金行。",
+    "saved": "已导入{count}笔佣金。",
+    "badShape": "每行都需要{columns}，以逗号分隔。",
+    "rowRef": "导入行{index}",
+    "report": "{ok}笔已资本化或排队，{refused}笔被拒绝。",
+    "submit": "导入"
+  }
+}

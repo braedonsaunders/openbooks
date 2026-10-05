@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "Obligaciones de desempeño restantes",
         "description": "Precio de transacción aún por reconocer por obligación y mes en el libro principal, con plazo esperado (ASC 606-10-50-13)."
+      },
+      "contract_cost_rollforward": {
+        "label": "Evolución de costos de contrato",
+        "description": "Saldos capitalizados, amortizados, deteriorados y de cierre por activo de costo de contrato."
+      },
+      "contract_cost_postings": {
+        "label": "Movimientos de costos de contrato",
+        "description": "Líneas de capitalización, amortización y deterioro por período desde el mayor etiquetado."
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "Estado del plan",
         "obligation_status": "Estado de la obligación",
         "journal_entry_id": "Asiento (id)"
+      },
+      "contract_cost_rollforward": {
+        "id": "Clave de activo",
+        "contract_number": "Contrato",
+        "customer": "Cliente",
+        "sales_rep": "Vendedor",
+        "cost_type": "Tipo de costo",
+        "status": "Estado",
+        "capitalized_on": "Capitalizado el",
+        "amort_start_on": "Amortizar desde",
+        "amort_end_on": "Amortizar hasta",
+        "currency": "Moneda",
+        "capitalized": "Capitalizado",
+        "amortized": "Amortizado",
+        "impaired": "Deteriorado",
+        "closing": "Saldo de cierre"
+      },
+      "contract_cost_postings": {
+        "id": "Clave de activo",
+        "period": "Período",
+        "posting_date": "Fecha contable",
+        "event": "Evento",
+        "account": "Cuenta",
+        "contract_number": "Contrato",
+        "currency": "Moneda",
+        "amount": "Importe",
+        "entry_id": "Asiento",
+        "asset_id": "Clave de activo"
       }
     },
     "enumValues": {

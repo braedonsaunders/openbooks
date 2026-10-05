@@ -1,0 +1,149 @@
+{
+  "common": {
+    "cancel": "Abbrechen",
+    "on": "ein",
+    "off": "aus",
+    "derived": "aus SaaS-Kennzahlen abgeleitet"
+  },
+  "workspace": {
+    "title": "Vertragskosten",
+    "description": "Aktivierte Verkaufsprovisionen, abgeschrieben über Vertrags- oder Kundenlaufzeit.",
+    "assetBalance": "Vermögensbestand",
+    "periodAmortization": "Abschreibung im Zeitraum",
+    "unlinked": "Nicht verknüpft",
+    "churned": "Abgewandert",
+    "policyTitle": "Aktivierungsrichtlinie",
+    "policySummary": "Wie Kosten aktiviert und abgeschrieben werden",
+    "policyDetail": "Abschreibung über {basis}; praktische Erleichterung {expedient}; Kundenlaufzeit {life}.",
+    "noPolicy": "Keine Richtlinie in Kraft. Legen Sie eine in den Einstellungen an, bevor Sie aktivieren.",
+    "openPolicy": "Richtlinie öffnen"
+  },
+  "policy": {
+    "basis": {
+      "contract_term": "die Vertragslaufzeit",
+      "customer_life": "die erwartete Kundenlaufzeit"
+    }
+  },
+  "queue": {
+    "title": "Erfordert Aufmerksamkeit",
+    "emptyTitle": "Nichts erfordert Aufmerksamkeit",
+    "emptyDescription": "Jede Provision ist verknüpft und jeder aktive Vertrag hat einen gesunden Saldo. Aktivieren Sie eine Provision, um das Vermögen aufzubauen.",
+    "kind": {
+      "unlinked": "Nicht verknüpft",
+      "churned": "Abgewandert"
+    },
+    "unlinkedHint": "Provision vom {date} ist noch keinem Vertrag zugeordnet.",
+    "churnedHint": "Vertrag {contract} ist mit {amount} nicht abgeschrieben abgewandert.",
+    "linkNow": "Jetzt verknüpfen",
+    "reviewNow": "Jetzt prüfen"
+  },
+  "status": {
+    "active": "Aktiv",
+    "fully_amortized": "Voll abgeschrieben",
+    "impaired": "Wertgemindert",
+    "expensed": "Aufgewandt"
+  },
+  "method": {
+    "straight_line": "Linear",
+    "pattern": "Umsatzverlauf"
+  },
+  "costType": {
+    "commission": "Provision",
+    "fulfilment": "Erfüllung"
+  },
+  "event": {
+    "contract_cost_capitalize": "Aktiviert",
+    "contract_cost_amortization": "Abschreibung",
+    "contract_cost_impairment": "Wertminderung"
+  },
+  "labels": {
+    "contract": "Vertrag",
+    "customer": "Kunde",
+    "salesRep": "Verkäufer",
+    "costType": "Kostenart",
+    "capitalized": "Aktiviert",
+    "carrying": "Buchwert",
+    "capitalizedOn": "Aktiviert am"
+  },
+  "drawer": {
+    "unlinked": "Nicht verknüpfte Provision",
+    "capitalized": "Aktiviert",
+    "carrying": "Buchwert",
+    "window": "Zeitraum",
+    "method": "Methode",
+    "linkHint": "Diese Provision hat noch keinen Vertrag, daher wird nichts abgeschrieben. Verknüpfen Sie sie, um die Abschreibung zu planen.",
+    "impairHint": "Der Vertrag ist abgewandert oder geschrumpft. Prüfen Sie die Wertminderung, um das Vermögen abzuschreiben.",
+    "scheduleTitle": "Abschreibungsplan",
+    "month": "Monat",
+    "period": "Periode",
+    "planned": "Geplant",
+    "posted": "Gebucht",
+    "viewEntry": "Buchung",
+    "entriesTitle": "Buchungspfad",
+    "advancedTitle": "Details",
+    "advancedSummary": "Vertreter, Daten, Richtliniengrundlage",
+    "salesRep": "Verkäufer",
+    "capitalizedOn": "Aktiviert am",
+    "policyBasis": "Richtliniengrundlage",
+    "baseCurrency": "Währung"
+  },
+  "capitalize": {
+    "open": "Aktivieren",
+    "title": "Provision aktivieren",
+    "description": "Erfassen Sie die Kosten als Vermögen. Kosten, die die Richtlinie ausschließt oder die einjährige Erleichterung abdeckt, werden stattdessen sofort aufgewandt.",
+    "contract": "Umsatzvertrag",
+    "costType": "Kostenart",
+    "amount": "Betrag ({currency})",
+    "date": "Aktivierungsdatum",
+    "expenseAccount": "Ursprüngliches Aufwandskonto",
+    "preview": "Vorschau: Vertragskostenvermögen an ursprüngliches Aufwandskonto über {amount} {currency}.",
+    "failed": "Die Provision konnte nicht aktiviert werden.",
+    "saved": "Provision erfasst ({status}).",
+    "submit": "Aktivieren"
+  },
+  "run": {
+    "open": "Abschreibung ausführen",
+    "title": "Abschreibung ausführen",
+    "description": "Bucht je eine Abschreibungszeile pro fälligem Vermögen in der Periode. Bereits Gebuchtes wird übersprungen; geschlossene Perioden werden abgelehnt.",
+    "period": "Periode",
+    "failed": "Die Abschreibung konnte nicht ausgeführt werden.",
+    "saved": "{posted} gebucht, {skipped} übersprungen.",
+    "submit": "Ausführen"
+  },
+  "link": {
+    "open": "Vertrag verknüpfen",
+    "title": "Mit einem Vertrag verknüpfen",
+    "description": "Plant die Abschreibung nach der aktiven Richtlinie und bucht die Aktivierungsbuchung.",
+    "contract": "Umsatzvertrag",
+    "failed": "Die Provision konnte nicht verknüpft werden.",
+    "saved": "Provision verknüpft.",
+    "submit": "Verknüpfen"
+  },
+  "impair": {
+    "open": "Wertmindern",
+    "title": "Wertminderung erfassen",
+    "description": "Buchwert {carrying}. Alles über der restlichen Gegenleistung abzüglich noch nicht erfasster Kosten wird abgeschrieben.",
+    "remaining": "Restliche Gegenleistung ({currency})",
+    "costs": "Noch nicht erfasste Kosten ({currency})",
+    "reason": "Grund",
+    "reasonHint": "Kunde nach dem ersten Monat abgewandert",
+    "date": "Bewertungsstichtag",
+    "failed": "Die Wertminderung konnte nicht erfasst werden.",
+    "saved": "Wertminderung gebucht.",
+    "clean": "Keine Wertminderung: das Vermögen ist werthaltig.",
+    "submit": "Erfassen"
+  },
+  "import": {
+    "open": "Importieren",
+    "title": "Provisionen importieren",
+    "description": "Eine Provision pro Zeile: {columns}. Beträge buchen in {currency}. Unbekannte Verträge werden unverknüpft eingereiht.",
+    "expenseAccount": "Ursprüngliches Aufwandskonto",
+    "rows": "Provisionszeilen",
+    "failed": "Die Provisionszeilen konnten nicht importiert werden.",
+    "saved": "{count} Provisionen importiert.",
+    "badShape": "Jede Zeile braucht {columns}, durch Kommas getrennt.",
+    "rowRef": "Importzeile {index}",
+    "report": "{ok} aktiviert oder eingereiht; {refused} abgelehnt.",
+    "submit": "Importieren"
+  }
+}

@@ -117,6 +117,13 @@ export {
 } from "./entity-list-query/revenue-contracts"
 
 export {
+  CONTRACT_COST_ASSET_BASE_JOINS,
+  CONTRACT_COST_ASSET_BUILT_IN_EXPR,
+  CONTRACT_COST_ASSET_SORTS,
+  contractCostAssetWhere,
+} from "./entity-list-query/contract-cost-assets"
+
+export {
   EQUIPMENT_BASE_JOINS,
   EQUIPMENT_BUILT_IN_EXPR,
   EQUIPMENT_SORTS,
