@@ -10,6 +10,7 @@ import {
   deriveOverheadDeptComposite,
   formatOverheadPublishRate,
   overheadPublishBlockers,
+  OverheadCalculationError,
   quantizeOverheadMoney,
   UnsupportedOverheadRateError,
 } from "./overhead-rates.ts";
@@ -198,15 +199,37 @@ test("cascading compounds percent categories and respects cascade order", () => 
   );
 });
 
-test("cascading defaults the labor base to 50 like the Overall headline", () => {
+test("cascading without a labor rate refuses by name instead of assuming one", () => {
+  assert.throws(
+    () =>
+      deriveOverheadDeptComposite({
+        compositeMethod: "cascading",
+        categories: [
+          { id: "x", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
+        ],
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof OverheadCalculationError);
+      assert.match(error.message, /needs a labor rate/);
+      assert.match(error.message, /base labor rate/);
+      return true;
+    },
+  );
+});
+
+test("per_fte without resolved annual hours refuses by name instead of assuming 2080", () => {
+  assert.throws(
+    () => deriveOverheadDisplayRate({ rawRate: "25.0000", expense: "100.0000", rateFormat: "per_fte" }),
+    (error: unknown) => {
+      assert.ok(error instanceof OverheadCalculationError);
+      assert.match(error.message, /annual FTE hours/);
+      assert.match(error.message, /labor cost rates/);
+      return true;
+    },
+  );
   assert.equal(
-    deriveOverheadDeptComposite({
-      compositeMethod: "cascading",
-      categories: [
-        { id: "x", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
-      ],
-    }),
-    "10.0000",
+    deriveOverheadDisplayRate({ rawRate: "25.0000", expense: "100.0000", rateFormat: "per_fte", annualFteHours: "2000" }),
+    "50000.0000",
   );
 });
 

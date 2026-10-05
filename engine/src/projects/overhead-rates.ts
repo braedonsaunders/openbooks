@@ -73,7 +73,6 @@ export const OVERHEAD_RATE_INTERNAL_DECIMALS = 4;
 export const OVERHEAD_RATE_PUBLISH_DECIMALS = 2;
 
 const ZERO_4 = "0.0000";
-export const DEFAULT_OVERHEAD_BASE_LABOR_RATE = "50.0000";
 
 export interface OverheadTier {
   min?: number | string;
@@ -105,7 +104,11 @@ export interface OverheadCompositeCategory {
 export interface OverheadDeptCompositeInput {
   compositeMethod: OverheadCompositeMethod;
   cascadeOrder?: string[];
-  /** Department labor rate (exact money string); defaults to 50 like Overall. */
+  /**
+   * Department labor rate (exact money string), measured from costed time or
+   * set explicitly on the profile. Required for cascading; unused otherwise.
+   * There is no default: an assumed rate would price every cascade.
+   */
   baseLaborRate?: string | number;
   categories: OverheadCompositeCategory[];
 }
@@ -361,17 +364,26 @@ export function deriveOverheadDisplayRate(input: {
   laborDollars?: string;
   directCost?: string;
   units?: string;
-  /** Annual hours per FTE; the existing model policy is 2080 unless supplied. */
+  /**
+   * Annual hours per FTE, resolved from work schedules or labor cost rates.
+   * Required for per_fte: without it the category refuses instead of
+   * assuming a divisor.
+   */
   annualFteHours?: string;
 }): string | null {
   if (input.rateFormat === "per_hour") return input.rawRate;
-  if (input.rateFormat === "per_fte")
+  if (input.rateFormat === "per_fte") {
+    if (input.annualFteHours === undefined || input.annualFteHours === null || String(input.annualFteHours).trim() === "")
+      throw new OverheadCalculationError(
+        "Cannot calculate Currency/FTE: no annual FTE hours were resolved — record annual hours on the employees' labor cost rates or weekly hours on their work schedules.",
+      );
     return fromUnits(
       roundDiv(
-        toUnits(input.rawRate) * toUnits(input.annualFteHours ?? "2080"),
+        toUnits(input.rawRate) * toUnits(input.annualFteHours),
         10_000n,
       ),
     );
+  }
   const denominator =
     input.rateFormat === "percent_labor"
       ? input.laborDollars
@@ -412,7 +424,11 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
       return fromUnits(roundDiv(weightedUnits, toUnits(expenseTotal))) as Rate;
     }
     case "cascading": {
-      const base = normalizeMoney(input.baseLaborRate ?? DEFAULT_OVERHEAD_BASE_LABOR_RATE);
+      if (input.baseLaborRate === undefined || input.baseLaborRate === null || String(input.baseLaborRate).trim() === "")
+        throw new OverheadCalculationError(
+          "The cascading composite needs a labor rate but the period has no costed labor and the profile sets no base labor rate — approve costed time for the period or set a base labor rate on the True Cost profile.",
+        );
+      const base = normalizeMoney(input.baseLaborRate);
       const baseUnits = toUnits(base);
       let running = baseUnits;
       const order = input.cascadeOrder ?? included.map((c) => c.id);

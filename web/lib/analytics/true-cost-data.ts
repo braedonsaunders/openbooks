@@ -9,7 +9,6 @@ import { sql } from "drizzle-orm";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, cmp, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
-  DEFAULT_OVERHEAD_BASE_LABOR_RATE,
   deriveOverheadCategoryDeptRates,
   deriveOverheadOverallRate,
   deriveOverheadDisplayRate,
@@ -302,7 +301,10 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
   name: "Default",
   color: "#3b82f6",
   compositeMethod: "sum",
-  baseLaborRate: DEFAULT_OVERHEAD_BASE_LABOR_RATE,
+  // No assumed labor rate: empty means "derive from costed time, else refuse
+  // when the composite method needs one". A previously-saved numeric default
+  // is an explicit operator value, not an assumption.
+  baseLaborRate: "",
   fringeRate: 0.25,
   categorySettings: {},
   customCategories: [],
@@ -1041,13 +1043,18 @@ export async function trueCostData(
   const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
 
   // ---- composite rate via the configured method () ---
+  // The labor rate is measured (costed time) or explicitly configured on the
+  // profile — never assumed. Cascading with neither refuses by name through
+  // deriveOverheadDeptComposite; other methods never read the rate.
   const typedEmployeeRows = empTranslated;
-  const overallLaborRateExact =
+  const overallLaborRateExact: string | null =
     overallLaborRatedExact === "0.0000"
-      ? quantizeOverheadMoney(profile.baseLaborRate)
+      ? (profile.baseLaborRate === "" || profile.baseLaborRate == null
+        ? null
+        : quantizeOverheadMoney(profile.baseLaborRate))
       : div(overallLaborCostExact, overallLaborRatedExact);
   const compositeRateExact = deriveOverheadDeptComposite({
-    compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact,
+    compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact ?? undefined,
     categories: categories.map((category) => ({
       id: category.id,
       rate: exactRatesByCat.get(category.id)!.overall,
@@ -1060,7 +1067,9 @@ export async function trueCostData(
     })),
   });
   const compositeRate = Number(compositeRateExact);
-  const deptLaborRateExact = (deptId: string): string => {
+  // A department without costed time uses the measured-or-explicit Overall
+  // rate — the same figure the headline shows, never a hidden default.
+  const deptLaborRateExact = (deptId: string): string | null => {
     const leg = deptLaborExact.get(deptId);
     if (!leg || leg.rated === "0.0000") return overallLaborRateExact;
     return div(leg.cost, leg.rated);
@@ -1076,7 +1085,7 @@ export async function trueCostData(
   const departments: Dept[] = departmentsBase.map((d) => {
     const composite4 = deriveOverheadDeptComposite({
         compositeMethod: profile.compositeMethod,
-        baseLaborRate: deptLaborRateExact(d.id),
+        baseLaborRate: deptLaborRateExact(d.id) ?? undefined,
         categories: categories
           .map((category) => ({
             id: category.id,
