@@ -1697,7 +1697,13 @@ export async function cancelCycle(query: {
     // Cancelling voids the round for every line: same recheck, or an
     // A-scoped actor cancels B's live round.
     await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
-    if (cycle.status === "historical" || cycle.status === "pushed" || cycle.status === "closed" || cycle.status === "cancelled") {
+    if (cycle.status === "historical") {
+      throw new CompensationError(
+        "BAD_STATE",
+        "Historical source reviews cannot be cancelled; retain the original evidence and import a new source version for corrections",
+      );
+    }
+    if (cycle.status === "pushed" || cycle.status === "closed" || cycle.status === "cancelled") {
       throw new CompensationError(
         "BAD_STATE",
         `a ${cycle.status} cycle cannot cancel — cancellation belongs to the live round, never to moved payroll`,
