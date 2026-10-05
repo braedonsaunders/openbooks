@@ -32,7 +32,7 @@ function LiveAnalyticsCard({ card, preview, error, onReady }: { card: AnalyticsC
   }, [card.slug, onReady])
   const Icon = ICONS[card.icon] ?? Activity
   return <div ref={element} data-analytics-card={card.slug} className="min-w-0">
-    <RecordKindCard compact href={card.href} label={card.title} description={card.desc} icon={<Icon size={17} />} metadata={<div className="flex min-w-0 items-center gap-3"><span title={card.pack} className="max-w-40 truncate text-right text-[10px] font-medium text-slate-500 dark:text-slate-400">{card.pack}</span>{preview?.chart ? <AnalyticsCardChart chart={preview.chart} /> : null}</div>}>
+    <RecordKindCard compact prefetch={false} href={card.href} label={card.title} description={card.desc} icon={<Icon size={17} />} metadata={<div className="flex min-w-0 items-center gap-3"><span title={card.pack} className="max-w-40 truncate text-right text-[10px] font-medium text-slate-500 dark:text-slate-400">{card.pack}</span>{preview?.chart ? <AnalyticsCardChart chart={preview.chart} /> : null}</div>}>
       <div className="mt-3 w-full border-t border-slate-100 pt-3 dark:border-slate-800" aria-live="polite" aria-busy={!preview && !error}>
         {error ? <p className="min-h-20 text-sm text-amber-700 dark:text-amber-300">{error}</p> : preview?.metrics.length ? <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
           {preview.metrics.map((metric, index) => <div key={`${metric.label}:${index}`} className="min-w-0">

@@ -39,12 +39,12 @@ const dataReads: Record<string, { slug: string; exports: string[] }> = {
 }
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (context.parentURL?.includes('/app/(app)/analytics/') && context.parentURL.endsWith('/view.ts')) {
-      if (specifier.endsWith('/lib/authz')) {
+    if ((context.parentURL?.includes('/app/(app)/analytics/') && context.parentURL.endsWith('/view.ts')) || context.parentURL?.endsWith('/lib/analytics/dashboard-reader.ts') || context.parentURL?.endsWith('/lib/analytics/dashboard-access.ts') || context.parentURL?.endsWith('/lib/analytics/preview-cache.ts')) {
+      if (specifier.endsWith('/lib/authz') || specifier === '../authz') {
         return {
           shortCircuit: true,
           url: 'data:text/javascript,' + encodeURIComponent(`
-            export { can } from ${JSON.stringify(new URL('../authz.ts', import.meta.url).href)};
+            export { can, ForbiddenError } from ${JSON.stringify(new URL('../authz.ts', import.meta.url).href)};
             export async function requirePermission() {
               return {
                 user: { orgId: 'org', id: 'user' },
@@ -55,7 +55,7 @@ const hooks = registerHooks({
           `),
         }
       }
-      if (specifier.endsWith('/lib/features') || specifier.endsWith('/lib/feature-gates')) {
+      if (specifier.endsWith('/lib/features') || specifier.endsWith('/lib/feature-gates') || specifier === '../features' || specifier === '../feature-gates') {
         return {
           shortCircuit: true,
           url: 'data:text/javascript,' + encodeURIComponent(`
@@ -97,6 +97,7 @@ const hooks = registerHooks({
         }
       }
     }
+    if (specifier === './connection' && context.parentURL?.endsWith('/jobs/src/read-cache.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function getReadCacheConnection(){return undefined}' }
     return next(specifier, context)
   },
 })

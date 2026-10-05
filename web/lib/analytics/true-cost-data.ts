@@ -1,10 +1,11 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { toChartNumber } from "../chart-number";
 import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, cmp, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
@@ -300,7 +301,7 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
 
 /** Load the True Cost engine config and resolve the active profile (). */
 export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
-  const r = await db.execute(sql`
+  const r = await analyticsQuery(sql`
     select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
   `);
   const raw = r.rows[0]?.cfg as Partial<TrueCostConfig> | null;
@@ -350,7 +351,7 @@ export async function trueCostData(
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
     // translate to presentation before the burden math ever sees them.
-    db.execute(sql`
+    analyticsQuery(sql`
       select l.account_id, a.number, a.name, to_char(e.posting_date, 'YYYY-MM') as month,
         l.department_id, sub.base_currency as func, max(e.posting_date)::text as late,
         sum(l.amount) as amount
@@ -368,7 +369,7 @@ export async function trueCostData(
     // labour cost (Σ hours × cost rate on non-billable time) is a native burden
     // category — the cost of paying people for unbilled time must be recovered
     // on billable hours (the unbilled-labour / time category).
-    db.execute(sql`
+    analyticsQuery(sql`
       select t.department_id, to_char(t.worked_on, 'YYYY-MM') as month,
         coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
         max(t.worked_on)::text as late,
@@ -384,7 +385,7 @@ export async function trueCostData(
     // Per-employee weighted labour rate + dominant dept/labour class. Cost
     // legs arrive per (employee, functional) so the rate translates before
     // the division — a cross-currency average of raw rates is meaningless.
-    db.execute(sql`
+    (analyticsSection('true-cost', ["selling"]) ? analyticsQuery(sql`
       with per_emp as (
         select t.employee_party_id, coalesce(p.display_name, 'Unknown') as name,
           coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
@@ -418,9 +419,9 @@ export async function trueCostData(
       left join departments d on d.id = dd.department_id and d.org_id = ${orgId}
       left join dom_item di on di.employee_party_id = pe.employee_party_id
       where pe.hours > 0
-    `),
+    `) : Promise.resolve({rows:[]})),
     // Prior equal window: per-account expense (classified below) + billed hours.
-    db.execute(sql`
+    (analyticsSection('true-cost', ["absorption","selling"]) ? analyticsQuery(sql`
       select l.account_id, sub.base_currency as func, max(e.posting_date)::text as late,
         sum(l.amount) as amount,
         (select coalesce(sum(t.hours) filter (where t.is_billable), 0) from time_entries t
@@ -432,10 +433,10 @@ export async function trueCostData(
       where l.org_id = ${orgId} ${ledgerScope} and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
       group by 1, 2
-    `),
+    `) : Promise.resolve({rows:[]})),
     // Prior-window non-billable labour cost per functional: the scalar
     // subselect above cannot carry legs, so it travels on its own query.
-    db.execute(sql`
+    (analyticsSection('true-cost', ["absorption","selling"]) ? analyticsQuery(sql`
       select coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
         max(t.worked_on)::text as late,
         coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
@@ -444,9 +445,9 @@ export async function trueCostData(
       join orgs o on o.id = t.org_id
       where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}
       group by 1
-    `),
+    `) : Promise.resolve({rows:[]})),
     // Does the "burden applied" GL mechanism carry postings in the period?
-    db.execute(sql`
+    analyticsQuery(sql`
       select sub.base_currency as func, max(e.posting_date)::text as late,
         coalesce(-sum(l.amount), 0) as applied, count(*) as lines
       from journal_lines l
@@ -457,7 +458,7 @@ export async function trueCostData(
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
     `),
-    db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`),
+    analyticsQuery(sql`select id, name from departments where org_id = ${orgId} order by name`),
     // Allocation bases by department (): labour $,
     // headcount, revenue, direct cost. Hours come from the time legs above.
     // One grouped pass per source instead of a correlated GL subquery per
@@ -467,7 +468,7 @@ export async function trueCostData(
     // classification is resolved once into id sets rather than joined per
     // line — the labour regex was being evaluated for every journal line in
     // the window.
-    db.execute(sql`
+    analyticsQuery(sql`
       with gl as (
         select l.department_id, sub.base_currency as func, max(e.posting_date)::text as late,
                coalesce(sum(l.amount) filter (where l.account_id in (

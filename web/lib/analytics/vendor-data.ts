@@ -1,11 +1,12 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { vendorStrings, type VendorStrings } from "./vendor-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 
@@ -136,7 +137,7 @@ export async function vendorData(
   const [spendRows, billRows, monthRows, payRows] = await Promise.all([
     // Entry window first: joined inline the planner drives from accounts and
     // probes the entry primary key once per journal line in the tenant.
-    db.execute<VendorSpendRow>(sql`
+    analyticsQuery<VendorSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
@@ -158,7 +159,7 @@ export async function vendorData(
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by p.id, p.display_name, sub.base_currency
     `),
-    db.execute<VendorBillRow>(sql`
+    (analyticsSection('vendor-performance', ["overview","payment","scorecard","matrix","vendors"]) ? analyticsQuery<VendorBillRow>(sql`
       with bill_movements as (
         select d.party_id, d.posting_date::date as movement_date, 1::int as direction
           from documents d
@@ -178,8 +179,8 @@ export async function vendorData(
         from bill_movements
        group by party_id
       having sum(direction) <> 0
-    `),
-    db.execute<MonthSpendRow>(sql`
+    `) : Promise.resolve({rows:[]})),
+    analyticsQuery<MonthSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
@@ -202,7 +203,7 @@ export async function vendorData(
     // observation only after full settlement. Days run from the bill date;
     // due dates determine timeliness. Late spend also includes partial payments
     // actually made after due, within the report cutoff.
-    db.execute<VendorPaymentRow>(sql`
+    analyticsQuery<VendorPaymentRow>(sql`
       with bill_applications as (
         select bl.id as bill_line_id, bl.party_id, be.posting_date as bill_date,
           abs(bl.txn_amount) as bill_total, a.target_transaction_amount as applied_amount,

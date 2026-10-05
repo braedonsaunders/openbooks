@@ -1,7 +1,7 @@
 import "server-only";
+import { analyticsQuery } from "./query";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -248,7 +248,7 @@ export function scoreLabelOf(score: number | null, b: HealthBenchmarks): ScoreLa
 /** Translated period activity (debit-positive) on the given accounts. */
 async function accountActivity(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null, accountIds: string[]): Promise<ExactDecimal> {
   if (accountIds.length === 0) return ZERO;
-  const r = await db.execute<{ func: string | null; s: string; late: string | null }>(sql`
+  const r = await analyticsQuery<{ func: string | null; s: string; late: string | null }>(sql`
     select sub.base_currency as func, coalesce(sum(l.amount), 0)::text as s, max(e.posting_date)::text as late
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -269,7 +269,7 @@ async function accountActivity(orgId: string, from: string, to: string, allowed:
 /** Translated closing balance (credit-positive) on the given accounts as of a date, at the closing spot rate. */
 async function creditBalance(orgId: string, asOf: string, allowed: ReadonlySet<string> | null, accountIds: string[]): Promise<ExactDecimal> {
   if (accountIds.length === 0) return ZERO;
-  const r = await db.execute<{ func: string | null; s: string }>(sql`
+  const r = await analyticsQuery<{ func: string | null; s: string }>(sql`
     select sub.base_currency as func, coalesce(-sum(l.amount), 0)::text as s
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -289,7 +289,7 @@ async function creditBalance(orgId: string, asOf: string, allowed: ReadonlySet<s
 }
 
 async function depreciationAmortization(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<ExactDecimal> {
-  const r = await db.execute<{ func: string | null; s: string; late: string | null }>(sql`
+  const r = await analyticsQuery<{ func: string | null; s: string; late: string | null }>(sql`
     with da_accounts as (
       -- These account references are the authoritative D&A classification. They
       -- remain correct when a tenant names its chart in any language.
@@ -332,7 +332,7 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
 // Employment dates govern the selected period, including an employee
 // through their final employment day. Undated legacy hires remain eligible.
 async function activeHeadcount(orgId: string, asOf: string, allowed: ReadonlySet<string> | null): Promise<number> {
-  const r = await db.execute<{ c: number }>(sql`
+  const r = await analyticsQuery<{ c: number }>(sql`
     select count(*)::int as c from employee_roles er
     join parties p on p.id = er.party_id and p.org_id = er.org_id
     where er.org_id = ${orgId}
@@ -345,13 +345,13 @@ async function activeHeadcount(orgId: string, asOf: string, allowed: ReadonlySet
 
 /** In-scope legal entities: the visible subsidiaries (or every one) plus the root. */
 async function scopeEntities(orgId: string, allowed: ReadonlySet<string> | null): Promise<{ id: string | null; currency: string; controlTaxAccount: string | null }[]> {
-  const r = await db.execute<{ id: string; currency: string; tax: string | null }>(sql`
+  const r = await analyticsQuery<{ id: string; currency: string; tax: string | null }>(sql`
     select s.id, s.base_currency as currency, s.control_accounts ->> 'incomeTaxExpense' as tax
       from subsidiaries s
      where s.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`s.id`, allowed)}
   `);
-  const org = await db.execute<{ currency: string; tax: string | null }>(sql`
+  const org = await analyticsQuery<{ currency: string; tax: string | null }>(sql`
     select base_currency as currency, settings -> 'controlAccounts' ->> 'incomeTaxExpense' as tax from orgs where id = ${orgId}
   `);
   const root = org.rows[0];
@@ -699,7 +699,7 @@ export async function financialHealth(
 async function accountActivityOfTypes(
   orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null, accountIds: string[], types: string[],
 ): Promise<ExactDecimal> {
-  const r = await db.execute<{ id: string }>(sql`
+  const r = await analyticsQuery<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])
        and type = any(${`{${types.join(",")}}`}::text[])

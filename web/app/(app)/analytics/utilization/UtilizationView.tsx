@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
@@ -29,7 +31,6 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 /* ------------------------------------------------------------------ helpers */
 
 const TABS = ['overview', 'intelligence', 'departments', 'items', 'titles', 'employees', 'config'] as const
-type Tab = (typeof TABS)[number]
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
 /** Viewer-locale whole hours: one hook so every tab shares it. */
 function useHrs0() {
@@ -345,12 +346,14 @@ type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: strin
 
 /* ------------------------------------------------------------------- shell */
 
-export function UtilizationView({ data, canConfigure }: { data: UtilizationData; canConfigure?: boolean }) {
+export function UtilizationView({ data: initialData, canConfigure }: { data: UtilizationData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('utilization', { data: initialData }, TABS)
+  const { tab, setTab } = read
+  const { data } = read.props
   const [flyout, setFlyout] = useState<Flyout>(null)
   const target = data.config.target
   const c = data.company.range
@@ -367,6 +370,7 @@ export function UtilizationView({ data, canConfigure }: { data: UtilizationData;
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'intelligence' ? <IntelligenceTab data={data} /> : null}
@@ -376,6 +380,7 @@ export function UtilizationView({ data, canConfigure }: { data: UtilizationData;
         {tab === 'employees' ? <EmployeesTab data={data} onDrill={setFlyout} /> : null}
         {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       {flyout ? (

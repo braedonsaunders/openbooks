@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { useState } from 'react'
@@ -23,10 +25,9 @@ import { RatiosTab } from './tabs/RatiosTab'
 import { ConfigurationTab } from './tabs/ConfigurationTab'
 
 const TABS = ['overview', 'margin', 'items', 'segments', 'forecast', 'scenarios', 'budget', 'drivers', 'ratios', 'configuration'] as const
-type Tab = (typeof TABS)[number]
 
 export function FinancialHealthView({
-  data,
+  data: initialData,
   defs,
   budgetsEnabled = true,
   canConfigure,
@@ -39,9 +40,11 @@ export function FinancialHealthView({
   const fmtMoney = useAnalyticsMoney()
   const fmtRatio = useRatioFormat()
   const t = useTranslations('analytics.financialHealth')
-  const grossMargin = Object.values(data.ratios).flat().find((r) => r.id === 'gross_margin')!
   const tabs = budgetsEnabled ? TABS : TABS.filter((k) => k !== 'budget')
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('financial-health', { data: initialData }, tabs)
+  const { tab, setTab } = read
+  const { data } = read.props
+  const grossMargin = Object.values(data.ratios).flat().find((r) => r.id === 'gross_margin')!
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const f = data.figures
   const openAccount = (id: string, name: string) => setDrill({ kind: 'account', id, name })
@@ -92,6 +95,7 @@ export function FinancialHealthView({
 
       {/* Tab strip */}
       <RecordTabs label={t('title')} tabs={tabs.map((k) => ({ key: k, label: t(`tabs.${k}`) }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'margin' ? <MarginTab data={data} /> : null}
@@ -104,6 +108,7 @@ export function FinancialHealthView({
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
         {tab === 'configuration' ? <ConfigurationTab canEdit={canConfigure ?? false} benchmarks={data.benchmarks} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />

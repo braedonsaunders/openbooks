@@ -6,6 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
+import { analyticsSection } from '../../../../lib/analytics/read-context'
 import { customerData, customerProfitability, customerSummaryData } from '../../../../lib/analytics/customer-data'
 import { customerStrings } from '../../../../lib/analytics/customer-strings'
 import type { CustomerView } from './CustomerView'
@@ -62,7 +63,7 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
   const { t, authz, period, strings } = await customerContext(sp)
   const [data, profitability, projectsEnabled] = await Promise.all([
     customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
-    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
+    analyticsSection('customer-intelligence', ['lifetime', 'profitability']) ? customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings) : Promise.resolve(null),
     isFeatureEnabled(authz.user.orgId, 'projects'),
   ])
 

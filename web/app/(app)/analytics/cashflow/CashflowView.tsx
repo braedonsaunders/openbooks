@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
@@ -35,17 +37,18 @@ import { formatExactPercent, formatExactRatio, toChartNumber, useAnalyticsMoney 
 // their operational homes at full fidelity: the weekly timeline + forecast
 // categories to Banking → Cash, the AP pay-selection rule to the AP cockpit.
 const TABS = ['overview', 'category'] as const
-type Tab = (typeof TABS)[number]
 // Bucket colours key off the cash-core bucket codes (Current, 1-30, …),
 // which travel with the data and never localize.
 const BUCKET_COLORS: Record<string, string> = { Current: '#10b981', '1-30': '#14b8a6', '31-60': '#0ea5e9', '61-90': '#f59e0b', '90+': '#ef4444' }
 
-export function CashflowView({ data }: { data: CashflowData }) {
+export function CashflowView({ data: initialData }: { data: CashflowData }) {
   const t = useTranslations('analytics.cashflow')
   const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('cashflow', { data: initialData }, TABS)
+  const { tab, setTab } = read
+  const { data } = read.props
   const s = data.summary
   const lowestWeek = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(s.lowestWeek + 'T00:00:00Z'))
 
@@ -61,10 +64,12 @@ export function CashflowView({ data }: { data: CashflowData }) {
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'category' ? <CategoryTab data={data} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       <p className="flex items-center justify-center gap-1 text-center text-xs text-slate-400 dark:text-slate-500">
