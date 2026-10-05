@@ -1394,7 +1394,8 @@
     "txnsCount": "{count} trans.",
     "errors": {
       "paymentStatsUnavailable": "No se cargaron las estadísticas de pago de clientes. Vuelve a cargar este panel.",
-      "scoringWeightsInvalid": "Las ponderaciones {keys} suman {actual}, no {total}: corrígelas en la Configuración de este panel."
+      "scoringWeightsInvalid": "Las ponderaciones {keys} suman {actual}, no {total}: corrígelas en la Configuración de este panel.",
+      "intelligenceUnavailable": "Ningún indicador de inteligencia de clientes puntúa con las ponderaciones configuradas: corrígelas en la Configuración de este panel."
     },
     "rating": {
       "excellent": "excelente",

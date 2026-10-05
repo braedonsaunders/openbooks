@@ -1394,7 +1394,8 @@
     "txnsCount": "{count} trans.",
     "errors": {
       "paymentStatsUnavailable": "Les statistiques de paiement client n’ont pas été chargées. Rechargez ce tableau de bord.",
-      "scoringWeightsInvalid": "Les pondérations {keys} totalisent {actual} au lieu de {total} : corrigez-les dans la Configuration de ce tableau."
+      "scoringWeightsInvalid": "Les pondérations {keys} totalisent {actual} au lieu de {total} : corrigez-les dans la Configuration de ce tableau.",
+      "intelligenceUnavailable": "Aucun indicateur d’intelligence client n’est noté avec les pondérations configurées : corrigez-les dans la Configuration de ce tableau."
     },
     "rating": {
       "excellent": "excellent",

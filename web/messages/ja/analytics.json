@@ -1394,7 +1394,8 @@
     "txnsCount": "{count}件の取引",
     "errors": {
       "paymentStatsUnavailable": "顧客の支払統計を読み込めませんでした。このダッシュボードを再読み込みしてください。",
-      "scoringWeightsInvalid": "重み{keys}の合計が{actual}で{total}になりません。このダッシュボードの設定で修正してください。"
+      "scoringWeightsInvalid": "重み{keys}の合計が{actual}で{total}になりません。このダッシュボードの設定で修正してください。",
+      "intelligenceUnavailable": "設定された重みでは顧客インテリジェンスの入力が何も採点されません。このダッシュボードの設定で修正してください。"
     },
     "rating": {
       "excellent": "優良",

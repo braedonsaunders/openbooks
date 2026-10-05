@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { exactMarginPercent, exactProfit } from './customer-profitability-money'
-import { isProfitLeak, profitTierOf, ratePayment, scorePayment } from './customer-data'
+import { compositeScoreOf, healthScoreOf, isProfitLeak, profitTierOf, ratePayment, scorePayment } from './customer-data'
 
 const bands = {
   highDays: 60, highPenalty: 40,
@@ -29,6 +29,31 @@ test('measured payment timing scores through the configured DSO and overdue band
   assert.equal(ratePayment(70, ratings), 'good')
   assert.equal(ratePayment(50, ratings), 'fair')
   assert.equal(ratePayment(10, ratings), 'poor')
+})
+
+const healthWeights = { recency: 25, frequency: 25, monetary: 30, payment: 20 }
+
+test('dropping the payment term re-normalises the rest instead of awarding phantom points', () => {
+  const terms = { recency: 100, frequency: 100, monetary: 100, payment: null as number | null }
+  const { score, scoredWithoutPayment } = healthScoreOf(terms, healthWeights, 0)
+  assert.equal(scoredWithoutPayment, true)
+  // (100·25 + 100·25 + 100·30) / 80, not / 100 and not + 15 phantom points.
+  assert.equal(score, 100)
+  const withPayment = healthScoreOf({ ...terms, payment: 50 }, healthWeights, 0)
+  assert.equal(withPayment.scoredWithoutPayment, false)
+  assert.equal(withPayment.score, 90)
+})
+
+test('no term left means no score, never a 0 that grades as F', () => {
+  const { score } = healthScoreOf(
+    { recency: 100, frequency: 100, monetary: 100, payment: null },
+    { recency: 0, frequency: 0, monetary: 0, payment: 100 },
+    0,
+  )
+  assert.equal(score, null)
+  assert.equal(compositeScoreOf([]), null)
+  assert.equal(compositeScoreOf([{ value: 80, weight: 0 }]), null)
+  assert.equal(compositeScoreOf([{ value: 80, weight: 30 }, { value: 60, weight: 20 }]), 72)
 })
 
 test('customer profit keeps a cent beyond the safe integer range', () => {

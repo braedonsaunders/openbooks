@@ -1394,7 +1394,8 @@
     "txnsCount": "{count}笔交易",
     "errors": {
       "paymentStatsUnavailable": "未能加载客户付款统计信息。请重新加载此仪表板。",
-      "scoringWeightsInvalid": "权重{keys}合计为{actual}而非{total}，请在此仪表板的配置中修正。"
+      "scoringWeightsInvalid": "权重{keys}合计为{actual}而非{total}，请在此仪表板的配置中修正。",
+      "intelligenceUnavailable": "按配置的权重，没有客户智能输入被评分，请在此仪表板的配置中修正。"
     },
     "rating": {
       "excellent": "优秀",

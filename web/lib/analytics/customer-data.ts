@@ -219,8 +219,9 @@ export interface CustomerRow {
   isFakeChampion: boolean;
   jobs: number;
   // health
-  healthScore: number;
-  healthGrade: "A+" | "A" | "B" | "C" | "D" | "F";
+  /** Null when no term was left to score: renders an em dash, never a 0 that grades as F. */
+  healthScore: number | null;
+  healthGrade: "A+" | "A" | "B" | "C" | "D" | "F" | null;
   recommendation: Recommendation;
   recommendationDetail: string;
   /** True when the customer has no payment history: the payment term was dropped. */
@@ -277,7 +278,12 @@ export interface Insight {
 export interface CustomerData {
   period: { from: string; to: string; label: string };
   rows: CustomerRow[];
-  intelligence: { score: number; label: string; grade: string };
+  /**
+   * Portfolio intelligence: either a score with its grade, or null with the
+   * translated reason when no term carried weight — never a 0 that reads as
+   * "scored worst".
+   */
+  intelligence: { score: number; label: string; grade: string } | { score: null; reason: string };
   kpis: {
     totalCustomers: number;
     /** Period recognized revenue across all customers (ties to P&L revenue). */
@@ -711,6 +717,57 @@ export function ratePayment(
   if (score < bands.good) return "fair";
   if (score < bands.excellent) return "good";
   return "excellent";
+}
+
+export interface HealthScoreTerms {
+  recency: number;
+  frequency: number;
+  monetary: number;
+  /** Null when the customer has no payment history to score. */
+  payment: number | null;
+}
+
+export interface HealthScoreWeights {
+  recency: number;
+  frequency: number;
+  monetary: number;
+  payment: number;
+}
+
+/**
+ * Composite health score from the terms that actually have data. A term with
+ * no data is dropped and the remaining weights re-normalised — never awarded
+ * phantom points. When no term is left (every present weight is zero) there is
+ * no score at all: null with the caller naming the reason, never a 0 that
+ * grades as F.
+ */
+export function healthScoreOf(
+  terms: HealthScoreTerms,
+  weights: HealthScoreWeights,
+  frictionPenalty: number,
+): { score: number | null; scoredWithoutPayment: boolean } {
+  const payment = terms.payment;
+  const scoredWithoutPayment = payment === null;
+  const present = [
+    { value: terms.recency, weight: weights.recency },
+    { value: terms.frequency, weight: weights.frequency },
+    { value: terms.monetary, weight: weights.monetary },
+  ];
+  if (payment !== null) present.push({ value: payment, weight: weights.payment });
+  const total = present.reduce((a, t) => a + t.weight, 0);
+  if (total <= 0) return { score: null, scoredWithoutPayment };
+  const raw = present.reduce((a, t) => a + t.value * t.weight, 0);
+  return { score: Math.max(0, Math.round(raw / total) - frictionPenalty), scoredWithoutPayment };
+}
+
+/**
+ * Weighted composite of the terms that carry weight. No weighted term means no
+ * composite — null, never a 0 that reads as "scored worst".
+ */
+export function compositeScoreOf(terms: { value: number; weight: number }[]): number | null {
+  const total = terms.reduce((a, t) => a + t.weight, 0);
+  if (total <= 0) return null;
+  return Math.round(terms.reduce((a, t) => a + t.value * t.weight, 0) / total);
 }
 
 function priorYearIso(iso: string): string {
@@ -1513,19 +1570,19 @@ async function readCustomerData(
     const recencyScore = rfm.r * 20;
     const frequencyScore = rfm.f * 20;
     const monetaryScore = rfm.m * 20;
-    // A term with no data is dropped and the remaining weights
-    // re-normalised: with no payment history — or timing too thin to score,
-    // with no paid invoice to measure against — the customer earns no phantom
-    // points, and the tile says so by name (scoredWithoutPayment).
-    const scoredWithoutPayment = payment === undefined || payment.score === null;
-    const weightTotal = scoredWithoutPayment ? 100 - weightPayment : 100;
-    const rawScore = recencyScore * weightRecency + frequencyScore * weightFrequency + monetaryScore * weightMonetary
-      + (payment && payment.score !== null ? payment.score * weightPayment : 0);
     const frictionPenalty = friction?.level === "critical" ? frictionCriticalPts : friction?.level === "high" ? frictionHighPts : friction?.level === "medium" ? frictionMediumPts : 0;
-
-    let healthScore = weightTotal > 0 ? Math.round(rawScore / weightTotal) : 0;
-    healthScore = Math.max(0, healthScore - frictionPenalty);
-    const healthGrade: CustomerRow["healthGrade"] = gradeOf(healthScore);
+    // A term with no data is dropped and the remaining weights re-normalised:
+    // with no payment history — or timing too thin to score, with no paid
+    // invoice to measure against — the customer earns no phantom points, and
+    // the tile says so by name (scoredWithoutPayment). When no term is left at
+    // all there is no score: null, never a 0 that grades as F.
+    const paymentScore = payment?.score ?? null;
+    const { score: healthScore, scoredWithoutPayment } = healthScoreOf(
+      { recency: recencyScore, frequency: frequencyScore, monetary: monetaryScore, payment: paymentScore },
+      { recency: weightRecency, frequency: weightFrequency, monetary: weightMonetary, payment: weightPayment },
+      frictionPenalty,
+    );
+    const healthGrade: CustomerRow["healthGrade"] = healthScore === null ? null : gradeOf(healthScore);
 
     // 7-priority recommendation ladder, verbatim.
     let recommendation: Recommendation = "maintain";
@@ -1543,7 +1600,7 @@ async function readCustomerData(
     } else if (churn.level === "critical" || churn.level === "high") {
       recommendation = "win-back";
       detail = strings.recWinBack;
-    } else if (healthScore >= nurtureHealth && cmp(clv.clv, nurtureClvCut) >= 0) {
+    } else if (healthScore !== null && healthScore >= nurtureHealth && cmp(clv.clv, nurtureClvCut) >= 0) {
       recommendation = "nurture";
       detail = strings.recNurture;
     } else if (rfm.segment === "new") {
@@ -1552,7 +1609,9 @@ async function readCustomerData(
     } else if (leakMargin !== null) {
       recommendation = "reprice";
       detail = strings.recReprice(leakMargin.toFixed(1));
-    } else if (healthScore < 50) {
+    } else if (healthScore === null || healthScore < gradeD) {
+      // The review floor follows the shared grade ladder (below D), and an
+      // unscored customer — no term left to score — lands here too.
       recommendation = "review";
       detail = strings.recReview;
     }
@@ -1610,7 +1669,8 @@ async function readCustomerData(
       scoreBreakdown: { recency: recencyScore, frequency: frequencyScore, monetary: monetaryScore, payment: payment ? payment.score : null, frictionPenalty: -frictionPenalty },
     };
   });
-  rows.sort((a, b) => b.healthScore - a.healthScore);
+  // Unscored customers sort last: no score is not the lowest score.
+  rows.sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1));
 
   /* ---- segments distribution ---- */
   const SEGMENTS: Segment[] = ["champions", "loyal", "potential", "new", "regular", "hibernating", "at-risk", "lost"];
@@ -1824,13 +1884,18 @@ async function readCustomerData(
   if (avgRetentionProbability !== null) intelTerms.push({ value: avgRetentionProbability, weight: intelRetention });
   intelTerms.push({ value: concentrationHealth, weight: intelConcentration });
   if (paymentRate !== null) intelTerms.push({ value: paymentRate, weight: intelPayment });
-  const intelWeight = intelTerms.reduce((a, t) => a + t.weight, 0);
-  const intelligenceScore = intelWeight > 0
-    ? Math.round(intelTerms.reduce((a, t) => a + t.value * t.weight, 0) / intelWeight)
-    : 0;
-  const { label: scoreLabel, grade: scoreGrade } = strings.intelligenceScore(intelligenceScore, {
-    aPlus: gradeAPlus, a: gradeA, b: gradeB, c: gradeC, d: gradeD,
-  });
+  // Terms with no data stay out; when no weighted term is left the portfolio
+  // has no intelligence score — null with a named remedy, never a 0 that
+  // reads as "scored worst".
+  const intelligenceScore = compositeScoreOf(intelTerms);
+  const intelligence: CustomerData["intelligence"] = intelligenceScore === null
+    ? { score: null, reason: strings.intelligenceUnavailable() }
+    : {
+      score: intelligenceScore,
+      ...strings.intelligenceScore(intelligenceScore, {
+        aPlus: gradeAPlus, a: gradeA, b: gradeB, c: gradeC, d: gradeD,
+      }),
+    };
 
   /* ---- aggregates + insights ---- */
   const atRisk = rows.filter((r) => r.churnLevel === "critical" || r.churnLevel === "high");
@@ -1860,7 +1925,7 @@ async function readCustomerData(
   return {
     period,
     rows,
-    intelligence: { score: intelligenceScore, label: scoreLabel, grade: scoreGrade },
+    intelligence,
     kpis: {
       totalCustomers: rows.length,
       totalRevenue: totalRevenueExact,

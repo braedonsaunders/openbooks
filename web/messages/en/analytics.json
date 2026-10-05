@@ -1394,7 +1394,8 @@
     },
     "errors": {
       "paymentStatsUnavailable": "Customer payment statistics did not load. Reload this dashboard to retry.",
-      "scoringWeightsInvalid": "Score weights {keys} sum to {actual}, not {total} — open Configuration on this dashboard and correct them."
+      "scoringWeightsInvalid": "Score weights {keys} sum to {actual}, not {total} — open Configuration on this dashboard and correct them.",
+      "intelligenceUnavailable": "No customer intelligence inputs are scored under the configured weights — open Configuration on this dashboard and correct them."
     },
     "rating": {
       "excellent": "excellent",

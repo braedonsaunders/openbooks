@@ -1394,7 +1394,8 @@
     "txnsCount": "{count} Buch.",
     "errors": {
       "paymentStatsUnavailable": "Die Kundenzahlungsstatistik wurde nicht geladen. Laden Sie dieses Dashboard erneut.",
-      "scoringWeightsInvalid": "Die Gewichtungen {keys} ergeben {actual} statt {total} — bitte in der Konfiguration dieses Dashboards korrigieren."
+      "scoringWeightsInvalid": "Die Gewichtungen {keys} ergeben {actual} statt {total} — bitte in der Konfiguration dieses Dashboards korrigieren.",
+      "intelligenceUnavailable": "Keine Kundensignale werden unter den konfigurierten Gewichtungen bewertet — bitte in der Konfiguration dieses Dashboards korrigieren."
     },
     "rating": {
       "excellent": "exzellent",
