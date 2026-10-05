@@ -636,7 +636,7 @@
       "policyNotice": {
         "title": "Keine Inkassorichtlinie aktiv",
         "description": "Der automatische Einzug ist eingeschaltet, aber für Kundenrechnungen ist keine Inkassorichtlinie aktiv — es gibt keinen Wiederholungsplan. Aktivieren Sie eine Richtlinie, um mit dem Einzug zu beginnen.",
-        "action": "Inkasso-Einstellungen öffnen"
+        "action": "Richtlinien öffnen"
       }
     }
   },

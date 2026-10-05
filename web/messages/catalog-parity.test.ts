@@ -3115,6 +3115,7 @@ const COGNATES = new Set<string>([
   // Product families: Code, Barcode, Status and Option are identical German
   // spellings; "{count} in {family}" reads the same in German.
   'de:items.families.fields.status|Status',
+  'de:items.families.code|Code',
   'de:items.families.grid.barcode|Barcode',
   'de:items.families.grid.code|Code',
   'de:items.familyCreate.previewCode|Code',
@@ -3132,6 +3133,7 @@ const COGNATES = new Set<string>([
   'fr:items.kinds.service|Service',
   'fr:items.labels.code|Code',
   // Product families: Code, Options and Option are identical French spellings.
+  'fr:items.families.code|Code',
   'fr:items.families.grid.code|Code',
   'fr:items.familyCreate.previewCode|Code',
   // French spells “source” identically.

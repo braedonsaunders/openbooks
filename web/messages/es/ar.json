@@ -636,7 +636,7 @@
       "policyNotice": {
         "title": "No hay ninguna política de cobro activa",
         "description": "El cobro automático está activado, pero no hay ninguna política de cobro activa para las facturas de clientes: no hay calendario de reintentos. Active una política para empezar a cobrar.",
-        "action": "Abrir la configuración de cobros"
+        "action": "Abrir políticas"
       }
     }
   },

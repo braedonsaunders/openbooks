@@ -42,7 +42,13 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
  * plus brand, last four and expiry for display.
  */
 
-export class AutopayError extends Error {}
+export class AutopayError extends Error {
+  /** Stable machine-readable refusal code; the message stays human copy and may change. */
+  code?: string;
+}
+
+/** Refusal code when no active collection policy exists for the billed scope. */
+export const MISSING_COLLECTION_POLICY = "missing_collection_policy";
 
 export type AutopayProvider = AcceptanceProvider;
 
@@ -265,7 +271,9 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
   `)).rows;
   const policy = rows[0];
   if (!policy) {
-    throw new AutopayError("no active collection policy for customer invoices; activate one in Setup → Collections before enrolling customers in autopay");
+    const missing = new AutopayError("no active collection policy for customer invoices; activate one in Setup → Collections before enrolling customers in autopay");
+    missing.code = MISSING_COLLECTION_POLICY;
+    throw missing;
   }
   return {
     policyId: policy.policyId,

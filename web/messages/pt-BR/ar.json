@@ -636,7 +636,7 @@
       "policyNotice": {
         "title": "Nenhuma política de cobrança ativa",
         "description": "A cobrança automática está ativada, mas não há nenhuma política de cobrança ativa para faturas de clientes — não há cronograma de novas tentativas. Ative uma política para começar a cobrar.",
-        "action": "Abrir configurações de cobrança"
+        "action": "Abrir políticas"
       }
     }
   },

@@ -30,10 +30,12 @@ stubModules({
     '@openbooks/engine/src/platform/db.ts': `export const db = { execute: async () => ({ rows: [] }) }`,
     '@openbooks/engine/platform/business-date': `export async function businessToday(){return '2026-10-05'}`,
     '@openbooks/engine/payments/autopay':
+      `export const MISSING_COLLECTION_POLICY = 'missing_collection_policy';` +
+      `const coded = (message) => { const error = new Error(message); error.code = MISSING_COLLECTION_POLICY; return error };` +
       `const mode = () => globalThis.__collectionsPolicyNoticeState.mode;` +
       `export async function getRecoveryMetrics(){` +
       `const m = mode();` +
-      `if (m === 'missing-policy') throw new Error('no active collection policy for customer invoices; activate one in Setup');` +
+      `if (m === 'missing-policy') throw coded('no active collection policy for customer invoices; activate one in Setup');` +
       `if (m === 'other-error') throw new Error('recovery metrics could not be read; try again');` +
       `return ${JSON.stringify(metrics)}}` +
       `export async function findCardsExpiringSoon(){return []}`,
@@ -50,7 +52,9 @@ test('a missing collection policy is a setup notice, not a page failure', async 
     title: 'collections.recovery.policyNotice.title',
     description: 'collections.recovery.policyNotice.description',
     actionLabel: 'collections.recovery.policyNotice.action',
-    actionHref: '/admin/setup/dunning-policies',
+    // Collection policies live in the shell's Policies view: the setup
+    // entity is rehomed there, so no /admin/setup page exists for it.
+    actionHref: '/collections?view=policies',
   })
   // The rest of the worklist still renders around the notice.
   assert.equal(data.worklistHref, '/ar')
@@ -68,8 +72,13 @@ test('an active policy loads recovery facts with no notice', async () => {
   assert.equal(data.recovery?.metrics.attempts, 3)
 })
 
-test('only the missing-policy refusal reads as a missing policy', () => {
-  assert.equal(isMissingCollectionPolicy(new Error('no active collection policy for customer invoices; x')), true)
+test('only the coded missing-policy refusal reads as a missing policy', () => {
+  const coded = Object.assign(new Error('no active collection policy for customer invoices; x'), {
+    code: 'missing_collection_policy',
+  })
+  assert.equal(isMissingCollectionPolicy(coded), true)
+  // The message alone never qualifies: copy may change, the code is the contract.
+  assert.equal(isMissingCollectionPolicy(new Error('no active collection policy for customer invoices; x')), false)
   assert.equal(isMissingCollectionPolicy(new Error('recovery metrics could not be read; try again')), false)
   assert.equal(isMissingCollectionPolicy(null), false)
 })
