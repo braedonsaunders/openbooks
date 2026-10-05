@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { WizardLayout } from '../../../components/page-layout'
-import { Badge, Button, Input, Label, PageHeader, SearchSelect, Switch } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
+import { WizardLayout } from '../../../../components/page-layout'
+import { Badge, Button, Input, Label, PageHeader, SearchSelect } from '@openbooks/ui'
+import { Switch } from '@/components/switch'
 
 interface AccountOption {
   value: string
@@ -93,7 +94,7 @@ export function ShopifyConnectWizard() {
     fetch(`/api/channels/${resumeChannel}/review`)
       .then(async (res) => {
         if (!res.ok || cancelled) {
-          if (!cancelled && !res.ok) toast.error(await readApiErrorMessage(res))
+          if (!cancelled && !res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
           return
         }
         const next = (await res.json()) as Review
@@ -126,7 +127,7 @@ export function ShopifyConnectWizard() {
         }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res))
+        toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
         return
       }
       const body = (await res.json()) as {
@@ -170,7 +171,7 @@ export function ShopifyConnectWizard() {
     if (!channelId) return
     const res = await fetch(`/api/channels/${channelId}/review`)
     if (!res.ok) {
-      toast.error(await readApiErrorMessage(res))
+      toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
       return
     }
     const next = (await res.json()) as Review
@@ -201,7 +202,7 @@ export function ShopifyConnectWizard() {
         body: JSON.stringify({ accountMaps }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res))
+        toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
         return
       }
       router.push(`/channels/${channelId}`)
@@ -289,7 +290,7 @@ export function ShopifyConnectWizard() {
             </div>
           )}
           <label className="flex items-start gap-2">
-            <Switch checked={push} onCheckedChange={setPush} />
+            <Switch on={push} onToggle={() => setPush((value) => !value)} disabled={busy} label={t('connect.pushLabel')} />
             <span>
               <span className="block text-sm font-medium">{t('connect.pushLabel')}</span>
               <span className="block text-sm text-slate-500">{t('connect.pushHint')}</span>
