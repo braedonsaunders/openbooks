@@ -11,7 +11,7 @@ registerHooks({
 })
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedVacationTerms } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { setPackSlotAccount, incomeTaxWithholdingSystemKeys } = await import('@openbooks/engine/src/payroll/packs.ts')
 const { upsertPayrollEmployerFact } = await import('@openbooks/engine/src/payroll/employer-fact-store.ts')
@@ -159,10 +159,11 @@ async function caEmployee(fx: CaFixture, name: string, province: string): Promis
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, pay_basis, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
+                                           provincial_claim_code,
                                            is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'CA', ${province},
-            'hourly', 1, 1, '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`)
+            'hourly', 1, 1, true, ${fx.actorId}, ${fx.actorId})`)
+  await seedVacationTerms(fx.orgId, employmentId, fx.actorId, '4', 'accrue')
   for (const day of ['2026-07-06', '2026-07-08', '2026-07-10', '2026-07-14', '2026-07-20', '2026-07-22', '2026-07-24', '2026-07-28']) {
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status,

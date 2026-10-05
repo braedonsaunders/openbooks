@@ -381,7 +381,10 @@ async function loadPayStubValues(
      order by l.sequence
   `))
 
-  // YTD for this employer and currency through the stub's pay date. An
+  // YTD for this employer and currency through this payment. Later payments
+  // on the same date must not change an earlier statement. The persisted ID
+  // gives equal timestamps a deterministic order; keep timestamp comparisons
+  // in PostgreSQL to preserve their full precision. An
   // employee transfer must not disclose another legal entity's payroll, and
   // monetary totals cannot add a different currency into this printed amount.
   //
@@ -400,6 +403,10 @@ async function loadPayStubValues(
     incomeTaxWithholdingSystemKeys().map((key) => sql`${key}`),
     sql`, `,
   )
+  const statementOrder = sql`(
+    select pay_date, created_at, id from pay_stubs
+     where org_id = ${orgId} and id = ${id}
+  )`
   const ytd = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
            coalesce(sum(income_tax_lines.tax), 0) as tax
@@ -414,7 +421,8 @@ async function loadPayStubValues(
            and c.system_key in (${incomeTaxKeys})
       ) income_tax_lines on true
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
-       and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
+       and s.tax_year = ${stub.tax_year}
+       and (s.pay_date, s.created_at, s.id) <= ${statementOrder}
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
   `))
@@ -449,9 +457,8 @@ async function loadPayStubValues(
       join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
-       and s.tax_year = ${stub.tax_year} and s.id <> ${id}
-       and (s.pay_date < ${stub.pay_date}
-            or (s.pay_date = ${stub.pay_date} and s.created_at < ${stub.created_at}))
+       and s.tax_year = ${stub.tax_year}
+       and (s.pay_date, s.created_at, s.id) < ${statementOrder}
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
      group by l.component_id, l.kind, l.payment_kind, c.system_key, c.taxable
