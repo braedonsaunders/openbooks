@@ -9,6 +9,25 @@
       "runs": "Zahlungsläufe"
     }
   },
+  "setup": {
+    "title": "Zahlungsmethode speichern",
+    "intro": "Speichern Sie eine Zahlungsmethode für {party} bei {org}.",
+    "providerLine": "Sichere Einrichtung über {provider}.",
+    "noChargeToday": "Heute erfolgt keine Abbuchung. Künftige Rechnungen können automatisch über diese Methode eingezogen werden.",
+    "singleUse": "Dieser Link funktioniert einmal — wenn Sie vor Abschluss abbrechen, bitten Sie den Absender um einen neuen Link.",
+    "continue": "Weiter zu {provider}",
+    "continueFailed": "Die Einrichtung konnte nicht gestartet werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut, oder bitten Sie den Absender um einen neuen Link.",
+    "alreadySaved": "Diese Zahlungsmethode ist bereits gespeichert.",
+    "alreadySavedDetail": "{brand} mit Endung {last4} ist hinterlegt. Es ist nichts weiter zu tun — Sie können dieses Fenster schließen.",
+    "alreadySavedNoDetail": "Ihre Zahlungsmethode ist hinterlegt. Es ist nichts weiter zu tun — Sie können dieses Fenster schließen.",
+    "invalidTitle": "Dieser Einrichtungslink ist ungültig.",
+    "invalidDetail": "Der Link ist möglicherweise abgelaufen oder wurde bereits verwendet. Bitten Sie den Absender um einen neuen Link.",
+    "withdrawnTitle": "Dieser Einrichtungslink wurde zurückgezogen.",
+    "withdrawnDetail": "Bitten Sie den Absender um einen neuen Link, um eine Zahlungsmethode zu speichern.",
+    "savedTitle": "Zahlungsmethode gespeichert",
+    "savedDetail": "{brand} mit Endung {last4} ist jetzt bei {org} hinterlegt. Künftige Rechnungen können automatisch eingezogen werden. Sie können dieses Fenster schließen.",
+    "savedNoDetail": "Ihre Zahlungsmethode ist jetzt bei {org} hinterlegt. Künftige Rechnungen können automatisch eingezogen werden. Sie können dieses Fenster schließen."
+  },
   "list": {
     "searchPlaceholder": "{side, select, ap {Zahlungen, Lieferanten, Referenzen suchen…} other {Zahlungen, Kunden, Referenzen suchen…}}",
     "newLabel": "{side, select, ap {Neue Zahlung} other {Neue Kundenzahlung}}",

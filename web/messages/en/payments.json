@@ -9,6 +9,25 @@
       "runs": "Payment runs"
     }
   },
+  "setup": {
+    "title": "Save a payment method",
+    "intro": "Save a payment method for {party} with {org}.",
+    "providerLine": "Secure setup via {provider}.",
+    "noChargeToday": "No charge happens today. Future invoices can be collected from this method automatically.",
+    "singleUse": "This link works once — if you leave before finishing, ask the sender for a fresh link.",
+    "continue": "Continue to {provider}",
+    "continueFailed": "The setup could not be started. Check your connection and try again, or ask the sender for a new link.",
+    "alreadySaved": "This payment method is already saved.",
+    "alreadySavedDetail": "{brand} ending in {last4} is on file. There is nothing left to do — you can close this window.",
+    "alreadySavedNoDetail": "Your payment method is on file. There is nothing left to do — you can close this window.",
+    "invalidTitle": "This setup link is not valid.",
+    "invalidDetail": "The link may have expired or already been used. Ask the sender for a fresh link.",
+    "withdrawnTitle": "This setup link was withdrawn.",
+    "withdrawnDetail": "Ask the sender for a fresh link to save a payment method.",
+    "savedTitle": "Payment method saved",
+    "savedDetail": "{brand} ending in {last4} is now on file with {org}. Future invoices can be collected automatically. You can close this window.",
+    "savedNoDetail": "Your payment method is now on file with {org}. Future invoices can be collected automatically. You can close this window."
+  },
   "list": {
     "searchPlaceholder": "{side, select, ap {Search payments, vendors, refs…} other {Search payments, customers, refs…}}",
     "newLabel": "{side, select, ap {New payment} other {New customer payment}}",
