@@ -196,5 +196,39 @@
     "prepare": "Préparer une déclaration",
     "history": "Déclarations antérieures"
   },
-  "registration": "Inscription pour les déclarations"
+  "registration": "Inscription pour les déclarations",
+  "oss": {
+    "title": "Déclarations au guichet unique",
+    "description": "Déclarations OSS trimestrielles de l'Union et mensuelles à l'importation à partir des ventes transfrontalières comptabilisées, groupées par État membre de consommation et taux.",
+    "scheme": "Régime",
+    "schemes": {
+      "union": "OSS Union (trimestriel)",
+      "nonUnion": "OSS non-Union (trimestriel)",
+      "ioss": "IOSS à l'importation (mensuel)"
+    },
+    "from": "Du",
+    "to": "Au",
+    "prepare": "Préparer la déclaration",
+    "preparing": "Préparation…",
+    "prepareFailed": "La déclaration n'a pas pu être préparée.",
+    "emptyTitle": "Aucune déclaration préparée",
+    "emptyDescription": "Choisissez le régime et la période, puis préparez la déclaration. Enregistrez d'abord l'identification OSS dans la configuration fiscale — sans elle, la déclaration est refusée.",
+    "setupAction": "Ouvrir les immatriculations OSS",
+    "totalBase": "Base imposable (EUR)",
+    "totalVat": "TVA due (EUR)",
+    "registration": "Immatriculation",
+    "columns": {
+      "record": "Ligne",
+      "country": "État de consommation",
+      "rate": "Taux",
+      "base": "Base imposable",
+      "vat": "TVA"
+    },
+    "current": "Courante",
+    "correction": "Correction {quarter}",
+    "exportCsv": "Exporter le CSV",
+    "exportNote": "Présentation OSS générique de l'UE pour saisie manuelle au portail. Les formats de fichier des portails nationaux ne sont pas implémentés.",
+    "noLinesTitle": "Aucune vente transfrontalière",
+    "noLinesDescription": "Rien de comptabilisé avec un lieu de prestation à l'étranger dans cette période."
+  }
 }

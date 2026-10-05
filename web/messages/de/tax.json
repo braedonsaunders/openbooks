@@ -196,5 +196,39 @@
     "prepare": "Erklärung vorbereiten",
     "history": "Frühere Einreichungen"
   },
-  "registration": "Registrierung für Meldungen"
+  "registration": "Registrierung für Meldungen",
+  "oss": {
+    "title": "One-Stop-Shop-Meldungen",
+    "description": "Vierteljährliche Unions- und monatliche Import-OSS-Meldungen aus gebuchten grenzüberschreitenden Umsätzen, gruppiert nach Verbrauchsmitgliedstaat und Satz.",
+    "scheme": "Verfahren",
+    "schemes": {
+      "union": "Union-OSS (vierteljährlich)",
+      "nonUnion": "Nicht-Unions-OSS (vierteljährlich)",
+      "ioss": "Import-OSS (monatlich)"
+    },
+    "from": "Von",
+    "to": "Bis",
+    "prepare": "Meldung erstellen",
+    "preparing": "Wird erstellt…",
+    "prepareFailed": "Die Meldung konnte nicht erstellt werden.",
+    "emptyTitle": "Noch keine Meldung erstellt",
+    "emptyDescription": "Wählen Sie Verfahren und Zeitraum und erstellen Sie die Meldung. Registrieren Sie zuerst die OSS-Identifizierung in der Steuer-Einrichtung — ohne sie wird die Meldung abgewiesen.",
+    "setupAction": "OSS-Registrierungen öffnen",
+    "totalBase": "Bemessungsgrundlage (EUR)",
+    "totalVat": "USt-Schuld (EUR)",
+    "registration": "Registrierung",
+    "columns": {
+      "record": "Position",
+      "country": "Verbrauchsstaat",
+      "rate": "Satz",
+      "base": "Bemessungsgrundlage",
+      "vat": "USt"
+    },
+    "current": "Laufend",
+    "correction": "Korrektur {quarter}",
+    "exportCsv": "CSV exportieren",
+    "exportNote": "Generisches EU-OSS-Layout zur manuellen Portal-Eingabe. Nationale Portal-Dateiformate sind nicht implementiert.",
+    "noLinesTitle": "Keine grenzüberschreitenden Umsätze",
+    "noLinesDescription": "In diesem Zeitraum wurde nichts mit Kundenland-Feststellung gebucht."
+  }
 }

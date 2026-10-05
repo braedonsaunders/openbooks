@@ -502,5 +502,48 @@
       "summaryFailed": "Could not collect {amount} for invoice {invoice}.",
       "summaryCanceled": "Collection of {amount} for invoice {invoice} was canceled."
     }
+  },
+  "supplyEvidence": {
+    "title": "Place of supply",
+    "loadFailed": "The evidence could not be loaded.",
+    "loading": "Loading supply evidence…",
+    "domestic": "Domestic tax treatment — no cross-border election on this document.",
+    "elect": "Add cross-border treatment",
+    "supplyKind": "Supply",
+    "supplyKindOptions": {
+      "digital_service": "Digital service",
+      "goods": "Goods"
+    },
+    "customerKind": "Customer",
+    "customerKindOptions": {
+      "consumer": "Consumer",
+      "business": "Business"
+    },
+    "signal": "Signal",
+    "kinds": {
+      "billing_address": "Billing address",
+      "ip_country": "Card country",
+      "card_bin_country": "IP country",
+      "bank_country": "Bank country",
+      "sim_country": "SIM country",
+      "ship_to": "Ship-to"
+    },
+    "country": "Country",
+    "source": "Source",
+    "remove": "Remove",
+    "addSignal": "Add signal",
+    "save": "Save evidence",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "saveFailed": "The evidence could not be saved.",
+    "pending": "Judged at posting — verdict pending.",
+    "edit": "Edit",
+    "outcomes": {
+      "customer_country": "B2C — place of supply: {country}",
+      "reverse_charge": "Reverse charge — {country}",
+      "seller_country": "Domestic — {country}",
+      "export": "Out of scope — {country}"
+    },
+    "vatId": "VAT ID {id}"
   }
 }

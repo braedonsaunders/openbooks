@@ -5,6 +5,7 @@ import { DocumentDrawer } from './document-drawer'
 import { ReturnWorkflowPanel } from '../app/(app)/returns/ReturnWorkflowPanel'
 import type { ReturnAuthorization } from '@openbooks/engine/sales/returns/contracts'
 import { PaymentLinksPanel } from './payment-links-panel'
+import { SupplyEvidencePanel } from './supply-evidence-panel'
 import { AppliedPaymentsPanel, type AppliedPayment } from './applied-payments-panel'
 import { CreditApplicationsPanel } from './credit-applications-panel'
 import { FieldTicketDrawer } from '../app/(app)/field-tickets/FieldTicketDrawer'
@@ -33,17 +34,25 @@ const renderers = {
           workflowCanWaiveFee?: boolean
           workflowCurrency?: string | null
           vendors?: { id: string; display_name: string }[]
+          supplyEvidence?: { documentId: string; status: string; canManage: boolean } | null
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, supplyEvidence, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}
         {...rest}
         afterContent={
-          paymentLinks || appliedPayments || creditApplications || workflow ? (
+          paymentLinks || appliedPayments || creditApplications || workflow || supplyEvidence ? (
             <>
+              {supplyEvidence ? (
+                <SupplyEvidencePanel
+                  documentId={supplyEvidence.documentId}
+                  status={supplyEvidence.status}
+                  canManage={supplyEvidence.canManage}
+                />
+              ) : null}
               {appliedPayments ? (
                 <AppliedPaymentsPanel payments={appliedPayments.payments} currency={appliedPayments.currency} />
               ) : null}

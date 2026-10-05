@@ -196,5 +196,39 @@
     "prepare": "申告書を作成する",
     "history": "過去の申告"
   },
-  "registration": "申告用登録"
+  "registration": "申告用登録",
+  "oss": {
+    "title": "ワンストップショップ申告",
+    "description": "計上済みクロスボーダー売上から、消費加盟国・税率別に集計する四半期ユニオンOSSおよび月次輸入OSS申告。",
+    "scheme": "制度",
+    "schemes": {
+      "union": "ユニオンOSS（四半期）",
+      "nonUnion": "非ユニオンOSS（四半期）",
+      "ioss": "輸入OSS（月次）"
+    },
+    "from": "開始",
+    "to": "終了",
+    "prepare": "申告を作成",
+    "preparing": "作成中…",
+    "prepareFailed": "申告を作成できませんでした。",
+    "emptyTitle": "申告はまだありません",
+    "emptyDescription": "制度と期間を選んで申告を作成してください。先に税務設定でOSS識別登録が必要です — 登録がないと申告は拒否されます。",
+    "setupAction": "OSS登録を開く",
+    "totalBase": "課税標準（EUR）",
+    "totalVat": "VAT納付額（EUR）",
+    "registration": "登録",
+    "columns": {
+      "record": "区分",
+      "country": "消費国",
+      "rate": "税率",
+      "base": "課税標準",
+      "vat": "VAT"
+    },
+    "current": "当期",
+    "correction": "訂正 {quarter}",
+    "exportCsv": "CSVを出力",
+    "exportNote": "ポータル手入力用のEU汎用OSSレイアウト。各国ポータルのファイル形式には未対応。",
+    "noLinesTitle": "クロスボーダー売上なし",
+    "noLinesDescription": "この期間に顧客国判定で計上されたものはありません。"
+  }
 }

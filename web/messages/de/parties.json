@@ -333,5 +333,33 @@
       "overlap": "Dieser Datensatz hat für einen Teil des Zeitraums bereits aktive Lohntarife.",
       "save": "Die Lohntarifzuordnung konnte nicht gespeichert werden."
     }
+  },
+  "taxIds": {
+    "title": "USt-Identifikationsnummern",
+    "hint": "Gegen die Behörde geprüfte Nummern entscheiden über Reverse-Charge. Ein Behördenausfall behält das bisherige Verdikt.",
+    "loadFailed": "Die Nummern konnten nicht geladen werden.",
+    "empty": "Noch keine Nummer erfasst.",
+    "checked": "geprüft {date}",
+    "neverChecked": "nie geprüft",
+    "consultation": "Referenz {id}",
+    "validate": "Prüfen",
+    "validating": "Wird geprüft…",
+    "validateFailed": "Die Nummer konnte nicht geprüft werden.",
+    "scheme": "Verfahren",
+    "schemes": {
+      "vies": "EU-VIES",
+      "hmrc": "UK-HMRC",
+      "abn": "AU-ABN",
+      "gst": "USt-Register"
+    },
+    "number": "Nummer",
+    "numberPlaceholder": "z. B. DE123456789",
+    "add": "Hinzufügen",
+    "saveFailed": "Die Nummer konnte nicht gespeichert werden.",
+    "status": {
+      "valid": "USt-IdNr. gültig ({scheme})",
+      "invalid": "USt-IdNr. ungültig ({scheme})",
+      "unverified": "USt-IdNr. ungeprüft ({scheme})"
+    }
   }
 }

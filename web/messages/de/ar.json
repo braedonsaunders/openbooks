@@ -502,5 +502,48 @@
       "summaryFailed": "{amount} für Rechnung {invoice} konnte nicht eingezogen werden.",
       "summaryCanceled": "Der Einzug von {amount} für Rechnung {invoice} wurde abgebrochen."
     }
+  },
+  "supplyEvidence": {
+    "title": "Leistungsort",
+    "loadFailed": "Die Nachweise konnten nicht geladen werden.",
+    "loading": "Nachweise werden geladen…",
+    "domestic": "Inländische Besteuerung — kein grenzüberschreitender Vorgang.",
+    "elect": "Grenzüberschreitende Behandlung erfassen",
+    "supplyKind": "Leistung",
+    "supplyKindOptions": {
+      "digital_service": "Digitale Dienstleistung",
+      "goods": "Warenlieferung"
+    },
+    "customerKind": "Kunde",
+    "customerKindOptions": {
+      "consumer": "Verbraucher",
+      "business": "Unternehmer"
+    },
+    "signal": "Signal",
+    "kinds": {
+      "billing_address": "Rechnungsadresse",
+      "ip_country": "Kartenland",
+      "card_bin_country": "IP-Land",
+      "bank_country": "Bankland",
+      "sim_country": "SIM-Land",
+      "ship_to": "Lieferadresse"
+    },
+    "country": "Land",
+    "source": "Quelle",
+    "remove": "Entfernen",
+    "addSignal": "Signal hinzufügen",
+    "save": "Nachweise speichern",
+    "saving": "Wird gespeichert…",
+    "cancel": "Abbrechen",
+    "saveFailed": "Die Nachweise konnten nicht gespeichert werden.",
+    "pending": "Wird bei Buchung entschieden — ausstehend.",
+    "edit": "Bearbeiten",
+    "outcomes": {
+      "customer_country": "B2C — Leistungsort: {country}",
+      "reverse_charge": "Reverse-Charge — {country}",
+      "seller_country": "Inland — {country}",
+      "export": "Außerhalb — {country}"
+    },
+    "vatId": "USt-IdNr. {id}"
   }
 }

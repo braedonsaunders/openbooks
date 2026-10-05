@@ -100,6 +100,7 @@ export async function loadEntityRole(
   const autopayEnabled = await isFeatureEnabled(authz.user.orgId, 'autopay')
   const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
   const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
+  const crossBorderTaxOn = await isFeatureEnabled(authz.user.orgId, 'crossBorderTax')
   const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
   // The Employment tab's double gate: the HRM feature switch plus the
   // employment read grant. The drawer shows the tab only when both hold.
@@ -244,6 +245,13 @@ export async function loadEntityRole(
             : openParty) as unknown as PartyDrawerProps['payload'],
           canManage,
           complianceEnabled,
+          // Customer tax IDs ride the drawer like compliance does: identity
+          // and the manage grant from the loader, rows from the section's
+          // own read. Hidden while the feature is off; data is kept.
+          taxIds:
+            crossBorderTaxOn && openParty && partyId && partyId !== 'new' && isUuid(partyId)
+              ? { partyId, canManage }
+              : null,
           canManageCompliance: can(authz, 'compliance.manage'),
           // The vendor Compliance tab — drawer-open vendors only.
           compliance: complianceEnabled && role === 'vendor' && partyId && isUuid(partyId)

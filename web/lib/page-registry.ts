@@ -2716,6 +2716,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/tax/oss': {
+    route: '/tax/oss',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/tax/oss/view')
+      return {
+        load: () => m.loadOss(),
+        spec: (data) => m.ossSpec(data as never),
+      }
+    },
+  },
   '/tax/provisions': {
     route: '/tax/provisions',
     segments: [],

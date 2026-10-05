@@ -72,6 +72,7 @@ export interface ArInvoicesDrawer {
   recordType: string
   canCustomize: boolean
   paymentLinks: { documentId: string; canManage: boolean } | null
+  supplyEvidence: { documentId: string; status: string; canManage: boolean } | null
   allocationsEntryEnabled: boolean
   appliedPayments: { payments: AppliedPayment[]; currency: string } | null
   creditApplications: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
@@ -303,6 +304,15 @@ export async function loadArInvoices(
           paymentLinks:
             drawerKind === 'customer_invoice' && onlinePaymentsEnabled && openDoc
               ? { documentId: String(openDoc.doc.id), canManage: canCreate }
+              : null,
+          // Cross-border evidence travels with the drawer like payments do:
+          // the loader supplies identity and permission, the panel reads
+          // its own state. Hidden while the feature is off; data is kept.
+          supplyEvidence:
+            openDoc &&
+            (drawerKind === 'customer_invoice' || drawerKind === 'customer_credit') &&
+            featureEnabled(featureState, 'crossBorderTax')
+              ? { documentId: String(openDoc.doc.id), status: String(openDoc.doc.status), canManage: canCreate }
               : null,
         }
       : null

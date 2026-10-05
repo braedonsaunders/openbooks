@@ -34,6 +34,7 @@ import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollPro
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { EmploymentTab } from '../hrm/EmploymentTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
+import { PartyTaxIdSection } from './PartyTaxIdSection'
 import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -67,6 +68,7 @@ export function PartyDrawer({
   complianceEnabled = false,
   canManageCompliance = false,
   compliance = null,
+  taxIds = null,
   hrm = null,
   role,
   autopay = null,
@@ -128,6 +130,8 @@ export function PartyDrawer({
   canManageCompliance?: boolean
   /** The vendor's assigned class + the active classes, for the Compliance tab. */
   compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null
+  /** Customer tax IDs: identity plus the manage grant; rows load in the section. Null hides the section. */
+  taxIds?: { partyId: string; canManage: boolean } | null
   /** Company Settings → Features. The HRM switch plus hrm.employment.read
    *  gate the employee Employment tab; the ids are the party's scoped
    *  employments (null = gated, so the tab never renders without the read
@@ -1578,6 +1582,9 @@ export function PartyDrawer({
             canManageAutopay={autopay?.canManageAutopay ?? false}
             defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
           />
+        ) : null}
+        {tab === 'pricing' && taxIds && !isPlaceholderName ? (
+          <PartyTaxIdSection partyId={taxIds.partyId} canManage={taxIds.canManage} />
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}

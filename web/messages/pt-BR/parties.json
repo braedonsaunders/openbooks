@@ -333,5 +333,33 @@
       "overlap": "Este registro já tem preço de mão de obra ativo em parte desse intervalo.",
       "save": "Não foi possível salvar a atribuição de preço de mão de obra."
     }
+  },
+  "taxIds": {
+    "title": "Inscrições fiscais da empresa",
+    "hint": "Os números validados junto à autoridade decidem a autoliquidação. Uma falha da autoridade mantém o veredicto anterior.",
+    "loadFailed": "Não foi possível carregar os números.",
+    "empty": "Nenhum número registrado.",
+    "checked": "verificado {date}",
+    "neverChecked": "nunca verificado",
+    "consultation": "referência {id}",
+    "validate": "Validar",
+    "validating": "Validando…",
+    "validateFailed": "Não foi possível validar o número.",
+    "scheme": "Regime",
+    "schemes": {
+      "vies": "VIES UE",
+      "hmrc": "HMRC RU",
+      "abn": "ABN AU",
+      "gst": "Cadastro IVA"
+    },
+    "number": "Número",
+    "numberPlaceholder": "ex. DE123456789",
+    "add": "Adicionar",
+    "saveFailed": "Não foi possível salvar o número.",
+    "status": {
+      "valid": "IVA válido ({scheme})",
+      "invalid": "IVA inválido ({scheme})",
+      "unverified": "IVA não verificado ({scheme})"
+    }
   }
 }

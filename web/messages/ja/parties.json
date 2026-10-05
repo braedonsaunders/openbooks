@@ -333,5 +333,33 @@
       "overlap": "このレコードには当該期間の一部に有効な労務料金がすでにあります。",
       "save": "労務料金の割当てを保存できませんでした。"
     }
+  },
+  "taxIds": {
+    "title": "事業者VAT ID",
+    "hint": "当局で検証された番号がリバースチャージを決定します。当局の障害時は前回の判定を維持します。",
+    "loadFailed": "番号を読み込めませんでした。",
+    "empty": "番号はまだありません。",
+    "checked": "検証済み {date}",
+    "neverChecked": "未検証",
+    "consultation": "照会 {id}",
+    "validate": "検証",
+    "validating": "検証中…",
+    "validateFailed": "番号を検証できませんでした。",
+    "scheme": "制度",
+    "schemes": {
+      "vies": "EU VIES",
+      "hmrc": "英国HMRC",
+      "abn": "豪州ABN",
+      "gst": "GST登録"
+    },
+    "number": "番号",
+    "numberPlaceholder": "例 DE123456789",
+    "add": "追加",
+    "saveFailed": "番号を保存できませんでした。",
+    "status": {
+      "valid": "VAT ID有効 ({scheme})",
+      "invalid": "VAT ID無効 ({scheme})",
+      "unverified": "VAT ID未検証 ({scheme})"
+    }
   }
 }

@@ -502,5 +502,48 @@
       "summaryFailed": "請求書{invoice}の{amount}を回収できませんでした。",
       "summaryCanceled": "請求書{invoice}の{amount}の回収はキャンセルされました。"
     }
+  },
+  "supplyEvidence": {
+    "title": "供給地",
+    "loadFailed": "証拠を読み込めませんでした。",
+    "loading": "証拠を読み込み中…",
+    "domestic": "国内課税 — クロスボーダー指定なし。",
+    "elect": "クロスボーダー処理を追加",
+    "supplyKind": "供給",
+    "supplyKindOptions": {
+      "digital_service": "デジタルサービス",
+      "goods": "物品"
+    },
+    "customerKind": "顧客",
+    "customerKindOptions": {
+      "consumer": "消費者",
+      "business": "事業者"
+    },
+    "signal": "シグナル",
+    "kinds": {
+      "billing_address": "請求先住所",
+      "ip_country": "カード国",
+      "card_bin_country": "IP国",
+      "bank_country": "銀行国",
+      "sim_country": "SIM国",
+      "ship_to": "配送先"
+    },
+    "country": "国",
+    "source": "取得元",
+    "remove": "削除",
+    "addSignal": "シグナルを追加",
+    "save": "証拠を保存",
+    "saving": "保存中…",
+    "cancel": "キャンセル",
+    "saveFailed": "証拠を保存できませんでした。",
+    "pending": "計上時に判定 — 保留中。",
+    "edit": "編集",
+    "outcomes": {
+      "customer_country": "B2C — 供給地: {country}",
+      "reverse_charge": "リバースチャージ — {country}",
+      "seller_country": "国内 — {country}",
+      "export": "対象外 — {country}"
+    },
+    "vatId": "VAT ID {id}"
   }
 }

@@ -333,5 +333,33 @@
       "overlap": "This record already has active Labor Pricing for part of that date range.",
       "save": "Could not save the Labor Pricing assignment."
     }
+  },
+  "taxIds": {
+    "title": "Business tax IDs",
+    "hint": "Numbers validated against the authority decide reverse charge. A failed authority call keeps the previous verdict.",
+    "loadFailed": "The tax IDs could not be loaded.",
+    "empty": "No tax ID recorded yet.",
+    "checked": "checked {date}",
+    "neverChecked": "never checked",
+    "consultation": "consultation {id}",
+    "validate": "Validate",
+    "validating": "Validating…",
+    "validateFailed": "The number could not be validated.",
+    "scheme": "Scheme",
+    "schemes": {
+      "vies": "EU VIES",
+      "hmrc": "UK HMRC",
+      "abn": "AU ABN",
+      "gst": "GST registry"
+    },
+    "number": "Number",
+    "numberPlaceholder": "e.g. DE123456789",
+    "add": "Add",
+    "saveFailed": "The tax ID could not be saved.",
+    "status": {
+      "valid": "VAT ID valid ({scheme})",
+      "invalid": "VAT ID invalid ({scheme})",
+      "unverified": "VAT ID unverified ({scheme})"
+    }
   }
 }

@@ -196,5 +196,39 @@
     "prepare": "Preparar uma declaração",
     "history": "Entregas anteriores"
   },
-  "registration": "Registro para declarações"
+  "registration": "Registro para declarações",
+  "oss": {
+    "title": "Declarações do Balcão Único",
+    "description": "Declarações OSS trimestrais da União e mensais de importação a partir de vendas transfronteiriças lançadas, agrupadas por Estado-Membro de consumo e alíquota.",
+    "scheme": "Regime",
+    "schemes": {
+      "union": "OSS da União (trimestral)",
+      "nonUnion": "OSS não-União (trimestral)",
+      "ioss": "OSS de Importação (mensal)"
+    },
+    "from": "De",
+    "to": "Até",
+    "prepare": "Preparar declaração",
+    "preparing": "Preparando…",
+    "prepareFailed": "Não foi possível preparar a declaração.",
+    "emptyTitle": "Nenhuma declaração preparada",
+    "emptyDescription": "Escolha o regime e o período e prepare a declaração. Registre antes a identificação OSS na configuração fiscal — sem ela a declaração é recusada.",
+    "setupAction": "Abrir inscrições OSS",
+    "totalBase": "Base tributável (EUR)",
+    "totalVat": "IVA devido (EUR)",
+    "registration": "Inscrição",
+    "columns": {
+      "record": "Linha",
+      "country": "Estado de consumo",
+      "rate": "Alíquota",
+      "base": "Base tributável",
+      "vat": "IVA"
+    },
+    "current": "Corrente",
+    "correction": "Correção {quarter}",
+    "exportCsv": "Exportar CSV",
+    "exportNote": "Leiaute OSS genérico da UE para digitação no portal. Os formatos de arquivo dos portais nacionais não estão implementados.",
+    "noLinesTitle": "Sem vendas transfronteiriças",
+    "noLinesDescription": "Nada lançado com veredicto de país do cliente cai neste período."
+  }
 }

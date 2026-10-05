@@ -10,6 +10,7 @@ import { KpiStrip } from '../kpi-strip'
 import { TaxDepreciationHeader, TaxDepreciationOverviewSlot } from '../../app/(app)/admin/setup/tax-depreciation/sections'
 import { ProvisionDifferencesSection, ProvisionFrameworkBadge, ProvisionPostButton, ProvisionReconSection, ProvisionStatusBadge } from '../../app/(app)/tax/provisions/[id]/sections'
 import { TaxFilingDrawer, TaxHistoryTable, TaxPageHeader, TaxPageShell, TaxPreparePanel, TaxTabPanels, TaxTabs } from '../../app/(app)/tax/sections'
+import { OssConsole } from '../../app/(app)/tax/oss/OssConsole'
 import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
 import { NewAssetButton } from '../../app/(app)/assets/NewAssetButton'
 import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
@@ -158,6 +159,15 @@ export const ASSETS_TAX_WIDGETS = {
     <ProvisionFrameworkBadge label={str(props, 'label') ?? ''} />
   ),
   'provision-post-button': (props) => <ProvisionPostButton runId={str(props, 'runId') ?? ''} />,
+
+  /* --- One-Stop-Shop returns ------------------------------------------------------ */
+  /** The OSS console prepares the period return from posted supplies, reviews
+   *  per-state lines with corrections flagged, and exports the filing CSV.
+   *  It fetches its own state; the spec only carries the setup link the
+   *  empty and refusal states point at. */
+  'oss-console': (props) => (
+    <OssConsole setupHref={str(props, 'setupHref') ?? '/admin/setup/tax-oss-registrations'} />
+  ),
 
   /* --- tax ------------------------------------------------------------------- */
   /**
