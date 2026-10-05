@@ -28,6 +28,18 @@ const VERIFICATION_REFUSALS = new Set([
   "shopify_signature_invalid",
 ]);
 
+// Route-authored summaries for the verification refusals above: the engine's
+// refusal message stays server-side (it can quote the delivery), while the
+// code travels for support and the remedy tells the operator what to do.
+const VERIFICATION_REFUSAL_SUMMARIES: Record<string, string> = {
+  channel_webhook_signature_invalid: "the webhook signature does not match the channel secret",
+  channel_webhook_unverified: "the webhook sender could not be verified",
+  shopify_webhook_id_missing: "the Shopify delivery carries no webhook id header",
+  shopify_topic_missing: "the Shopify delivery carries no topic header",
+  shopify_signature_missing: "the Shopify delivery carries no signature",
+  shopify_signature_invalid: "the Shopify delivery signature does not match its body",
+};
+
 function isVerificationRefusal(code: string): boolean {
   return VERIFICATION_REFUSALS.has(code);
 }
@@ -77,7 +89,10 @@ export const POST = defineRoute({
       // throw. The remedy travels with the refusal so the operator sees
       // what to fix instead of a bare status.
       if (error instanceof CommerceError && isVerificationRefusal(error.code)) {
-        return NextResponse.json({ error: error.message, code: error.code, remedy: error.remedy }, { status: 401 });
+        return NextResponse.json(
+          { error: VERIFICATION_REFUSAL_SUMMARIES[error.code] ?? "the webhook delivery failed verification", code: error.code, remedy: error.remedy },
+          { status: 401 },
+        );
       }
       throw error;
     }
