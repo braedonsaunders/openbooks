@@ -706,9 +706,6 @@
       "rfmChampions": "RFM champions segment",
       "threeYearProjection": "3-year projection",
       "weightedRfm": "weighted R/F/M/payment",
-      "score80Plus": "score ≥ 80",
-      "score40to59": "score 40–59",
-      "scoreBelow40": "score < 40",
       "avgPerCustomer": "avg {amount} / customer",
       "clvBase": "historical CLV base",
       "marginPct": "{pct}% margin",
@@ -724,7 +721,10 @@
       "firstOrderInPeriod": "first order in period",
       "activeLast6mo": "active in last 6 months",
       "customersCount": "{count} customers",
-      "jobsCount": "{count} jobs"
+      "jobsCount": "{count} jobs",
+      "scoreHigh": "score ≥ {cutoff}",
+      "scoreMid": "score {low}–{high}",
+      "scoreLow": "score < {cutoff}"
     },
     "drill": {
       "invoicesRevenue": "{invoices} invoices · {revenue}"
@@ -743,7 +743,9 @@
       "paidInFull": "invoices paid in full",
       "daysToPay": "days to pay",
       "ofRevenue": "of revenue",
-      "avgMoM": "avg MoM (mature months)"
+      "avgMoM": "avg MoM (mature months)",
+      "noPaymentHistory": "No payment history yet",
+      "noRetentionData": "No customers in period"
     },
     "panels": {
       "keyMetrics": "Key Metrics",
@@ -776,7 +778,8 @@
       "scoringModelHint": "How the composite scores are built",
       "dataSources": "Data Sources & Derivations",
       "customerHealth": "Customer Health ({count})",
-      "customerHealthHint": "Weighted 25% recency · 25% frequency · 30% monetary · 20% payment, minus friction penalty"
+      "customerHealthHint": "Weighted {recency}% recency · {frequency}% frequency · {monetary}% monetary · {payment}% payment, minus friction penalty",
+      "healthNoPaymentNote": "{count, plural, one {# customer} other {# customers}} scored without payment data"
     },
     "empty": {
       "noSignals": "No notable signals for this period.",
@@ -1264,6 +1267,18 @@
         "overdueInsightCount": {
           "label": "Insight — overdue above (invoices)",
           "help": "Overdue invoices above this raise the payments insight"
+        },
+        "frictionCriticalPoints": {
+          "label": "Friction — critical at (points)",
+          "help": "Credit point totals at or above this read as critical"
+        },
+        "frictionHighPoints": {
+          "label": "Friction — high at (points)",
+          "help": "Credit point totals at or above this read as high"
+        },
+        "frictionMediumPoints": {
+          "label": "Friction — medium at (points)",
+          "help": "Credit point totals at or above this read as medium"
         }
       }
     },
@@ -1377,7 +1392,8 @@
       "untitledProject": "Untitled project"
     },
     "errors": {
-      "paymentStatsUnavailable": "Customer payment statistics did not load. Reload this dashboard to retry."
+      "paymentStatsUnavailable": "Customer payment statistics did not load. Reload this dashboard to retry.",
+      "scoringWeightsInvalid": "Score weights {keys} sum to {actual}, not {total} — open Configuration on this dashboard and correct them."
     }
   },
   "vendor": {

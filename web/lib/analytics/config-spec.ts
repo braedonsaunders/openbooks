@@ -236,8 +236,12 @@ export const ANALYTICS_CONFIG = {
       concentrationMediumShare: 10,
       concentrationCoverageShare: 80,
       topSharePct: 10,
-      // Friction: points per credit memo, penalty points and issue-rate bands.
+      // Friction: points per credit memo, level point cut-offs, penalty
+      // points and issue-rate bands.
       frictionPointsPerCredit: 2,
+      frictionCriticalPoints: 10,
+      frictionHighPoints: 5,
+      frictionMediumPoints: 2,
       frictionPenaltyCritical: 25,
       frictionPenaltyHigh: 15,
       frictionPenaltyMedium: 8,
@@ -326,6 +330,9 @@ export const ANALYTICS_CONFIG = {
       pct("concentrationCoverageShare", "analytics.customer.config.fields.concentrationCoverageShare", 1, 100),
       num("topSharePct", "analytics.customer.config.fields.topSharePct", 1, 100),
       num("frictionPointsPerCredit", "analytics.customer.config.fields.frictionPointsPerCredit", 1, 10),
+      num("frictionCriticalPoints", "analytics.customer.config.fields.frictionCriticalPoints", 0, 100),
+      num("frictionHighPoints", "analytics.customer.config.fields.frictionHighPoints", 0, 100),
+      num("frictionMediumPoints", "analytics.customer.config.fields.frictionMediumPoints", 0, 100),
       num("frictionPenaltyCritical", "analytics.customer.config.fields.frictionPenaltyCritical", 0, 100),
       num("frictionPenaltyHigh", "analytics.customer.config.fields.frictionPenaltyHigh", 0, 100),
       num("frictionPenaltyMedium", "analytics.customer.config.fields.frictionPenaltyMedium", 0, 100),
@@ -362,6 +369,7 @@ export const ANALYTICS_CONFIG = {
       ["hhiWarning", "hhiCritical"],
       ["gradeD", "gradeC", "gradeB", "gradeA", "gradeAPlus"],
       ["recencyGoodDays", "recencyWarningDays", "recencyCriticalDays"],
+      ["frictionMediumPoints", "frictionHighPoints", "frictionCriticalPoints"],
       ["frictionPenaltyMedium", "frictionPenaltyHigh", "frictionPenaltyCritical"],
       ["frictionMediumRate", "frictionHighRate", "frictionCriticalRate"],
       ["churnMediumDays", "churnHighDays"],

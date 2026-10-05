@@ -91,6 +91,7 @@ function row(overrides: Partial<CustomerRow> = {}): CustomerRow {
     healthGrade: 'A',
     recommendation: 'maintain',
     recommendationDetail: '',
+    scoredWithoutPayment: false,
     scoreBreakdown: { recency: 20, frequency: 20, monetary: 20, payment: 20, frictionPenalty: 0 },
     ...overrides,
   } as CustomerRow

@@ -69,18 +69,20 @@ const PROFIT_TIER_STYLE: Record<ProfitTier, string> = {
   marginal: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
   loss: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
 }
-function marginClass(m: number | null): string {
+/** Margin display bands, always the effective profit-tier cut-offs — never literals. */
+export interface MarginBands { high: number; medium: number; low: number }
+function marginClass(m: number | null, bands: MarginBands): string {
   if (m === null) return 'text-slate-400 dark:text-slate-500'
-  if (m >= 40) return 'text-emerald-600 dark:text-emerald-400'
+  if (m >= bands.high) return 'text-emerald-600 dark:text-emerald-400'
   if (m < 0) return 'text-red-600 dark:text-red-400'
-  if (m < 10) return 'text-amber-600 dark:text-amber-400'
+  if (m < bands.low) return 'text-amber-600 dark:text-amber-400'
   return 'text-slate-700 dark:text-slate-300'
 }
-function marginAccent(m: number | null): 'emerald' | 'sky' | 'violet' | 'amber' | 'red' | 'slate' {
+function marginAccent(m: number | null, bands: MarginBands): 'emerald' | 'sky' | 'violet' | 'amber' | 'red' | 'slate' {
   if (m === null) return 'slate'
-  if (m >= 40) return 'emerald'
-  if (m >= 25) return 'sky'
-  if (m >= 10) return 'violet'
+  if (m >= bands.high) return 'emerald'
+  if (m >= bands.medium) return 'sky'
+  if (m >= bands.low) return 'violet'
   if (m >= 0) return 'amber'
   return 'red'
 }
@@ -222,7 +224,7 @@ export function CustomerView({
         {tab === 'lifetime' ? <LifetimeTab data={data} profitability={profitability} projectsEnabled={projectsEnabled} /> : null}
         {tab === 'churn' ? <ChurnTab data={data} /> : null}
         {tab === 'growth' ? <GrowthTab data={data} /> : null}
-        {tab === 'profitability' && projectsEnabled && profitability ? <ProfitabilityTab p={profitability} leak={{ share: data.config.profitLeakRevenueSharePct, margin: data.config.profitLeakMarginTarget }} /> : null}
+        {tab === 'profitability' && projectsEnabled && profitability ? <ProfitabilityTab p={profitability} leak={{ share: data.config.profitLeakRevenueSharePct, margin: data.config.profitLeakMarginTarget }} bands={{ high: data.config.profitHighMargin, medium: data.config.profitMediumMargin, low: data.config.profitLowMargin }} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
             </AnalyticsTabContent>
@@ -263,9 +265,9 @@ function OverviewTab({ data }: { data: CustomerData }) {
       <Panel title={t('panels.keyMetrics')} icon={BarChart3}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {metric(t('metrics.avgValue'), money(k.avgCustomerValue), t('metricsSub.perCustomer'))}
-          {metric(t('metrics.retention'), `${k.retentionRate}%`, t('metricsSub.retentionProb'))}
-          {metric(t('metrics.paymentRate'), `${k.paymentRate}%`, t('metricsSub.paidInFull'))}
-          {metric(t('metrics.avgDso'), `${k.avgDaysToPay}d`, t('metricsSub.daysToPay'))}
+          {metric(t('metrics.retention'), k.retentionRate === null ? '—' : `${k.retentionRate}%`, k.retentionRate === null ? t('metricsSub.noRetentionData') : t('metricsSub.retentionProb'))}
+          {metric(t('metrics.paymentRate'), k.paymentRate === null ? '—' : `${k.paymentRate}%`, k.paymentRate === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.paidInFull'))}
+          {metric(t('metrics.avgDso'), k.avgDaysToPay === null ? '—' : `${k.avgDaysToPay}d`, k.avgDaysToPay === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.daysToPay'))}
           {metric(t('metrics.top10Share'), `${k.top10PctShare}%`, t('metricsSub.ofRevenue'))}
           {metric(t('metrics.monthlyGrowth'), `${k.monthlyGrowth >= 0 ? '+' : ''}${k.monthlyGrowth}%`, t('metricsSub.avgMoM'))}
         </div>
@@ -362,10 +364,16 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const pageNo = Math.min(page, totalPages)
   const flat = rows.slice((pageNo - 1) * HEALTH_PAGE, pageNo * HEALTH_PAGE)
 
-  const excellent = rows.filter((r) => r.healthScore >= 80).length
-  const warning = rows.filter((r) => r.healthScore < 60 && r.healthScore >= 40).length
-  const critical = rows.filter((r) => r.healthScore < 40).length
+  // Health bands follow the configured grade ladder: excellent starts at A,
+  // critical below D, warning in between.
+  const excellentAt = data.config.gradeA
+  const warningAt = data.config.gradeD
+  const warningBelow = data.config.gradeC
+  const excellent = rows.filter((r) => r.healthScore >= excellentAt).length
+  const warning = rows.filter((r) => r.healthScore < warningBelow && r.healthScore >= warningAt).length
+  const critical = rows.filter((r) => r.healthScore < warningAt).length
   const avgHealth = rows.length ? Math.round(rows.reduce((a, r) => a + r.healthScore, 0) / rows.length) : 0
+  const noPaymentCount = rows.filter((r) => r.scoredWithoutPayment).length
 
   const Row = ({ r }: { r: CustomerRow }) => (
     <InteractiveTableRow onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
@@ -407,15 +415,20 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={HeartPulse} accent="teal" label={t('kpi.avgHealth')} value={String(avgHealth)} sub={t('sub.weightedRfm')} />
-        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.excellent')} value={String(excellent)} sub={t('sub.score80Plus')} tone="positive" />
-        <KpiCard icon={AlertTriangle} accent={warning > 0 ? 'amber' : 'emerald'} label={t('kpi.warning')} value={String(warning)} sub={t('sub.score40to59')} />
-        <KpiCard icon={AlertOctagon} accent={critical > 0 ? 'red' : 'emerald'} label={t('kpi.critical')} value={String(critical)} sub={t('sub.scoreBelow40')} tone={critical > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.excellent')} value={String(excellent)} sub={t('sub.scoreHigh', { cutoff: excellentAt })} tone="positive" />
+        <KpiCard icon={AlertTriangle} accent={warning > 0 ? 'amber' : 'emerald'} label={t('kpi.warning')} value={String(warning)} sub={t('sub.scoreMid', { low: warningAt, high: warningBelow - 1 })} />
+        <KpiCard icon={AlertOctagon} accent={critical > 0 ? 'red' : 'emerald'} label={t('kpi.critical')} value={String(critical)} sub={t('sub.scoreLow', { cutoff: warningAt })} tone={critical > 0 ? 'negative' : 'positive'} />
       </div>
+      {noPaymentCount > 0 ? (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          {t('panels.healthNoPaymentNote', { count: noPaymentCount })}
+        </p>
+      ) : null}
 
       <Panel
         title={t('panels.customerHealth', { count: rows.length })}
         icon={HeartPulse}
-        hint={t('panels.customerHealthHint')}
+        hint={t('panels.customerHealthHint', { recency: data.config.healthWeightRecency, frequency: data.config.healthWeightFrequency, monetary: data.config.healthWeightMonetary, payment: data.config.healthWeightPayment })}
         bodyClassName="p-0"
         actions={
           <span className="flex items-center gap-2">
@@ -652,6 +665,7 @@ function LifetimeTab({
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
+  const bands: MarginBands = { high: data.config.profitHighMargin, medium: data.config.profitMediumMargin, low: data.config.profitLowMargin }
   const byClv = [...data.rows].sort((a, b) => cmp(b.clv, a.clv))
   const totalPages = Math.max(1, Math.ceil(byClv.length / 25))
   const pageNo = Math.min(page, totalPages)
@@ -726,7 +740,7 @@ function LifetimeTab({
                   <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitleShort')}> ⚠️</span> : null}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.revenue)}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', r.marginPct === null ? 'text-slate-400 dark:text-slate-500' : marginClass(r.marginPct))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', marginClass(r.marginPct, bands))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.annualValue)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionFactor} /></SharedTableCell>
@@ -897,7 +911,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
         <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= 50 ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLast6mo')} />
       </div>
 
-      {k.overdueInvoices > 5 ? (
+      {k.overdueInvoices > data.config.overdueInsightCount ? (
         <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
           <span><span className="font-semibold">{t('overdueBanner.count', { count: k.overdueInvoices })}</span>{t('overdueBanner.rest')}</span>
@@ -977,15 +991,15 @@ function GrowthTab({ data }: { data: CustomerData }) {
 type ProfitSort = 'customerName' | 'totalRevenue' | 'totalCost' | 'grossProfit' | 'marginPct'
 const PAGE_SIZE = 20
 
-function ProfitabilityTab({ p, leak }: { p: Profitability; leak: { share: number; margin: number } }) {
+function ProfitabilityTab({ p, leak, bands }: { p: Profitability; leak: { share: number; margin: number }; bands: MarginBands }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const marginLabel = (m: number | null): string => {
+  const marginLabel = (m: number | null, bands: MarginBands): string => {
     if (m === null) return '—'
-    if (m >= 40) return t('margin.excellent')
-    if (m >= 25) return t('margin.good')
-    if (m >= 10) return t('margin.fair')
+    if (m >= bands.high) return t('margin.excellent')
+    if (m >= bands.medium) return t('margin.good')
+    if (m >= bands.low) return t('margin.fair')
     if (m >= 0) return t('margin.low')
     return t('margin.loss')
   }
@@ -1030,7 +1044,7 @@ function ProfitabilityTab({ p, leak }: { p: Profitability; leak: { share: number
         <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.totalRevenue')} value={money(s.totalRevenue)} sub={t('sub.customersCount', { count: s.customerCount })} />
         <KpiCard icon={FileText} accent="red" label={t('kpi.totalCosts')} value={money(s.totalCost)} sub={t('sub.jobsCount', { count: s.totalJobs })} />
         <KpiCard icon={HandCoins} accent={cmp(s.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(s.totalGrossProfit)} sub={cmp(s.totalGrossProfit, '0') < 0 ? t('margin.loss') : t('margin.profit')} tone={cmp(s.totalGrossProfit, '0') < 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct)} label={t('kpi.avgMargin')} value={s.avgMarginPct === null ? '—' : `${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct)} />
+        <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct, bands)} label={t('kpi.avgMargin')} value={s.avgMarginPct === null ? '—' : `${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct, bands)} />
       </div>
 
       {p.customers.length === 0 ? (
@@ -1071,7 +1085,7 @@ function ProfitabilityTab({ p, leak }: { p: Profitability; leak: { share: number
                         <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</SharedTableCell>
                         <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</SharedTableCell>
                         <SharedTableCell className={cn('px-3 py-2.5 text-right font-medium tabular-nums', cmp(c.grossProfit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</SharedTableCell>
-                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct === null ? '—' : `${c.marginPct.toFixed(1)}%`}</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct, bands))}>{c.marginPct === null ? '—' : `${c.marginPct.toFixed(1)}%`}</SharedTableCell>
                         <SharedTableCell className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></SharedTableCell>
                       </InteractiveTableRow>
                       {isOpen
@@ -1088,7 +1102,7 @@ function ProfitabilityTab({ p, leak }: { p: Profitability; leak: { share: number
                               <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</SharedTableCell>
                               <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.costs)}</SharedTableCell>
                               <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', cmp(j.profit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</SharedTableCell>
-                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct))}>{j.marginPct === null ? '—' : `${j.marginPct.toFixed(1)}%`}</SharedTableCell>
+                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct, bands))}>{j.marginPct === null ? '—' : `${j.marginPct.toFixed(1)}%`}</SharedTableCell>
                               <SharedTableCell />
                             </SharedTableRow>
                           ))

@@ -16,6 +16,15 @@ export interface CustomerInsightText {
   action?: string;
 }
 
+/** Cut-offs of the grade ladder shared by the health and intelligence grades. */
+export interface GradeLadder {
+  aPlus: number;
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+}
+
 export interface CustomerStrings {
   locale: string;
   monthLabel(ym: string): string;
@@ -36,7 +45,8 @@ export interface CustomerStrings {
   /** `marginPct` is pre-rendered ("12.3", matching the legacy toFixed(1)). */
   recReprice(marginPct: string): string;
   recReview: string;
-  intelligenceScore(score: number): { label: string; grade: string };
+  /** The shared A+/A/B/C/D/F grade ladder, read from the scoring config. */
+  intelligenceScore(score: number, grades: GradeLadder): { label: string; grade: string };
   /** `amount` is pre-formatted money (existing locale-aware formatter). */
   projectedClv(amount: string, years: number, customers: number): CustomerInsightText;
   churnRisk(count: number, revenue: string): CustomerInsightText;
@@ -48,6 +58,8 @@ export interface CustomerStrings {
   overdue(count: number): CustomerInsightText;
   /** Loader refusal when the settlement pipeline yields no payment statistics. */
   paymentStatsUnavailable(): string;
+  /** Loader refusal when a hand-edited weight group no longer sums to 100. */
+  scoringWeightsInvalid(keys: string, total: number, actual: number): string;
 }
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
@@ -71,12 +83,13 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
     recOnboard: t("customer.insights.recOnboard"),
     recReprice: (marginPct) => t("customer.insights.recReprice", { pct: marginPct }),
     recReview: t("customer.insights.recReview"),
-    intelligenceScore: (score) => {
-      if (score < 40) return { label: t("customer.insights.scoreNeedsAttention"), grade: "D" };
-      if (score < 55) return { label: t("customer.insights.scoreFair"), grade: "C" };
-      if (score < 70) return { label: t("customer.insights.scoreGood"), grade: "B" };
-      if (score < 85) return { label: t("customer.insights.scoreVeryGood"), grade: "B+" };
-      return { label: t("customer.insights.scoreExcellent"), grade: "A" };
+    intelligenceScore: (score, grades) => {
+      if (score >= grades.aPlus) return { label: t("customer.insights.scoreExcellent"), grade: "A+" };
+      if (score >= grades.a) return { label: t("customer.insights.scoreVeryGood"), grade: "A" };
+      if (score >= grades.b) return { label: t("customer.insights.scoreGood"), grade: "B" };
+      if (score >= grades.c) return { label: t("customer.insights.scoreFair"), grade: "C" };
+      if (score >= grades.d) return { label: t("customer.insights.scoreNeedsAttention"), grade: "D" };
+      return { label: t("customer.insights.scoreNeedsAttention"), grade: "F" };
     },
     projectedClv: (amount, years, customers) => ({
       title: t("customer.insights.projectedClv.title"),
@@ -112,5 +125,7 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
       action: t("customer.insights.overdue.action"),
     }),
     paymentStatsUnavailable: () => t("customer.errors.paymentStatsUnavailable"),
+    scoringWeightsInvalid: (keys, total, actual) =>
+      t("customer.errors.scoringWeightsInvalid", { keys, total, actual }),
   };
 }

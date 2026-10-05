@@ -1056,6 +1056,18 @@
         "overdueInsightCount": {
           "label": "Signal — en retard au-delà (factures)",
           "help": "Les factures en retard au-delà déclenchent le signal paiements"
+        },
+        "frictionCriticalPoints": {
+          "label": "Friction — critique dès (points)",
+          "help": "Les points égaux ou supérieurs valent friction critique"
+        },
+        "frictionHighPoints": {
+          "label": "Friction — élevée dès (points)",
+          "help": "Les points égaux ou supérieurs valent friction élevée"
+        },
+        "frictionMediumPoints": {
+          "label": "Friction — moyenne dès (points)",
+          "help": "Les points égaux ou supérieurs valent friction moyenne"
         }
       }
     },
@@ -1140,7 +1152,9 @@
       "ofRevenue": "du chiffre d’affaires",
       "paidInFull": "factures intégralement payées",
       "perCustomer": "par client",
-      "retentionProb": "probabilité de fidélisation moy."
+      "retentionProb": "probabilité de fidélisation moy.",
+      "noPaymentHistory": "Aucun historique de paiement",
+      "noRetentionData": "Aucun client sur la période"
     },
     "overdueBanner": {
       "count": "{count} factures en retard",
@@ -1159,7 +1173,7 @@
       "cohortHint": "Par année de première commande · actif = a commandé dans les 6 derniers mois",
       "cohortRetention": "Rétention par cohorte",
       "customerHealth": "Santé client ({count})",
-      "customerHealthHint": "Pondéré 25 % ancienneté · 25 % fréquence · 30 % montant · 20 % paiement, moins pénalité de friction",
+      "customerHealthHint": "Pondéré {recency} % récence · {frequency} % fréquence · {monetary} % valeur · {payment} % paiements, moins la friction",
       "customerProfitability": "Rentabilité client",
       "customersBySegment": "Clients par segment ({count})",
       "dataSources": "Sources de données et calculs",
@@ -1183,7 +1197,8 @@
       "segmentMix": "Répartition des segments",
       "segmentPerformance": "Performance des segments",
       "tierDistribution": "Distribution des niveaux de CLV",
-      "topByRevenue": "Meilleurs clients par chiffre d’affaires"
+      "topByRevenue": "Meilleurs clients par chiffre d’affaires",
+      "healthNoPaymentNote": "{count, plural, one {# client noté} other {# clients notés}} sans données de paiement"
     },
     "profitTier": {
       "high": "Élevé",
@@ -1307,12 +1322,12 @@
       "revenue": "chiffre d’affaires",
       "invoiced": "facturation brute de la période",
       "rfmChampions": "segment champions RFM",
-      "score40to59": "score 40–59",
-      "score80Plus": "score ≥ 80",
-      "scoreBelow40": "score < 40",
       "threeYearProjection": "projection sur 3 ans",
       "trend": "tendance : {trend}",
-      "weightedRfm": "R/F/M/paiement pondérés"
+      "weightedRfm": "R/F/M/paiement pondérés",
+      "scoreHigh": "score ≥ {cutoff}",
+      "scoreMid": "score {low}–{high}",
+      "scoreLow": "score < {cutoff}"
     },
     "table": {
       "active": "Actifs",
@@ -1377,7 +1392,8 @@
     },
     "txnsCount": "{count} trans.",
     "errors": {
-      "paymentStatsUnavailable": "Les statistiques de paiement client n’ont pas été chargées. Rechargez ce tableau de bord."
+      "paymentStatsUnavailable": "Les statistiques de paiement client n’ont pas été chargées. Rechargez ce tableau de bord.",
+      "scoringWeightsInvalid": "Les pondérations {keys} totalisent {actual} au lieu de {total} : corrigez-les dans la Configuration de ce tableau."
     }
   },
   "vendor": {

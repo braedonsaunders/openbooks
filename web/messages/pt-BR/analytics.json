@@ -1056,6 +1056,18 @@
         "overdueInsightCount": {
           "label": "Aviso — vencidas acima (faturas)",
           "help": "Vencidas acima deste número ativam o aviso de pagamentos"
+        },
+        "frictionCriticalPoints": {
+          "label": "Atrito — crítico desde (pontos)",
+          "help": "Pontos iguais ou acima indicam atrito crítico"
+        },
+        "frictionHighPoints": {
+          "label": "Atrito — alto desde (pontos)",
+          "help": "Pontos iguais ou acima indicam atrito alto"
+        },
+        "frictionMediumPoints": {
+          "label": "Atrito — médio desde (pontos)",
+          "help": "Pontos iguais ou acima indicam atrito médio"
         }
       }
     },
@@ -1140,7 +1152,9 @@
       "ofRevenue": "da receita",
       "paidInFull": "faturas pagas integralmente",
       "perCustomer": "por cliente",
-      "retentionProb": "probabilidade média de retenção"
+      "retentionProb": "probabilidade média de retenção",
+      "noPaymentHistory": "Sem histórico de pagamentos ainda",
+      "noRetentionData": "Sem clientes no período"
     },
     "overdueBanner": {
       "count": "{count} faturas vencidas",
@@ -1159,7 +1173,7 @@
       "cohortHint": "Por ano do primeiro pedido · ativo = pediu nos últimos 6 meses",
       "cohortRetention": "Retenção de coortes",
       "customerHealth": "Saúde de clientes ({count})",
-      "customerHealthHint": "Ponderado 25% recentidade · 25% frequência · 30% monetário · 20% pagamento, menos penalidade de atrito",
+      "customerHealthHint": "Ponderado {recency} % recência · {frequency} % frequência · {monetary} % valor · {payment} % pagamentos, menos atrito",
       "customerProfitability": "Rentabilidade de clientes",
       "customersBySegment": "Clientes por segmento ({count})",
       "dataSources": "Fontes de dados e derivações",
@@ -1183,7 +1197,8 @@
       "segmentMix": "Composição de segmentos",
       "segmentPerformance": "Desempenho por segmento",
       "tierDistribution": "Distribuição de faixas de CLV",
-      "topByRevenue": "Principais clientes por receita"
+      "topByRevenue": "Principais clientes por receita",
+      "healthNoPaymentNote": "{count, plural, one {# cliente pontuado} other {# clientes pontuados}} sem dados de pagamento"
     },
     "profitTier": {
       "high": "Alto",
@@ -1307,12 +1322,12 @@
       "revenue": "receita",
       "invoiced": "faturamento bruto no período",
       "rfmChampions": "segmento de campeões RFM",
-      "score40to59": "escore 40–59",
-      "score80Plus": "escore ≥ 80",
-      "scoreBelow40": "escore < 40",
       "threeYearProjection": "projeção de 3 anos",
       "trend": "tendência: {trend}",
-      "weightedRfm": "R/F/M/pagamento ponderados"
+      "weightedRfm": "R/F/M/pagamento ponderados",
+      "scoreHigh": "pontos ≥ {cutoff}",
+      "scoreMid": "pontos {low}–{high}",
+      "scoreLow": "pontos < {cutoff}"
     },
     "table": {
       "active": "Ativo",
@@ -1377,7 +1392,8 @@
     },
     "txnsCount": "{count} transações",
     "errors": {
-      "paymentStatsUnavailable": "As estatísticas de pagamento de clientes não foram carregadas. Recarregue este painel."
+      "paymentStatsUnavailable": "As estatísticas de pagamento de clientes não foram carregadas. Recarregue este painel.",
+      "scoringWeightsInvalid": "Os pesos {keys} somam {actual}, não {total} — corrija na Configuração deste painel."
     }
   },
   "vendor": {

@@ -1056,6 +1056,18 @@
         "overdueInsightCount": {
           "label": "Hinweis — überfällig über (Rechnungen)",
           "help": "Überfällige Rechnungen über dieser Zahl heben den Zahlungshinweis"
+        },
+        "frictionCriticalPoints": {
+          "label": "Reibung — kritisch ab (Punkte)",
+          "help": "Gutschriftspunkte ab dieser Schwelle gelten als kritisch"
+        },
+        "frictionHighPoints": {
+          "label": "Reibung — hoch ab (Punkte)",
+          "help": "Gutschriftspunkte ab dieser Schwelle gelten als hoch"
+        },
+        "frictionMediumPoints": {
+          "label": "Reibung — mittel ab (Punkte)",
+          "help": "Gutschriftspunkte ab dieser Schwelle gelten als mittel"
         }
       }
     },
@@ -1140,7 +1152,9 @@
       "ofRevenue": "des Umsatzes",
       "paidInFull": "vollständig bezahlte Rechnungen",
       "perCustomer": "pro Kunde",
-      "retentionProb": "Ø Bindungswahrscheinlichkeit"
+      "retentionProb": "Ø Bindungswahrscheinlichkeit",
+      "noPaymentHistory": "Noch keine Zahlungshistorie",
+      "noRetentionData": "Keine Kunden im Zeitraum"
     },
     "overdueBanner": {
       "count": "{count} überfällige Rechnungen",
@@ -1159,7 +1173,7 @@
       "cohortHint": "Nach Jahr des Erstauftrags · aktiv = Bestellung in den letzten 6 Monaten",
       "cohortRetention": "Kohortenbindung",
       "customerHealth": "Kundengesundheit ({count})",
-      "customerHealthHint": "Gewichtet 25 % Aktualität · 25 % Häufigkeit · 30 % Volumen · 20 % Zahlung, abzüglich Friktionsabschlag",
+      "customerHealthHint": "Gewichtet {recency} % Aktualität · {frequency} % Häufigkeit · {monetary} % Umsatz · {payment} % Zahlungsverhalten, abzüglich Reibung",
       "customerProfitability": "Kundenrentabilität",
       "customersBySegment": "Kunden nach Segment ({count})",
       "dataSources": "Datenquellen & Herleitungen",
@@ -1183,7 +1197,8 @@
       "segmentMix": "Segmentmix",
       "segmentPerformance": "Segmentleistung",
       "tierDistribution": "CLV-Stufenverteilung",
-      "topByRevenue": "Top-Kunden nach Umsatz"
+      "topByRevenue": "Top-Kunden nach Umsatz",
+      "healthNoPaymentNote": "{count, plural, one {# Kunde} other {# Kunden}} ohne Zahlungsverhalten bewertet"
     },
     "profitTier": {
       "high": "Hoch",
@@ -1307,12 +1322,12 @@
       "revenue": "Umsatz",
       "invoiced": "Bruttorechnungen im Zeitraum",
       "rfmChampions": "RFM-Top-Segment",
-      "score40to59": "Wert 40–59",
-      "score80Plus": "Wert ≥ 80",
-      "scoreBelow40": "Wert < 40",
       "threeYearProjection": "3-Jahres-Prognose",
       "trend": "Trend: {trend}",
-      "weightedRfm": "gewichtet R/F/M/Zahlung"
+      "weightedRfm": "gewichtet R/F/M/Zahlung",
+      "scoreHigh": "Wert ≥ {cutoff}",
+      "scoreMid": "Wert {low}–{high}",
+      "scoreLow": "Wert < {cutoff}"
     },
     "table": {
       "active": "Aktiv",
@@ -1377,7 +1392,8 @@
     },
     "txnsCount": "{count} Buch.",
     "errors": {
-      "paymentStatsUnavailable": "Die Kundenzahlungsstatistik wurde nicht geladen. Laden Sie dieses Dashboard erneut."
+      "paymentStatsUnavailable": "Die Kundenzahlungsstatistik wurde nicht geladen. Laden Sie dieses Dashboard erneut.",
+      "scoringWeightsInvalid": "Die Gewichtungen {keys} ergeben {actual} statt {total} — bitte in der Konfiguration dieses Dashboards korrigieren."
     }
   },
   "vendor": {

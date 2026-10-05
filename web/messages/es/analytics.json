@@ -1056,6 +1056,18 @@
         "overdueInsightCount": {
           "label": "Aviso — vencidas sobre (facturas)",
           "help": "Las vencidas sobre este número activan el aviso de pagos"
+        },
+        "frictionCriticalPoints": {
+          "label": "Fricción — crítica desde (puntos)",
+          "help": "Los puntos iguales o superiores indican fricción crítica"
+        },
+        "frictionHighPoints": {
+          "label": "Fricción — alta desde (puntos)",
+          "help": "Los puntos iguales o superiores indican fricción alta"
+        },
+        "frictionMediumPoints": {
+          "label": "Fricción — media desde (puntos)",
+          "help": "Los puntos iguales o superiores indican fricción media"
         }
       }
     },
@@ -1140,7 +1152,9 @@
       "ofRevenue": "de los ingresos",
       "paidInFull": "facturas pagadas en su totalidad",
       "perCustomer": "por cliente",
-      "retentionProb": "probabilidad de retención media"
+      "retentionProb": "probabilidad de retención media",
+      "noPaymentHistory": "Sin historial de pagos aún",
+      "noRetentionData": "Sin clientes en el período"
     },
     "overdueBanner": {
       "count": "{count} facturas vencidas",
@@ -1159,7 +1173,7 @@
       "cohortHint": "Por año del primer pedido · activo = pidió en los últimos 6 meses",
       "cohortRetention": "Retención por cohorte",
       "customerHealth": "Salud del cliente ({count})",
-      "customerHealthHint": "Ponderado 25 % antigüedad · 25 % frecuencia · 30 % importe · 20 % pago, menos penalización por fricción",
+      "customerHealthHint": "Ponderado {recency} % recencia · {frequency} % frecuencia · {monetary} % valor · {payment} % pagos, menos fricción",
       "customerProfitability": "Rentabilidad del cliente",
       "customersBySegment": "Clientes por segmento ({count})",
       "dataSources": "Fuentes de datos y cálculos",
@@ -1183,7 +1197,8 @@
       "segmentMix": "Mezcla de segmentos",
       "segmentPerformance": "Rendimiento de segmentos",
       "tierDistribution": "Distribución de niveles de CLV",
-      "topByRevenue": "Mejores clientes por ingresos"
+      "topByRevenue": "Mejores clientes por ingresos",
+      "healthNoPaymentNote": "{count, plural, one {# cliente puntuado} other {# clientes puntuados}} sin datos de pago"
     },
     "profitTier": {
       "high": "Alto",
@@ -1307,12 +1322,12 @@
       "revenue": "ingresos",
       "invoiced": "facturación bruta del período",
       "rfmChampions": "segmento campeones RFM",
-      "score40to59": "puntuación 40–59",
-      "score80Plus": "puntuación ≥ 80",
-      "scoreBelow40": "puntuación < 40",
       "threeYearProjection": "proyección a 3 años",
       "trend": "tendencia: {trend}",
-      "weightedRfm": "R/F/M/pago ponderados"
+      "weightedRfm": "R/F/M/pago ponderados",
+      "scoreHigh": "puntos ≥ {cutoff}",
+      "scoreMid": "puntos {low}–{high}",
+      "scoreLow": "puntos < {cutoff}"
     },
     "table": {
       "active": "Activos",
@@ -1377,7 +1392,8 @@
     },
     "txnsCount": "{count} trans.",
     "errors": {
-      "paymentStatsUnavailable": "No se cargaron las estadísticas de pago de clientes. Vuelve a cargar este panel."
+      "paymentStatsUnavailable": "No se cargaron las estadísticas de pago de clientes. Vuelve a cargar este panel.",
+      "scoringWeightsInvalid": "Las ponderaciones {keys} suman {actual}, no {total}: corrígelas en la Configuración de este panel."
     }
   },
   "vendor": {
