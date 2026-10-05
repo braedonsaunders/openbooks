@@ -313,7 +313,7 @@
     "notEnoughHistory": "Erfordert mindestens zwei Monate Verlauf.",
     "trailingMonths": "{count, plural, one {# Monat} other {# Monate}}",
     "noBudget": "Kein genehmigtes Budget deckt diesen Zeitraum ab.",
-    "budget": "Budget",
+    "budget": "Budgetiert",
     "actual": "Ist",
     "variance": "Abweichung",
     "offTrack": "Abweichend"
