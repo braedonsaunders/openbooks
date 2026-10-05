@@ -46,6 +46,34 @@ import { englishCatalogMessage } from "./catalog-strings";
 
 const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"] as const;
 
+/**
+ * An amount tier the organization configured: its threshold with the
+ * severity model's points. An unset tier (empty threshold) is null — never
+ * zero points, so scorers skip it and the score names the exclusion.
+ */
+interface SetTier { threshold: string; points: number }
+const setTier = (rule: { points?: number }, threshold: string): SetTier | null =>
+  (threshold === "" || rule.points === undefined ? null : { threshold, points: rule.points });
+
+/**
+ * First configured rung at or under the amount, in priority order. Empty
+ * tiers skip their points: awarding against an unset figure would mean
+ * different money per currency, and skipped tiers are named in the score's
+ * exclusion note. `strict` keeps the aggregate ladders' above-threshold
+ * semantics; document ladders award at the threshold.
+ */
+const ladderBump = (
+  total: string,
+  rungs: ReadonlyArray<{ rule: { points?: number }; threshold: string }>,
+  strict = false,
+): number => {
+  for (const rung of rungs) {
+    const set = setTier(rung.rule, rung.threshold);
+    if (set !== null && (strict ? cmp(total, set.threshold) > 0 : cmp(total, set.threshold) >= 0)) return set.points;
+  }
+  return 0;
+};
+
 // Mean Absolute Deviation conformity bands from Benford's Law
 // (Mark Nigrini, 2012): first-digit 0.006 / 0.012 / 0.015
 // (close / acceptable / marginal; above nonconforming) and first-two-digit
@@ -93,14 +121,6 @@ export interface FlowAmountLimit {
 type LogicRuleLeaf = { op: string; field?: string; value?: unknown; rules?: LogicRuleLeaf[]; rule?: LogicRuleLeaf };
 
 /**
- * Candidate approval limits from the org's enabled Flows: every numeric
- * `total` comparison value in a condition node, per subject kind. A flow
- * condition reads the document's own total, so each limit is denominated in
- * whatever transaction currency the document under test carries — detection
- * compares amounts to limits in the same currency and never translates
- * either side. Non-positive and unreadable values are not limits.
- */
-/**
  * Latest spot rate from a row's functional currency to presentation on or
  * before the row's date — the same selection flowRates makes in TypeScript
  * (direct quotes win ties, inverse otherwise, 1 when identical). NULL when
@@ -145,6 +165,16 @@ async function assertFloorCoverage(
   );
 }
 
+/**
+ * Candidate approval limits from the org's enabled Flows: every numeric
+ * `total` comparison value in a condition node, per subject kind. A flow
+ * condition reads the document's own total, so each limit is denominated in
+ * whatever transaction currency the document under test carries — detection
+ * compares amounts to limits in the same currency and never translates
+ * either side. Non-positive and unreadable values are not limits. Only
+ * spend subjects are collected: a limit on any other subject kind can never
+ * gate a spend document.
+ */
 export function extractFlowAmountLimits(
   flows: ReadonlyArray<{ subjectKind: string; graph: unknown }>,
 ): FlowAmountLimit[] {
@@ -165,7 +195,7 @@ export function extractFlowAmountLimits(
       node.field === "total"
     ) {
       const raw = typeof node.value === "number" ? String(node.value) : typeof node.value === "string" ? node.value.trim() : "";
-      if (/^\d+(\.\d+)?$/.test(raw) && Number(raw) > 0) {
+      if (/^\d+(\.\d+)?$/.test(raw) && /[1-9]/.test(raw)) {
         const key = `${subjectKind}|${raw}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -185,7 +215,7 @@ export function extractFlowAmountLimits(
       if (node?.data?.kind === "condition") visit(flow.subjectKind, node.data.rule);
     }
   }
-  out.sort((a, b) => (a.subjectKind < b.subjectKind ? -1 : a.subjectKind > b.subjectKind ? 1 : Number(a.limit) - Number(b.limit)));
+  out.sort((a, b) => (a.subjectKind < b.subjectKind ? -1 : a.subjectKind > b.subjectKind ? 1 : cmp(a.limit, b.limit)));
   return out;
 }
 
@@ -1249,15 +1279,12 @@ export async function sentinelData(
 
   // ---- Duplicates: one finding per natural-key group ---------------------------------
   const dupRules = RISK_SCORING.duplicate.rules;
-  const dupTierBump = (translated: string): number => {
-    // Empty tiers skip their points: awarding against an unset figure would
-    // mean different money per currency. Skipped tiers are named in the
-    // score's exclusion note.
-    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) return dupRules.tierCritical.points;
-    if (cfg.highRiskAmount !== "" && cmp(translated, cfg.highRiskAmount) >= 0) return dupRules.tierHigh.points;
-    if (cfg.moderateRiskAmount !== "" && cmp(translated, cfg.moderateRiskAmount) >= 0) return dupRules.tierModerate.points;
-    return 0;
-  };
+  const dupTierBump = (translated: string): number =>
+    ladderBump(translated, [
+      { rule: dupRules.tierCritical, threshold: cfg.criticalRiskAmount },
+      { rule: dupRules.tierHigh, threshold: cfg.highRiskAmount },
+      { rule: dupRules.tierModerate, threshold: cfg.moderateRiskAmount },
+    ]);
   const dupSpanBump = (spanDays: number): number => {
     if (spanDays <= dupRules.span1Day.days) return dupRules.span1Day.points;
     if (spanDays <= dupRules.span3Days.days) return dupRules.span3Days.points;
@@ -1307,10 +1334,10 @@ export async function sentinelData(
   const dupAmount = translateBuckets(dupValueBuckets);
   const duplicateUnavailable = duplicateFloor === null ? strings.duplicateFloorUnset : null;
 
-  // Compatibility projection for the assistant/MCP passthrough (owned by
-  // another team): every within-group ordered pair, so pair-shaped readers
-  // keep working. Same-currency and same-reference by construction — the
-  // cross-currency false positive cannot appear here either.
+  // Compatibility projection for pair-shaped readers of the finding: every
+  // within-group ordered pair, so existing consumers keep working.
+  // Same-currency and same-reference by construction — the cross-currency
+  // false positive cannot appear here either.
   const dupPairs: DuplicatePair[] = [];
   for (const g of dupGroups) {
     const ms = g.members;
@@ -1344,8 +1371,10 @@ export async function sentinelData(
     const translated = translatedOf(r);
     const isSunday = Number(r.dow) === 0;
     let score = weekendRules.base.points;
-    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) score += weekendRules.tierCritical.points;
-    else if (cfg.highRiskAmount !== "" && cmp(translated, cfg.highRiskAmount) >= 0) score += weekendRules.tierHigh.points;
+    score += ladderBump(translated, [
+      { rule: weekendRules.tierCritical, threshold: cfg.criticalRiskAmount },
+      { rule: weekendRules.tierHigh, threshold: cfg.highRiskAmount },
+    ]);
     if (isSunday) score += weekendRules.sunday.points;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
@@ -1377,8 +1406,10 @@ export async function sentinelData(
     else if (rsf >= rsfRules.ratio20.ratio) score += rsfRules.ratio20.points;
     else if (rsf >= rsfRules.ratio15.ratio) score += rsfRules.ratio15.points;
     else score += rsfRules.ratioBase.points;
-    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) score += rsfRules.tierCritical.points;
-    else if (cfg.highRiskAmount !== "" && cmp(translated, cfg.highRiskAmount) >= 0) score += rsfRules.tierHigh.points;
+    score += ladderBump(translated, [
+      { rule: rsfRules.tierCritical, threshold: cfg.criticalRiskAmount },
+      { rule: rsfRules.tierHigh, threshold: cfg.highRiskAmount },
+    ]);
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1401,7 +1432,7 @@ export async function sentinelData(
     let score = zRules.base.points;
     if (Math.abs(z) >= zRules.z5.z) score += zRules.z5.points;
     else if (Math.abs(z) >= zRules.z4.z) score += zRules.z4.points;
-    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) score += zRules.tierCritical.points;
+    score += ladderBump(translated, [{ rule: zRules.tierCritical, threshold: cfg.criticalRiskAmount }]);
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1428,9 +1459,15 @@ export async function sentinelData(
     const totalAmount = sum(invoices.length > 0 ? invoices.map((inv) => inv.funcAmount) : ["0.0000"]);
     let score = spanDays >= seqHighDays ? seqRules.highSpan.points : seqRules.baseSpan.points;
     score += Math.min(count * seqRules.perInvoice.perUnit, seqRules.perInvoice.cap);
-    if (cfg.aggregateCriticalAmount !== "" && cmp(totalAmount, cfg.aggregateCriticalAmount) > 0) score += seqRules.tierCritical.points;
-    else if (cfg.aggregateHighAmount !== "" && cmp(totalAmount, cfg.aggregateHighAmount) > 0) score += seqRules.tierHigh.points;
-    else if (cfg.criticalRiskAmount !== "" && cmp(totalAmount, cfg.criticalRiskAmount) > 0) score += seqRules.tierModerate.points;
+    score += ladderBump(
+      totalAmount,
+      [
+        { rule: seqRules.tierCritical, threshold: cfg.aggregateCriticalAmount },
+        { rule: seqRules.tierHigh, threshold: cfg.aggregateHighAmount },
+        { rule: seqRules.tierModerate, threshold: cfg.criticalRiskAmount },
+      ],
+      true,
+    );
     const level: "high" | "medium" = spanDays >= seqHighDays ? "high" : "medium";
     return {
       partyId: r.party_id, partyName: strings.displayPartyName(r.party_name), count, totalAmount,
@@ -1553,11 +1590,12 @@ export async function sentinelData(
   }
   // Composite vendor score from the severity model, capped at 100.
   for (const v of vendorMap.values()) {
-    const amountTier = cfg.aggregateHighAmount !== "" && cmp(v.totalAmount, cfg.aggregateHighAmount) >= 0
-      ? vendorRules.tierCritical.points
-      : cfg.highRiskAmount !== "" && cmp(v.totalAmount, cfg.highRiskAmount) >= 0
-        ? vendorRules.tierHigh.points
-        : vendorRules.tierBase.points;
+    const critical = setTier(vendorRules.tierCritical, cfg.aggregateHighAmount);
+    const high = setTier(vendorRules.tierHigh, cfg.highRiskAmount);
+    const amountTier =
+      critical !== null && cmp(v.totalAmount, critical.threshold) >= 0 ? critical.points
+      : high !== null && cmp(v.totalAmount, high.threshold) >= 0 ? high.points
+      : vendorRules.tierBase.points;
     v.compositeScore = Math.min(100, Math.round(Math.min(v.flagCount * vendorRules.perFlag.perUnit, vendorRules.perFlag.cap) + amountTier + v.flagTypes.length * vendorRules.perType.points + v.maxRiskScore * vendorRules.worstShare.share));
   }
   const vendorRisk = [...vendorMap.values()].sort((a, b) => b.compositeScore - a.compositeScore || cmp(b.totalAmount, a.totalAmount)).slice(0, 50);
