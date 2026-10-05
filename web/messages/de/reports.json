@@ -1022,6 +1022,10 @@
       "demand_forecast_accuracy": {
         "label": "Prognosegenauigkeit",
         "description": "Frühere Bedarfsprognosen im Abgleich mit tatsächlichen Verbräuchen je Artikelklasse: bewertete Wochen, mittlerer absoluter Prozentfehler und Verzerrung."
+      },
+      "channel_sales": {
+        "label": "Kanalverkäufe",
+        "description": "Storefront-Bestellungen nach Kanal, Tag, Artikel, Standort und Zahlung — eine Zeile pro Bestellposition mit Buchungsstatus und Beleg."
       }
     },
     "columns": {
@@ -2526,6 +2530,23 @@
         "scored_weeks": "Bewertete Wochen",
         "mape": "MAPE",
         "bias": "Verzerrung"
+      },
+      "channel_sales": {
+        "channel": "Kanal",
+        "ordered_day": "Bestelldatum",
+        "order_number": "Bestellung",
+        "customer": "Kunde",
+        "currency": "Währung",
+        "item": "Artikel",
+        "sku": "Artikelcode",
+        "quantity": "Menge",
+        "unit_price": "Stückpreis",
+        "discount": "Rabatt",
+        "line_total": "Zeilensumme",
+        "tenders": "Zahlungen",
+        "location": "Standort",
+        "posting_status": "Buchungsstatus",
+        "document_number": "Beleg"
       }
     },
     "enumValues": {
@@ -2620,7 +2641,11 @@
       "no_bill_rate": "Kein Abrechnungssatz gefunden",
       "no_employee": "Keine Person zugeordnet",
       "no_cost_rate": "Kein Arbeitskostensatz gefunden",
-      "no_cost_fx": "Kein Kassakurs für die Kostenumrechnung"
+      "no_cost_fx": "Kein Kassakurs für die Kostenumrechnung",
+      "pending": "Offen",
+      "summarized": "In Tagessumme",
+      "exception": "Handlungsbedarf",
+      "excluded": "Ausgeschlossen"
     }
   },
   "operators": {

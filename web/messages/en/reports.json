@@ -1022,6 +1022,10 @@
       "demand_forecast_accuracy": {
         "label": "Forecast accuracy",
         "description": "Past demand forecasts scored against actual issues by item class: scored weeks, mean absolute percentage error, and bias."
+      },
+      "channel_sales": {
+        "label": "Channel sales",
+        "description": "Storefront orders by channel, day, item, location and tender — one row per order line with the order's posting status and document."
       }
     },
     "columns": {
@@ -2526,6 +2530,23 @@
         "scored_weeks": "Scored weeks",
         "mape": "MAPE",
         "bias": "Bias"
+      },
+      "channel_sales": {
+        "channel": "Channel",
+        "ordered_day": "Ordered day",
+        "order_number": "Order",
+        "customer": "Customer",
+        "currency": "Currency",
+        "item": "Item",
+        "sku": "Item code",
+        "quantity": "Quantity",
+        "unit_price": "Unit price",
+        "discount": "Discount",
+        "line_total": "Line total",
+        "tenders": "Tenders",
+        "location": "Location",
+        "posting_status": "Posting status",
+        "document_number": "Document"
       }
     },
     "enumValues": {
@@ -2620,7 +2641,11 @@
       "no_bill_rate": "No bill rate found",
       "no_employee": "No employee assigned",
       "no_cost_rate": "No labor cost rate found",
-      "no_cost_fx": "No spot rate for cost conversion"
+      "no_cost_fx": "No spot rate for cost conversion",
+      "pending": "Pending",
+      "summarized": "In daily summary",
+      "exception": "Needs attention",
+      "excluded": "Excluded"
     }
   },
   "operators": {
