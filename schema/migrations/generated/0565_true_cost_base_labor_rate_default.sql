@@ -64,14 +64,14 @@ updated AS (
   WHERE o.id = rebuilt.org_id
   RETURNING o.id AS org_id
 )
--- One audit row per cleared profile: actor null (system migration), the
--- before/after value and the reason in changes.
+-- One audit row per changed org: actor null (system migration), the
+-- before/after of exactly the cleared key per profile, and the reason.
 INSERT INTO public.audit_log (org_id, table_name, row_id, action, actor_id, changes)
 SELECT c.org_id, 'orgs', c.org_id, 'update', NULL,
   jsonb_build_object(
-    'before', jsonb_build_object('baseLaborRate', '50.0000'),
-    'after', jsonb_build_object('baseLaborRate', ''),
-    'profileId', c.profile_id, 'profileName', c.profile_name,
-    'reason', '0565 clears the retired persistMoney default baseLaborRate 50.0000 the operator never wrote; no audit evidence of an operator value exists for this org. Re-enter the rate on the True Cost profile if 50.0000 was intended.')
+    'before', jsonb_object_agg(c.profile_id, jsonb_build_object('baseLaborRate', '50.0000')),
+    'after', jsonb_object_agg(c.profile_id, jsonb_build_object('baseLaborRate', '')),
+    'reason', 'retired default base rate cleared; re-enter a deliberate value in True Cost configuration')
 FROM candidates c
-JOIN updated u ON u.org_id = c.org_id;
+JOIN updated u ON u.org_id = c.org_id
+GROUP BY c.org_id;
