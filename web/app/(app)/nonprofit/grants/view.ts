@@ -47,7 +47,7 @@ export interface GrantAccountOption {
   type: string
 }
 
-export interface GrantGroupOption {
+export interface GrantGroupOption extends Record<string, unknown> {
   id: string
   name: string
   dimension: string
