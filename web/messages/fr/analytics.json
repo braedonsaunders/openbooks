@@ -2221,7 +2221,8 @@
       "defaultProfile": "Par défaut",
       "formulaError": "Résultat de formule invalide",
       "absorptionNoAccount": "Aucun compte d’application des frais généraux configuré — configurez-en un dans Setup → Overhead.",
-      "absorptionNoPostings": "Le compte d’application des frais généraux configuré ne contient aucune écriture appliquée sur cette période."
+      "absorptionNoPostings": "Le compte configuré d’application des frais généraux ne contient aucune écriture appliquée sur cette période — approuve du temps projet pour la période (les approbations transfèrent les frais) ou reporte le temps antérieur avec Backfill dans Setup → Overhead Model.",
+      "absorptionNoCards": "Aucune charge appliquée n’existe pour cette période — publie les taux de frais généraux dans Setup → Overhead Model (Publish) pour que les heures projet réelles soient chiffrées contre les cartes."
     },
     "refusals": {
       "mixedUnits": "Impossible de combiner {formats} dans un même composite ({categories}) — donne à chaque catégorie incluse le même format de taux, ou exclus les autres du composite dans Setup → Overhead Model.",
@@ -2453,7 +2454,8 @@
       "monthShort": "{months} mois",
       "monthCell": "M{n}",
       "contributionByDept": "Contribution à l’écart par service",
-      "hrsShort": "{count, plural, one {# h} other {# h}}"
+      "hrsShort": "{count, plural, one {# h} other {# h}}",
+      "pricedFromCards": "Chiffré d’après les taux standards publiés — aucune écriture appliquée pour cette période."
     },
     "selling": {
       "sellingRate": "Taux de facturation",

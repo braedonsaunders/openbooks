@@ -2221,7 +2221,8 @@
       "defaultProfile": "Standard",
       "formulaError": "Ungültiges Formelergebnis",
       "absorptionNoAccount": "Kein Overhead-Anwendungskonto konfiguriert — richten Sie eines unter Setup → Overhead ein.",
-      "absorptionNoPostings": "Das konfigurierte Overhead-Anwendungskonto enthält in diesem Zeitraum keine angewendeten Buchungen."
+      "absorptionNoPostings": "Das konfigurierte Overhead-Anwendungskonto enthält keine angewendeten Buchungen in diesem Zeitraum — gib Projektzeiten für den Zeitraum frei (Freigaben übertragen Overhead) oder übertrage frühere Zeiten mit Backfill in Setup → Overhead Model.",
+      "absorptionNoCards": "Für diesen Zeitraum gibt es keine angewendete Umlage — veröffentliche Overhead-Sätze in Setup → Overhead Model (Publish), damit tatsächliche Projektstunden gegen die Karten bepreist werden."
     },
     "refusals": {
       "mixedUnits": "{formats} lassen sich nicht in einem Composite mischen ({categories}) — gib jeder einbezogenen Kategorie dasselbe Ratenformat oder schließe die abweichenden in Setup → Overhead Model vom Composite aus.",
@@ -2453,7 +2454,8 @@
       "monthShort": "{months} Mon.",
       "monthCell": "M{n}",
       "contributionByDept": "Beitrag zur Lücke nach Abteilung",
-      "hrsShort": "{count, plural, one {# Std.} other {# Std.}}"
+      "hrsShort": "{count, plural, one {# Std.} other {# Std.}}",
+      "pricedFromCards": "Aus veröffentlichten Standardsätzen bepreist — für diesen Zeitraum gibt es keine angewendeten Buchungen."
     },
     "selling": {
       "sellingRate": "Verrechnungssatz",

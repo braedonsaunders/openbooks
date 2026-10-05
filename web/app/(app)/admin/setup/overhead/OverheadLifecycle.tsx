@@ -20,7 +20,8 @@ import {
 export interface DriftRow {
   id: string
   name: string
-  live: number
+  /** Live composite; null while the composite refuses. */
+  live: number | null
   /** Exact published $/hr decimal string (PostgreSQL numeric text) — never a double. */
   published: string | null
 }
@@ -77,7 +78,7 @@ export function OverheadLifecycle(props: {
   // decimal string end to end — the percentage is display-only, derived with
   // the shared bigint decimal helpers, never through a double.
   const driftPct = (r: DriftRow): string | null => {
-    if (r.published == null || cmpMoney(r.published, '0') <= 0) return null
+    if (r.live == null || r.published == null || cmpMoney(r.published, '0') <= 0) return null
     return mulMoney(divMoney(addMoney(String(r.live), negMoney(r.published)), r.published), '100')
   }
 
@@ -124,7 +125,7 @@ export function OverheadLifecycle(props: {
             columns={[
               { key: 'dept', header: t('department'), cell: (r) => r.name, search: (r) => r.name },
               { key: 'published', header: t('published'), cell: (r) => <span className="tabular-nums">{r.published != null ? money(r.published) : '—'}</span> },
-              { key: 'live', header: t('live'), cell: (r) => <span className="tabular-nums">{money(r.live)}</span> },
+              { key: 'live', header: t('live'), cell: (r) => <span className="tabular-nums">{r.live == null ? '—' : money(r.live)}</span> },
               {
                 key: 'drift',
                 header: t('drift'),

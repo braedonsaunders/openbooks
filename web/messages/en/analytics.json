@@ -2221,7 +2221,8 @@
       "defaultProfile": "Default",
       "formulaError": "Invalid formula result",
       "absorptionNoAccount": "No overhead application account is configured — set one in Setup → Overhead.",
-      "absorptionNoPostings": "The configured overhead application account has no applied postings in this period."
+      "absorptionNoPostings": "The configured overhead application account has no applied postings in this period — approve project time for the period (approvals carry overhead), or carry earlier time with Backfill in Setup → Overhead Model.",
+      "absorptionNoCards": "No applied burden exists for this period — publish overhead rates in Setup → Overhead Model (Publish) so actual project hours price against the cards."
     },
     "refusals": {
       "mixedUnits": "Cannot blend {formats} in one composite ({categories}) — give every included category the same rate format, or exclude the odd ones from the composite in Setup → Overhead Model.",
@@ -2453,7 +2454,8 @@
       "monthShort": "{months}mo",
       "monthCell": "M{n}",
       "contributionByDept": "Gap contribution by department",
-      "hrsShort": "{count, plural, one {# hr} other {# hrs}}"
+      "hrsShort": "{count, plural, one {# hr} other {# hrs}}",
+      "pricedFromCards": "Priced from published standard rates — no applied postings exist for this period."
     },
     "selling": {
       "sellingRate": "Selling Rate",

@@ -13,7 +13,8 @@ import { useMoney } from '@/components/money-provider'
 export interface DeptRate {
   id: string
   name: string
-  composite: number
+  /** Live department composite; null while the composite refuses. */
+  composite: number | null
 }
 export interface TypeOpt {
   id: string
@@ -54,7 +55,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
   // Publish state — pre-seeded from the live engine, editable.
   const [effectiveFrom, setEffectiveFrom] = useState(today)
   const [rates, setRates] = useState<Record<string, string>>(() =>
-    Object.fromEntries(departments.filter((d) => d.composite > 0).map((d) => [d.id, d.composite.toFixed(2)])))
+    Object.fromEntries(departments.filter((d) => (d.composite ?? 0) > 0).map((d) => [d.id, (d.composite ?? 0).toFixed(2)])))
 
   // Wizard state.
   const [step, setStep] = useState(0)
@@ -112,14 +113,14 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
   const rateTable = (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        {departments.filter((d) => rates[d.id] !== undefined || d.composite > 0).map((d) => (
+        {departments.filter((d) => rates[d.id] !== undefined || (d.composite ?? 0) > 0).map((d) => (
           <div key={d.id} className="space-y-1">
             <Label>{d.name}</Label>
             <div className="flex items-center gap-1.5">
               <Input type="number" step="0.01" value={rates[d.id] ?? ''} onChange={(e) => setRates({ ...rates, [d.id]: e.target.value })} />
               <span className="text-xs text-slate-400">{currency}/hr</span>
             </div>
-            <p className="text-[11px] text-slate-400">{t('liveNow', { rate: money(d.composite) })}</p>
+            <p className="text-[11px] text-slate-400">{t('liveNow', { rate: d.composite == null ? '—' : money(d.composite) })}</p>
           </div>
         ))}
       </div>

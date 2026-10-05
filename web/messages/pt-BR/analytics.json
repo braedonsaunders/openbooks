@@ -2221,7 +2221,8 @@
       "defaultProfile": "Padrão",
       "formulaError": "Resultado de fórmula inválido",
       "absorptionNoAccount": "Nenhuma conta de aplicação de custos indiretos configurada — configure uma em Setup → Overhead.",
-      "absorptionNoPostings": "A conta de aplicação de custos indiretos configurada não possui lançamentos aplicados neste período."
+      "absorptionNoPostings": "A conta configurada de aplicação de custos indiretos não tem lançamentos aplicados neste período — aprove tempo de projeto para o período (as aprovações transferem os custos) ou transfira tempo anterior com Backfill em Setup → Overhead Model.",
+      "absorptionNoCards": "Não há carga aplicada para este período — publique as tarifas de custos indiretos em Setup → Overhead Model (Publish) para que as horas reais de projeto sejam precificadas contra os cartões."
     },
     "refusals": {
       "mixedUnits": "Não é possível combinar {formats} em um único composto ({categories}) — atribua o mesmo formato de tarifa a cada categoria incluída ou exclua as divergentes do composto em Setup → Overhead Model.",
@@ -2453,7 +2454,8 @@
       "monthShort": "{months} m",
       "monthCell": "M{n}",
       "contributionByDept": "Contribuição para a lacuna por departamento",
-      "hrsShort": "{count, plural, one {# h} other {# h}}"
+      "hrsShort": "{count, plural, one {# h} other {# h}}",
+      "pricedFromCards": "Precificado a partir de tarifas padrão publicadas — não há lançamentos aplicados para este período."
     },
     "selling": {
       "sellingRate": "Taxa de venda",
