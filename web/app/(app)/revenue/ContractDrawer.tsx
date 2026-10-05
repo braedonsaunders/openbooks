@@ -57,12 +57,33 @@ export function contractSummaryTotals(
 }
 
 /**
+ * An obligation needs attention while it has no plan, carries unverified
+ * history, or prices outside its fair value range — the same conditions
+ * that force its schedule disclosure open.
+ */
+function obligationNeedsAttention(
+  obligation: Pick<
+    ContractPayload["obligations"][number],
+    "lines" | "legacy_unverified" | "fair_value_flag"
+  >,
+): boolean {
+  return (
+    obligation.lines.length === 0 ||
+    obligation.legacy_unverified ||
+    obligation.fair_value_flag !== null
+  );
+}
+
+/**
  * Revenue contract detail: the billed invoices on one sub-tab, performance
  * obligations with their primary-book recognition schedules on the other.
  * Billings and schedules are separate concepts, so they never share a body:
  * the shared drawer strip switches between them and both stay mounted
- * (hidden) so in-flight work survives the switch. Recognition is driven by
- * invoices + the Run action. Contract changes prepare a separate,
+ * (hidden) so in-flight work survives the switch. Inside the obligations
+ * body the parent-child workflow applies: one selector list names every
+ * obligation, and selecting one shows only its schedule in the focused
+ * pane below — never one schedule table per obligation. Recognition is
+ * driven by invoices + the Run action. Contract changes prepare a separate,
  * independently approved proposal; this drawer never edits recognized
  * history in place.
  */
@@ -85,6 +106,16 @@ export function ContractDrawer({
   // Billings vs obligations+schedules: separate concepts, separate bodies.
   // Client-local like the drawer rail: switching never navigates.
   const [section, setSection] = useState<"overview" | "obligations">("overview");
+  // Obligations follow the parent-child workflow: the selector names each
+  // obligation once, and only the selected obligation renders its schedule.
+  // Attention-worthy obligations (no plan, unverified history, out-of-range
+  // allocation) win the default selection so the queue surfaces itself.
+  const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
+  const selectedObligation =
+    payload.obligations.find((o) => o.id === selectedObligationId) ??
+    payload.obligations.find((o) => obligationNeedsAttention(o)) ??
+    payload.obligations[0] ??
+    null;
 
   return (
     <UrlDrawer
@@ -231,47 +262,97 @@ export function ContractDrawer({
           </section>
         ) : null}
         </div>
-        <div hidden={section !== "obligations"} className="space-y-2">
-        {/* -- obligations + schedules -------------------------------- */}
-        {payload.obligations.map((o) => (
+        <div hidden={section !== "obligations"} className="space-y-4">
+        {/* -- parent: one obligation selector. A list of buttons, never a
+            table, so the body holds exactly one concept table at a time. */}
+        <section aria-label={t("drawer.obligations")} className="space-y-2">
+          <ul className="space-y-2">
+            {payload.obligations.map((o) => {
+              const selected = selectedObligation?.id === o.id;
+              return (
+                <li key={o.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedObligationId(o.id)}
+                    aria-current={selected ? "true" : undefined}
+                    className={`flex w-full flex-wrap items-center gap-2 rounded-lg border p-3 text-left ${
+                      selected
+                        ? "border-teal-600 dark:border-teal-400"
+                        : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <span className="font-semibold">{o.description}</span>
+                    <Badge variant={STATUS_VARIANT[o.status] ?? "secondary"}>
+                      {t(`obligationStatus.${o.status}`)}
+                    </Badge>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {t(`method.${o.method}`)} · {money(o.allocated_price)}
+                    </span>
+                    {o.legacy_unverified ? (
+                      <Badge variant="warning">
+                        {t("drawer.legacyUnverified")}
+                      </Badge>
+                    ) : null}
+                    {o.fair_value_flag ? (
+                      <Badge variant="warning">
+                        {t("drawer.fairValueOutOfRange", {
+                          low:
+                            o.fair_value_low != null
+                              ? money(o.fair_value_low)
+                              : "—",
+                          high:
+                            o.fair_value_high != null
+                              ? money(o.fair_value_high)
+                              : "—",
+                        })}
+                      </Badge>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+        {/* -- focused child: only the selected obligation's schedule ------- */}
+        {selectedObligation ? (
           <section
-            key={o.id}
+            aria-label={selectedObligation.description}
             className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="font-semibold">{o.description}</span>
-                <Badge variant={STATUS_VARIANT[o.status] ?? "secondary"}>
-                  {t(`obligationStatus.${o.status}`)}
+                <span className="font-semibold">{selectedObligation.description}</span>
+                <Badge variant={STATUS_VARIANT[selectedObligation.status] ?? "secondary"}>
+                  {t(`obligationStatus.${selectedObligation.status}`)}
                 </Badge>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {t(`method.${o.method}`)} · {money(o.allocated_price)}
+                  {t(`method.${selectedObligation.method}`)} · {money(selectedObligation.allocated_price)}
                 </span>
-                {o.legacy_unverified ? (
+                {selectedObligation.legacy_unverified ? (
                   <Badge variant="warning">
                     {t("drawer.legacyUnverified")}
                   </Badge>
                 ) : null}
-                {o.fair_value_flag ? (
+                {selectedObligation.fair_value_flag ? (
                   <Badge variant="warning">
                     {t("drawer.fairValueOutOfRange", {
                       low:
-                        o.fair_value_low != null
-                          ? money(o.fair_value_low)
+                        selectedObligation.fair_value_low != null
+                          ? money(selectedObligation.fair_value_low)
                           : "—",
                       high:
-                        o.fair_value_high != null
-                          ? money(o.fair_value_high)
+                        selectedObligation.fair_value_high != null
+                          ? money(selectedObligation.fair_value_high)
                           : "—",
                     })}
                   </Badge>
                 ) : null}
               </div>
               {canRun ? (
-                <RunRecognitionButton obligationId={o.id} obligationDescription={o.description} />
+                <RunRecognitionButton obligationId={selectedObligation.id} obligationDescription={selectedObligation.description} />
               ) : null}
-              {canRun && o.legacy_unverified ? (
-                <ReconcileLegacyButton obligationId={o.id} />
+              {canRun && selectedObligation.legacy_unverified ? (
+                <ReconcileLegacyButton obligationId={selectedObligation.id} />
               ) : null}
             </div>
             {/* -- advanced: period-by-period posting detail, collapsed with
@@ -281,17 +362,13 @@ export function ContractDrawer({
             <DisclosureSection
               title={t("drawer.scheduleTitle")}
               summary={t("drawer.scheduleSummary", {
-                periods: o.lines.length,
-                recognized: money(o.recognized),
-                planned: money(o.planned),
+                periods: selectedObligation.lines.length,
+                recognized: money(selectedObligation.recognized),
+                planned: money(selectedObligation.planned),
               })}
-              forceOpen={
-                o.lines.length === 0 ||
-                o.legacy_unverified ||
-                o.fair_value_flag !== null
-              }
+              forceOpen={obligationNeedsAttention(selectedObligation)}
             >
-              {o.lines.length === 0 ? (
+              {selectedObligation.lines.length === 0 ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {t("drawer.noSchedule")}
                 </p>
@@ -310,7 +387,7 @@ export function ContractDrawer({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {o.lines.map((l, i) => (
+                    {selectedObligation.lines.map((l, i) => (
                       <TableRow key={i}>
                         <TableCell>{l.period_name}</TableCell>
                         <TableCell className="text-right tabular-nums">
@@ -339,7 +416,7 @@ export function ContractDrawer({
               )}
             </DisclosureSection>
           </section>
-        ))}
+        ) : null}
         </div>
       </div>
     </UrlDrawer>
