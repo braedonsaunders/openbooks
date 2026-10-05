@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { disposeAsset } from "./asset-lifecycle.ts";
-import { buildSchedule } from "./depreciation.ts";
+import { buildSchedule, runDepreciation } from "./depreciation.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -50,33 +50,37 @@ async function seedInServiceAsset(
 }
 
 test(
-  "disposing with zero prior runs stays open and books NBV off posted-to-date",
+  "disposing before any depreciation run refuses until the held periods are posted",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const { assetId, bank } = await seedInServiceAsset(org, actorId, "CATCHUP-DISP");
     try {
-      // Deliberate exception (e7944aea3), restored: with zero prior runs
-      // there is no posted trail to leapfrog, so the stub tie cannot fire
-      // and the disposal stays open. July's 100.00 plan line remains
-      // unposted; NBV is cost less posted-to-date (1000), not the
-      // schedule-tied 900 a catch-up run would produce.
-      const disposal = await disposeAsset(org.orgId, assetId, {
+      // July's 100.00 plan line is unposted and the asset was held through
+      // July. Booking NBV off posted-to-date (nothing) would derecognize at
+      // full cost and overstate the loss by that month's depreciation.
+      const dispose = () => disposeAsset(org.orgId, assetId, {
         proceeds: "850",
         proceedsAccountId: bank,
         date: "2026-07-31",
         actorId,
       });
-      assert.equal(disposal.nbv, "1000.0000");
-      assert.equal(disposal.gainLoss, "-150.0000");
+      await assert.rejects(dispose, (error: Error) => {
+        assert.match(error.message, /run depreciation through 2026-07-31 before disposing/);
+        return true;
+      });
+      const events = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}
+           and kind in ('disposed','written_off')`)).rows[0]!;
+      assert.equal(events.n, 0, "a refused disposal records nothing");
+
+      // Following the remedy ties the disposal to the schedule: NBV 900.
+      await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
+      const disposal = await dispose();
+      assert.equal(disposal.nbv, "900.0000");
+      assert.equal(disposal.gainLoss, "-50.0000");
       assert.equal(disposal.status, "disposed");
-      const july = (await db.execute<{ posted: string | null }>(sql`
-        select l.posted_amount::text as posted
-          from depreciation_schedule_lines l
-          join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-         where l.org_id = ${org.orgId} and s.asset_id = ${assetId}`)).rows;
-      assert.ok(july.length > 0 && july.every((line) => line.posted === null));
       const balance = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
