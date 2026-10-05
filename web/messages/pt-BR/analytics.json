@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "Receita",
+      "grossProfit": "Lucro bruto",
       "grossMargin": "Margem bruta",
       "operatingIncome": "Resultado operacional",
       "breakeven": "Ponto de equilíbrio"

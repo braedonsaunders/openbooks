@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "Revenue",
+      "grossProfit": "Gross Profit",
       "grossMargin": "Gross Margin",
       "operatingIncome": "Operating Income",
       "breakeven": "Breakeven"

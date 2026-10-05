@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "Umsatz",
+      "grossProfit": "Bruttoergebnis",
       "grossMargin": "Bruttomarge",
       "operatingIncome": "Betriebsergebnis",
       "breakeven": "Break-even"

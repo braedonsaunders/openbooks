@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "売上高",
+      "grossProfit": "粗利益",
       "grossMargin": "売上総利益率",
       "operatingIncome": "営業利益",
       "breakeven": "損益分岐点"
