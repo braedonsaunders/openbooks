@@ -56,7 +56,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct, ratioNumber, toChartNumber } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { cmp, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { cmp, neg, sum } from '@openbooks/engine/money'
 import type { MoneyValue } from '../../../../lib/money-format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
@@ -812,7 +812,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
         <KpiCard icon={AlertOctagon} accent={k.atRiskCount > 0 ? 'red' : 'emerald'} label={t('kpi.recencyRisk')} value={String(k.atRiskCount)} sub={t('sub.highCriticalChurn')} tone={k.atRiskCount > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={Undo2} accent={k.criticalFriction + k.highFriction > 0 ? 'amber' : 'emerald'} label={t('kpi.highFriction')} value={String(k.criticalFriction + k.highFriction)} sub={t('sub.creditHeavy')} />
         <KpiCard icon={CalendarClock} accent={k.overdueOrders > 0 ? 'amber' : 'emerald'} label={t('kpi.overdueOrders')} value={String(k.overdueOrders)} sub={t('sub.pastUsualCycle')} />
-        <KpiCard icon={DollarSign} accent={k.atRiskRevenue > 0 ? 'red' : 'emerald'} label={t('kpi.atRiskRevenue')} value={money(k.atRiskRevenue)} sub={t('sub.highCriticalAccounts')} tone={k.atRiskRevenue > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={DollarSign} accent={cmp(k.atRiskRevenue, "0") > 0 ? 'red' : 'emerald'} label={t('kpi.atRiskRevenue')} value={money(k.atRiskRevenue)} sub={t('sub.highCriticalAccounts')} tone={cmp(k.atRiskRevenue, "0") > 0 ? 'negative' : 'positive'} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

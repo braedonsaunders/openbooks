@@ -15,7 +15,7 @@ import { englishCatalogMessage } from "./catalog-strings";
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
-import { add, cmp, div, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg, sum } from "@openbooks/engine/money";
 import { exactMarginPercent, exactProfit } from "./customer-profitability-money";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";

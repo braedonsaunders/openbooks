@@ -50,7 +50,8 @@ test('customer insights and churn factors render in the request locale', { skip:
       const frConcentration = fr.insights.find((i) => i.category === 'concentration')
       assert.equal(frConcentration?.title, "Risque de concentration du chiffre d'affaires")
       assert.ok(fr.rows[0]?.churnFactors.includes('Client à transaction unique'))
-      assert.equal(fr.intelligence.label, "Nécessite de l'attention")
+      if (fr.intelligence.score === null) assert.fail(`expected a scored book, got refusal: ${fr.intelligence.reason}`)
+      else assert.equal(fr.intelligence.label, "Nécessite de l'attention")
     })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
