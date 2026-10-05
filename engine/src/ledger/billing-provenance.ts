@@ -1,10 +1,80 @@
 import { sql } from "drizzle-orm";
 import { lineRequiresReceipt } from "../payables/ap-capture-service.ts";
 import { type SqlExecutor } from "../platform/db.ts";
+import { laterProgressApplicationNumbers, laterProgressApplicationsRefusal } from "../projects/construction-billing.ts";
+import { laterVendorApplicationNumbers, laterVendorApplicationsRefusal } from "../projects/subcontracts.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
+
+/**
+ * A billing release refused because later draws build on the billed draw.
+ * Void and delete callers translate it into their own refusal type so the
+ * named remedy reaches the operator as a refusal, not a server error.
+ */
+export class BillingReleaseRefusedError extends Error {}
+
+/**
+ * Refuse releasing a progress draw's invoice (which returns the draw to
+ * approved, from where it can be voided) while a later non-void draw exists on
+ * the same project. Each later draw froze this draw's billed work into its
+ * previous-completed basis when it was created; un-billing this draw underneath
+ * it would leave that work counted as billed by a draw that no longer bills it.
+ * Locks the draw rows, then the project row — the order invoice generation
+ * uses, and the project lock application creation takes — so no later draw can
+ * be created between this check and the release.
+ */
+async function assertCustomerDrawReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+  const draws = (await tx.execute<{ project_id: string; application_number: number }>(sql`
+    select project_id, application_number from pay_applications
+     where org_id = ${orgId} and invoice_document_id = ${documentId}
+       and kind = 'progress' and status in ('invoiced', 'posted')
+     order by application_number
+     for update
+  `)).rows;
+  for (const draw of draws) {
+    await tx.execute(sql`select 1 from projects where org_id = ${orgId} and id = ${draw.project_id} for update`);
+    const later = await laterProgressApplicationNumbers(tx, orgId, draw.project_id, Number(draw.application_number));
+    if (later.length) {
+      throw new BillingReleaseRefusedError(
+        laterProgressApplicationsRefusal(Number(draw.application_number), later, "return to approved"),
+      );
+    }
+  }
+}
+
+/** Vendor-side counterpart: a billed subcontract draw cannot return to
+ * approved while a later non-void draw on the same subcontract carries its
+ * earned-to-date forward. Draw rows, then the subcontract row. */
+async function assertVendorDrawReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+  const draws = (await tx.execute<{ subcontract_id: string; application_number: number }>(sql`
+    select subcontract_id, application_number from vendor_pay_applications
+     where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
+     order by application_number
+     for update
+  `)).rows;
+  for (const draw of draws) {
+    await tx.execute(sql`select 1 from subcontracts where org_id = ${orgId} and id = ${draw.subcontract_id} for update`);
+    const later = await laterVendorApplicationNumbers(tx, orgId, draw.subcontract_id, Number(draw.application_number));
+    if (later.length) {
+      throw new BillingReleaseRefusedError(
+        laterVendorApplicationsRefusal(Number(draw.application_number), later, "return to approved"),
+      );
+    }
+  }
+}
+
+/**
+ * Refuse a void or delete whose billing release would return a draw to
+ * approved underneath a later draw. Void and delete call this before any
+ * effect so the refusal names the later draws; the release functions below
+ * repeat it under their own locks as the backstop.
+ */
+export async function assertBillingReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+  await assertCustomerDrawReleasable(tx, orgId, documentId);
+  await assertVendorDrawReleasable(tx, orgId, documentId);
+}
 
 /**
  * Release the billing provenance a generated invoice consumed. Called when a
@@ -24,6 +94,7 @@ export async function releaseBillingProvenance(
   documentId: string,
   audit: { actorId: string | null; reason: string },
 ): Promise<void> {
+  await assertCustomerDrawReleasable(tx, orgId, documentId);
   const retainer = (await tx.execute<{
     id: string;
     state: string;
@@ -147,7 +218,8 @@ export async function releaseBillingProvenance(
     update billing_requests set status = 'open', invoice_document_id = null
      where org_id = ${orgId} and invoice_document_id = ${documentId}
   `);
-  // Progress applications retain their line basis and can regenerate. A release
+  // Progress applications retain their line basis and can regenerate (the
+  // check at the top refused if a later draw builds on one). A release
   // has no progress lines: cancel that reservation with evidence so a fresh
   // release recalculates the current GL capacity instead of reopening an
   // approved application that can never bill. Preserve the original row.
@@ -194,6 +266,7 @@ export async function releaseVendorBillProvenance(
   documentId: string,
   audit: { actorId: string | null; reason: string },
 ): Promise<void> {
+  await assertVendorDrawReleasable(tx, orgId, documentId);
   await tx.execute(sql`
     with source as (
       select id, status from vendor_pay_applications

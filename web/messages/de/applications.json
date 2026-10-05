@@ -31,7 +31,8 @@
     "applicationInProgress": "Schließen Sie den laufenden Antrag ab oder stornieren Sie ihn, bevor Sie einen Nachtrag genehmigen.",
     "targetLineGone": "Die Zielposition existiert nicht mehr. Laden Sie neu und versuchen Sie es erneut.",
     "unallocatedAdditive": "Ein nicht zugeordneter Nachtrag muss additiv (positiv) sein.",
-    "onlyDraftVoid": "Nur ein Nachtrag im Entwurf kann storniert werden."
+    "onlyDraftVoid": "Nur ein Nachtrag im Entwurf kann storniert werden.",
+    "laterApplicationsOpen": "Antrag Nr. {number} kann nicht storniert werden, solange spätere Anträge nicht storniert sind ({later}). Stornieren Sie zuerst die späteren Anträge, den neuesten zuerst; bei einem fakturierten Antrag stornieren oder löschen Sie zuerst dessen Rechnung und stornieren dann den Antrag."
   },
   "empty": { "title": "Keine geeigneten Projekte", "description": "Aktivieren Sie einen Projekttyp mit Zahlungsanträgen und weisen Sie ihn einem Projekt zu.", "manageProjectTypes": "Projekttypen verwalten" },
   "summary": { "contractSum": "Auftragssumme", "retainageHeld": "Einbehalt", "committedCost": "Gebundene Kosten (offene Bestellungen)" },

@@ -31,7 +31,8 @@
     "applicationInProgress": "Terminez ou annulez la demande en cours avant d'approuver un avenant.",
     "targetLineGone": "La ligne cible du bordereau n'existe plus. Rechargez et réessayez.",
     "unallocatedAdditive": "Un avenant non affecté doit être additif (positif).",
-    "onlyDraftVoid": "Seul un avenant à l'état de brouillon peut être annulé."
+    "onlyDraftVoid": "Seul un avenant à l'état de brouillon peut être annulé.",
+    "laterApplicationsOpen": "La demande nº {number} ne peut pas être annulée tant que des demandes ultérieures ne sont pas annulées ({later}). Annulez d'abord les demandes ultérieures, en commençant par la plus récente ; pour une demande facturée, annulez ou supprimez sa facture, puis annulez la demande."
   },
   "empty": { "title": "Aucun projet admissible", "description": "Activez un type de projet utilisant les demandes de paiement, puis attribuez-le à un projet.", "manageProjectTypes": "Gérer les types de projet" },
   "summary": { "contractSum": "Montant du contrat", "retainageHeld": "Retenue détenue", "committedCost": "Coût engagé (BC ouverts)" },

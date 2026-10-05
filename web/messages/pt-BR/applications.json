@@ -31,7 +31,8 @@
     "applicationInProgress": "Conclua ou anule a solicitação atual antes de aprovar uma ordem de alteração.",
     "targetLineGone": "A linha de cronograma de destino não existe mais. Recarregue e tente novamente.",
     "unallocatedAdditive": "Uma ordem de alteração não alocada deve ser aditiva (positiva).",
-    "onlyDraftVoid": "Somente uma ordem de alteração em rascunho pode ser anulada."
+    "onlyDraftVoid": "Somente uma ordem de alteração em rascunho pode ser anulada.",
+    "laterApplicationsOpen": "A solicitação nº {number} não pode ser anulada enquanto houver solicitações posteriores não anuladas ({later}). Anule primeiro as solicitações posteriores, começando pela mais recente; para uma solicitação faturada, anule ou exclua a fatura e depois anule a solicitação."
   },
   "empty": { "title": "Nenhum projeto elegível", "description": "Ative um tipo de projeto que use solicitações de pagamento e atribua-o a um projeto.", "manageProjectTypes": "Gerenciar tipos de projeto" },
   "summary": { "contractSum": "Valor do contrato", "retainageHeld": "Retenção mantida", "committedCost": "Custo comprometido (pedidos abertos)" },

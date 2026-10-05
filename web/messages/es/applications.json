@@ -31,7 +31,8 @@
     "applicationInProgress": "Complete o anule la solicitud actual antes de aprobar una orden de cambio.",
     "targetLineGone": "La línea de programa de destino ya no existe. Recargue e inténtelo de nuevo.",
     "unallocatedAdditive": "Una orden de cambio sin asignar debe ser aditiva (positiva).",
-    "onlyDraftVoid": "Solo se puede anular una orden de cambio en borrador."
+    "onlyDraftVoid": "Solo se puede anular una orden de cambio en borrador.",
+    "laterApplicationsOpen": "La solicitud n.º {number} no se puede anular mientras haya solicitudes posteriores sin anular ({later}). Anule primero las solicitudes posteriores, empezando por la más reciente; si una solicitud está facturada, anule o elimine su factura y después anule la solicitud."
   },
   "empty": { "title": "No hay proyectos elegibles", "description": "Active un tipo de proyecto que use solicitudes de pago y asígnelo a un proyecto.", "manageProjectTypes": "Gestionar tipos de proyecto" },
   "summary": { "contractSum": "Importe del contrato", "retainageHeld": "Retención mantenida", "committedCost": "Coste comprometido (OC abiertas)" },

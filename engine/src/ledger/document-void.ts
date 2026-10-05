@@ -15,7 +15,7 @@ import {
   recordTransactionAudit,
   type TransactionAuditSnapshot,
 } from "../records/transaction-audit.ts";
-import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { assertBillingReleasable, BillingReleaseRefusedError, releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { InventoryError } from "../inventory/contracts.ts";
@@ -256,6 +256,10 @@ export async function requestDocumentVoid(
     // reservation below would otherwise answer with the generic draft/status
     // refusal and the operator would never see the file number or its remedy.
     await refuseUnavailablePayRunVoid(db, input.orgId, input.documentId);
+    // A draw invoice/bill whose void would return its draw to approved
+    // underneath a later draw refuses here, before the reservation and any
+    // approval routing, so the operator sees the later draws named.
+    await refuseDrawReleaseBehindLaterDraws(db, input.orgId, input.documentId);
     if (current.status === "posted") await assertPostingEffectsCompleteForVoid(db, input.orgId, input.documentId);
     // This compare-and-set is the single-winner claim. PostgreSQL locks the
     // aggregate row and rechecks the predicate after a concurrent waiter
@@ -636,6 +640,21 @@ async function assertRetainageDrawVoidable(
   }
 }
 
+/** Translate the billing-release fence into a void refusal so its named
+ * remedy reaches the operator instead of surfacing as a server error. */
+async function refuseDrawReleaseBehindLaterDraws(
+  executor: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  try {
+    await assertBillingReleasable(executor, orgId, documentId);
+  } catch (error) {
+    if (error instanceof BillingReleaseRefusedError) throw new DocumentVoidError(error.message, 409);
+    throw error;
+  }
+}
+
 /**
  * A released payroll bank file or fulfilled non-cash benefit locks its pay run against voiding.
  * Runs in the REQUEST path before the reservation, so the operator sees the
@@ -830,6 +849,11 @@ export async function completeRequestedDocumentVoid(
       }
 
       if (doc.status === "posted") await assertPostingEffectsCompleteForVoid(tx, orgId, documentId);
+
+      // Draw-sequence fence: voiding this invoice/bill returns its draw to
+      // approved, which later draws' cumulative basis forbids. Completion is
+      // the race backstop for a later draw created after the request.
+      await refuseDrawReleaseBehindLaterDraws(tx, orgId, documentId);
 
       // Retainage lifecycle fence. A draw invoice/bill whose holdback supports
       // live retainage releases cannot be voided out from under them: the void

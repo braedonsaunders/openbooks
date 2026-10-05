@@ -717,10 +717,16 @@ export async function createVendorPayApplication(input: {
     await assertFeatureEnabled(tx, input.orgId);
     const contract = (await tx.execute<{ status: string; default_retainage_percent: string }>(sql`select status, default_retainage_percent from subcontracts where org_id = ${input.orgId} and id = ${input.subcontractId} for update`));
     if (!contract.rows[0] || !["active", "substantially_complete"].includes(contract.rows[0].status)) throw new SubcontractError("Subcontract is not active");
+    // A billed draw is not open: the new draw carries its earned-to-date as
+    // previous_earned. That basis stays true because a billed draw can never
+    // return to approved or void while this later draw exists
+    // (voidVendorPayApplication and the vendor bill void/delete release refuse).
     const lifecycle = (await tx.execute<{ has_open: boolean; next_number: number; last_period: string | null }>(sql`
       select exists(select 1 from vendor_pay_applications where org_id = ${input.orgId} and subcontract_id = ${input.subcontractId} and status in ('draft','submitted','approved')) as has_open,
              coalesce(max(application_number), 0) + 1 as next_number,
-             max(period_end) filter (where status = 'billed') as last_period
+             -- ISO text, not a driver-parsed Date: comparing the input string
+             -- against a Date object is always false and would admit any period.
+             (max(period_end) filter (where status = 'billed'))::text as last_period
         from vendor_pay_applications where org_id = ${input.orgId} and subcontract_id = ${input.subcontractId}
     `));
     if (lifecycle.rows[0]!.has_open) throw new SubcontractError("Complete or void the open vendor application first");
@@ -942,15 +948,74 @@ export async function approveVendorPayApplication(orgId: string, userId: string,
   });
 }
 
+/**
+ * Later vendor applications on a subcontract that are not void, oldest first.
+ * Each later draw froze the earned-to-date of the last billed draw into its
+ * previous_earned when it was created, and every draw after it carries that
+ * figure forward, so returning an earlier draw to an unbilled state (voiding
+ * it, or releasing its bill back to approved) would leave its work counted as
+ * earned permanently. The caller must hold the subcontract row lock:
+ * application creation takes the same lock, so no later draw can appear
+ * between this read and the caller's transition.
+ */
+export async function laterVendorApplicationNumbers(
+  tx: SqlExecutor,
+  orgId: string,
+  subcontractId: string,
+  applicationNumber: number,
+): Promise<number[]> {
+  const rows = (await tx.execute<{ application_number: number }>(sql`
+    select application_number from vendor_pay_applications
+     where org_id = ${orgId} and subcontract_id = ${subcontractId}
+       and application_number > ${applicationNumber} and status <> 'void'
+     order by application_number
+  `)).rows;
+  return rows.map((row) => Number(row.application_number));
+}
+
+/** The refusal for un-billing a vendor draw that later draws build on. The
+ * remedy is the product's own path: void each later application newest first,
+ * and a billed one is first released by voiding or deleting its vendor bill. */
+export function laterVendorApplicationsRefusal(
+  applicationNumber: number,
+  later: readonly number[],
+  transition: "be voided" | "return to approved",
+): string {
+  const named = later.map((n) => `#${n}`).join(", ");
+  const subject = later.length === 1 ? `later vendor application ${named} is` : `later vendor applications ${named} are`;
+  const lead = transition === "be voided"
+    ? `Vendor application #${applicationNumber} cannot be voided`
+    : `This vendor bill is for vendor application #${applicationNumber}, which cannot return to approved`;
+  return `${lead} while ${subject} not void — ` +
+    "void the later vendor applications first, newest first; for a billed application, void or delete its vendor bill, then void the application";
+}
+
 export async function voidVendorPayApplication(orgId: string, userId: string, id: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
+    // Application row, then subcontract row: the same lock order bill
+    // generation uses, and the subcontract lock is the one creation takes.
+    const app = (await tx.execute<{
+      subcontract_id: string; application_number: number; status: string; vendor_bill_document_id: string | null;
+    }>(sql`
+      select subcontract_id, application_number, status, vendor_bill_document_id from vendor_pay_applications
+       where org_id = ${orgId} and id = ${id} for update
+    `)).rows[0];
+    if (!app) throw new SubcontractError("Vendor application not found");
+    if (!["draft", "submitted", "approved"].includes(app.status) || app.vendor_bill_document_id) {
+      throw new SubcontractError("A billed or void application cannot be voided here");
+    }
+    await tx.execute(sql`select 1 from subcontracts where org_id = ${orgId} and id = ${app.subcontract_id} for update`);
+    const later = await laterVendorApplicationNumbers(tx, orgId, app.subcontract_id, Number(app.application_number));
+    if (later.length) {
+      throw new SubcontractError(laterVendorApplicationsRefusal(Number(app.application_number), later, "be voided"));
+    }
     const result = (await tx.execute(sql`
       update vendor_pay_applications set status = 'void', updated_at = now(), updated_by = ${userId}
       where org_id = ${orgId} and id = ${id} and status in ('draft','submitted','approved') and vendor_bill_document_id is null returning id
     `));
     if (!result.rows.length) throw new SubcontractError("A billed or void application cannot be voided here");
-    await audit(tx, orgId, "vendor_pay_applications", id, "void", { after: { status: "void" } }, userId);
+    await audit(tx, orgId, "vendor_pay_applications", id, "void", { before: { status: app.status }, after: { status: "void" } }, userId);
   });
 }
 

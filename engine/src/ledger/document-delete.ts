@@ -6,7 +6,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
-import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance, releaseVendorRetainageProvenance } from "./billing-provenance.ts";
+import { assertBillingReleasable, BillingReleaseRefusedError, releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance, releaseVendorRetainageProvenance } from "./billing-provenance.ts";
 import { releaseCaptureMaterialization } from "../payables/ap-capture-service.ts";
 
 /**
@@ -107,6 +107,18 @@ export async function deleteDocument(
       throw new DeleteError(
         `${doc.documentNumber} is the source of ${downstream.rows[0].document_number} — remove the downstream document first`,
       );
+    }
+
+    // Deleting a draw's draft invoice/bill returns the draw to approved, from
+    // where it can be voided; refuse while a later draw builds on it, naming
+    // the later draws, rather than letting the release fail as a server error.
+    if (doc.kind === "customer_invoice" || doc.kind === "vendor_bill") {
+      try {
+        await assertBillingReleasable(tx, doc.orgId, documentId);
+      } catch (error) {
+        if (error instanceof BillingReleaseRefusedError) throw new DeleteError(error.message, 409);
+        throw error;
+      }
     }
 
     const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);

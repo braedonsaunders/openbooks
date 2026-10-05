@@ -31,7 +31,8 @@
     "applicationInProgress": "请先完成或作废当前申请，再审批变更单。",
     "targetLineGone": "目标工程量清单行已不存在，请重新加载后重试。",
     "unallocatedAdditive": "未分配的变更单必须为增加项（正数）。",
-    "onlyDraftVoid": "只能作废草稿状态的变更单。"
+    "onlyDraftVoid": "只能作废草稿状态的变更单。",
+    "laterApplicationsOpen": "后续申请（{later}）尚未作废，因此无法作废申请 #{number}。请先从最新的开始作废后续申请；对于已开票的申请，请先作废或删除其发票，再作废该申请。"
   },
   "empty": { "title": "没有符合条件的项目", "description": "启用使用付款申请的项目类型，然后将其分配给项目。", "manageProjectTypes": "管理项目类型" },
   "summary": { "contractSum": "合同总额", "retainageHeld": "已扣保留款", "committedCost": "已承诺成本（未结采购单）" },

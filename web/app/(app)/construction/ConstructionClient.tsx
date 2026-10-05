@@ -105,6 +105,10 @@ function constructionRefusal(
   fallback: string,
 ): string {
   if (typeof error !== "string" || error === "") return fallback;
+  // The draw-sequence refusal names the application and the later draws that
+  // block it; carry both numbers into the localized remedy.
+  const laterDraws = /^Application #(\d+) cannot be voided while later applications? (#\d+(?:, #\d+)*) (?:is|are) not void/.exec(error);
+  if (laterDraws) return t("errors.laterApplicationsOpen", { number: laterDraws[1]!, later: laterDraws[2]! });
   switch (error) {
     case "not found": return t("errors.notFound");
     case "This project's billing profile does not use applications for payment": return t("errors.notApplicationsBilling");
