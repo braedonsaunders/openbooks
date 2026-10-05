@@ -190,26 +190,27 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
     support: "supported",
     tier: "computation",
     assertion:
-      "Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when there is no budget or no cost yet, so an unbudgeted project can never report phantom progress.",
+      "Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when no cost has been incurred yet. With no budget, progress is unmeasurable and is refused rather than read as zero, so an unbudgeted project can neither report phantom progress nor have revenue already recognized re-planned to nothing.",
     facts: [
       "Budget 500,000.00 with 125,000.00 of cost incurred: 25% complete.",
       "Cost of 600,000.00 against the same budget: complete, capped at 100%, not 120%.",
-      "No budget, or no cost incurred: 0% complete.",
+      "No cost incurred against the budget: 0% complete.",
+      "No budget: progress is unmeasurable, not 0%.",
     ],
     expected: {
       values: {
         quarterSpent: "25.0000",
         overrunCapped: "100.0000",
-        noBudget: "0.0000",
+        noBudget: "unmeasurable",
         noCost: "0.0000",
       },
     },
     run: () => ({
       values: {
-        quarterSpent: costToCostPercent("500000", "125000"),
-        overrunCapped: costToCostPercent("500000", "600000"),
-        noBudget: costToCostPercent("0", "100"),
-        noCost: costToCostPercent("500000", "0"),
+        quarterSpent: costToCostPercent("500000", "125000") ?? "unmeasurable",
+        overrunCapped: costToCostPercent("500000", "600000") ?? "unmeasurable",
+        noBudget: costToCostPercent("0", "100") ?? "unmeasurable",
+        noCost: costToCostPercent("500000", "0") ?? "unmeasurable",
       },
     }),
   },
