@@ -36,6 +36,21 @@ export type CashCoverage = {
   covered: boolean
 }
 
+export type CashForecastWeek = {
+  label: string
+  inflow: string
+  outflow: string
+  net: string
+  endingCash: string
+}
+
+export type CashForecast = {
+  /** Weekly magnitudes only — the week's entries stay on the dashboard. */
+  weeks: CashForecastWeek[]
+  projectedEnd: string
+  horizonWeeks: number
+}
+
 export type CashWidgetMetrics = {
   cashLowest: WidgetValue<CashLowestPoint> | null
   cashBurn: WidgetValue<CashBurn> | null
@@ -44,6 +59,7 @@ export type CashWidgetMetrics = {
   cashCollectDays: WidgetValue<number | null> | null
   /** Mean days to pay (null = no payment history). */
   cashPayDays: WidgetValue<number | null> | null
+  cashForecast: WidgetValue<CashForecast> | null
 }
 
 export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
@@ -52,13 +68,14 @@ export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
   cashCoverage: null,
   cashCollectDays: null,
   cashPayDays: null,
+  cashForecast: null,
 }
 
 export async function loadCashWidgetMetrics(
   ctx: DashboardWidgetContext,
   need: (...fields: (keyof CashWidgetMetrics)[]) => boolean,
 ): Promise<Partial<CashWidgetMetrics>> {
-  if (!need('cashLowest', 'cashBurn', 'cashCoverage', 'cashCollectDays', 'cashPayDays')) return {}
+  if (!need('cashLowest', 'cashBurn', 'cashCoverage', 'cashCollectDays', 'cashPayDays', 'cashForecast')) return {}
   const read = ctx.cashPosition
   if (!read) return {}
   let position
@@ -76,6 +93,7 @@ export async function loadCashWidgetMetrics(
       if (need('cashCoverage')) out.cashCoverage = refused
       if (need('cashCollectDays')) out.cashCollectDays = refused
       if (need('cashPayDays')) out.cashPayDays = refused
+      if (need('cashForecast')) out.cashForecast = refused
       return out
     }
     throw error
@@ -107,6 +125,22 @@ export async function loadCashWidgetMetrics(
   }
   if (need('cashPayDays')) {
     out.cashPayDays = { available: true, value: position.dpo }
+  }
+  if (need('cashForecast')) {
+    out.cashForecast = {
+      available: true,
+      value: {
+        weeks: position.weeks.map((week) => ({
+          label: week.label,
+          inflow: week.inflow,
+          outflow: week.outflow,
+          net: week.net,
+          endingCash: week.endingCash,
+        })),
+        projectedEnd: position.projectedEnd,
+        horizonWeeks: position.horizonWeeks,
+      },
+    }
   }
   if (need('cashCoverage')) {
     // No AP outstanding means no coverage ratio exists — the tile names

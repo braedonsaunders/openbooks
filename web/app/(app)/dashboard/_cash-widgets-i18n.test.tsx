@@ -3,9 +3,25 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { registerHooks } from 'node:module'
 import './_dashboard-render-harness'
 import { mountDashboard } from './_dashboard-render-harness'
 import type { DashboardMetrics } from './_metrics'
+
+// The forecast chart draws on an ECharts canvas, which jsdom cannot host:
+// stub the canvas host like the analytics view tests do. The tile shell,
+// headline, context and the refusal below it still render for real.
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === '@openbooks/analytics/viz') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function InsightChart(){return null}',
+      }
+    }
+    return next(specifier, context)
+  },
+})
 
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
@@ -156,6 +172,60 @@ test('settlement tile names the side with no history', async () => {
     assert.ok(html.includes('Pay 41d'), 'the side with history still renders')
     assert.ok(html.includes('No collection history yet'), 'the missing side is named')
     assert.ok(!html.includes('Collect 38d'), 'no invented collect figure renders')
+  } finally {
+    await unmount()
+  }
+})
+
+function forecastData() {
+  return {
+    baseCurrency: 'USD',
+    asOfDate: '2026-09-16',
+    cashForecast: {
+      available: true,
+      value: {
+        weeks: [
+          { label: 'Sep 14 – Sep 20', inflow: '5000.0000', outflow: '8450.2500', net: '-3450.2500', endingCash: '1234.5600' },
+          { label: 'Sep 21 – Sep 27', inflow: '6000.0000', outflow: '5234.4400', net: '765.5600', endingCash: '2000.1200' },
+        ],
+        projectedEnd: '2000.1200',
+        horizonWeeks: 13,
+      },
+    },
+  } as unknown as DashboardMetrics
+}
+
+// The forecast chart is the Cash Flow dashboard's own chart (same option
+// builder, same weekly rows): the headline is the projected end and the
+// context names the horizon.
+test('forecast chart renders the projected end with its horizon', async () => {
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="chart-cash-forecast" data={forecastData()} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('Cash forecast'), 'the tile title resolves through dashboard.widgets copy')
+    assert.ok(html.includes('2,000.12'), 'the headline is the projected end as money')
+    assert.ok(html.includes('13-week forecast'), 'the context names the horizon')
+  } finally {
+    await unmount()
+  }
+})
+
+test('forecast chart refuses by name when the rate is missing', async () => {
+  const data = {
+    ...forecastData(),
+    cashForecast: { available: false, reason: 'no spot rate for EUR→USD on or before 2026-09-16' },
+  } as unknown as DashboardMetrics
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="chart-cash-forecast" data={data} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('Cash forecast'), 'the tile shell still renders')
+    assert.ok(html.includes('no spot rate'), 'the tile shows the refusal instead of failing the dashboard')
   } finally {
     await unmount()
   }
