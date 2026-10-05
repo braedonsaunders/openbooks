@@ -3782,7 +3782,13 @@
       "customerLifeMonths": "Durée de vie client attendue (mois)",
       "renewalCommensurateThresholdPercent": "Seuil de proportionnalité du renouvellement",
       "contractCostBasisLabel": "Base d'amortissement",
-      "contractCostAssetAccount": "Compte d'actif des coûts du contrat"
+      "contractCostAssetAccount": "Compte d'actif des coûts du contrat",
+      "amountMinor": "Montant de la remise (sous-unités)",
+      "feeAmountMinor": "Montant des frais (sous-unités)",
+      "feePercent": "Pourcentage de frais",
+      "itemCategory": "Catégorie d'article",
+      "percentValue": "Pourcentage de remise",
+      "usageCount": "Utilisations"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
@@ -3909,7 +3915,8 @@
       "zonedDateTime": "Saisissez un horodatage ISO avec Z ou un décalage explicite, par exemple 2026-10-01T09:00:00-04:00. Le décalage est conservé.",
       "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris.",
       "contractCostPracticalExpedient": "Quand elle est activée, les coûts dont la période d’avantage est de douze mois ou moins sont passés en charges aussitôt au lieu d’être capitalisés.",
-      "contractCostCommensurate": "Une commission de renouvellement égale ou supérieure à cette part de la commission initiale limite l’amortissement à la durée du contrat, même en base de durée de vie client."
+      "contractCostCommensurate": "Une commission de renouvellement égale ou supérieure à cette part de la commission initiale limite l’amortissement à la durée du contrat, même en base de durée de vie client.",
+      "minorAmount": "Sous-unités entières de la devise : 1000 vaut 10,00 USD."
     },
     "options": {
       "usageAggregation": {
@@ -4514,6 +4521,21 @@
       "contractCostLifeSource": {
         "manual": "Manuelle",
         "derived": "Dérivé des métriques SaaS"
+      },
+      "promotionKind": {
+        "percent": "Remise en pourcentage",
+        "amount": "Montant fixe",
+        "free_shipping": "Livraison offerte",
+        "buy_x_get_y": "X achetés, Y offerts"
+      },
+      "promotionStatus": {
+        "draft": "Brouillon",
+        "active": "Actif",
+        "archived": "Archivée"
+      },
+      "restockingFeeKind": {
+        "percent": "Pourcentage de la valeur créditée",
+        "fixed": "Montant fixe"
       }
     },
     "laborCosting": {

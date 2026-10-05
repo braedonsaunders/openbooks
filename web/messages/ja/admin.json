@@ -3902,7 +3902,13 @@
       "customerLifeMonths": "想定顧客ライフ（月数）",
       "renewalCommensurateThresholdPercent": "更新手数料の相当性しきい値",
       "contractCostBasisLabel": "償却基準",
-      "contractCostAssetAccount": "契約コスト資産勘定"
+      "contractCostAssetAccount": "契約コスト資産勘定",
+      "amountMinor": "割引額（補助単位）",
+      "feeAmountMinor": "手数料金額（補助単位）",
+      "feePercent": "手数料率",
+      "itemCategory": "商品カテゴリ",
+      "percentValue": "割引率",
+      "usageCount": "利用回数"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -4029,7 +4035,8 @@
       "zonedDateTime": "Z または明示的なオフセットを含む ISO 日時を入力してください（例：2026-10-01T09:00:00-04:00）。オフセットは保持されます。",
       "ianaTimezone": "Asia/Tokyo などの IANA タイムゾーンを入力してください。",
       "contractCostPracticalExpedient": "オンの場合、受益期間が12か月以下のコストは資産化せず即時費用処理されます。",
-      "contractCostCommensurate": "初回手数料に対するこの割合以上の更新手数料は、顧客ライフ基準でも償却を契約期間に限定します。"
+      "contractCostCommensurate": "初回手数料に対するこの割合以上の更新手数料は、顧客ライフ基準でも償却を契約期間に限定します。",
+      "minorAmount": "通貨の補助単位の整数値。1000は米ドルで10.00を意味します。"
     },
     "options": {
       "usageAggregation": {
@@ -4634,6 +4641,21 @@
       "contractCostLifeSource": {
         "manual": "手動",
         "derived": "SaaS指標から導出"
+      },
+      "promotionKind": {
+        "percent": "割引率",
+        "amount": "定額",
+        "free_shipping": "送料無料",
+        "buy_x_get_y": "X点購入でY点無料"
+      },
+      "promotionStatus": {
+        "draft": "下書き",
+        "active": "有効",
+        "archived": "アーカイブ済み"
+      },
+      "restockingFeeKind": {
+        "percent": "返金額に対する割合",
+        "fixed": "定額"
       }
     },
     "invoicing": {

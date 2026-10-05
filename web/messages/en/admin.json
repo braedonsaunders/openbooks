@@ -3827,7 +3827,13 @@
       "customerLifeMonths": "Expected customer life (months)",
       "renewalCommensurateThresholdPercent": "Renewal commensurate threshold",
       "contractCostBasisLabel": "Amortization basis",
-      "contractCostAssetAccount": "Contract cost asset account"
+      "contractCostAssetAccount": "Contract cost asset account",
+      "amountMinor": "Discount amount (minor units)",
+      "feeAmountMinor": "Fee amount (minor units)",
+      "feePercent": "Fee percent",
+      "itemCategory": "Item category",
+      "percentValue": "Percent off",
+      "usageCount": "Times used"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -3954,7 +3960,8 @@
       "zonedDateTime": "Enter an ISO timestamp with Z or an explicit offset, such as 2026-10-01T09:00:00-04:00. The offset is preserved.",
       "ianaTimezone": "Enter an IANA time zone, such as America/Toronto.",
       "contractCostPracticalExpedient": "When on, costs whose benefit period is twelve months or less expense immediately instead of capitalizing.",
-      "contractCostCommensurate": "A renewal commission at or above this share of the initial commission confines amortization to the contract term, even under customer-life basis."
+      "contractCostCommensurate": "A renewal commission at or above this share of the initial commission confines amortization to the contract term, even under customer-life basis.",
+      "minorAmount": "Whole minor units of the currency: 1000 means 10.00 in USD."
     },
     "options": {
       "usageAggregation": {
@@ -4559,6 +4566,21 @@
       "contractCostLifeSource": {
         "manual": "Manual",
         "derived": "Derived from SaaS metrics"
+      },
+      "promotionKind": {
+        "percent": "Percent off",
+        "amount": "Fixed amount",
+        "free_shipping": "Free shipping",
+        "buy_x_get_y": "Buy X get Y"
+      },
+      "promotionStatus": {
+        "draft": "Draft",
+        "active": "Active",
+        "archived": "Archived"
+      },
+      "restockingFeeKind": {
+        "percent": "Percent of credited value",
+        "fixed": "Fixed amount"
       }
     },
     "payroll": {

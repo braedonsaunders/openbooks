@@ -493,6 +493,7 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'projects', iconKey: 'briefcase' },
   { key: 'compliance', iconKey: 'shield' },
   { key: 'billing', iconKey: 'hash' },
+  { key: 'sales', iconKey: 'tag' },
   { key: 'revenue', iconKey: 'trending-up' },
   { key: 'inventory', iconKey: 'package' },
   { key: 'workforce', iconKey: 'users' },

@@ -108,7 +108,11 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     assert.ok(!allVisible.includes(key), `${key} must not appear in the setup rail`)
   }
 
-  assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), [])
+  // Restocking fee policies are the one visible inventory-rail entity:
+  // merchant return-fee rules configured in Setup, not on an operational
+  // record. Everything rehomed stays off the rail.
+  assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), ['restocking-fee-policies'])
+  assert.deepEqual(byGroup.get('sales')?.map((entity) => entity.key), ['promotions'])
   assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories'])
 })
 

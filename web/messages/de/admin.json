@@ -3902,7 +3902,13 @@
       "customerLifeMonths": "Erwartete Kundenbindungsdauer (Monate)",
       "renewalCommensurateThresholdPercent": "Schwelle für angemessene Verlängerungsprovision",
       "contractCostBasisLabel": "Amortisationsbasis",
-      "contractCostAssetAccount": "Vermögenskonto für Vertragskosten"
+      "contractCostAssetAccount": "Vermögenskonto für Vertragskosten",
+      "amountMinor": "Rabattbetrag (Nebeneinheiten)",
+      "feeAmountMinor": "Gebührenbetrag (Nebeneinheiten)",
+      "feePercent": "Gebühr in Prozent",
+      "itemCategory": "Artikelkategorie",
+      "percentValue": "Rabatt in Prozent",
+      "usageCount": "Nutzungen"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
@@ -4029,7 +4035,8 @@
       "zonedDateTime": "Geben Sie einen ISO-Zeitstempel mit Z oder einem expliziten Offset ein, z. B. 2026-10-01T09:00:00-04:00. Der Offset bleibt erhalten.",
       "ianaTimezone": "Geben Sie eine IANA-Zeitzone ein, z. B. Europe/Berlin.",
       "contractCostPracticalExpedient": "Wenn aktiv, werden Kosten mit einem Nutzenzeitraum von zwölf Monaten oder weniger sofort aufgewandt statt aktiviert.",
-      "contractCostCommensurate": "Eine Folgeprovision ab diesem Anteil der Erstprovision begrenzt die Abschreibung auf die Vertragslaufzeit, auch bei Kundenlaufzeit-Basis."
+      "contractCostCommensurate": "Eine Folgeprovision ab diesem Anteil der Erstprovision begrenzt die Abschreibung auf die Vertragslaufzeit, auch bei Kundenlaufzeit-Basis.",
+      "minorAmount": "Ganze Nebeneinheiten der Währung: 1000 bedeutet 10,00 USD."
     },
     "options": {
       "usageAggregation": {
@@ -4634,6 +4641,21 @@
       "contractCostLifeSource": {
         "manual": "Manuell",
         "derived": "Aus SaaS-Kennzahlen abgeleitet"
+      },
+      "promotionKind": {
+        "percent": "Prozentrabatt",
+        "amount": "Festbetrag",
+        "free_shipping": "Gratisversand",
+        "buy_x_get_y": "X kaufen, Y gratis"
+      },
+      "promotionStatus": {
+        "draft": "Entwurf",
+        "active": "Aktiv",
+        "archived": "Archiviert"
+      },
+      "restockingFeeKind": {
+        "percent": "Prozent des Gutschriftswerts",
+        "fixed": "Festbetrag"
       }
     },
     "bankFeeds": {
