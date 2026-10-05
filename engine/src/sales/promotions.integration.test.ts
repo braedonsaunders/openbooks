@@ -23,13 +23,26 @@ async function enablePromotions(orgId: string): Promise<void> {
   assert.equal(result.rows.length, 1)
 }
 
-async function draftSale(org: ScratchOrg, lines: { itemId: string; quantity: string; unitPrice: string; amount: string }[]): Promise<string> {
+async function ensureIsoRegistry(): Promise<void> {
+  // ISO 4217 publishes BHD at three minor units and JPY at zero. The engine
+  // must agree with the published exponents, never with hundredths: seed
+  // the rows when absent and fail loudly when the registry disagrees.
+  await withBypassContext(() => db.execute(sql`
+    insert into currencies (code, name, minor_units)
+    values ('BHD', 'Bahraini Dinar', 3), ('JPY', 'Japanese Yen', 0)
+    on conflict (code) do nothing`))
+  const rows = (await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`
+    select code, minor_units from currencies where code in ('BHD', 'JPY') order by code`))).rows
+  assert.deepEqual(rows, [{ code: 'BHD', minor_units: 3 }, { code: 'JPY', minor_units: 0 }])
+}
+
+async function draftSale(org: ScratchOrg, lines: { itemId: string; quantity: string; unitPrice: string; amount: string }[], currency = 'CAD'): Promise<string> {
   const documentId = randomUUID()
   await db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            currency, fx_rate, status, subtotal, tax_total, total, custom)
     values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-${documentId.slice(0, 8)}`}, ${org.customerId},
-            ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', '0', '0', '0', '{}'::jsonb)`)
+            ${org.subsidiaryId}, ${org.date}, ${currency}, 1, 'draft', '0', '0', '0', '{}'::jsonb)`)
   let number = 1
   for (const line of lines) {
     await db.execute(sql`
@@ -276,6 +289,106 @@ test('a promotion applies once per document and stacked discounts never exceed t
     await assert.rejects(apply('TENMORE'), (error: unknown) => error instanceof PromotionRefusal
       && error.code === 'fully_discounted' && /fully discounted/.test(error.message) && /1000\.00 CAD/.test(error.message))
     assert.equal(await withOrg(org.orgId, () => usageCount(org.orgId, promotions.TENMORE!)), 0)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('amount promotion applies ISO fils on BHD, never hundredths', { skip: !DB }, async () => {
+  // The operator configures 0.234 BHD; Setup stores 234 fils. The writer
+  // must apply 234 fils: reading hundredths would charge 2.340 BHD instead.
+  await ensureIsoRegistry()
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'BHD234', name: 'Fils amount', kind: 'amount', amountMinor: 234n, currency: 'BHD',
+      discountAccountId: org.accounts.revenue,
+    })))
+    await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
+    const documentId = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '1', unitPrice: '1.234', amount: '1.234' },
+    ], 'BHD'))
+    const applied = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId, code: 'BHD234', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(applied.discountMinor, '234')
+    assert.equal(applied.minorUnits, 3)
+    assert.equal(applied.lines.length, 1)
+    const stored = await withOrg(org.orgId, () => discountLines(org.orgId, documentId))
+    assert.deepEqual(stored.map((line) => line.amount), ['-0.2340'])
+    assert.ok(stored.every((line) => line.promotion_id === promotion.id))
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('percent promotion deals fils on BHD and whole yen on JPY', { skip: !DB }, async () => {
+  // ISO 4217: BHD carries three decimals, JPY none. Ten percent of 1.234
+  // BHD is 123 fils on a -0.1230 line; ten percent of 100 yen is 10 yen on
+  // a -10.0000 line. The returned total, the stored lines, and the quantum
+  // agree on every currency.
+  await ensureIsoRegistry()
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'TEN', name: 'Ten percent', kind: 'percent', percentValue: '10',
+      discountAccountId: org.accounts.revenue,
+    })))
+    await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
+    const filsDoc = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '1', unitPrice: '1.234', amount: '1.234' },
+    ], 'BHD'))
+    const fils = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId: filsDoc, code: 'TEN', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(fils.discountMinor, '123')
+    assert.equal(fils.minorUnits, 3)
+    assert.deepEqual((await withOrg(org.orgId, () => discountLines(org.orgId, filsDoc))).map((line) => line.amount), ['-0.1230'])
+    const yenDoc = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.service, quantity: '1', unitPrice: '100', amount: '100' },
+    ], 'JPY'))
+    const yen = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId: yenDoc, code: 'TEN', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(yen.discountMinor, '10')
+    assert.equal(yen.minorUnits, 0)
+    assert.deepEqual((await withOrg(org.orgId, () => discountLines(org.orgId, yenDoc))).map((line) => line.amount), ['-10.0000'])
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('unknown registry precision refuses before any line is written', { skip: !DB }, async () => {
+  // XX9 is absent from the ISO registry: the application refuses with the
+  // seeded-precision remedy and writes no discount line and no redemption.
+  const rows = (await withBypassContext(() => db.execute<{ code: string }>(sql`
+    select code from currencies where code = 'XX9'`))).rows
+  assert.equal(rows.length, 0)
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'XX9TEN', name: 'Ten percent', kind: 'percent', percentValue: '10',
+      discountAccountId: org.accounts.revenue,
+    })))
+    await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
+    const documentId = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '1', unitPrice: '10', amount: '10' },
+    ], 'XX9'))
+    await assert.rejects(
+      withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+        documentId, code: 'XX9TEN', allowedSubsidiaryIds: null,
+      }))),
+      (error: unknown) => error instanceof PromotionRefusal && error.code === 'currency_precision_unknown'
+        && error.status === 422 && /platform currency seed/.test(error.remedy ?? ''),
+    )
+    assert.deepEqual(await withOrg(org.orgId, () => discountLines(org.orgId, documentId)), [])
+    assert.equal(await withOrg(org.orgId, () => usageCount(org.orgId, promotion.id)), 0)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

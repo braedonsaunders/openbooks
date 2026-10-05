@@ -11,7 +11,7 @@ import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting-dispatch.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { toCents } from '@openbooks/engine/money'
+import { quantumScale, roundDiv, toUnits } from '@openbooks/engine/money'
 import {
   recordRestockingFeeWaiver,
   resolveRestockingFee,
@@ -381,6 +381,25 @@ async function customerCreditLine(
 type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMinor: bigint }
 
 /**
+ * The return currency's ISO quantum from the authoritative registry.
+ * Credited line values enter fee math as ISO minors of the credit
+ * currency (Setup stores fixed policy amounts the same way); an unknown
+ * precision refuses before any fee resolves instead of guessing hundredths.
+ */
+async function creditQuantum(orgId: string, currency: string): Promise<number> {
+  const row = (await db.execute<{ minor_units: number | null }>(sql`
+    select minor_units from currencies where code = ${currency}`)).rows[0]
+  const quantum = row?.minor_units
+  if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
+    throw new ReturnRefusal(
+      `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
+      'currency_precision_unknown', 422,
+      'Ask your system administrator to restore the missing row with the platform currency seed')
+  }
+  return quantum
+}
+
+/**
  * Resolve the restocking fee for accepted return value, shared by the fee
  * preview and the inspect write path so both price the same lines.
  */
@@ -428,6 +447,8 @@ export async function previewReturnRestockingFee(input: {
     select document_date::text, currency from documents
      where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
   if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
+  const quantum = await creditQuantum(input.orgId, header.currency)
+  const scale = quantumScale(quantum)
   const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
   const credited: CreditedReturnLine[] = []
   const claims: OrderLineClaims = new Map()
@@ -437,7 +458,7 @@ export async function previewReturnRestockingFee(input: {
     const credit = await customerCreditLine(input.orgId, current.id, {
       lineId, accepted, disposition: null, dispositionLocationId: null,
     }, rmaLine.sourceIssueMovementId, claims)
-    if (credit) credited.push({ lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: toCents(credit.amount) })
+    if (credit) credited.push({ lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: roundDiv(toUnits(credit.amount), scale) })
   }
   return resolveInspectionRestockingFee({
     orgId: input.orgId,
@@ -567,6 +588,8 @@ export async function inspectReturnAuthorization(input: {
       select party_id, subsidiary_id, document_date::text, status, currency
         from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
     if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
+    const quantum = await creditQuantum(input.orgId, header.currency)
+    const scale = quantumScale(quantum)
     let creditId = current.customerCreditId
     let awaitingCreditApproval = false
     if (!creditId) {
@@ -580,7 +603,7 @@ export async function inspectReturnAuthorization(input: {
         const line = await customerCreditLine(input.orgId, current.id, decision, rmaLine.sourceIssueMovementId, claims)
         if (line) {
           creditLines.push(line)
-          credited.push({ lineId: decision.lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: toCents(line.amount) })
+          credited.push({ lineId: decision.lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: roundDiv(toUnits(line.amount), scale) })
         }
       }
       if (creditLines.length === 0) throw new ReturnRefusal('Accept at least one unit before issuing a customer credit', 'invalid_input', 422, 'Accept a received quantity for at least one line')

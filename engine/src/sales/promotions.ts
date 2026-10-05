@@ -6,8 +6,8 @@ import {
   apportion,
   formatMoney,
   fromUnits,
+  quantumScale,
   roundDiv,
-  toCents,
   toUnits,
 } from "../money/money.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -32,6 +32,7 @@ export type PromotionRefusalCode =
   | "discount_account_missing"
   | "free_shipping_unsupported"
   | "currency_mismatch"
+  | "currency_precision_unknown"
   | "changed_concurrently";
 
 /** A promotion lifecycle refusal with the stable detail returned by API routes. */
@@ -373,17 +374,42 @@ type EligibleLine = {
 export type AppliedPromotionLine = {
   lineId: string;
   lineNumber: number;
+  /** Share of the discount in ISO minors of the document currency. */
   amountMinor: string;
 };
 
 export type ApplyPromotionResult = {
   promotionId: string;
   code: string;
+  /** Total discount in ISO minors of currency (never hundredths-guessed). */
   discountMinor: string;
   currency: string;
-  minorUnits: number | null;
+  /** The registry quantum the computation used; always present, because an
+   *  unknown precision refuses before any line is written. */
+  minorUnits: number;
   lines: AppliedPromotionLine[];
 };
+
+/**
+ * The document currency's ISO quantum from the authoritative registry.
+ * Refuses before any write when the row is missing or unusable, so later
+ * math can rely on ISO minors without guessing hundredths.
+ */
+async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<number> {
+  const row = (await runner.execute<{ minor_units: number | null }>(sql`
+    select minor_units from currencies where code = ${currency}
+  `)).rows[0];
+  const quantum = row?.minor_units;
+  if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
+    throw refusal(
+      `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
+      "currency_precision_unknown",
+      422,
+      "Ask your system administrator to restore the missing row with the platform currency seed",
+    );
+  }
+  return quantum;
+}
 
 /**
  * Apply a promotion code to a draft sales document: resolve the promotion,
@@ -423,6 +449,8 @@ export async function applyPromotion(
       "Set the discount account on the promotion in Setup → Sales → Promotions",
     );
   }
+  const quantum = await currencyQuantum(runner, document.currency);
+  const scale = quantumScale(quantum);
   const { lines, eligibleUnits, offsetUnits } = await loadEligibleLines(runner, orgId, document.id);
   if (lines.length === 0) {
     throw refusal(
@@ -432,9 +460,10 @@ export async function applyPromotion(
       "Add a positively priced line before applying the promotion",
     );
   }
-  // What is left to discount, in whole minor units, rounded down so the
-  // stacked discounts can never take the discountable lines below zero.
-  const remainingMinor = (eligibleUnits - offsetUnits) / 100n;
+  // What is left to discount, in ISO minors of the document currency,
+  // rounded down so the stacked discounts can never take the discountable
+  // lines below zero.
+  const remainingMinor = (eligibleUnits - offsetUnits) / scale;
   if (remainingMinor <= 0n) {
     throw refusal(
       `Document ${document.document_number} is already fully discounted: its discount and credit lines offset all ${formatMoney(fromUnits(eligibleUnits))} ${document.currency} of discountable lines`,
@@ -443,7 +472,7 @@ export async function applyPromotion(
       "Remove a discount line from the draft (Remove line in the line grid) and save before applying another promotion",
     );
   }
-  const computed = computeDiscountShares(promotion, lines, document);
+  const computed = computeDiscountShares(promotion, lines, document, quantum, scale);
   if (computed.every((share) => share === 0n)) {
     throw refusal(`Promotion ${promotion.code} gives no discount on this document`, "below_threshold", 422, "Check the promotion value against the document lines");
   }
@@ -451,7 +480,7 @@ export async function applyPromotion(
   // A stacked promotion is capped at the remaining undiscounted amount and
   // re-dealt across the same lines in proportion, summing exactly.
   const shares = computedMinor > remainingMinor ? apportion(remainingMinor, computed) : computed;
-  const inserted = await insertDiscountLines(runner, orgId, actorId, document, promotion, lines, shares, discountAccountId);
+  const inserted = await insertDiscountLines(runner, orgId, actorId, document, promotion, lines, shares, discountAccountId, scale);
   await countRedemption(runner, orgId, promotion);
   const total = shares.reduce((sum, share) => sum + share, 0n);
   await writeDocumentAudit(runner, orgId, actorId, document.id, {
@@ -463,17 +492,12 @@ export async function applyPromotion(
     currency: document.currency,
     lineIds: inserted.map((line) => line.lineId),
   });
-  // Display precision rides with the result from the authoritative registry;
-  // a missing row refuses at render, never guesses hundredths.
-  const precision = (await runner.execute<{ minor_units: number | null }>(sql`
-    select minor_units from currencies where code = ${document.currency}
-  `)).rows[0];
   return {
     promotionId: promotion.id,
     code: promotion.code,
     discountMinor: total.toString(),
     currency: document.currency,
-    minorUnits: precision?.minor_units ?? null,
+    minorUnits: quantum,
     lines: inserted,
   };
 }
@@ -620,16 +644,17 @@ async function loadEligibleLines(
 
 const MICRO_PER_UNIT = 1_000_000n;
 
-/** Per-line discount shares in minor units, summing exactly to the promotion value. */
-function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], document: LockedDocument): bigint[] {
+/** Per-line discount shares in ISO minors, summing exactly to the promotion value. */
+function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], document: LockedDocument, quantum: number, scale: bigint): bigint[] {
+  const toMinor = (units4dp: bigint): bigint => roundDiv(units4dp, scale);
   switch (promotion.kind) {
     case "percent": {
-      // Exact 4dp shares, then largest-remainder dealing to the cent so the
-      // inserted lines sum to the penny the operator was promised.
+      // Exact 4dp shares, then largest-remainder dealing to the ISO minor
+      // so the inserted lines sum to the amount the operator was promised.
       const exact = lines.map((line) =>
         fromUnits(roundDiv(line.amount_units * toUnits(promotion.percentValue!), MICRO_PER_UNIT)),
       );
-      return allocateLargestRemainder(exact, 2).map(toCents);
+      return allocateLargestRemainder(exact, quantum).map((dealt) => toMinor(toUnits(dealt)));
     }
     case "amount": {
       if (promotion.currency !== document.currency) {
@@ -640,7 +665,10 @@ function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], docu
           "Price the promotion in the document currency or invoice in the promotion currency",
         );
       }
-      const base = lines.map((line) => toCents(fromUnits(line.amount_units)));
+      // The configured amount is stored ISO minors (Setup converts operator
+      // majors with the currency exponent), so it compares directly against
+      // the ISO-minor line base: no hundredths reinterpretation.
+      const base = lines.map((line) => toMinor(line.amount_units));
       const total = promotion.amountMinor! < base.reduce((sum, minor) => sum + minor, 0n)
         ? promotion.amountMinor!
         : base.reduce((sum, minor) => sum + minor, 0n);
@@ -648,7 +676,7 @@ function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], docu
       return apportion(total, base);
     }
     case "buy_x_get_y": {
-      return buyXGetYShares(promotion, lines);
+      return buyXGetYShares(promotion, lines, scale);
     }
     case "free_shipping": {
       // Documents carry no shipping charges in this release, so there is
@@ -664,7 +692,7 @@ function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], docu
   }
 }
 
-function buyXGetYShares(promotion: Promotion, lines: EligibleLine[]): bigint[] {
+function buyXGetYShares(promotion: Promotion, lines: EligibleLine[], scale: bigint): bigint[] {
   const buy = promotion.buyQuantity!;
   const get = promotion.getQuantity!;
   const wholeUnits = lines.map((line) => line.quantity_units / 10_000n);
@@ -694,8 +722,8 @@ function buyXGetYShares(promotion: Promotion, lines: EligibleLine[]): bigint[] {
   for (const index of order) {
     if (remaining <= 0n) break;
     const take = wholeUnits[index]! < remaining ? wholeUnits[index]! : remaining;
-    // Whole units times 4dp unit-price units, rounded once to the minor unit.
-    shares[index] = roundDiv(take * lines[index]!.unit_price_units, 100n);
+    // Whole units times 4dp unit-price units, rounded once to the ISO minor.
+    shares[index] = roundDiv(take * lines[index]!.unit_price_units, scale);
     remaining -= take;
   }
   return shares;
@@ -710,14 +738,16 @@ async function insertDiscountLines(
   lines: EligibleLine[],
   shares: bigint[],
   discountAccountId: string,
+  scale: bigint,
 ): Promise<AppliedPromotionLine[]> {
   const inserted: AppliedPromotionLine[] = [];
   let lineNumber = (document.max_line ?? 0) + 1;
   for (let index = 0; index < lines.length; index++) {
     const share = shares[index]!;
     if (share <= 0n) continue;
-    // Money columns carry four decimals; a cent share scales up exactly.
-    const amount = fromUnits(-share * 100n);
+    // Money columns carry four decimals; an ISO-minor share scales up
+    // exactly, so the stored line agrees with the returned total.
+    const amount = fromUnits(-share * scale);
     const row = (await runner.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, account_id, description, quantity,
                                   unit_price, amount, tax_amount, tax_overridden, is_billable,
