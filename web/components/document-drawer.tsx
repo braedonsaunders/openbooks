@@ -17,6 +17,7 @@ import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { TransactionDrawer } from './transaction-drawer'
+import { ExternalRefChip } from './external-ref-chip'
 import { LineGrid, type LineGridColumn, type LineGridDistribution } from './line-grid'
 import {
   chipForRow,
@@ -645,11 +646,15 @@ export function DocumentDrawerTitle({
   documentNumber,
   statusLabel,
   statusVariant,
+  externalRef,
+  externalSource,
 }: {
   kind: string
   documentNumber: string
   statusLabel: string
   statusVariant: 'default' | 'success' | 'secondary' | 'warning' | 'outline'
+  externalRef?: string | null
+  externalSource?: string | null
 }) {
   return (
     <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -658,6 +663,7 @@ export function DocumentDrawerTitle({
       <Badge variant={statusVariant} className="shrink-0">
         {statusLabel}
       </Badge>
+      <ExternalRefChip externalRef={externalRef} externalSource={externalSource} />
     </span>
   )
 }
@@ -2685,6 +2691,8 @@ export function DocumentDrawer({
             ? tCommon(`status.${STATUS_KEYS[displayStatus]}`)
             : String(displayStatus).replace('_', ' ')}
           statusVariant={STATUS_VARIANT[displayStatus] ?? 'secondary'}
+          externalRef={typeof doc.external_ref === 'string' ? doc.external_ref : null}
+          externalSource={typeof doc.external_source === 'string' ? doc.external_source : null}
         />
       }
       description={mode === 'edit' ? t('drawer.editingHint') : (doc.party_name ?? undefined)}

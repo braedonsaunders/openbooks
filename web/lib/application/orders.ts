@@ -723,7 +723,7 @@ export async function issueApplicationOrder(
           expectedUpdatedAt: token.token,
           status: "pending_approval",
           approvalPending: true,
-          requestId: issued.submission.runId,
+          requestId: issued.submission.runId ?? undefined,
         },
       };
     }

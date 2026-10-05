@@ -50,6 +50,24 @@ test("malformed list date and reference filters match nothing instead of throwin
   }
 });
 
+test("free-text search matches the storefront reference and source", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const plain = randomUUID();
+    const linked = randomUUID();
+    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom, external_ref, external_source)
+      values
+        (${plain}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-P', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb, null, null),
+        (${linked}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-L', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb, 'SHOP-7701', 'shopify')`);
+    assert.equal(await countRows(org.orgId, { q: "BILL-" }), 2, "number search still sees both");
+    assert.equal(await countRows(org.orgId, { q: "SHOP-7701" }), 1, "reference search finds the linked bill");
+    assert.equal(await countRows(org.orgId, { q: "shopify" }), 1, "source search finds the linked bill");
+    assert.equal(await countRows(org.orgId, { q: "SHOP-7702" }), 0, "an unknown reference is empty, not an error");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("malformed saved-view structured filters match nothing instead of throwing", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

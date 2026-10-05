@@ -10,7 +10,7 @@ const { DocumentDrawerTitle } = await import('./document-drawer')
 // at 390px — the title was a single nowrap flex row, so the pill (last
 // item) was what shrank. The pill must keep its width (shrink-0) and the
 // row must wrap (flex-wrap) so the status stays readable.
-function titleHtml() {
+function titleHtml(props?: { externalRef?: string | null; externalSource?: string | null }) {
   // The provider's overloads only accept children inside the props object.
   /* eslint-disable react/no-children-prop */
   return renderToString(
@@ -23,6 +23,7 @@ function titleHtml() {
         documentNumber: 'INV-00001',
         statusLabel: 'Voided',
         statusVariant: 'outline',
+        ...props,
       }),
     }),
   )
@@ -43,4 +44,13 @@ test('status pill never shrinks', () => {
   const pill = html.match(/<div class="([^"]*)">Voided<\/div>/)
   assert.ok(pill, 'status pill must render')
   assert.match(pill[1]!, /shrink-0/, 'status pill must keep its width, never clip')
+})
+
+test('external provenance chip renders only when the pair is set', () => {
+  const bare = titleHtml()
+  assert.ok(!bare.includes('shopify'), 'no chip without a stored pair')
+  const half = titleHtml({ externalRef: 'SHOP-1' })
+  assert.ok(!half.includes('SHOP-1'), 'a lone half must not render')
+  const html = titleHtml({ externalRef: 'SHOP-1', externalSource: 'shopify' })
+  assert.ok(html.includes('shopify · SHOP-1'), 'the pair must render as one chip')
 })
