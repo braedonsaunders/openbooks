@@ -580,7 +580,7 @@ const { loadCustomerIntelligence } = await import('../app/(app)/analytics/custom
 const { loadVendorPerformance } = await import('../app/(app)/analytics/vendor-performance/view');
 const { loadSpendVelocity } = await import('../app/(app)/analytics/spend-velocity/view');
 const { executeAssistantTool } = await import('./assistant/registry');
-type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: string | number }; summary?: { totalSpend: string | number }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: string }[] | { items: { totalSpend: string }[] } } };
+type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: string }; summary?: { totalSpend: string }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: string }[] | { items: { totalSpend: string }[] } } };
 
 for (const surface of ['customer', 'vendor', 'spend'] as const) {
   for (const boundary of ['service', 'page', 'assistant'] as const) {

@@ -31,7 +31,9 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
     : new Intl.NumberFormat(fmt.locale, { style: 'percent', maximumFractionDigits: 1 }).format(value / 100)
   const metric = (key: string, value: string) => ({ label: t(key), value })
   let chart: AnalyticsPreviewChart | undefined
-  const trend = (label: string, points: number[], labels: string[]): AnalyticsPreviewChart | undefined => points.length > 1 ? { kind: 'sparkline', label, points, from: labels[0]!, to: labels[labels.length - 1]! } : undefined
+  // Trend points arrive as exact decimal strings from the loaders that
+  // moved off floats: cross into chart numbers here, at the chart boundary.
+  const trend = (label: string, points: (number | string)[], labels: string[]): AnalyticsPreviewChart | undefined => points.length > 1 ? { kind: 'sparkline', label, points: points.map((p) => typeof p === "number" ? p : toChartNumber(p)), from: labels[0]!, to: labels[labels.length - 1]! } : undefined
   const result = (periodLabel: string, metrics: AnalyticsPreview['metrics'], notice?: string): AnalyticsPreview => ({ ...(chart ? { chart } : {}), periodLabel, metrics, observedAt: new Date(currentAnalyticsRead()?.observedAt ?? Date.now()).toISOString(), ...(notice ? { notice } : {}) })
   switch (dashboard.slug) {
     case 'financial-health': {
