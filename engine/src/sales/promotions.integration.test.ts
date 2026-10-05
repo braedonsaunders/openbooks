@@ -221,7 +221,7 @@ test('buy X get Y frees units only from complete buy-plus-get groups', { skip: !
     // One unit is the qualifying purchase itself: nothing is free yet.
     await assert.rejects(apply('BOGO', '1'), (error: unknown) => error instanceof PromotionRefusal
       && error.code === 'below_threshold' && /BOGO needs at least 2 units/.test(error.message) && /2 or more/.test(error.remedy ?? ''))
-    for (const [quantity, freeMinor] of [['2', '1000'], ['3', '1000'], ['4', '2000']]) {
+    for (const [quantity, freeMinor] of [['2', '1000'], ['3', '1000'], ['4', '2000']] as const) {
       assert.equal((await apply('BOGO', quantity)).discountMinor, freeMinor, `buy 1 get 1 on ${quantity} units`)
     }
     assert.equal((await apply('B2G1', '3')).discountMinor, '1000')
