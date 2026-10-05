@@ -441,7 +441,34 @@
       "retentionArpa": "Ø Umsatz pro Kunde",
       "retentionQuickRatio": "Wachstumsquote",
       "retentionUnavailable": "Bindungskennzahlen erscheinen nach der ersten SaaS-Kennzahlenberechnung.",
-      "retentionForMonth": "Für {month}"
+      "retentionForMonth": "Für {month}",
+      "drawer": {
+        "status": {
+          "active": "Aktiv",
+          "paused": "Pausiert",
+          "suspended": "Gesperrt",
+          "canceled": "Gekündigt"
+        },
+        "every": "alle {count}{unit}",
+        "nextBill": "Nächste Abrechnung {date}",
+        "billing": {
+          "title": "Abrechnung",
+          "summary": "Kunde, Rechnungsempfänger und Zahler",
+          "customer": "Kunde",
+          "billTo": "Rechnungsempfänger",
+          "payer": "Zahler",
+          "sameAsCustomer": "Wie Kunde",
+          "autoPost": "Rechnungen automatisch buchen"
+        },
+        "overrides": {
+          "billTo": "Abweichender Rechnungsempfänger",
+          "payer": "Abweichender Zahler",
+          "hint": "Rechnungsempfänger und Zahler entsprechen standardmäßig dem Kunden. Ausnahmen gelten für künftige Rechnungen; Mahnwesen und Autopay richten sich an den Zahler.",
+          "save": "Ausnahmen speichern",
+          "saved": "Ausnahmen gespeichert.",
+          "saveFailed": "Ausnahmen konnten nicht gespeichert werden."
+        }
+      }
     },
     "recurring": {
       "newSchedule": "Neuer wiederkehrender Zeitplan",

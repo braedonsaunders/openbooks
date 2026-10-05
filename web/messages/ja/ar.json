@@ -441,7 +441,34 @@
       "retentionArpa": "アカウント当たり平均収益",
       "retentionQuickRatio": "クイックレシオ",
       "retentionUnavailable": "SaaS指標の初回計算後にリテンション指標が表示されます。",
-      "retentionForMonth": "{month}時点"
+      "retentionForMonth": "{month}時点",
+      "drawer": {
+        "status": {
+          "active": "有効",
+          "paused": "一時停止",
+          "suspended": "利用停止",
+          "canceled": "解約済み"
+        },
+        "every": "{count}{unit}ごと",
+        "nextBill": "次回請求 {date}",
+        "billing": {
+          "title": "請求",
+          "summary": "顧客・請求先・支払者",
+          "customer": "顧客",
+          "billTo": "請求先",
+          "payer": "支払者",
+          "sameAsCustomer": "顧客と同じ",
+          "autoPost": "請求書を自動転記"
+        },
+        "overrides": {
+          "billTo": "請求先の上書き",
+          "payer": "支払者の上書き",
+          "hint": "請求先と支払者は既定で顧客です。上書きは将来の請求書に適用され、督促と自動引落は支払者に対して行われます。",
+          "save": "上書きを保存",
+          "saved": "上書きを保存しました。",
+          "saveFailed": "上書きを保存できませんでした。"
+        }
+      }
     },
     "recurring": {
       "newSchedule": "新しい定期スケジュール",

@@ -5301,8 +5301,8 @@
           "expired": "Token abgelaufen"
         },
         "clientId": "Client-ID",
-        "clientSecret": "Client Secret",
-        "scope": "Scope",
+        "clientSecret": "Client-Secret",
+        "scope": "Geltungsbereich",
         "guid": "ABN-Lookup-GUID",
         "save": "Anbindung speichern",
         "saving": "Speichert…",

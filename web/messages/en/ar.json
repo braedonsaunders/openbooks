@@ -441,7 +441,34 @@
       "retentionArpa": "Avg revenue per account",
       "retentionQuickRatio": "Quick ratio",
       "retentionUnavailable": "Retention metrics appear after the first SaaS metrics computation.",
-      "retentionForMonth": "For {month}"
+      "retentionForMonth": "For {month}",
+      "drawer": {
+        "status": {
+          "active": "Active",
+          "paused": "Paused",
+          "suspended": "Suspended",
+          "canceled": "Canceled"
+        },
+        "every": "every {count}{unit}",
+        "nextBill": "Next bill {date}",
+        "billing": {
+          "title": "Billing",
+          "summary": "Customer, bill-to and payer",
+          "customer": "Customer",
+          "billTo": "Bill-to",
+          "payer": "Payer",
+          "sameAsCustomer": "Same as customer",
+          "autoPost": "Auto-post invoices"
+        },
+        "overrides": {
+          "billTo": "Bill-to override",
+          "payer": "Payer override",
+          "hint": "Bill-to and payer default to the customer. Overrides apply to future invoices; dunning and autopay act on the payer.",
+          "save": "Save overrides",
+          "saved": "Overrides saved.",
+          "saveFailed": "Could not save overrides."
+        }
+      }
     },
     "recurring": {
       "newSchedule": "New recurring schedule",

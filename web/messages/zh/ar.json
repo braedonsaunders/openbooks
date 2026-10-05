@@ -441,7 +441,34 @@
       "retentionArpa": "每账户平均收入",
       "retentionQuickRatio": "增长比率",
       "retentionUnavailable": "首次SaaS指标计算后将显示留存指标。",
-      "retentionForMonth": "{month}"
+      "retentionForMonth": "{month}",
+      "drawer": {
+        "status": {
+          "active": "有效",
+          "paused": "已暂停",
+          "suspended": "已中止",
+          "canceled": "已取消"
+        },
+        "every": "每{count}{unit}",
+        "nextBill": "下次账单 {date}",
+        "billing": {
+          "title": "开单",
+          "summary": "客户、账单接收方与付款方",
+          "customer": "客户",
+          "billTo": "账单接收方",
+          "payer": "付款方",
+          "sameAsCustomer": "与客户相同",
+          "autoPost": "自动过账发票"
+        },
+        "overrides": {
+          "billTo": "账单接收方覆盖",
+          "payer": "付款方覆盖",
+          "hint": "账单接收方与付款方默认为客户。覆盖用于未来发票; 催收与自动扣款面向付款方。",
+          "save": "保存覆盖",
+          "saved": "覆盖已保存。",
+          "saveFailed": "无法保存覆盖。"
+        }
+      }
     },
     "recurring": {
       "newSchedule": "新建定期计划",
