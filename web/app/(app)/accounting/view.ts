@@ -221,8 +221,11 @@ export async function loadAccounting(): Promise<AccountingData> {
     netIncomeSub: period.label,
     netIncomeTone: health?.figures.netIncome.startsWith('-') ? 'negative' : 'positive',
     closeLabel: t('home.vitals.close'),
-    closeValue: data.close.progressPct === null ? t('home.vitals.noClose') : `${data.close.progressPct}%`,
-    closeSub: data.close.periodName ? t('home.vitals.closeSub', { period: data.close.periodName }) : t('home.vitals.noCloseSub'),
+    // A restricted caller reads the organization-wide refusal by name —
+    // never "no close run" for a run they are not allowed to see. The
+    // refusal carries its own reason, so no sub-caption qualifies it.
+    closeValue: data.closeUnavailable ?? (data.close.progressPct === null ? t('home.vitals.noClose') : `${data.close.progressPct}%`),
+    closeSub: data.closeUnavailable ? '' : (data.close.periodName ? t('home.vitals.closeSub', { period: data.close.periodName }) : t('home.vitals.noCloseSub')),
     draftLabel: t('home.vitals.draftJournals'),
     draftValue: format.number(data.draftJournals),
     draftSub: t('home.vitals.draftJournalsSub', { posted: data.postedJournals7d }),
