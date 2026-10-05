@@ -1508,9 +1508,11 @@ export async function settleCollectionAttemptEvent(
       await applyFinalAction(orgId, candidate, policy, null);
       return "failed_terminal";
     }
-    if (event.status === "refunded") {
+    if (event.status === "refunded" || event.status === "disputed") {
       // A chargeback parks a marker so the scan refuses the invoice until
       // finance reviews; a voluntary refund only needs the controller note.
+      // Disputed events always carry the dispute flag, so they take the
+      // chargeback arm with the provider dispute id attached.
       if (event.dispute && event.intentRef) {
         await db.execute(sql`
           insert into payment_pending_clawbacks
