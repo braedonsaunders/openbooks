@@ -56,7 +56,7 @@ function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
 
 async function postedOpenItem(
   org: ScratchOrg,
-  opts: { side: "ar" | "ap"; amount: string; postingDate?: string; period?: string; dueDate: string; docNo: string; party?: string },
+  opts: { side: "ar" | "ap"; amount: string; postingDate?: string; period?: string; dueDate: string | null; docNo: string; party?: string },
 ): Promise<void> {
   const isAr = opts.side === "ar";
   const doc = randomUUID();
@@ -95,10 +95,12 @@ test("top-party lists order, split overdue, and tie the cockpits", { skip: !DB }
         values(${may},${org.orgId},2026,5,'2026-05','2026-05-01','2026-05-31',false,${cal})`);
     });
     // Small Co owes more in total (2000 current) but Big Co carries the
-    // overdue balance (1000 of 1500): ordering is by balance, the split by
-    // due date — the two answers the collections call needs first.
+    // overdue balance: ordering is by balance, the split by the shared aging
+    // rule. INV-BIG-3 has no due date, so it ages from its May posting date
+    // and is past due exactly like the overdue tiles count it.
     await withBypass(() => postedOpenItem(org, { side: "ar", amount: "1000", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "INV-BIG-1", party: big }));
     await withBypass(() => postedOpenItem(org, { side: "ar", amount: "500", dueDate: "2026-09-13", docNo: "INV-BIG-2", party: big }));
+    await withBypass(() => postedOpenItem(org, { side: "ar", amount: "300", postingDate: "2026-05-20", period: may, dueDate: null, docNo: "INV-BIG-3", party: big }));
     await withBypass(() => postedOpenItem(org, { side: "ar", amount: "2000", dueDate: "2026-09-13", docNo: "INV-SMALL-1", party: small }));
     await withBypass(() => postedOpenItem(org, { side: "ap", amount: "700", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "BILL-V-1", party: vend }));
 
@@ -116,9 +118,9 @@ test("top-party lists order, split overdue, and tie the cockpits", { skip: !DB }
     assert.equal(toUnits(customers[0]?.amount ?? "0"), toUnits("2000"));
     assert.equal(toUnits(customers[0]?.overdue ?? "1"), toUnits("0"), "nothing past due");
     assert.equal(customers[1]?.partyName, "Big Co");
-    assert.equal(toUnits(customers[1]?.amount ?? "0"), toUnits("1500"));
-    assert.equal(toUnits(customers[1]?.overdue ?? "0"), toUnits("1000"), "the May invoice is past due");
-    assert.equal(customers[1]?.count, 2);
+    assert.equal(toUnits(customers[1]?.amount ?? "0"), toUnits("1800"));
+    assert.equal(toUnits(customers[1]?.overdue ?? "0"), toUnits("1300"), "the May invoice and the untermed May invoice are past due");
+    assert.equal(customers[1]?.count, 3);
     const vendors = metrics.topVendors ?? [];
     assert.equal(vendors.length, 1);
     assert.equal(vendors[0]?.partyName, "Main Supplier");

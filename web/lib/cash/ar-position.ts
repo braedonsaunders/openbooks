@@ -24,6 +24,7 @@ import {
   type WeekRow,
 } from "./core";
 import { buildTimeline, type ApSettings } from "./cash-position";
+import { agingBasisDate } from "../aging-basis";
 import { isCategoryVisibleInScope } from "./core";
 
 export interface ArWeek {
@@ -83,7 +84,11 @@ export function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivab
       { partyId: it.partyId, partyName: it.partyName, amount: ZERO_MONEY, count: 0, overdue: ZERO_MONEY, oldestDue: null as string | null };
     cur.amount = addMoney(cur.amount, it.remaining);
     cur.count += 1;
-    if (it.dueDate && daysBetween(it.dueDate, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
+    // Past-due follows the shared aging rule: an item with no due date ages
+    // from its posting date, exactly like the overdue tiles — the customer
+    // lines and the tiles cannot disagree on what "past due" means.
+    const basis = agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate });
+    if (basis && daysBetween(basis, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
     if (it.dueDate) {
       const iso = toISO(it.dueDate);
       if (!cur.oldestDue || iso < cur.oldestDue) cur.oldestDue = iso;
