@@ -1599,8 +1599,8 @@
       "burnBadge": "Hebdo",
       "arCoverage": "Couverture AR",
       "arHint": "(Tréso + AR) / AP",
-      "cashCycle": "Cycle de trésorerie",
-      "cashCycleHint": "DSO / DPO",
+      "cashCycle": "Jours moyens de règlement",
+      "cashCycleHint": "Encaissement / paiement",
       "netFlow": "Flux net période",
       "netFlowHint": "Entrées - Sorties",
       "runway": "Autonomie de trésorerie",
@@ -1722,7 +1722,9 @@
           "help": "Jours depuis le dernier paiement quand aucun paiement significatif n'est observé"
         }
       }
-    }
+    },
+    "unplacedAr": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu. Ajoutez une échéance pour les placer.",
+    "unplacedAp": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu. Ajoutez une échéance pour les placer."
   },
   "trueCost": {
     "title": "Coût réel",
