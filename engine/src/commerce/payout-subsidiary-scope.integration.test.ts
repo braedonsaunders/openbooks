@@ -636,3 +636,155 @@ test("a runtime restricted role refuses a hidden batch at match", { skip: !DB },
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("the automatic matcher counts only receipts visible in the payout's entity", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { docA, docB } = await seed(org, actor);
+    // One provider reference claimed by two receipts in two entities, plus a
+    // second reference naming only hidden receipts.
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      provider: "stripe", externalAccount: "acct_1", objectType: "order",
+      externalId: "txn-count-1", nativeTable: "documents", nativeId: docA.id,
+    }, "salesChannels"));
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      provider: "stripe", externalAccount: "acct_3", objectType: "payout",
+      externalId: "txn-count-1", nativeTable: "documents", nativeId: docB.id,
+    }, "salesChannels"));
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      provider: "stripe", externalAccount: "acct_3", objectType: "payout",
+      externalId: "txn-count-2", nativeTable: "documents", nativeId: docB.id,
+    }, "salesChannels"));
+    const draftId = (await db.execute<{ id: string }>(sql`
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      provider: "stripe", externalAccount: "acct_1", objectType: "order",
+      externalId: "txn-count-2", nativeTable: "documents", nativeId: draftId,
+    }, "salesChannels"));
+    const batch = (await importSettlementBatch(org.orgId, actor, {
+      provider: "stripe", externalRef: "po_scope_count", settlementDate: "2026-07-10", currency: "CAD",
+      lines: [
+        { kind: "charge", amount: docA.total, externalRef: "txn-count-1", currency: "CAD", meta: {} },
+        { kind: "charge", amount: "9.00", externalRef: "txn-count-2", currency: "CAD", meta: {} },
+      ],
+    }, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
+      select id, external_ref as ref from psp_settlement_lines
+       where org_id = ${org.orgId} and batch_id = ${batch}`)).rows.map((row) => [row.id, row.ref] as const));
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    const byRef = new Map([...refs].map(([id, ref]) => [ref, result.lines.find((line) => line.lineId === id)!]));
+    const mixed = byRef.get("txn-count-1")!;
+    assert.equal(mixed.status, "matched", `the visible receipt wins outright, got ${JSON.stringify(mixed)}`);
+    assert.ok(mixed.status === "matched" && mixed.documentId === docA.id && mixed.via === "external_link");
+    const hidden = byRef.get("txn-count-2")!;
+    assert.equal(hidden.status, "unmatched");
+    assert.ok(hidden.status === "unmatched");
+    assert.equal(hidden.reason, "linked_missing", `hidden claims never read as several documents, got ${hidden.reason}`);
+    assert.match(hidden.remedy ?? "", /unavailable in this payout's legal entity/);
+    assert.match(hidden.remedy ?? "", /authorized operator/);
+    for (const text of [hidden.reason, hidden.remedy ?? ""]) {
+      assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
+      assert.ok(!text.includes("CS-DRAFT-W1"), `hidden draft number leaks: ${text}`);
+      assert.doesNotMatch(text, /several/i, `hidden claims never report a count: ${text}`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("refund claims count only posted receipts visible in the payout's entity", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { channelA, docB } = await seed(org, actor);
+    const refundHome = (await db.execute<{ id: string }>(sql`
+      insert into documents (org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
+      values (${org.orgId}, 'cash_refund', 'posted', 'CR-TEST-R1', ${org.subsidiaryId}, ${org.date}, 'CAD', '20', '0', '20')
+      returning id`)).rows[0]!.id;
+    const orderId = (await db.execute<{ id: string }>(sql`
+      select id from channel_orders
+       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`)).rows[0]!.id;
+    for (const [externalId, documentId] of [["refund-home-1", refundHome], ["refund-hidden-1", docB.id]] as const) {
+      const inserted = await db.execute(sql`
+        insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, occurred_at)
+        values (${org.orgId}, ${channelA}, ${orderId}, 'refund', ${externalId}, '{}'::jsonb, 'posted', ${documentId}, now())`);
+      assert.equal(inserted.rowCount, 1, "the refund event lands on the home order");
+    }
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-refund-1", currency: "CAD", issuedAt: "2026-07-10" },
+      [{ id: "txn-refund-R1", type: "refund", amount: "20.00", currency: "CAD", sourceOrderId: "8801" }],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    assert.equal(result.lines.length, 1);
+    const [verdict] = result.lines;
+    assert.equal(verdict!.status, "matched", `the visible posted refund wins outright, got ${JSON.stringify(verdict)}`);
+    assert.ok(verdict!.status === "matched" && verdict.documentId === refundHome && verdict.via === "channel_order");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("hidden refund claims never read as several posted refunds", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { channelA, docB } = await seed(org, actor);
+    const draftId = (await db.execute<{ id: string }>(sql`
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+    const orderId = (await db.execute<{ id: string }>(sql`
+      select id from channel_orders
+       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`)).rows[0]!.id;
+    for (const [externalId, documentId] of [["refund-hidden-1", docB.id], ["refund-hidden-2", draftId]] as const) {
+      const inserted = await db.execute(sql`
+        insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, occurred_at)
+        values (${org.orgId}, ${channelA}, ${orderId}, 'refund', ${externalId}, '{}'::jsonb, 'posted', ${documentId}, now())`);
+      assert.equal(inserted.rowCount, 1, "the refund event lands on the home order");
+    }
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-refund-2", currency: "CAD", issuedAt: "2026-07-10" },
+      [{ id: "txn-refund-R2", type: "refund", amount: "20.00", currency: "CAD", sourceOrderId: "8801" }],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    assert.equal(result.lines.length, 1);
+    const [verdict] = result.lines;
+    assert.equal(verdict!.status, "unmatched");
+    assert.ok(verdict!.status === "unmatched");
+    assert.equal(verdict.reason, "refund_unposted", `hidden refund claims never read as several, got ${verdict.reason}`);
+    for (const text of [verdict.reason, verdict.remedy ?? ""]) {
+      assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
+      assert.ok(!text.includes("CS-DRAFT-W1"), `hidden draft number leaks: ${text}`);
+      assert.doesNotMatch(text, /several/i, `hidden claims never report a count: ${text}`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an order outside the payout's entity never makes its line ambiguous", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { channelB, batchShop, lines, docA } = await seed(org, actor);
+    // The same storefront order number ingested on the western storefront and
+    // never posted there: payout discovery must not see it at all.
+    await withBypass(() => ingestChannelOrder(org.orgId, actor, channelB, paidOrder("8801")));
+    const result = await matchPayoutLines(org.orgId, batchShop, actor, homeScope(org));
+    const line = result.lines.find((verdict) => verdict.lineId === lines.shopVisible);
+    assert.equal(line!.status, "matched", `the home order resolves alone, got ${JSON.stringify(line)}`);
+    assert.ok(line!.status === "matched" && line.documentId === docA.id && line.via === "channel_order");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
