@@ -3929,7 +3929,9 @@
       "externalId": "External ID",
       "externalAccount": "External account",
       "lastSyncedAt": "Last synced",
-      "nativeId": "OpenBooks record"
+      "nativeId": "OpenBooks record",
+      "bufferQuantity": "Keep-back buffer",
+      "stopSellingAtZero": "Stop selling at zero"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "The balance-sheet account credited when value is issued and debited on redemption.",

@@ -4004,7 +4004,9 @@
       "externalId": "外部ID",
       "externalAccount": "外部アカウント",
       "lastSyncedAt": "最終同期",
-      "nativeId": "OpenBooksレコード"
+      "nativeId": "OpenBooksレコード",
+      "bufferQuantity": "引き当て在庫",
+      "stopSellingAtZero": "ゼロで販売停止"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "発行時に貸方記入し、利用時に借方記入する貸借対照表勘定。",

@@ -1007,6 +1007,44 @@ export async function listItemChannelStock(orgId: string, itemId: string): Promi
   return out;
 }
 
+export interface ItemPolicyRow {
+  itemId: string;
+  itemCode: string | null;
+  itemName: string;
+  bufferQuantity: string | null;
+  stopSellingAtZero: boolean | null;
+  syncInventory: boolean;
+}
+
+/** Every per-item override on a channel, with item labels, for the advanced policy editor. */
+export async function listItemInventoryPolicies(orgId: string, channelId: string): Promise<ItemPolicyRow[]> {
+  const rows = (await withOrgContext(orgId, () => db.execute<
+    Record<string, unknown> & {
+      item_id: string;
+      item_code: string | null;
+      item_name: string;
+      buffer_quantity: string | null;
+      stop_selling_at_zero: boolean | null;
+      sync_inventory: boolean;
+    }
+  >(sql`
+    select p.item_id, i.code as item_code, i.name as item_name,
+           p.buffer_quantity::text as buffer_quantity,
+           p.stop_selling_at_zero, p.sync_inventory
+      from channel_item_inventory_policies p
+      join items i on i.org_id = p.org_id and i.id = p.item_id
+     where p.org_id = ${orgId} and p.channel_id = ${channelId}
+     order by i.code`))).rows;
+  return rows.map((row) => ({
+    itemId: row.item_id,
+    itemCode: row.item_code,
+    itemName: row.item_name,
+    bufferQuantity: row.buffer_quantity,
+    stopSellingAtZero: row.stop_selling_at_zero,
+    syncInventory: row.sync_inventory,
+  }));
+}
+
 export interface ItemInventoryPolicyInput {
   channelId: string;
   itemId: string;

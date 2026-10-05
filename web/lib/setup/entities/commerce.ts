@@ -61,7 +61,7 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
       { key: 'stockLocationId', kind: 'ref', ref: 'stock-locations' },
       { key: 'syncInventory', kind: 'boolean' },
       { key: 'fulfilsOrders', kind: 'boolean' },
-      { key: 'bufferQuantity', kind: 'decimal' },
+      { key: 'bufferQuantity', kind: 'number' },
       { key: 'stopSellingAtZero', kind: 'boolean' },
     ],
     fields: [

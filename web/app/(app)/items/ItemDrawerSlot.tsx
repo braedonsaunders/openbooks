@@ -14,8 +14,9 @@ import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
 import { ItemVariantsTab } from './ItemVariantsTab'
 import { KitComponentsTab } from './KitComponentsTab'
+import { ChannelStockTab } from './ChannelStockTab'
 import { externalLinkUnlinkColumn } from '../channels/external-links-column'
-import { listLinksByNative } from '@openbooks/engine/commerce'
+import { listItemChannelStock, listLinksByNative } from '@openbooks/engine/commerce'
 import { withOrgContext } from '@openbooks/engine/platform/database'
 import { PlanningTab } from '../inventory/planning/PlanningTab'
 
@@ -79,7 +80,8 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'items.manage'), props, sp)
   const planningTab = await itemPlanningTab(authz, props, sp)
   const variantsTab = await itemVariantsTab(props, sp)
-  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : [])]
+  const channelStockTab = await itemChannelStockTab(authz, props, sp)
+  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : []), ...(channelStockTab ? [channelStockTab] : [])]
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
     return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} />
   }
@@ -132,6 +134,30 @@ export async function ItemDrawerSlot({ drawer, sp }: {
       })),
   ]
   return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
+}
+
+/**
+ * An item's storefront stock lives beside the item, not under setup:
+ * operators without the setup grant read what the storefront shows, so the
+ * tab rides both drawer paths like the kit and planning tabs. Policy
+ * changes stay on the channel side; this tab only reads.
+ */
+async function itemChannelStockTab(
+  authz: Authz,
+  props: ComponentProps<typeof ItemDrawer>,
+  sp: Record<string, string | string[] | undefined>,
+) {
+  if (props.createMode) return null
+  if (!can(authz, 'channels.read')) return null
+  if (!(await isFeatureEnabled(authz.user.orgId, 'salesChannels'))) return null
+  const t = await getTranslations('channels')
+  if (pickString(sp.itemSetup) !== 'channels') {
+    return { key: 'channels', label: t('itemTab.title'), content: null }
+  }
+  const rows = await withOrgContext(authz.user.orgId, () =>
+    listItemChannelStock(authz.user.orgId, String(props.payload.item.id)),
+  )
+  return { key: 'channels', label: t('itemTab.title'), content: <ChannelStockTab rows={rows} /> }
 }
 
 /**

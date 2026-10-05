@@ -3929,7 +3929,9 @@
       "externalId": "ID externo",
       "externalAccount": "Conta externa",
       "lastSyncedAt": "Última sincronização",
-      "nativeId": "Registro do OpenBooks"
+      "nativeId": "Registro do OpenBooks",
+      "bufferQuantity": "Estoque reservado",
+      "stopSellingAtZero": "Parar de vender no zero"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "A conta do balanço creditada ao emitir valor e debitada no resgate.",

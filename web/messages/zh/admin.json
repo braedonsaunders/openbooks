@@ -3929,7 +3929,9 @@
       "externalId": "外部ID",
       "externalAccount": "外部账户",
       "lastSyncedAt": "上次同步",
-      "nativeId": "OpenBooks记录"
+      "nativeId": "OpenBooks记录",
+      "bufferQuantity": "预留库存",
+      "stopSellingAtZero": "为零时停止销售"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "发行时贷记、兑换时借记的资产负债表科目。",

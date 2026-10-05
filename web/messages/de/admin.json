@@ -4004,7 +4004,9 @@
       "externalId": "Externe ID",
       "externalAccount": "Externes Konto",
       "lastSyncedAt": "Zuletzt synchronisiert",
-      "nativeId": "OpenBooks-Datensatz"
+      "nativeId": "OpenBooks-Datensatz",
+      "bufferQuantity": "Zurückgehaltener Bestand",
+      "stopSellingAtZero": "Verkauf bei Null stoppen"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "Das Bilanzkonto, das bei Ausgabe gutgeschrieben und bei Einlösung belastet wird.",

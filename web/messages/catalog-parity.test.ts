@@ -288,6 +288,14 @@ const COGNATES = new Set<string>([
   // French spells “Document”, “Cause” and “Exceptions” exactly like English.
   'fr:reports.catalog.columns.channel_sales.document_number|Document',
   'fr:channels.tabs.exceptions|Exceptions',
+  // OpenBooks and Shopify are proper nouns, so the conflict-level template
+  // is identical in every locale by review, not by omission.
+  'de:channels.locations.conflictLevels|OpenBooks {open} · Shopify {shop}',
+  'es:channels.locations.conflictLevels|OpenBooks {open} · Shopify {shop}',
+  'fr:channels.locations.conflictLevels|OpenBooks {open} · Shopify {shop}',
+  'ja:channels.locations.conflictLevels|OpenBooks {open} · Shopify {shop}',
+  'pt-BR:channels.locations.conflictLevels|OpenBooks {open} · Shopify {shop}',
+  'zh:channels.locations.conflictLevels|OpenBooks {open} · Shopify {shop}',
   'fr:channels.columns.document|Document',
   'fr:channels.columns.code|Cause',
   'fr:channels.drawer.document|Document',

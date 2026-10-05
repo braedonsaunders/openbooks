@@ -3884,7 +3884,9 @@
       "externalId": "ID externe",
       "externalAccount": "Compte externe",
       "lastSyncedAt": "Dernière synchronisation",
-      "nativeId": "Enregistrement OpenBooks"
+      "nativeId": "Enregistrement OpenBooks",
+      "bufferQuantity": "Stock mis de côté",
+      "stopSellingAtZero": "Arrêter la vente à zéro"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "Le compte de bilan crédité à l’émission et débité au rachat.",

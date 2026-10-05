@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   CommerceError,
   listInventoryConflicts,
+  listItemInventoryPolicies,
   listLocationSyncStates,
   listSyncPairs,
   loadShopifyChannel,
@@ -60,11 +61,12 @@ export const GET = defineRoute({
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
     try {
-      const [states, conflicts] = await Promise.all([
+      const [states, conflicts, policies] = await Promise.all([
         listLocationSyncStates(gate.user.orgId, id),
         listInventoryConflicts(gate.user.orgId, id),
+        listItemInventoryPolicies(gate.user.orgId, id),
       ]);
-      return NextResponse.json({ states, conflicts });
+      return NextResponse.json({ states, conflicts, policies });
     } catch (error) {
       return notFoundWhenMissing(error);
     }
