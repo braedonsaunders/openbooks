@@ -94,6 +94,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "tax_id_revalidation",
   "consolidated_billing",
   "signature_reminder",
+  "psp_payout_pull",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -731,6 +732,28 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "commerce_inbound") {
     const { runCommerceInboundScan } = await import("../commerce/inbound.ts");
     await runCommerceInboundScan();
+    return;
+  }
+  if (row.kind === "psp_payout_pull") {
+    const { runDuePspPayoutPulls } = await import("../payments/psp-pull.ts");
+    const { runDueShopifyPayoutPulls } = await import("../commerce/shopify/payouts.ts");
+    // Sequential runners share one scan lease: parallel pulls would
+    // interleave their provider cursors and could advance one past a
+    // failed import on the other.
+    const cardPull = await runDuePspPayoutPulls();
+    const shopifyPull = await runDueShopifyPayoutPulls();
+    const problems = new Map<string, string[]>();
+    for (const failure of [...cardPull.orgErrors, ...shopifyPull.orgErrors]) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "PSP payout pull",
+      noticeKind: "psp_payout_pull_scan_failed",
+      href: "/admin/setup/payment-providers",
+      remedy: "Review the provider connection and its scheduled-pull toggle under Setup → Payment providers (Shopify channels under Channels); the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === "tax_id_revalidation") {
