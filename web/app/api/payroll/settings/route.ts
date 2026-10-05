@@ -126,6 +126,27 @@ const ACCOUNT_KEYS = [
  * place the allow-lists and the seeded charts disagreed.
  * payroll-account-types.test.ts pins both halves of that.
  */
+/** Operator-facing names for the account settings, used in every refusal. */
+const ACCOUNT_KEY_LABELS: Record<typeof ACCOUNT_KEYS[number], string> = {
+  wageExpenseAccountId: 'Wage expense',
+  burdenExpenseAccountId: 'Employer burden expense',
+  netPayAccountId: 'Net pay payable',
+  cppPayableAccountId: 'CPP payable',
+  eiPayableAccountId: 'EI payable',
+  taxPayableAccountId: 'Income tax payable',
+  vacationPayableAccountId: 'Vacation payable',
+}
+const EXPENSE_REMEDY = 'an expense or cost-of-sales account'
+const LIABILITY_REMEDY = 'a current liability account (payable or other current liability)'
+const ACCOUNT_TYPE_REMEDY: Record<typeof ACCOUNT_KEYS[number], string> = {
+  wageExpenseAccountId: EXPENSE_REMEDY,
+  burdenExpenseAccountId: EXPENSE_REMEDY,
+  netPayAccountId: `${LIABILITY_REMEDY}; net pay is cleared to the bank when the run's payment is recorded`,
+  cppPayableAccountId: LIABILITY_REMEDY,
+  eiPayableAccountId: LIABILITY_REMEDY,
+  taxPayableAccountId: LIABILITY_REMEDY,
+  vacationPayableAccountId: LIABILITY_REMEDY,
+}
 const ACCOUNT_TYPES_BY_KEY: Record<typeof ACCOUNT_KEYS[number], readonly string[]> = {
   wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
   burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
@@ -205,17 +226,33 @@ async function validatePayrollAccounts(
   const labels = new Map<string, string>()
   for (const [key, id] of requested) {
     const row = byId.get(id)
+    const field = ACCOUNT_KEY_LABELS[key]
     if (!row) {
-      return NextResponse.json({ error: `invalid ${key}: account is not active in this organization` }, { status: 422 })
+      return NextResponse.json(
+        { error: `${field}: the chosen account is not in this organization's chart of accounts — choose an active posting account` },
+        { status: 422 },
+      )
     }
+    const account = row.number ? `${row.number} · ${row.name}` : row.name
     if (!row.isActive) {
-      return NextResponse.json({ error: `invalid ${key}: account is inactive` }, { status: 422 })
+      return NextResponse.json(
+        { error: `${field}: ${account} is inactive — reactivate it in the chart of accounts or choose another account` },
+        { status: 422 },
+      )
     }
     if (row.isSummary) {
-      return NextResponse.json({ error: `invalid ${key}: summary accounts cannot receive payroll postings` }, { status: 422 })
+      return NextResponse.json(
+        { error: `${field}: ${account} is a summary account and cannot receive postings — choose one of its posting sub-accounts` },
+        { status: 422 },
+      )
     }
     if (!ACCOUNT_TYPES_BY_KEY[key].includes(row.type)) {
-      return NextResponse.json({ error: `invalid ${key}: account type ${row.type} is not compatible with payroll` }, { status: 422 })
+      return NextResponse.json(
+        {
+          error: `${field}: ${account} has account type "${row.type.replace(/_/g, ' ')}" — ${field} must be ${ACCOUNT_TYPE_REMEDY[key]}`,
+        },
+        { status: 422 },
+      )
     }
     labels.set(id, row.number ? `${row.number} · ${row.name}` : row.name)
   }

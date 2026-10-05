@@ -349,6 +349,18 @@ test(
       assert.equal(foreignAccount.status, 422);
       assert.deepEqual(await payrollState(fixture.orgId), before);
 
+      // A bank account cannot hold net pay: the refusal names the field the
+      // operator chose it for and the account type that is required.
+      const bankAsNetPay = await PUT(
+        request("PUT", { netPayAccountId: fixture.accounts.bank }),
+      );
+      assert.equal(bankAsNetPay.status, 422);
+      assert.match(
+        String((await bankAsNetPay.json()).error),
+        /^Net pay payable: .* has account type "asset bank" — Net pay payable must be a current liability account/,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
       const missingVendor = await PUT(
         request("PUT", { craRemittancePartyId: randomUUID() }),
       );
