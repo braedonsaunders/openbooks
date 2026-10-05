@@ -6,7 +6,7 @@ import { applyDocumentPromotion } from '@/lib/promotions'
 const bodySchema = z.object({
   code: z.string().max(64).optional(),
   promotionId: z.string().uuid().optional(),
-}).refine((body) => body.code || body.promotionId, { message: 'A promotion code is required' })
+}).refine((body) => Object.keys(body).length > 0 && (body.code || body.promotionId), { message: 'A promotion code is required' })
 
 export const POST = defineRoute({
   permission: 'ar.create',

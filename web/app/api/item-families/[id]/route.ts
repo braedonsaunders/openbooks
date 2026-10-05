@@ -16,7 +16,7 @@ const familyPatchSchema = z.object({
   defaultUnit: z.string().nullable().optional(),
   defaultRate: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
-}).strict()
+}).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
 
 export const GET = defineRoute({
   permission: 'items.read',

@@ -190,6 +190,9 @@ export const PATCH = defineRoute({
   scope: 'unrestricted',
   params: itemParams,
   body: itemPatchSchema,
+  opaque: {
+    dimensions: "shipping dimensions are validated by parseItemShippingFields, refusing unusable values by name",
+  },
   handler: async ({ request, params: { id }, body, authz: gate }) => {
   // Item accounts, tax, and recognition config apply org-wide.
   const user = gate.user

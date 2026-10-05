@@ -17,9 +17,9 @@ const createBodySchema = z.strictObject({
   subsidiaryId: z.string().uuid().nullish(),
   currency: z.string().trim().min(3).max(3),
   externalAccount: z.string().trim().min(1),
-  secrets: z.record(z.string(), z.unknown()).nullish(),
+  secrets: z.record(z.string(), z.json()).nullish(),
   webhookSecret: z.string().trim().min(1).nullish(),
-  settings: z.record(z.string(), z.unknown()).nullish(),
+  settings: z.record(z.string(), z.json()).nullish(),
 });
 
 export const GET = defineRoute({
@@ -44,10 +44,6 @@ export const POST = defineRoute({
   permission: "channels.manage",
   feature: "salesChannels",
   body: createBodySchema,
-  opaque: {
-    secrets: "connector credentials are sealed on write; their shape is the connector's, not the route's",
-    settings: "validated against the adapter's describeSettings schema in the engine, never as route JSON",
-  },
   handler: async ({ authz: gate, body }) => {
     const { channel, webhookSecret } = await createChannel(gate.user.orgId, gate.user.id, {
       kind: body.kind,

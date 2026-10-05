@@ -125,6 +125,9 @@ export const POST = defineRoute({
   feature: { none: 'The item catalog is available independently of optional item capabilities.' },
   scope: 'unrestricted',
   body: itemCreateSchema,
+  opaque: {
+    dimensions: "shipping dimensions are validated by parseItemShippingFields, refusing unusable values by name",
+  },
   handler: async ({ request, authz: gate, body }) => {
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return bad('invalid_idempotency_key', 400)

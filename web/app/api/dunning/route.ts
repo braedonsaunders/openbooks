@@ -154,6 +154,9 @@ export const POST = defineRoute({
   permission: 'documents.manage',
   feature: { none: "This always-on route is governed by documents.manage; the existing route has no separate feature gate." },
   body: POSTBodySchema1,
+  opaque: {
+    retryOffsetsDays: "retry offsets are normalized by normalizeRetryOffsets, refusing non-integer days with a 422",
+  },
   handler: async ({ request, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);

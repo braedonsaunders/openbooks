@@ -19,9 +19,9 @@ const updateBodySchema = z
     name: z.string().trim().min(1).optional(),
     subsidiaryId: z.string().uuid().nullish(),
     currency: z.string().trim().min(3).max(3).optional(),
-    secrets: z.record(z.string(), z.unknown()).nullish(),
+    secrets: z.record(z.string(), z.json()).nullish(),
     webhookSecret: z.string().trim().min(1).nullish(),
-    settings: z.record(z.string(), z.unknown()).optional(),
+    settings: z.record(z.string(), z.json()).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "provide at least one channel field to update");
 
@@ -57,10 +57,6 @@ export const PATCH = defineRoute({
   feature: "salesChannels",
   params: z.object({ id: z.string() }),
   body: updateBodySchema,
-  opaque: {
-    secrets: "connector credentials are sealed on write; their shape is the connector's, not the route's",
-    settings: "validated against the adapter's describeSettings schema in the engine, never as route JSON",
-  },
   handler: async ({ authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
