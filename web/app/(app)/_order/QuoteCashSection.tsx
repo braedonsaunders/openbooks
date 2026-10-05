@@ -311,7 +311,7 @@ export function QuoteCashSection(props: {
     preview.terms[0] ??
     null
 
-  function termCard(term: PreviewTerm) {
+  function termCard(term: PreviewTerm, currency: string) {
     return (
       <li key={term.term.id} className="rounded-lg border p-3 text-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -319,7 +319,7 @@ export function QuoteCashSection(props: {
           <span className="text-slate-500 dark:text-slate-400">
             {t('quoteCash.termMonths', { count: term.term.termMonths })}
           </span>
-          <strong className="tabular-nums">{money(term.schedule.tcv, { currency: preview.quote.currency })}</strong>
+          <strong className="tabular-nums">{money(term.schedule.tcv, { currency })}</strong>
           <span className="flex-1" />
           {canEdit ? (
             <>
@@ -336,9 +336,9 @@ export function QuoteCashSection(props: {
           {term.schedule.periods.map((p) => (
             <span key={p.periodIndex} className="mr-3">
               {t('quoteCash.periodLine', {
-                price: money(p.unitPrice, { currency: preview.quote.currency }),
+                price: money(p.unitPrice, { currency }),
                 qty: p.quantity,
-                amount: money(p.periodAmount, { currency: preview.quote.currency }),
+                amount: money(p.periodAmount, { currency }),
               })}
             </span>
           ))}
@@ -396,7 +396,7 @@ export function QuoteCashSection(props: {
         </div>
       ) : preview.terms.length === 1 ? (
         <ul className="space-y-2">
-          {preview.terms.map((term) => termCard(term))}
+          {preview.terms.map((term) => termCard(term, preview.quote.currency))}
         </ul>
       ) : (
         <>
@@ -411,7 +411,7 @@ export function QuoteCashSection(props: {
             ariaLabel={t('quoteCash.termsLabel')}
           />
           <ul className="space-y-2">
-            {focusedTerm ? termCard(focusedTerm) : null}
+            {focusedTerm ? termCard(focusedTerm, preview.quote.currency) : null}
           </ul>
         </>
       )}
