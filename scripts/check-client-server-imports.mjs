@@ -23,6 +23,9 @@ const builtins = new Set(builtinModules)
 const serverOnly = (spec) => {
   const bare = spec.replace(/^node:/, '')
   if (spec === 'pg' || spec.startsWith('pg/')) return true
+  // A module that opts out of the client bundle fails the build for any
+  // client module that reaches it, exactly like the database driver.
+  if (spec === 'server-only') return true
   return (builtins.has(bare) || builtins.has(bare.split('/')[0])) && !polyfilled.has(bare)
 }
 
