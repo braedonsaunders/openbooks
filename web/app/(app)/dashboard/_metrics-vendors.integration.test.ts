@@ -55,6 +55,7 @@ test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, 
     assert.deepEqual(widgets.concentrationHhi, { available: true, value: dashboard.totals.hhiScaled })
     assert.deepEqual(widgets.concentrationTop5Share, { available: true, value: dashboard.totals.top5SharePct })
     assert.deepEqual(widgets.vendorLateSpend, { available: true, value: dashboard.totals.lateSpend })
+    assert.equal(widgets.vendorOnTimeGoodRate, dashboard.config.onTimeGoodRate)
     if (dashboard.totals.onTimePct === null) {
       assert.equal(widgets.vendorOnTimeRate?.available, false)
       assert.ok(

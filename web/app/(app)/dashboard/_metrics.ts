@@ -1038,7 +1038,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
   'kpi-vendor-concentration': ['concentrationHhi', 'concentrationTop5Share', 'concentrationBand', 'vendorPeriodLabel'],
-  'kpi-vendor-payment-performance': ['vendorOnTimeRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount', 'vendorPeriodLabel'],
+  'kpi-vendor-payment-performance': ['vendorOnTimeRate', 'vendorOnTimeGoodRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount', 'vendorPeriodLabel'],
   'kpi-spend-velocity': ['spendOpenAlerts', 'spendSavingsPotential', 'vendorPeriodLabel'],
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
