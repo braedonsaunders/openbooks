@@ -7,6 +7,9 @@ import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Input,
@@ -24,7 +27,7 @@ import {
 import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { confirmDialog } from '@/lib/confirm'
 import { useAppAction } from '@/lib/use-app-action'
-import type { GrantDrawerData } from './view'
+import type { GrantDrawerData, GrantGroupOption } from './view'
 
 type GrantTab = 'terms' | 'budget' | 'drawdowns' | 'reports' | 'activity'
 
@@ -216,6 +219,99 @@ function PostingAccountsForm({
   )
 }
 
+type IndirectTerms = {
+  indirectRate: string
+  indirectBase: string
+  mtdcExclusionAccountGroupId: string
+  mtdcSubawardAccountGroupId: string
+  mtdcSubawardThreshold: string
+}
+
+const EMPTY_INDIRECT_TERMS: IndirectTerms = {
+  indirectRate: '',
+  indirectBase: 'direct_costs',
+  mtdcExclusionAccountGroupId: '',
+  mtdcSubawardAccountGroupId: '',
+  mtdcSubawardThreshold: '',
+}
+
+function groupLabel(group: GrantGroupOption) {
+  return `${group.name} (${group.dimension})`
+}
+
+/**
+ * The grant's indirect-cost terms as the engine accepts them. The MTDC
+ * settings travel only with the MTDC base; an unchosen excluded-cost group is
+ * sent as null so the server can refuse a reimbursement by name rather than
+ * the form guessing a default.
+ */
+function indirectPayload(value: IndirectTerms): Record<string, unknown> {
+  const mtdc = value.indirectBase === 'modified_total_direct'
+  return {
+    ...(value.indirectRate.trim() ? { indirectRate: value.indirectRate.trim() } : {}),
+    indirectBase: value.indirectBase,
+    ...(mtdc
+      ? {
+          mtdcExclusionAccountGroupId: value.mtdcExclusionAccountGroupId || null,
+          mtdcSubawardAccountGroupId: value.mtdcSubawardAccountGroupId || null,
+          mtdcSubawardThreshold: value.mtdcSubawardAccountGroupId ? value.mtdcSubawardThreshold.trim() || null : null,
+        }
+      : {}),
+  }
+}
+
+function IndirectTermsFields({
+  value,
+  onChange,
+  groups,
+}: {
+  value: IndirectTerms
+  onChange: (next: IndirectTerms) => void
+  groups: GrantGroupOption[]
+}) {
+  const t = useTranslations('nonprofit')
+  const set = (key: keyof IndirectTerms) => (next: string) => onChange({ ...value, [key]: next })
+  return (
+    <>
+      <Field label={t('grants.indirectRate')}>
+        <Input value={value.indirectRate} onChange={(e) => set('indirectRate')(e.target.value)} inputMode="decimal" />
+      </Field>
+      <Field label={t('grants.indirectBase')}>
+        <Select value={value.indirectBase} onChange={(e) => set('indirectBase')(e.target.value)}>
+          <option value="direct_costs">{t('grants.indirectBaseDirect')}</option>
+          <option value="modified_total_direct">{t('grants.indirectBaseMtdc')}</option>
+        </Select>
+      </Field>
+      {value.indirectBase === 'modified_total_direct' ? (
+        <>
+          <Field label={t('grants.mtdcExclusionGroup')}>
+            <Select value={value.mtdcExclusionAccountGroupId} onChange={(e) => set('mtdcExclusionAccountGroupId')(e.target.value)}>
+              <option value="">{t('grants.mtdcChooseGroup')}</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>{groupLabel(group)}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('grants.mtdcExclusionHint')}</p>
+          </Field>
+          <Field label={t('grants.mtdcSubawardGroup')}>
+            <Select value={value.mtdcSubawardAccountGroupId} onChange={(e) => set('mtdcSubawardAccountGroupId')(e.target.value)}>
+              <option value="">{t('grants.mtdcNoSubaward')}</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>{groupLabel(group)}</option>
+              ))}
+            </Select>
+          </Field>
+          {value.mtdcSubawardAccountGroupId ? (
+            <Field label={t('grants.mtdcSubawardThreshold')}>
+              <Input value={value.mtdcSubawardThreshold} onChange={(e) => set('mtdcSubawardThreshold')(e.target.value)} inputMode="decimal" />
+            </Field>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  )
+}
+
 function CreateGrantForm({
   drawer,
   busy,
@@ -239,6 +335,7 @@ function CreateGrantForm({
     fundId: drawer.fundOptions[0]?.id ?? '',
     allowableAccountGroupId: drawer.groupOptions[0]?.id ?? '',
   })
+  const [indirect, setIndirect] = useState<IndirectTerms>(EMPTY_INDIRECT_TERMS)
   const set = (key: keyof typeof form) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }))
   if (!drawer.canManage) return <p className="text-sm text-slate-500">{t('grants.manageRequired')}</p>
   return (
@@ -279,15 +376,16 @@ function CreateGrantForm({
       <Field label={t('grants.allowableGroup')}>
         <Select value={form.allowableAccountGroupId} onChange={(e) => set('allowableAccountGroupId')(e.target.value)}>
           {drawer.groupOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>{opt.name}</option>
+            <option key={opt.id} value={opt.id}>{groupLabel(opt)}</option>
           ))}
         </Select>
       </Field>
+      <IndirectTermsFields value={indirect} onChange={setIndirect} groups={drawer.groupOptions} />
       {form.determination === 'contribution_conditional' ? (
         <Field label={t('grants.barrier')}><Textarea value={form.barrier} onChange={(e) => set('barrier')(e.target.value)} /></Field>
       ) : null}
       <div className="sm:col-span-2">
-        <Button disabled={busy} onClick={() => onSubmit({ ...form, rightOfReturn: form.determination === 'contribution_conditional' })}>
+        <Button disabled={busy} onClick={() => onSubmit({ ...form, ...indirectPayload(indirect), rightOfReturn: form.determination === 'contribution_conditional' })}>
           {t('grants.createAction')}
         </Button>
       </div>
@@ -315,6 +413,25 @@ function GrantTermsTab({
   const [accounts, setAccounts] = useState<Record<string, string>>(() => defaultAccountIds(drawer.accountOptions))
   const [reason, setReason] = useState('')
   const [amendAmount, setAmendAmount] = useState('')
+  const currentIndirect: IndirectTerms = {
+    indirectRate: terms.indirectRate,
+    indirectBase: terms.indirectBase,
+    mtdcExclusionAccountGroupId: terms.mtdcExclusionAccountGroupId ?? '',
+    mtdcSubawardAccountGroupId: terms.mtdcSubawardAccountGroupId ?? '',
+    mtdcSubawardThreshold: terms.mtdcSubawardThreshold ?? '',
+  }
+  const [indirect, setIndirect] = useState<IndirectTerms>(currentIndirect)
+  const groupName = (id: string | null) => {
+    const group = id ? drawer.groupOptions.find((option) => option.id === id) : undefined
+    return group ? groupLabel(group) : t('grants.notConfigured')
+  }
+
+  // An amendment carries only the indirect terms the operator changed.
+  function indirectChanges(): Record<string, unknown> {
+    const before = indirectPayload(currentIndirect)
+    const after = indirectPayload(indirect)
+    return Object.fromEntries(Object.entries(after).filter(([key, next]) => before[key] !== next))
+  }
 
   async function confirmThen(label: string, task: () => Promise<boolean>) {
     if (!(await confirmDialog(label))) return
@@ -328,7 +445,23 @@ function GrantTermsTab({
         <Field label={t('grants.determination')}><p className="text-sm">{terms.determination}</p></Field>
         <Field label={t('grants.awardAmount')}><p className="font-mono text-sm">{terms.awardAmount}</p></Field>
         <Field label={t('grants.period')}><p className="text-sm">{`${terms.periodFrom} – ${terms.periodTo}`}</p></Field>
-        <Field label={t('grants.indirectRate')}><p className="text-sm">{`${terms.indirectRate} (${terms.indirectBase})`}</p></Field>
+        <Field label={t('grants.indirectRate')}>
+          <p className="text-sm">
+            {`${terms.indirectRate} · ${terms.indirectBase === 'modified_total_direct' ? t('grants.indirectBaseMtdc') : t('grants.indirectBaseDirect')}`}
+          </p>
+        </Field>
+        {terms.indirectBase === 'modified_total_direct' ? (
+          <>
+            <Field label={t('grants.mtdcExclusionGroup')}><p className="text-sm">{groupName(terms.mtdcExclusionAccountGroupId)}</p></Field>
+            <Field label={t('grants.mtdcSubawardGroup')}>
+              <p className="text-sm">
+                {terms.mtdcSubawardAccountGroupId
+                  ? `${groupName(terms.mtdcSubawardAccountGroupId)} · ${terms.mtdcSubawardThreshold}`
+                  : t('grants.mtdcNoSubaward')}
+              </p>
+            </Field>
+          </>
+        ) : null}
         <Field label={t('grants.barrier')}>
           <p className="text-sm">{terms.barrier ?? t('grants.noBarrier')}{terms.barrierMetAt ? ` · ${terms.barrierMetAt}` : ''}</p>
         </Field>
@@ -361,7 +494,13 @@ function GrantTermsTab({
               </Button>
             </div>
           ) : null}
-          {!['closed', 'void', 'draft'].includes(terms.status) ? (
+          {!['closed_out', 'closed', 'void'].includes(terms.status) ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <h4 className="text-sm font-medium sm:col-span-2">{t('grants.indirectTerms')}</h4>
+              <IndirectTermsFields value={indirect} onChange={setIndirect} groups={drawer.groupOptions} />
+            </div>
+          ) : null}
+          {!['closed_out', 'closed', 'void'].includes(terms.status) ? (
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-40 flex-1">
                 <Field label={t('grants.amendAmount')}><Input value={amendAmount} onChange={(e) => setAmendAmount(e.target.value)} inputMode="decimal" /></Field>
@@ -373,7 +512,7 @@ function GrantTermsTab({
                 disabled={busy}
                 onClick={() => onPosting({
                   action: 'amend', grantId: terms.id, reason,
-                  changes: amendAmount.trim() ? { awardAmount: amendAmount.trim() } : {},
+                  changes: { ...(amendAmount.trim() ? { awardAmount: amendAmount.trim() } : {}), ...indirectChanges() },
                   accounts, postingDate,
                 }, t('grants.amended'))}
               >
@@ -381,7 +520,7 @@ function GrantTermsTab({
               </Button>
             </div>
           ) : null}
-          {!['closed', 'void'].includes(terms.status) ? (
+          {!['closed_out', 'closed', 'void'].includes(terms.status) ? (
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-40">
                 <Field label={t('grants.postingDate')}><Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} /></Field>
@@ -416,11 +555,12 @@ function GrantTermsTab({
 
 function GrantBudgetTab({ budget }: { budget: Extract<GrantDrawerData, { mode: 'record' }>['budget'] }) {
   const t = useTranslations('nonprofit')
-  const rows: [string, string][] = [
+  const rows: [string, string | null][] = [
     [t('grants.awardAmount'), budget.awardAmount],
     [t('grants.drawnAmount'), budget.drawnAmount],
     [t('grants.remainingAward'), budget.remainingAward],
     [t('grants.allowableDirect'), budget.allowableDirectCosts],
+    [t('grants.indirectCostBase'), budget.indirectCostBase],
     [t('grants.indirectCost'), budget.indirectCost],
     [t('grants.allowableSpend'), budget.allowableSpend],
     [t('grants.reimbursedAmount'), budget.reimbursedAmount],
@@ -428,16 +568,27 @@ function GrantBudgetTab({ budget }: { budget: Extract<GrantDrawerData, { mode: '
     [t('grants.remainingAllowable'), budget.remainingAllowableSpend],
   ]
   return (
-    <Table>
-      <TableBody>
-        {rows.map(([label, value]) => (
-          <TableRow key={label}>
-            <TableCell>{label}</TableCell>
-            <TableCell className="text-right font-mono text-[13px]">{value}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="space-y-3">
+      {budget.measurementRefusal ? (
+        <Alert variant="warning">
+          <AlertTitle>{t('grants.budgetUnmeasured')}</AlertTitle>
+          <AlertDescription>
+            <p>{budget.measurementRefusal.message}</p>
+            <p>{budget.measurementRefusal.remedy}</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <Table>
+        <TableBody>
+          {rows.map(([label, value]) => (
+            <TableRow key={label}>
+              <TableCell>{label}</TableCell>
+              <TableCell className="text-right font-mono text-[13px]">{value ?? t('grants.notMeasured')}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
