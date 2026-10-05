@@ -62,7 +62,13 @@ export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/
  * at/below the cutoff and therefore unscanned. 0401 (arch-ledger) must add
  * its basename here if it keeps any raw read alongside the predicate call.
  */
-export const INLINE_BYPASS_GUC_ALLOWLIST = new Map([])
+export const INLINE_BYPASS_GUC_ALLOWLIST = new Map([
+  // Superseded tenant policies: 0525 re-created both with the privileged
+  // predicate, so these files' inline reads are frozen history, not live
+  // trust — the live policies are scanned clean above.
+  ["0489_pay_component_department_expenses.sql", "policy superseded by 0525_policy_bypass_predicate"],
+  ["0497_psp_automation.sql", "policy superseded by 0525_policy_bypass_predicate"],
+])
 
 /** Line numbers (1-based) of executable inline-GUC reads in comment-stripped SQL. */
 export function findInlineBypassTrust(content) {

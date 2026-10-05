@@ -1,0 +1,1 @@
+Policy-only change: re-creates the tenant isolation policies of pay_component_department_expenses and payment_disputes with the privileged bypass predicate. No tenant data is read, rewritten or deleted; policy names and predicates are otherwise unchanged.
