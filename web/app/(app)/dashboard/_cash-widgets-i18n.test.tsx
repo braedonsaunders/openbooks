@@ -47,6 +47,34 @@ test('lowest-point tile renders the position figure with its week', async () => 
   }
 })
 
+function burnData() {
+  return {
+    baseCurrency: 'USD',
+    asOfDate: '2026-09-16',
+    cashBurn: {
+      available: true,
+      value: { weeklyOutflow: '8450.2500', netChange: '-1234.5600', horizonWeeks: 13 },
+    },
+  } as unknown as DashboardMetrics
+}
+
+// The burn tile shows the average weekly outflow with the projected net
+// change over the horizon as its hint — both from the same position.
+test('burn tile renders the weekly outflow with the projected net change', async () => {
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-burn" data={burnData()} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('Weekly cash burn'), 'the tile title resolves through dashboard.widgets copy')
+    assert.ok(html.includes('8,450.25'), 'the weekly outflow renders as money, never raw')
+    assert.ok(html.includes('Net -$1,234.56 over the horizon'), 'the hint carries the projected net change')
+  } finally {
+    await unmount()
+  }
+})
+
 test('lowest-point tile refuses by name when the rate is missing', async () => {
   const data = {
     ...lowestData(),
