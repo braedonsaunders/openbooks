@@ -4,7 +4,7 @@ import { db, withOrg } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import { cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
+import { cmp, fromUnits, isZero, mulRate, neg, toUnits } from "../money/money.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -20,7 +20,20 @@ import { isUuid } from "../platform/uuid.ts";
  * are evidence-backed settlement_lines. Idempotent on (org, provider, externalRef).
  */
 
-export type PspProvider = "stripe" | "recurly" | "chargebee";
+export type PspProvider = "stripe" | "recurly" | "chargebee" | "shopify_payments" | "paypal";
+
+/** Every provider the settlement importer accepts. Adding a provider is one entry here, one parser below, and the CHECK widening in the migration. */
+export const PSP_PROVIDERS: readonly PspProvider[] = [
+  "stripe",
+  "recurly",
+  "chargebee",
+  "shopify_payments",
+  "paypal",
+];
+
+export function isPspProvider(value: string): value is PspProvider {
+  return (PSP_PROVIDERS as readonly string[]).includes(value);
+}
 export type SettlementLineKind =
   | "charge"
   | "refund"
@@ -119,7 +132,28 @@ export interface ParsedSettlementLine {
   externalRef?: string | null;
   description?: string | null;
   currency?: string | null;
+  /** Posted receipt this line settles (charge/refund/dispute legs). The FX
+   *  path reads the receipt's booked functional amount to post realized FX. */
+  documentId?: string | null;
   meta?: Record<string, unknown>;
+}
+
+/**
+ * Cross-currency evidence for one settlement batch. Rates are exact decimal
+ * strings (at most 10 places): `rate` converts one unit of the charges
+ * currency into payout currency, `payoutRate` converts one unit of payout
+ * currency into the posting entity's base currency (omit when the payout
+ * currency already is base). Per-line `exchangeRate` in a line's meta
+ * overrides `rate` for that line. A foreign-currency line with neither is
+ * refused naming the field to supply — converting at an assumed rate would
+ * book money nobody evidenced.
+ */
+export interface SettlementFxEvidence {
+  sourceCurrency: string;
+  rate: string;
+  rateSource: string;
+  payoutRate?: string | null;
+  payoutRateSource?: string | null;
 }
 
 export interface ParsedSettlement {
@@ -128,8 +162,28 @@ export interface ParsedSettlement {
   settlementDate: string;
   currency: string;
   lines: ParsedSettlementLine[];
+  fx?: SettlementFxEvidence | null;
   memo?: string | null;
   raw?: Record<string, unknown>;
+}
+
+/**
+ * Validate an FX rate shape before it can move money: positive, exact, at
+ * most 10 decimal places. The message names the field the operator supplies.
+ */
+export function requireFxRate(rate: unknown, field: string): string {
+  const raw = typeof rate === "number" ? String(rate) : typeof rate === "string" ? rate.trim() : "";
+  if (raw === "" || !/^\+?(\d+(\.\d*)?|\.\d+)$/.test(raw)) {
+    throw new PspSettlementError(`${field} must be a positive decimal exchange rate`);
+  }
+  const fraction = raw.replace(/^\+/, "").split(".")[1] ?? "";
+  if (fraction.length > 10) {
+    throw new PspSettlementError(`${field} must carry at most 10 decimal places`);
+  }
+  if (toUnits(mulRate("1", raw)) <= 0n) {
+    throw new PspSettlementError(`${field} must be greater than zero`);
+  }
+  return raw.replace(/^\+/, "");
 }
 
 /**
@@ -414,6 +468,10 @@ export function parseStripeBalanceTransactions(
     created?: number;
     description?: string | null;
     available_on?: number;
+    /** Provider rate for this transaction into the payout currency (Stripe
+     *  balance-transaction `exchange_rate`). Carried into the line meta as
+     *  FX evidence; a foreign-currency row uses it at posting. */
+    exchange_rate?: number | string | null;
   }[],
   payoutId: string,
   settlementDate: string,
@@ -520,13 +578,24 @@ export function parseStripeBalanceTransactions(
       rowsWithNet += 1;
     }
     includedRows += 1;
+    // A supplied provider rate rides the line as FX evidence (validated, not
+    // trusted blind: a malformed rate refuses naming the row). Rows without
+    // one convert at the batch rate; a foreign-currency row with neither is
+    // refused at import, naming exchange_rate.
+    const lineMeta: Record<string, unknown> = { stripeType: rowType, fee: r.fee, net: r.net };
+    if (r.exchange_rate != null) {
+      lineMeta.exchangeRate = requireFxRate(
+        r.exchange_rate,
+        `Stripe transaction exchange_rate (${rowLabel})`,
+      );
+    }
     lines.push({
       kind,
       amount: major,
       externalRef: r.id,
       description: r.description ?? rowType,
       currency,
-      meta: { stripeType: rowType, fee: r.fee, net: r.net },
+      meta: lineMeta,
     });
     // Fees ride every row kind — a dispute's $15 fee is fee expense whether
     // the row is a charge, a refund, a dispute, or an adjustment. Splitting
@@ -846,7 +915,387 @@ export function parseChargebeeSettlement(payload: {
   };
 }
 
-async function primaryBookId(orgId: string): Promise<string> {
+/**
+ * Exact decimal from a provider payload: Shopify Money and PayPal API amounts
+ * arrive as decimal strings. Scientific notation, thousands separators and
+ * over-precision are refused naming the field — silently coercing "1,234.56"
+ * or 1e3 would book money nobody evidenced.
+ */
+function requireExactMoney(value: unknown, field: string): string {
+  const raw = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d+(\.\d{1,4})?$/.test(raw)) {
+    throw new PspSettlementError(`${field} must be an exact decimal amount with at most 4 places`);
+  }
+  return fromUnits(toUnits(raw));
+}
+
+function requireProviderCurrency(code: unknown, provider: string, field: string): string {
+  return requireSettlementCurrency(
+    code,
+    `${provider} ${field} is required`,
+    `${provider} ${field} must be a three-letter currency code`,
+  );
+}
+
+const SHOPIFY_BALANCE_KINDS: Record<string, SettlementLineKind | "payout"> = {
+  charge: "charge",
+  refund: "refund",
+  dispute: "dispute",
+  dispute_reversal: "dispute_reversal",
+  reserve: "adjustment",
+  adjustment: "adjustment",
+  payout: "payout",
+};
+
+/**
+ * Shopify Payments payout subset (Admin GraphQL `shopifyPaymentsAccount`
+ * `payouts` / `balanceTransactions` shapes, fetched by a later change — this
+ * parser works from the documented field names): the payout carries its id,
+ * currency and net, and every balance transaction carries its type, amount,
+ * fee, net, currency and source order. Amounts are decimal strings in the
+ * transaction currency, never floats. The payout's own movement rows are the
+ * bank leg, not content, exactly like the Stripe payout movement.
+ */
+export function parseShopifyPaymentsPayout(
+  payout: {
+    id: string;
+    currency?: string | null;
+    amount?: string | number | null;
+    net?: string | number | null;
+    issuedAt?: string | null;
+  },
+  transactions: {
+    id?: string | null;
+    type: string;
+    amount: string | number;
+    fee?: string | number | null;
+    net?: string | number | null;
+    currency?: string | null;
+    exchange_rate?: string | number | null;
+    sourceOrderId?: string | null;
+  }[],
+  fallbackDate?: string,
+): ParsedSettlement {
+  const payoutId = (payout.id ?? "").trim();
+  if (payoutId === "") throw new PspSettlementError("Shopify Payments payout id is required");
+  const currency = requireProviderCurrency(payout.currency, "Shopify Payments", "payout currency");
+  const settlementDate = (payout.issuedAt ?? fallbackDate ?? new Date().toISOString()).slice(0, 10);
+  const lines: ParsedSettlementLine[] = [];
+  let payoutAnchor: bigint | null = null;
+  for (const [index, t] of transactions.entries()) {
+    const rowType = (t.type ?? "").trim().toLowerCase().replace(/-/g, "_");
+    const rowLabel = `row ${index + 1}${t.id ? ` ${t.id}` : ""}`;
+    const mapped = SHOPIFY_BALANCE_KINDS[rowType];
+    if (!mapped) {
+      throw new PspSettlementError(
+        `unsupported Shopify Payments balance type "${t.type}" (${rowLabel}): ` +
+          `re-export the payout's balance transactions without it, or extend the importer to map it, before importing payout ${payoutId}`,
+      );
+    }
+    const rowCurrency = requireProviderCurrency(
+      t.currency ?? currency,
+      "Shopify Payments",
+      `transaction currency (${rowLabel})`,
+    );
+    if (rowCurrency !== currency) {
+      throw new PspSettlementError(
+        `mixed-currency Shopify Payments transactions (${currency}, ${rowCurrency}) cannot settle as one batch`,
+      );
+    }
+    // The payout's own movement is a balance debit (negative): it anchors the
+    // payout-total reconciliation, so it keeps its sign while content rows
+    // stay magnitudes.
+    if (mapped === "payout") {
+      const signed = typeof t.amount === "number" ? String(t.amount) : t.amount.trim();
+      if (!/^-?\d+(\.\d{1,4})?$/.test(signed)) {
+        throw new PspSettlementError(
+          `Shopify Payments transaction amount (${rowLabel}) must be an exact decimal amount with at most 4 places`,
+        );
+      }
+      payoutAnchor = (payoutAnchor ?? 0n) - toUnits(fromUnits(toUnits(signed)));
+      continue;
+    }
+    const amount = requireExactMoney(t.amount, `Shopify Payments transaction amount (${rowLabel})`);
+    const meta: Record<string, unknown> = { shopifyType: rowType };
+    if (t.sourceOrderId) meta.sourceOrderId = t.sourceOrderId;
+    if (t.exchange_rate != null) {
+      meta.exchangeRate = requireFxRate(t.exchange_rate, `Shopify Payments transaction exchange_rate (${rowLabel})`);
+    }
+    lines.push({
+      kind: mapped,
+      amount,
+      externalRef: t.id ?? null,
+      description: t.sourceOrderId ? `${rowType} for order ${t.sourceOrderId}` : rowType,
+      currency,
+      meta,
+    });
+    if (t.fee != null && String(t.fee).trim() !== "" && String(t.fee).trim() !== "0" && String(t.fee).trim() !== "0.00") {
+      const fee = requireExactMoney(t.fee, `Shopify Payments transaction fee (${rowLabel})`);
+      lines.push({
+        kind: "fee",
+        amount: fee,
+        externalRef: t.id ? `${t.id}_fee` : null,
+        description: "Shopify Payments transaction fee",
+        currency,
+        meta: { shopifyType: `${rowType}_fee` },
+      });
+    }
+  }
+  if (lines.length === 0) {
+    throw new PspSettlementError(
+      `settlement batch has no evidence lines: payout ${payoutId} carries only its own payout movement`,
+    );
+  }
+  if (payoutAnchor !== null) {
+    const computedNet = toUnits(summarizeSettlement(lines).netAmount);
+    if (computedNet !== payoutAnchor) {
+      throw new PspSettlementError(
+        `Shopify Payments payout ${payoutId} does not reconcile: its payout movement totals ${fromUnits(payoutAnchor)} but settlement lines net to ${fromUnits(computedNet)}; ` +
+          `re-export the payout's balance transactions without the payout movement row and import again`,
+      );
+    }
+  }
+  return {
+    provider: "shopify_payments",
+    externalRef: payoutId,
+    settlementDate,
+    currency,
+    lines,
+    memo: `Shopify Payments payout ${payoutId}`,
+    raw: { payout, rowCount: transactions.length },
+  };
+}
+
+/**
+ * PayPal Transaction Search API (`/v1/reporting/transactions`) T-code
+ * families. Only the long-stable families map; anything else refuses naming
+ * the code, because a new PayPal event family booked as a charge would invent
+ * receivables. Amounts are magnitudes — the family carries the direction.
+ */
+const PAYPAL_EVENT_FAMILIES: Record<string, SettlementLineKind> = {
+  T00: "charge",
+  T01: "transfer",
+  T02: "transfer",
+  T03: "transfer",
+  T04: "charge",
+  T05: "charge",
+  T07: "charge",
+  T08: "charge",
+  T11: "refund",
+  T12: "fee",
+  T15: "adjustment",
+  T20: "dispute",
+  T21: "dispute",
+};
+
+function paypalKindFor(code: string, label: string): SettlementLineKind {
+  const family = code.trim().toUpperCase().slice(0, 3);
+  const kind = PAYPAL_EVENT_FAMILIES[family];
+  if (!kind) {
+    throw new PspSettlementError(
+      `unsupported PayPal transaction event code "${code}" (${label}): ` +
+        `map the event family in the PayPal importer before importing this batch`,
+    );
+  }
+  return kind;
+}
+
+/**
+ * PayPal Transaction Search API subset: `transaction_details` rows with
+ * `transaction_info` (id, event code, dates, amounts, fee). One payout or
+ * date-range export becomes one batch, idempotent on the export reference.
+ */
+export function parsePaypalTransactions(
+  input: {
+    reference: string;
+    transactions: {
+      transaction_info?: {
+        transaction_id?: string;
+        transaction_event_code?: string;
+        transaction_initiated_date?: string;
+        transaction_updated_date?: string;
+        transaction_amount?: { currency_code?: string; value?: string | number };
+        fee_amount?: { currency_code?: string; value?: string | number };
+      };
+    }[];
+  },
+  fallbackDate?: string,
+): ParsedSettlement {
+  const reference = (input.reference ?? "").trim();
+  if (reference === "") throw new PspSettlementError("PayPal settlement reference is required");
+  if (input.transactions.length === 0) {
+    throw new PspSettlementError("settlement batch has no evidence lines");
+  }
+  const lines: ParsedSettlementLine[] = [];
+  let currency = "";
+  const today = new Date().toISOString().slice(0, 10);
+  let settlementDate = fallbackDate ?? today;
+  for (const [index, row] of input.transactions.entries()) {
+    const info = row.transaction_info ?? {};
+    const label = `row ${index + 1}${info.transaction_id ? ` ${info.transaction_id}` : ""}`;
+    const code = info.transaction_event_code ?? "";
+    if (code.trim() === "") {
+      throw new PspSettlementError(`PayPal transaction event code is required (${label})`);
+    }
+    const kind = paypalKindFor(code, label);
+    const amountValue = info.transaction_amount?.value;
+    if (amountValue == null || String(amountValue).trim() === "") {
+      throw new PspSettlementError(`PayPal transaction amount is required (${label})`);
+    }
+    const rowCurrency = requireProviderCurrency(
+      info.transaction_amount?.currency_code,
+      "PayPal",
+      `transaction currency (${label})`,
+    );
+    if (currency === "") currency = rowCurrency;
+    else if (rowCurrency !== currency) {
+      throw new PspSettlementError(
+        `mixed-currency PayPal transactions (${currency}, ${rowCurrency}) cannot settle as one batch`,
+      );
+    }
+    // The export's first dated row sets the settlement day; an explicit
+    // fallback date from the import form wins over provider dates.
+    if (index === 0 && fallbackDate === undefined) {
+      const initiated = info.transaction_initiated_date ?? info.transaction_updated_date;
+      if (typeof initiated === "string" && /^\d{4}-\d{2}-\d{2}/.test(initiated)) {
+        settlementDate = initiated.slice(0, 10);
+      }
+    }
+    lines.push({
+      kind,
+      amount: requireExactMoney(amountValue, `PayPal transaction amount (${label})`),
+      externalRef: info.transaction_id ?? null,
+      description: `PayPal ${code.trim().toUpperCase()}`,
+      currency,
+      meta: { paypalEventCode: code.trim().toUpperCase() },
+    });
+    const feeValue = info.fee_amount?.value;
+    if (feeValue != null && String(feeValue).trim() !== "" && String(feeValue).trim() !== "0" && String(feeValue).trim() !== "0.00") {
+      lines.push({
+        kind: "fee",
+        amount: requireExactMoney(feeValue, `PayPal transaction fee (${label})`),
+        externalRef: info.transaction_id ? `${info.transaction_id}_fee` : null,
+        description: `PayPal fee (${code.trim().toUpperCase()})`,
+        currency,
+        meta: { paypalEventCode: `${code.trim().toUpperCase()}_fee` },
+      });
+    }
+  }
+  return {
+    provider: "paypal",
+    externalRef: reference,
+    settlementDate,
+    currency,
+    lines,
+    memo: `PayPal settlement ${reference}`,
+    raw: { reference, rowCount: input.transactions.length },
+  };
+}
+
+/**
+ * PayPal settlement report CSV (STL): strict comma-separated values with a
+ * header row. The classifier is the Transaction Event Code family (same map
+ * as the API parser); Debit/Credit rides the line meta as evidence.
+ */
+export function parsePaypalSettlementCsv(csv: string, reference: string, fallbackDate?: string): ParsedSettlement {
+  const ref = (reference ?? "").trim();
+  if (ref === "") throw new PspSettlementError("PayPal settlement reference is required");
+  const records = splitCsvRecords(csv);
+  if (records.length < 2) {
+    throw new PspSettlementError("PayPal settlement CSV carries no transaction rows");
+  }
+  const header = records[0]!.map((h) => h.trim().toLowerCase());
+  const col = (name: string): number => header.indexOf(name);
+  const codeCol = col("transaction event code");
+  const idCol = col("transaction id");
+  const amountCol = col("gross transaction amount");
+  const currencyCol = col("gross transaction currency");
+  const dcCol = ["transaction debit or credit", "debit or credit"].map(col).find((i) => i >= 0) ?? -1;
+  const feeCol = ["fee amount", "fee"].map(col).find((i) => i >= 0) ?? -1;
+  const dateCol = ["transaction completed date", "transaction initiated date"].map(col).find((i) => i >= 0) ?? -1;
+  if (codeCol < 0 || idCol < 0 || amountCol < 0 || currencyCol < 0) {
+    throw new PspSettlementError(
+      "PayPal settlement CSV must carry Transaction ID, Transaction Event Code, Gross Transaction Amount and Gross Transaction Currency columns",
+    );
+  }
+  const transactions = records.slice(1).map((fields) => ({
+    transaction_info: {
+      transaction_id: fields[idCol],
+      transaction_event_code: fields[codeCol],
+      transaction_initiated_date: dateCol >= 0 ? fields[dateCol] : undefined,
+      transaction_amount: { currency_code: fields[currencyCol], value: fields[amountCol] },
+      fee_amount: feeCol >= 0 ? { currency_code: fields[currencyCol], value: fields[feeCol] } : undefined,
+    },
+  }));
+  const parsed = parsePaypalTransactions({ reference: ref, transactions }, fallbackDate);
+  return {
+    ...parsed,
+    lines: parsed.lines.map((line, index) => {
+      const dc = dcCol >= 0 ? (records[index + 1]?.[dcCol]?.trim() || null) : null;
+      return dc ? { ...line, meta: { ...(line.meta ?? {}), paypalDebitOrCredit: dc } } : line;
+    }),
+  };
+}
+
+/** Minimal strict CSV reader: commas, double-quote escaping, CRLF rows. */
+function splitCsvRecords(csv: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = "";
+  let quoted = false;
+  const text = csv.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      record.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      record.push(field);
+      field = "";
+      if (!(record.length === 1 && record[0]!.trim() === "")) records.push(record);
+      record = [];
+    } else if (ch === "\r") {
+      continue;
+    } else {
+      field += ch;
+    }
+  }
+  record.push(field);
+  if (!(record.length === 1 && record[0]!.trim() === "")) records.push(record);
+  if (quoted) throw new PspSettlementError("PayPal settlement CSV has an unterminated quoted field");
+  return records;
+}
+
+/**
+ * Parser registry: adding a provider is one entry here (plus the CHECK
+ * widening). The settlements route dispatches through this instead of
+ * branching per provider, so a new provider cannot strand the route.
+ */
+export const SETTLEMENT_PARSERS: Record<
+  PspProvider,
+  { label: string; kinds: string }
+> = {
+  stripe: { label: "Stripe", kinds: "balance transactions" },
+  recurly: { label: "Recurly", kinds: "settlement payload" },
+  chargebee: { label: "Chargebee", kinds: "settlement payload" },
+  shopify_payments: { label: "Shopify Payments", kinds: "payout and balance transactions" },
+  paypal: { label: "PayPal", kinds: "transaction search export or settlement CSV" },
+};
+
+export async function primaryBookId(orgId: string): Promise<string> {
   const r = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
      limit 1 for share
@@ -856,7 +1305,7 @@ async function primaryBookId(orgId: string): Promise<string> {
   return id;
 }
 
-async function periodForDate(
+export async function periodForDate(
   orgId: string,
   date: string,
 ): Promise<string | null> {
@@ -901,6 +1350,11 @@ function sameStoredImport(
     fx_account_id: string | null;
     clearing_account_id: string | null;
     subsidiary_id: string | null;
+    source_currency: string | null;
+    conversion_rate: string | null;
+    conversion_rate_source: string | null;
+    payout_rate: string | null;
+    payout_rate_source: string | null;
     source_payload: unknown;
     line_count: number;
     memo: string | null;
@@ -912,6 +1366,7 @@ function sameStoredImport(
     description: string | null;
     amount: string;
     currency: string | null;
+    document_id: string | null;
     meta: unknown;
   }>,
   parsed: ParsedSettlement,
@@ -919,6 +1374,13 @@ function sameStoredImport(
   currency: string,
   totals: ReturnType<typeof summarizeSettlement>,
   subsidiaryId: string | null,
+  fx: {
+    sourceCurrency: string;
+    conversionRate: string;
+    conversionRateSource: string;
+    payoutRate: string | null;
+    payoutRateSource: string | null;
+  } | null,
 ): boolean {
   const sameAmount = (stored: string, expected: string) => toUnits(stored) === toUnits(expected);
   if (
@@ -937,6 +1399,11 @@ function sameStoredImport(
     || row.fx_account_id !== (accounts.fxAccountId ?? null)
     || row.clearing_account_id !== (accounts.clearingAccountId ?? null)
     || row.subsidiary_id !== subsidiaryId
+    || (row.source_currency ?? null) !== (fx?.sourceCurrency ?? null)
+    || (row.conversion_rate ?? null) !== (fx?.conversionRate ?? null)
+    || (row.conversion_rate_source ?? null) !== (fx?.conversionRateSource ?? null)
+    || (row.payout_rate ?? null) !== (fx?.payoutRate ?? null)
+    || (row.payout_rate_source ?? null) !== (fx?.payoutRateSource ?? null)
     || stableJson(row.source_payload) !== stableJson(parsed.raw ?? null)
     || row.line_count !== parsed.lines.length
     || row.memo !== (parsed.memo ?? null)
@@ -952,6 +1419,7 @@ function sameStoredImport(
       && stored.description === (line.description ?? null)
       && sameAmount(stored.amount, line.amount)
       && stored.currency === (line.currency ?? null)
+      && stored.document_id === (line.documentId ?? null)
       && stableJson(stored.meta) === stableJson(line.meta ?? {});
   });
 }
@@ -989,10 +1457,75 @@ export async function importSettlementBatch(
       "settlement currency must be a three-letter code",
     );
   }
-  for (const line of parsed.lines) {
-    if (line.currency && line.currency.toUpperCase() !== currency) {
+  // Cross-currency batches convert at evidenced rates only. Every line is in
+  // the batch currency or the evidenced source currency, and every
+  // source-currency line carries its own exchange_rate or rides the batch
+  // conversion_rate. A foreign line with neither names exchange_rate, so an
+  // operator knows exactly which evidence to supply.
+  const fx = parsed.fx ?? null;
+  let sourceCurrency = "";
+  let conversionRate = "";
+  let conversionRateSource = "";
+  let payoutRate: string | null = null;
+  let payoutRateSource: string | null = null;
+  if (fx) {
+    sourceCurrency = requireSettlementCurrency(
+      fx.sourceCurrency,
+      "settlement source currency is required whenever conversion evidence is supplied",
+      "settlement source currency must be a three-letter currency code",
+    );
+    if (sourceCurrency === currency) {
       throw new PspSettlementError(
-        "mixed-currency settlement lines require explicit conversion evidence",
+        "settlement source currency must differ from the batch currency",
+      );
+    }
+    conversionRate = requireFxRate(fx.rate, "settlement conversion_rate");
+    conversionRateSource = (fx.rateSource ?? "").trim();
+    if (conversionRateSource === "") {
+      throw new PspSettlementError(
+        "settlement conversion_rate_source is required alongside conversion_rate",
+      );
+    }
+    if (fx.payoutRate != null) {
+      payoutRate = requireFxRate(fx.payoutRate, "settlement payout_rate");
+      payoutRateSource = (fx.payoutRateSource ?? "").trim() || null;
+      if (!payoutRateSource) {
+        throw new PspSettlementError(
+          "settlement payout_rate_source is required alongside payout_rate",
+        );
+      }
+    }
+  }
+  for (const [lineIndex, line] of parsed.lines.entries()) {
+    const lineCurrency = (line.currency ?? "").toUpperCase() || currency;
+    if (lineCurrency !== currency && lineCurrency !== sourceCurrency) {
+      throw new PspSettlementError(
+        `settlement line ${lineIndex + 1} in ${lineCurrency} matches neither the batch currency ${currency} nor the evidenced source currency ${sourceCurrency || "(none)"}; re-import with conversion evidence for that currency`,
+      );
+    }
+    if (lineCurrency !== currency) {
+      const meta = line.meta ?? {};
+      if (meta.exchangeRate == null && conversionRate === "") {
+        throw new PspSettlementError(
+          `settlement line ${lineIndex + 1} in ${lineCurrency} has no exchange-rate evidence; supply exchange_rate on the balance transaction or conversion_rate on the batch import`,
+        );
+      }
+      if (meta.exchangeRate != null) {
+        requireFxRate(meta.exchangeRate, `settlement line ${lineIndex + 1} exchange_rate`);
+      }
+      if (meta.bookedAmount != null) {
+        try {
+          toUnits(String(meta.bookedAmount));
+        } catch {
+          throw new PspSettlementError(
+            `settlement line ${lineIndex + 1} bookedAmount must be an exact decimal amount`,
+          );
+        }
+      }
+    }
+    if (line.documentId != null && !isUuid(line.documentId)) {
+      throw new PspSettlementError(
+        `settlement line ${lineIndex + 1} receipt reference is not a valid document id`,
       );
     }
   }
@@ -1043,7 +1576,23 @@ export async function importSettlementBatch(
     allowedSubsidiaryIds,
     subsidiaryId,
   );
-  const totals = summarizeSettlement(parsed.lines);
+  // Stored totals are always in payout (batch) currency: a cross-currency
+  // batch converts each line at its evidenced rate before footing, so the
+  // bank leg matches the payout the provider actually paid. Lines keep their
+  // source amounts with the rate evidence; posting reconciles the two.
+  const totals = fx
+    ? summarizeSettlement(
+      parsed.lines.map((line) => {
+        const lineCurrency = (line.currency ?? "").toUpperCase() || currency;
+        if (lineCurrency === currency) return line;
+        const rate = requireFxRate(
+          (line.meta ?? {}).exchangeRate ?? conversionRate,
+          "settlement conversion_rate",
+        );
+        return { ...line, amount: mulRate(line.amount, rate), currency };
+      }),
+    )
+    : summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
     const inserted = (await db.execute<{ id: string }>(sql`
@@ -1051,7 +1600,8 @@ export async function importSettlementBatch(
         id, org_id, provider, external_ref, status, currency,
         gross_amount, fee_amount, refund_amount, dispute_amount, adjustment_amount, net_amount, fx_amount,
         settlement_date, bank_account_id, fee_account_id, dispute_account_id, fx_account_id,
-        clearing_account_id, subsidiary_id, source_payload, line_count, memo, created_by, updated_by
+        clearing_account_id, subsidiary_id, source_currency, conversion_rate, conversion_rate_source,
+        payout_rate, payout_rate_source, source_payload, line_count, memo, created_by, updated_by
       ) values (
         ${proposedId}, ${orgId}, ${parsed.provider}, ${parsed.externalRef}, 'draft', ${currency},
         ${totals.grossAmount}, ${totals.feeAmount}, ${totals.refundAmount}, ${totals.disputeAmount},
@@ -1059,6 +1609,8 @@ export async function importSettlementBatch(
         ${accounts.bankAccountId ?? null}, ${accounts.feeAccountId ?? null},
         ${accounts.disputeAccountId ?? null}, ${accounts.fxAccountId ?? null},
         ${accounts.clearingAccountId ?? null}, ${subsidiaryId},
+        ${sourceCurrency || null}, ${conversionRate || null}, ${conversionRateSource || null},
+        ${payoutRate}, ${payoutRateSource},
         ${parsed.raw ? JSON.stringify(parsed.raw) : null}::jsonb, ${parsed.lines.length},
         ${parsed.memo ?? null}, ${actorId}, ${actorId}
       )
@@ -1106,6 +1658,11 @@ export async function importSettlementBatch(
         fx_account_id: string | null;
         clearing_account_id: string | null;
         subsidiary_id: string | null;
+        source_currency: string | null;
+        conversion_rate: string | null;
+        conversion_rate_source: string | null;
+        payout_rate: string | null;
+        payout_rate_source: string | null;
         source_payload: unknown;
         line_count: number;
         memo: string | null;
@@ -1114,7 +1671,9 @@ export async function importSettlementBatch(
                refund_amount::text, dispute_amount::text, adjustment_amount::text,
                net_amount::text, fx_amount::text, settlement_date::text,
                bank_account_id, fee_account_id, dispute_account_id, fx_account_id,
-               clearing_account_id, subsidiary_id, source_payload, line_count, memo
+               clearing_account_id, subsidiary_id, source_currency, conversion_rate::text,
+               conversion_rate_source, payout_rate::text, payout_rate_source,
+               source_payload, line_count, memo
           from psp_settlement_batches
          where id = ${batchId} and org_id = ${orgId}
       `)).rows[0];
@@ -1125,14 +1684,21 @@ export async function importSettlementBatch(
         description: string | null;
         amount: string;
         currency: string | null;
+        document_id: string | null;
         meta: unknown;
       }>(sql`
-        select line_number, kind, external_ref, description, amount::text, currency, meta
+        select line_number, kind, external_ref, description, amount::text, currency, document_id, meta
           from psp_settlement_lines
          where batch_id = ${batchId} and org_id = ${orgId}
          order by line_number
       `)).rows;
-      if (!stored || !sameStoredImport(stored, storedLines, parsed, accounts, currency, totals, subsidiaryId)) {
+      if (!stored || !sameStoredImport(stored, storedLines, parsed, accounts, currency, totals, subsidiaryId, sourceCurrency ? {
+        sourceCurrency,
+        conversionRate,
+        conversionRateSource,
+        payoutRate,
+        payoutRateSource,
+      } : null)) {
         if (!stored) throw new PspSettlementError("settlement batch could not be read");
         throw new PspSettlementConflictError(
           "provider settlement reference already has different evidence; use the persisted batch, then reverse it or record a separate adjustment",
@@ -1172,11 +1738,126 @@ async function insertLines(
     n++;
     await db.execute(sql`
       insert into psp_settlement_lines
-        (org_id, batch_id, line_number, kind, external_ref, description, amount, currency, meta, created_by, updated_by)
+        (org_id, batch_id, line_number, kind, external_ref, description, amount, currency, document_id, meta, created_by, updated_by)
       values (${orgId}, ${batchId}, ${n}, ${l.kind}, ${l.externalRef ?? null}, ${l.description ?? null},
-              ${l.amount}, ${l.currency ?? null}, ${JSON.stringify(l.meta ?? {})}::jsonb, ${actorId}, ${actorId})
+              ${l.amount}, ${l.currency ?? null}, ${l.documentId ?? null},
+              ${JSON.stringify(l.meta ?? {})}::jsonb, ${actorId}, ${actorId})
     `);
   }
+}
+
+/**
+ * Convert one FX batch into base-currency legs. Every foreign line converts
+ * at its own exchange_rate (or the batch conversion_rate) into payout
+ * currency, then at payout_rate into base — exact decimal math, no floats.
+ * Legs with receipt booking (a linked posted receipt in the line currency,
+ * or explicit bookedAmount evidence) post at the booked amount; the summed
+ * converted-minus-booked difference returns as realized FX gain/loss.
+ * Legs without booking post at converted and contribute nothing.
+ */
+async function buildFxLegs(
+  orgId: string,
+  batchId: string,
+  b: {
+    currency: string;
+    net_amount: string;
+    fee_amount: string;
+  },
+  fxPlan: { sourceCurrency: string; conversionRate: string; payoutRate: string },
+): Promise<{
+  bank: string;
+  fee: string;
+  refund: string;
+  dispute: string;
+  adjustment: string;
+  realized: string;
+}> {
+  const rows = (await db.execute<{
+    line_number: number;
+    kind: string;
+    amount: string;
+    currency: string | null;
+    document_id: string | null;
+    meta: unknown;
+  }>(sql`
+    select line_number, kind, amount::text, currency, document_id, meta
+      from psp_settlement_lines
+     where batch_id = ${batchId} and org_id = ${orgId}
+     order by line_number
+  `)).rows;
+  const bookedKinds = new Set(["charge", "refund", "dispute", "dispute_reversal", "adjustment", "transfer"]);
+  let refund = 0n;
+  let dispute = 0n;
+  let adjustment = 0n;
+  let realized = 0n;
+  for (const row of rows) {
+    const lineCurrency = (row.currency ?? b.currency).toUpperCase();
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    const rateIntoPayout = lineCurrency === b.currency
+      ? "1"
+      : requireFxRate(
+        meta.exchangeRate ?? fxPlan.conversionRate,
+        `settlement line ${row.line_number} exchange_rate`,
+      );
+    const convertedBase = toUnits(mulRate(mulRate(row.amount, rateIntoPayout), fxPlan.payoutRate));
+    let bookedBase = convertedBase;
+    if (bookedKinds.has(row.kind)) {
+      if (meta.bookedAmount != null) {
+        try {
+          bookedBase = toUnits(fromUnits(toUnits(String(meta.bookedAmount))));
+        } catch {
+          throw new PspSettlementError(
+            `settlement line ${row.line_number} bookedAmount must be an exact decimal amount`,
+          );
+        }
+      } else if (row.document_id != null) {
+        const receipt = (await db.execute<{
+          status: string;
+          currency: string;
+          total: string;
+          fx_rate: string;
+        }>(sql`
+          select status, currency, total::text, fx_rate::text
+            from documents
+           where id = ${row.document_id} and org_id = ${orgId}
+        `)).rows[0];
+        if (!receipt) {
+          throw new PspSettlementError(
+            `settlement line ${row.line_number} links receipt ${row.document_id}, which is not in this organization; relink the line and import again`,
+          );
+        }
+        if (receipt.status !== "posted") {
+          throw new PspSettlementError(
+            `settlement line ${row.line_number} links receipt ${row.document_id}, which is ${receipt.status}; realized FX posts only against posted receipts`,
+          );
+        }
+        if (receipt.currency.toUpperCase() !== lineCurrency) {
+          throw new PspSettlementError(
+            `settlement line ${row.line_number} in ${lineCurrency} links receipt ${row.document_id} in ${receipt.currency}; realized FX needs the receipt in the line currency`,
+          );
+        }
+        if (toUnits(row.amount) !== toUnits(receipt.total)) {
+          throw new PspSettlementError(
+            `settlement line ${row.line_number} amount ${row.amount} does not match linked receipt ${row.document_id} total ${receipt.total}; link one line per receipt or supply bookedAmount evidence`,
+          );
+        }
+        bookedBase = toUnits(mulRate(receipt.total, receipt.fx_rate));
+      }
+      realized += convertedBase - bookedBase;
+    }
+    if (row.kind === "refund") refund += bookedBase < 0n ? -bookedBase : bookedBase;
+    else if (row.kind === "dispute") dispute += bookedBase < 0n ? -bookedBase : bookedBase;
+    else if (row.kind === "dispute_reversal") dispute -= bookedBase < 0n ? -bookedBase : bookedBase;
+    else if (row.kind === "adjustment") adjustment += bookedBase < 0n ? -bookedBase : bookedBase;
+  }
+  return {
+    bank: mulRate(b.net_amount, fxPlan.payoutRate),
+    fee: mulRate(b.fee_amount, fxPlan.payoutRate),
+    refund: fromUnits(refund),
+    dispute: fromUnits(dispute),
+    adjustment: fromUnits(adjustment),
+    realized: fromUnits(realized),
+  };
 }
 
 /**
@@ -1220,6 +1901,11 @@ export async function postSettlementBatch(
         external_ref: string;
         memo: string | null;
         journal_entry_id: string | null;
+        source_currency: string | null;
+        conversion_rate: string | null;
+        conversion_rate_source: string | null;
+        payout_rate: string | null;
+        payout_rate_source: string | null;
       }>(sql`
       select b.*
         from psp_settlement_batches b
@@ -1276,10 +1962,37 @@ export async function postSettlementBatch(
       throw new PspSettlementError("settlement subsidiary is missing");
     }
     if (!subsidiary.isActive) throw new PspSettlementError(`subsidiary "${subsidiary.name}" is inactive`);
-    if (b.currency !== subsidiary.baseCurrency) {
-      throw new PspSettlementError(
-        `cross-currency PSP settlement ${b.currency}→${subsidiary.baseCurrency} requires explicit rate and functional-currency evidence`,
-      );
+    // Cross-currency batches post at evidenced rates: every foreign leg
+    // converts through the batch conversion_rate (or its own exchange_rate)
+    // into payout currency, then through payout_rate into base. A missing
+    // rate stays a named refusal — converting at an assumed rate would book
+    // money nobody evidenced.
+    const baseCurrency = subsidiary.baseCurrency;
+    const fxBatch = b.source_currency != null || b.currency !== baseCurrency;
+    let fxPlan: {
+      sourceCurrency: string;
+      conversionRate: string;
+      payoutRate: string;
+    } | null = null;
+    if (fxBatch) {
+      const sourceCurrency = (b.source_currency ?? b.currency).toUpperCase();
+      const conversionRate = b.source_currency != null
+        ? requireFxRate(b.conversion_rate, "settlement conversion_rate")
+        : "1";
+      if (b.currency !== baseCurrency && b.payout_rate == null) {
+        throw new PspSettlementError(
+          `cross-currency PSP settlement ${b.currency}→${baseCurrency} requires payout_rate evidence; re-import the same provider reference with payout_rate to repair this draft`,
+        );
+      }
+      if (b.source_currency != null && b.conversion_rate == null) {
+        throw new PspSettlementError(
+          `cross-currency PSP settlement carries source currency ${sourceCurrency} without conversion_rate evidence; re-import the same provider reference with conversion_rate to repair this draft`,
+        );
+      }
+      const payoutRate = b.currency === baseCurrency
+        ? "1"
+        : requireFxRate(b.payout_rate, "settlement payout_rate");
+      fxPlan = { sourceCurrency, conversionRate, payoutRate };
     }
 
     const fxAcct = b.fx_account_id ?? c.fxRealizedGainLoss ?? null;
@@ -1308,69 +2021,124 @@ export async function postSettlementBatch(
     type JL = { accountId: string; amount: string; memo: string };
     const jlines: JL[] = [];
 
-    if (!isZero(b.net_amount) && cmp(b.net_amount, "0") !== 0) {
-      jlines.push({
-        accountId: b.bank_account_id,
-        amount: b.net_amount, // DR bank when positive net deposit
-        memo: "PSP net deposit",
-      });
-    }
-    if (!isZero(b.fee_amount)) {
-      jlines.push({
-        accountId: b.fee_account_id,
-        amount: b.fee_amount,
-        memo: "PSP processing fees",
-      });
-    }
-    if (!isZero(b.refund_amount)) {
-      jlines.push({
-        accountId: b.clearing_account_id,
-        amount: b.refund_amount,
-        memo: "PSP refunds",
-      });
-    }
-    if (!isZero(b.dispute_amount)) {
-      jlines.push({
-        accountId: disputeAcct!,
-        amount: b.dispute_amount,
-        memo: "PSP disputes",
-      });
-    }
-    // Adjustments (e.g. Chargebee amount_adjusted) clear against the same
-    // customer-balance pool as refunds — the gross charges credited clearing,
-    // so the write-off/credit leg debits it — but on their own journal line
-    // so the GL tells write-offs apart from cash refunds.
-    if (!isZero(b.adjustment_amount)) {
-      jlines.push({
-        accountId: b.clearing_account_id,
-        amount: b.adjustment_amount,
-        memo: "PSP adjustments",
-      });
-    }
-    // CR clearing for gross charges (or residual).
-    // Balance: sum(DR) + sum(CR signed) = 0 with DR+, CR− convention.
-    const debitSum = jlines.reduce((s, l) => s + toUnits(l.amount), 0n);
-    // We need clearing credit = −(gross) typically when landing charges
-    // Recompute so entry balances: clearing takes residual opposite of debs + fx.
-    // Residual amount so total = 0.
-    let running = debitSum;
-    if (!isZero(b.fx_amount) && fxAcct) {
-      // FX: positive gain = credit (negative amount)
-      jlines.push({
-        accountId: fxAcct,
-        amount: neg(b.fx_amount), // if fx positive gain → CR
-        memo: "PSP FX",
-      });
-      running += toUnits(neg(b.fx_amount));
-    }
-    // Clearing residual to balance
-    const clearAmount = fromUnits(-running);
-    if (!isZero(clearAmount)) {
-      jlines.push({
-        accountId: b.clearing_account_id,
-        amount: clearAmount,
-        memo: "PSP clearing / charges",
-      });
+    // A cross-currency batch converts every leg to base at evidenced rates and
+    // books the realized difference against the receipts' booked amounts to
+    // the FX gain/loss account. Single-currency batches keep the stored
+    // totals path below unchanged.
+    let fxRealized: string | null = null;
+    if (fxPlan) {
+      const fxLegs = await buildFxLegs(orgId, batchId, b, fxPlan);
+      fxRealized = fxLegs.realized;
+      if (!isZero(fxRealized) && !fxAcct) {
+        throw new PspSettlementError(
+          "realized FX gain/loss account is not configured",
+        );
+      }
+      if (!isZero(fxLegs.bank)) {
+        jlines.push({ accountId: b.bank_account_id!, amount: fxLegs.bank, memo: "PSP net deposit" });
+      }
+      if (!isZero(fxLegs.fee)) {
+        jlines.push({ accountId: b.fee_account_id!, amount: fxLegs.fee, memo: "PSP processing fees" });
+      }
+      if (!isZero(fxLegs.refund)) {
+        jlines.push({ accountId: b.clearing_account_id!, amount: fxLegs.refund, memo: "PSP refunds" });
+      }
+      if (!isZero(fxLegs.dispute)) {
+        jlines.push({ accountId: disputeAcct!, amount: fxLegs.dispute, memo: "PSP disputes" });
+      }
+      if (!isZero(fxLegs.adjustment)) {
+        jlines.push({ accountId: b.clearing_account_id!, amount: fxLegs.adjustment, memo: "PSP adjustments" });
+      }
+      if (!isZero(fxRealized)) {
+        jlines.push({
+          accountId: fxAcct!,
+          amount: neg(fxRealized), // realized gain (converted above booked) = credit
+          memo: `PSP realized FX at ${fxPlan.sourceCurrency} evidence`,
+        });
+      }
+      const fxRunning = jlines.reduce((s, l) => s + toUnits(l.amount), 0n);
+      const fxClear = fromUnits(-fxRunning);
+      if (!isZero(fxClear)) {
+        jlines.push({
+          accountId: b.clearing_account_id!,
+          amount: fxClear,
+          memo: "PSP clearing / charges",
+        });
+      }
+      // The realized plug is posting evidence: stamp it onto the batch so the
+      // stored row shows the booked FX, not just the import-time fx legs.
+      const stamped = await db.execute(sql`
+        update psp_settlement_batches set fx_amount = ${fxRealized}, updated_at = now(), updated_by = ${actorId}
+         where id = ${batchId} and org_id = ${orgId}
+      `);
+      if ((stamped.rowCount ?? 0) !== 1) {
+        throw new PspSettlementError("settlement batch could not be stamped with realized FX");
+      }
+    } else {
+      if (!isZero(b.net_amount) && cmp(b.net_amount, "0") !== 0) {
+        jlines.push({
+          accountId: b.bank_account_id,
+          amount: b.net_amount, // DR bank when positive net deposit
+          memo: "PSP net deposit",
+        });
+      }
+      if (!isZero(b.fee_amount)) {
+        jlines.push({
+          accountId: b.fee_account_id,
+          amount: b.fee_amount,
+          memo: "PSP processing fees",
+        });
+      }
+      if (!isZero(b.refund_amount)) {
+        jlines.push({
+          accountId: b.clearing_account_id,
+          amount: b.refund_amount,
+          memo: "PSP refunds",
+        });
+      }
+      if (!isZero(b.dispute_amount)) {
+        jlines.push({
+          accountId: disputeAcct!,
+          amount: b.dispute_amount,
+          memo: "PSP disputes",
+        });
+      }
+      // Adjustments (e.g. Chargebee amount_adjusted) clear against the same
+      // customer-balance pool as refunds — the gross charges credited clearing,
+      // so the write-off/credit leg debits it — but on their own journal line
+      // so the GL tells write-offs apart from cash refunds.
+      if (!isZero(b.adjustment_amount)) {
+        jlines.push({
+          accountId: b.clearing_account_id,
+          amount: b.adjustment_amount,
+          memo: "PSP adjustments",
+        });
+      }
+      // CR clearing for gross charges (or residual).
+      // Balance: sum(DR) + sum(CR signed) = 0 with DR+, CR− convention.
+      const debitSum = jlines.reduce((s, l) => s + toUnits(l.amount), 0n);
+      // We need clearing credit = −(gross) typically when landing charges
+      // Recompute so entry balances: clearing takes residual opposite of debs + fx.
+      // Residual amount so total = 0.
+      let running = debitSum;
+      if (!isZero(b.fx_amount) && fxAcct) {
+        // FX: positive gain = credit (negative amount)
+        jlines.push({
+          accountId: fxAcct,
+          amount: neg(b.fx_amount), // if fx positive gain → CR
+          memo: "PSP FX",
+        });
+        running += toUnits(neg(b.fx_amount));
+      }
+      // Clearing residual to balance
+      const clearAmount = fromUnits(-running);
+      if (!isZero(clearAmount)) {
+        jlines.push({
+          accountId: b.clearing_account_id,
+          amount: clearAmount,
+          memo: "PSP clearing / charges",
+        });
+      }
     }
 
     // Verify balance.
@@ -1615,6 +2383,11 @@ export async function savePspProviderConfig(
     defaultDisputeAccountId?: string | null;
     defaultFxAccountId?: string | null;
     defaultClearingAccountId?: string | null;
+    defaultDisputedFundsAccountId?: string | null;
+    defaultChargebackLossAccountId?: string | null;
+    defaultDisputeFeeAccountId?: string | null;
+    refundPolicy?: "automatic" | "review";
+    pullEnabled?: boolean;
     apiKey?: string | null;
   },
   actorId: string | null,
@@ -1622,9 +2395,13 @@ export async function savePspProviderConfig(
 ): Promise<void> {
   assertUnrestrictedScope(allowedSubsidiaryIds);
   // Fail closed before any write: without this the storage CHECK surfaces
-  // an unknown provider as a raw 500.
-  if (input.provider !== "stripe" && input.provider !== "recurly" && input.provider !== "chargebee") {
+  // an unknown provider as a raw 500. The registry is the single list, so a
+  // new provider cannot strand this guard behind the migration.
+  if (!isPspProvider(input.provider)) {
     throw new PspSettlementError(`unknown provider ${String(input.provider)}`);
+  }
+  if (input.refundPolicy !== undefined && input.refundPolicy !== "automatic" && input.refundPolicy !== "review") {
+    throw new PspSettlementError(`unknown refund policy ${String(input.refundPolicy)}`);
   }
   // Default posting accounts are validated like any other settlement
   // reference: a foreign or unpostable id must not persist to detonate at
@@ -1633,6 +2410,9 @@ export async function savePspProviderConfig(
     { label: "bank", id: input.defaultBankAccountId },
     { label: "fee", id: input.defaultFeeAccountId },
     { label: "dispute", id: input.defaultDisputeAccountId },
+    { label: "disputed-funds", id: input.defaultDisputedFundsAccountId },
+    { label: "chargeback-loss", id: input.defaultChargebackLossAccountId },
+    { label: "dispute-fee", id: input.defaultDisputeFeeAccountId },
     { label: "fx", id: input.defaultFxAccountId },
     { label: "clearing", id: input.defaultClearingAccountId },
   ]);
@@ -1641,11 +2421,17 @@ export async function savePspProviderConfig(
   await db.execute(sql`
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, default_bank_account_id, default_fee_account_id,
-       default_dispute_account_id, default_fx_account_id, default_clearing_account_id, secrets, created_by, updated_by)
+       default_dispute_account_id, default_fx_account_id, default_clearing_account_id,
+       default_disputed_funds_account_id, default_chargeback_loss_account_id, default_dispute_fee_account_id,
+       refund_policy, pull_enabled, secrets, created_by, updated_by)
     values (${orgId}, ${input.provider}, ${input.displayName ?? input.provider}, ${input.isEnabled},
             ${input.defaultBankAccountId ?? null}, ${input.defaultFeeAccountId ?? null},
             ${input.defaultDisputeAccountId ?? null}, ${input.defaultFxAccountId ?? null},
-            ${input.defaultClearingAccountId ?? null}, ${secrets}, ${actorId}, ${actorId})
+            ${input.defaultClearingAccountId ?? null},
+            ${input.defaultDisputedFundsAccountId ?? null}, ${input.defaultChargebackLossAccountId ?? null},
+            ${input.defaultDisputeFeeAccountId ?? null},
+            ${input.refundPolicy ?? "automatic"}, ${input.pullEnabled ?? false},
+            ${secrets}, ${actorId}, ${actorId})
     on conflict (org_id, provider) do update set
       display_name = excluded.display_name,
       is_enabled = excluded.is_enabled,
@@ -1654,6 +2440,11 @@ export async function savePspProviderConfig(
       default_dispute_account_id = excluded.default_dispute_account_id,
       default_fx_account_id = excluded.default_fx_account_id,
       default_clearing_account_id = excluded.default_clearing_account_id,
+      default_disputed_funds_account_id = excluded.default_disputed_funds_account_id,
+      default_chargeback_loss_account_id = excluded.default_chargeback_loss_account_id,
+      default_dispute_fee_account_id = excluded.default_dispute_fee_account_id,
+      refund_policy = excluded.refund_policy,
+      pull_enabled = excluded.pull_enabled,
       secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
       updated_at = now(), updated_by = ${actorId}
     where psp_provider_configs.org_id = ${orgId}

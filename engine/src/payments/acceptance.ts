@@ -104,11 +104,33 @@ export interface WebhookEvent {
   /** Some providers key events by our reference instead of their object id. */
   linkToken?: string | null;
   /** In-flight states never settle: "processing" means the provider reports
-   *  the collection still pending (async ACH/SEPA). */
-  status: "succeeded" | "processing" | "failed" | "cancelled" | "refunded";
+   *  the collection still pending (async ACH/SEPA). "disputed" routes to the
+   *  dispute lifecycle; every other return routes to the refund path. */
+  status: "succeeded" | "processing" | "failed" | "cancelled" | "refunded" | "disputed";
   /** Gross amount and ISO currency the provider confirms it collected. */
   paidAmount?: string | null;
   paidCurrency?: string | null;
+  /** Provider delivery id (evt_..., notification id). The refund/dispute
+   *  automation's idempotency key: redeliveries converge instead of posting
+   *  twice. Null for providers that send none — those events park under the
+   *  intent marker and replay once, never twice. */
+  providerEventId?: string | null;
+  /** Refunded amount and ISO currency (4dp major strings) the provider
+   *  confirms it returned. Null when the provider reports no amount — the
+   *  automation parks for review instead of guessing full vs partial. */
+  refundedAmount?: string | null;
+  refundCurrency?: string | null;
+  /** Dispute lifecycle detail. State follows the provider: opened on
+   *  creation/notification, won/lost on close/reversal. Separate from the
+   *  `dispute` boolean above (which autopay reads): detail drives the
+   *  refund/dispute automation's accounting, the flag drives collection. */
+  disputeDetail?: {
+    id: string;
+    amount: string;
+    currency: string;
+    reason?: string | null;
+    state: "opened" | "won" | "lost";
+  } | null;
   raw: Record<string, unknown>;
 }
 
@@ -499,19 +521,62 @@ function normalizeStripeNotification(event: unknown): WebhookEvent | null {
     // direct client reference.
     return { externalRef: String(obj.id ?? ""), linkToken: stringLinkToken(obj.client_reference_id), status: "cancelled", raw: root };
   }
-  if (type === "charge.refunded" || type === "charge.dispute.created") {
+  if (type === "charge.refunded" || type === "charge.refund.updated") {
     // Checkout stores the session id as external_ref and persists
     // payment_intent onto event_payload. Refund/dispute objects are keyed
     // by the intent, so both refs must be set: externalRef for a later
     // re-key, intentRef so resolution matches event_payload.paymentIntent.
+    // The refunded amount rides the event so the automation can tell a full
+    // refund from a partial one without guessing.
     const intent = obj.payment_intent ? String(obj.payment_intent) : null;
+    const refundCurrency = typeof obj.currency === "string" ? obj.currency.toUpperCase() : null;
+    const refundedRaw = obj.amount_refunded ?? obj.amount;
     return {
       externalRef: String(obj.payment_intent ?? obj.id ?? ""),
       intentRef: intent,
+      linkToken,
       status: "refunded",
+      // A voluntary refund is not a dispute — but the flag rides every
+      // return so autopay never has to guess which one this is.
+      dispute: false,
+      providerEventId: typeof root.id === "string" ? root.id : null,
+      refundedAmount:
+        refundedRaw != null && refundCurrency
+          ? fromMinorUnits(BigInt(refundedRaw as string | number | bigint | boolean), refundCurrency)
+          : null,
+      refundCurrency,
+      raw: root,
+    };
+  }
+  if (
+    type === "charge.dispute.created" ||
+    type === "charge.dispute.updated" ||
+    type === "charge.dispute.closed"
+  ) {
+    const intent = obj.payment_intent ? String(obj.payment_intent) : null;
+    const disputeCurrency = typeof obj.currency === "string" ? obj.currency.toUpperCase() : null;
+    const closedStatus = String((obj as Record<string, unknown>).status ?? "");
+    const state =
+      type === "charge.dispute.closed" ? (closedStatus === "lost" ? "lost" : "won") : "opened";
+    return {
+      externalRef: String(obj.payment_intent ?? obj.id ?? ""),
+      intentRef: intent,
+      linkToken,
+      status: "disputed",
+      providerEventId: typeof root.id === "string" ? root.id : null,
       // A dispute is not a voluntary refund: autopay must never auto-charge
       // an invoice whose collection is under dispute.
-      dispute: type === "charge.dispute.created",
+      dispute: true,
+      disputeDetail: {
+        id: String(obj.id ?? ""),
+        amount:
+          obj.amount != null && disputeCurrency
+            ? fromMinorUnits(BigInt(obj.amount as string | number | bigint | boolean), disputeCurrency)
+            : "0",
+        currency: disputeCurrency ?? "",
+        reason: typeof obj.reason === "string" ? obj.reason : null,
+        state,
+      },
       raw: root,
     };
   }
@@ -785,7 +850,42 @@ function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: 
     return { externalRef: String(item.pspReference ?? ""), linkToken, status: "failed", raw: payload };
   }
   if (eventCode === "CANCELLATION" || eventCode === "CANCEL_OR_REFUND") {
-    return { externalRef: String(item.pspReference ?? ""), linkToken, status: "refunded", raw: payload };
+    const refundCurrency = typeof amountCurrency === "string" ? amountCurrency.toUpperCase() : null;
+    return {
+      externalRef: String(item.pspReference ?? ""),
+      linkToken,
+      status: "refunded",
+      dispute: false,
+      providerEventId: `${String(item.pspReference ?? "")}:${eventCode}`,
+      refundedAmount:
+        amountValue != null && amountCurrency
+          ? fromAdyenMinorUnits(BigInt(amountValue as string | number | bigint | boolean), String(amountCurrency))
+          : null,
+      refundCurrency,
+      raw: payload,
+    };
+  }
+  if (eventCode === "CHARGEBACK" || eventCode === "CHARGEBACK_REVERSED" || eventCode === "SECOND_CHARGEBACK") {
+    const disputeCurrency = typeof amountCurrency === "string" ? amountCurrency.toUpperCase() : "";
+    return {
+      externalRef: String(item.originalReference ?? item.pspReference ?? ""),
+      alternateExternalRef: String(item.pspReference ?? ""),
+      linkToken,
+      status: "disputed",
+      providerEventId: `${String(item.pspReference ?? "")}:${eventCode}`,
+      dispute: true,
+      disputeDetail: {
+        id: String(item.pspReference ?? ""),
+        amount:
+          amountValue != null && amountCurrency
+            ? fromAdyenMinorUnits(BigInt(amountValue as string | number | bigint | boolean), String(amountCurrency))
+            : "0",
+        currency: disputeCurrency,
+        reason: eventCode,
+        state: eventCode === "CHARGEBACK" ? "opened" : eventCode === "SECOND_CHARGEBACK" ? "lost" : "won",
+      },
+      raw: payload,
+    };
   }
   return null;
 }
@@ -1006,6 +1106,11 @@ function verifyGoCardlessWebhookDelivery(
         // A chargeback is a dispute, not a voluntary refund: autopay must
         // never auto-charge an invoice whose collection is under dispute.
         dispute: event.action === "charged_back",
+        // Bank-debit returns carry no amount on the webhook: the automation
+        // parks for review with the amount to confirm instead of guessing.
+        providerEventId: typeof event?.id === "string" ? event.id : null,
+        refundedAmount: null,
+        refundCurrency: null,
         raw: payload,
       });
     } else if (event?.resource_type === "mandates" && (event.action === "created" || event.action === "active")) {
@@ -2253,36 +2358,68 @@ export const CLAIMABLE_FROM: Record<WebhookEvent["status"], string[]> = {
   processing: ["initiated"],
   failed: ["initiated"],
   cancelled: ["initiated"],
-  refunded: ["succeeded", "initiated"],
+  // A second return for one attempt (a partial after a partial, a dispute
+  // after a refund) must still claim: redeliveries converge on the
+  // per-event automation record instead of posting twice, so widening the
+  // claim here cannot double-post.
+  refunded: ["succeeded", "initiated", "refunded"],
+  disputed: ["succeeded", "initiated", "refunded"],
 };
 
 /**
- * Consume a parked refund-first marker for a succeeded event's intent: write
- * the controller-facing clawback note and close the marker exactly once
- * (conditional update = the once-only lock; concurrent consumers serialize
- * and the loser sees no row). Runs ahead of settlement so the note survives
- * a settlement failure; a retry then settles without re-noting.
+ * Consume a parked refund-first marker for a succeeded event's intent and
+ * return its normalized refund detail. The conditional update is the
+ * once-only lock; concurrent consumers serialize and the loser sees no row.
+ * Markers parked before automation existed carry only the raw payload, so
+ * the replay parks for review instead of posting an amount nobody
+ * normalized — fail closed across the upgrade window.
  */
 async function consumePendingClawback(
   orgId: string,
   provider: AcceptanceProvider,
   intentRef: string,
   attemptId: string,
-): Promise<boolean> {
-  const consumed = (await db.execute<{ id: string }>(sql`
+): Promise<{
+  providerEventId: string;
+  refundedAmount: string | null;
+  refundCurrency: string | null;
+  providerRef: string | null;
+  dispute: {
+    id: string;
+    amount: string;
+    currency: string;
+    reason?: string | null;
+    state: "opened" | "won" | "lost";
+  } | null;
+  status: string;
+} | null> {
+  const consumed = (await db.execute<{ event_payload: Record<string, unknown> | null; event_status: string }>(sql`
     update payment_pending_clawbacks
        set consumed_at = now(), consumed_attempt_id = ${attemptId}
      where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
        and consumed_at is null
-     returning id
+     returning event_payload, event_status
   `));
-  if (!consumed.rows[0]) return false;
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'payment_attempts', ${attemptId}, 'update',
-            ${JSON.stringify({ after: { status: "refunded", note: "refund/chargeback reported by provider before its settlement event; reverse the receipt via payments if funds were clawed back" } })}::jsonb, null)
-  `);
-  return true;
+  const row = consumed.rows[0];
+  if (!row) return null;
+  const detail = ((row.event_payload ?? {}).normalized ?? {}) as Record<string, unknown>;
+  return {
+    providerEventId:
+      typeof detail.providerEventId === "string" && detail.providerEventId !== ""
+        ? detail.providerEventId
+        : `${provider}:${intentRef}:parked`,
+    refundedAmount: typeof detail.refundedAmount === "string" ? detail.refundedAmount : null,
+    refundCurrency: typeof detail.refundCurrency === "string" ? detail.refundCurrency : null,
+    providerRef: typeof detail.providerRef === "string" ? detail.providerRef : null,
+    dispute: (detail.dispute ?? null) as {
+      id: string;
+      amount: string;
+      currency: string;
+      reason?: string | null;
+      state: "opened" | "won" | "lost";
+    } | null,
+    status: row.event_status,
+  };
 }
 
 async function processWebhookEvent(
@@ -2345,28 +2482,44 @@ async function processWebhookEvent(
   if (!found) {
     // Automatic collection settles against collection attempts, not payment
     // attempts: offer async-debit and off-session results to autopay before
-    // the refund-first logic below.
-    if (event.status === "succeeded" || event.status === "processing" || event.status === "failed" || event.status === "refunded") {
+    // the refund-first logic below. Disputed events ride along: autopay
+    // records the dispute against its collection, and a null outcome falls
+    // through to the payment automation below.
+    if (event.status === "succeeded" || event.status === "processing" || event.status === "failed" || event.status === "refunded" || event.status === "disputed") {
       const { settleCollectionAttemptEvent } = await import("./autopay.ts");
       const collectionOutcome = await settleCollectionAttemptEvent(orgId, provider, event);
       if (collectionOutcome !== null) return collectionOutcome;
     }
-    // Refund-first: a chargeback that beat its settlement event cannot resolve
-    // — the intent id is only persisted onto the attempt from the completed
+    // Refund-first: a return that beat its settlement event cannot resolve —
+    // the intent id is only persisted onto the attempt from the completed
     // session — so park it as a pending-clawback marker instead of dropping it
     // as unknown_attempt (which 200s and loses the return forever). The later
-    // succeeded event consumes the marker, settles, and writes the clawback
-    // note. Redeliveries upsert idempotently but never re-arm a consumed
-    // marker (only last_seen_at/payload refresh), so one return fires exactly
-    // one clawback note. Normal-order refunds never land here because they
-    // resolve above. Events without an intent key have nothing to park under
-    // and stay unknown.
-    if (event.status === "refunded" && intentRef) {
+    // succeeded event consumes the marker, settles, and replays the parked
+    // return through refund/dispute automation. Redeliveries upsert
+    // idempotently but never re-arm a consumed marker (only
+    // last_seen_at/payload refresh), so one return posts exactly once.
+    // Normal-order returns never land here because they resolve above. Events
+    // without an intent key have nothing to park under and stay unknown.
+    if ((event.status === "refunded" || event.status === "disputed") && intentRef) {
+      // The normalized envelope replays after settlement; the raw body stays
+      // for forensics. Markers parked before automation existed carry no
+      // envelope, and their replay parks for review instead of auto-posting.
+      const markerStatus = event.status === "disputed" ? "disputed" : "refunded";
       await db.execute(sql`
         insert into payment_pending_clawbacks
           (org_id, provider, intent_ref, event_status, event_payload, last_seen_at)
-        values (${orgId}, ${provider}, ${intentRef}, 'refunded',
-                ${JSON.stringify({ externalRef: event.externalRef, raw: event.raw ?? null })}::jsonb, now())
+        values (${orgId}, ${provider}, ${intentRef}, ${markerStatus},
+                ${JSON.stringify({
+                  externalRef: event.externalRef,
+                  normalized: {
+                    providerEventId: event.providerEventId ?? null,
+                    refundedAmount: event.refundedAmount ?? null,
+                    refundCurrency: event.refundCurrency ?? null,
+                    providerRef: event.disputeDetail?.id ?? event.externalRef,
+                    dispute: event.disputeDetail ?? null,
+                  },
+                  raw: event.raw ?? null,
+                })}::jsonb, now())
         on conflict (org_id, provider, intent_ref)
         do update set event_status = excluded.event_status,
           event_payload = excluded.event_payload,
@@ -2437,7 +2590,10 @@ async function processWebhookEvent(
   if (event.paidCurrency != null) merge.paidCurrency = event.paidCurrency.toUpperCase();
   // 'processing' has no column value (see CLAIMABLE_FROM): the row stays
   // initiated and the payload marker records the in-flight provider state.
-  const rowStatus = event.status === "processing" ? "initiated" : event.status;
+  // 'disputed' persists as refunded: attempts track collection state, and the
+  // dispute lifecycle lives in payment_disputes — the attempt CHECK admits no
+  // dispute state.
+  const rowStatus = event.status === "processing" ? "initiated" : event.status === "disputed" ? "refunded" : event.status;
 
   // Atomic claim: exactly one concurrent delivery transitions the attempt out
   // of its current state; every later delivery sees a non-claimable row and
@@ -2476,23 +2632,30 @@ async function processWebhookEvent(
     throw err;
   }
   if (!claim.rows[0]) {
-    // Crash-after-settle with a parked refund: the receipt is already booked
-    // (journal set, so this delivery correctly dedupes) but the clawback note
-    // never fired. Consume the marker now so the controller still learns of
-    // the return.
+    // Crash-after-settle with a parked return: the receipt is already booked
+    // (journal set, so this delivery correctly dedupes) but the parked
+    // return never replayed. Replay it now so the return posts instead of
+    // stranding.
     if (event.status === "succeeded" && intentRef) {
-      await consumePendingClawback(orgId, provider, intentRef, found.id);
+      const parked = await consumePendingClawback(orgId, provider, intentRef, found.id);
+      if (parked) await replayParkedReturn(orgId, provider, found.id, parked);
     }
     return "duplicate";
   }
 
   if (event.status === "succeeded") {
-    // A refund that beat this settlement parked a marker on the intent: fire
-    // its clawback note ahead of settlement (survives a settlement failure).
-    if (intentRef) await consumePendingClawback(orgId, provider, intentRef, found.id);
+    // A return that beat this settlement parked a marker on the intent. Peek
+    // before settling (the replay needs the receipt); consume and replay
+    // only after settlement commits, so a settlement failure keeps the
+    // marker for the retry instead of losing the return.
+    const parkedBefore = intentRef ? await peekPendingClawback(orgId, provider, intentRef) : null;
     try {
       const outcome = await settleAttempt(orgId, found.id);
       if (typeof outcome !== "string") return outcome;
+      if (parkedBefore) {
+        const parked = await consumePendingClawback(orgId, provider, intentRef!, found.id);
+        if (parked) await replayParkedReturn(orgId, provider, found.id, parked);
+      }
       return outcome === "gated" ? "awaiting_approval" : "settled";
     } catch (err) {
       // Roll the claim back so the next delivery retries settlement. The
@@ -2505,9 +2668,11 @@ async function processWebhookEvent(
       throw err;
     }
   }
-  if (event.status === "refunded") {
-    // A marker parked by an earlier out-of-order delivery is superseded: this
-    // branch writes the note itself, so just close the marker silently.
+  if (event.status === "refunded" || event.status === "disputed") {
+    // A marker parked by an earlier out-of-order delivery is superseded: the
+    // automation below records the return, so close the marker silently
+    // after it does.
+    const outcome = await runReturnAutomation(orgId, provider, found.id, event);
     if (intentRef) {
       await db.execute(sql`
         update payment_pending_clawbacks
@@ -2516,14 +2681,108 @@ async function processWebhookEvent(
            and consumed_at is null
       `);
     }
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'payment_attempts', ${found.id}, 'update',
-              ${JSON.stringify({ after: { status: "refunded", note: "refund/chargeback reported by provider; reverse the receipt via payments if funds were clawed back" } })}::jsonb, null)
-    `);
-    return "refunded_noted";
+    return outcome;
   }
   return event.status;
+}
+
+/** Peek a parked marker without consuming it. */
+async function peekPendingClawback(
+  orgId: string,
+  provider: AcceptanceProvider,
+  intentRef: string,
+): Promise<boolean> {
+  const row = (await db.execute<{ id: string }>(sql`
+    select id from payment_pending_clawbacks
+     where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
+       and consumed_at is null
+  `)).rows[0];
+  return !!row;
+}
+
+/**
+ * Provider delivery id for automation idempotency. Providers that send none
+ * (bank-debit returns) key on the payment object instead: one payment is
+ * returned once, so the key stays unique per return.
+ */
+function returnEventId(provider: AcceptanceProvider, event: WebhookEvent): string {
+  if (event.providerEventId) return event.providerEventId;
+  return `${provider}:${event.intentRef ?? event.externalRef}:${event.status}`;
+}
+
+/** Route one return event through refund/dispute automation. */
+async function runReturnAutomation(
+  orgId: string,
+  provider: AcceptanceProvider,
+  attemptId: string,
+  event: WebhookEvent,
+): Promise<string> {
+  const { processProviderRefundEvent, processProviderDisputeEvent } = await import(
+    "./psp-refund-automation.ts"
+  );
+  const prefix = event.status === "disputed" ? "disputed" : "refunded";
+  if (event.status === "disputed" && event.disputeDetail) {
+    const outcome = await processProviderDisputeEvent(orgId, {
+      provider,
+      providerEventId: returnEventId(provider, event),
+      attemptId,
+      dispute: event.disputeDetail,
+      raw: event.raw,
+    });
+    return `${prefix}_${outcome.status}`;
+  }
+  const outcome = await processProviderRefundEvent(orgId, {
+    provider,
+    providerEventId: returnEventId(provider, event),
+    attemptId,
+    refundedAmount: event.refundedAmount ?? null,
+    refundCurrency: event.refundCurrency ?? null,
+    providerRef: event.disputeDetail?.id ?? event.externalRef,
+    raw: event.raw,
+  });
+  return `${prefix}_${outcome.status}`;
+}
+
+/** Replay a refund-first marker after its payment lands. */
+async function replayParkedReturn(
+  orgId: string,
+  provider: AcceptanceProvider,
+  attemptId: string,
+  parked: {
+    providerEventId: string;
+    refundedAmount: string | null;
+    refundCurrency: string | null;
+    providerRef: string | null;
+    dispute: {
+      id: string;
+      amount: string;
+      currency: string;
+      reason?: string | null;
+      state: "opened" | "won" | "lost";
+    } | null;
+    status: string;
+  },
+): Promise<void> {
+  const { processProviderRefundEvent, processProviderDisputeEvent } = await import(
+    "./psp-refund-automation.ts"
+  );
+  if (parked.status === "disputed" && parked.dispute) {
+    await processProviderDisputeEvent(orgId, {
+      provider,
+      providerEventId: parked.providerEventId,
+      attemptId,
+      dispute: parked.dispute,
+    });
+    return;
+  }
+  await processProviderRefundEvent(orgId, {
+    provider,
+    providerEventId: parked.providerEventId,
+    attemptId,
+    refundedAmount: parked.refundedAmount,
+    refundCurrency: parked.refundCurrency,
+    providerRef: parked.providerRef,
+  });
 }
 
 /**
