@@ -63,7 +63,7 @@
     "marginTitle": "Margem do pedido",
     "marginHint": "Contribuição dos últimos 30 dias por canal, após envio e taxas",
     "marginEmpty": "A margem aparece aqui quando os pedidos do canal são lançados com custos. Atualize um pedido para calculá-la agora.",
-    "marginPrecisionUnknown": "A margem em {currency} não pode ser exibida: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Peça ao administrador do sistema para restaurar a linha ausente com a semente de moedas da plataforma.",
+    "marginPrecisionUnknown": "A margem em {currency} não pode ser exibida: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Uma linha ausente para um código ISO 4217 suportado é restaurada com a semente de moedas da plataforma; qualquer outro código deve ser substituído por um código ISO 4217 suportado.",
     "marginReport": "Relatório de margem",
     "marginMeta": "{orders} pedido(s) · {revenue} de receita · {adSpend} em anúncios",
     "marginEstimated": "{count} estimado(s)",
@@ -368,7 +368,7 @@
   },
   "drawer": {
     "lines": "Itens",
-    "unknownPrecision": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o pedido estiver retido, siga sua correção em Exceções e reprocesse o pedido.",
+    "unknownPrecision": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o pedido estiver retido, siga sua correção em Exceções e reprocesse o pedido. Uma linha ausente para um código ISO 4217 suportado é restaurada com a semente de moedas da plataforma; qualquer outro código deve ser substituído por um código ISO 4217 suportado.",
     "tenders": "Pagamentos",
     "activity": "Atividade",
     "posting": "Contabilização",
@@ -426,7 +426,7 @@
       "manual": "Manual"
     },
     "unreadableAmount": "Um valor em {currency} não pode ser exibido: o valor armazenado não é legível. Reimporte ou reprocesse o evento de origem na aba Atividade do canal.",
-    "unknownPrecisionFrozen": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). O histórico contabilizado é imutável e o reprocessamento não pode reescrevê-lo; peça ao administrador do sistema para restaurar a linha ausente com a semente de moedas da plataforma.",
+    "unknownPrecisionFrozen": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). O histórico contabilizado é imutável e o reprocessamento não pode reescrevê-lo. Uma linha ausente para um código ISO 4217 suportado é restaurada com a semente de moedas da plataforma; qualquer outro código deve ser substituído por um código ISO 4217 suportado.",
     "unreadableAmountFrozen": "Um valor em {currency} não pode ser exibido: o valor armazenado não é legível. O histórico contabilizado é imutável e o reprocessamento não pode reescrevê-lo; peça ao administrador do sistema para revisar o registro armazenado."
   },
   "assistance": {

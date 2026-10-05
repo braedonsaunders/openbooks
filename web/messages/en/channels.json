@@ -63,7 +63,7 @@
     "marginTitle": "Order margin",
     "marginHint": "Trailing 30-day contribution by channel, after fulfilment and fees",
     "marginEmpty": "Margin appears here once channel orders post with costs. Refresh an order to build it now.",
-    "marginPrecisionUnknown": "Margin in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). Ask your system administrator to restore the missing row with the platform currency seed.",
+    "marginPrecisionUnknown": "Margin in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). A missing row for a supported ISO 4217 code is restored with the platform currency seed; any other code must be replaced with a supported ISO 4217 code.",
     "marginReport": "Margin report",
     "marginMeta": "{orders} order(s) · {revenue} revenue · {adSpend} ad spend",
     "marginEstimated": "{count} estimated",
@@ -368,7 +368,7 @@
   },
   "drawer": {
     "lines": "Lines",
-    "unknownPrecision": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). If the order is parked, follow its exception remedy in Exceptions, then replay the order.",
+    "unknownPrecision": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). If the order is parked, follow its exception remedy in Exceptions, then replay the order. A missing row for a supported ISO 4217 code is restored with the platform currency seed; any other code must be replaced with a supported ISO 4217 code.",
     "tenders": "Tenders",
     "activity": "Activity",
     "posting": "Posting",
@@ -426,7 +426,7 @@
       "manual": "Manual"
     },
     "unreadableAmount": "An amount in {currency} cannot be shown: the stored value is not readable. Re-import or replay the source event from the channel's Activity tab.",
-    "unknownPrecisionFrozen": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). Posted history is immutable and replay cannot rewrite it; ask your system administrator to restore the missing row with the platform currency seed.",
+    "unknownPrecisionFrozen": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). Posted history is immutable and replay cannot rewrite it. A missing row for a supported ISO 4217 code is restored with the platform currency seed; any other code must be replaced with a supported ISO 4217 code.",
     "unreadableAmountFrozen": "An amount in {currency} cannot be shown: the stored value is not readable. Posted history is immutable and replay cannot rewrite it; ask your system administrator to review the stored record."
   },
   "assistance": {
