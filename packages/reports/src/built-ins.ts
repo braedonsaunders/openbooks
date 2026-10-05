@@ -369,6 +369,82 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       limit: 1000,
     },
   },
+  {
+    slug: 'order-margin-by-channel',
+    name: 'Order margin by channel',
+    description: 'Contribution margin per storefront channel and month from stored facts: CM1 after actual issue cost, CM2 after fulfilment and payment fees, CM3 after allocated ad spend, with the margin ratio.',
+    query: {
+      entity: 'order_economics', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'channel' }, { column: 'ordered_day', bin: 'month' }, { column: 'currency' }],
+      measures: [
+        { fn: 'sum', column: 'amount', key: 'revenue', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'in', value: ['net_revenue', 'discount'] }] } },
+        { fn: 'sum', column: 'amount', key: 'goods', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'in', value: ['cogs', 'returns', 'restocking_fee'] }] } },
+        { fn: 'sum', column: 'amount', key: 'fees', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'in', value: ['processor_fee', 'shipping_label', 'marketplace_fee', 'stored_value_funding'] }] } },
+        { fn: 'sum', column: 'amount', key: 'marketing', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'eq', value: 'ad_spend' }] } },
+        {
+          fn: 'formula', key: 'revenue_shown', label: 'Revenue', format: 'money',
+          expr: { ref: 'revenue' },
+        },
+        {
+          fn: 'formula', key: 'cm1', label: 'CM1 after cost of goods', format: 'money',
+          expr: { op: '+', left: { ref: 'revenue' }, right: { ref: 'goods' } },
+        },
+        {
+          fn: 'formula', key: 'cm2', label: 'CM2 after fulfilment and fees', format: 'money',
+          expr: { op: '+', left: { ref: 'cm1' }, right: { ref: 'fees' } },
+        },
+        {
+          fn: 'formula', key: 'cm3', label: 'CM3 after marketing', format: 'money',
+          expr: { op: '+', left: { ref: 'cm2' }, right: { ref: 'marketing' } },
+        },
+        {
+          fn: 'formula', key: 'margin_pct', label: 'CM2 margin', format: 'percent',
+          undefinedLabel: 'No revenue in the period',
+          guards: [{ measure: 'revenue', when: 'zero', label: 'No revenue in the period' }],
+          expr: { op: '/', left: { ref: 'cm2' }, right: { ref: 'revenue' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'order-margin-by-sku',
+    name: 'Order margin by item',
+    description: 'Contribution margin per item code and channel from stored facts, with the same CM1/CM2/CM3 ladder and margin ratio as the channel view.',
+    query: {
+      entity: 'order_economics', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'sku' }, { column: 'channel' }, { column: 'currency' }],
+      measures: [
+        { fn: 'sum', column: 'amount', key: 'revenue', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'in', value: ['net_revenue', 'discount'] }] } },
+        { fn: 'sum', column: 'amount', key: 'goods', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'in', value: ['cogs', 'returns', 'restocking_fee'] }] } },
+        { fn: 'sum', column: 'amount', key: 'fees', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'in', value: ['processor_fee', 'shipping_label', 'marketplace_fee', 'stored_value_funding'] }] } },
+        { fn: 'sum', column: 'amount', key: 'marketing', hidden: true, filter: { combinator: 'and', rules: [{ field: 'component', op: 'eq', value: 'ad_spend' }] } },
+        {
+          fn: 'formula', key: 'revenue_shown', label: 'Revenue', format: 'money',
+          expr: { ref: 'revenue' },
+        },
+        {
+          fn: 'formula', key: 'cm1', label: 'CM1 after cost of goods', format: 'money',
+          expr: { op: '+', left: { ref: 'revenue' }, right: { ref: 'goods' } },
+        },
+        {
+          fn: 'formula', key: 'cm2', label: 'CM2 after fulfilment and fees', format: 'money',
+          expr: { op: '+', left: { ref: 'cm1' }, right: { ref: 'fees' } },
+        },
+        {
+          fn: 'formula', key: 'cm3', label: 'CM3 after marketing', format: 'money',
+          expr: { op: '+', left: { ref: 'cm2' }, right: { ref: 'marketing' } },
+        },
+        {
+          fn: 'formula', key: 'margin_pct', label: 'CM2 margin', format: 'percent',
+          undefinedLabel: 'No revenue in the period',
+          guards: [{ measure: 'revenue', when: 'zero', label: 'No revenue in the period' }],
+          expr: { op: '/', left: { ref: 'cm2' }, right: { ref: 'revenue' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
   ...DEMAND_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   {
     slug: 'ap-aging-by-vendor',
