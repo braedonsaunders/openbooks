@@ -780,11 +780,14 @@ test("hidden refund claims never read as several posted refunds", { skip: !DB },
     assert.ok(verdict, "the batch yields its refund verdict");
     assert.equal(verdict.status, "unmatched");
     assert.ok(verdict.status === "unmatched");
-    assert.equal(verdict.reason, "refund_unposted", `hidden refund claims never read as several, got ${verdict.reason}`);
-    for (const text of [verdict.reason, verdict.remedy ?? ""]) {
+    assert.equal(verdict.reason, "refund_unavailable", `hidden refund claims never read as several, got ${verdict.reason}`);
+    assert.match(verdict.remedy, /unavailable in this payout's legal entity/);
+    assert.match(verdict.remedy, /authorized operator/);
+    for (const text of [verdict.reason, verdict.remedy]) {
       assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
       assert.ok(!text.includes("CS-DRAFT-W1"), `hidden draft number leaks: ${text}`);
       assert.doesNotMatch(text, /several/i, `hidden claims never report a count: ${text}`);
+      assert.doesNotMatch(text, /not posted/i, `hidden posted claims never read as unposted: ${text}`);
     }
   } finally {
     await dropScratchOrg(org.orgId);
@@ -806,6 +809,92 @@ test("an order outside the payout's entity never makes its line ambiguous", { sk
     assert.ok(line, "the shop line reports its verdict");
     assert.equal(line.status, "matched", `the home order resolves alone, got ${JSON.stringify(line)}`);
     assert.ok(line.status === "matched" && line.documentId === docA.id && line.via === "channel_order");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a claimed but ineligible order never asks for re-ingest", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { subB } = await seed(org, actor);
+    // Order 8802 posted on the western storefront: the caller may see both
+    // entities, but the home payout cannot use it.
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-foreign-order-1", currency: "CAD", issuedAt: "2026-07-10" },
+      [{ id: "txn-foreign-8802", type: "charge", amount: "25.30", currency: "CAD", sourceOrderId: "8802" }],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const result = await matchPayoutLines(org.orgId, batch, actor, new Set([org.subsidiaryId, subB]));
+    assert.equal(result.lines.length, 1);
+    const [verdict] = result.lines;
+    assert.ok(verdict, "the batch yields its order verdict");
+    assert.equal(verdict.status, "unmatched");
+    assert.ok(verdict.status === "unmatched");
+    assert.equal(verdict.reason, "order_unavailable", `an ineligible order never reads as unknown, got ${verdict.reason}`);
+    assert.match(verdict.remedy, /No eligible order in this payout's legal entity/);
+    assert.match(verdict.remedy, /authorized operator/);
+    for (const text of [verdict.reason, verdict.remedy]) {
+      assert.ok(!text.includes("#8802"), `the foreign order number leaks: ${text}`);
+      assert.doesNotMatch(text, /ingest/i, `an ineligible order never asks for re-ingest: ${text}`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("two visible posted refunds still read as ambiguous", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { channelA } = await seed(org, actor);
+    // Two partial refunds through the product flow exhaust the order exactly,
+    // so both cash refunds post in the home entity.
+    const partial = async (externalId: string, quantity: string, amount: bigint, shipping: bigint, total: bigint, refundedAt: string) => {
+      const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelA, "8801", {
+        kind: "refund",
+        externalId,
+        refund: {
+          externalId,
+          orderExternalId: "8801",
+          reason: "damaged in transit",
+          restock: true,
+          totalMinor: total,
+          lines: [{
+            lineExternalId: "1", sku: "TEE-RED-M", variantExternalId: null, quantity,
+            amountMinor: amount, taxMinor: null, restock: true,
+          }],
+          shippingMinor: shipping,
+          tenders: [{ gateway: "shopify_payments", amountMinor: total }],
+          refundedAt,
+        },
+        occurredAt: refundedAt,
+      }));
+      const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+      assert.equal(outcome.status, "posted", `partial refund ${externalId} posts`);
+      assert.ok(outcome.documentId);
+    };
+    await partial("r-2vis-1", "1", 2500n, 0n, 2690n, "2026-07-16T09:00:00Z");
+    await partial("r-2vis-2", "1", 2500n, 600n, 3350n, "2026-07-17T09:00:00Z");
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-refund-3", currency: "CAD", issuedAt: "2026-07-10" },
+      [{ id: "txn-refund-R3", type: "refund", amount: "20.00", currency: "CAD", sourceOrderId: "8801" }],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    assert.equal(result.lines.length, 1);
+    const [verdict] = result.lines;
+    assert.ok(verdict, "the batch yields its refund verdict");
+    assert.equal(verdict.status, "unmatched");
+    assert.ok(verdict.status === "unmatched");
+    assert.equal(verdict.reason, "ambiguous_refund", `two visible refunds still refuse to guess, got ${verdict.reason}`);
   } finally {
     await dropScratchOrg(org.orgId);
   }
