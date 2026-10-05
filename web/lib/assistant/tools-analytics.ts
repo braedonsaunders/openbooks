@@ -209,11 +209,13 @@ const customerIntelligenceTool: AssistantToolDef = {
     const strings = customerStrings(translate, locale);
     // soft-feature: only drops the job-costed section when the module is off; the dashboard stays.
     const projectsOn = await isFeatureEnabled(orgId, "projects");
-    const [r, prof] = await withOrg(orgId, () =>
-      Promise.all([
-        customerData(period, orgId, authz.allowedSubsidiaryIds, strings),
-        projectsOn ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds, strings) : Promise.resolve(null),
-      ]),
+    // The leak share divides by the loader's scoped, customer-attributed
+    // period total — passed in, never a second unscoped query.
+    const r = await withOrg(orgId, () => customerData(period, orgId, authz.allowedSubsidiaryIds, strings));
+    const prof = await withOrg(orgId, () =>
+      projectsOn
+        ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds, strings, r.kpis.totalRevenue)
+        : Promise.resolve(null),
     );
     // A broken weight sum refuses in the loader payload: fail the tool with
     // the named remedy instead of answering from empty figures.

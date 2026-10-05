@@ -324,6 +324,7 @@
   },
   "concentrationHint": "{level} · cuota líder {share}",
   "atRiskCount": "{count, plural, one {# cliente} other {# clientes}}",
+  "concentrationNoRevenue": "Sin ingresos reconocidos de clientes en {period}",
   "churnScore": "puntuación de fuga {score}",
   "analytics": {
     "loading": "Las cifras aún no están disponibles.",

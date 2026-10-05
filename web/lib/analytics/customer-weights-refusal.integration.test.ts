@@ -36,7 +36,7 @@ test('customer loaders refuse a broken weight sum in the payload, never a throw'
       assert.equal(full.config.healthWeightRecency, 24)
       const summary = await withOrgContext(scratch.orgId, () => customerSummaryData(period, scratch.orgId, null))
       assert.equal(summary.weightsError, full.weightsError)
-      const prof = await withOrgContext(scratch.orgId, () => customerProfitability(period, scratch.orgId, null))
+      const prof = await withOrgContext(scratch.orgId, () => customerProfitability(period, scratch.orgId, null, undefined, full.kpis.totalRevenue))
       assert.equal(prof.weightsError, full.weightsError)
       assert.deepEqual(prof.customers, [])
     })

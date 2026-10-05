@@ -14,7 +14,7 @@ const { add } = await import("@openbooks/engine/src/money/money.ts");
 const { db, withOrgContext, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { healthData } = await import("./analytics/health-data");
-const { customerProfitability } = await import("./analytics/customer-data");
+const { customerData, customerProfitability } = await import("./analytics/customer-data");
 const { profitAndLoss } = await import("./reports/statements");
 
 for (const view of ["current month", "completed month", "segments", "drivers", "items", "operating income"] as const) {
@@ -163,7 +163,8 @@ test('expense_other with segment + project tags reaches every P&L slice', { skip
       const headline = await profitAndLoss(period.from, period.to, undefined, org.scoped.orgId);
       assert.equal(Number(headline.revenue), 200, 'headline control: revenue');
       assert.equal(Number(headline.expenses), 100, 'headline control: expenses include expense_other');
-      const profit = await customerProfitability(period, org.scoped.orgId, null);
+      const loader = await customerData(period, org.scoped.orgId, null);
+      const profit = await customerProfitability(period, org.scoped.orgId, null, undefined, loader.kpis.totalRevenue);
       assert.equal(profit.summary.totalRevenue, '200.0000');
       assert.equal(profit.summary.totalCost, '100.0000', 'project costs include expense_other legs');
       assert.equal(profit.summary.totalGrossProfit, '100.0000', 'project slice ties to the headline P&L');

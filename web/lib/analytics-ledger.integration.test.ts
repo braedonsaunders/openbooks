@@ -14,7 +14,7 @@ const { db, withOrgContext, withBypassContext, withBypass } = await import('@ope
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { vendorData } = await import('./analytics/vendor-data');
 const { spendVelocityData } = await import('./analytics/spend-velocity-data');
-const { customerProfitability } = await import('./analytics/customer-data');
+const { customerData, customerProfitability } = await import('./analytics/customer-data');
 
 for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend vendors', 'spend revenue', 'spend categories', 'spend comparison', 'customer profitability'] as const) {
   for (const scenario of ['posted control', 'secondary book', 'draft entries', 'reversed history'] as const) {
@@ -72,7 +72,8 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
             if (view === 'vendor total') assert.equal(data.totals.spend, 100);
             else assert.equal(data.monthly.find(row => row.month === '2026-07')?.spend, 100);
           } else if (view === 'customer profitability') {
-            const data = await customerProfitability(period, org.orgId, null);
+            const loader = await customerData(period, org.orgId, null);
+            const data = await customerProfitability(period, org.orgId, null, undefined, loader.kpis.totalRevenue);
             assert.equal(data.summary.totalRevenue, '200.0000');
             assert.equal(data.summary.totalCost, '100.0000');
             assert.equal(data.summary.totalGrossProfit, '100.0000');
@@ -553,7 +554,8 @@ const { sql } = await import('drizzle-orm');
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('./authz');
-const { customerData, customerProfitability } = await import('./analytics/customer-data');
+const { customerData, customerProfitability, isProfitLeak } = await import('./analytics/customer-data');
+const { analyticsConfig } = await import('./analytics/config');
 const { vendorData } = await import('./analytics/vendor-data');
 const { spendVelocityData } = await import('./analytics/spend-velocity-data');
 // The page LOADERS. The `page` boundary below asks whether the page applies
@@ -615,7 +617,11 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
               data = surface === 'customer' ? await customerData(period, org.orgId, authz.allowedSubsidiaryIds)
                 : surface === 'vendor' ? await vendorData(period, org.orgId, authz.allowedSubsidiaryIds)
                 : await spendVelocityData(org.orgId, period, authz.allowedSubsidiaryIds);
-              if (surface === 'customer') profitability = await customerProfitability(period, org.orgId, authz.allowedSubsidiaryIds);
+              if (surface === 'customer') {
+                const total = data.kpis?.totalRevenue;
+                assert.ok(total !== undefined, 'the customer loader carries its period total for the leak share');
+                profitability = await customerProfitability(period, org.orgId, authz.allowedSubsidiaryIds, undefined, String(total));
+              }
             } else if (boundary === 'page') {
               const load = surface === 'customer' ? loadCustomerIntelligence
                 : surface === 'vendor' ? loadVendorPerformance : loadSpendVelocity;
@@ -646,6 +652,18 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             if (surface === 'customer') {
               assert.equal((profitability as { summary: { totalRevenue: string } }).summary.totalRevenue, expectedRevenue.toFixed(4));
               assert.equal(JSON.stringify(profitability).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
+              // The leak share divides the loader's scoped period total: every
+              // flagged customer re-derived here from that total must agree.
+              // A denominator that counted hidden subsidiaries would clear
+              // flags the dashboard shows (or set ones it does not).
+              if (boundary === 'service') {
+                const cfg = await analyticsConfig(org.orgId, 'customerIntelligence');
+                const cuts = { revenueSharePct: cfg.profitLeakRevenueSharePct!, marginTarget: cfg.profitLeakMarginTarget! };
+                const total = String(data.kpis?.totalRevenue);
+                for (const c of (profitability as { customers: { customerId: string; totalRevenue: string; marginPct: number | null; isFakeChampion: boolean }[] }).customers) {
+                  assert.equal(c.isFakeChampion, isProfitLeak({ revenue: c.totalRevenue, totalRevenue: total, marginPct: c.marginPct }, cuts), `leak flag for ${c.customerId} divides the loader total`);
+                }
+              }
             }
           });
         } finally { state.user = null; await withBypass(() => dropScratchOrg(org.orgId)); }

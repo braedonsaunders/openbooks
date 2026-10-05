@@ -324,6 +324,7 @@
   },
   "concentrationHint": "{level} · premier {share}",
   "atRiskCount": "{count, plural, one {# client} other {# clients}}",
+  "concentrationNoRevenue": "Aucun chiffre d’affaires client comptabilisé sur {period}",
   "churnScore": "score d’attrition {score}",
   "analytics": {
     "loading": "Les chiffres ne sont pas encore disponibles.",
