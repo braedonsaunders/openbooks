@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { SETUP_ENTITY_BY_KEY } from './registry.ts'
 import { validatePromotionWrite } from './sales-validation.ts'
+
+const entity = SETUP_ENTITY_BY_KEY.get('promotions')
+if (!entity) throw new Error('promotions setup entity is not registered')
 
 const draftCreate = {
   code: 'QA-PROMO10',
@@ -16,13 +21,13 @@ const executor = {
     calls.push(args)
     return { rows: [] }
   },
-}
+} as unknown as SqlExecutor
 
 test('a draft-by-default promotion create passes validation without a transition', async () => {
   // Creation stores its opening status directly; comparing it against no
   // previous status refused every draft create with the transition remedy.
   calls.length = 0
-  const result = await validatePromotionWrite({ orgId: 'org-1', body: { ...draftCreate }, rowId: undefined, executor: executor as never })
+  const result = await validatePromotionWrite({ entity, orgId: 'org-1', body: { ...draftCreate }, rowId: undefined, executor })
   assert.equal(result, undefined)
   assert.deepEqual(calls, [], 'a create reads no current row')
 })
@@ -37,7 +42,7 @@ test('leaving the status unchanged on edit passes validation', async () => {
       }],
     }),
   }
-  const result = await validatePromotionWrite({ orgId: 'org-1', body: {}, rowId: 'promo-1', executor: reading as never })
+  const result = await validatePromotionWrite({ entity, orgId: 'org-1', body: {}, rowId: 'promo-1', executor: reading as unknown as SqlExecutor })
   assert.equal(result, undefined)
 })
 
@@ -52,7 +57,7 @@ test('an illegal archived-to-active edit keeps its named remedy', async () => {
     }),
   }
   const result = await validatePromotionWrite({
-    orgId: 'org-1', body: { status: 'active' }, rowId: 'promo-1', executor: reading as never,
+    entity, orgId: 'org-1', body: { status: 'active' }, rowId: 'promo-1', executor: reading as unknown as SqlExecutor,
   })
   assert.match(String(result), /new promotion/)
 })
