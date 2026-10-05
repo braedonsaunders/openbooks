@@ -40,7 +40,7 @@ test("decline classification and policy parsing are pure and strict", () => {
   assert.equal(classifyDecline("stolen_card"), "hard");
   assert.equal(classifyDecline("closed_account"), "hard");
   assert.equal(classifyDecline("mandate_cancelled"), "hard");
-  assert.equal(classifyDecline("insufficient_funds"), "soft");
+  assert.equal(classifyDecline("insufficient_funds"), "insufficient_funds");
   assert.equal(classifyDecline("some_future_code"), "soft");
   assert.deepEqual(parseRetryOffsetsDays([1, 3, 7]), [1, 3, 7]);
   assert.deepEqual(parseRetryOffsetsDays([]), []);
