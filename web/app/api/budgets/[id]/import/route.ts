@@ -15,6 +15,7 @@ import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from
 import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 import { PNL_TYPES } from '../../../../../lib/account-types'
 import { notFound } from "@/lib/api/responses";
+import { effectiveExtraDimsSql, loadBudgetSegments, resolveBudgetExtraDims } from '@openbooks/engine/budgets/dimensions'
 
 
 export const runtime = 'nodejs'
@@ -204,6 +205,15 @@ export const POST = defineRoute({
         locationId: buildResolver(locationsResult.rows),
         classId: buildResolver(classesResult.rows),
       }
+    // Custom segments (fund included) import from a column named for the
+    // segment (its name or key), resolved by value code or name. A row that
+    // names no fund is imported under the default fund explicitly — the cell
+    // budgetary control reads.
+    const segments = await loadBudgetSegments(db, user.orgId)
+    const segmentResolvers = segments.map((segment) => ({
+      segment,
+      resolve: buildResolver(segment.values.map((value) => ({ id: value.id, key: value.code ?? '', name: value.name }))),
+    }))
     const errors: { row: number; field: string; message: string }[] = []
     const cells: BudgetCellInput[] = []
     const seen = new Set<string>()
@@ -307,6 +317,19 @@ export const POST = defineRoute({
             }
           }
         }
+        const pickedSegments: Record<string, string> = {}
+        for (const { segment, resolve } of segmentResolvers) {
+          const raw = first(row, segment.name, segment.key)
+          if (!String(raw ?? '').trim()) continue
+          const outcome = resolve(String(raw))
+          if ('id' in outcome) pickedSegments[segment.key] = outcome.id
+          else if ('ambiguous' in outcome) {
+            errors.push({ row: rowNumber, field: segment.name, message: `ambiguous_dimension: ${outcome.ambiguous.join(', ')}` })
+          } else {
+            errors.push({ row: rowNumber, field: segment.name, message: 'unknown_dimension' })
+          }
+        }
+        const extraDims = resolveBudgetExtraDims(segments, pickedSegments)
         let amount = '0.0000'
         try {
           amount = normalizeBudgetAmount(first(row, 'Amount', 'amount'))
@@ -315,7 +338,7 @@ export const POST = defineRoute({
           errors.push({ row: rowNumber, field: 'Amount', message: 'invalid_amount' })
         }
         if (accountId && periodId && subsidiaryId) {
-          const key = [accountId, periodId, subsidiaryId, ...Object.values(resolvedDims).map((value) => value ?? '')].join('|')
+          const key = [accountId, periodId, subsidiaryId, ...Object.values(resolvedDims).map((value) => value ?? ''), JSON.stringify(extraDims)].join('|')
           if (seen.has(key)) errors.push({ row: rowNumber, field: 'Account Number', message: 'duplicate_cell' })
           seen.add(key)
           cells.push({
@@ -323,6 +346,7 @@ export const POST = defineRoute({
             periodId,
             subsidiaryId,
             ...resolvedDims,
+            extraDims,
             amount,
             note: String(first(row, 'Note', 'note') ?? '').trim().slice(0, 2_000) || null,
           })
@@ -349,18 +373,38 @@ export const POST = defineRoute({
             project_id: cell.projectId,
             location_id: cell.locationId,
             class_id: cell.classId,
+            extra_dims: cell.extraDims ?? {},
             amount: cell.amount,
             note: cell.note ?? null,
           }))
+          // A cell saved before fund accounting names no fund; it is the same
+          // cell as its default-fund spelling, so it is cleared before the
+          // explicit line is written rather than left to count twice.
+          await tx.execute(sql`
+            delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
+              account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
+              location_id uuid, class_id uuid, extra_dims jsonb
+            )
+            where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
+              and bl.account_id = x.account_id and bl.period_id = x.period_id
+              and bl.subsidiary_id is not distinct from x.subsidiary_id
+              and bl.department_id is not distinct from x.department_id
+              and bl.project_id is not distinct from x.project_id
+              and bl.location_id is not distinct from x.location_id
+              and bl.class_id is not distinct from x.class_id
+              and bl.extra_dims <> x.extra_dims
+              and ${effectiveExtraDimsSql(sql`bl.extra_dims`, user.orgId)} = x.extra_dims
+              ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+          `)
           await tx.execute(sql`
             insert into budget_lines
               (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-               amount, note, created_by, updated_by)
+               extra_dims, amount, note, created_by, updated_by)
             select ${user.orgId}, ${id}, x.account_id, x.period_id, x.subsidiary_id, x.department_id, x.project_id, x.location_id,
-                   x.class_id, x.amount, x.note, ${user.id}, ${user.id}
+                   x.class_id, x.extra_dims, x.amount, x.note, ${user.id}, ${user.id}
               from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
                 account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
-                location_id uuid, class_id uuid, amount numeric(19,4), note text
+                location_id uuid, class_id uuid, extra_dims jsonb, amount numeric(19,4), note text
               )
              where x.amount <> 0 or x.note is not null
             on conflict on constraint budget_lines_cell do update set
@@ -373,7 +417,7 @@ export const POST = defineRoute({
           await tx.execute(sql`
             delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
               account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
-              location_id uuid, class_id uuid, amount numeric(19,4), note text
+              location_id uuid, class_id uuid, extra_dims jsonb, amount numeric(19,4), note text
             )
             where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
               and x.amount = 0 and x.note is null
@@ -383,6 +427,7 @@ export const POST = defineRoute({
               and bl.project_id is not distinct from x.project_id
               and bl.location_id is not distinct from x.location_id
               and bl.class_id is not distinct from x.class_id
+              and ${effectiveExtraDimsSql(sql`bl.extra_dims`, user.orgId)} = x.extra_dims
               ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
           `)
           const revision = expectedRevision + 1

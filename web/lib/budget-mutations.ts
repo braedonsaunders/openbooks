@@ -6,6 +6,7 @@ import { normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import type { BudgetDimensions } from './budgets'
 import { PNL_TYPES } from './account-types'
 import { canonicalDecimal } from './exact-decimal'
+import { BudgetDimensionError, effectiveExtraDimsSql, loadBudgetSegments, resolveBudgetExtraDims } from '@openbooks/engine/budgets/dimensions'
 
 export type BudgetCellInput = BudgetDimensions & {
   /** Legal entity owning this planning cell; omitted inputs resolve to root. */
@@ -51,6 +52,7 @@ function cellKey(cell: Pick<BudgetCellInput, 'accountId' | 'periodId'> & Partial
     cell.projectId ?? '',
     cell.locationId ?? '',
     cell.classId ?? '',
+    JSON.stringify(cell.extraDims ?? {}),
   ].join('|')
 }
 
@@ -90,6 +92,17 @@ export async function saveBudgetCells(input: {
   }))
 
   return db.transaction(async (tx) => {
+    // Custom segments (fund included) are part of the cell identity budgetary
+    // control matches on. Each cell's assignment is validated against the
+    // active segments, and a cell that names no fund is saved under the
+    // default fund explicitly, so the stored line is the cell control reads.
+    const segments = await loadBudgetSegments(tx, input.orgId)
+    try {
+      normalized = normalized.map((cell) => ({ ...cell, extraDims: resolveBudgetExtraDims(segments, cell.extraDims) }))
+    } catch (error) {
+      if (error instanceof BudgetDimensionError) throw new BudgetMutationError(error.message)
+      throw error
+    }
     const locked = (await tx.execute<{ status: string; revision: number; fiscal_year: number }>(sql`
       select id, status, revision, fiscal_year
         from budget_scenarios
@@ -195,11 +208,16 @@ export async function saveBudgetCells(input: {
       project_id: string | null
       location_id: string | null
       class_id: string | null
+      extra_dims: Record<string, string>
       amount: string
       note: string | null
     }
+    // Read under the same effective-fund reading control uses, so a line saved
+    // before fund accounting (no fund key) is the before-image of — and is
+    // replaced by — the default-fund cell the worksheet now shows it in.
     const beforeRows = (await tx.execute<BudgetLineBeforeRow>(sql`
-      select account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id, amount::text, note
+      select account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
+             ${effectiveExtraDimsSql(sql`extra_dims`, input.orgId)} as extra_dims, amount::text, note
         from budget_lines
        where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
          and account_id = any(${uuidArray(accountIds)}::uuid[])
@@ -215,6 +233,7 @@ export async function saveBudgetCells(input: {
           projectId: row.project_id,
           locationId: row.location_id,
           classId: row.class_id,
+          extraDims: Object.fromEntries(Object.entries(row.extra_dims ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
         }),
         { amount: row.amount, note: row.note },
       ]),
@@ -223,26 +242,31 @@ export async function saveBudgetCells(input: {
     const evidence: Record<string, unknown>[] = []
     for (const cell of normalized) {
       const old = before.get(cellKey(cell)) ?? null
+      const extraDims = JSON.stringify(cell.extraDims)
+      // Clear the cell's line under every stored spelling of its identity (an
+      // older line may name no fund), then write the one explicit line.
+      await tx.execute(sql`
+        delete from budget_lines
+         where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
+           and account_id = ${cell.accountId} and period_id = ${cell.periodId}
+           and subsidiary_id is not distinct from ${cell.subsidiaryId}
+           and department_id is not distinct from ${cell.departmentId}
+           and project_id is not distinct from ${cell.projectId}
+           and location_id is not distinct from ${cell.locationId}
+           and class_id is not distinct from ${cell.classId}
+           and ${effectiveExtraDimsSql(sql`extra_dims`, input.orgId)} = ${extraDims}::jsonb
+           and (${toUnits(cell.amount) === 0n && !cell.note} or extra_dims <> ${extraDims}::jsonb)
+      `)
       if (toUnits(cell.amount) === 0n && !cell.note) {
-        await tx.execute(sql`
-          delete from budget_lines
-           where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
-             and account_id = ${cell.accountId} and period_id = ${cell.periodId}
-             and subsidiary_id is not distinct from ${cell.subsidiaryId}
-             and department_id is not distinct from ${cell.departmentId}
-             and project_id is not distinct from ${cell.projectId}
-             and location_id is not distinct from ${cell.locationId}
-             and class_id is not distinct from ${cell.classId}
-        `)
         evidence.push({ ...cell, before: old, after: null })
       } else {
         await tx.execute(sql`
           insert into budget_lines
             (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-             amount, note, created_by, updated_by)
+             extra_dims, amount, note, created_by, updated_by)
           values
             (${input.orgId}, ${input.scenarioId}, ${cell.accountId}, ${cell.periodId}, ${cell.subsidiaryId}, ${cell.departmentId},
-             ${cell.projectId}, ${cell.locationId}, ${cell.classId}, ${cell.amount}, ${cell.note},
+             ${cell.projectId}, ${cell.locationId}, ${cell.classId}, ${extraDims}::jsonb, ${cell.amount}, ${cell.note},
              ${input.actorId}, ${input.actorId})
           on conflict on constraint budget_lines_cell do update set
             amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by

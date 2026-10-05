@@ -15,6 +15,9 @@ import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../..
 import { listBudgetSourceOptions, loadBudgetBooksAndYears, loadBudgetWorkspace, loadUnsavedBudgetWorkspace, type BudgetDimensions, type BudgetWorkspace } from '../../../lib/budgets'
 import type { BudgetDrawer } from './BudgetDrawer'
 
+/** URL parameter prefix of a custom segment slice: budgetSeg_<segment key>. */
+const BUDGET_SEGMENT_PARAM = 'budgetSeg_'
+
 /**
  * Budgets, split into a loader and a spec.
  *
@@ -65,7 +68,16 @@ export async function loadBudgets(
     projectId: dimension('budgetProject'),
     locationId: dimension('budgetLocation'),
     classId: dimension('budgetClass'),
+    // Custom segment slices (fund included) travel as budgetSeg_<segment key>;
+    // the workspace loader drops any key or value that is not active.
+    extraDims: Object.fromEntries(Object.keys(sp)
+      .filter((param) => param.startsWith(BUDGET_SEGMENT_PARAM))
+      .map((param) => [param.slice(BUDGET_SEGMENT_PARAM.length), dimension(param)])
+      .filter((entry): entry is [string, string] => entry[1] !== null)),
   }
+  const segmentParams = Object.fromEntries(Object.keys(sp)
+    .filter((param) => param.startsWith(BUDGET_SEGMENT_PARAM))
+    .map((param) => [param, null]))
   const { books, years } = await loadBudgetBooksAndYears(orgId)
   // Unsaved-create (?budgetNew=1): the drawer opens over an in-memory
   // workspace — zero writes on open, zero on Cancel, one explicit Save. The
@@ -106,6 +118,7 @@ export async function loadBudgets(
     budgetProject: null,
     budgetLocation: null,
     budgetClass: null,
+    ...segmentParams,
     budgetImport: null,
     budgetView: null,
     drawerReturn: null,
@@ -131,13 +144,14 @@ export async function loadBudgets(
         canExport: unsaved ? false : can(authz, 'data.export'),
       }
     : null
+  const sliceKey = `${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}-${JSON.stringify(openWorkspace?.effectiveExtraDims ?? {})}`
   const persistedKey = workspace
-    ? `${workspace.scenario.id}-${workspace.scenario.revision}-${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`
+    ? `${workspace.scenario.id}-${workspace.scenario.revision}-${sliceKey}`
     : ''
   const drawer: BudgetsData['drawer'] = openWorkspace && drawerPayload
     ? {
         remountKey: unsaved
-          ? `new-${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`
+          ? `new-${sliceKey}`
           : persistedKey,
         ...drawerPayload,
       }

@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { PNL_TYPES } from './account-types'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { effectiveExtraDimsSql, loadBudgetSegments, resolveBudgetExtraDims, type BudgetSegment } from '@openbooks/engine/budgets/dimensions'
 
 export const BUDGET_KINDS = ['budget', 'forecast'] as const
 export const BUDGET_STATUSES = ['draft', 'pending_approval', 'approved', 'archived'] as const
@@ -42,6 +43,9 @@ export type BudgetDimensions = {
   projectId: string | null
   locationId: string | null
   classId: string | null
+  /** Custom segment values (fund included) keyed by segment key. Omitted
+   * segments are unset, except the fund, which resolves to the default fund. */
+  extraDims?: Record<string, string>
 }
 
 export type BudgetScenario = {
@@ -146,12 +150,16 @@ export type BudgetWorkspace = {
   sliceTotal: string
   /** The entity slice actually loaded (requested id, or the tenant root default). */
   effectiveSubsidiaryId: string | null
+  /** The custom segment slice actually loaded, with the default fund filled in. */
+  effectiveExtraDims: Record<string, string>
   dimensions: {
     subsidiaries: DimensionOption[]
     departments: DimensionOption[]
     projects: DimensionOption[]
     locations: DimensionOption[]
     classes: DimensionOption[]
+    /** Active custom segments (fund included) offered as worksheet slices. */
+    segments: BudgetSegment[]
   }
 }
 
@@ -164,13 +172,17 @@ const accountTypesSql = sql`(${sql.join(
   sql`, `,
 )})`
 
-function dimensionWhere(alias: string, dims: BudgetDimensions) {
+// A slice is the exact cell identity budgetary control matches on, custom
+// segments included; a stored line that names no fund reads as the default
+// fund, the same reading the control applies.
+function dimensionWhere(alias: string, dims: BudgetDimensions, orgId: string) {
   const col = (name: string) => sql.raw(`${alias}.${name}`)
   return sql`${col('subsidiary_id')} is not distinct from ${dims.subsidiaryId}
     and ${col('department_id')} is not distinct from ${dims.departmentId}
     and ${col('project_id')} is not distinct from ${dims.projectId}
     and ${col('location_id')} is not distinct from ${dims.locationId}
-    and ${col('class_id')} is not distinct from ${dims.classId}`
+    and ${col('class_id')} is not distinct from ${dims.classId}
+    and ${effectiveExtraDimsSql(col('extra_dims'), orgId)} = ${JSON.stringify(dims.extraDims ?? {})}::jsonb`
 }
 
 export async function loadBudgetScenario(
@@ -238,7 +250,17 @@ async function loadWorksheetSlice(
      order by created_at, id
      limit 1
   `)).rows[0]?.id ?? null
-  const dims: BudgetDimensions = { ...dimsIn, subsidiaryId: rootSubsidiaryId }
+  // Custom segment slice: unknown or retired selections are dropped (a stale
+  // link opens the nearest valid slice), and the fund resolves to the default
+  // fund, so the worksheet always names the fund its cells are saved under.
+  const segments = await loadBudgetSegments(db, orgId)
+  const requestedExtra = Object.fromEntries(Object.entries(dimsIn.extraDims ?? {}).filter(([key, value]) =>
+    segments.some((segment) => segment.key === key && segment.values.some((option) => option.id === value))))
+  const dims: BudgetDimensions = {
+    ...dimsIn,
+    subsidiaryId: rootSubsidiaryId,
+    extraDims: resolveBudgetExtraDims(segments, requestedExtra),
+  }
 
   const search = opts.q?.trim()
   const accountWhere = sql`a.org_id = ${orgId} and a.is_active and not a.is_summary
@@ -268,7 +290,7 @@ async function loadWorksheetSlice(
     db.execute(sql`select count(*) as n from accounts a where ${accountWhere}`) as Promise<{
       rows: { n: string }[]
     }>,
-    loadBudgetDimensionOptions(orgId),
+    loadBudgetDimensionOptions(orgId, segments),
   ])
 
   return {
@@ -310,7 +332,7 @@ export async function loadBudgetWorkspace(
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where bl.org_id = ${orgId} and bl.scenario_id = ${id}
          and fc.is_default
-         and ${dimensionWhere('bl', slice.dims)}
+         and ${dimensionWhere('bl', slice.dims, orgId)}
     `) as { rows: { total: string }[] })
 
   const accountIds = slice.accounts.map((account) => account.id)
@@ -324,7 +346,7 @@ export async function loadBudgetWorkspace(
          where bl.org_id = ${orgId} and bl.scenario_id = ${id}
            and fc.is_default
            and bl.account_id = any(${`{${accountIds.join(',')}}`}::uuid[])
-           and ${dimensionWhere('bl', slice.dims)}
+           and ${dimensionWhere('bl', slice.dims, orgId)}
       `))).rows
     : []
 
@@ -350,6 +372,7 @@ export async function loadBudgetWorkspace(
     sliceTotal: total.rows[0]?.total ?? '0.0000',
     dimensions: slice.dimensions,
     effectiveSubsidiaryId: slice.dims.subsidiaryId,
+    effectiveExtraDims: slice.dims.extraDims ?? {},
   }
 }
 
@@ -436,10 +459,11 @@ export async function loadUnsavedBudgetWorkspace(
     sliceTotal: '0.0000',
     dimensions: slice.dimensions,
     effectiveSubsidiaryId: slice.dims.subsidiaryId,
+    effectiveExtraDims: slice.dims.extraDims ?? {},
   }
 }
 
-export async function loadBudgetDimensionOptions(orgId: string): Promise<BudgetWorkspace['dimensions']> {
+export async function loadBudgetDimensionOptions(orgId: string, preloadedSegments?: BudgetSegment[]): Promise<BudgetWorkspace['dimensions']> {
   const [subsidiaries, departments, projects, locations, classes] = (await Promise.all([
     db.execute<DimensionOption>(sql`select id, null as code, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by name`),
     db.execute<DimensionOption>(sql`select id, code, name from departments where org_id = ${orgId} and is_active order by code nulls last, name`),
@@ -453,6 +477,7 @@ export async function loadBudgetDimensionOptions(orgId: string): Promise<BudgetW
     projects: projects.rows,
     locations: locations.rows,
     classes: classes.rows,
+    segments: preloadedSegments ?? await loadBudgetSegments(db, orgId),
   }
 }
 

@@ -151,7 +151,7 @@ export function BudgetDrawer({
         // The cell's resolved entity wins over the slice param: both name the
         // same subsidiary, but an explicit id must never degrade to an
         // omitted one (which the save path would re-resolve).
-        cells: pending.map(({ cell }) => ({ ...dims, ...cell, amount: toStorage(cell.accountId, cell.amount) })),
+        cells: pending.map(({ cell }) => ({ ...dims, extraDims: initial.effectiveExtraDims, ...cell, amount: toStorage(cell.accountId, cell.amount) })),
       })
       return true
     } catch {
@@ -488,6 +488,11 @@ export function BudgetDrawer({
    * persisted, then creates the scenario and commits the entered non-zero
    * lines. Abandoning the drawer (Cancel/close) writes nothing at all.
    */
+  // Navigating away from the create sheet clears every custom segment slice too.
+  const segmentParamResets = Object.fromEntries(Object.keys(currentParams)
+    .filter((param) => param.startsWith('budgetSeg_'))
+    .map((param) => [param, null]))
+
   async function saveNew() {
     const trimmedName = name.trim()
     if (!trimmedName) {
@@ -509,6 +514,7 @@ export function BudgetDrawer({
         if (units === 0n) continue
         cells.push({
           ...dims,
+          extraDims: initial.effectiveExtraDims,
           accountId: account.id,
           periodId: period.id,
           subsidiaryId: sliceSubsidiaryId,
@@ -555,6 +561,7 @@ export function BudgetDrawer({
         budgetProject: null,
         budgetLocation: null,
         budgetClass: null,
+        ...segmentParamResets,
         budgetImport: null,
         budgetView: null,
       })))
@@ -574,6 +581,7 @@ export function BudgetDrawer({
           budgetProject: null,
           budgetLocation: null,
           budgetClass: null,
+          ...segmentParamResets,
           budgetImport: null,
           budgetView: null,
         }))
@@ -646,6 +654,8 @@ export function BudgetDrawer({
             <DimensionSelect label={t('workspace.dimensions.project')} value={dims.projectId ?? ''} options={initial.dimensions.projects} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetProject', value)} />
             <DimensionSelect label={t('workspace.dimensions.location')} value={dims.locationId ?? ''} options={initial.dimensions.locations} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetLocation', value)} />
             <DimensionSelect label={t('workspace.dimensions.class')} value={dims.classId ?? ''} options={initial.dimensions.classes} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetClass', value)} />
+            {/* Custom segments (fund included) are part of the budget cell budgetary control matches on; a segment with a default (the fund) always names a value. */}
+            {initial.dimensions.segments.map((segment) => <DimensionSelect key={segment.key} label={segment.name} value={initial.effectiveExtraDims[segment.key] ?? ''} options={segment.values} allowEmpty={!segment.defaultValueId} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl(`budgetSeg_${segment.key}`, value)} />)}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">

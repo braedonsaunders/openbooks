@@ -15,6 +15,8 @@ const PATCHBodySchema1 = z.object({
     accountId: z.string().uuid(), periodId: z.string().uuid(), amount: z.string(), note: z.string().nullable().optional(),
     subsidiaryId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(),
     projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(), classId: z.string().uuid().nullable().optional(),
+    // Custom segment values (fund included) keyed by segment key; validated against the active segments on save.
+    extraDims: z.record(z.string(), z.string()).nullable().optional(),
   })).min(1),
 });
 
@@ -65,6 +67,7 @@ export const PATCH = defineRoute({
           projectId: projectId as string | null,
           locationId: locationId as string | null,
           classId: classId as string | null,
+          extraDims: (raw.extraDims ?? undefined) as Record<string, string> | undefined,
         })
       }
     const explicitSubsidiaryIds = [...new Set(cells.map((cell) => cell.subsidiaryId).filter((id): id is string => !!id))]
