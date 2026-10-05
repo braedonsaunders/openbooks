@@ -4,6 +4,7 @@ import type { BillLineInput } from '@openbooks/engine/src/ledger/document-input.
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
+import { persistLineTaxComponents as persistEngineLineTaxComponents } from '@openbooks/engine/src/tax/persist.ts'
 import { cmp, add, isZero, sum } from '@openbooks/engine/src/money/money.ts'
 import {
   computeLineTaxes,
@@ -351,7 +352,13 @@ export async function computeBillTotalsWithProvider(
 
 type SqlRunner = SqlExecutor
 
-/** Persist the immutable calculation snapshot immediately after its document line. */
+/**
+ * Persist the immutable calculation snapshot immediately after its document
+ * line. Delegates to the engine's single writer, which derives who collected
+ * the tax (merchant or a marketplace facilitator) from the stored line — a
+ * second writer here once dropped that attribution and booked facilitator-
+ * collected tax as the merchant's own liability.
+ */
 export async function persistLineTaxComponents(
   runner: SqlRunner,
   args: {
@@ -361,23 +368,7 @@ export async function persistLineTaxComponents(
     actorId: string | null
   },
 ): Promise<void> {
-  for (const component of args.components) {
-    await runner.execute(sql`
-      insert into document_line_tax_components
-        (org_id, document_line_id, tax_code_id, sequence, rate_percent,
-         taxable_amount, tax_amount, recoverable_amount, nonrecoverable_amount,
-         calculation_type, price_includes_tax, compound_on_previous, rounding_scale,
-         collected_account_id, paid_account_id, withholding_account_id, overridden,
-         created_by, updated_by)
-      values (${args.orgId}, ${args.documentLineId}, ${component.taxCodeId}, ${component.sequence},
-              ${component.ratePercent}, ${component.taxableAmount}, ${component.taxAmount},
-              ${component.recoverableAmount}, ${component.nonrecoverableAmount},
-              ${component.calculationType}, ${component.priceIncludesTax},
-              ${component.compoundOnPrevious}, ${component.roundingScale},
-              ${component.collectedAccountId}, ${component.paidAccountId},
-              ${component.withholdingAccountId}, ${component.overridden},
-              ${args.actorId}, ${args.actorId})`)
-  }
+  await persistEngineLineTaxComponents(args.orgId, args.documentLineId, args.components, args.actorId, runner)
 }
 
 /**
