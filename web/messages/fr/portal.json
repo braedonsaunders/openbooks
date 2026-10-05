@@ -95,6 +95,7 @@
     "check": "Vérifier",
     "yours": "Votre avoir",
     "empty": "Aucun avoir ni solde prépayé.",
+    "noCurrency": "Devise non enregistrée — montant masqué jusqu'à correction.",
     "storeCredit": "Avoir en magasin",
     "prepaid": "Usage prépayé"
   }

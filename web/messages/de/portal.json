@@ -95,6 +95,7 @@
     "check": "Guthaben prüfen",
     "yours": "Ihr Guthaben",
     "empty": "Kein Guthaben und keine Vorauszahlungen.",
+    "noCurrency": "Währung nicht erfasst — Betrag ausgeblendet, bis dies korrigiert ist.",
     "storeCredit": "Guthaben",
     "prepaid": "Vorausbezahlte Nutzung"
   }

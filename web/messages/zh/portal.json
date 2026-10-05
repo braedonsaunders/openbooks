@@ -95,6 +95,7 @@
     "check": "查询余额",
     "yours": "您的信用",
     "empty": "暂无储值或预付余额。",
+    "noCurrency": "未记录货币，金额已隐藏，待更正后再显示。",
     "storeCredit": "储值信用",
     "prepaid": "预付用量"
   }

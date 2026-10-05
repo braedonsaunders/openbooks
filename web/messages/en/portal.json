@@ -95,6 +95,7 @@
     "check": "Check balance",
     "yours": "Your credit",
     "empty": "No store credit or prepaid balances.",
+    "noCurrency": "Currency not recorded — amount hidden until it is corrected.",
     "storeCredit": "Store credit",
     "prepaid": "Prepaid usage"
   }

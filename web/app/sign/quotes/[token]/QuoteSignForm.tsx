@@ -27,7 +27,9 @@ interface QuoteLine {
     tcv: string
   }>
   tcv: string
-  /** Null when no signing request remains open — the form refuses instead. */
+  /** Null only when the view fails to resolve — open, signed, declined,
+   *  voided and expired requests all resolve their status, so the form
+   *  refuses with a named remedy instead of rendering a missing request. */
   signature: {
     status: string
     signerName: string
