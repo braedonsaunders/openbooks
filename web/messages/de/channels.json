@@ -59,7 +59,14 @@
       "disconnected": "Kanal getrennt.",
       "connected": "Storefront verbunden.",
       "createFailed": "Die Storefront wurde nicht verbunden (Status {status})."
-    }
+    },
+    "marginTitle": "Auftragsmarge",
+    "marginHint": "Deckungsbeitrag der letzten 30 Tage je Kanal, nach Versand und Gebühren",
+    "marginEmpty": "Die Marge erscheint hier, sobald Kanalaufträge mit Kosten gebucht sind. Einen Auftrag aktualisieren, um sie sofort zu bilden.",
+    "marginReport": "Margenbericht",
+    "marginMeta": "{orders} Auftrag/Aufträge · {revenue} Umsatz · {adSpend} Werbeausgaben",
+    "marginEstimated": "{count} geschätzt",
+    "marginPct": "{pct} %"
   },
   "workspace": {
     "back": "Kanäle",
@@ -339,7 +346,44 @@
     "item": "Artikel",
     "quantity": "Menge",
     "price": "Preis",
-    "amount": "Betrag"
+    "amount": "Betrag",
+    "revenue": "Umsatz",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "Auftragsmarge",
+    "economicsSummary": "CM2 {cm2} nach Versand und Gebühren",
+    "marginPct": "{pct} % Marge",
+    "estimated": "Geschätzt",
+    "storedValueNote": "{amount} wurde mit Guthaben bezahlt: Es tilgt die Gutscheinverbindlichkeit und steht hier nur als Hinweis, nie als Kosten.",
+    "mixedCurrencyNote": "Kosten in einer anderen Währung bleiben neben den Summen stehen, statt über einen Kurs umgerechnet zu werden, den der Auftrag nie vereinbart hat.",
+    "noEconomicsTitle": "Marge noch nicht berechnet",
+    "noEconomicsBody": "Aktualisieren, um die Marge dieses Auftrags aus Positionen, Kosten und Gebühren zu bilden. Späte Kosten stellen die Marge mit Verlauf neu dar.",
+    "refreshEconomics": "Marge aktualisieren",
+    "refreshedEconomics": "Marge aktualisiert: {inserted} Fakt(en) gespeichert, {retired} abgelöst.",
+    "openReport": "Margenbericht öffnen",
+    "components": {
+      "net_revenue": "Nettoumsatz",
+      "discount": "Rabatt",
+      "cogs": "Wareneinsatz",
+      "processor_fee": "Zahlungsgebühren",
+      "shipping_label": "Versandetiketten",
+      "marketplace_fee": "Marktplatzgebühren",
+      "stored_value_funding": "Guthabenfinanzierung",
+      "returns": "Retouren",
+      "restocking_fee": "Wiedereinlagerungsertrag",
+      "ad_spend": "Werbeausgaben"
+    },
+    "sources": {
+      "posting": "Buchung",
+      "fulfilment": "Versand",
+      "label": "Etikett",
+      "payout": "Auszahlung",
+      "refund": "Erstattung",
+      "estimate": "Schätzung",
+      "import": "Import",
+      "manual": "Manuell"
+    }
   },
   "assistance": {
     "loading": "Lösung wird gesucht…",

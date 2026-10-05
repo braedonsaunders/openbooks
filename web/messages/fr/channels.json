@@ -59,7 +59,14 @@
       "disconnected": "Canal déconnecté.",
       "connected": "Boutique connectée.",
       "createFailed": "La boutique ne s'est pas connectée (statut {status})."
-    }
+    },
+    "marginTitle": "Marge de la commande",
+    "marginHint": "Contribution des 30 derniers jours par canal, après expédition et frais",
+    "marginEmpty": "La marge apparaît ici dès que les commandes du canal sont comptabilisées avec leurs coûts. Actualisez une commande pour la calculer.",
+    "marginReport": "Rapport de marge",
+    "marginMeta": "{orders} commande(s) · {revenue} de chiffre d’affaires · {adSpend} de publicité",
+    "marginEstimated": "{count} estimé(s)",
+    "marginPct": "{pct} %"
   },
   "workspace": {
     "back": "Canaux",
@@ -339,7 +346,44 @@
     "item": "Article",
     "quantity": "Qté",
     "price": "Prix",
-    "amount": "Montant"
+    "amount": "Montant",
+    "revenue": "Chiffre d’affaires",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "Marge de la commande",
+    "economicsSummary": "CM2 {cm2} après expédition et frais",
+    "marginPct": "{pct} % de marge",
+    "estimated": "Estimé",
+    "storedValueNote": "{amount} a été payé en avoir : il solde la dette des cartes et figure ici pour contexte, jamais en coût.",
+    "mixedCurrencyNote": "Un coût est arrivé dans une autre devise et reste à côté des totaux au lieu d’être converti à un taux que la commande n’a jamais accepté.",
+    "noEconomicsTitle": "Marge pas encore calculée",
+    "noEconomicsBody": "Actualisez pour construire la marge de cette commande depuis ses lignes, coûts et frais. Les coûts tardifs la retraitent avec historique.",
+    "refreshEconomics": "Actualiser la marge",
+    "refreshedEconomics": "Marge actualisée : {inserted} fait(s) enregistré(s), {retired} retiré(s).",
+    "openReport": "Ouvrir le rapport de marge",
+    "components": {
+      "net_revenue": "Chiffre d’affaires net",
+      "discount": "Remise",
+      "cogs": "Coût des ventes",
+      "processor_fee": "Frais de paiement",
+      "shipping_label": "Étiquettes d’expédition",
+      "marketplace_fee": "Frais de la place de marché",
+      "stored_value_funding": "Financement en avoir",
+      "returns": "Retours",
+      "restocking_fee": "Produit de restockage",
+      "ad_spend": "Dépenses publicitaires"
+    },
+    "sources": {
+      "posting": "Comptabilisation",
+      "fulfilment": "Expédition",
+      "label": "Étiquette",
+      "payout": "Versement",
+      "refund": "Remboursement",
+      "estimate": "Estimation",
+      "import": "Importation",
+      "manual": "Manuel"
+    }
   },
   "assistance": {
     "loading": "Recherche de la solution…",

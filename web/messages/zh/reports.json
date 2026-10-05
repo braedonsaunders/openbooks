@@ -1026,6 +1026,10 @@
       "channel_sales": {
         "label": "渠道销售",
         "description": "按渠道、日期、商品、库位和收款方式统计的网店订单 — 每个订单行一行，含过账状态和单据。"
+      },
+      "order_economics": {
+        "label": "订单毛利",
+        "description": "按渠道订单明细存储的贡献毛利数据，毛利以公式度量表示。"
       }
     },
     "columns": {
@@ -2547,6 +2551,23 @@
         "location": "库位",
         "posting_status": "过账状态",
         "document_number": "单据"
+      },
+      "order_economics": {
+        "channel": "渠道",
+        "ordered_day": "订单日",
+        "order_number": "订单",
+        "customer": "客户",
+        "customer_cohort": "客户群体",
+        "region": "地区",
+        "country": "国家",
+        "sku": "商品编码",
+        "promotion": "促销",
+        "line": "订单明细",
+        "component": "成本组成",
+        "source": "成本来源",
+        "costing": "成本状态",
+        "currency": "货币",
+        "amount": "金额"
       }
     },
     "enumValues": {
@@ -2645,7 +2666,29 @@
       "pending": "待处理",
       "summarized": "已入日报",
       "exception": "需处理",
-      "excluded": "已排除"
+      "excluded": "已排除",
+      "new": "新客户",
+      "returning": "回头客",
+      "unidentified": "未识别",
+      "net_revenue": "净营收",
+      "cogs": "销售成本",
+      "processor_fee": "支付手续费",
+      "shipping_label": "运单标签",
+      "marketplace_fee": "市场手续费",
+      "stored_value_funding": "储值出资",
+      "returns": "退货",
+      "restocking_fee": "重新入库收入",
+      "ad_spend": "广告开支",
+      "posting": "记账",
+      "fulfilment": "就运",
+      "label": "标签",
+      "payout": "结算",
+      "refund": "退款",
+      "estimate": "估计",
+      "import": "导入",
+      "manual": "手动",
+      "settled": "已结算",
+      "estimated": "估计"
     }
   },
   "operators": {

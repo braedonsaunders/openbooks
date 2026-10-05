@@ -59,7 +59,14 @@
       "disconnected": "チャネルを切断しました。",
       "connected": "ストアを接続しました。",
       "createFailed": "ストアを接続できませんでした(ステータス {status})。"
-    }
+    },
+    "marginTitle": "受注の采算",
+    "marginHint": "チャネル別・直近30日の貢献利益（発送・手数料後）",
+    "marginEmpty": "コスト付きで受注が記帳されるとここにマージンが表示されます。今すぐ作成するには受注を更新してください。",
+    "marginReport": "マージンレポート",
+    "marginMeta": "受注{orders}件・売上{revenue}・広告費{adSpend}",
+    "marginEstimated": "見積もり{count}件",
+    "marginPct": "{pct}%"
   },
   "workspace": {
     "back": "チャネル",
@@ -339,7 +346,44 @@
     "item": "商品",
     "quantity": "数量",
     "price": "単価",
-    "amount": "金額"
+    "amount": "金額",
+    "revenue": "売上",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "受注の采算",
+    "economicsSummary": "発送・手数料後のCM2 {cm2}",
+    "marginPct": "マージン{pct}%",
+    "estimated": "見積もり",
+    "storedValueNote": "{amount}は保有価値で支払われました：商品券債務の決済のため、参考情報として表示し、コストには含めません。",
+    "mixedCurrencyNote": "別通貨のコストは合計に含めず併記します。受注が合意していないレートで換算しません。",
+    "noEconomicsTitle": "マージン未計算",
+    "noEconomicsBody": "更新して、明細・コスト・手数料からこの受注のマージンを作成します。遅れて届いたコストは履歴を残して再表示します。",
+    "refreshEconomics": "マージンを更新",
+    "refreshedEconomics": "マージンを更新しました：保存{inserted}件、廃止{retired}件。",
+    "openReport": "マージンレポートを開く",
+    "components": {
+      "net_revenue": "純売上",
+      "discount": "割引",
+      "cogs": "売上原価",
+      "processor_fee": "決済手数料",
+      "shipping_label": "配送ラベル",
+      "marketplace_fee": "マーケットプレイス手数料",
+      "stored_value_funding": "保有価値充当",
+      "returns": "返品",
+      "restocking_fee": "再入庫収益",
+      "ad_spend": "広告費"
+    },
+    "sources": {
+      "posting": "記帳",
+      "fulfilment": "発送",
+      "label": "ラベル",
+      "payout": "支払い",
+      "refund": "返金",
+      "estimate": "見積もり",
+      "import": "インポート",
+      "manual": "手動"
+    }
   },
   "assistance": {
     "loading": "解決策を検索中…",

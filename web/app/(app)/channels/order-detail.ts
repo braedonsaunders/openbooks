@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
-import { loadChannelOrder } from '@openbooks/engine/commerce'
+import { getOrderEconomics, loadChannelOrder } from '@openbooks/engine/commerce'
 import { getPostingPolicy } from '@openbooks/engine/commerce'
 import { isoDateOf } from '@openbooks/engine/platform/civil-date'
 
@@ -44,6 +44,18 @@ export interface ChannelOrderDrawerData {
   exception: { code: string; reason: string; remedy: string } | null
   canManage: boolean
   remountKey: string
+  economics: {
+    currency: string
+    revenueMinor: string
+    cm1Minor: string
+    cm2Minor: string
+    cm3Minor: string
+    marginPct: string | null
+    estimatedAny: boolean
+    mixedCurrency: boolean
+    storedValueMinor: string
+    components: { component: string; sourceKind: string; currency: string; amountMinor: string; estimated: boolean }[]
+  } | null
 }
 
 function documentHrefFor(kind: string, id: string): string | null {
@@ -77,6 +89,10 @@ export async function loadChannelOrderDrawer(
       : Promise.resolve({ rows: [] as { summary_date: string; document_number: string | null }[] }),
   ])
   const policy = await getPostingPolicy(orgId, order.channelId, isoDateOf(new Date())).catch(() => null)
+  // Margin facts may predate this drawer (orders posted before margin
+  // tracking, or a recompute that never ran): absence renders the teaching
+  // empty state with a refresh action, never a failure.
+  const economics = await loadOrderEconomics(orgId, order.id, order.postingDocumentId)
   const doc = order.postingDocumentId && docRow.rows[0]
     ? { id: order.postingDocumentId, kind: docRow.rows[0].kind, number: docRow.rows[0].document_number, status: docRow.rows[0].status }
     : null
@@ -130,5 +146,57 @@ export async function loadChannelOrderDrawer(
       : null,
     canManage,
     remountKey: order.id,
+    economics,
+  }
+}
+
+async function loadOrderEconomics(
+  orgId: string,
+  orderId: string,
+  postingDocumentId: string | null,
+): Promise<ChannelOrderDrawerData['economics']> {
+  const facts = await getOrderEconomics(orgId, orderId).catch(() => null)
+  if (!facts || facts.facts.length === 0) return null
+  const grouped = new Map<string, { component: string; sourceKind: string; currency: string; amountMinor: bigint; estimated: boolean }>()
+  for (const fact of facts.facts) {
+    const key = `${fact.component}|${fact.sourceKind}|${fact.currency}`
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.amountMinor += fact.amountMinor
+      existing.estimated = existing.estimated || fact.estimated
+    } else {
+      grouped.set(key, {
+        component: fact.component,
+        sourceKind: fact.sourceKind,
+        currency: fact.currency,
+        amountMinor: fact.amountMinor,
+        estimated: fact.estimated,
+      })
+    }
+  }
+  // Gift-card tenders settle a liability the sale already funded, so they
+  // read beside the margin as context, never as a cost.
+  const tenders = postingDocumentId
+    ? await db.execute<{ total: string }>(sql`
+        select coalesce(sum(amount_minor), 0)::text as total from document_tenders
+         where org_id = ${orgId} and document_id = ${postingDocumentId} and kind = 'stored_value'`)
+    : null
+  return {
+    currency: facts.currency,
+    revenueMinor: facts.revenue.toString(),
+    cm1Minor: facts.cm1.toString(),
+    cm2Minor: facts.cm2.toString(),
+    cm3Minor: facts.cm3.toString(),
+    marginPct: facts.marginPct,
+    estimatedAny: facts.estimatedAny,
+    mixedCurrency: facts.mixedCurrency,
+    storedValueMinor: tenders?.rows[0]?.total ?? '0',
+    components: [...grouped.values()].map((row) => ({
+      component: row.component,
+      sourceKind: row.sourceKind,
+      currency: row.currency,
+      amountMinor: row.amountMinor.toString(),
+      estimated: row.estimated,
+    })),
   }
 }

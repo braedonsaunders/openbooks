@@ -59,7 +59,14 @@
       "disconnected": "Canal desconectado.",
       "connected": "Loja conectada.",
       "createFailed": "A loja não foi conectada (status {status})."
-    }
+    },
+    "marginTitle": "Margem do pedido",
+    "marginHint": "Contribuição dos últimos 30 dias por canal, após envio e taxas",
+    "marginEmpty": "A margem aparece aqui quando os pedidos do canal são lançados com custos. Atualize um pedido para calculá-la agora.",
+    "marginReport": "Relatório de margem",
+    "marginMeta": "{orders} pedido(s) · {revenue} de receita · {adSpend} em anúncios",
+    "marginEstimated": "{count} estimado(s)",
+    "marginPct": "{pct}%"
   },
   "workspace": {
     "back": "Canais",
@@ -339,7 +346,44 @@
     "item": "Item",
     "quantity": "Qtd.",
     "price": "Preço",
-    "amount": "Valor"
+    "amount": "Valor",
+    "revenue": "Receita",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "Margem do pedido",
+    "economicsSummary": "CM2 {cm2} após envio e taxas",
+    "marginPct": "{pct}% de margem",
+    "estimated": "Estimado",
+    "storedValueNote": "{amount} foi pago com saldo armazenado: quita o passivo do vale e aparece aqui como contexto, nunca como custo.",
+    "mixedCurrencyNote": "Um custo chegou em outra moeda e fica ao lado dos totais em vez de ser convertido por uma taxa que o pedido nunca aceitou.",
+    "noEconomicsTitle": "Margem ainda não calculada",
+    "noEconomicsBody": "Atualize para construir a margem deste pedido a partir de itens, custos e taxas. Custos tardios reexpressam a margem com histórico.",
+    "refreshEconomics": "Atualizar margem",
+    "refreshedEconomics": "Margem atualizada: {inserted} fato(s) gravado(s), {retired} aposentado(s).",
+    "openReport": "Abrir relatório de margem",
+    "components": {
+      "net_revenue": "Receita líquida",
+      "discount": "Desconto",
+      "cogs": "Custo das vendas",
+      "processor_fee": "Taxas de pagamento",
+      "shipping_label": "Etiquetas de envio",
+      "marketplace_fee": "Taxas do marketplace",
+      "stored_value_funding": "Custeio com saldo",
+      "returns": "Devoluções",
+      "restocking_fee": "Receita de reestoque",
+      "ad_spend": "Gasto com anúncios"
+    },
+    "sources": {
+      "posting": "Lançamento",
+      "fulfilment": "Envio",
+      "label": "Etiqueta",
+      "payout": "Repasse",
+      "refund": "Reembolso",
+      "estimate": "Estimativa",
+      "import": "Importação",
+      "manual": "Manual"
+    }
   },
   "assistance": {
     "loading": "Buscando a solução…",

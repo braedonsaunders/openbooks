@@ -1026,6 +1026,10 @@
       "channel_sales": {
         "label": "Ventas del canal",
         "description": "Pedidos de la tienda por canal, día, artículo, ubicación y cobro — una fila por línea de pedido con su estado contable y documento."
+      },
+      "order_economics": {
+        "label": "Margen del pedido",
+        "description": "Datos de margen de contribución guardados por línea de pedido del canal, con el margen como medidas de fórmula."
       }
     },
     "columns": {
@@ -2547,6 +2551,23 @@
         "location": "Ubicación",
         "posting_status": "Estado contable",
         "document_number": "Documento"
+      },
+      "order_economics": {
+        "channel": "Canal",
+        "ordered_day": "Día del pedido",
+        "order_number": "Pedido",
+        "customer": "Cliente",
+        "customer_cohort": "Cohorte de clientes",
+        "region": "Región",
+        "country": "País",
+        "sku": "Código de artículo",
+        "promotion": "Promoción",
+        "line": "Línea del pedido",
+        "component": "Componente del costo",
+        "source": "Origen del costo",
+        "costing": "Situación del costo",
+        "currency": "Moneda",
+        "amount": "Importe"
       }
     },
     "enumValues": {
@@ -2645,7 +2666,29 @@
       "pending": "Pendiente",
       "summarized": "En resumen diario",
       "exception": "Requiere atención",
-      "excluded": "Excluido"
+      "excluded": "Excluido",
+      "new": "Nuevo",
+      "returning": "Recurrente",
+      "unidentified": "Sin identificar",
+      "net_revenue": "Ingresos netos",
+      "cogs": "Costo de ventas",
+      "processor_fee": "Comisiones de pago",
+      "shipping_label": "Etiquetas de envío",
+      "marketplace_fee": "Comisiones del mercado",
+      "stored_value_funding": "Financiación con saldo",
+      "returns": "Devoluciones",
+      "restocking_fee": "Ingreso por reintegro",
+      "ad_spend": "Gasto publicitario",
+      "posting": "Contabilización",
+      "fulfilment": "Envío",
+      "label": "Etiqueta",
+      "payout": "Liquidación",
+      "refund": "Reembolso",
+      "estimate": "Estimación",
+      "import": "Importación",
+      "manual": "Manual",
+      "settled": "Liquidado",
+      "estimated": "Estimado"
     }
   },
   "operators": {

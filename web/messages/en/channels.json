@@ -59,7 +59,14 @@
       "disconnected": "Channel disconnected.",
       "connected": "Storefront connected.",
       "createFailed": "The storefront did not connect (status {status})."
-    }
+    },
+    "marginTitle": "Order margin",
+    "marginHint": "Trailing 30-day contribution by channel, after fulfilment and fees",
+    "marginEmpty": "Margin appears here once channel orders post with costs. Refresh an order to build it now.",
+    "marginReport": "Margin report",
+    "marginMeta": "{orders} order(s) · {revenue} revenue · {adSpend} ad spend",
+    "marginEstimated": "{count} estimated",
+    "marginPct": "{pct}%"
   },
   "workspace": {
     "back": "Channels",
@@ -339,7 +346,44 @@
     "item": "Item",
     "quantity": "Qty",
     "price": "Price",
-    "amount": "Amount"
+    "amount": "Amount",
+    "revenue": "Revenue",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "Order margin",
+    "economicsSummary": "CM2 {cm2} after fulfilment and fees",
+    "marginPct": "{pct}% margin",
+    "estimated": "Estimated",
+    "storedValueNote": "{amount} was paid with stored value: it settles the gift liability, so it reads here as context and never as a cost.",
+    "mixedCurrencyNote": "A cost arrived in another currency and stays beside the totals instead of converting through a rate the order never agreed.",
+    "noEconomicsTitle": "Margin not computed yet",
+    "noEconomicsBody": "Refresh to build this order’s margin from its lines, costs, and fees. Late costs restate the margin with history.",
+    "refreshEconomics": "Refresh margin",
+    "refreshedEconomics": "Margin refreshed: {inserted} fact(s) stored, {retired} retired.",
+    "openReport": "Open margin report",
+    "components": {
+      "net_revenue": "Net revenue",
+      "discount": "Discount",
+      "cogs": "Cost of goods",
+      "processor_fee": "Processor fees",
+      "shipping_label": "Shipping labels",
+      "marketplace_fee": "Marketplace fees",
+      "stored_value_funding": "Stored-value funding",
+      "returns": "Returns",
+      "restocking_fee": "Restocking income",
+      "ad_spend": "Ad spend"
+    },
+    "sources": {
+      "posting": "Posting",
+      "fulfilment": "Fulfilment",
+      "label": "Label",
+      "payout": "Payout",
+      "refund": "Refund",
+      "estimate": "Estimate",
+      "import": "Import",
+      "manual": "Manual"
+    }
   },
   "assistance": {
     "loading": "Finding the fix…",

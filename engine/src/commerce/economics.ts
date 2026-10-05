@@ -131,7 +131,8 @@ async function convertCostAmount(
   return { minor: decimalToMinorUnits(amountText, exponent), currency: code };
 }
 
-async function minorUnitsForCurrency(currency: string): Promise<number> {
+/** Tenant minor-unit precision; an unknown currency refuses instead of converting dust. */
+export async function minorUnitsForCurrency(currency: string): Promise<number> {
   const row = (await db.execute<{ minor_units: number }>(sql`
     select minor_units from currencies where code = ${currency}`)).rows[0];
   const minorUnits = row?.minor_units;
@@ -1019,6 +1020,73 @@ export async function getOrderEconomics(orgId: string, orderId: string): Promise
   });
 }
 
+export interface ChannelMarginSummary {
+  channelId: string;
+  channelName: string;
+  currency: string;
+  orders: number;
+  revenueMinor: bigint;
+  cm2Minor: bigint;
+  estimatedOrders: number;
+  adSpendMinor: bigint;
+}
+
+type SummaryRow = {
+  channel_id: string;
+  channel_name: string;
+  currency: string;
+  orders: string;
+  revenue: string;
+  cm2: string;
+  estimated_orders: string;
+};
+
+/**
+ * Trailing margin per channel and currency for the cockpit panel: order
+ * counts, revenue and CM2 from current facts, the orders still carrying
+ * estimated fees, and the imported ad spend beside them.
+ */
+export async function getChannelMarginSummary(orgId: string, days = 30): Promise<ChannelMarginSummary[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 90) {
+    refuse(
+      "margin_window_invalid",
+      `Margin window "${days}" is not between 1 and 90 days.`,
+      "Request trailing margin for 1 to 90 days.",
+    );
+  }
+  return withOrg(orgId, async () => {
+    const rows = (await db.execute<SummaryRow>(sql`
+      select c.id as channel_id, c.name as channel_name, f.currency,
+             count(distinct f.order_id)::text as orders,
+             coalesce(sum(case when f.component in ('net_revenue', 'discount') then f.amount_minor else 0 end), 0)::text as revenue,
+             coalesce(sum(case when f.component in ('net_revenue', 'discount', 'cogs', 'returns', 'restocking_fee',
+               'processor_fee', 'shipping_label', 'marketplace_fee', 'stored_value_funding') then f.amount_minor else 0 end), 0)::text as cm2,
+             count(distinct case when f.estimated then f.order_id end)::text as estimated_orders
+        from channel_order_economics f
+        join channel_orders o on o.id = f.order_id and o.org_id = f.org_id
+        join sales_channels c on c.id = f.channel_id and c.org_id = f.org_id
+       where f.org_id = ${orgId} and f.is_current and o.ordered_at >= now() - make_interval(days => ${days})
+       group by c.id, c.name, f.currency
+       order by c.name, f.currency`)).rows;
+    const spend = (await db.execute<{ channel_id: string; currency: string; total: string }>(sql`
+      select channel_id, currency, coalesce(sum(amount_minor), 0)::text as total
+        from channel_ad_spend
+       where org_id = ${orgId} and spend_date >= (now() - make_interval(days => ${days}))::date
+       group by channel_id, currency`)).rows;
+    const spendByChannel = new Map(spend.map((row) => [`${row.channel_id}|${row.currency}`, BigInt(row.total)]));
+    return rows.map((row) => ({
+      channelId: row.channel_id,
+      channelName: row.channel_name,
+      currency: row.currency,
+      orders: Number(row.orders),
+      revenueMinor: BigInt(row.revenue),
+      cm2Minor: BigInt(row.cm2),
+      estimatedOrders: Number(row.estimated_orders),
+      adSpendMinor: spendByChannel.get(`${row.channel_id}|${row.currency}`) ?? 0n,
+    }));
+  });
+}
+
 /**
  * Record one day's imported marketing spend for a channel (idempotent by
  * channel, day and source: re-importing the same source replaces its
@@ -1034,6 +1102,7 @@ export async function recordChannelAdSpend(
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
+    await channelProvider(orgId, input.channelId);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.spendDate)) {
       refuse(
         "ad_spend_date_invalid",

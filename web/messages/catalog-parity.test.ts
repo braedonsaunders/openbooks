@@ -275,6 +275,40 @@ const COGNATES = new Set<string>([
   'fr:reports.formats.ratio|Ratio',
   // French spells the Features-page tab “Finance” identically.
   'fr:admin.setup.features.categories.finance|Finance',
+  // Order margin: CM1/CM2/CM3 are abbreviations every locale keeps, and the
+  // bare percent template carries no translatable words.
+  'de:channels.drawer.cm1|CM1',
+  'de:channels.drawer.cm2|CM2',
+  'de:channels.drawer.cm3|CM3',
+  'es:channels.drawer.cm1|CM1',
+  'es:channels.drawer.cm2|CM2',
+  'es:channels.drawer.cm3|CM3',
+  'fr:channels.drawer.cm1|CM1',
+  'fr:channels.drawer.cm2|CM2',
+  'fr:channels.drawer.cm3|CM3',
+  'ja:channels.drawer.cm1|CM1',
+  'ja:channels.drawer.cm2|CM2',
+  'ja:channels.drawer.cm3|CM3',
+  'pt-BR:channels.drawer.cm1|CM1',
+  'pt-BR:channels.drawer.cm2|CM2',
+  'pt-BR:channels.drawer.cm3|CM3',
+  'zh:channels.drawer.cm1|CM1',
+  'zh:channels.drawer.cm2|CM2',
+  'zh:channels.drawer.cm3|CM3',
+  'ja:channels.home.marginPct|{pct}%',
+  'pt-BR:channels.home.marginPct|{pct}%',
+  'zh:channels.home.marginPct|{pct}%',
+  // Order margin: Import is an established German loanword; Manual is an
+  // established Spanish and Brazilian Portuguese loanword; Promotion and
+  // Region are spelled identically in French and German commerce copy.
+  'de:channels.drawer.sources.import|Import',
+  'de:reports.catalog.enumValues.import|Import',
+  'es:channels.drawer.sources.manual|Manual',
+  'es:reports.catalog.enumValues.manual|Manual',
+  'pt-BR:channels.drawer.sources.manual|Manual',
+  'pt-BR:reports.catalog.enumValues.manual|Manual',
+  'fr:reports.catalog.columns.order_economics.promotion|Promotion',
+  'de:reports.catalog.columns.order_economics.region|Region',
   // French spells the sales term “commission” (une commission) identically.
   'fr:contractCosts.costType.commission|Commission',
   // “Production” is spelled identically in French.

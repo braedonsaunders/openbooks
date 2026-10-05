@@ -206,14 +206,44 @@ function ExceptionAssistance({ orderId, canManage }: { orderId: string; canManag
     </div>
   )
 }
+const COMPONENT_ORDER = [
+  'net_revenue',
+  'discount',
+  'cogs',
+  'processor_fee',
+  'shipping_label',
+  'marketplace_fee',
+  'stored_value_funding',
+  'returns',
+  'restocking_fee',
+  'ad_spend',
+]
 
 export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrderDrawerData; closeHref: string }) {
   const t = useTranslations('channels')
   const locale = useLocale()
   const router = useRouter()
   const { busy, refusal: replayRefusal, execute } = useAppAction()
+  const { busy: refreshBusy, refusal: refreshRefusal, execute: executeRefresh } = useAppAction()
   const money = createMoneyFormatter(locale, drawer.currency)
   const amount = (minor: string) => money.money(minorToMajorText(minor), { currency: drawer.currency })
+  const amountIn = (minor: string, currency: string) =>
+    currency === drawer.currency
+      ? amount(minor)
+      : createMoneyFormatter(locale, currency).money(minorToMajorText(minor), { currency })
+
+  const onRefreshEconomics = async () => {
+    await executeRefresh(
+      () => channelRequest<{ inserted: number; retired: number }>(`/api/channels/orders/${drawer.id}/economics`, { method: 'POST' }, t('drawer.refreshEconomics')),
+      {
+        fallbackMessage: t('drawer.refreshEconomics'),
+        onOk: (outcome) => {
+          router.refresh()
+          toast.success(t('drawer.refreshedEconomics', { inserted: outcome.inserted, retired: outcome.retired }))
+        },
+      },
+    )
+  }
 
   const onReplay = async () => {
     await execute(
@@ -363,6 +393,95 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
             <dd className="font-mono text-base font-semibold">{amount(drawer.totalMinor)}</dd>
           </div>
         </dl>
+        {drawer.economics ? (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-500">{t('drawer.cm2')}</p>
+              <p className="font-mono text-base font-semibold">{amount(drawer.economics.cm2Minor)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {drawer.economics.estimatedAny ? <Badge variant="warning">{t('drawer.estimated')}</Badge> : null}
+              {drawer.economics.marginPct != null ? (
+                <Badge variant="secondary">{t('drawer.marginPct', { pct: drawer.economics.marginPct })}</Badge>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        <ActionAlert error={refreshRefusal} fallbackMessage={t('drawer.refreshEconomics')} />
+        {drawer.economics ? (
+          <DisclosureSection
+            title={t('drawer.economicsTitle')}
+            summary={t('drawer.economicsSummary', { cm2: amount(drawer.economics.cm2Minor) })}
+            forceOpen={drawer.economics.estimatedAny}
+          >
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">{t('drawer.revenue')}</dt>
+                <dd className="font-mono">{amount(drawer.economics.revenueMinor)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">{t('drawer.cm1')}</dt>
+                <dd className="font-mono">{amount(drawer.economics.cm1Minor)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">{t('drawer.cm2')}</dt>
+                <dd className="font-mono font-semibold">{amount(drawer.economics.cm2Minor)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">{t('drawer.cm3')}</dt>
+                <dd className="font-mono">{amount(drawer.economics.cm3Minor)}</dd>
+              </div>
+            </dl>
+            <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
+              {[...drawer.economics.components]
+                .sort((a, b) => COMPONENT_ORDER.indexOf(a.component) - COMPONENT_ORDER.indexOf(b.component))
+                .map((row) => (
+                  <li key={`${row.component}|${row.sourceKind}|${row.currency}`} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="font-medium">{t(`drawer.components.${row.component}`)}</span>
+                      <span className="text-slate-500"> · {t(`drawer.sources.${row.sourceKind}`)}</span>
+                      {row.estimated ? (
+                        <Badge variant="warning" className="ml-2">
+                          {t('drawer.estimated')}
+                        </Badge>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 font-mono">{amountIn(row.amountMinor, row.currency)}</span>
+                  </li>
+                ))}
+            </ul>
+            {drawer.economics.storedValueMinor !== '0' ? (
+              <p className="mt-3 text-sm text-slate-500">
+                {t('drawer.storedValueNote', { amount: amount(drawer.economics.storedValueMinor) })}
+              </p>
+            ) : null}
+            {drawer.economics.mixedCurrency ? (
+              <p className="mt-1 text-sm text-slate-500">{t('drawer.mixedCurrencyNote')}</p>
+            ) : null}
+            <div className="mt-3 flex gap-2">
+              {drawer.canManage ? (
+                <Button size="sm" variant="outline" disabled={refreshBusy} onClick={onRefreshEconomics}>
+                  {t('drawer.refreshEconomics')}
+                </Button>
+              ) : null}
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/reports">{t('drawer.openReport')}</Link>
+              </Button>
+            </div>
+          </DisclosureSection>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
+            <p className="text-sm font-medium">{t('drawer.noEconomicsTitle')}</p>
+            <p className="mt-1 text-sm text-slate-500">{t('drawer.noEconomicsBody')}</p>
+            {drawer.canManage ? (
+              <div className="mt-3">
+                <Button size="sm" variant="outline" disabled={refreshBusy} onClick={onRefreshEconomics}>
+                  {t('drawer.refreshEconomics')}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
         <DisclosureSection title={t('drawer.posting')} summary={drawer.policyMode ? t(`posting.${drawer.policyMode === 'daily_summary' ? 'modeDailySummary' : 'modePerOrder'}`) : undefined}>
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-4">

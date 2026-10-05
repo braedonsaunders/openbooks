@@ -59,7 +59,14 @@
       "disconnected": "Canal desconectado.",
       "connected": "Tienda conectada.",
       "createFailed": "La tienda no se conectó (estado {status})."
-    }
+    },
+    "marginTitle": "Margen del pedido",
+    "marginHint": "Contribución de los últimos 30 días por canal, tras envío y comisiones",
+    "marginEmpty": "El margen aparece aquí cuando los pedidos del canal se contabilizan con costos. Actualiza un pedido para calcularlo ahora.",
+    "marginReport": "Informe de margen",
+    "marginMeta": "{orders} pedido(s) · {revenue} ingresos · {adSpend} publicidad",
+    "marginEstimated": "{count} estimado(s)",
+    "marginPct": "{pct} %"
   },
   "workspace": {
     "back": "Canales",
@@ -339,7 +346,44 @@
     "item": "Artículo",
     "quantity": "Cant.",
     "price": "Precio",
-    "amount": "Importe"
+    "amount": "Importe",
+    "revenue": "Ingresos",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "Margen del pedido",
+    "economicsSummary": "CM2 {cm2} tras envío y comisiones",
+    "marginPct": "{pct} % de margen",
+    "estimated": "Estimado",
+    "storedValueNote": "{amount} se pagó con saldo almacenado: liquida el pasivo del vale y aparece aquí como contexto, nunca como costo.",
+    "mixedCurrencyNote": "Un costo llegó en otra moneda y queda junto a los totales en lugar de convertirse con un tipo que el pedido nunca pactó.",
+    "noEconomicsTitle": "Margen aún no calculado",
+    "noEconomicsBody": "Actualiza para construir el margen de este pedido desde sus líneas, costos y comisiones. Los costos tardíos reexpresan el margen con historial.",
+    "refreshEconomics": "Actualizar margen",
+    "refreshedEconomics": "Margen actualizado: {inserted} dato(s) guardado(s), {retired} retirado(s).",
+    "openReport": "Abrir informe de margen",
+    "components": {
+      "net_revenue": "Ingresos netos",
+      "discount": "Descuento",
+      "cogs": "Costo de ventas",
+      "processor_fee": "Comisiones de pago",
+      "shipping_label": "Etiquetas de envío",
+      "marketplace_fee": "Comisiones del mercado",
+      "stored_value_funding": "Financiación con saldo",
+      "returns": "Devoluciones",
+      "restocking_fee": "Ingreso por reintegro",
+      "ad_spend": "Gasto publicitario"
+    },
+    "sources": {
+      "posting": "Contabilización",
+      "fulfilment": "Envío",
+      "label": "Etiqueta",
+      "payout": "Liquidación",
+      "refund": "Reembolso",
+      "estimate": "Estimación",
+      "import": "Importación",
+      "manual": "Manual"
+    }
   },
   "assistance": {
     "loading": "Buscando la solución…",

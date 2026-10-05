@@ -59,7 +59,14 @@
       "disconnected": "渠道已断开。",
       "connected": "网店已连接。",
       "createFailed": "网店连接失败（状态 {status}）。"
-    }
+    },
+    "marginTitle": "订单毛利",
+    "marginHint": "各渠道近30天贡献毛利（扣除就运与费用后）",
+    "marginEmpty": "渠道订单附成本记账后，毛利将显示在此。立即构建可刷新订单。",
+    "marginReport": "毛利报表",
+    "marginMeta": "{orders}个订单·营收{revenue}·广告{adSpend}",
+    "marginEstimated": "{count}个估计",
+    "marginPct": "{pct}%"
   },
   "workspace": {
     "back": "渠道",
@@ -339,7 +346,44 @@
     "item": "商品",
     "quantity": "数量",
     "price": "单价",
-    "amount": "金额"
+    "amount": "金额",
+    "revenue": "营收",
+    "cm1": "CM1",
+    "cm2": "CM2",
+    "cm3": "CM3",
+    "economicsTitle": "订单毛利",
+    "economicsSummary": "扣除就运与费用后的CM2 {cm2}",
+    "marginPct": "毛利率{pct}%",
+    "estimated": "估计",
+    "storedValueNote": "{amount}以储值支付：该款结清礼品卡负债，仅作背景显示，不计入成本。",
+    "mixedCurrencyNote": "有一笔成本以其他货币到达，保留在合计旁显示，不按订单未合意的汇率折算。",
+    "noEconomicsTitle": "尚未计算毛利",
+    "noEconomicsBody": "刷新以根据明细、成本与费用构建本订单的毛利。迟到成本将保留历史重述毛利。",
+    "refreshEconomics": "刷新毛利",
+    "refreshedEconomics": "毛利已刷新：存储{inserted}条，退役{retired}条。",
+    "openReport": "打开毛利报表",
+    "components": {
+      "net_revenue": "净营收",
+      "discount": "折扣",
+      "cogs": "销售成本",
+      "processor_fee": "支付手续费",
+      "shipping_label": "运单标签",
+      "marketplace_fee": "市场手续费",
+      "stored_value_funding": "储值出资",
+      "returns": "退货",
+      "restocking_fee": "重新入库收入",
+      "ad_spend": "广告开支"
+    },
+    "sources": {
+      "posting": "记账",
+      "fulfilment": "就运",
+      "label": "标签",
+      "payout": "结算",
+      "refund": "退款",
+      "estimate": "估计",
+      "import": "导入",
+      "manual": "手动"
+    }
   },
   "assistance": {
     "loading": "正在查找解决方案…",
