@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import { receiveInboundEvent } from "@openbooks/engine/src/commerce/inbound.ts";
@@ -21,37 +22,44 @@ const WEBHOOK_MAX_BODY_BYTES = 5 * 1024 * 1024;
  * channel is a 404. 200 answers only after the event is durably stored
  * (processing follows on the scheduler scan).
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const bounded = await readBoundedBodyBytes(req, WEBHOOK_MAX_BODY_BYTES);
-  if (!bounded.ok) {
-    return NextResponse.json(
-      {
-        error:
-          bounded.reason === "too_large"
-            ? "webhook delivery exceeds the 5 MiB size limit"
-            : "malformed webhook delivery",
-      },
-      { status: bounded.reason === "too_large" ? 413 : 400 },
-    );
-  }
-  const headers: Record<string, string> = {};
-  req.headers.forEach((value, key) => {
-    headers[key.toLowerCase()] = value;
-  });
-  try {
-    const event = await receiveInboundEvent({ channelId: id, rawBody: bounded.bytes, headers });
-    return NextResponse.json({ received: true, event: { id: event.id, status: event.status } });
-  } catch (error) {
-    if (error instanceof CommerceError && error.code === "channel_not_found") {
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
+export const POST = defineRoute({
+  // Sessionless by design (provider HMAC, no session cookie): the factory
+  // performs no session check and leaves the raw body untouched — no body
+  // schema, so verification still reads the exact delivered bytes. The path
+  // stays public through the channel webhook pattern in proxy-policy.
+  public: "token",
+  handler: async ({ request: req, params }) => {
+    const { id } = params as { id: string };
+    const bounded = await readBoundedBodyBytes(req, WEBHOOK_MAX_BODY_BYTES);
+    if (!bounded.ok) {
+      return NextResponse.json(
+        {
+          error:
+            bounded.reason === "too_large"
+              ? "webhook delivery exceeds the 5 MiB size limit"
+              : "malformed webhook delivery",
+        },
+        { status: bounded.reason === "too_large" ? 413 : 400 },
+      );
     }
-    if (
-      error instanceof CommerceError &&
-      (error.code === "channel_webhook_signature_invalid" || error.code === "channel_webhook_unverified")
-    ) {
-      return NextResponse.json({ error: error.message, code: error.code }, { status: 401 });
+    const headers: Record<string, string> = {};
+    req.headers.forEach((value, key) => {
+      headers[key.toLowerCase()] = value;
+    });
+    try {
+      const event = await receiveInboundEvent({ channelId: id, rawBody: bounded.bytes, headers });
+      return NextResponse.json({ received: true, event: { id: event.id, status: event.status } });
+    } catch (error) {
+      if (error instanceof CommerceError && error.code === "channel_not_found") {
+        return NextResponse.json({ error: "not_found" }, { status: 404 });
+      }
+      if (
+        error instanceof CommerceError &&
+        (error.code === "channel_webhook_signature_invalid" || error.code === "channel_webhook_unverified")
+      ) {
+        return NextResponse.json({ error: error.message, code: error.code }, { status: 401 });
+      }
+      throw error;
     }
-    throw error;
-  }
-}
+  },
+});
