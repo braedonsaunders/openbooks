@@ -105,6 +105,13 @@ function buttonsMatching(pattern: RegExp): HTMLButtonElement[] {
   ) as HTMLButtonElement[];
 }
 
+function singleButton(found: HTMLButtonElement[], name: string): HTMLButtonElement {
+  assert.equal(found.length, 1, `expected exactly one ${name} button`);
+  const button = found[0];
+  assert.ok(button);
+  return button;
+}
+
 async function click(button: HTMLButtonElement) {
   await act(async () => {
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -125,9 +132,7 @@ test("open checks open one filterable list, never stacked collections", async (t
   // Summary names the open proof without nesting collections.
   assert.match(document.body.textContent ?? "", /test-open-check/);
 
-  const review = buttonsNamed("Review");
-  assert.equal(review.length, 1);
-  await click(review[0]);
+  await click(singleButton(buttonsNamed("Review"), "Review"));
 
   // Exactly one check collection inside the drawer.
   assert.equal(document.querySelectorAll("ul").length, 1);
@@ -136,9 +141,7 @@ test("open checks open one filterable list, never stacked collections", async (t
   assert.doesNotMatch(document.body.textContent ?? "", /test-proven-check/);
 
   // The All filter reveals the proven check in the same single list.
-  const all = buttonsMatching(/^All \(2\)$/);
-  assert.equal(all.length, 1);
-  await click(all[0]);
+  await click(singleButton(buttonsMatching(/^All \(2\)$/), "All (2)"));
   assert.equal(document.querySelectorAll("ul").length, 1);
   assert.match(document.body.textContent ?? "", /test-proven-check/);
   assert.match(document.body.textContent ?? "", /Proven/);
@@ -154,15 +157,11 @@ test("a clean day still reaches proof review from the summary", async (t) => {
   t.after(unmount);
 
   assert.match(document.body.textContent ?? "", /fully in the books/);
-  const review = buttonsNamed("Review");
-  assert.equal(review.length, 1);
-  await click(review[0]);
+  await click(singleButton(buttonsNamed("Review"), "Review"));
 
   // The default Open filter is empty on a clean day; All reveals one
   // collection with both proofs and no remedy links.
-  const all = buttonsMatching(/^All \(2\)$/);
-  assert.equal(all.length, 1);
-  await click(all[0]);
+  await click(singleButton(buttonsMatching(/^All \(2\)$/), "All (2)"));
   assert.equal(document.querySelectorAll("ul").length, 1);
   assert.match(document.body.textContent ?? "", /test-open-check/);
   assert.match(document.body.textContent ?? "", /test-proven-check/);
