@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addMonthsClamped, isIsoCalendarDate } from "../platform/civil-date.ts";
 import {
@@ -47,34 +47,6 @@ export interface DocumentLoadResult {
   code: string | null;
   entryId: string;
   replayed: boolean;
-}
-
-export interface LiveSourcedAccount {
-  id: string;
-  codeLast4: string;
-}
-
-/**
- * Accounts a document minted that still hold value. Voiding such a document
- * would reverse the ledger leg while the spendable balance survives, so the
- * caller refuses the void until the operator spends the value down or
- * adjusts it away. Top-ups into pre-existing accounts are out of scope: once
- * mixed with the account's own funds, the refund's share is no longer
- * attributable without a per-load reservation.
- */
-export async function listLiveSourcedAccounts(
-  runner: SqlExecutor,
-  orgId: string,
-  documentId: string,
-): Promise<LiveSourcedAccount[]> {
-  const rows = (
-    await runner.execute<LiveSourcedAccount>(sql`
-      select id, code_last4 as "codeLast4" from stored_value_accounts
-       where org_id = ${orgId} and source_document_id = ${documentId} and balance_minor > 0
-       order by code_last4
-       limit 5`)
-  ).rows;
-  return rows;
 }
 
 /**

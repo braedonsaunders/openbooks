@@ -19,8 +19,6 @@ import {
   settleCashRefundTenders,
   TenderRefusal,
 } from "./document-tenders.ts";
-import { requestDocumentVoid } from "../ledger/document-void.ts";
-
 // A refund that pays out to store credit moves real customer value: the
 // settle effect may only load the refund's own customer, only once, and
 // only while the refund stands posted.
@@ -301,41 +299,6 @@ test("a sale cannot redeem another customer's credit at posting", { skip: !DB },
       "customer A's sale must not spend customer B's credit",
     );
     assert.equal(await accountBalance(org.orgId, setup.accountB), toUnits("50"), "the refused redeem moves no money");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("void refuses while the refund's minted credit still holds value", { skip: !DB }, async () => {
-  const setup = await setupGuardWorld();
-  const { org, actorId } = setup;
-  try {
-    const refundId = await draftCashRefund(org, setup.customerA);
-    const entryId = await seedJournal(org, actorId, refundId);
-    const tenderId = await insertTender(org, refundId, actorId, { storedValueAccountId: null, amount: "25" });
-    await withBypassContext(() => db.execute(sql`
-      update documents set custom = jsonb_build_object('storeCreditProgramId', ${setup.creditProgramId}::text)
-       where org_id = ${org.orgId} and id = ${refundId}`));
-    await postCashDoc(org, refundId, entryId);
-    await withBypass(() =>
-      settleCashRefundTenders(org.orgId, refundId, { journalEntryId: entryId, actorId }),
-    );
-    const minted = await tenderAccount(org.orgId, tenderId);
-    assert.ok(minted, "the settle mints the credit before the void is attempted");
-    await assert.rejects(
-      withBypass(() =>
-        requestDocumentVoid({
-          documentId: refundId, orgId: org.orgId, actorId,
-          reason: "Void a refund whose store credit is still live",
-          reversalDate: org.date, source: "api",
-        }),
-      ),
-      /store credit.*live|live.*store credit/i,
-      "voiding must not strand spendable value from a voided refund",
-    );
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${org.orgId} and id = ${refundId}`)).rows;
-    assert.equal(status[0]!.status, "posted", "the refused void leaves the refund posted");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
