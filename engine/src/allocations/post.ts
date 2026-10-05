@@ -199,6 +199,8 @@ interface ResolvedTargets {
   driverId: string | null;
   driverVector: DriverVector | null;
   driverDimension: string | null;
+  /** The driver vintage measured, named when it yields no weight. */
+  driverAsOf?: string | null;
 }
 
 async function resolveWeights(
@@ -237,6 +239,7 @@ async function resolveWeights(
         driverId: rule.version.driverId ?? null,
         driverVector: measured.vector,
         driverDimension: measured.dimension,
+        driverAsOf: measured.asOf,
       };
     }
     // No resolver (or no driver): manual per-target weights are the
@@ -269,7 +272,7 @@ async function measureDriver(
   doc: PostableDocument,
   postingDate: string,
   runner: PostRunner,
-): Promise<{ vector: DriverVector; dimension: string } | null> {
+): Promise<{ vector: DriverVector; dimension: string; asOf: string | null } | null> {
   if (!deps.driverResolver || !rule.version.driverId) return null;
   const driver = await loadDriver(runner, doc.orgId, rule.version.driverId);
   if (!driver) throw new PostAllocationError(`rule ${rule.rule.key} points at unknown driver`);
@@ -293,7 +296,13 @@ async function measureDriver(
     subsidiaryId: doc.subsidiaryId ?? null,
     actorId: deps.actorId ?? null,
   });
-  return { vector, dimension: driver.dimension };
+  // A human label for the vintage, named if the vector carries no weight.
+  const asOf = "date" in vintage.asOf
+    ? vintage.asOf.date
+    : ((await runner.execute<{ name: string }>(sql`
+        select name from accounting_periods where org_id = ${doc.orgId} and id = ${vintage.asOf.periodId}`)).rows[0]?.name
+        ?? null);
+  return { vector, dimension: driver.dimension, asOf };
 }
 
 async function loadDriver(
@@ -708,7 +717,7 @@ export async function collectPostContributions(
     const winner = selectRule(postRules, coordinate, { resolveAccountGroup });
     if (!winner) continue;
     const resolved = await resolveWeights(winner, deps, doc, opts.postingDate, runner);
-    const apportioned = apportionForRule(kernelLine.amount, resolved.weights, winner);
+    const apportioned = apportionForRule(kernelLine.amount, resolved.weights, winner, resolved.driverAsOf);
     const ruleBooks = resolveRuleBooks(winner, books);
     const built = buildContributedLines({
       rule: winner,
@@ -761,10 +770,22 @@ async function makeAccountGroupResolver(
 }
 
 /** A1 apportionment errors surface as post errors naming the rule. */
-function apportionForRule(total: string, weights: WeightedTarget[], rule: RuleInEffect): ApportionResult {
+function apportionForRule(
+  total: string,
+  weights: WeightedTarget[],
+  rule: RuleInEffect,
+  driverAsOf?: string | null,
+): ApportionResult {
   try {
     return apportionTargets(total, weights, rule.version.residualPolicy, rule.version.residualTargetId);
   } catch (error) {
+    // All-zero weights refuse here exactly as entry explosion and period runs
+    // refuse: posting never splits a line equally over an unmeasured basis.
+    if (error instanceof AllocationApportionError && error.code === "no_driver_weight" && driverAsOf) {
+      throw new PostAllocationError(
+        `rule ${rule.rule.key}: its driver measured no weight for any target for ${driverAsOf}, so there is no basis to apportion ${total} — record the driver values for that month, or change the rule's basis or target weights`,
+      );
+    }
     if (error instanceof AllocationApportionError) {
       throw new PostAllocationError(`rule ${rule.rule.key}: ${error.message}`);
     }

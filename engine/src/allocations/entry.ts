@@ -276,6 +276,7 @@ function apportionMoney(
   total: string,
   weights: WeightedTarget[],
   version: AllocationRuleVersion,
+  ruleKey: string,
 ): ApportionResult {
   try {
     return apportionTargets(total, weights, version.residualPolicy, version.residualTargetId ?? null);
@@ -283,6 +284,12 @@ function apportionMoney(
     if (error instanceof AllocationApportionError) {
       if (error.code === "total_invalid") {
         throw new EntryAllocationError("invalid_line", error.message);
+      }
+      if (error.code === "no_driver_weight") {
+        throw new EntryAllocationError(
+          "no_driver_weight",
+          `rule "${ruleKey}" resolved to no driver weight: ${error.message}`,
+        );
       }
       throw new EntryAllocationError("misconfigured_rule", error.message);
     }
@@ -330,12 +337,11 @@ function targetValueInDimension(target: AllocationRuleTarget, dimension: string)
 /**
  * Driver-basis weights: an explicit manual weight wins, else the driver
  * vector value for the target's value in the driver's dimension. An
- * all-zero vector carries no information, so entry mode refuses to explode
- * rather than fabricate attribution (fail closed; the automatic path leaves
- * the line plain).
+ * all-zero vector carries no information; apportionment refuses it, so entry
+ * mode never fabricates attribution (the automatic path leaves the line
+ * plain).
  */
 function driverWeights(
-  ruleKey: string,
   targets: AllocationRuleTarget[],
   opts: ExplodeOptions,
 ): { weighted: WeightedTarget[]; units: bigint[]; driverTotal: string | null } {
@@ -355,12 +361,6 @@ function driverWeights(
       weight,
       isRemainder: t.isRemainder === true,
     });
-  }
-  if (units.every((u) => u === 0n)) {
-    throw new EntryAllocationError(
-      "no_driver_weight",
-      `rule "${ruleKey}" resolved to no driver weight — nothing to apportion to`,
-    );
   }
   let driverTotal: string | null = null;
   if (vector) {
@@ -439,7 +439,7 @@ export function explodeDocumentLine(
   let weightUnits: bigint[];
   let driverTotal: string | null = null;
   if (version.basisKind === "driver") {
-    const resolved = driverWeights(ruleInEffect.rule.key, targets, opts);
+    const resolved = driverWeights(targets, opts);
     weighted = resolved.weighted;
     weightUnits = resolved.units;
     driverTotal = resolved.driverTotal;
@@ -456,7 +456,7 @@ export function explodeDocumentLine(
   }
 
   const ordered = targets;
-  const apportioned = apportionMoney(line.amount, weighted, version);
+  const apportioned = apportionMoney(line.amount, weighted, version, ruleInEffect.rule.key);
   const amounts = apportioned.targets.map((t) => t.amount);
   const residualIdx = Math.max(
     0,

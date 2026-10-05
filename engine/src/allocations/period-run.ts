@@ -5,7 +5,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
-import { apportionTargets, fixedPercentWeights } from "./apportion.ts";
+import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
 import { previewPinError, sourceScopeViolation, targetPinViolation } from "../organization/allocation-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
@@ -1064,19 +1064,22 @@ async function buildComputation(
     targetSet.resolved.map((target) => target.coordinate.subsidiaryId ?? null),
   );
   if (pinViolation) throw new AllocationRunError("INVALID", pinViolation);
-  // Zero weights carry no basis: A1 would split equally, which invents
-  // attribution for driver/manual targets, so fail closed instead. Percent
-  // grids always sum to 100 and never trip this.
-  if (cmp(sum(targetSet.weights.map((weight) => weight.weight)), "0") === 0) {
-    throw new AllocationRunError("INVALID", "allocation produced no positive target weight");
-  }
-
   // Absorber precedence: an explicit residual key wins, else a sole
   // remainder target absorbs, else the residual policy decides.
   const residualKey = opts.version.residual_policy === "explicit_target"
     ? (opts.version.residual_target_id ?? undefined)
     : undefined;
-  const display = apportionTargets(pool.total, targetSet.weights, opts.version.residual_policy, residualKey);
+  // Zero weights carry no basis; apportionment refuses them for every
+  // allocation path (percent grids always sum to 100 and never trip this).
+  let display: ReturnType<typeof apportionTargets>;
+  try {
+    display = apportionTargets(pool.total, targetSet.weights, opts.version.residual_policy, residualKey);
+  } catch (error) {
+    if (error instanceof AllocationApportionError && error.code === "no_driver_weight") {
+      throw new AllocationRunError("INVALID", `allocation produced no positive target weight: ${error.message}`);
+    }
+    throw error;
+  }
 
   const driverTotal = targetSet.driver
     ? targetSet.driver.vector.reduce((acc, entry) => add(acc, entry.value), "0")

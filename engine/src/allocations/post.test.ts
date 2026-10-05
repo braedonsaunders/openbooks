@@ -464,6 +464,31 @@ test("driver-basis explicit targets resolve through the injected resolver", asyn
   assert.equal(result.lines[0]!.lineage?.driverTotal, "4.0000");
 });
 
+test("a driver measuring no weight for any target refuses posting instead of splitting equally", async () => {
+  // Entry explosion and period runs refuse an all-zero basis; posting must
+  // too, naming the vintage measured and the remedy.
+  await assert.rejects(
+    collectPostContributions(
+      driverRunner,
+      docFixture,
+      [expenseLine],
+      {
+        rulesOverride: [
+          ruleFixture({
+            version: { basisKind: "driver", driverId: "drv-1" },
+            targets: [target({ sequence: 1, departmentId: "dept-a" }), target({ sequence: 2, departmentId: "dept-b" })],
+          }),
+        ],
+        driverResolver: { resolve: () => Promise.resolve(new Map([["dept-c", "5.0000"]])) },
+        featureGate: gateOn,
+      },
+      { postingDate: "2026-07-15" },
+    ),
+    (error: unknown) => error instanceof PostAllocationError
+      && new RegExp(`driver measured no weight for any target for ${docFixture.documentDate}, so there is no basis to apportion 100\\.0000 — record the driver values for that month`).test(error.message),
+  );
+});
+
 test("dynamic targets fan out to every measured dimension value", async () => {
   const result = await collectPostContributions(
     driverRunner,
