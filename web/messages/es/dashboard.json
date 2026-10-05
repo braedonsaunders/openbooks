@@ -82,7 +82,7 @@
     "kpiVendorConcentration": "Concentración de proveedores",
     "kpiVendorPayment": "Desempeño de pagos a proveedores",
     "kpiSpendVelocity": "Velocidad del gasto",
-    "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
+    "kpiVendorConcentrationHint": "5 principales: {share} · {period}",
     "kpiVendorPaymentHint": "Promedio de {days} días de pago · {late} con retraso · {period}",
     "kpiSpendVelocityHint": "{savings} de ahorro potencial · {period}"
   },

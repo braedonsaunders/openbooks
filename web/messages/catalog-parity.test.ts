@@ -282,6 +282,8 @@ const COGNATES = new Set<string>([
   'fr:analytics.spendVelocity.config.groups.concentration|Concentration',
   'fr:analytics.spendVelocity.config.groups.fragmentation|Fragmentation',
   'fr:analytics.spendVelocity.config.groups.projections|Projections',
+  // Scorecard is an established German business loanword.
+  'de:analytics.vendor.config.groups.scorecard|Scorecard',
   // CSV names the file format on export buttons; every locale keeps the acronym.
   'de:analytics.vendor.csv.export|CSV',
   'de:analytics.spendVelocity.csv.export|CSV',
