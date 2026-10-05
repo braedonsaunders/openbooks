@@ -48,6 +48,7 @@ import type {
 } from '../../../../lib/analytics/customer-data'
 import { compareAtRiskCustomers } from '../../../../lib/analytics/customer-profitability-money'
 import { Gauge } from '../_ui/Gauge'
+import { Gauge, NEUTRAL_GAUGE_BANDS } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, GroupedBar } from '../_ui/charts'
@@ -227,7 +228,7 @@ export function CustomerView({
           {intel.score === null ? (
             <p className="px-2 text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">{intel.reason}</p>
           ) : (
-            <Gauge value={intel.score} label={intel.label} size={132} thickness={12} showTicks={false} />
+            <Gauge value={intel.score} label={intel.label} size={132} thickness={12} showTicks={false} bands={NEUTRAL_GAUGE_BANDS} />
           )}
         </div>
         <KpiCard icon={Users} accent="sky" label={t('kpi.totalCustomers')} value={String(k.totalCustomers)} sub={t('sub.newInPeriod', { count: k.newCustomers })} />

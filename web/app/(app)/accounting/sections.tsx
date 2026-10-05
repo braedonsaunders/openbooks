@@ -2,7 +2,7 @@ import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as Sha
 import { cn } from '@openbooks/ui'
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
-import { Gauge } from '../analytics/_ui/Gauge'
+import { Gauge, NEUTRAL_GAUGE_BANDS } from '../analytics/_ui/Gauge'
 
 /**
  * The accounting cockpit's bespoke panel bodies, extracted from page.tsx.
@@ -71,7 +71,7 @@ export function HealthHero({
   return (
     <>
       <div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 py-5 sm:flex-row sm:gap-8 dark:border-slate-800">
-        <Gauge value={gaugeValue} label={gaugeLabel} size={150} thickness={13} showTicks={false} className="shrink-0" />
+        <Gauge value={gaugeValue} label={gaugeLabel} size={150} thickness={13} showTicks={false} className="shrink-0" bands={NEUTRAL_GAUGE_BANDS} />
         <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-1.5 sm:grid-cols-3">
           {categories.map((c) => (
             <div key={c.key}>

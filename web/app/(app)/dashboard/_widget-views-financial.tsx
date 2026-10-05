@@ -7,6 +7,7 @@ import type { RatioCategory, RatioId, RatioResult } from '@/lib/analytics/financ
 import { useMoney } from '@/components/money-provider'
 import { TrendChart } from '../analytics/_ui/charts'
 import { HealthScore } from '../analytics/_ui/HealthScore'
+import { NEUTRAL_GAUGE_BANDS } from '../analytics/_ui/Gauge'
 import { GRADE_STYLE, toChartNumber, useRatioFormat } from '../analytics/_ui/format'
 import { CardShell, ChartTile, MetricTile, UnavailableRow, type WidgetCardProps } from './_widget-tiles'
 import type { FinancialSummary } from './_metrics-financial'
@@ -185,6 +186,7 @@ function HealthScoreCard({ summary }: { summary: WidgetCardProps['data']['financ
             score={summary.value.overallScore}
             scoreLabel={tf(`score.${summary.value.scoreLabel}`)}
             overallLabel={tf('score.overall')}
+            bands={NEUTRAL_GAUGE_BANDS}
             categories={summary.value.categoryScores
               .filter((c): c is { key: RatioCategory; score: number } => c.score !== null)
               .map((c) => ({ label: tf(`categories.${c.key}`), score: c.score }))}
