@@ -66,7 +66,7 @@ export async function loadItems(
   // as a tab; managing them keeps the admin.setup.manage gate.
   const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
-  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled, subscriptionPricingEnabled, variantsEnabled] = await Promise.all([
+  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled, subscriptionPricingEnabled, variantsEnabled, shippingHubEnabled] = await Promise.all([
     isFeatureEnabled(orgId, 'projects'),
     isFeatureEnabled(orgId, 'inventory'),
     isFeatureEnabled(orgId, 'revenueRecognition'),
@@ -74,6 +74,7 @@ export async function loadItems(
     isFeatureEnabled(orgId, 'equipment'),
     isFeatureEnabled(orgId, 'subscriptionBilling'),
     isFeatureEnabled(orgId, 'itemVariants'),
+    isFeatureEnabled(orgId, 'shippingHub'),
   ])
 
   const itemId = typeof sp.item === 'string' ? sp.item : undefined
@@ -256,6 +257,7 @@ export async function loadItems(
           fairValuePrices: revenueRecognitionEnabled,
           timeTracking: timeTrackingEnabled,
           equipmentEnabled,
+          shippingHub: shippingHubEnabled,
           subscriptionPricing: subscriptionPricingEnabled,
           initialPricingView,
           configuredPricingViews,

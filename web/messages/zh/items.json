@@ -25,7 +25,16 @@
     "expenseAccount": "费用科目",
     "payrollCostingAccount": "工资成本科目",
     "taxCode": "税码",
-    "family": "系列"
+    "family": "系列",
+    "weight": "重量",
+    "weightUnit": "重量单位",
+    "dimUnit": "尺寸单位",
+    "length": "长度",
+    "width": "宽度",
+    "height": "高度",
+    "dimensions": "包裹规格",
+    "hsCode": "HS编码",
+    "countryOfOrigin": "原产国"
   },
   "kinds": {
     "service": "服务",
@@ -54,7 +63,7 @@
     "gift_card": "储值销售：记入负债而非收入，过账时生成可兑换代码。"
   },
   "drawer": {
-    "tabs": { "overview": "概览", "pricing": "定价", "accounting": "会计", "costing": "库存", "revenue": "收入确认" },
+    "tabs": { "overview": "概览", "pricing": "定价", "accounting": "会计", "costing": "库存", "revenue": "收入确认", "shipping": "配送" },
     "newItem": "新建物料",
     "chooseKindTitle": "选择物料类型",
     "chooseKindDescription": "先选择此物料需要的会计和运营行为。创建前可再次确认类型。",
@@ -370,5 +379,23 @@
       "valueLabel": "选项值",
       "done": "系列 {family} 已创建"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "克",
+      "kg": "千克",
+      "oz": "盎司",
+      "lb": "磅"
+    },
+    "dimUnits": {
+      "cm": "厘米",
+      "in": "英寸"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "长度",
+    "widthPlaceholder": "宽度",
+    "heightPlaceholder": "高度",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "CN"
   }
 }

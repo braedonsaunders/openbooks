@@ -25,7 +25,16 @@
     "expenseAccount": "Cuenta de gastos",
     "payrollCostingAccount": "Cuenta de costo de nómina",
     "taxCode": "Código de impuesto",
-    "family": "Familia"
+    "family": "Familia",
+    "weight": "Peso",
+    "weightUnit": "Unidad de peso",
+    "dimUnit": "Unidad de medida",
+    "length": "Largo",
+    "width": "Ancho",
+    "height": "Alto",
+    "dimensions": "Tamaño del paquete",
+    "hsCode": "Código SA",
+    "countryOfOrigin": "País de origen"
   },
   "kinds": {
     "service": "Servicio",
@@ -54,7 +63,7 @@
     "gift_card": "Una venta de saldo prepago: se registra en el pasivo, nunca en ingresos, y al contabilizar emite un código canjeable."
   },
   "drawer": {
-    "tabs": { "overview": "Resumen", "pricing": "Precios", "accounting": "Contabilidad", "costing": "Inventario", "revenue": "Reconocimiento de ingresos" },
+    "tabs": { "overview": "Resumen", "pricing": "Precios", "accounting": "Contabilidad", "costing": "Inventario", "revenue": "Reconocimiento de ingresos", "shipping": "Envío" },
     "newItem": "Nuevo artículo",
     "chooseKindTitle": "Elija un tipo de artículo",
     "chooseKindDescription": "Comience por el comportamiento contable y operativo que necesita. Puede confirmar el tipo antes de crearlo.",
@@ -380,5 +389,23 @@
       "valueLabel": "Valor de opción",
       "done": "Familia {family} creada"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "Gramos",
+      "kg": "Kilogramos",
+      "oz": "Onzas",
+      "lb": "Libras"
+    },
+    "dimUnits": {
+      "cm": "Centímetros",
+      "in": "Pulgadas"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "Largo",
+    "widthPlaceholder": "Ancho",
+    "heightPlaceholder": "Alto",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "US"
   }
 }

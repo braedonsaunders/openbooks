@@ -25,7 +25,16 @@
     "expenseAccount": "Aufwandskonto",
     "payrollCostingAccount": "Lohnkostenkonto",
     "taxCode": "Steuerschlüssel",
-    "family": "Familie"
+    "family": "Familie",
+    "weight": "Gewicht",
+    "weightUnit": "Gewichtseinheit",
+    "dimUnit": "Größeneinheit",
+    "length": "Länge",
+    "width": "Breite",
+    "height": "Höhe",
+    "dimensions": "Paketgröße",
+    "hsCode": "HS-Code",
+    "countryOfOrigin": "Ursprungsland"
   },
   "kinds": {
     "service": "Leistung",
@@ -54,7 +63,7 @@
     "gift_card": "Ein Guthabenverkauf: wird auf die Guthabenverbindlichkeit gebucht, niemals auf Erlöse, und erzeugt bei Buchung einen einlösbaren Code."
   },
   "drawer": {
-    "tabs": { "overview": "Übersicht", "pricing": "Preise", "accounting": "Buchhaltung", "costing": "Lagerbestand", "revenue": "Umsatzrealisierung" },
+    "tabs": { "overview": "Übersicht", "pricing": "Preise", "accounting": "Buchhaltung", "costing": "Lagerbestand", "revenue": "Umsatzrealisierung", "shipping": "Versand" },
     "newItem": "Neuer Artikel",
     "chooseKindTitle": "Artikeltyp auswählen",
     "chooseKindDescription": "Beginnen Sie mit dem benötigten buchhalterischen und operativen Verhalten. Vor dem Erstellen können Sie den Typ erneut prüfen.",
@@ -383,5 +392,23 @@
       "valueLabel": "Optionswert",
       "done": "Familie {family} angelegt"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "Gramm",
+      "kg": "Kilogramm",
+      "oz": "Unzen",
+      "lb": "Pfund"
+    },
+    "dimUnits": {
+      "cm": "Zentimeter",
+      "in": "Zoll"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "Länge",
+    "widthPlaceholder": "Breite",
+    "heightPlaceholder": "Höhe",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "US"
   }
 }

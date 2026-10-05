@@ -107,8 +107,17 @@ interface ItemRecord {
   is_active: boolean
   create_plans_on: string
   revenue_allocation: string
+  weight: string | null
+  weight_unit: string | null
+  dimensions: { length: string | null; width: string | null; height: string | null; unit: string } | null
+  hs_code: string | null
+  country_of_origin: string | null
   custom: Record<string, unknown>
 }
+
+/** Parcel measures rate shopping and customs; the server validates units. */
+const WEIGHT_UNITS = ['g', 'kg', 'oz', 'lb'] as const
+const DIMENSION_UNITS = ['cm', 'in'] as const
 interface ItemPayload {
   item: ItemRecord
   incomeAccountName: string | null
@@ -171,6 +180,7 @@ export function ItemDrawer({
   fairValuePrices = false,
   timeTracking = false,
   equipmentEnabled = false,
+  shippingHub = false,
   subscriptionPricing = false,
   initialPricingView = 'landing',
   configuredPricingViews = [],
@@ -196,6 +206,8 @@ export function ItemDrawer({
   fairValuePrices?: boolean
   /** Show-on-timesheet flag — Time Tracking Features switch. */
   timeTracking?: boolean
+  /** Parcel measures for rate shopping and customs — shipping hub switch. */
+  shippingHub?: boolean
   /** Equipment-charge kind — Equipment Features switch. */
   equipmentEnabled?: boolean
   /** Recurring/usage pricing has its own contract lifecycle surface. */
@@ -261,6 +273,15 @@ export function ItemDrawer({
   const [standaloneSellingPrice, setStandaloneSellingPrice] = useState<string>(
     preserveItemDecimal(it.standalone_selling_price),
   )
+  const storedDims = (it.dimensions ?? {}) as { length?: unknown; width?: unknown; height?: unknown; unit?: unknown }
+  const [weight, setWeight] = useState<string>(preserveItemDecimal(it.weight))
+  const [weightUnit, setWeightUnit] = useState<string>(it.weight_unit ?? 'kg')
+  const [dimLength, setDimLength] = useState<string>(preserveItemDecimal(storedDims.length))
+  const [dimWidth, setDimWidth] = useState<string>(preserveItemDecimal(storedDims.width))
+  const [dimHeight, setDimHeight] = useState<string>(preserveItemDecimal(storedDims.height))
+  const [dimUnit, setDimUnit] = useState<string>(typeof storedDims.unit === 'string' ? storedDims.unit : 'cm')
+  const [hsCode, setHsCode] = useState<string>(it.hs_code ?? '')
+  const [countryOfOrigin, setCountryOfOrigin] = useState<string>(it.country_of_origin ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(it.custom ?? {})
   const [isActive, setIsActive] = useState<boolean>(createMode ? true : it.is_active === true)
 
@@ -333,10 +354,27 @@ export function ItemDrawer({
             standaloneSellingPrice: standaloneSellingPrice || null,
           }
         : {}),
+      ...(shippingHub
+        ? {
+            weight: weight.trim() || null,
+            weightUnit: weightUnit || null,
+            dimensions:
+              dimLength.trim() || dimWidth.trim() || dimHeight.trim()
+                ? {
+                    length: dimLength.trim() || null,
+                    width: dimWidth.trim() || null,
+                    height: dimHeight.trim() || null,
+                    unit: dimUnit,
+                  }
+                : null,
+            hsCode: hsCode.trim() || null,
+            countryOfOrigin: countryOfOrigin.trim() || null,
+          }
+        : {}),
       custom: customValues,
       ...(createMode ? { isActive } : {}),
     }),
-    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, payrollCostingAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, equipmentEnabled, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive, createMode],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, payrollCostingAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, equipmentEnabled, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive, createMode, shippingHub, weight, weightUnit, dimLength, dimWidth, dimHeight, dimUnit, hsCode, countryOfOrigin],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render).
@@ -372,6 +410,15 @@ export function ItemDrawer({
     setCreatePlansOn(it.create_plans_on ?? 'billing')
     setRevenueAllocation(it.revenue_allocation ?? 'normal')
     setStandaloneSellingPrice(preserveItemDecimal(it.standalone_selling_price))
+    const dims = (it.dimensions ?? {}) as { length?: unknown; width?: unknown; height?: unknown; unit?: unknown }
+    setWeight(preserveItemDecimal(it.weight))
+    setWeightUnit(it.weight_unit ?? 'kg')
+    setDimLength(preserveItemDecimal(dims.length))
+    setDimWidth(preserveItemDecimal(dims.width))
+    setDimHeight(preserveItemDecimal(dims.height))
+    setDimUnit(typeof dims.unit === 'string' ? dims.unit : 'cm')
+    setHsCode(it.hs_code ?? '')
+    setCountryOfOrigin(it.country_of_origin ?? '')
     setCustomValues(it.custom ?? {})
   }
 
@@ -524,12 +571,16 @@ export function ItemDrawer({
     'recognition_rule_id', 'deferred_account_id', 'standalone_selling_price',
     'create_plans_on', 'revenue_allocation',
   ]))
+  const shippingLayout = layoutForKeys(new Set([
+    'weight', 'weight_unit', 'dimensions', 'hs_code', 'country_of_origin',
+  ]))
 
   const tabs = useMemo(
     () => [...resolveFormTabs(effectiveLayout)
       .filter((placement) => placement.visible)
       .filter((placement) => placement.key !== 'costing' || (inventoryCosting && INVENTORY_KINDS.has(kind)))
       .filter((placement) => placement.key !== 'revenue' || fairValuePrices)
+      .filter((placement) => placement.key !== 'shipping' || shippingHub)
       .map((placement) => ({
         key: placement.key,
         groupIds: placement.groupIds ?? [],
@@ -539,7 +590,7 @@ export function ItemDrawer({
             : t(`drawer.tabs.${placement.key}`)
         ),
       })), ...recordTabs.map((recordTab) => ({ ...recordTab, groupIds: [] as string[] }))],
-    [effectiveLayout, inventoryCosting, fairValuePrices, kind, t, recordTabs],
+    [effectiveLayout, inventoryCosting, fairValuePrices, shippingHub, kind, t, recordTabs],
   )
   const requestedRecordTab = searchParams.get('itemSetup')
   const selectedTab = recordTabs.some((candidate) => candidate.key === requestedRecordTab) ? requestedRecordTab : tab
@@ -557,6 +608,15 @@ export function ItemDrawer({
     for (const param of ['recordRow', 'recordQ', 'recordPage', 'recordShowInactive']) next.delete(param)
     const query = next.toString()
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
+
+  const weightUnitLabel = (unit: string) =>
+    (WEIGHT_UNITS as readonly string[]).includes(unit) ? t(`shipping.weightUnits.${unit as 'g'}`) : unit
+  const dimensionLabel = () => {
+    const parts = [dimLength.trim(), dimWidth.trim(), dimHeight.trim()].filter((part) => part.length > 0)
+    if (parts.length === 0) return ''
+    const unitLabel = (DIMENSION_UNITS as readonly string[]).includes(dimUnit) ? t(`shipping.dimUnits.${dimUnit as 'cm'}`) : dimUnit
+    return `${parts.join(' × ')} ${unitLabel}`
   }
 
   function renderItemField(placement: HeaderFieldPlacement): React.ReactNode {
@@ -606,6 +666,21 @@ export function ItemDrawer({
       case 'revenue_allocation':
         if (!fairValuePrices) return null
         return <><Label>{label || t('revrec.allocation')}</Label>{editable ? <Select value={revenueAllocation} onChange={(event) => setRevenueAllocation(event.target.value)}>{REVENUE_ALLOCATION.map((option) => <option key={option} value={option}>{t(`revrec.allocationOptions.${option}`)}</option>)}</Select> : <ReadOnlyValue value={t(`revrec.allocationOptions.${revenueAllocation}`)} />}</>
+      case 'weight':
+        if (!shippingHub) return null
+        return <><Label>{label || t('labels.weight')}</Label>{editable ? <Input inputMode="decimal" className="text-right tabular-nums" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder={t('shipping.weightPlaceholder')} /> : <ReadOnlyValue value={weight ? `${weight} ${weightUnitLabel(weightUnit)}` : ''} className="text-right tabular-nums" />}</>
+      case 'weight_unit':
+        if (!shippingHub) return null
+        return <><Label>{label || t('labels.weightUnit')}</Label>{editable ? <Select value={weightUnit} onChange={(event) => setWeightUnit(event.target.value)}>{WEIGHT_UNITS.map((option) => <option key={option} value={option}>{t(`shipping.weightUnits.${option}`)}</option>)}</Select> : <ReadOnlyValue value={weightUnitLabel(weightUnit)} />}</>
+      case 'dimensions':
+        if (!shippingHub) return null
+        return <><Label>{label || t('labels.dimensions')}</Label>{editable ? <div className="grid grid-cols-4 gap-2"><Input inputMode="decimal" aria-label={t('labels.length')} className="text-right tabular-nums" value={dimLength} onChange={(event) => setDimLength(event.target.value)} placeholder={t('shipping.lengthPlaceholder')} /><Input inputMode="decimal" aria-label={t('labels.width')} className="text-right tabular-nums" value={dimWidth} onChange={(event) => setDimWidth(event.target.value)} placeholder={t('shipping.widthPlaceholder')} /><Input inputMode="decimal" aria-label={t('labels.height')} className="text-right tabular-nums" value={dimHeight} onChange={(event) => setDimHeight(event.target.value)} placeholder={t('shipping.heightPlaceholder')} /><Select value={dimUnit} onChange={(event) => setDimUnit(event.target.value)} aria-label={t('labels.dimUnit')}>{DIMENSION_UNITS.map((option) => <option key={option} value={option}>{t(`shipping.dimUnits.${option}`)}</option>)}</Select></div> : <ReadOnlyValue value={dimensionLabel()} />}</>
+      case 'hs_code':
+        if (!shippingHub) return null
+        return <><Label>{label || t('labels.hsCode')}</Label>{editable ? <Input value={hsCode} onChange={(event) => setHsCode(event.target.value)} placeholder={t('shipping.hsPlaceholder')} /> : <ReadOnlyValue value={hsCode} className="font-mono" />}</>
+      case 'country_of_origin':
+        if (!shippingHub) return null
+        return <><Label>{label || t('labels.countryOfOrigin')}</Label>{editable ? <Input value={countryOfOrigin} onChange={(event) => setCountryOfOrigin(event.target.value.toUpperCase())} placeholder={t('shipping.originPlaceholder')} maxLength={2} className="font-mono uppercase" /> : <ReadOnlyValue value={countryOfOrigin} className="font-mono" />}</>
       default: {
         const definition = customFieldByPlacement.get(placement.key)
         if (!definition) return null
@@ -813,6 +888,7 @@ export function ItemDrawer({
 
         {!choosingKind && activeTabKey === 'accounting' ? <HeaderFields layout={accountingLayout} editable={editable} renderField={renderItemField} /> : null}
         {!choosingKind && activeTabKey === 'revenue' && fairValuePrices ? <HeaderFields layout={revenueLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && activeTabKey === 'shipping' && shippingHub ? <HeaderFields layout={shippingLayout} editable={editable} renderField={renderItemField} /> : null}
         {!choosingKind && activeTabKey === 'revenue' && fairValuePrices && !createMode ? (
           <FairValuePricesEditor itemId={String(it.id)} canManage={editable} />
         ) : null}

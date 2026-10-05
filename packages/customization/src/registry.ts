@@ -831,6 +831,7 @@ const ITEM: RecordTypeMeta = {
     { key: "accounting", labelKey: "items.drawer.tabs.accounting" },
     { key: "costing", labelKey: "items.drawer.tabs.costing", featureKey: "inventory" },
     { key: "revenue", labelKey: "items.drawer.tabs.revenue", featureKey: "revenueRecognition" },
+    { key: "shipping", labelKey: "items.drawer.tabs.shipping", featureKey: "shippingHub" },
   ],
   headerFields: [
     { key: "kind", labelKey: "items.labels.kind", level: "header", kind: "select", required: true, locked: true },
@@ -852,6 +853,11 @@ const ITEM: RecordTypeMeta = {
     { key: "standalone_selling_price", labelKey: "items.revrec.standaloneSellingPrice", level: "header", kind: "currency" },
     { key: "create_plans_on", labelKey: "items.revrec.createPlansOn", level: "header", kind: "select" },
     { key: "revenue_allocation", labelKey: "items.revrec.allocation", level: "header", kind: "select" },
+    { key: "weight", labelKey: "items.labels.weight", level: "header", kind: "text" },
+    { key: "weight_unit", labelKey: "items.labels.weightUnit", level: "header", kind: "text" },
+    { key: "dimensions", labelKey: "items.labels.dimensions", level: "header", kind: "text" },
+    { key: "hs_code", labelKey: "items.labels.hsCode", level: "header", kind: "text" },
+    { key: "country_of_origin", labelKey: "items.labels.countryOfOrigin", level: "header", kind: "text" },
   ],
   lineFields: [],
   listColumns: [

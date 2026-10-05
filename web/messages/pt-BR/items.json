@@ -25,7 +25,16 @@
     "expenseAccount": "Conta de despesa",
     "payrollCostingAccount": "Conta de custo de folha",
     "taxCode": "Código de imposto",
-    "family": "Família"
+    "family": "Família",
+    "weight": "Peso",
+    "weightUnit": "Unidade de peso",
+    "dimUnit": "Unidade de tamanho",
+    "length": "Comprimento",
+    "width": "Largura",
+    "height": "Altura",
+    "dimensions": "Tamanho do pacote",
+    "hsCode": "Código SH",
+    "countryOfOrigin": "País de origem"
   },
   "kinds": {
     "service": "Serviço",
@@ -54,7 +63,7 @@
     "gift_card": "Uma venda de valor armazenado: registra no passivo, nunca na receita, e emite um código resgatável ao contabilizar."
   },
   "drawer": {
-    "tabs": { "overview": "Visão geral", "pricing": "Preços", "accounting": "Contabilidade", "costing": "Estoque", "revenue": "Reconhecimento de receita" },
+    "tabs": { "overview": "Visão geral", "pricing": "Preços", "accounting": "Contabilidade", "costing": "Estoque", "revenue": "Reconhecimento de receita", "shipping": "Envio" },
     "newItem": "Novo item",
     "chooseKindTitle": "Escolha um tipo de item",
     "chooseKindDescription": "Comece pelo comportamento contábil e operacional necessário. Você pode confirmar o tipo antes de criar.",
@@ -370,5 +379,23 @@
       "valueLabel": "Valor da opção",
       "done": "Família {family} criada"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "Gramas",
+      "kg": "Quilogramas",
+      "oz": "Onças",
+      "lb": "Libras"
+    },
+    "dimUnits": {
+      "cm": "Centímetros",
+      "in": "Polegadas"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "Comprimento",
+    "widthPlaceholder": "Largura",
+    "heightPlaceholder": "Altura",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "BR"
   }
 }
