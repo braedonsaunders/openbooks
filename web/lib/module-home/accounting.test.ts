@@ -29,6 +29,15 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.accounting-home-scope-test')]
       const sqlText = globalThis.openbooksSqlTextAccounting
+      // orgContext and the scope helpers exist only to link engine close
+      // modules the cockpit reaches through the close-application import;
+      // no test here runs a request scope or a transaction.
+      export const orgContext = { getStore: () => null, run: (_store, fn) => fn() }
+      export async function withOrgContext(work) { return work() }
+      export async function withBypass(work) { return work() }
+      export async function withOrgTransaction(_org, work) { return work() }
+      export async function withOrg(_org, work) { return work() }
+      export const pool = undefined
       export const db = {
         execute: async (query) => {
           const text = sqlText(query)
@@ -59,7 +68,9 @@ const mockSources = new Map<string, string>([
   // pinned — the explicit export shadows the re-exported one. The old
   // identity addCalendarDays stub is gone: it dated the 7-day window as today.
   ['mock:business-date', `export * from "@openbooks/engine/src/platform/business-date.ts"; export async function businessToday() { return '2026-08-28' }`],
-  ['mock:authz', `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') }`],
+  // `can` exists only to link the close-application module the cockpit
+  // imports its organization-wide refusal from; no test here decides gates.
+  ['mock:authz', `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') } export function can() { return false }`],
 ])
 
 const mockUrls = new Map<string, string>([

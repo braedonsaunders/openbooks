@@ -5,6 +5,15 @@ import test from 'node:test'
 
 registerHooks({
   resolve(specifier, _context, next) {
+    // purchasingHome translates its unknown-vendor fallback through
+    // next-intl: outside a request (here) the catalog resolves to the key
+    // itself — the money assertions below never read a name.
+    if (specifier === 'next-intl/server') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (key) => key}'),
+      }
+    }
     return next(specifier)
   },
 })
@@ -83,12 +92,12 @@ test('purchasing cockpit translates every payable functional to presentation', {
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })
-        assert.equal(home.apOutstanding, 235)
+        assert.equal(toUnits(home.apOutstanding), toUnits(235))
         assert.equal(toUnits(home.spend30d), toUnits(235))
         assert.equal(toUnits(home.badges.paid7dValue), toUnits(235))
         assert.equal(toUnits(home.trend.find((w) => toUnits(w.spend) > 0n)?.spend ?? '0'), toUnits(235))
         const usRow = home.topExposure.find((r) => r.partyId === usVend)!
-        assert.equal(usRow.billedOpen, 135)
+        assert.equal(toUnits(usRow.billedOpen), toUnits(135))
       })
     })
   } finally {
