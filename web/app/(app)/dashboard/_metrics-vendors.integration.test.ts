@@ -73,3 +73,30 @@ test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, 
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * Concentration of nothing is not diversification: with no vendor spend the
+ * concentration tile stays unavailable by name instead of reading green
+ * with HHI 0 and a 0% top-5 share.
+ */
+test('vendor concentration widgets refuse by name with no vendor spend', { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    const window = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+    const ctx = {
+      orgId: org.orgId,
+      allowedSubsidiaryIds: null,
+      period: async () => window,
+    } as unknown as DashboardWidgetContext
+    const widgets = await withOrgContext(org.orgId, () => loadVendorWidgetMetrics(ctx, () => true))
+    assert.equal(widgets.concentrationHhi?.available, false)
+    assert.equal(widgets.concentrationTop5Share?.available, false)
+    assert.ok(
+      ((widgets.concentrationHhi ?? {}) as { reason?: string }).reason?.length,
+      'an unavailable concentration must say why',
+    )
+    assert.equal(widgets.concentrationBand, null)
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})

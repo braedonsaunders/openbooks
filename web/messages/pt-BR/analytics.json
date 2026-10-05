@@ -1840,7 +1840,8 @@
       "billsSpend": "{bills} faturas · {spend} em gastos"
     },
     "empty": {
-      "noLatePaid": "Nenhum gasto pago em atraso."
+      "noLatePaid": "Nenhum gasto pago em atraso.",
+      "noSpend": "Sem gastos com fornecedores neste período."
     },
     "gauge": {
       "balanced": "Equilibrado",

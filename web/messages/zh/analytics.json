@@ -1840,7 +1840,8 @@
       "billsSpend": "{bills}张账单 · 支出{spend}"
     },
     "empty": {
-      "noLatePaid": "没有逾期支付的支出。"
+      "noLatePaid": "没有逾期支付的支出。",
+      "noSpend": "本期没有供应商支出。"
     },
     "gauge": {
       "balanced": "均衡",
