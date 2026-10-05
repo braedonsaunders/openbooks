@@ -3754,7 +3754,7 @@
       "benefitFrequency": "Frequência de medição: mensal, trimestral, anual, conclusão do projeto ou manual.",
       "benefitPeriodBasis": "Programas trimestrais e anuais nomeiam períodos de calendário ou de exercício.",
       "paymentKind": "Os benefícios não monetários mantêm o tratamento tributário configurado, mas seu valor não é pago em dinheiro.",
-      "nonCashAccountId": "Use um ativo pré-pago ou um passivo de compensação do fornecedor. As compras do fornecedor devem usar a mesma conta para evitar contabilizar a despesa duas vezes.",
+      "nonCashAccountId": "Use um ativo pré-pago, um passivo de compensação com o fornecedor ou uma conta redutora de despesa. A folha debita a despesa do benefício e credita esta conta; compras do fornecedor devem usar a mesma conta de compensação para não contar a despesa duas vezes. Uma conta redutora de despesa (diferente da conta de despesa) serve para um benefício cujo custo já foi lançado como despesa, como o uso pessoal de um veículo da empresa.",
       "zonedDateTime": "Digite uma data e hora ISO com Z ou deslocamento explícito, como 2026-10-01T09:00:00-04:00. O deslocamento é preservado.",
       "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo."
     },
