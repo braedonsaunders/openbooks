@@ -67,6 +67,12 @@ export interface PspSettlementsStrings {
   reversalPlaceholder: string
   colProvider: string
   colNet: string
+  colFx: string
+  filterProviderLabel: string
+  filterAllProviders: string
+  reviewLinkLabel: string
+  reviewsHref: string
+  reviewPending: string | null
   reverse: string
   empty: string
   referenceLabel: string
@@ -101,6 +107,9 @@ interface BatchRow extends Record<string, unknown> {
   settlementDate: string
   currency: string
   netAmount: string
+  fxAmount: string
+  disputeAmount: string
+  sourceCurrency: string | null
   status: string
 }
 
@@ -123,11 +132,19 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
     : sql``
   const batches = await db.execute<BatchRow>(sql`
     select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
-           settlement_date as "settlementDate"
+           fx_amount as "fxAmount", dispute_amount as "disputeAmount",
+           source_currency as "sourceCurrency", settlement_date as "settlementDate"
       from psp_settlement_batches
      where org_id = ${authz.user.orgId}${subsidiaryFilter}
      order by settlement_date desc, created_at desc
   `)
+  // Parked refunds and disputes waiting on an operator: the queue link names
+  // the count so the work is visible before opening it.
+  const pendingReviews = await db.execute<{ count: string }>(sql`
+    select count(*)::text as count from payment_disputes
+     where org_id = ${authz.user.orgId} and status = 'pending_review'
+  `)
+  const pendingReviewCount = Number(pendingReviews.rows[0]?.count ?? '0')
   // The import form's subsidiary picker: same flag gate and caller scope as
   // the document drawers. Empty keeps all subsidiary UI hidden
   // and the batch posts to the root like every other document.
@@ -149,6 +166,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   }))
 
   const settlementDateLabel = (value: string) => dateLabel(new Date(`${value}T12:00:00Z`), locale)
+  const isZeroAmount = (value: string) => Number(value) === 0
 
   return {
     title: t('title'),
@@ -182,6 +200,13 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       reversalPlaceholder: t('reversalPlaceholder'),
       colProvider: t('colProvider'),
       colNet: t('colNet'),
+      colFx: t('colFx'),
+      filterProviderLabel: t('filterProviderLabel'),
+      filterAllProviders: t('filterAllProviders'),
+      reviewLinkLabel: t('reviewLinkLabel'),
+      reviewsHref: '/banking/psp-settlements/reviews',
+      reviewPending:
+        pendingReviewCount > 0 ? t('reviewPending', { count: pendingReviewCount }) : null,
       reverse: t('reverse'),
       empty: t('empty'),
       referenceLabel: common('labels.reference'),
@@ -194,18 +219,30 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
     },
     subsidiaries,
     accounts,
-    rows: batches.rows.map((b) => ({
-      id: String(b.id),
-      providerLabel: t(`providers.${b.provider}`),
-      externalRef: String(b.externalRef),
-      settlementDate: settlementDateLabel(String(b.settlementDate).slice(0, 10)),
-      netAmount: money(String(b.netAmount), { currency: String(b.currency) }),
-      // `common`, not the page namespace: the client component resolves this
-      // label from common.status.*, and the page namespace has no status keys
-      // at all — so the page namespace renders the raw key path.
-      statusLabel: common(`status.${STATUS_MESSAGE[b.status as SettlementStatus]}`),
-      status: b.status as SettlementStatus,
-    })),
+    rows: batches.rows.map((b) => {
+      const currency = String(b.currency)
+      const fxAmount = String(b.fxAmount)
+      const disputeAmount = String(b.disputeAmount)
+      return {
+        id: String(b.id),
+        provider: b.provider,
+        providerLabel: t(`providers.${b.provider}`),
+        externalRef: String(b.externalRef),
+        settlementDate: settlementDateLabel(String(b.settlementDate).slice(0, 10)),
+        currency,
+        netAmount: money(String(b.netAmount), { currency }),
+        fxAmount: isZeroAmount(fxAmount) ? null : money(fxAmount, { currency }),
+        disputeBadge: isZeroAmount(disputeAmount)
+          ? null
+          : t('disputeBadge', { amount: money(disputeAmount, { currency }) }),
+        sourceCurrency: b.sourceCurrency,
+        // `common`, not the page namespace: the client component resolves this
+        // label from common.status.*, and the page namespace has no status keys
+        // at all — so the page namespace renders the raw key path.
+        statusLabel: common(`status.${STATUS_MESSAGE[b.status as SettlementStatus]}`),
+        status: b.status as SettlementStatus,
+      }
+    }),
   }
 }
 
