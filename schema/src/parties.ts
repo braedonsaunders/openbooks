@@ -27,7 +27,7 @@ export const parties = pgTable(
     id: id(),
     orgId: orgRef(),
     // The live vocabulary is wider than person/company: role lists store
-    // customer/vendor/employee kinds (F-t05-002), and the parties PATCH
+    // customer/vendor/employee kinds, and the parties PATCH
     // endpoint accepts exactly this set. text enums emit plain `text` DDL,
     // so widening changes only the TypeScript contract, never the database.
     kind: text("kind", { enum: ["company", "person", "customer", "vendor", "employee"] }).notNull(),

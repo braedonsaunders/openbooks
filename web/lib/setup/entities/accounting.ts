@@ -57,7 +57,7 @@ export const ACCOUNTING_ENTITIES: SetupEntity[] = [
     // No `mode` column: the static custom page at /admin/setup/allocations
     // takes precedence over the generic [entity] route and renders its own
     // `rules.list.columns.mode` header, so a registry `mode` column would
-    // only add an unlabelled `fields.mode` key (F-coord-008).
+    // only add an unlabelled `fields.mode` key.
     columns: [
       { key: 'name', kind: 'text' },
       { key: 'key', kind: 'code' },

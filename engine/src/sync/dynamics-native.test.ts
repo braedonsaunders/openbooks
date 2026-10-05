@@ -49,7 +49,7 @@ test("Dynamics invoices keep tax amounts and codes on their matching detail line
   );
 
   assert.ok(!("skip" in built));
-  // F-t12-004: the invoice list showed "salesInvoice:<uuid>" because the
+  // The invoice list showed "salesInvoice:<uuid>" because the
   // adapter never set documentNumber, so the writer fell back to sourceRef.
   assert.equal(built.documentNumber, "INV-1");
   assert.deepEqual(

@@ -7,7 +7,7 @@ import { buildSchedule, runDepreciation } from "./depreciation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
- * F-t07-005: a mid-period Run depreciation posts nothing (the period has not
+ * A mid-period Run depreciation posts nothing (the period has not
  * ended) and answers 200 with all-zero counters and an empty problems list —
  * no toast, no dialog, no path forward. The zero must explain itself: which
  * as-of date the run evaluated and the next due line with its period end.

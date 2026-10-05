@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-user-003: a posted expense report follows the same amend/reverse
+// A posted expense report follows the same amend/reverse
 // contract as bills — Correct creates the correcting revision, never
 // "void and re-key". POST /api/expenses/[id]/correct is the dedicated
 // correction workflow (the generic documents route 422s expense reports).

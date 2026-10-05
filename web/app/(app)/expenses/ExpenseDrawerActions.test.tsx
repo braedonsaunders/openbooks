@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-user-003: expense reports need an Edit action with bill parity — drafts
+// Expense reports need an Edit action with bill parity — drafts
 // edit in place; pending_approval and approved-unposted Edit recalls to
 // draft behind a visible confirm; posted Edits correct via the dedicated
 // endpoint. These tests mount the real ExpenseDrawer under jsdom and drive

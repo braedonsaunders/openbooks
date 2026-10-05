@@ -5,7 +5,7 @@ import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revisi
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
- * Recall eligibility for an expense report (F-user-003): a pending_approval
+ * Recall eligibility for an expense report: a pending_approval
  * or approved-but-unposted report is editable via recall — Edit cancels the
  * open gates and returns it to draft. Only the submitter (or document
  * author for legacy rows with no recorded submitter) or an org admin may

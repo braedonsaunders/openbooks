@@ -813,7 +813,7 @@ export async function payRunReadiness(
   `));
   // Both period blockers resolve on the periods setup screen (generate the
   // missing period, or reopen the closed one) — the readiness panel promises
-  // every item links to where it is fixed (F-t08-005).
+  // every item links to where it is fixed.
   if (!lock.rows[0]) flag("blocker", "period.missing", [], { detail: run.pay_date, href: "/admin/setup/period-close" });
   else if (lock.rows[0].state !== "open") {
     flag("blocker", "period.closed", [], { detail: lock.rows[0].name, href: "/admin/setup/period-close" });
@@ -2026,7 +2026,7 @@ export async function payRunFunding(
   // primary posting book, exactly the banking roster's balance leg
   // (web/lib/module-home/banking.ts) and the GL summary. Reading posted-only
   // counted live reversal legs while ignoring the voided originals they
-  // negate, so a voided transfer haunted funding (F-t05-004: 1010 at -$5,000
+  // negate, so a voided transfer haunted funding (1010 at -$5,000
   // beside the roster's $0.00, 1000 $2,500 apart) with no journal entry to
   // explain the gap — because the explaining entries were the reversed ones
   // this query excluded. A secondary book's adjustments must not inflate

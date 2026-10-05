@@ -11,7 +11,7 @@ import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type Scra
 /**
  * Pay-run funding balances must read the ledger like every other surface.
  *
- * F-t05-004: the pay-run Funding panel showed 1010 at -$5,000.00 while the
+ * The pay-run Funding panel showed 1010 at -$5,000.00 while the
  * banking roster showed $0.00 (and 1000 $2,500 apart) — a voided transfer
  * whose reversal the funding query counted while ignoring the voided
  * original it negates. The funding lateral read `status = 'posted'` with no
@@ -100,7 +100,7 @@ async function fundingBankBalance(org: ScratchOrg, documentId: string): Promise<
   return account.balance;
 }
 
-test("funding nets a voided transfer instead of counting only its reversal (F-t05-004)", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("funding nets a voided transfer instead of counting only its reversal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Payroll controller", "admin");

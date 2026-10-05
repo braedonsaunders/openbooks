@@ -115,7 +115,7 @@ export function buildNativeFromBC(
   }
   const base = {
     sourceRef,
-    // F-t12-004: without this the writer falls back to sourceRef, so the
+    // Without this the writer falls back to sourceRef, so the
     // invoice list renders the internal "salesInvoice:<uuid>" as the number.
     documentNumber: t.number ?? null,
     posting: true,

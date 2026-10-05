@@ -158,7 +158,7 @@ test('submitting a line-less draft is refused with budget_requires_lines', async
 })
 
 /**
- * F-coord-003: a submitter holding budgets.approve must not approve their own
+ * A submitter holding budgets.approve must not approve their own
  * budget — the document and close paths both refuse self-approval, and the
  * budget path is the outlier. The refusal names the reason; a different
  * approver can still decide the same budget.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { displayListViewName } from './display.ts'
 
-// F-x6-001 item 2: the provisioned baseline view row is seeded in English
+// The provisioned baseline view row is seeded in English
 // ("Default view"), which shadowed the translated views.defaultName fallback
 // so every list switcher read "Vue Default view". An unrenamed baseline
 // renders as the translated system default; a renamed row keeps its name.

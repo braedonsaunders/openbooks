@@ -64,7 +64,7 @@ export interface ExpenseReportsDrawer {
   segments: unknown
   canSubmit: boolean
   canPost: boolean
-  /** The open report is recallable to draft by this viewer (F-user-003). */
+  /** The open report is recallable to draft by this viewer. */
   canRecall: boolean
   layout: unknown
   closeHref: string
@@ -149,7 +149,7 @@ export async function loadExpenseReports(
         })
       : null
 
-  // F-user-003: recall eligibility (submitter-or-admin, void-free) is
+  // Recall eligibility (submitter-or-admin, void-free) is
   // shared with the related-transaction drawer; the actions route
   // re-checks authoritatively.
   const canRecall = canRecallExpenseReport(

@@ -293,7 +293,7 @@ export const ITEM_MISSING_RNB_ACCOUNT = 'ITEM_MISSING_RNB_ACCOUNT'
 /**
  * Machine-readable code for a fulfillment/receipt refused because a stocked
  * order line has no warehouse and the org has no single default to fall
- * back to (F-coord-004). Details carry the offending lineNumber and the
+ * back to. Details carry the offending lineNumber and the
  * active warehouse count the message was built from.
  */
 export const ORDER_LINE_WAREHOUSE_REQUIRED = 'ORDER_LINE_WAREHOUSE_REQUIRED'
@@ -798,7 +798,7 @@ export async function fulfillSalesOrderInTx(
   // Orders approved before line warehouses existed carry NULL warehouses
   // and are storage-immutable, so fulfillment would otherwise fail deep
   // inside the inventory kernel with a generic stock-location error.
-  // Refuse up front naming the line and the way forward (F-coord-004).
+  // Refuse up front naming the line and the way forward.
   if (options.inventory === 'apply') {
     const activeWarehouses = await activeStockLocations(orgId)
     const unwarehoused = missingOrderLineWarehouses(
@@ -1204,7 +1204,7 @@ export async function receivePurchaseOrderInTx(
 
     // Same legacy trap as the sales side: a NULL warehouse on a stocked
     // line would fail inside the inventory kernel with a generic error.
-    // Refuse up front naming the line and the way forward (F-coord-004).
+    // Refuse up front naming the line and the way forward.
     if (options.inventory === 'apply') {
       const receiptWarehouses = await activeStockLocations(orgId)
       const unwarehousedReceipt = missingOrderLineWarehouses(
@@ -1383,8 +1383,8 @@ export interface AssignOrderLineWarehouseInput {
 }
 
 /**
- * Assign a warehouse to one line of an approved-but-unfulfilled order
- * (F-coord-004). Orders approved before line warehouses existed carry NULL
+ * Assign a warehouse to one line of an approved-but-unfulfilled order.
+ * Orders approved before line warehouses existed carry NULL
  * warehouses and their lines are storage-immutable (migration 0034), so
  * fulfillment could never name a location and failed closed with no way
  * forward. Setting the warehouse changes no posted amount — it only routes

@@ -780,7 +780,7 @@ export async function runDepreciation(
 
   // A run that posts nothing must still say what it ran for and what is
   // next: a mid-period run otherwise answers all-zero counters with an empty
-  // problems list while a planned line waits in the open period (F-t07-005).
+  // problems list while a planned line waits in the open period.
   // Same scope as the due list above, minus the ended-period filter.
   if (result.posted === 0 && result.recorded === 0) {
     const next = (await db.execute<{

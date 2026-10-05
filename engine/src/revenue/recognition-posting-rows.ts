@@ -8,7 +8,7 @@ import type { RevenueChangeBasis } from "./recognition-schedule-build.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
 
 /**
- * What remains genuinely unearned for one obligation on one book (F-w5-001).
+ * What remains genuinely unearned for one obligation on one book.
  *
  *   remaining = allocated − recognized(net of reversals) − credited-to-deferred
  *

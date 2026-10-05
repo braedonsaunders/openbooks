@@ -10,7 +10,7 @@ import type { PayrollRegionCoverage } from "./packs.ts";
 // pack to build the registry, and pack engines import THIS module, so a
 // runtime edge back would close a load-order-dependent cycle that crashes
 // with "Cannot access '<CC>_PAYROLL_PACK' before initialization" whenever a
-// pack is entered first (F-reg-003). The registry is handed in as data:
+// pack is entered first. The registry is handed in as data:
 // `PayrollPackRates` and `PayrollRegionCoverage` declarations resolved by the
 // caller, where the country is already known. Type-only imports are erased,
 // so they are safe.
@@ -167,7 +167,7 @@ export interface PayrollPackRates {
 //
 // `declaredPackRates()`, `packRates()` and `statutoryRateSlot()` used to live
 // here, reading the pack registry. A function whose whole job is "ask every
-// pack" belongs with the registry, so they moved to `packs.ts` (F-reg-003).
+// pack" belongs with the registry, so they moved to `packs.ts`.
 // What stays here takes the pack's declaration as a parameter instead.
 
 /** One slot of a handed-in rate declaration, or a refusal listing what it declares. */
@@ -276,7 +276,7 @@ export function canonicalStatutoryRateValues(
 export function statutoryRateProblem(input: {
   /**
    * The pack's rate declaration and region declaration, resolved by the
-   * caller where the country is already known (F-reg-003: this module must
+   * caller where the country is already known (this module must
    * not reach back into the registry for them).
    */
   rates: PayrollPackRates;
@@ -601,7 +601,7 @@ export function rateScopePointProblem(
 export async function upsertStatutoryRate(input: {
   orgId: string;
   actorId: string;
-  /** The pack's rate declaration, resolved by the caller (F-reg-003). */
+  /** The pack's rate declaration, resolved by the caller. */
   rates: PayrollPackRates;
   rateKey: string;
   region: string | null;
@@ -800,7 +800,7 @@ export interface StatutoryRateResolution {
  */
 export async function resolveStatutoryRates(
   orgId: string,
-  /** The pack's rate declaration, resolved by the caller (F-reg-003). */
+  /** The pack's rate declaration, resolved by the caller. */
   pack: PayrollPackRates,
   taxYear: number,
   /** ISO pay date the resolution is as-of; null reads the current rows. */

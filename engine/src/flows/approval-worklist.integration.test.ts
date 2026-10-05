@@ -125,7 +125,7 @@ async function seedPendingBudget(
 }
 
 /**
- * F-t13-005: a budget submitted through the direct maker/checker path creates
+ * A budget submitted through the direct maker/checker path creates
  * no flow gate, so the approvals inbox (which reads this union) showed an
  * empty worklist while the budget waited. Pending scenarios must appear for
  * approvers — never for the submitter, never twice when a gate does exist.

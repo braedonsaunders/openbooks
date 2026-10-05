@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-user-003: an expense report that is pending_approval or approved-but-
+// An expense report that is pending_approval or approved-but-
 // unposted must be editable — Edit cancels the open gates and returns the
 // report to draft (submitter or admin) behind a visible confirm. The server
 // half is the `recall` action on /api/expenses/actions.

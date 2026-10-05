@@ -80,7 +80,7 @@ function validateEmailConfigFields(raw: PlainEmailConfig | RawEmailConfig, requi
   if (!requireComplete) return
   // Presence messages read correctly whether the save enables delivery or
   // merely stages a provider: a selected provider must be sendable-shaped
-  // even while disabled (F-t12-002), so no "before enabling" suffix here.
+  // even while disabled, so no "before enabling" suffix here.
   if (!raw.provider) throw new Error('Select an email provider before enabling email delivery.')
   if (!raw.fromEmail) throw new Error('Enter a From email address to save this provider configuration.')
   if (raw.provider === 'smtp' && !raw.smtpHost) throw new Error('Enter an SMTP host to save this provider configuration.')

@@ -34,7 +34,7 @@ test("inherited Sales placements move to Customers without overriding company ch
   assert.deepEqual(reconcileNavConfig(result), result, 'correction must be idempotent');
 });
 
-// F-t11-012 follow-up: findings persisted before the pack fix carry the
+// Findings persisted before the pack fix carry the
 // hand-built "/ar/cockpit" href, which 404s. Stored hrefs resolve through
 // the registry at render time so old findings heal without a backfill.
 test("stored legacy AR cockpit href resolves to the registry ar href", () => {

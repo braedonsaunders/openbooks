@@ -15,7 +15,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * F-w5-001: revenue re-inflated after a credit memo.
+ * Revenue re-inflated after a credit memo.
  *
  * An invoice carrying a recognition rule cannot be voided (document-void
  * refuses and points at a cancellation workflow with no route), so the only
@@ -134,7 +134,7 @@ async function postInvoice(
  * Post a manual credit memo for `amount` whose income line debits
  * `debitAccountId` (deferred for unearned relief, income for a concession),
  * then apply it in full to the invoice. Mirrors the operator path from
- * F-w5-001: the memo is a standalone document settled against the invoice
+ * The memo is a standalone document settled against the invoice
  * through open-item application.
  */
 async function postAndApplyCredit(

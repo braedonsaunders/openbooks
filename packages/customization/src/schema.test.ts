@@ -460,7 +460,7 @@ test('the employee list gains directory columns with HRM on and drops them with 
   }
 })
 
-test('journal origin filter offers migration alongside the posting origins (F-t12-014)', () => {
+test('journal origin filter offers migration alongside the posting origins', () => {
   // Migration true-ups are GL-native journals visible with Origin=All, so
   // the Origin dropdown must offer Migration as an explicit choice too.
   const journal = getRecordType('journal')
@@ -512,7 +512,7 @@ test('custom-field list filters are linted instead of skipped', () => {
 })
 
 test('the default check form carries an optional vendor payee', () => {
-  // F-t05-008: the standalone check form had no payee field although the
+  // The standalone check form had no payee field although the
   // record model (doc.party_id) and the posting rule both support one. The
   // payee stays optional — anonymous expense checks remain valid.
   const check = getRecordType('check')

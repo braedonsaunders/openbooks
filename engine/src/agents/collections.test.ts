@@ -127,7 +127,7 @@ test("overdue findings rank the call list and keep exact money", async () => {
   assert.equal(only.summary.callListSize, 1, "below-floor balances never join the call list");
   assert.match(String(only.summary.reminderDraft), /Big Debtor/);
   assert.match(String(only.summary.reminderDraft), /5234\.5678/);
-  // F-t11-012: the evidence source link resolves through the nav registry —
+  // The evidence source link resolves through the nav registry —
   // never a hand-built path ("/ar/cockpit" 404s; the cockpit is the `ar` entry).
   assert.equal(only.summary.href, MODULE_BY_KEY.get("ar")?.href);
   assert.equal(only.summary.href, "/ar");

@@ -302,7 +302,7 @@ export async function previewRevenueRecognition(
       skipDetail = row.period_name;
       amount = "0";
     } else if (cmp(row.planned, "0") > 0) {
-      // The same unearned ceiling the run applies (F-w5-001), read-only.
+      // The same unearned ceiling the run applies, read-only.
       const cap = await recognitionUnearnedRemaining(db, {
         orgId,
         obligationId: row.obligation_id,

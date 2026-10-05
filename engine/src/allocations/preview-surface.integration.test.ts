@@ -18,9 +18,9 @@ import { postProjectGlEntry } from "../projects/recognition.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 // ---------------------------------------------------------------------------
-// F-t06-017: preview fail-closed errors must be typed user errors (422), not
+// Preview fail-closed errors must be typed user errors (422), not
 // untyped throws (500). The tester's manual-table driver had no addable
-// values (F-t06-016), so the vector resolved empty and the preview died with
+// values, so the vector resolved empty and the preview died with
 // a plain Error that the route could only 500 — and the UI swallowed.
 // ---------------------------------------------------------------------------
 
@@ -71,8 +71,8 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      // Pool has postings; the manual driver has no values (F-t06-016 left it
-      // unfillable), so the tester hit the empty-vector fail-closed throw.
+      // Pool has postings; the manual driver has no values (free-text
+      // entry once left it unfillable), so the tester hit the empty-vector fail-closed throw.
       await postProjectGlEntry({
         orgId: org.orgId,
         actorId,

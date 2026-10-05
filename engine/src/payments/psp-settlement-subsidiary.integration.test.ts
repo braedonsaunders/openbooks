@@ -107,7 +107,7 @@ test(
 );
 
 test(
-  "a single-entity org posts a subsidiary-less draft to the root (F-t06-004)",
+  "a single-entity org posts a subsidiary-less draft to the root",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -139,7 +139,7 @@ test(
 );
 
 test(
-  "import refuses malformed, foreign, and inactive subsidiaries (F-t06-004)",
+  "import refuses malformed, foreign, and inactive subsidiaries",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();

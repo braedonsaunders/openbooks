@@ -72,7 +72,7 @@ export interface PeriodRunDeps {
 }
 
 /**
- * User-facing run-computation failures (F-t06-017). Every fail-closed throw
+ * User-facing run-computation failures. Every fail-closed throw
  * on the preview path — missing records, inactive/mismatched configuration,
  * empty pools and empty driver vectors — carries one of these codes so API
  * routes can answer 404/422 with the message instead of an untyped 500 the

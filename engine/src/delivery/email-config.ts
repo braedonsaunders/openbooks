@@ -192,7 +192,7 @@ export async function saveOrgEmailConfig(
     }
 
     // A selected provider is staged to send even while disabled, so its
-    // identifying fields must be present on every save (F-t12-002). Only a
+    // identifying fields must be present on every save. Only a
     // fully cleared provider (unconfigured) may be incomplete; the
     // credential itself is required at enable time, not before.
     validateStoredEmailConfig(next, { requireComplete: next.enabled === true || next.provider !== undefined });

@@ -59,7 +59,7 @@ import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
  */
 
 /**
- * Stable machine-readable refusal reason (F-t06-026). Surfaces map the code
+ * Stable machine-readable refusal reason. Surfaces map the code
  * (localized copy, retry policy) while the message stays the user-language
  * explanation. New refusal sites must pick the narrowest fitting code, never
  * the default.

@@ -47,7 +47,7 @@ async function seedUser(orgId: string, userId: string): Promise<void> {
 }
 
 /**
- * F-user-002 server half: deleting a conversation must persist — a list
+ * Deleting a conversation must persist — a list
  * refetch afterwards (the sidebar's switch-chat fetch) must not return it.
  */
 test("delete persists: the thread is absent from the next list fetch", DB_ONLY, async () => {

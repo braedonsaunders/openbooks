@@ -2037,7 +2037,7 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
       withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)),
       /GL is closed for this period/,
     );
-    // F-t06-026: the refusal carries the typed code the close task persists.
+    // The refusal carries the typed code the close task persists.
     const closedErr = await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)).then(
       () => null,
       (e: unknown) => e,
@@ -2349,7 +2349,7 @@ test("ownership preserves cutoff balances across a later reversal and restoratio
   } finally { await dropScratchOrg(org.orgId); }
 });
 
-test("consolidation without an elimination subsidiary refuses typed not-configured (F-t06-026)", { skip: !DB }, async () => {
+test("consolidation without an elimination subsidiary refuses typed not-configured", { skip: !DB }, async () => {
   // The t06 close-run shape: subsidiaries exist but no elimination
   // subsidiary and no ownership chain — "Run consolidation" must refuse
   // with a typed reason the task persists, never a bare message.
@@ -2366,7 +2366,7 @@ test("consolidation without an elimination subsidiary refuses typed not-configur
   } finally { await dropScratchOrg(org.orgId); }
 });
 
-test("rate derivation without a spot rate refuses typed rates-missing (F-t06-026)", { skip: !DB }, async () => {
+test("rate derivation without a spot rate refuses typed rates-missing", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;

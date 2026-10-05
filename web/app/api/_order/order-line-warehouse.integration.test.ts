@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-coord-004: approved orders predating the line warehouse picker carry
+// Approved orders predating the line warehouse picker carry
 // NULL warehouses and are storage-immutable, so fulfillment failed closed
 // with a generic kernel error and no way forward. Fulfillment now refuses
 // up front naming the line (ORDER_LINE_WAREHOUSE_REQUIRED), and a narrow

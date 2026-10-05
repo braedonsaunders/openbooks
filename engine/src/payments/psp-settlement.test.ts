@@ -216,7 +216,7 @@ test("Stripe payout with no transactions is rejected before any batch exists", (
   );
 });
 
-// F-t06-004: a transaction without `type` reached `r.type.includes(...)` and
+// A transaction without `type` reached `r.type.includes(...)` and
 // threw `TypeError: Cannot read properties of undefined (reading 'includes')`,
 // which the route surfaced as a 500 with no schema help. A missing type is a
 // client-shape refusal (422), naming the row so the payload can be repaired.
@@ -225,7 +225,7 @@ for (const [label, row] of [
   ["empty", { id: "ch_t06_1", type: "", amount: 250000, currency: "USD", fee: 7250, net: 242750 }],
   ["non-string", { id: "ch_t06_1", type: 7, amount: 250000, currency: "USD", fee: 7250, net: 242750 }],
 ] as const) {
-  test(`Stripe transaction with ${label} type is refused with a row-naming 422, never a TypeError (F-t06-004)`, () => {
+  test(`Stripe transaction with ${label} type is refused with a row-naming 422, never a TypeError`, () => {
     assert.throws(
       () =>
         parseStripeBalanceTransactions(

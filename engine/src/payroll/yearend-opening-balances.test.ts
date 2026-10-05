@@ -370,7 +370,7 @@ test("explicitly routed openings still seed exactly their own country's slips", 
 });
 
 test("a FICA tax withheld carry-in splits into W-2 boxes 4 and 6", () => {
-  // F-t08-010: the combined FICA carry-in reached no box, so an adopted
+  // The combined FICA carry-in reached no box, so an adopted
   // workforce filed $0 SS/Medicare tax. The split is wage-implied — Social
   // Security is 6.2% of FICA wages up to the wage base, Medicare is the
   // withheld remainder (Box 6 includes Additional Medicare) — so the two

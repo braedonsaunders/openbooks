@@ -13,7 +13,7 @@ import { MODULE_BY_KEY } from "../navigation/nav-registry.ts";
 /**
  * Evidence "open source" target, resolved through the nav registry — never a
  * hand-built path. A hand-built "/ar/cockpit" shipped here and 404d every
- * finding's source link (F-t11-012); the AR cockpit route is the registry's
+ * finding's source link; the AR cockpit route is the registry's
  * `ar` entry. Resolving (not copying) keeps the link honest if the route
  * ever moves: a dropped key yields no link rather than a dead one, and the
  * drawer already hides non-string hrefs.

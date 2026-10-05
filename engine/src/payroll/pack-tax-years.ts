@@ -23,7 +23,7 @@ export function payrollTaxYear(country: string, payDate: string): number {
  * `tax-year-math.ts` (re-exported above) so the MECHANISM stays testable
  * against jurisdictions no pack has yet — an HMRC 6-April year and an ATO
  * 1-July year — without the generic date module reaching back into this
- * registry (F-reg-003).
+ * registry.
  */
 
 /**
@@ -60,7 +60,7 @@ export function payrollRegionSupported(country: string, region: string): boolean
 // ---------------------------------------------------------------------------
 //
 // These lived in `tax-years.ts` and read this registry from there — the other
-// edge that closed the F-reg-003 cycle. They live here now; the pure coverage
+// edge that closed the registry load cycle. They live here now; the pure coverage
 // arithmetic (`payrollSupportedTaxYears`, `payrollDraftTaxYears`) stays in
 // `tax-years.ts` and takes the declaration as a parameter.
 

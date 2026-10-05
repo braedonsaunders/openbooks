@@ -42,7 +42,7 @@ async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: str
       if (error.code === 'not-found') return notFound("record")
       // Every 409 carries its machine-readable code: the drawer localizes
       // the refusal (period-not-closed names the close-the-period remedy)
-      // instead of swallowing it into a generic save failure (F-x5-001).
+      // instead of swallowing it into a generic save failure.
       if (error.code === 'already-filed') {
         return NextResponse.json({ code: error.code, error: 'filing is already filed' }, { status: 409 })
       }

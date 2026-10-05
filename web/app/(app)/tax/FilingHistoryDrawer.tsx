@@ -34,7 +34,7 @@ export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: Fi
 
   const [markError, setMarkError] = useState<string | null>(null)
 
-  /** Map a typed mark-filed refusal to localized copy (F-x5-001). */
+  /** Map a typed mark-filed refusal to localized copy. */
   function markFiledMessage(data: { code?: unknown; error?: unknown }): string {
     const code = typeof data.code === 'string' ? data.code : null
     if (code === 'period-not-closed') return t('errors.periodNotClosed')

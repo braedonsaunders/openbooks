@@ -180,7 +180,7 @@ test("property buildings table headers render French, never English", () => {
 
 test("property type and status cells resolve through the catalog", () => {
   const html = renderFr();
-  // F-v4-001: each row describes a building (un immeuble, masculine — the
+  // Each row describes a building (un immeuble, masculine — the
   // "Immeuble"/"Type"/"Statut" headers), so the type/status adjectives agree
   // masculine. The catalog previously carried the feminine forms.
   assert.ok(
@@ -206,11 +206,11 @@ test("property type and status cells resolve through the catalog", () => {
   assert.ok(html.includes("Non associé"), "unmapped location needs French copy");
 });
 
-// F-v4-001 twin (es): the same table-only catalog carried feminine agreement
+// The same table-only catalog carried feminine agreement
 // in Spanish too (Vendida/Activa/Inactiva, Otra) against the masculine row
 // noun (Inmueble/Tipo/Estado). The drawer catalog already agrees masculine,
 // so the table catalog flips masculine with no shared-gender split.
-test("spanish type and status cells agree masculine with the building noun (F-v4-001)", () => {
+test("spanish type and status cells agree masculine with the building noun", () => {
   const messagesEs = merge(enMessages, esMessages) as AbstractIntlMessages;
   const html = renderToStaticMarkup(
     <NextIntlClientProvider locale="es" messages={messagesEs} timeZone="UTC">

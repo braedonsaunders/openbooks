@@ -1,6 +1,6 @@
 /**
  * Canonical account-type universes — re-exported from the engine so posting
- * paths, consolidation and statements share one definition (F-u1-001 / P2).
+ * paths, consolidation and statements share one definition.
  * Importing from here keeps existing import sites working; the source of
  * truth is `@openbooks/engine/src/records/account-types.ts`.
  */

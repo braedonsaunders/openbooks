@@ -862,7 +862,7 @@ test(
   "employer burden: each component posts its own labeled expense debit",
   { skip: !DB },
   async () => {
-    // F-t08-014 residual: a committed US run merged every employer share
+    // A committed US run merged every employer share
     // into one burden debit labeled with the first component's name
     // ("Social Security (employer)" for the whole SS-ER + MED-ER aggregate).
     // Each component keeps its own labeled debit.

@@ -127,7 +127,7 @@ test("a standalone invoice for an inventory item without a costing profile canno
   }
 });
 
-// F-t07-003: INV-00001 posted $89 of revenue with no COGS because its line
+// INV-00001 posted $89 of revenue with no COGS because its line
 // carried no stock_location_id while the org had two active locations.
 // loadDocumentInventoryLines threw inside the post-commit effects drain, so
 // the journal committed and the posting_effects row sat at failed —

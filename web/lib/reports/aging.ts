@@ -147,7 +147,7 @@ export class AgingRatesUnavailableError extends Error {
  * Both readers (summary, detail) share this one rebuild — the basis toggle
  * only chooses which leg converts to the reporting currency.
  *
- * The rebuild admits only counterparty-side control lines (0171, F-p3-001):
+ * The rebuild admits only counterparty-side control lines (0171):
  * personal expense lines post open employee-receivable debits that still
  * carry the expense_report kind, and the legs below enter through abs() — so
  * without the account gate a personal balance would age on the AP side as
