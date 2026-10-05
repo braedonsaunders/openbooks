@@ -367,6 +367,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "channel_orders", columnName: "customer_name", transform: "faker_name" },
   { tableName: "channel_orders", columnName: "customer_email", transform: "faker_email" },
   { tableName: "channel_orders", columnName: "customer_address", transform: "null_out" },
+  // A portal magic link is keyed to the customer contact email it was sent
+  // to; the event detail can hold customer-written notes, so it is removed
+  // while the coded reason stays queryable.
+  { tableName: "customer_portal_links", columnName: "contact_email", transform: "faker_email" },
+  { tableName: "customer_portal_events", columnName: "detail", transform: "null_out" },
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the
