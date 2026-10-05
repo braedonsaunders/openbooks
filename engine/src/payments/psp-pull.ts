@@ -27,8 +27,9 @@ import {
 
 export type PullFetchFn = FetchFn;
 
-// fetch-redirect-audit: allow
-const defaultFetch: PullFetchFn = (url, init) => fetch(url, init);
+// The FetchFn type requires redirect: "error", and this default states it
+// again at the global fetch boundary so a caller omitting it still refuses.
+const defaultFetch: PullFetchFn = (url, init) => fetch(url, { ...init, redirect: "error" });
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
