@@ -12,11 +12,14 @@ export const navContributionSchema = z.object({
   /**
    * In-app absolute path. Modules link to their own pages: external URLs
    * are refused (a module is org UI, never an off-site shortcut), as are
-   * hrefs owned by native registry modules.
+   * hrefs owned by native registry modules. A path is a single leading
+   * slash followed by non-empty segments: `//host/...` is a
+   * protocol-relative URL that browsers resolve off-site, so an empty
+   * segment anywhere is refused.
    */
   href: z
     .string()
-    .regex(/^\/[A-Za-z0-9\-_/[\]().]*$/, "href must be an in-app absolute path")
+    .regex(/^(?:\/[A-Za-z0-9\-_[\]().]+)+\/?$|^\/$/, "href must be an in-app absolute path (a single leading slash, no empty segments)")
     .max(120).refine((href) => !NAV_MODULES.some((entry) => entry.href === href), "native navigation route"),
   /** Canonical workspace group the entry is appended to. */
   group: z.string().min(1).max(100).refine((key) => NAV_GROUP_BY_KEY.has(key as never), "unknown navigation group"),
