@@ -1,6 +1,8 @@
 {
   "list": {
     "title": "Facturas de cliente",
+    "cashTitle": "Ventas en efectivo",
+    "cashDescription": "Recibos pagados al momento y reembolsos — dinero en caja, sin cuentas por cobrar.",
     "description": "Facturas y notas de crédito de cliente — sus cuentas por cobrar: borrador → aprobación → contabilizadas a través del kernel.",
     "searchPlaceholder": "Buscar facturas, notas de crédito, clientes, referencias…",
     "emptyTitle": "Aún no hay facturas de cliente",
@@ -21,7 +23,27 @@
     "newCredit": "Nueva nota de crédito",
     "submitForApproval": "Enviar para aprobación"
   },
-  "drawer": {
+    "tenders": {
+    "title": "Formas de pago",
+    "tenderedOf": "Cobrado {tendered} de {total}",
+    "balanced": "Cuadrado",
+    "unbalanced": "Descuadrado",
+    "help": "Cómo se pagó esta venta. Deben sumar el total del documento — la contabilización rechaza cualquier diferencia.",
+    "method": "Medio",
+    "account": "Cuenta",
+    "accountPlaceholder": "Cuenta transitoria o bancaria",
+    "amount": "Importe",
+    "reference": "Referencia",
+    "referencePlaceholder": "Autorización o resguardo",
+    "remove": "Quitar",
+    "add": "Añadir forma de pago",
+    "emptyHint": "Añade al menos una forma de pago antes de contabilizar.",
+    "refundAction": "Reembolsar",
+    "postTitle": "¿Contabilizar este recibo?",
+    "postBody": "{number}: recibir {total}.\n{tenders}",
+    "kinds": { "cash": "Efectivo", "card": "Tarjeta", "bank": "Banco" }
+  },
+"drawer": {
     "editingHint": "Editando — Guarde para aplicar los cambios",
     "viewGlImpact": "Ver impacto en el libro mayor",
     "dateLabel": "Fecha de la factura",

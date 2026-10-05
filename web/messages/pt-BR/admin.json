@@ -772,6 +772,20 @@
       "november": "Novembro",
       "december": "Dezembro"
     },
+    "cashSales": {
+      "title": "Padrões de caixa",
+      "description": "Contra qual cliente vão as vendas de balcão sem atribuição e quais contas precarregam os pagamentos.",
+      "customerPlaceholder": "Escolher cliente de balcão…",
+      "customerSearchPlaceholder": "Buscar clientes…",
+      "accountPlaceholder": "Conta transitória ou bancária…",
+      "accountSearchPlaceholder": "Buscar contas…",
+      "fields": {
+        "walkInCustomer": { "label": "Cliente de balcão", "hint": "Vendas sem cliente nominal vão contra este cliente." },
+        "defaultCashAccountId": { "label": "Conta de dinheiro padrão", "hint": "Pré-preenche o dinheiro em vendas novas." },
+        "defaultCardAccountId": { "label": "Conta de cartão padrão", "hint": "Pré-preenche o cartão em vendas novas." },
+        "defaultBankAccountId": { "label": "Conta bancária padrão", "hint": "Pré-preenche a transferência em vendas novas." }
+      }
+    },
     "controlAccounts": {
       "title": "Contas de controle",
       "description": "As contas do livro-razão pelas quais os subrazões e impostos lançam. Apenas contas lançáveis (não sintéticas) aparecem.",

@@ -27,7 +27,7 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled, ordersEnabled, expensesEnabled, projectsEnabled, assetsEnabled, feedbackConfigured] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled, ordersEnabled, expensesEnabled, projectsEnabled, assetsEnabled, cashSalesEnabled, feedbackConfigured] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
@@ -42,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isFeatureEnabled(authz.user.orgId, 'expenses'),
     isFeatureEnabled(authz.user.orgId, 'projects'),
     isFeatureEnabled(authz.user.orgId, 'fixedAssets'),
+    isFeatureEnabled(authz.user.orgId, 'cashSales'),
     // Installation-level, not a tenant feature: the operator configures one
     // issue destination for the whole deployment (web/lib/feedback/config.ts).
     isFeedbackReady(),
@@ -108,6 +109,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             projects: can(authz, 'projects.manage') && projectsEnabled,
             assets: can(authz, 'assets.manage') && assetsEnabled,
             orders: ordersEnabled,
+            cashSales: can(authz, 'cash_sales.create') && cashSalesEnabled,
           }}
           canReadParties={can(authz, 'parties.read')}
           canManageParties={can(authz, 'parties.manage')}

@@ -75,6 +75,8 @@
     "items": {
       "invoice": "Ausgangsrechnung",
       "creditMemo": "Gutschrift",
+      "cashSale": "Barverkauf",
+      "cashRefund": "Bar-Erstattung",
       "estimate": "Angebot",
       "salesOrder": "Kundenauftrag",
       "customerPayment": "Kundenzahlung",

@@ -1,6 +1,8 @@
 {
   "list": {
     "title": "发票",
+    "cashTitle": "现金销售",
+    "cashDescription": "收款时即付清的销售小票与退款 — 现金入库，不经过应收账款。",
     "description": "客户发票与贷项通知单——您的应收账款：草稿 → 审批 → 通过内核过账。",
     "searchPlaceholder": "搜索发票、贷项、客户、参考号……",
     "emptyTitle": "暂无发票",
@@ -21,7 +23,27 @@
     "newCredit": "新建客户贷项",
     "submitForApproval": "提交审批"
   },
-  "drawer": {
+    "tenders": {
+    "title": "结算方式",
+    "tenderedOf": "已收 {tendered}，共 {total}",
+    "balanced": "已平衡",
+    "unbalanced": "不平衡",
+    "help": "本次销售的收款方式。合计必须等于单据总额，过账会拒绝任何差额。",
+    "method": "方式",
+    "account": "科目",
+    "accountPlaceholder": "过渡或银行科目",
+    "amount": "金额",
+    "reference": "参考号",
+    "referencePlaceholder": "授权码或小票号",
+    "remove": "移除",
+    "add": "添加结算",
+    "emptyHint": "过账前请至少添加一种结算方式。",
+    "refundAction": "退款",
+    "postTitle": "过账这张小票？",
+    "postBody": "{number}：收款 {total}。\n{tenders}",
+    "kinds": { "cash": "现金", "card": "刷卡", "bank": "银行" }
+  },
+"drawer": {
     "editingHint": "编辑中——保存以应用更改",
     "viewGlImpact": "查看总账影响",
     "dateLabel": "发票日期",

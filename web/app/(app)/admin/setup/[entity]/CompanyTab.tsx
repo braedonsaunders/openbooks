@@ -7,6 +7,7 @@ import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
+import { readCashSalesSettings } from '../../../../../lib/company-settings'
 import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
 
 /**
@@ -18,7 +19,7 @@ import { SampleCompanyPicker } from '../../../../../components/sample-company-pi
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, vendorBillFlowConfigured] = ((await Promise.all([
+  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, cashSalesEnabled, vendorBillFlowConfigured, customers] = ((await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -31,7 +32,16 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
     isFeatureEnabled(orgId, 'revenueRecognition'),
     isFeatureEnabled(orgId, 'revenueContracts'),
     isFeatureEnabled(orgId, 'saasMetrics'),
+    isFeatureEnabled(orgId, 'cashSales'),
     hasVendorBillApprovalFlow(orgId),
+    db.execute(sql`
+      select p.id, p.display_name from parties p
+       where p.org_id = ${orgId} and p.is_active
+         and exists (
+           select 1 from customer_roles cr
+            where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
+         )
+       order by p.display_name limit 2000`),
   ])))
 
   const row = org.rows[0]
@@ -92,6 +102,17 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           controlAccounts: Object.fromEntries(
             CONTROL_ACCOUNT_ROLES.map((role) => [role, control[role] ?? '']),
           ),
+          cashSales: (() => {
+            const stored = readCashSalesSettings(
+              (settings.cashSales ?? {}) as Record<string, unknown>,
+            )
+            return {
+              walkInCustomerId: stored.walkInCustomerId ?? '',
+              defaultCashAccountId: stored.defaultCashAccountId ?? '',
+              defaultCardAccountId: stored.defaultCardAccountId ?? '',
+              defaultBankAccountId: stored.defaultBankAccountId ?? '',
+            }
+          })(),
         }}
         controlAccountRoles={CONTROL_ACCOUNT_ROLES}
         accounts={accountOptions}
@@ -101,6 +122,11 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         revenueRecognition={revenueRecognition}
         revenueContracts={revenueContracts}
         saasMetricsEnabled={saasMetricsEnabled}
+        cashSalesEnabled={cashSalesEnabled}
+        customers={(customers.rows as { id: string; display_name: string }[]).map((c) => ({
+          id: c.id,
+          label: c.display_name,
+        }))}
         vendorBillFlowConfigured={vendorBillFlowConfigured}
       />
       <SampleCompanyPicker />

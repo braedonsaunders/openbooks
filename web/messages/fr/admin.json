@@ -772,6 +772,20 @@
       "november": "Novembre",
       "december": "Décembre"
     },
+    "cashSales": {
+      "title": "Réglages de caisse par défaut",
+      "description": "Contre quel client passent les ventes au comptant anonymes, et quels comptes pré-remplissent les règlements.",
+      "customerPlaceholder": "Choisir le client comptoir…",
+      "customerSearchPlaceholder": "Rechercher des clients…",
+      "accountPlaceholder": "Compte d’attente ou bancaire…",
+      "accountSearchPlaceholder": "Rechercher des comptes…",
+      "fields": {
+        "walkInCustomer": { "label": "Client comptoir", "hint": "Les ventes sans client nommé passent contre ce client." },
+        "defaultCashAccountId": { "label": "Compte espèces par défaut", "hint": "Pré-remplit les espèces des ventes." },
+        "defaultCardAccountId": { "label": "Compte cartes par défaut", "hint": "Pré-remplit la carte des ventes." },
+        "defaultBankAccountId": { "label": "Compte bancaire par défaut", "hint": "Pré-remplit le virement des ventes." }
+      }
+    },
     "controlAccounts": {
       "title": "Comptes de contrôle",
       "description": "Les comptes du grand livre par lesquels les grands livres auxiliaires et les taxes sont comptabilisés. Seuls les comptes imputables (non sommaires) apparaissent.",

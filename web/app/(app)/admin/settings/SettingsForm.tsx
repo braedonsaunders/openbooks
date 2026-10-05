@@ -51,6 +51,20 @@ type Initial = {
   requireVendorBillApproval: boolean
   requireStockCountReview: boolean
   controlAccounts: Partial<Record<ControlAccountRole, string>>
+  cashSales?: {
+    walkInCustomerId: string
+    defaultCashAccountId: string
+    defaultCardAccountId: string
+    defaultBankAccountId: string
+  }
+}
+
+/** Blank till defaults: no walk-in customer and no account prefills. */
+const EMPTY_CASH_SALES = {
+  walkInCustomerId: '',
+  defaultCashAccountId: '',
+  defaultCardAccountId: '',
+  defaultBankAccountId: '',
 }
 
 // Month message keys under admin.settings.months, indexed 0–11.
@@ -69,6 +83,8 @@ export function SettingsForm({
   revenueRecognition = false,
   revenueContracts = false,
   saasMetricsEnabled = false,
+  cashSalesEnabled = false,
+  customers = [],
   vendorBillFlowConfigured,
 }: {
   initial: Initial
@@ -88,6 +104,10 @@ export function SettingsForm({
   revenueContracts?: boolean
   /** SaaS metrics definitions belong to the gated feature and stay stored when it is disabled. */
   saasMetricsEnabled?: boolean
+  /** Cash-sale till defaults belong to the gated feature and stay stored when it is disabled. */
+  cashSalesEnabled?: boolean
+  /** Active customers for the walk-in default picker. */
+  customers?: { id: string; label: string }[]
   /** Whether an enabled vendor-bill approval flow exists. The loader always
    *  resolves this; when false the Approvals card warns that bills release
    *  with no approver (or that submits will be refused once required). */
@@ -106,6 +126,7 @@ export function SettingsForm({
       billingsUsePreTaxSubtotal: true,
       customerCreditsReduceBillings: true,
     },
+    cashSales: initial.cashSales ?? { ...EMPTY_CASH_SALES },
   })
   // Save-attempt marker: the required error shows once a save is attempted
   // with a blank name and clears as soon as typing resumes
@@ -120,6 +141,15 @@ export function SettingsForm({
 
   const accountOptions: SelectOption[] = useMemo(
     () => accounts.map((a) => ({ value: a.id, label: a.label })),
+    [accounts],
+  )
+
+  // Till settlement accounts: bank and asset-clearing only — tenders never
+  // settle into receivables, payables, or income directly.
+  const settlementAccountOptions: SelectOption[] = useMemo(
+    () => accounts
+      .filter((a) => a.type === 'asset_bank' || a.type === 'asset_current_other')
+      .map((a) => ({ value: a.id, label: a.label })),
     [accounts],
   )
 
@@ -146,19 +176,21 @@ export function SettingsForm({
       return
     }
     setSaving(true)
-    const { fairValueRangePolicy, contractCreation, saasMetrics, ...rest } = form
+    const { fairValueRangePolicy, contractCreation, saasMetrics, cashSales, ...rest } = form
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       // The vendor-bill approval requirement is a plain org boolean with no
       // feature fence — it always travels. The fair-value policy stays gated
-      // on Revenue Recognition above, and contract creation on scoped revenue
-      // contracts; either off omits its field so the stored choice survives.
+      // on Revenue Recognition above, contract creation on scoped revenue
+      // contracts, and the till defaults on Cash Sales; any of them off omits
+      // its field so the stored choice survives.
       body: JSON.stringify({
         ...rest,
         ...(revenueRecognition ? { fairValueRangePolicy } : {}),
         ...(revenueContracts ? { contractCreation } : {}),
         ...(saasMetricsEnabled ? { saasMetrics } : {}),
+        ...(cashSalesEnabled ? { cashSales } : {}),
       }),
     })
     setSaving(false)
@@ -505,6 +537,50 @@ export function SettingsForm({
         </CardContent>
       </Card>
 
+      {cashSalesEnabled ? <Card>
+        <CardHeader>
+          <CardTitle>{t('cashSales.title')}</CardTitle>
+          <CardDescription>{t('cashSales.description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="cash-walk-in" help={t('cashSales.fields.walkInCustomer.hint')}>{t('cashSales.fields.walkInCustomer.label')}</FieldLabel>
+            <SearchSelect
+              id="cash-walk-in"
+              value={form.cashSales.walkInCustomerId}
+              onChange={(v) => setForm((f) => ({ ...f, cashSales: { ...EMPTY_CASH_SALES, ...f.cashSales, walkInCustomerId: v ?? '' } }))}
+              options={customers.map((c) => ({ value: c.id, label: c.label }))}
+              placeholder={t('cashSales.customerPlaceholder')}
+              searchPlaceholder={t('cashSales.customerSearchPlaceholder')}
+              sheetTitle={t('cashSales.fields.walkInCustomer.label')}
+              clearable
+              emptyLabel={tCommon('labels.notSet')}
+              ariaLabel={t('cashSales.fields.walkInCustomer.label')}
+            />
+          </div>
+          {(['defaultCashAccountId', 'defaultCardAccountId', 'defaultBankAccountId'] as const).map((key) => {
+            const label = t(`cashSales.fields.${key}.label`)
+            return (
+              <div key={key} className="space-y-1.5">
+                <FieldLabel htmlFor={`cash-${key}`} help={t(`cashSales.fields.${key}.hint`)}>{label}</FieldLabel>
+                <SearchSelect
+                  id={`cash-${key}`}
+                  value={form.cashSales[key]}
+                  onChange={(v) => setForm((f) => ({ ...f, cashSales: { ...EMPTY_CASH_SALES, ...f.cashSales, [key]: v ?? '' } }))}
+                  options={settlementAccountOptions}
+                  placeholder={t('cashSales.accountPlaceholder')}
+                  searchPlaceholder={t('cashSales.accountSearchPlaceholder')}
+                  sheetTitle={label}
+                  clearable
+                  emptyLabel={tCommon('labels.notSet')}
+                  ariaLabel={label}
+                />
+              </div>
+            )
+          })}
+        </CardContent>
+      </Card> : null}
+
       {/* Control accounts */}
       <Card>
         <CardHeader>
@@ -550,6 +626,7 @@ export function SettingsForm({
             billingsUsePreTaxSubtotal: true,
             customerCreditsReduceBillings: true,
           },
+          cashSales: initial.cashSales ?? { ...EMPTY_CASH_SALES },
         })}>
           {tCommon('actions.reset')}
         </Button>

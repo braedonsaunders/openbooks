@@ -75,6 +75,8 @@
     "items": {
       "invoice": "发票",
       "creditMemo": "贷记通知单",
+      "cashSale": "现金销售",
+      "cashRefund": "现金退款",
       "estimate": "报价单",
       "salesOrder": "销售订单",
       "customerPayment": "客户付款",

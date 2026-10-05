@@ -75,6 +75,8 @@
     "items": {
       "invoice": "請求書",
       "creditMemo": "クレジットメモ",
+      "cashSale": "現金売上",
+      "cashRefund": "現金返金",
       "estimate": "見積",
       "salesOrder": "受注",
       "customerPayment": "得意先支払",

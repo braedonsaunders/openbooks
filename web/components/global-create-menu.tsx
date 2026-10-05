@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
+  Banknote,
   Building2,
   ClipboardList,
   Contact,
@@ -13,6 +14,7 @@ import {
   Package,
   Plus,
   Receipt,
+  RotateCcw,
   ScrollText,
   Send,
   ShoppingCart,
@@ -26,6 +28,8 @@ import { toast } from 'sonner'
 export interface GlobalCreatePermissions {
   accountsReceivable: boolean
   accountsPayable: boolean
+  /** Cash-sales create grant + the Cash Sales switch (absent = hidden). */
+  cashSales?: boolean
   journal: boolean
   customerPayments: boolean
   vendorPayments: boolean
@@ -41,6 +45,8 @@ export interface GlobalCreatePermissions {
 type CreateKey =
   | 'invoice'
   | 'creditMemo'
+  | 'cashSale'
+  | 'cashRefund'
   | 'estimate'
   | 'salesOrder'
   | 'customerPayment'
@@ -79,6 +85,8 @@ interface CreateAction {
 const ACTIONS: CreateAction[] = [
   { key: 'invoice', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FilePlus2, endpoint: '/api/documents/draft', body: { kind: 'customer_invoice' }, destination: (id) => `/ar/invoices?doc=${id}&mode=edit` },
   { key: 'creditMemo', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'customer_credit' }, destination: (id) => `/ar/invoices?doc=${id}&mode=edit` },
+  { key: 'cashSale', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: Banknote, endpoint: '/api/documents/draft', body: { kind: 'cash_sale' }, destination: (id) => `/cash-sales?doc=${id}&mode=edit` },
+  { key: 'cashRefund', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: RotateCcw, endpoint: '/api/documents/draft', body: { kind: 'cash_refund' }, destination: (id) => `/cash-sales?doc=${id}&mode=edit` },
   { key: 'estimate', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: ClipboardList, endpoint: '/api/estimates/draft', destination: (id) => `/estimates?estimate=${id}&mode=edit` },
   { key: 'salesOrder', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: Send, endpoint: '/api/sales-orders/draft', destination: (id) => `/sales-orders?order=${id}&mode=edit` },
   { key: 'customerPayment', group: 'sales', enabled: (p) => p.customerPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'customer_payment' }, destination: (id) => `/receipts?payment=${id}&mode=edit` },

@@ -75,6 +75,8 @@
     "items": {
       "invoice": "Fatura",
       "creditMemo": "Memorando de crédito",
+      "cashSale": "Venda à vista",
+      "cashRefund": "Reembolso à vista",
       "estimate": "Orçamento",
       "salesOrder": "Pedido de venda",
       "customerPayment": "Pagamento de cliente",

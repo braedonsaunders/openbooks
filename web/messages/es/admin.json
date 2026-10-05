@@ -772,6 +772,20 @@
       "november": "Noviembre",
       "december": "Diciembre"
     },
+    "cashSales": {
+      "title": "Valores de caja por defecto",
+      "description": "Contra qué cliente se contabilizan las ventas sin atribuir y qué cuentas precargan las formas de pago.",
+      "customerPlaceholder": "Elegir cliente de mostrador…",
+      "customerSearchPlaceholder": "Buscar clientes…",
+      "accountPlaceholder": "Cuenta transitoria o bancaria…",
+      "accountSearchPlaceholder": "Buscar cuentas…",
+      "fields": {
+        "walkInCustomer": { "label": "Cliente de mostrador", "hint": "Las ventas sin cliente nominal van contra este cliente." },
+        "defaultCashAccountId": { "label": "Cuenta de efectivo por defecto", "hint": "Pre-rellena el efectivo en ventas nuevas." },
+        "defaultCardAccountId": { "label": "Cuenta de tarjetas por defecto", "hint": "Pre-rellena la tarjeta en ventas nuevas." },
+        "defaultBankAccountId": { "label": "Cuenta bancaria por defecto", "hint": "Pre-rellena la transferencia en ventas nuevas." }
+      }
+    },
     "controlAccounts": {
       "title": "Cuentas de control",
       "description": "Las cuentas del libro mayor a través de las cuales contabilizan los auxiliares y los impuestos. Solo aparecen las cuentas imputables (no de resumen).",

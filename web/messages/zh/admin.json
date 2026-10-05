@@ -772,6 +772,20 @@
       "november": "十一月",
       "december": "十二月"
     },
+    "cashSales": {
+      "title": "收银默认值",
+      "description": "未记名柜台销售记到哪个客户，以及新建结算按渠道预填哪些科目。",
+      "customerPlaceholder": "选择散客…",
+      "customerSearchPlaceholder": "搜索客户…",
+      "accountPlaceholder": "过渡或银行科目…",
+      "accountSearchPlaceholder": "搜索科目…",
+      "fields": {
+        "walkInCustomer": { "label": "散客", "hint": "未记名柜台销售记到该客户名下。" },
+        "defaultCashAccountId": { "label": "默认现金科目", "hint": "新建销售预填现金结算。" },
+        "defaultCardAccountId": { "label": "默认刷卡过渡科目", "hint": "新建销售预填刷卡结算。" },
+        "defaultBankAccountId": { "label": "默认银行科目", "hint": "新建销售预填银行结算。" }
+      }
+    },
     "controlAccounts": {
       "title": "控制科目",
       "description": "各子分类账和税务过账所经过的总账科目。仅显示可过账（非汇总）科目。",
