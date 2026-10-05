@@ -2,15 +2,17 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
-import { add, cmp, div, mulDecimal, roundMoney } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { analyticsConfig } from "./config";
+import { analyticsConfig, ANALYTICS_CONFIG, type ConfigValuesOf } from "./config";
+import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope } from "./fiscal-buckets";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
 import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { getMoneyFormatter } from '../money-server'
 import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.ts';
+import { toChartNumber } from "../chart-number";
 
 /**
  * Spend Velocity — an implementation of the SpendVelocity dashboard
@@ -18,17 +20,27 @@ import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.t
  *
  * Source data mirrors the four spend transaction types exactly:
  * vendor_bill / expense_report / check (positive) net of vendor_credit —
- * as journal lines on expense/COGS accounts, grouped account × month
- * (primary) and vendor × month (drill-down). PO vs SO velocity feeds the
+ * as journal lines on expense/COGS accounts, grouped account × period
+ * (primary) and vendor × period (drill-down). PO vs SO velocity feeds the
  * Commitment Cliff; customer invoices feed revenue normalisation.
  *
- * Velocity engine (verbatim): monthly CAGR with a minimum-base guard;
- * acceleration = recent-half CAGR − early-half CAGR; trends classified by
- * high(15)/medium(5) thresholds. Detectors: statistical anomalies (z≥2.5σ),
- * boiling frog (small monotonic creep), zombie subscriptions (identical
- * recurring vendor totals), category fragmentation (many small txns),
- * concentration risk (HHI), seasonal patterns, commitment cliff.
- * Comprehensive health score = 100 − severity-weighted deductions, verbatim.
+ * Velocity engine: monthly CAGR with a minimum-base guard; acceleration =
+ * recent-half CAGR − early-half CAGR; trends classified by the configured
+ * high/medium thresholds. Detectors: statistical anomalies, boiling frog
+ * (small monotonic creep), zombie subscriptions (identical recurring vendor
+ * totals), category fragmentation (many small txns), concentration risk
+ * (HHI), seasonal patterns, commitment cliff. Health score = 100 −
+ * severity-weighted deductions. Every threshold below reads from the
+ * organization's own spendVelocity analytics config — no cutoff, weight,
+ * horizon or band is constant.
+ *
+ * Money travels as exact decimal strings in the presentation currency from
+ * translation to the last sum (single exact→Number crossings feed only the
+ * CAGR/z-score rate math and the charts). An unset optional money threshold
+ * disables the detector that needs it by name instead of inventing a value:
+ * with no fragmentation size cap the fragmentation detector reports itself
+ * unconfigured; with no minimum base the velocity engine scores every series
+ * from its first month and says so on the Configuration tab.
  *
  * HONEST GAP: the Shadow IT detector needs a line-level VENDOR on
  * expense-report lines (who the employee actually paid). openbooks expense
@@ -36,19 +48,7 @@ import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.t
  * detector is reported as unavailable rather than faked.
  */
 
-// ---- Default config -------------------------------------------------
-const CFG = {
-  velocityHighThreshold: 15,
-  velocityMediumThreshold: 5,
-  anomalyStdDevThreshold: 2.5,
-  topVendorsCount: 30,
-  boilingFrogMonths: 6,
-  boilingFrogMinIncrease: 3,
-  zombieMinMonths: 6,
-  fragmentationMinTxns: 20,
-  fragmentationMaxAvgSize: 500,
-  minBaseAmount: 100,
-};
+export type SpendVelocityConfig = ConfigValuesOf<"spendVelocity">;
 
 const SPEND_KINDS = ["vendor_bill", "expense_report", "check", "vendor_credit"] as const;
 
@@ -58,10 +58,10 @@ export interface VelocityRow {
   id: string;
   name: string;
   entityType: "account" | "vendor";
-  totalSpend: number;
-  totalBills: number;
-  totalExpenses: number;
-  totalOther: number;
+  totalSpend: string;
+  totalBills: string;
+  totalExpenses: string;
+  totalOther: string;
   billPct: number;
   expensePct: number;
   transactionCount: number;
@@ -69,9 +69,9 @@ export interface VelocityRow {
   velocity: number;
   acceleration: number;
   trend: "accelerating" | "high" | "rising" | "declining" | "stable" | "new";
-  latestSpend: number;
-  previousSpend: number;
-  avgMonthlySpend: number;
+  latestSpend: string;
+  previousSpend: string;
+  avgMonthlySpend: string;
   monthlyAmounts: number[];
   monthLabels: string[];
 }
@@ -80,8 +80,8 @@ export interface SVAnomaly {
   accountId: string;
   accountName: string;
   month: string;
-  amount: number;
-  expectedAmount: number;
+  amount: string;
+  expectedAmount: string;
   deviation: number;
   zScore: number;
   type: "spike" | "drop";
@@ -97,9 +97,9 @@ export interface SVInsight {
 
 export interface SpendVelocityData {
   period: { from: string; to: string; label: string };
-  config: typeof CFG;
+  config: SpendVelocityConfig;
   summary: {
-    totalSpend: number;
+    totalSpend: string;
     accountCount: number;
     avgVelocity: number;
     avgAcceleration: number;
@@ -108,11 +108,11 @@ export interface SpendVelocityData {
     highVelocityCount: number;
     healthScore: number;
     healthGrade: string;
-    billsTotal: number;
-    expensesTotal: number;
+    billsTotal: string;
+    expensesTotal: string;
     billsVelocity: number;
     expensesVelocity: number;
-    savingsPotential: number;
+    savingsPotential: string;
     totalAlerts: number;
   };
   accountVelocity: VelocityRow[];
@@ -120,24 +120,25 @@ export interface SpendVelocityData {
   anomalies: { summary: { count: number; spikeCount: number; dropCount: number; criticalCount: number }; items: SVAnomaly[] };
   monthlyTrends: {
     month: string;
-    totalAmount: number;
+    label: string;
+    totalAmount: string;
     transactionCount: number;
-    billAmount: number;
-    expenseAmount: number;
+    billAmount: string;
+    expenseAmount: string;
     vendorCount: number;
-    priorYearAmount: number;
-    yoyChange: number;
-    velocity: number;
+    priorYearAmount: string;
+    yoyChange: number | null;
+    velocity: number | null;
   }[];
   seasonal: {
-    patterns: { month: number; monthName: string; totalSpend: number; deviation: number; isHigh: boolean; isLow: boolean }[];
+    patterns: { month: number; monthName: string; totalSpend: string; deviation: number; isHigh: boolean; isLow: boolean }[];
     insights: { type: string; message: string }[];
   };
   boilingFrog: {
-    summary: { count: number; criticalCount: number; totalAnnualizedCreep: number };
+    summary: { count: number; criticalCount: number; totalAnnualizedCreep: string };
     accounts: {
       accountId: string; accountName: string; monotonicRatio: number; avgMonthlyIncrease: number; totalCreep: number;
-      startAmount: number; endAmount: number; monthCount: number; annualizedCreep: number; monthlyAmounts: number[];
+      startAmount: string; endAmount: string; monthCount: number; annualizedCreep: string; monthlyAmounts: number[];
       severity: "critical" | "warning" | "info";
     }[];
   };
@@ -146,12 +147,12 @@ export interface SpendVelocityData {
     accounts: (VelocityRow & { spendShare: number })[];
   };
   zombies: {
-    summary: { count: number; criticalCount: number; totalAnnualCost: number };
-    subscriptions: { vendorId: string; vendorName: string; amount: number; monthCount: number; annualCost: number; firstMonth: string; lastMonth: string; severity: "critical" | "warning" }[];
+    summary: { count: number; criticalCount: number; totalAnnualCost: string };
+    subscriptions: { vendorId: string; vendorName: string; amount: string; monthCount: number; annualCost: string; firstMonth: string; lastMonth: string; severity: "critical" | "warning" }[];
   };
   fragmentation: {
-    summary: { fragmentedCategories: number; totalFragmentedSpend: number };
-    categories: { accountId: string; accountName: string; totalSpend: number; transactionCount: number; avgTransactionSize: number; txnsPerMonth: number; fragmentationScore: number }[];
+    summary: { fragmentedCategories: number; totalFragmentedSpend: string; configured: boolean; reason: string };
+    categories: { accountId: string; accountName: string; totalSpend: string; transactionCount: number; avgTransactionSize: string; txnsPerMonth: number; fragmentationScore: number }[];
   };
   shadowIT: { available: false; reason: string };
   commitmentCliff: {
@@ -161,14 +162,14 @@ export interface SpendVelocityData {
   revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
   insights: SVInsight[];
   periodComparison: {
-    summary: { currentTotal: number; priorTotal: number; twoBackTotal: number; projectedTotal: number; changePct: number | null; priorLabel: string; twoBackLabel: string };
-    accounts: { accountId: string; accountName: string; currentAmount: number; priorAmount: number; twoBackAmount: number; changePct: number | null; projectedAmount: number; isNew: boolean; monthlyTrend: number[]; velocity: number; acceleration: number; trend: string }[];
+    summary: { currentTotal: string; priorTotal: string; twoBackTotal: string; projectedTotal: string; changePct: number | null; priorLabel: string; twoBackLabel: string };
+    accounts: { accountId: string; accountName: string; currentAmount: string; priorAmount: string; twoBackAmount: string; changePct: number | null; projectedAmount: string; isNew: boolean; monthlyTrend: number[]; velocity: number; acceleration: number; trend: string }[];
   };
   expenseAnalysis: {
-    summary: { expenseReportTotal: number; vendorBillTotal: number; topSpenderCount: number; categoryIncreaseTotal: number };
-    topSpenders: { employeeId: string; employeeName: string; totalSpend: number; priorSpend: number; reportCount: number; changePct: number }[];
-    categories: { categoryId: string; categoryName: string; currentAmount: number; priorAmount: number; changePct: number }[];
-    monthlyTrends: { month: string; expenseAmount: number; billAmount: number }[];
+    summary: { expenseReportTotal: string; vendorBillTotal: string; topSpenderCount: number; categoryIncreaseTotal: string };
+    topSpenders: { employeeId: string; employeeName: string; totalSpend: number; priorSpend: number; reportCount: number; changePct: number | null }[];
+    categories: { categoryId: string; categoryName: string; currentAmount: number; priorAmount: number; changePct: number | null }[];
+    monthlyTrends: { month: string; expenseAmount: string; billAmount: string }[];
   };
 }
 
@@ -181,28 +182,40 @@ function calculateCAGR(startValue: number, endValue: number, periods: number): n
   return Math.max(-100, Math.min(200, cagr));
 }
 
-function velocityCAGR(monthlyAmounts: number[], minBase = CFG.minBaseAmount): number {
+type VelocityEngine = Pick<SpendVelocityConfig, "velocityHighThreshold" | "velocityMediumThreshold" | "minBaseAmount">;
+const specDefaults = ANALYTICS_CONFIG.spendVelocity.defaults;
+const DEFAULT_VELOCITY_ENGINE: VelocityEngine = {
+  velocityHighThreshold: specDefaults.velocityHighThreshold,
+  velocityMediumThreshold: specDefaults.velocityMediumThreshold,
+  minBaseAmount: specDefaults.minBaseAmount,
+};
+
+/** An empty minimum base means no floor: every series scores from its first month. */
+function velocityCAGR(monthlyAmounts: number[], minBase: string): number {
   if (!monthlyAmounts || monthlyAmounts.length < 2) return 0;
   let start = monthlyAmounts[0]!;
   let periods = monthlyAmounts.length - 1;
   const end = monthlyAmounts[monthlyAmounts.length - 1]!;
-  if (start < minBase) {
-    for (let i = 0; i < monthlyAmounts.length - 1; i++) {
-      if (monthlyAmounts[i]! >= minBase) { start = monthlyAmounts[i]!; periods = monthlyAmounts.length - 1 - i; break; }
+  if (minBase !== "") {
+    const floor = Number(minBase);
+    if (start < floor) {
+      for (let i = 0; i < monthlyAmounts.length - 1; i++) {
+        if (monthlyAmounts[i]! >= floor) { start = monthlyAmounts[i]!; periods = monthlyAmounts.length - 1 - i; break; }
+      }
+      if (start < floor) return 0;
     }
-    if (start < minBase) return 0;
   }
   return calculateCAGR(start, end, periods);
 }
 
-export function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
+export function velocityAndAcceleration(amounts: number[], C: VelocityEngine = DEFAULT_VELOCITY_ENGINE): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
   let velocity = 0, acceleration = 0;
   let trend: VelocityRow["trend"] = "stable";
   if (amounts.length >= 2) {
-    velocity = velocityCAGR(amounts);
+    velocity = velocityCAGR(amounts, C.minBaseAmount);
     if (amounts.length >= 4) {
       const mid = Math.floor(amounts.length / 2);
-      acceleration = velocityCAGR(amounts.slice(mid)) - velocityCAGR(amounts.slice(0, mid));
+      acceleration = velocityCAGR(amounts.slice(mid), C.minBaseAmount) - velocityCAGR(amounts.slice(0, mid), C.minBaseAmount);
     }
     if (velocity > C.velocityHighThreshold) trend = acceleration > 0 ? "accelerating" : "high";
     else if (velocity > C.velocityMediumThreshold) trend = "rising";
@@ -247,20 +260,20 @@ export function getSpendVelocityComparisonWindows(from: string, to: string): Spe
 
 type SqlNumber = string | number | null;
 interface AccountSpendRow extends Record<string, unknown> {
-  account_id: string; account_name: string | null; month: string; month_num: number;
+  account_id: string; account_name: string | null; bucket: string; bucket_label: string | null; month_num: number;
   bill_amount: SqlNumber; expense_amount: SqlNumber; check_amount: SqlNumber; credit_amount: SqlNumber;
   total_amount: SqlNumber; transaction_count: SqlNumber; doc_ids: string[] | null; func: string | null; late: string | null;
 }
 interface VendorSpendRow extends Record<string, unknown> {
-  vendor_id: string; vendor_name: string; month: string; total_amount: SqlNumber; transaction_count: SqlNumber;
+  vendor_id: string; vendor_name: string; bucket: string; bucket_label: string | null; total_amount: SqlNumber; transaction_count: SqlNumber;
   doc_ids: string[] | null; func: string | null; late: string | null;
 }
 interface PriorYearRow extends Record<string, unknown> {
-  month_num: string; total_amount: SqlNumber; transaction_count: SqlNumber;
+  bucket: string; total_amount: SqlNumber; transaction_count: SqlNumber;
   doc_ids: string[] | null; func: string | null; late: string | null;
 }
 interface CommitmentRow extends Record<string, unknown> {
-  kind: string; month: string; amount: SqlNumber; func: string | null; late: string | null;
+  kind: string; bucket: string; amount: SqlNumber; func: string | null; late: string | null;
 }
 interface SpenderRow extends Record<string, unknown> {
   employee_id: string; employee_name: string; current_spend: SqlNumber; prior_spend: SqlNumber;
@@ -286,7 +299,8 @@ export async function spendVelocityData(
 ): Promise<SpendVelocityData> {
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
-  const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
+  const C = await analyticsConfig(orgId, "spendVelocity");
+  const buckets = await fiscalBucketScope(orgId);
 
   // Period windows for comparison (inclusive current and back-to-back prior).
   const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to);
@@ -307,6 +321,7 @@ export async function spendVelocityData(
     join documents d on d.id = e.source_document_id and d.org_id = e.org_id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+    ${fiscalBucketJoin(orgId, sql`e.posting_date`, buckets.useFiscal)}
     where l.org_id = ${orgId} and d.voided_at is null
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
@@ -318,11 +333,14 @@ export async function spendVelocityData(
   const [acctRows, vendRows, pyRows, poSoRows, plOpex, spenderRows, catRows, cmpRows] = await Promise.all([
     // 1. Monthly account spend split by transaction kind (PRIMARY). Legs are
     // stamped in their line entity's functional: aggregate per (account,
-    // month, functional) and translate below. Document counts ride
-    // array_agg unions so multi-line documents still count once.
+    // bucket, functional) and translate below. Document counts ride
+    // array_agg unions so multi-line documents still count once. Buckets are
+    // the org's fiscal periods when it runs a non-monthly calendar, else
+    // calendar months; the calendar month number rides along for seasonality.
     db.execute<AccountSpendRow>(sql`
       select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
-        to_char(e.posting_date, 'YYYY-MM') as month,
+        ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
+        ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
         extract(month from e.posting_date)::int as month_num,
         sum(l.amount) filter (where d.kind = 'vendor_bill') as bill_amount,
         sum(l.amount) filter (where d.kind = 'expense_report') as expense_amount,
@@ -333,12 +351,13 @@ export async function spendVelocityData(
         sub.base_currency as func,
         max(l.posting_date)::text as late
       ${spendBaseWithSubs(from, to)}
-      group by 1, 2, 3, 4, 5, 6, sub.base_currency
+      group by 1, 2, 3, 4, 5, 6, 7, sub.base_currency
     `),
     // 2. Monthly vendor/party spend (drill-down).
     db.execute<VendorSpendRow>(sql`
       select d.party_id as vendor_id, coalesce(p.display_name, 'Unknown') as vendor_name,
-        to_char(e.posting_date, 'YYYY-MM') as month,
+        ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
+        ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
         sum(l.amount) as total_amount,
         array_agg(distinct d.id) as doc_ids,
         sub.base_currency as func,
@@ -349,6 +368,7 @@ export async function spendVelocityData(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+      ${fiscalBucketJoin(orgId, sql`e.posting_date`, buckets.useFiscal)}
       where l.org_id = ${orgId} and d.voided_at is null
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
@@ -357,11 +377,12 @@ export async function spendVelocityData(
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
         and d.party_id is not null
-      group by 1, 2, 3, sub.base_currency
+      group by 1, 2, 3, 4, sub.base_currency
     `),
-    // 3. Prior-YEAR monthly totals for YoY.
+    // 3. Prior-YEAR buckets for YoY, keyed by the full bucket identity so a
+    // window longer than twelve months can never collide two Januarys.
     db.execute<PriorYearRow>(sql`
-      select to_char(e.posting_date, 'MM') as month_num, sum(l.amount) as total_amount,
+      select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket, sum(l.amount) as total_amount,
         array_agg(distinct d.id) as doc_ids, sub.base_currency as func,
         max(l.posting_date)::text as late
       ${spendBaseWithSubs(pyFrom, pyTo)}
@@ -371,9 +392,10 @@ export async function spendVelocityData(
     // transaction currency: translate txn→presentation directly at each
     // bucket's latest document date (same basis as the open-PO tile).
     db.execute<CommitmentRow>(sql`
-      select kind, to_char(document_date, 'YYYY-MM') as month, sum(total) as amount,
+      select kind, ${fiscalBucketKey(sql`document_date`, buckets.useFiscal)} as bucket, sum(total) as amount,
         currency as func, max(document_date)::text as late
       from documents
+      ${fiscalBucketJoin(orgId, sql`document_date`, buckets.useFiscal)}
       where org_id = ${orgId} and kind in ('purchase_order', 'sales_order') and voided_at is null
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
         and document_date >= ${from} and document_date <= ${to}
@@ -445,15 +467,18 @@ export async function spendVelocityData(
   // in presentation, so the whole velocity engine downstream — CAGR series,
   // detectors, YoY, cliff, comparisons — runs in one currency. Document
   // counts union across legs so multi-line documents still count once, and
-  // the old `having sum > 0` filters re-apply on merged month totals.
+  // the old `having sum > 0` filters re-apply on merged bucket totals.
   // Missing rate coverage fails closed.
+  const ZERO = "0";
   const asDate = (v: unknown, fallback: string): string => String(v ?? fallback).slice(0, 10);
   const unionIds = (...sets: (readonly string[] | null | undefined)[]): number =>
     new Set(sets.flatMap((s) => [...(s ?? [])])).size;
+  const bucketLabelOf = (bucket: string, label: string | null): string =>
+    label ?? (buckets.useFiscal ? bucket : strings.monthLabel(bucket.slice(0, 7)));
   const acctCtx = await flowRates(orgId, acctRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
   const acctMerged = new Map<string, AccountSpendRow>();
   for (const r of acctRows.rows) {
-    const key = `${r.account_id} ${r.month}`;
+    const key = `${r.account_id} ${r.bucket}`;
     const date = asDate(r.late, to);
     const tr = (v: SqlNumber): string => mulDecimal(String(v ?? 0), acctCtx.rateAt(r.func ?? null, date));
     const cur = acctMerged.get(key);
@@ -471,12 +496,12 @@ export async function spendVelocityData(
   const acctFinal: AccountSpendRow[] = [...acctMerged.values()].map((r) => ({
     ...r,
     transaction_count: unionIds(r.doc_ids),
-  })).filter((r) => Number(r.total_amount ?? 0) > 0);
+  })).filter((r) => cmp(String(r.total_amount ?? 0), ZERO) > 0);
 
   const vendCtx = await flowRates(orgId, vendRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
   const vendMerged = new Map<string, VendorSpendRow>();
   for (const r of vendRows.rows) {
-    const key = `${r.vendor_id} ${r.month}`;
+    const key = `${r.vendor_id} ${r.bucket}`;
     const date = asDate(r.late, to);
     const tr = (v: SqlNumber): string => mulDecimal(String(v ?? 0), vendCtx.rateAt(r.func ?? null, date));
     const cur = vendMerged.get(key);
@@ -490,12 +515,12 @@ export async function spendVelocityData(
   const vendFinal: VendorSpendRow[] = [...vendMerged.values()].map((r) => ({
     ...r,
     transaction_count: unionIds(r.doc_ids),
-  })).filter((r) => Number(r.total_amount ?? 0) > 0);
+  })).filter((r) => cmp(String(r.total_amount ?? 0), ZERO) > 0);
 
   const pyCtx = await flowRates(orgId, pyRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, pyTo) })));
   const pyMerged = new Map<string, PriorYearRow>();
   for (const r of pyRows.rows) {
-    const key = String(r.month_num);
+    const key = String(r.bucket);
     const date = asDate(r.late, pyTo);
     const cur = pyMerged.get(key);
     const translated = mulDecimal(String(r.total_amount ?? 0), pyCtx.rateAt(r.func ?? null, date));
@@ -506,39 +531,55 @@ export async function spendVelocityData(
       cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
     }
   }
-  const pyFinal: PriorYearRow[] = [...pyMerged.values()].map((r) => ({
-    ...r,
-    transaction_count: unionIds(r.doc_ids),
-  }));
+  const pyByBucket = new Map<string, { amount: string; txns: number }>();
+  for (const [key, r] of pyMerged) {
+    pyByBucket.set(key, { amount: String(r.total_amount ?? 0), txns: unionIds(r.doc_ids) });
+  }
+  // Prior-bucket lookup: the same calendar month a year earlier, or the same
+  // fiscal period number in the prior fiscal year. A missing prior bucket is
+  // unknown history, never zero.
+  const priorBucketKey = buckets.useFiscal
+    ? (() => {
+        const byPeriod = new Map(buckets.periods.map((p) => [`${p.fiscalYear}:${p.periodNumber}`, p.from]));
+        return (bucket: string): string | null => {
+          const cur = buckets.periods.find((p) => p.from === bucket);
+          if (!cur) return null;
+          return byPeriod.get(`${cur.fiscalYear - 1}:${cur.periodNumber}`) ?? null;
+        };
+      })()
+    : (bucket: string): string | null => addMonthsClamped(`${bucket}-01`, -12).slice(0, 7);
 
   // ---- account velocity (primary) -------------------------------------------
   interface AcctAgg {
-    id: string; name: string; months: { month: string; monthNum: number; amount: number; bill: number; expense: number; other: number; txns: number }[];
-    totalSpend: number; totalBills: number; totalExpenses: number; totalOther: number; txns: number;
+    id: string; name: string; buckets: { bucket: string; label: string; monthNum: number; amount: string; bill: string; expense: string; other: string; txns: number }[];
+    totalSpend: string; totalBills: string; totalExpenses: string; totalOther: string; txns: number;
   }
   const acctMap = new Map<string, AcctAgg>();
   for (const r of acctFinal) {
     let a = acctMap.get(r.account_id);
     if (!a) {
-      a = { id: r.account_id, name: r.account_name ?? `Account ${r.account_id}`, months: [], totalSpend: 0, totalBills: 0, totalExpenses: 0, totalOther: 0, txns: 0 };
+      a = { id: r.account_id, name: strings.displayAccountName(r.account_name, r.account_id), buckets: [], totalSpend: ZERO, totalBills: ZERO, totalExpenses: ZERO, totalOther: ZERO, txns: 0 };
       acctMap.set(r.account_id, a);
     }
-    const amount = Number(r.total_amount ?? 0);
-    const bill = Number(r.bill_amount ?? 0);
-    const expense = Number(r.expense_amount ?? 0);
-    const other = Number(r.check_amount ?? 0) - Number(r.credit_amount ?? 0);
-    a.months.push({ month: r.month, monthNum: Number(r.month_num), amount, bill, expense, other, txns: Number(r.transaction_count ?? 0) });
-    a.totalSpend += amount;
-    a.totalBills += bill;
-    a.totalExpenses += expense;
-    a.totalOther += other;
+    const amount = String(r.total_amount ?? 0);
+    const bill = String(r.bill_amount ?? 0);
+    const expense = String(r.expense_amount ?? 0);
+    const other = add(String(r.check_amount ?? 0), neg(String(r.credit_amount ?? 0)));
+    a.buckets.push({ bucket: r.bucket, label: bucketLabelOf(r.bucket, r.bucket_label), monthNum: Number(r.month_num), amount, bill, expense, other, txns: Number(r.transaction_count ?? 0) });
+    a.totalSpend = add(a.totalSpend, amount);
+    a.totalBills = add(a.totalBills, bill);
+    a.totalExpenses = add(a.totalExpenses, expense);
+    a.totalOther = add(a.totalOther, other);
     a.txns += Number(r.transaction_count ?? 0);
   }
 
-  const accountVelocity: VelocityRow[] = [...acctMap.values()].filter((a) => a.months.length > 0).map((a) => {
-    a.months.sort((x, y) => x.month.localeCompare(y.month));
-    const amounts = a.months.map((m) => m.amount);
+  const accountVelocity: VelocityRow[] = [...acctMap.values()].filter((a) => a.buckets.length > 0).map((a) => {
+    a.buckets.sort((x, y) => x.bucket.localeCompare(y.bucket));
+    // Rate math crosses into numbers once per bucket; every money figure
+    // above and below stays an exact decimal string.
+    const amounts = a.buckets.map((m) => toChartNumber(m.amount));
     const { velocity, acceleration, trend } = velocityAndAcceleration(amounts, C);
+    const total = toChartNumber(a.totalSpend);
     return {
       id: a.id,
       name: a.name,
@@ -547,81 +588,83 @@ export async function spendVelocityData(
       totalBills: a.totalBills,
       totalExpenses: a.totalExpenses,
       totalOther: a.totalOther,
-      billPct: a.totalSpend > 0 ? Math.round((a.totalBills / a.totalSpend) * 100) : 0,
-      expensePct: a.totalSpend > 0 ? Math.round((a.totalExpenses / a.totalSpend) * 100) : 0,
+      billPct: total > 0 ? Math.round((toChartNumber(a.totalBills) / total) * 100) : 0,
+      expensePct: total > 0 ? Math.round((toChartNumber(a.totalExpenses) / total) * 100) : 0,
       transactionCount: a.txns,
-      monthCount: a.months.length,
+      monthCount: a.buckets.length,
       velocity,
       acceleration,
       trend,
-      latestSpend: amounts[amounts.length - 1] ?? 0,
-      previousSpend: amounts.length > 1 ? amounts[amounts.length - 2]! : 0,
-      avgMonthlySpend: a.totalSpend / Math.max(1, a.months.length),
+      latestSpend: a.buckets[a.buckets.length - 1]?.amount ?? ZERO,
+      previousSpend: a.buckets.length > 1 ? a.buckets[a.buckets.length - 2]!.amount : ZERO,
+      avgMonthlySpend: div(a.totalSpend, String(Math.max(1, a.buckets.length))),
       monthlyAmounts: amounts,
-      monthLabels: a.months.map((m) => m.month),
+      monthLabels: a.buckets.map((m) => m.label),
     };
-  }).sort((x, y) => y.totalSpend - x.totalSpend);
+  }).sort((x, y) => cmp(y.totalSpend, x.totalSpend));
 
   // ---- vendor velocity (drill-down) ------------------------------------------
-  interface VendAgg { id: string; name: string; months: { month: string; amount: number; txns: number }[]; totalSpend: number; txns: number }
+  interface VendAgg { id: string; name: string; buckets: { bucket: string; label: string; amount: string; txns: number }[]; totalSpend: string; txns: number }
   const vendMap = new Map<string, VendAgg>();
   for (const r of vendFinal) {
     let v = vendMap.get(r.vendor_id);
-    if (!v) { v = { id: r.vendor_id, name: r.vendor_name, months: [], totalSpend: 0, txns: 0 }; vendMap.set(r.vendor_id, v); }
-    const amount = Number(r.total_amount ?? 0);
-    v.months.push({ month: r.month, amount, txns: Number(r.transaction_count ?? 0) });
-    v.totalSpend += amount;
+    if (!v) { v = { id: r.vendor_id, name: strings.displayPartyName(String(r.vendor_name)), buckets: [], totalSpend: ZERO, txns: 0 }; vendMap.set(r.vendor_id, v); }
+    const amount = String(r.total_amount ?? 0);
+    v.buckets.push({ bucket: r.bucket, label: bucketLabelOf(r.bucket, r.bucket_label), amount, txns: Number(r.transaction_count ?? 0) });
+    v.totalSpend = add(v.totalSpend, amount);
     v.txns += Number(r.transaction_count ?? 0);
   }
-  const allVendors = [...vendMap.values()].filter((v) => v.months.length > 0).map((v) => {
-    v.months.sort((x, y) => x.month.localeCompare(y.month));
-    const amounts = v.months.map((m) => m.amount);
+  const allVendors = [...vendMap.values()].filter((v) => v.buckets.length > 0).map((v) => {
+    v.buckets.sort((x, y) => x.bucket.localeCompare(y.bucket));
+    const amounts = v.buckets.map((m) => toChartNumber(m.amount));
     const { velocity, acceleration, trend } = velocityAndAcceleration(amounts, C);
     return {
       id: v.id, name: v.name, entityType: "vendor" as const,
-      totalSpend: v.totalSpend, totalBills: 0, totalExpenses: 0, totalOther: 0, billPct: 0, expensePct: 0,
-      transactionCount: v.txns, monthCount: v.months.length,
+      totalSpend: v.totalSpend, totalBills: ZERO, totalExpenses: ZERO, totalOther: ZERO, billPct: 0, expensePct: 0,
+      transactionCount: v.txns, monthCount: v.buckets.length,
       velocity, acceleration, trend,
-      latestSpend: amounts[amounts.length - 1] ?? 0,
-      previousSpend: amounts.length > 1 ? amounts[amounts.length - 2]! : 0,
-      avgMonthlySpend: v.totalSpend / Math.max(1, v.months.length),
-      monthlyAmounts: amounts, monthLabels: v.months.map((m) => m.month),
+      latestSpend: v.buckets[v.buckets.length - 1]?.amount ?? ZERO,
+      previousSpend: v.buckets.length > 1 ? v.buckets[v.buckets.length - 2]!.amount : ZERO,
+      avgMonthlySpend: div(v.totalSpend, String(Math.max(1, v.buckets.length))),
+      monthlyAmounts: amounts, monthLabels: v.buckets.map((m) => m.label),
     };
-  }).sort((x, y) => y.totalSpend - x.totalSpend);
+  }).sort((x, y) => cmp(y.totalSpend, x.totalSpend));
   const vendorVelocity = allVendors.slice(0, C.topVendorsCount);
 
   // ---- transaction-type velocity (bills vs expense reports) ------------------
-  const typeMonthly = new Map<string, { bill: number; expense: number }>();
+  const typeMonthly = new Map<string, { bill: string; expense: string }>();
   for (const a of acctMap.values()) {
-    for (const m of a.months) {
-      const t = typeMonthly.get(m.month) ?? { bill: 0, expense: 0 };
-      t.bill += m.bill; t.expense += m.expense;
-      typeMonthly.set(m.month, t);
+    for (const m of a.buckets) {
+      const t = typeMonthly.get(m.bucket) ?? { bill: ZERO, expense: ZERO };
+      t.bill = add(t.bill, m.bill); t.expense = add(t.expense, m.expense);
+      typeMonthly.set(m.bucket, t);
     }
   }
-  const typeMonths = [...typeMonthly.keys()].sort();
-  const billsSeries = typeMonths.map((m) => typeMonthly.get(m)!.bill);
-  const expSeries = typeMonths.map((m) => typeMonthly.get(m)!.expense);
-  const billsTotal = billsSeries.reduce((s, v) => s + v, 0);
-  const expensesTotal = expSeries.reduce((s, v) => s + v, 0);
-  const billsVelocity = r1(velocityCAGR(billsSeries));
-  const expensesVelocity = r1(velocityCAGR(expSeries));
+  const typeBuckets = [...typeMonthly.keys()].sort();
+  const billsSeries = typeBuckets.map((b) => toChartNumber(typeMonthly.get(b)!.bill));
+  const expSeries = typeBuckets.map((b) => toChartNumber(typeMonthly.get(b)!.expense));
+  const billsTotal = [...typeMonthly.values()].reduce((s, t) => add(s, t.bill), ZERO);
+  const expensesTotal = [...typeMonthly.values()].reduce((s, t) => add(s, t.expense), ZERO);
+  const billsVelocity = r1(velocityCAGR(billsSeries, C.minBaseAmount));
+  const expensesVelocity = r1(velocityCAGR(expSeries, C.minBaseAmount));
 
   // ---- anomalies (z-score, verbatim) -----------------------------------------
+  const anomalyCritical = C.anomalyStdDevThreshold + C.anomalyCriticalOffset;
   const anomalyItems: SVAnomaly[] = [];
   for (const a of acctMap.values()) {
-    if (a.months.length < 3) continue;
-    const amounts = a.months.map((m) => m.amount);
+    if (a.buckets.length < 3) continue;
+    const amounts = a.buckets.map((m) => toChartNumber(m.amount));
     const mean = amounts.reduce((s, v) => s + v, 0) / amounts.length;
     const stdDev = Math.sqrt(amounts.reduce((s, v) => s + (v - mean) ** 2, 0) / amounts.length);
     if (stdDev === 0) continue;
-    for (const m of a.months) {
-      const z = (m.amount - mean) / stdDev;
+    const exactMean = div(a.buckets.reduce((s, m) => add(s, m.amount), ZERO), String(amounts.length));
+    for (let i = 0; i < a.buckets.length; i++) {
+      const z = (amounts[i]! - mean) / stdDev;
       if (Math.abs(z) >= C.anomalyStdDevThreshold) {
         anomalyItems.push({
-          accountId: a.id, accountName: a.name, month: m.month, amount: m.amount, expectedAmount: mean,
-          deviation: Math.round(((m.amount - mean) / mean) * 100), zScore: r1(z),
-          type: z > 0 ? "spike" : "drop", severity: Math.abs(z) >= 3 ? "critical" : "warning",
+          accountId: a.id, accountName: a.name, month: a.buckets[i]!.label, amount: a.buckets[i]!.amount, expectedAmount: exactMean,
+          deviation: mean !== 0 ? Math.round(((amounts[i]! - mean) / mean) * 100) : 0, zScore: r1(z),
+          type: z > 0 ? "spike" : "drop", severity: Math.abs(z) >= anomalyCritical ? "critical" : "warning",
         });
       }
     }
@@ -638,44 +681,60 @@ export async function spendVelocityData(
   };
 
   // ---- monthly trends w/ YoY ---------------------------------------------------
-  const pyByMonth = new Map<string, { amount: number; txns: number }>(
-    pyFinal.map((r) => [r.month_num, { amount: Number(r.total_amount ?? 0), txns: Number(r.transaction_count ?? 0) }]),
-  );
-  const trendMap = new Map<string, { total: number; txns: number; bill: number; expense: number; vendors: Set<string> }>();
+  const trendMap = new Map<string, { label: string; total: string; txns: number; bill: string; expense: string; vendors: Set<string> }>();
   for (const a of acctMap.values()) {
-    for (const m of a.months) {
-      let t = trendMap.get(m.month);
-      if (!t) { t = { total: 0, txns: 0, bill: 0, expense: 0, vendors: new Set() }; trendMap.set(m.month, t); }
-      t.total += m.amount; t.txns += m.txns; t.bill += m.bill; t.expense += m.expense;
+    for (const m of a.buckets) {
+      let t = trendMap.get(m.bucket);
+      if (!t) { t = { label: m.label, total: ZERO, txns: 0, bill: ZERO, expense: ZERO, vendors: new Set() }; trendMap.set(m.bucket, t); }
+      t.total = add(t.total, m.amount); t.txns += m.txns; t.bill = add(t.bill, m.bill); t.expense = add(t.expense, m.expense);
     }
   }
-  for (const r of vendRows.rows) trendMap.get(r.month)?.vendors.add(r.vendor_id);
-  const monthlyTrends = [...trendMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, t], i, arr) => {
-    const py = pyByMonth.get(month.slice(5, 7));
-    const prev = i > 0 ? arr[i - 1]![1].total : 0;
+  for (const r of vendRows.rows) {
+    const t = trendMap.get(r.bucket);
+    if (t) {
+      // Vendor legs arrive per functional; the account map already holds the
+      // translated total, so only the distinct vendor count rides this pass.
+      t.vendors.add(r.vendor_id);
+    }
+  }
+  const monthlyTrends = [...trendMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([bucket, t], i, arr) => {
+    const priorKey = priorBucketKey(bucket);
+    const py = priorKey ? pyByBucket.get(priorKey) : undefined;
+    const prev = i > 0 ? arr[i - 1]![1].total : ZERO;
+    const total = toChartNumber(t.total);
+    const prevNum = toChartNumber(prev);
+    const pyAmount = py?.amount ?? ZERO;
     return {
-      month,
+      month: bucket,
+      label: t.label,
       totalAmount: t.total,
       transactionCount: t.txns,
       billAmount: t.bill,
       expenseAmount: t.expense,
       vendorCount: t.vendors.size,
-      priorYearAmount: py?.amount ?? 0,
-      yoyChange: py && py.amount > 0 ? Math.round(((t.total - py.amount) / py.amount) * 1000) / 10 : 0,
-      velocity: i > 0 && prev > 0 ? Math.round(((t.total - prev) / prev) * 1000) / 10 : 0,
+      priorYearAmount: pyAmount,
+      yoyChange: py && cmp(py.amount, ZERO) > 0 ? Math.round(((total - toChartNumber(py.amount)) / toChartNumber(py.amount)) * 1000) / 10 : null,
+      velocity: i > 0 && cmp(prev, ZERO) > 0 ? Math.round(((total - prevNum) / prevNum) * 1000) / 10 : null,
     };
   });
 
   // ---- seasonal patterns --------------------------------------------------------
+  // Seasonality is a calendar-month phenomenon (holiday peaks), not a fiscal
+  // one: buckets always fold back to their calendar month here.
   const monthNames = strings.shortMonths;
-  const seasonTotals = new Map<number, number>();
-  for (const a of acctMap.values()) for (const m of a.months) seasonTotals.set(m.monthNum, (seasonTotals.get(m.monthNum) ?? 0) + m.amount);
-  const seasonVals = [...seasonTotals.values()];
+  const seasonTotals = new Map<number, string>();
+  for (const a of acctMap.values()) {
+    for (const m of a.buckets) {
+      seasonTotals.set(m.monthNum, add(seasonTotals.get(m.monthNum) ?? ZERO, m.amount));
+    }
+  }
+  const seasonVals = [...seasonTotals.values()].map(toChartNumber);
   const seasonAvg = seasonVals.length ? seasonVals.reduce((s, v) => s + v, 0) / seasonVals.length : 0;
   const patterns = Array.from({ length: 12 }, (_, i) => {
-    const total = seasonTotals.get(i + 1) ?? 0;
-    const deviation = seasonAvg > 0 ? Math.round(((total - seasonAvg) / seasonAvg) * 100) : 0;
-    return { month: i + 1, monthName: monthNames[i]!, totalSpend: total, deviation, isHigh: deviation > 15, isLow: deviation < -15 };
+    const total = seasonTotals.get(i + 1) ?? ZERO;
+    const totalNum = toChartNumber(total);
+    const deviation = seasonAvg > 0 ? Math.round(((totalNum - seasonAvg) / seasonAvg) * 100) : 0;
+    return { month: i + 1, monthName: monthNames[i]!, totalSpend: total, deviation, isHigh: deviation > C.seasonalBand, isLow: deviation < -C.seasonalBand };
   });
   const seasonalInsights: { type: string; message: string }[] = [];
   const highMonths = patterns.filter((p) => p.isHigh);
@@ -686,28 +745,30 @@ export async function spendVelocityData(
   // ---- boiling frog ---------------------------------------------------------------
   const frogAccounts: SpendVelocityData["boilingFrog"]["accounts"] = [];
   for (const a of acctMap.values()) {
-    if (a.months.length < C.boilingFrogMonths) continue;
+    if (a.buckets.length < C.boilingFrogMonths) continue;
+    const amounts = a.buckets.map((m) => toChartNumber(m.amount));
     let increases = 0, totalCreep = 0;
-    for (let i = 1; i < a.months.length; i++) {
-      const prev = a.months[i - 1]!.amount, curr = a.months[i]!.amount;
+    for (let i = 1; i < amounts.length; i++) {
+      const prev = amounts[i - 1]!, curr = amounts[i]!;
       if (prev > 0) {
         const pct = ((curr - prev) / prev) * 100;
-        if (pct > 0 && pct <= 10) { increases++; totalCreep += pct; }
+        if (pct > 0 && pct <= C.boilingFrogStepCap) { increases++; totalCreep += pct; }
       }
     }
-    const monotonicRatio = (increases / (a.months.length - 1)) * 100;
-    if (monotonicRatio >= 50 && totalCreep >= C.boilingFrogMinIncrease) {
-      const startAmount = a.months[0]!.amount;
-      const endAmount = a.months[a.months.length - 1]!.amount;
+    const monotonicRatio = (increases / (amounts.length - 1)) * 100;
+    if (monotonicRatio >= C.boilingFrogMonotonicRatio && totalCreep >= C.boilingFrogMinIncrease) {
+      const startAmount = a.buckets[0]!.amount;
+      const endAmount = a.buckets[a.buckets.length - 1]!.amount;
+      const monthCount = a.buckets.length;
       frogAccounts.push({
         accountId: a.id, accountName: a.name,
         monotonicRatio: Math.round(monotonicRatio),
         avgMonthlyIncrease: increases > 0 ? r1(totalCreep / increases) : 0,
         totalCreep: Math.round(totalCreep),
-        startAmount, endAmount, monthCount: a.months.length,
-        annualizedCreep: Math.round(((endAmount - startAmount) * 12) / a.months.length),
-        monthlyAmounts: a.months.map((m) => m.amount),
-        severity: totalCreep > 20 ? "critical" : totalCreep > 10 ? "warning" : "info",
+        startAmount, endAmount, monthCount,
+        annualizedCreep: div(mulDecimal(add(endAmount, neg(startAmount)), "12"), String(monthCount)),
+        monthlyAmounts: amounts,
+        severity: totalCreep > C.boilingFrogCriticalCreep ? "critical" : totalCreep > C.boilingFrogWarningCreep ? "warning" : "info",
       });
     }
   }
@@ -716,73 +777,86 @@ export async function spendVelocityData(
     summary: {
       count: frogAccounts.length,
       criticalCount: frogAccounts.filter((x) => x.severity === "critical").length,
-      totalAnnualizedCreep: frogAccounts.reduce((s, x) => s + ((x.endAmount - x.startAmount) * 12) / x.monthCount, 0),
+      totalAnnualizedCreep: frogAccounts.reduce((s, x) => add(s, x.annualizedCreep), ZERO),
     },
     accounts: frogAccounts.slice(0, 20),
   };
 
   // ---- concentration risk (HHI) ----------------------------------------------------
-  const totalSpend = accountVelocity.reduce((s, a) => s + a.totalSpend, 0);
-  const withShares = accountVelocity.map((a) => ({ ...a, spendShare: totalSpend > 0 ? (a.totalSpend / totalSpend) * 100 : 0 }));
+  const totalSpend = accountVelocity.reduce((s, a) => add(s, a.totalSpend), ZERO);
+  const totalSpendNum = toChartNumber(totalSpend);
+  const withShares = accountVelocity.map((a) => ({ ...a, spendShare: totalSpendNum > 0 ? (toChartNumber(a.totalSpend) / totalSpendNum) * 100 : 0 }));
   const hhi = withShares.reduce((s, a) => s + a.spendShare ** 2, 0);
   const concentration = {
     summary: {
       hhi: Math.round(hhi),
-      hhiStatus: hhi > 2500 ? "concentrated" : hhi > 1500 ? "moderate" : "diversified",
+      hhiStatus: hhi > C.hhiCritical ? "concentrated" : hhi > C.hhiWarning ? "moderate" : "diversified",
       top1Share: r1(withShares[0]?.spendShare ?? 0),
       top5Share: r1(withShares.slice(0, 5).reduce((s, a) => s + a.spendShare, 0)),
       top10Share: r1(withShares.slice(0, 10).reduce((s, a) => s + a.spendShare, 0)),
-      riskAccountCount: withShares.filter((a) => a.spendShare > 5 && (a.trend === "accelerating" || a.trend === "high")).length,
+      riskAccountCount: withShares.filter((a) => a.spendShare > C.concentrationShareThreshold && (a.trend === "accelerating" || a.trend === "high")).length,
     },
-    accounts: withShares.filter((a) => a.spendShare > 5 && (a.trend === "accelerating" || a.trend === "high")).slice(0, 10),
+    accounts: withShares.filter((a) => a.spendShare > C.concentrationShareThreshold && (a.trend === "accelerating" || a.trend === "high")).slice(0, 10),
   };
 
   // ---- zombie subscriptions -----------------------------------------------------------
   const zombieList: SpendVelocityData["zombies"]["subscriptions"] = [];
   for (const v of vendMap.values()) {
-    if (v.months.length < C.zombieMinMonths) continue;
-    const amounts = v.months.map((m) => Number(roundMoney(String(m.amount), 2)));
+    if (v.buckets.length < C.zombieMinMonths) continue;
+    const amounts = v.buckets.map((m) => m.amount);
     const first = amounts[0]!;
-    let isZombie = amounts.every((x) => x === first);
+    let isZombie = amounts.every((x) => cmp(x, first) === 0);
     if (!isZombie) {
-      const mean = amounts.reduce((s, x) => s + x, 0) / amounts.length;
-      const maxDev = Math.max(...amounts.map((x) => Math.abs(x - mean)));
-      isZombie = mean > 0 && (maxDev / mean) * 100 < 1;
+      const nums = amounts.map(toChartNumber);
+      const mean = nums.reduce((s, x) => s + x, 0) / nums.length;
+      const maxDev = Math.max(...nums.map((x) => Math.abs(x - mean)));
+      isZombie = mean > 0 && (maxDev / mean) * 100 < C.zombieMaxDeviation;
     }
-    if (isZombie && first > 0) {
+    if (isZombie && cmp(first, ZERO) > 0) {
       zombieList.push({
-        vendorId: v.id, vendorName: v.name, amount: first, monthCount: v.months.length,
-        annualCost: first * 12, firstMonth: v.months[0]!.month, lastMonth: v.months[v.months.length - 1]!.month,
-        severity: v.months.length >= 12 ? "critical" : "warning",
+        vendorId: v.id, vendorName: v.name, amount: first, monthCount: v.buckets.length,
+        annualCost: mulDecimal(first, "12"), firstMonth: v.buckets[0]!.bucket, lastMonth: v.buckets[v.buckets.length - 1]!.bucket,
+        severity: v.buckets.length >= C.zombieCriticalMonths ? "critical" : "warning",
       });
     }
   }
-  zombieList.sort((x, y) => y.annualCost - x.annualCost);
+  zombieList.sort((x, y) => cmp(y.annualCost, x.annualCost));
   const zombies = {
     summary: {
       count: zombieList.length,
       criticalCount: zombieList.filter((z) => z.severity === "critical").length,
-      totalAnnualCost: zombieList.reduce((s, z) => s + z.annualCost, 0),
+      totalAnnualCost: zombieList.reduce((s, z) => add(s, z.annualCost), ZERO),
     },
     subscriptions: zombieList.slice(0, 20),
   };
 
   // ---- category fragmentation -----------------------------------------------------------
+  // The score is a unitless ratio product: how many times over the count
+  // floor the category runs, times how far under the configured size cap its
+  // average sits. Averages in any currency score identically.
+  const fragCap = C.fragmentationMaxAvgSize;
   const fragList: SpendVelocityData["fragmentation"]["categories"] = [];
-  for (const a of acctMap.values()) {
-    const avgTxnSize = a.txns > 0 ? a.totalSpend / a.txns : 0;
-    const txnsPerMonth = a.months.length > 0 ? a.txns / a.months.length : 0;
-    if (txnsPerMonth > C.fragmentationMinTxns && avgTxnSize < C.fragmentationMaxAvgSize) {
-      fragList.push({
-        accountId: a.id, accountName: a.name, totalSpend: a.totalSpend, transactionCount: a.txns,
-        avgTransactionSize: avgTxnSize, txnsPerMonth: Math.round(txnsPerMonth),
-        fragmentationScore: avgTxnSize > 0 ? Math.round((txnsPerMonth / avgTxnSize) * 100) : 0,
-      });
+  if (fragCap !== "") {
+    for (const a of acctMap.values()) {
+      const avgTxnSize = a.txns > 0 ? div(a.totalSpend, String(a.txns)) : ZERO;
+      const txnsPerMonth = a.buckets.length > 0 ? a.txns / a.buckets.length : 0;
+      if (txnsPerMonth > C.fragmentationMinTxns && cmp(avgTxnSize, fragCap) < 0 && cmp(avgTxnSize, ZERO) > 0) {
+        fragList.push({
+          accountId: a.id, accountName: a.name, totalSpend: a.totalSpend, transactionCount: a.txns,
+          avgTransactionSize: avgTxnSize, txnsPerMonth: Math.round(txnsPerMonth),
+          fragmentationScore: (txnsPerMonth / C.fragmentationMinTxns) * Number(div(fragCap, avgTxnSize)),
+        });
+      }
     }
   }
   fragList.sort((x, y) => y.fragmentationScore - x.fragmentationScore);
   const fragmentation = {
-    summary: { fragmentedCategories: fragList.length, totalFragmentedSpend: Math.round(fragList.reduce((s, f) => s + f.totalSpend, 0)) },
+    summary: {
+      fragmentedCategories: fragList.length,
+      totalFragmentedSpend: fragList.reduce((s, f) => add(s, f.totalSpend), ZERO),
+      configured: fragCap !== "",
+      reason: fragCap !== "" ? "" : strings.fragmentationUnconfigured,
+    },
     categories: fragList.slice(0, 15),
   };
 
@@ -798,46 +872,48 @@ export async function spendVelocityData(
   })));
   const cliffMonths = new Map<string, { po: string; so: string }>();
   for (const r of poSoRows.rows) {
-    const m = cliffMonths.get(r.month) ?? { po: "0.0000", so: "0.0000" };
+    const m = cliffMonths.get(r.bucket) ?? { po: "0.0000", so: "0.0000" };
     const rate = commitCtx.rateAt((r.func ?? null) as string | null, asDate(r.late, to));
     const amount = mulDecimal(String(r.amount ?? 0), rate);
     if (r.kind === "purchase_order") m.po = add(m.po, amount);
     else m.so = add(m.so, amount);
-    cliffMonths.set(r.month, m);
+    cliffMonths.set(r.bucket, m);
   }
   const cliffSeries = [...cliffMonths.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([month, v]) => ({ month, poAmount: v.po, soAmount: v.so }));
+    .map(([bucket, v]) => ({ month: bucket, poAmount: v.po, soAmount: v.so }));
   // A short history suppresses growth estimates, not the observed commitments.
   const moneyCagr = (amounts: string[], minimum: string): number => {
     if (amounts.length < 2) return 0;
     let start = amounts[0]!;
     let periods = amounts.length - 1;
     const end = amounts[amounts.length - 1]!;
-    if (cmp(start, minimum) < 0) {
-      for (let i = 0; i < amounts.length - 1; i++) {
-        if (cmp(amounts[i]!, minimum) >= 0) { start = amounts[i]!; periods = amounts.length - 1 - i; break; }
+    if (minimum !== "") {
+      if (cmp(start, minimum) < 0) {
+        for (let i = 0; i < amounts.length - 1; i++) {
+          if (cmp(amounts[i]!, minimum) >= 0) { start = amounts[i]!; periods = amounts.length - 1 - i; break; }
+        }
+        if (cmp(start, minimum) < 0) return 0;
       }
-      if (cmp(start, minimum) < 0) return 0;
     }
-    if (cmp(end, "0") <= 0) return -100;
-    const ratio = Number(div(end, start));
+    if (cmp(end, ZERO) <= 0) return -100;
+    const ratio = toChartNumber(div(end, start));
     return Math.max(-100, Math.min(200, (Math.pow(ratio, 1 / periods) - 1) * 100));
   };
-  const poVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.poAmount), String(CFG.minBaseAmount)));
-  const soVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.soAmount), String(CFG.minBaseAmount)));
+  const poVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.poAmount), C.minBaseAmount));
+  const soVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.soAmount), C.minBaseAmount));
   const velocityGap = poVelocity - soVelocity;
   const totalPO = cliffSeries.reduce((s, m) => add(s, m.poAmount), "0.0000");
   const totalSO = cliffSeries.reduce((s, m) => add(s, m.soAmount), "0.0000");
-  const hasSales = cmp(totalSO, "0") > 0;
-  const ratio = hasSales ? Math.round(Number(div(totalPO, totalSO)) * 100) / 100 : 0;
+  const hasSales = cmp(totalSO, ZERO) > 0;
+  const ratio = hasSales ? Math.round(toChartNumber(div(totalPO, totalSO)) * 100) / 100 : 0;
   let status: "healthy" | "warning" | "critical" = "healthy";
   let monthsToCliff: number | null = null;
-  if (velocityGap > 20 || ratio > 1.5) {
+  if (velocityGap > C.cliffCriticalGap || ratio > C.cliffCriticalRatio) {
     status = "critical";
-    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(12 / (velocityGap / 10)));
-  } else if (velocityGap > 10 || ratio > 1.2) {
+    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffCriticalHorizon / (velocityGap / 10)));
+  } else if (velocityGap > C.cliffWarningGap || ratio > C.cliffWarningRatio) {
     status = "warning";
-    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(18 / (velocityGap / 10)));
+    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffWarningHorizon / (velocityGap / 10)));
   }
   const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO }, months: cliffSeries };
 
@@ -847,7 +923,7 @@ export async function spendVelocityData(
   // mixes a COGS account in and drops genuine expense.
   const totalRevenue = plOpex.revenue;
   const revenue = {
-    hasData: cmp(totalRevenue, "0") > 0,
+    hasData: cmp(totalRevenue, ZERO) > 0,
     totalRevenue,
     opexRatio: operatingExpenseRatio(plOpex.opex, totalRevenue),
   };
@@ -862,7 +938,7 @@ export async function spendVelocityData(
   ]);
   const cmpByAccount = new Map<string, { name: string; current: string; prior: string; twoBack: string }>();
   for (const r of cmpRows.rows) {
-    const cur = cmpByAccount.get(r.account_id) ?? { name: String(r.account_name ?? ""), current: "0", prior: "0", twoBack: "0" };
+    const cur = cmpByAccount.get(r.account_id) ?? { name: strings.displayAccountName(String(r.account_name ?? ""), r.account_id), current: ZERO, prior: ZERO, twoBack: ZERO };
     cur.current = add(cur.current, mulDecimal(String(r.current_amount ?? 0), cmpCtx.rateAt(r.func ?? null, asDate(r.late_cur, to))));
     if (r.prior_amount != null) {
       cur.prior = add(cur.prior, mulDecimal(String(r.prior_amount), cmpCtx.rateAt(r.func ?? null, asDate(r.late_prior, priorFrom))));
@@ -872,45 +948,61 @@ export async function spendVelocityData(
     }
     cmpByAccount.set(r.account_id, cur);
   }
+  const capAccount = C.projectionCapAccount / 100;
   const cmpAccounts = [...cmpByAccount.entries()].map(([accountId, c]) => {
-    const r = { account_id: accountId, account_name: c.name, current_amount: c.current, prior_amount: c.prior, two_back_amount: c.twoBack };
-    const current = Number(r.current_amount ?? 0);
-    const prior = Number(r.prior_amount ?? 0);
-    const twoBack = Number(r.two_back_amount ?? 0);
+    const current = c.current;
+    const prior = c.prior;
+    const twoBack = c.twoBack;
+    const priorPositive = cmp(prior, ZERO) > 0;
+    const twoBackPositive = cmp(twoBack, ZERO) > 0;
     // No prior-window history (mid-year go-live, new account): change is
     // UNKNOWN, never a fabricated +100% against a zero base.
-    const changePct: number | null = prior > 0 ? ((current - prior) / prior) * 100 : null;
+    const changePct: number | null = priorPositive
+      ? r1(toChartNumber(div(add(current, neg(prior)), prior)) * 100)
+      : null;
+    const curNum = toChartNumber(current);
+    const priorNum = toChartNumber(prior);
+    const twoBackNum = toChartNumber(twoBack);
     let avgChange = 0;
-    if (prior > 0 && twoBack > 0) avgChange = (current / prior + prior / twoBack) / 2 - 1;
-    else if (prior > 0) avgChange = current / prior - 1;
-    const vel = accountVelocity.find((a) => a.id === r.account_id);
+    if (priorPositive && twoBackPositive) avgChange = (curNum / priorNum + priorNum / twoBackNum) / 2 - 1;
+    else if (priorPositive) avgChange = curNum / priorNum - 1;
+    const clamped = Math.min(Math.max(avgChange, -capAccount), capAccount);
+    const vel = accountVelocity.find((a) => a.id === accountId);
     return {
-      accountId: r.account_id,
-      accountName: r.account_name ?? `Account ${r.account_id}`,
+      accountId,
+      accountName: c.name,
       currentAmount: current,
       priorAmount: prior,
       twoBackAmount: twoBack,
-      changePct: changePct === null ? null : r1(changePct),
-      projectedAmount: Math.round(current * (1 + Math.min(Math.max(avgChange, -0.5), 0.5))),
-      isNew: prior === 0 && current > 0,
+      changePct,
+      projectedAmount: add(current, mulDecimal(current, clamped.toFixed(4))),
+      isNew: !priorPositive && cmp(current, ZERO) > 0,
       monthlyTrend: vel?.monthlyAmounts ?? [],
       velocity: vel?.velocity ?? 0,
       acceleration: vel?.acceleration ?? 0,
       trend: vel?.trend ?? "stable",
     };
-  }).filter((a) => a.currentAmount + a.priorAmount + a.twoBackAmount > 0)
+  }).filter((a) => cmp(a.currentAmount, ZERO) > 0 || cmp(a.priorAmount, ZERO) > 0 || cmp(a.twoBackAmount, ZERO) > 0)
     .sort((a, b) => Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0));
-  const currentTotal = cmpAccounts.reduce((s, a) => s + a.currentAmount, 0);
-  const priorTotal = cmpAccounts.reduce((s, a) => s + a.priorAmount, 0);
-  const twoBackTotal = cmpAccounts.reduce((s, a) => s + a.twoBackAmount, 0);
-  const overallChange: number | null = priorTotal > 0 ? ((currentTotal - priorTotal) / priorTotal) * 100 : null;
+  const currentTotal = cmpAccounts.reduce((s, a) => add(s, a.currentAmount), ZERO);
+  const priorTotal = cmpAccounts.reduce((s, a) => add(s, a.priorAmount), ZERO);
+  const twoBackTotal = cmpAccounts.reduce((s, a) => add(s, a.twoBackAmount), ZERO);
+  const priorTotalPositive = cmp(priorTotal, ZERO) > 0;
+  const overallChange: number | null = priorTotalPositive
+    ? r1(toChartNumber(div(add(currentTotal, neg(priorTotal)), priorTotal)) * 100)
+    : null;
+  const capTotal = C.projectionCapTotal / 100;
   const periodComparison = {
     summary: {
-      currentTotal: Math.round(currentTotal),
-      priorTotal: Math.round(priorTotal),
-      twoBackTotal: Math.round(twoBackTotal),
-      projectedTotal: overallChange === null ? Math.round(currentTotal) : Math.round(currentTotal * (1 + Math.min(Math.max(overallChange / 100, -0.3), 0.3))),
-      changePct: overallChange === null ? null : r1(overallChange),
+      currentTotal,
+      priorTotal,
+      twoBackTotal,
+      projectedTotal: overallChange === null
+        ? currentTotal
+        : add(currentTotal, mulDecimal(currentTotal, (overallChange / 100 >= 0
+            ? Math.min(overallChange / 100, capTotal)
+            : Math.max(overallChange / 100, -capTotal)).toFixed(4))),
+      changePct: overallChange,
       priorLabel: `${priorFrom} → ${priorTo}`,
       twoBackLabel: `${twoBackFrom} → ${twoBackTo}`,
     },
@@ -919,14 +1011,16 @@ export async function spendVelocityData(
 
   // ---- expense analysis ---------------------------------------------------------------------------------------
   // Spender and category legs translate per (entity, functional) at each
-  // window's latest posting date, then merge; report counts union.
+  // window's latest posting date, then merge; report counts union. Totals
+  // accumulate over every spender and category BEFORE the display slices, so
+  // a top-50 list can never shrink the headline figure.
   const spenderCtx = await flowRates(orgId, [
     ...spenderRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late_cur, to) })),
     ...spenderRows.rows.filter((r) => r.prior_spend != null).map((r) => ({ func: r.func ?? null, date: asDate(r.late_prior, priorFrom) })),
   ]);
   const spenderByEmployee = new Map<string, { name: string; current: string; prior: string; ids: Set<string> }>();
   for (const r of spenderRows.rows) {
-    const cur = spenderByEmployee.get(r.employee_id) ?? { name: String(r.employee_name), current: "0", prior: "0", ids: new Set<string>() };
+    const cur = spenderByEmployee.get(r.employee_id) ?? { name: strings.displayPartyName(String(r.employee_name)), current: ZERO, prior: ZERO, ids: new Set<string>() };
     cur.current = add(cur.current, mulDecimal(String(r.current_spend ?? 0), spenderCtx.rateAt(r.func ?? null, asDate(r.late_cur, to))));
     if (r.prior_spend != null) {
       cur.prior = add(cur.prior, mulDecimal(String(r.prior_spend), spenderCtx.rateAt(r.func ?? null, asDate(r.late_prior, priorFrom))));
@@ -934,28 +1028,30 @@ export async function spendVelocityData(
     for (const id of (r.current_ids ?? []) as string[]) cur.ids.add(id);
     spenderByEmployee.set(r.employee_id, cur);
   }
+  const expenseReportTotal = [...spenderByEmployee.values()].reduce((s, x) => add(s, x.current), ZERO);
   const topSpenders = [...spenderByEmployee.entries()].map(([employeeId, s]) => {
-    const current = Number(s.current);
-    const prior = Number(s.prior);
+    const current = toChartNumber(s.current);
+    const prior = toChartNumber(s.prior);
+    const priorPositive = cmp(s.prior, ZERO) > 0;
     return {
       employeeId,
       employeeName: s.name,
       totalSpend: current,
       priorSpend: prior,
       reportCount: s.ids.size,
-      changePct: prior > 0 ? r1(((current - prior) / prior) * 100) : 0,
+      changePct: priorPositive ? r1(((current - prior) / prior) * 100) : null,
     };
   }).filter((s) => s.totalSpend + s.priorSpend > 0 && (s.totalSpend > 0 || s.priorSpend > 0))
     .sort((a, b) => b.totalSpend - a.totalSpend)
     .slice(0, 50);
-  let categoryIncreaseTotal = 0;
+  let categoryIncreaseTotal = ZERO;
   const catCtx = await flowRates(orgId, [
     ...catRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late_cur, to) })),
     ...catRows.rows.filter((r) => r.prior_amount != null).map((r) => ({ func: r.func ?? null, date: asDate(r.late_prior, priorFrom) })),
   ]);
   const catByAccount = new Map<string, { name: string; current: string; prior: string }>();
   for (const r of catRows.rows) {
-    const cur = catByAccount.get(r.category_id) ?? { name: String(r.category_name ?? ""), current: "0", prior: "0" };
+    const cur = catByAccount.get(r.category_id) ?? { name: strings.displayAccountName(String(r.category_name ?? ""), r.category_id), current: ZERO, prior: ZERO };
     cur.current = add(cur.current, mulDecimal(String(r.current_amount ?? 0), catCtx.rateAt(r.func ?? null, asDate(r.late_cur, to))));
     if (r.prior_amount != null) {
       cur.prior = add(cur.prior, mulDecimal(String(r.prior_amount), catCtx.rateAt(r.func ?? null, asDate(r.late_prior, priorFrom))));
@@ -963,75 +1059,81 @@ export async function spendVelocityData(
     catByAccount.set(r.category_id, cur);
   }
   const expCategories = [...catByAccount.entries()].map(([categoryId, c]) => {
-    const current = Number(c.current);
-    const prior = Number(c.prior);
-    const changePct = prior > 0 ? r1(((current - prior) / prior) * 100) : 0;
-    if (changePct > 10) categoryIncreaseTotal += current - prior;
-    return { categoryId, categoryName: c.name, currentAmount: current, priorAmount: prior, changePct };
+    const priorPositive = cmp(c.prior, ZERO) > 0;
+    const changePct = priorPositive ? r1(((toChartNumber(c.current) - toChartNumber(c.prior)) / toChartNumber(c.prior)) * 100) : null;
+    if (changePct !== null && changePct > C.categoryIncreaseThreshold) {
+      categoryIncreaseTotal = add(categoryIncreaseTotal, add(c.current, neg(c.prior)));
+    }
+    return { categoryId, categoryName: c.name, currentAmount: toChartNumber(c.current), priorAmount: toChartNumber(c.prior), changePct };
   }).filter((c) => c.currentAmount > 0 || c.priorAmount > 0)
     .sort((a, b) => b.currentAmount - a.currentAmount)
     .slice(0, 50);
   const expenseAnalysis = {
     summary: {
-      expenseReportTotal: Math.round(topSpenders.reduce((s, x) => s + x.totalSpend, 0)),
-      vendorBillTotal: Math.round(billsTotal),
-      topSpenderCount: topSpenders.filter((s) => s.changePct > 20).length,
-      categoryIncreaseTotal: Math.round(categoryIncreaseTotal),
+      expenseReportTotal,
+      vendorBillTotal: billsTotal,
+      topSpenderCount: topSpenders.filter((s) => (s.changePct ?? 0) > C.spenderIncreaseThreshold).length,
+      categoryIncreaseTotal,
     },
     topSpenders,
     categories: expCategories,
-    monthlyTrends: typeMonths.map((m) => ({ month: m, expenseAmount: typeMonthly.get(m)!.expense, billAmount: typeMonthly.get(m)!.bill })),
+    monthlyTrends: typeBuckets.map((b) => ({ month: b, expenseAmount: typeMonthly.get(b)!.expense, billAmount: typeMonthly.get(b)!.bill })),
   };
 
-  // ---- summary + comprehensive health score (verbatim weights) ---------------------------------------------------
+  // ---- summary + health score ---------------------------------------------------
   const avgVelocity = accountVelocity.length ? accountVelocity.reduce((s, a) => s + a.velocity, 0) / accountVelocity.length : 0;
   const avgAcceleration = accountVelocity.length ? accountVelocity.reduce((s, a) => s + a.acceleration, 0) / accountVelocity.length : 0;
   const acceleratingCount = accountVelocity.filter((a) => a.trend === "accelerating").length;
-  const highVelocityCount = accountVelocity.filter((a) => a.velocity > 15).length;
+  const highVelocityCount = accountVelocity.filter((a) => a.velocity > C.velocityHighThreshold).length;
 
   let deductions = 0;
-  // Velocity health (max −20).
-  deductions += Math.min(20, Math.min(10, highVelocityCount * 1.5) + Math.min(10, acceleratingCount * 1.5));
-  // Critical issues (max −25).
+  // Velocity health: hot-velocity accounts cost unit points each, capped twice.
+  deductions += Math.min(C.healthVelocityCap,
+    Math.min(C.healthVelocityUnitCap, highVelocityCount * C.healthVelocityUnit)
+    + Math.min(C.healthVelocityUnitCap, acceleratingCount * C.healthVelocityUnit));
+  // Critical issues.
   const criticalFrog = boilingFrog.summary.criticalCount;
   const criticalZombies = zombies.summary.criticalCount;
-  deductions += Math.min(25, Math.min(12, anomalies.summary.criticalCount * 4) + Math.min(8, criticalFrog * 3) + Math.min(5, criticalZombies * 2));
-  // Warnings (max −15).
-  deductions += Math.min(15,
-    Math.min(6, (anomalies.summary.count - anomalies.summary.criticalCount) * 1.5) +
-    Math.min(4, (boilingFrog.summary.count - criticalFrog) * 1) +
-    Math.min(3, (zombies.summary.count - criticalZombies) * 1));
-  // Structural risk (max −15).
+  deductions += Math.min(C.healthCriticalCap,
+    Math.min(C.healthCriticalAnomalyCap, anomalies.summary.criticalCount * C.healthCriticalAnomalyUnit)
+    + Math.min(C.healthCriticalFrogCap, criticalFrog * C.healthCriticalFrogUnit)
+    + Math.min(C.healthCriticalZombieCap, criticalZombies * C.healthCriticalZombieUnit));
+  // Warnings.
+  deductions += Math.min(C.healthWarningCap,
+    Math.min(C.healthWarningAnomalyCap, (anomalies.summary.count - anomalies.summary.criticalCount) * C.healthWarningAnomalyUnit) +
+    Math.min(C.healthWarningFrogCap, (boilingFrog.summary.count - criticalFrog) * C.healthWarningFrogUnit) +
+    Math.min(C.healthWarningZombieCap, (zombies.summary.count - criticalZombies) * C.healthWarningZombieUnit));
+  // Structural risk.
   let structural = 0;
   const top1 = concentration.summary.top1Share;
-  if (top1 > 30) structural += 5; else if (top1 > 25) structural += 3; else if (top1 > 20) structural += 1;
-  structural += Math.min(4, fragmentation.summary.fragmentedCategories * 0.5);
-  if (commitmentCliff.summary.status === "critical") structural += 6;
-  else if (commitmentCliff.summary.status === "warning") structural += 3;
-  deductions += Math.min(15, structural);
-  // Financial impact (max −10).
-  const savingsPotential = boilingFrog.summary.totalAnnualizedCreep + zombies.summary.totalAnnualCost;
-  const savingsWithFrag = savingsPotential + fragmentation.summary.totalFragmentedSpend * 0; // frag excluded as designed
-  void savingsWithFrag;
-  if (totalSpend > 0) {
-    const ratio = (boilingFrog.summary.totalAnnualizedCreep + fragmentation.summary.totalFragmentedSpend * 0 + zombies.summary.totalAnnualCost) / totalSpend;
-    if (ratio > 0.05) deductions += 10;
-    else if (ratio > 0.03) deductions += 7;
-    else if (ratio > 0.02) deductions += 5;
-    else if (ratio > 0.01) deductions += 3;
-    else if (ratio > 0.005) deductions += 1;
+  if (top1 > C.structuralTop1High) structural += C.structuralTop1HighPoints;
+  else if (top1 > C.structuralTop1Medium) structural += C.structuralTop1MediumPoints;
+  else if (top1 > C.structuralTop1Low) structural += C.structuralTop1LowPoints;
+  structural += Math.min(C.fragmentationUnitCap, fragmentation.summary.fragmentedCategories * C.fragmentationUnitWeight);
+  if (commitmentCliff.summary.status === "critical") structural += C.cliffCriticalPoints;
+  else if (commitmentCliff.summary.status === "warning") structural += C.cliffWarningPoints;
+  deductions += Math.min(C.healthStructuralCap, structural);
+  // Financial impact: savings potential as a share of total spend.
+  const savingsPotential = add(boilingFrog.summary.totalAnnualizedCreep, zombies.summary.totalAnnualCost);
+  if (cmp(totalSpend, ZERO) > 0) {
+    const savingsRatio = toChartNumber(div(savingsPotential, totalSpend)) * 100;
+    if (savingsRatio > C.savingsRatioCritical) deductions += C.savingsCriticalPoints;
+    else if (savingsRatio > C.savingsRatioHigh) deductions += C.savingsHighPoints;
+    else if (savingsRatio > C.savingsRatioMedium) deductions += C.savingsMediumPoints;
+    else if (savingsRatio > C.savingsRatioLow) deductions += C.savingsLowPoints;
+    else if (savingsRatio > C.savingsRatioWatch) deductions += C.savingsWatchPoints;
   }
   const healthScore = Math.round(Math.max(0, Math.min(100, 100 - deductions)));
-  const healthGrade = healthScore >= 90 ? "A" : healthScore >= 80 ? "B" : healthScore >= 70 ? "C" : healthScore >= 60 ? "D" : "F";
+  const healthGrade = healthScore >= C.healthGradeA ? "A" : healthScore >= C.healthGradeB ? "B" : healthScore >= C.healthGradeC ? "C" : healthScore >= C.healthGradeD ? "D" : "F";
 
   const totalAlerts = boilingFrog.summary.count + anomalies.summary.count + zombies.summary.count + fragmentation.summary.fragmentedCategories;
 
-  // ---- insights (verbatim conditions) ---------------------------------------------------------------------------------
+  // ---- insights ---------------------------------------------------------------------------------
   const insights: SVInsight[] = [];
-  const fmtK = (n: number) => money(n, { maximumFractionDigits: 0 });
-  const highVel20 = accountVelocity.filter((a) => a.velocity > 20);
-  if (highVel20.length) insights.push({ type: "alert", ...strings.highGrowth(highVel20.length) });
-  if (Math.abs(billsVelocity - expensesVelocity) > 20) {
+  const fmtK = (n: string) => money(n, { maximumFractionDigits: 0 });
+  const highVelAlerts = accountVelocity.filter((a) => a.velocity > C.highVelocityAlert);
+  if (highVelAlerts.length) insights.push({ type: "alert", ...strings.highGrowth(highVelAlerts.length) });
+  if (Math.abs(billsVelocity - expensesVelocity) > C.typeImbalanceGap) {
     insights.push({
       type: "warning",
       ...strings.typeImbalance(
@@ -1042,10 +1144,10 @@ export async function spendVelocityData(
   }
   if (anomalies.summary.criticalCount > 0) insights.push({ type: "alert", ...strings.anomalies(anomalies.summary.criticalCount) });
   if (boilingFrog.summary.criticalCount > 0) insights.push({ type: "warning", ...strings.creep(boilingFrog.summary.criticalCount) });
-  if (concentration.summary.top1Share > 25) insights.push({ type: "warning", ...strings.concentration(Math.round(concentration.summary.top1Share)) });
+  if (concentration.summary.top1Share > C.concentrationTop1Warning) insights.push({ type: "warning", ...strings.concentration(Math.round(concentration.summary.top1Share)) });
   if (zombies.summary.count > 0) insights.push({ type: "info", ...strings.zombies(zombies.summary.count, fmtK(zombies.summary.totalAnnualCost)) });
   if (fragmentation.summary.fragmentedCategories > 0) insights.push({ type: "warning", ...strings.fragmentation(fragmentation.summary.fragmentedCategories) });
-  if (revenue.hasData && revenue.opexRatio > 50) insights.push({ type: "alert", ...strings.opexRatio(revenue.opexRatio) });
+  if (revenue.hasData && revenue.opexRatio > C.opexRatioAlert) insights.push({ type: "alert", ...strings.opexRatio(revenue.opexRatio) });
   if (commitmentCliff.summary.status !== "healthy") {
     const c = commitmentCliff.summary;
     const cliffText = strings.cliff(c.poVelocity, c.soVelocity, c.velocityGap, c.ratio);
@@ -1085,3 +1187,6 @@ export async function spendVelocityData(
     expenseAnalysis,
   };
 }
+
+
+

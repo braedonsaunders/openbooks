@@ -72,3 +72,15 @@ test("falling spend retains the acceleration signal from disjoint halves", () =>
     trend: "declining",
   });
 });
+
+test("an unset minimum base scores dust series from their first month", () => {
+  const dust = [5, 500, 600, 700, 800];
+  const thresholds = { velocityHighThreshold: 15, velocityMediumThreshold: 5, minBaseAmount: "" };
+  // No floor: 5 → 800 caps at the +200% ceiling instead of being skipped.
+  assert.equal(velocityAndAcceleration(dust, thresholds).velocity, 200);
+  // A configured floor skips the dust base and scores from the first real month.
+  assert.equal(
+    velocityAndAcceleration(dust, { ...thresholds, minBaseAmount: "100.0000" }).velocity,
+    17,
+  );
+});
