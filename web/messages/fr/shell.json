@@ -113,6 +113,7 @@
     "close": "fermer",
     "resultCount": "{count, plural, one {# résultat} other {# résultats}}",
     "groups": {
+      "pages": "Pages",
       "contacts": "Contacts",
       "transactions": "Transactions",
       "accounts": "Comptes",

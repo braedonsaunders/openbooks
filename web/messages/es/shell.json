@@ -113,6 +113,7 @@
     "close": "cerrar",
     "resultCount": "{count, plural, one {# resultado} other {# resultados}}",
     "groups": {
+      "pages": "Páginas",
       "contacts": "Contactos",
       "transactions": "Transacciones",
       "accounts": "Cuentas",

@@ -90,11 +90,11 @@ export function AppShell({
                 <BrandHomeLink className="hidden lg:inline-flex" />
                 <TopNav groups={navigationGroups} />
                 <div className="flex-1 lg:hidden" />
-                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" />
-                <TopbarSearchToggle />
+                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" navGroups={groups} />
+                <TopbarSearchToggle navGroups={groups} />
               </>
             ) : (
-              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" />
+              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" navGroups={groups} />
             )}
             <div className="flex shrink-0 items-center gap-1">
               {docsItem ? <HeaderNavLink item={docsItem} /> : null}

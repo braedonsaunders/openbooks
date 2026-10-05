@@ -3351,6 +3351,7 @@ const COGNATES = new Set<string>([
   // "environnement de production" to the same word).
   'fr:shell.accountMenu.production|Production',
   'fr:shell.globalSearch.groups.contacts|Contacts',
+  'fr:shell.globalSearch.groups.pages|Pages',
   'fr:shell.globalSearch.groups.transactions|Transactions',
   'fr:shell.mobileNav.menu|Menu',
   'fr:shell.notifications.kindLabel|Type',

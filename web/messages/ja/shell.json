@@ -113,6 +113,7 @@
     "close": "閉じる",
     "resultCount": "{count, plural, one {# 件の結果} other {# 件の結果}}",
     "groups": {
+      "pages": "ページ",
       "contacts": "連絡先",
       "transactions": "取引",
       "accounts": "勘定",
