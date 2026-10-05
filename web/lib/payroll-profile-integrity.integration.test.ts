@@ -25,7 +25,7 @@ const cases: Array<[string, Record<string, unknown>]> = [
   ["invalid vacation method", { vacationMethod: "weekly" }], ["object SIN", { sin: {} }],
   ["numeric SIN", { sin: 123456789 }], ["boolean claim code", { federalClaimCode: true }],
   ["boolean allowances", { w4Allowances: true }], ["string activation", { isActive: "false" }],
-  ["explicit clear", { sin: null, federalClaimCode: "", vacationPercent: null }],
+  ["explicit clear", { sin: null, federalClaimCode: "" }],
   ["concurrent create", {}],
   ["inherited country name", { country: "constructor" }],
 ];
@@ -55,9 +55,9 @@ for (const [label, fields] of cases) {
       await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,subsidiary_id)
         values (${scheduleId},${org.orgId},'Review schedule','biweekly',26,'2026-07-18',${org.subsidiaryId})`);
       if (label !== "create audit" && label !== "concurrent create") await db.execute(sql`
-        insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,country,province,pay_basis,vacation_method,
+        insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,country,province,pay_basis,
           federal_claim_code,federal_claim_amount,tax_exempt,sin_encrypted,sin_last3)
-        values (${org.orgId},${employeeId},${scheduleId},'CA','ON','salary','pay_each_period',1,'1000',true,${sealSecret("123456789", { orgId: org.orgId, purpose: "payroll.employee.sin" })},'789')`);
+        values (${org.orgId},${employeeId},${scheduleId},'CA','ON','salary',1,'1000',true,${sealSecret("123456789", { orgId: org.orgId, purpose: "payroll.employee.sin" })},'789')`);
       const before = (await db.execute(sql`select * from employee_payroll_profiles where employee_party_id=${employeeId}`)).rows[0];
       if (label === "audit failure") {
         await db.execute(sql.raw(`create function public."${trigger}"() returns trigger language plpgsql as $$
@@ -71,7 +71,7 @@ for (const [label, fields] of cases) {
         await db.execute(sql.raw(`create trigger "${trigger}" before insert on audit_log for each row execute function public."${trigger}"()`));
       }
       const body = { employeePartyId: employeeId, payScheduleId: scheduleId, country: "CA", province: "ON", payBasis: "salary",
-        vacationMethod: "pay_each_period", taxExempt: true, ...fields };
+        taxExempt: true, ...fields };
       const invoke = (overrides: Record<string, unknown> = {}) => withOrgContext(org.orgId, () => POST(new Request("http://audit.local/api/payroll/profiles", {
         method: "POST", headers: { "X-Request-Id": "profile-integrity-review" }, body: JSON.stringify({ ...body, ...overrides }),
       })));

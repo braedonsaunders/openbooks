@@ -160,7 +160,8 @@
           "noOpeningBalance": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun solde d’ouverture {detail} de votre ancien système de paie, donc leurs plafonds légaux annuels repartiront de zéro sur cette paie.",
           "noOpeningComponentYtd": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun cumul annuel d’ouverture pour {detail}, qui a un plafond annuel — le plafond repart de zéro sur cette paie, donc ils peuvent cotiser un deuxième plafond annuel complet.",
           "noOpeningEntitlement": "{count, plural, one {# employé reporte} other {# employés reportent}} un solde de votre ancien système de paie mais aucun solde d’ouverture pour {detail}. C’est la première paie qui le fait bouger, donc leur banque part de zéro.",
-          "missingFact": "{detail}"
+          "missingFact": "{detail}",
+          "noEmployment": "{count, plural, one {# salarié n’a} other {# salariés n’ont}} aucun lien entre la paie et son emploi. Vérifiez l’emploi et enregistrez les paramètres de paie dans Salariés, ou importez les liens d’emploi vérifiés."
         },
         "holiday": {
           "undeclaredJurisdiction": "L’indemnité de jour férié ne peut pas être calculée : {detail}",

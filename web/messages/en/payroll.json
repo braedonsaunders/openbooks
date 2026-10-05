@@ -160,7 +160,8 @@
           "noOpeningBalance": "{count, plural, one {# employee has} other {# employees have}} no {detail} opening balance from your previous payroll system, so their annual statutory ceilings will restart at zero on this run.",
           "noOpeningComponentYtd": "{count, plural, one {# employee has} other {# employees have}} no opening year-to-date for {detail}, which has an annual cap — the cap restarts at zero on this run, so they can contribute a second full annual limit.",
           "noOpeningEntitlement": "{count, plural, one {# employee carries} other {# employees carry}} a balance from your previous payroll system but no opening balance for {detail}. This is the first pay run that moves it, so their bank starts at zero.",
-          "missingFact": "{detail}"
+          "missingFact": "{detail}",
+          "noEmployment": "{count, plural, one {# employee has} other {# employees have}} no payroll link to their employment. Review Employment and save Payroll settings in Employees, or import reviewed Payroll employment links."
         },
         "holiday": {
           "undeclaredJurisdiction": "Statutory holiday pay cannot be calculated: {detail}",

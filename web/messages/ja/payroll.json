@@ -160,7 +160,8 @@
           "noOpeningBalance": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}前給与システムからの{detail}期首残高がなく、この計算から年間法定上限がゼロから再開します。",
           "noOpeningComponentYtd": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}年額上限のある{detail}の期首年累計がなく、上限がこの計算からゼロで再開するため、年額上限いっぱいまで2回拠出できる状態です。",
           "noOpeningEntitlement": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}前給与システムからの残高を持ち越していますが、{detail}の期首残高がありません。この残高を動かす最初の給与計算のため、バンクはゼロから始まります。",
-          "missingFact": "{detail}"
+          "missingFact": "{detail}",
+          "noEmployment": "{count}人の従業員の給与設定に雇用情報が紐付けられていません。従業員の雇用情報を確認し、給与設定を保存するか、確認済みの雇用リンクをインポートしてください。"
         },
         "holiday": {
           "undeclaredJurisdiction": "法定休日給を計算できません：{detail}",

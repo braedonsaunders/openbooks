@@ -113,6 +113,7 @@ type ScopeRow = {
    *  derive the labour jurisdiction from the work region. */
   labour_jurisdiction: string | null;
   has_wage: boolean;
+  has_employment_link: boolean;
   approved_hours: string;
   hired_on: string | null;
   terminated_on: string | null;
@@ -216,6 +217,10 @@ async function scope(
            prof.sin_encrypted is not null as has_sin,
            prof.payment_method as profile_payment_method,
            p.payment_method as party_payment_method,
+           exists (select 1 from worker_employments employment
+             where employment.org_id=prof.org_id and employment.id=prof.employment_id
+               and employment.worker_party_id=prof.employee_party_id
+               and employment.employer_subsidiary_id=p.subsidiary_id) as has_employment_link,
            exists (
              select 1 from party_bank_accounts b
               where b.org_id = prof.org_id and b.party_id = p.id
@@ -823,6 +828,8 @@ export async function payRunReadiness(
   if (people.length === 0) flag("blocker", "scope.empty", []);
 
   const employeesHref = "/entities/employees";
+  const noEmployment = people.filter((p) => !p.has_employment_link);
+  if (noEmployment.length) flag("blocker", "employee.noEmployment", noEmployment, { href: employeesHref });
   const noWage = people.filter((p) => !p.has_wage);
   if (noWage.length) flag("blocker", "employee.noWage", noWage, { href: employeesHref });
 
