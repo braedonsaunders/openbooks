@@ -1173,7 +1173,7 @@
       "monthlyRevenueTrend": "Monatsumsatz-Trend",
       "overdueHint": "Tage über den eigenen Ø-Bestellzyklus jedes Kunden hinaus",
       "overdueOrders": "Überfällige Aufträge",
-      "profitabilityHint": "Klicken Sie auf einen Kunden für Aufträge · ⚠️ markiert Margenlecks (> {threshold} Umsatz, <15 % Marge)",
+      "profitabilityHint": "Klicken Sie auf einen Kunden für Aufträge · ⚠️ markiert Margenlecks (≥{share} % Umsatzanteil, <{margin} % Marge)",
       "revenueByTier": "Umsatz nach CLV-Stufe",
       "rfmHint": "R/F/M-Werte: 5 bestens, 1 schwächste — Aktualität aus festen Tagesschwellen, Häufigkeit/Volumen aus 33./66. Perzentil",
       "rfmSegments": "RFM-Segmente",
@@ -1298,7 +1298,7 @@
       "firstOrderInPeriod": "Erstauftrag im Zeitraum",
       "highCriticalAccounts": "hohe + kritische Konten",
       "highCriticalChurn": "hohe + kritische Abwanderung",
-      "highRevenueLowMargin": "hoher Umsatz, <15 % Marge",
+      "highRevenueLowMargin": "≥{share} % Umsatzanteil, <{margin} % Marge",
       "jobsCount": "{count} Aufträge",
       "last3moVsLy": "letzte 3 Mon. vs Vorjahreszeitraum",
       "marginPct": "{pct} % Marge",
@@ -1375,7 +1375,10 @@
       "platinum": "Platin",
       "silver": "Silber"
     },
-    "txnsCount": "{count} Buch."
+    "txnsCount": "{count} Buch.",
+    "errors": {
+      "paymentStatsUnavailable": "Die Kundenzahlungsstatistik wurde nicht geladen. Laden Sie dieses Dashboard erneut."
+    }
   },
   "vendor": {
     "title": "Lieferantenleistung",

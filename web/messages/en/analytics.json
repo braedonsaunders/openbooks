@@ -712,7 +712,7 @@
       "avgPerCustomer": "avg {amount} / customer",
       "clvBase": "historical CLV base",
       "marginPct": "{pct}% margin",
-      "highRevenueLowMargin": "high revenue, <15% margin",
+      "highRevenueLowMargin": "≥{share}% of revenue, <{margin}% margin",
       "highCriticalChurn": "high + critical churn",
       "creditHeavy": "credit-heavy accounts",
       "pastUsualCycle": "past their usual cycle",
@@ -771,7 +771,7 @@
       "monthlyDetails": "Monthly Details",
       "monthlyDetailsHint": "MoM growth capped +200/−80%; '—' marks ramp-up from an immature month",
       "customerProfitability": "Customer Profitability",
-      "profitabilityHint": "Click a customer to expand jobs · ⚠️ marks profit leaks (>{threshold} revenue, <15% margin)",
+      "profitabilityHint": "Click a customer to expand jobs · ⚠️ marks profit leaks (≥{share}% of revenue, <{margin}% margin)",
       "scoringModel": "Scoring Model",
       "scoringModelHint": "How the composite scores are built",
       "dataSources": "Data Sources & Derivations",
@@ -1375,6 +1375,9 @@
     "labels": {
       "unknownCustomer": "Unknown",
       "untitledProject": "Untitled project"
+    },
+    "errors": {
+      "paymentStatsUnavailable": "Customer payment statistics did not load. Reload this dashboard to retry."
     }
   },
   "vendor": {

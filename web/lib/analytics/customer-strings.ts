@@ -46,6 +46,8 @@ export interface CustomerStrings {
   declining(growth: number): CustomerInsightText;
   growing(growth: number, newCustomers: number): CustomerInsightText;
   overdue(count: number): CustomerInsightText;
+  /** Loader refusal when the settlement pipeline yields no payment statistics. */
+  paymentStatsUnavailable(): string;
 }
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
@@ -109,5 +111,6 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
       message: t("customer.insights.overdue.message", { count }),
       action: t("customer.insights.overdue.action"),
     }),
+    paymentStatsUnavailable: () => t("customer.errors.paymentStatsUnavailable"),
   };
 }

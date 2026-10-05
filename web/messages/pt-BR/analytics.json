@@ -1173,7 +1173,7 @@
       "monthlyRevenueTrend": "Tendência mensal de receita",
       "overdueHint": "Dias além do ciclo médio de pedidos de cada cliente",
       "overdueOrders": "Pedidos em atraso",
-      "profitabilityHint": "Clique em um cliente para expandir obras · ⚠️ marca vazamentos de lucro (receita >{threshold}, margem <15%)",
+      "profitabilityHint": "Clique em um cliente para expandir obras · ⚠️ marca vazamentos de lucro (≥{share} % da receita, margem <{margin} %)",
       "revenueByTier": "Receita por faixa de CLV",
       "rfmHint": "Escores R/F/M: 5 melhor, 1 pior — recentidade por limiares fixos de dias, frequência/monetário por percentis 33/66",
       "rfmSegments": "Segmentos RFM",
@@ -1298,7 +1298,7 @@
       "firstOrderInPeriod": "primeiro pedido no período",
       "highCriticalAccounts": "contas altas + críticas",
       "highCriticalChurn": "churn alto + crítico",
-      "highRevenueLowMargin": "receita alta, margem <15%",
+      "highRevenueLowMargin": "≥{share} % da receita, margem <{margin} %",
       "jobsCount": "{count} obras",
       "last3moVsLy": "últ. 3 meses vs ano anterior",
       "marginPct": "margem {pct}%",
@@ -1375,7 +1375,10 @@
       "platinum": "Platina",
       "silver": "Prata"
     },
-    "txnsCount": "{count} transações"
+    "txnsCount": "{count} transações",
+    "errors": {
+      "paymentStatsUnavailable": "As estatísticas de pagamento de clientes não foram carregadas. Recarregue este painel."
+    }
   },
   "vendor": {
     "title": "Desempenho de fornecedores",
