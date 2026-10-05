@@ -4,6 +4,7 @@ import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
 import { analyticsConfig } from "./config";
 import { ANALYTICS_CONFIG } from "./config-spec";
+import { fiscalStartMonth } from "../fiscal";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   bankBalances,
@@ -114,7 +115,7 @@ export async function cashflowData(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, accountRows] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, fiscalStart, accountRows] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds),
@@ -122,7 +123,8 @@ export async function cashflowData(
     bankBalances(asOfIso, subIds),
     loadCategories(orgId),
     analyticsConfig(orgId, "cashflow"),
-    (analyticsSection('cashflow', []) ? analyticsQuery<AccountOptionRow>(sql`
+    fiscalStartMonth(orgId),
+    (analyticsQuery<AccountOptionRow>(sql`
       select id, number, name from accounts
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
@@ -143,7 +145,7 @@ export async function cashflowData(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart };
   const visibleCategoryConfigs = catConfigs.filter((category) =>
     isCategoryVisibleInScope(category, subIds, allowedSubsidiaryIds),
   );

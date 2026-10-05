@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { ANALYTICS_CONFIG } from "../analytics/config-spec";
+import { fiscalStartMonth } from "../fiscal";
 import {
   addDays,
   addMoney,
@@ -243,7 +244,7 @@ export async function cashPosition(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows, model] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows, model, fiscalStart] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds),
@@ -282,6 +283,7 @@ export async function cashPosition(
       order by s.name
     `),
     cashflowModel(orgId),
+    fiscalStartMonth(orgId),
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
@@ -297,6 +299,7 @@ export async function cashPosition(
     cashStart: startingCash,
     model,
     subIds,
+    fiscalStartMonth: fiscalStart,
     includeNullSubsidiary: includeNullSubsidiary === true,
   };
   // Manual and formula strategies are org-level models that ignore subIds:

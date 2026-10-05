@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
 import { advanceAnchoredMonth } from "@openbooks/engine/src/billing/cadence.ts";
 import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, daysInCivilMonth, parseIsoDate, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+import { fiscalMonthOffset } from "@openbooks/reports";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
 import { ANALYTICS_CONFIG } from "../analytics/config-spec";
@@ -278,6 +279,12 @@ export interface CategoryContext {
    * subsidiary) rows. Restricted callers never receive it.
    */
   includeNullSubsidiary?: boolean;
+  /**
+   * The org's fiscal year start month (1-12). Formula {QUARTER}/{IS_Q_START}/
+   * {IS_Q_END}/{IS_YEAR_END} resolve on the fiscal calendar; omission falls
+   * back to a January start.
+   */
+  fiscalStartMonth?: number;
 }
 
 /** A source item behind a category estimate (the breakdown rows). */
@@ -653,6 +660,35 @@ export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, t
 // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
 // onto 1900-1999.
 const daysInMonthUTC = (d: Date): number => daysInCivilMonth(d.getUTCFullYear(), d.getUTCMonth() + 1);
+
+/**
+ * Spread one month's amount across a forecast week using the ACTUAL calendar
+ * month the week starts in (month days ÷ 7) — never the fixed 4.345-week
+ * average, which prices January like February. One exact-decimal rounding.
+ */
+export const spreadMonthlyOverWeek = (monthly: Money, weekStartIso: string): Money =>
+  divideMoney(multiplyMoney(monthly, String(daysInMonthUTC(parseISO(weekStartIso)))), "7");
+
+/**
+ * Fiscal quarter flags for one forecast week, for formula {QUARTER}/
+ * {IS_Q_START}/{IS_Q_END}/{IS_YEAR_END}. The offset counts months from the
+ * org's fiscal year start — never calendar quarters. Exported for unit tests;
+ * callers pass the already-computed month-boundary flags.
+ */
+export function fiscalFormulaFlags(
+  weekStartIso: string,
+  fiscalStart: number,
+  isMonthStart: number,
+  isMonthEnd: number,
+): { quarter: number; isQStart: number; isQEnd: number; isYearEnd: number } {
+  const offset = fiscalMonthOffset(weekStartIso, fiscalStart);
+  return {
+    quarter: Math.floor(offset / 3) + 1,
+    isQStart: offset % 3 === 0 && isMonthStart === 1 ? 1 : 0,
+    isQEnd: offset % 3 === 2 && isMonthEnd === 1 ? 1 : 0,
+    isYearEnd: offset === 11 && isMonthEnd === 1 ? 1 : 0,
+  };
+}
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
 /**
@@ -838,13 +874,14 @@ export function getProrationFactor(
  *
  *  - gl_history_average: weekly GL activity average over historyWeeks, actuals
  *    override forecast inside the horizon, optional net-amount mode.
- *  - vendor_payment_history: median non-zero monthly outflow to the vendors ÷
- *    4.345 (or placed monthly when an expected week is set).
+ *  - vendor_payment_history: median non-zero monthly outflow to the vendors,
+ *    spread by each week's actual calendar month length (or placed monthly
+ *    when an expected week is set).
  *  - credit_card_cycle: statement-cycle model — detected payment day, median
  *    completed-month payment, current balance + burn-rate trajectory blend.
  *  - manual_recurring: fixed amount stepped weekly / bi-weekly / monthly.
  *  - formula_expression: Excel-style formula over {AR_IN}/{AP_OUT}/{NET_FLOW}/
- *    {CASH_START}/{WEEK_NUM}/calendar flags, evaluated safely per week.
+ *    {CASH_START}/{WEEK_NUM}/fiscal-calendar flags, evaluated safely per week.
  *  - vendor_recurring_average: auto-detected payment cadence (median interval,
  *    2σ outlier filter) scheduled forward from the last payment.
  *  - bank_register_history: average of actual bank cash-out by week, filtered
@@ -1047,9 +1084,10 @@ export async function categoryWeekly(
       : { total: absMoney(totalHistory), againstDirection: false };
     let weeklyAvg = fullWindowWeeklyAverage(oriented.total, historyWeeks, windowStartIso, dataStartIso);
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
-    const forecastAmount = isSet(cat.expectedWeek) ? multiplyMoney(weeklyAvg, "4.345") : weeklyAvg;
     weekStarts.forEach((k, i) => {
       const actual = weeklyHistory[k] ?? ZERO_MONEY;
+      // A monthly placement spreads the week's own calendar month across it.
+      const forecastAmount = isSet(cat.expectedWeek) ? spreadMonthlyOverWeek(weeklyAvg, k) : weeklyAvg;
       const amount = compareMoney(actual, ZERO_MONEY) > 0 ? actual : forecastAmount;
       const factor = getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek);
       weeklyExact[i] = multiplyMoney(amount, String(factor));
@@ -1110,16 +1148,21 @@ export async function categoryWeekly(
     const months = [...monthlyTotals.values()].filter((v) => compareMoney(v, ZERO_MONEY) > 0).sort(compareMoney);
     const mid = Math.floor(months.length / 2);
     const median = months.length ? (months.length % 2 !== 0 ? months[mid]! : divideMoney(addMoney(months[mid - 1]!, months[mid]!), "2")) : ZERO_MONEY;
-    let baseAmount = isSet(cat.expectedWeek) ? median : divideMoney(median, "4.345");
-    if (adj !== 0) baseAmount = multiplyMoney(baseAmount, String(1 + adj));
+    // Without an expected week the monthly median spreads across each week's
+    // own calendar month; the card's weekly equivalent is the horizon mean of
+    // those scaled weeks (post-adjustment, pre-proration).
+    let scaledSum = ZERO_MONEY;
     weekStarts.forEach((k, i) => {
+      const scaled = isSet(cat.expectedWeek) ? median : spreadMonthlyOverWeek(median, k);
+      const baseAmount = adj !== 0 ? multiplyMoney(scaled, String(1 + adj)) : scaled;
+      scaledSum = addMoney(scaledSum, baseAmount);
       weeklyExact[i] = multiplyMoney(baseAmount, String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)));
     });
-    logic = `median of ${months.length} monthly payments${isSet(cat.expectedWeek) ? "" : " ÷ 4.345"}`;
+    logic = `median of ${months.length} monthly payments${isSet(cat.expectedWeek) ? "" : ", spread by actual month length"}`;
     meta = {
       method: "Vendor History (Median)",
       monthlyMedian: median,
-      finalWeekly: divideMoney(median, "4.345"),
+      finalWeekly: weekStarts.length ? divideMoney(scaledSum, String(weekStarts.length)) : ZERO_MONEY,
       vendors: vids.length,
       ...(cat.partyName ? { vendor: cat.partyName } : {}),
     };
@@ -1129,8 +1172,11 @@ export async function categoryWeekly(
   } else if (cat.method === "credit_card_cycle" && (cat.cardAccountIds?.length || cat.accountIds?.length)) {
     const accountIds = cat.cardAccountIds?.length ? cat.cardAccountIds : cat.accountIds!;
     const lookbackMonths = Math.max(1, Math.min(24, cat.historyMonths ?? 6));
-    const lookbackDays = lookbackMonths * 30;
-    const historyStart = addDays(asOf, -lookbackDays);
+    // The window opens an exact calendar span before the forecast date — the
+    // day count comes from the dates involved, never 30-day months.
+    const historyStartIso = addMonthsClamped(asOfIso, -lookbackMonths);
+    const lookbackDays = Math.max(1, calendarDaysBetween(historyStartIso, asOfIso));
+    const historyStart = parseISO(historyStartIso);
     const ids = sql.join(accountIds.map((a) => sql`${a}`), sql`, `);
     // Charges push the card liability (amount < 0), payments release it (> 0).
     // Legs carry their functional currency: each (day, functional) leg is
@@ -1222,7 +1268,9 @@ export async function categoryWeekly(
           : ZERO_MONEY;
       }
     } else {
-      const monthlySpendRate = multiplyMoney(divideMoney(grandTotalSpend, String(lookbackDays)), "30");
+      // No completed payment month: the window's daily rate scaled to the
+      // forecast month's exact length.
+      const monthlySpendRate = multiplyMoney(divideMoney(grandTotalSpend, String(lookbackDays)), String(daysInMonthUTC(asOf)));
       medianPayment = monthlySpendRate;
       avgPayment = monthlySpendRate;
     }
@@ -1327,7 +1375,7 @@ export async function categoryWeekly(
       currentBalance: totalCurrentBalance,
       daysSinceLastPayment,
       dailyBurnRate,
-      monthlySpendRate: multiplyMoney(dailyBurnRate, "30"),
+      monthlySpendRate: multiplyMoney(dailyBurnRate, String(daysInMonthUTC(asOf))),
       paymentTrend: `${multiplyMoney(paymentTrend, "100")}%`,
       monthsAnalyzed: completedMonths.length,
       accountsIncluded: accountIds.length,
@@ -1352,19 +1400,22 @@ export async function categoryWeekly(
       const weekEnd = addDays(cur, 6);
       const isMonthStart = dayOfMonth <= 7 ? 1 : 0;
       const isMonthEnd = weekEnd.getUTCMonth() !== cur.getUTCMonth() || dayOfMonth >= 25 ? 1 : 0;
+      // Quarter flags resolve on the FISCAL calendar, never calendar
+      // quarters: the offset counts months from the org's fiscal year start.
+      const fiscal = fiscalFormulaFlags(k, context.fiscalStartMonth ?? 1, isMonthStart, isMonthEnd);
       const evalStr = expression
         .replace(/{AR_IN}/g, String(valAR)).replace(/{AP_OUT}/g, String(valAP))
         .replace(/{NET_FLOW}/g, subtractMoney(valAR, valAP)).replace(/{CASH_START}/g, String(context.cashStart))
         .replace(/{WEEK_NUM}/g, String(weekIndex)).replace(/{MONTH}/g, String(monthNum))
-        .replace(/{QUARTER}/g, String(Math.ceil(monthNum / 3))).replace(/{YEAR}/g, String(cur.getUTCFullYear()))
+        .replace(/{QUARTER}/g, String(fiscal.quarter)).replace(/{YEAR}/g, String(cur.getUTCFullYear()))
         .replace(/{DAY}/g, String(dayOfMonth))
         .replace(/{IS_WK1}/g, weekIndex === 1 ? "1" : "0").replace(/{IS_WK2}/g, weekIndex === 2 ? "1" : "0")
         .replace(/{IS_WK3}/g, weekIndex === 3 ? "1" : "0").replace(/{IS_WK4}/g, weekIndex === 4 ? "1" : "0")
         .replace(/{IS_WK5}/g, weekIndex >= 5 ? "1" : "0")
         .replace(/{IS_MONTH_START}/g, String(isMonthStart)).replace(/{IS_MONTH_END}/g, String(isMonthEnd))
-        .replace(/{IS_Q_START}/g, monthNum % 3 === 1 && isMonthStart ? "1" : "0")
-        .replace(/{IS_Q_END}/g, monthNum % 3 === 0 && isMonthEnd ? "1" : "0")
-        .replace(/{IS_YEAR_END}/g, monthNum === 12 && isMonthEnd ? "1" : "0")
+        .replace(/{IS_Q_START}/g, String(fiscal.isQStart))
+        .replace(/{IS_Q_END}/g, String(fiscal.isQEnd))
+        .replace(/{IS_YEAR_END}/g, String(fiscal.isYearEnd))
         .replace(/{TAX_RATE}/g, String(taxRate)).replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
       // A malformed tenant formula is a refusal the operator must see named,
       // never a silent 0 forecast that looks like "no cash expected" —
