@@ -1,4 +1,4 @@
-import { add, isZero } from '@openbooks/engine/src/money/money.ts'
+import { add, isZero } from '@openbooks/engine/money'
 
 /**
  * The statement-of-earnings sections a printed pay stub groups its lines

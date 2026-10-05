@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
-import { installedPayrollCountries } from '@openbooks/engine/src/payroll/readiness.ts'
+import { installedPayrollCountries } from '@openbooks/engine/payroll/setup'
 import {
   employmentJurisdictionsOf,
   holidayOccupationClassesOf,

@@ -1,8 +1,8 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/database'
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
-import { installedPayrollCountries } from '@openbooks/engine/src/payroll/readiness.ts'
+import { installedPayrollCountries } from '@openbooks/engine/payroll/setup'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './types'
 
 /**

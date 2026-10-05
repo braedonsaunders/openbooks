@@ -16,7 +16,7 @@ import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-regis
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
-import { nonCashOffsetProblem } from '@openbooks/engine/src/payroll/non-cash-earnings.ts'
+import { nonCashOffsetProblem } from '@openbooks/engine/payroll/setup'
 import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { recognitionRulePolicyProblem } from '@openbooks/engine/src/revenue/recognition-limits.ts'
 import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'

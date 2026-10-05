@@ -57,6 +57,8 @@
     "./revenue": "./src/revenue/public.ts",
     "./payroll/entitlements": "./src/payroll/public-entitlements.ts",
     "./payroll/withholding": "./src/payroll/public-withholding.ts",
+    "./payroll/setup": "./src/payroll/public-setup.ts",
+    "./payroll/non-cash-offsets": "./src/payroll/non-cash-offset-types.ts",
     "./money/quantity": "./src/money/quantity.ts",
     "./consolidation": "./src/consolidation/public.ts",
     "./tax/contracts": "./src/tax/public-contracts.ts",
