@@ -14,7 +14,7 @@ import { monthYearLabel } from "../format";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
 import { statementBookExpr } from '../gl-summary'
-import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
+import { flowRates, lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 
 interface CashWeeklyHistoryRow extends Record<string, unknown> {
   wk: string
@@ -22,17 +22,27 @@ interface CashWeeklyHistoryRow extends Record<string, unknown> {
   name: string
   net: string
   gross: string
+  /** Line entity's functional currency (translated before adding). */
+  func: string | null
+  /** Bucket's latest posting date (the translation date). */
+  late: string
 }
 
 interface CashDailyRow extends Record<string, unknown> {
   day: string
   spend: string
   paid: string
+  /** Line entity's functional currency (translated before adding). */
+  func: string | null
 }
 
 interface CashPaymentEventRow extends Record<string, unknown> {
   day: string
   paid: string
+  /** Line entity's functional currency (translated before adding). */
+  func: string | null
+  /** Bucket's latest document date (the translation date). */
+  late: string
 }
 
 interface CashRegisterLineRow extends Record<string, unknown> {
@@ -41,7 +51,10 @@ interface CashRegisterLineRow extends Record<string, unknown> {
   doc_number: string | null
   party: string
   memo: string
-  amount: string
+  entry_id: string
+  raw_amount: string
+  /** Line entity's functional currency (translated before netting/adding). */
+  func: string | null
 }
 
 export { openItems } from './open-items'
@@ -104,6 +117,27 @@ export interface Bucket {
    * relabelled bucket cannot hide past-due money in the current column.
    */
   index: number;
+}
+
+/**
+ * Translate one category-history read's legs into presentation currency
+ * BEFORE they are added together. Every leg carries its line entity's
+ * functional currency and is translated at its bucket's latest posting date
+ * (the rate in effect when the bucket's last flow posted) — the same rule
+ * the customer profitability legs use. A missing rate refuses by name: a
+ * multi-subsidiary history fails closed instead of fusing functionals raw,
+ * exactly like the open-items forecast does. Returns translated amounts
+ * aligned with the input legs; callers merge them per bucket.
+ */
+async function translateHistoryLegs(
+  orgId: string,
+  legs: { func: string | null; date: string; amount: string }[],
+): Promise<string[]> {
+  const ctx = await flowRates(
+    orgId,
+    legs.map((leg) => ({ func: leg.func, date: leg.date })),
+  );
+  return legs.map((leg) => mulDecimal(leg.amount, ctx.rateAt(leg.func, leg.date)));
 }
 export interface ForecastEntry {
   id: string;
@@ -889,32 +923,44 @@ export async function categoryWeekly(
     // asOf: postings after the forecast date must not leak into a historical
     // forecast, so only the current (partial) week can carry actuals.
     const r = (await analyticsQuery<CashWeeklyHistoryRow>(sql`
+      -- Legs are stamped in their line entity's functional: carry it (and the
+      -- bucket's latest posting date) so the merge below translates every leg
+      -- into presentation currency BEFORE adding. Raw sums across
+      -- subsidiaries would fuse functionals the forecast keeps separate.
       select (e.posting_date - extract(dow from e.posting_date)::int)::text as wk,
-             a.number, a.name,
-             sum(l.amount) as net, sum(abs(l.amount)) as gross
+             a.number, a.name, sub.base_currency as func,
+             sum(l.amount) as net, sum(abs(l.amount)) as gross,
+             max(e.posting_date)::text as late
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
-      group by 1, a.number, a.name
+      group by 1, a.number, a.name, sub.base_currency
     `));
+    const translatedNet = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.late), amount: normalizeMoneyValue(String(x.net)) })),
+    );
+    const translatedGross = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.late), amount: normalizeMoneyValue(String(x.gross)) })),
+    );
     const weeklyHistory: Record<string, Money> = {};
     const accountTotals = new Map<string, Money>();
-    for (const x of r.rows) {
-      const net = normalizeMoneyValue(String(x.net));
-      const gross = normalizeMoneyValue(String(x.gross));
+    r.rows.forEach((x, i) => {
       // Net mode keeps rows SIGNED through the weekly and window sums so
       // refunds offset spend and contra accounts offset their primaries.
       // Orientation happens once, on the netted total, below.
-      const activity = useNet ? net : gross;
+      const activity = useNet ? translatedNet[i]! : translatedGross[i]!;
       weeklyHistory[x.wk] = addMoney(weeklyHistory[x.wk] ?? ZERO_MONEY, activity);
       const label = [x.number, x.name].filter(Boolean).join(" · ");
       // Signed like the forecast series, so the source rows tie to the
       // netted total they explain.
       accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, activity));
-    }
+    });
     let totalHistory = ZERO_MONEY;
     const startKey = toISO(tStart);
     for (const k of Object.keys(weeklyHistory)) {
@@ -927,27 +973,42 @@ export async function categoryWeekly(
     // account's type and gross, which net mode needs to resolve one
     // normal-balance convention for the orientation below.
     const windowStartIso = toISO(historyStart);
-    const scopeRows = (await analyticsQuery<{ d: string | null; id: string; type: string; gross: string }>(sql`
-      select min(e.posting_date)::text as d, a.id::text as id, a.type as type, sum(abs(l.amount)) as gross
+    const scopeRows = (await analyticsQuery<{ d: string | null; id: string; type: string; gross: string; func: string | null }>(sql`
+      select min(e.posting_date)::text as d, a.id::text as id, a.type as type, sum(abs(l.amount)) as gross, sub.base_currency as func
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        join subsidiaries sub on sub.id = l.subsidiary_id
        where l.org_id = ${orgId} and l.account_id in (${ids})${subScope(sql`l.subsidiary_id`, context.subIds)}
-       group by a.id, a.type
+       group by a.id, a.type, sub.base_currency
     `));
-    const dataStartIso = scopeRows.rows.reduce<string | null>(
+    // Lifetime activity has no bucket date: translate every leg at the
+    // forecast date (today's rate for a lifetime total) before the merge.
+    const scopeTranslated = await translateHistoryLegs(
+      orgId,
+      scopeRows.rows.map((row) => ({ func: row.func, date: asOfIso, amount: normalizeMoneyValue(String(row.gross)) })),
+    );
+    const scopeMerged = new Map<string, { d: string | null; type: string; gross: Money }>();
+    scopeRows.rows.forEach((row, i) => {
+      const cur = scopeMerged.get(row.id) ?? { d: null, type: row.type, gross: ZERO_MONEY };
+      if (row.d !== null && (cur.d === null || row.d < cur.d)) cur.d = row.d;
+      cur.gross = addMoney(cur.gross, scopeTranslated[i]!);
+      scopeMerged.set(row.id, cur);
+    });
+    const dataStartIso = [...scopeMerged.values()].reduce<string | null>(
       (earliest, row) => (row.d !== null && (earliest === null || row.d < earliest) ? row.d : earliest),
       null,
     );
     const divisor = historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso);
     // Convention votes come only from accounts WITH activity (a selected
     // account that never posted must not refuse the forecast); the
-    // accountIds order breaks exact ties.
+    // accountIds order breaks exact ties. Gross is the translated merge, so
+    // a foreign-functional account votes with its presentation weight.
     const voted = cat.accountIds.flatMap((id) => {
-      const row = scopeRows.rows.find((candidate) => candidate.id === id);
+      const row = scopeMerged.get(id);
       return row
-        ? [{ id, type: row.type, gross: normalizeMoneyValue(String(row.gross)) }]
+        ? [{ id, type: row.type, gross: row.gross }]
         : [];
     });
     const oriented = useNet
@@ -991,16 +1052,31 @@ export async function categoryWeekly(
     const r = (await analyticsQuery(sql`
       -- documents.total is transaction-currency denominated: translate at the
       -- document FX rate into functional currency before adding, exactly like
-      -- the purchasing paid values do.
-      select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(round(abs(d.total * d.fx_rate), 4)) as paid
+      -- the purchasing paid values do. The functional leg is carried (with
+      -- the month's latest document date) so the merge below translates every
+      -- subsidiary into presentation currency BEFORE adding — raw sums would
+      -- fuse functionals the forecast keeps separate.
+      select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sub.base_currency as func,
+             sum(round(abs(d.total * d.fx_rate), 4)) as paid,
+             max(coalesce(d.document_date, d.posting_date))::text as late
       from documents d
+      join subsidiaries sub on sub.id = d.subsidiary_id
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - (${historyMonths} || ' months')::interval
         and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
-      group by 1
+      group by 1, 2
     `));
-    const months = (r.rows).map((x) => normalizeMoneyValue(String(x.paid))).filter((v) => compareMoney(v, ZERO_MONEY) > 0).sort(compareMoney);
+    const translatedPaid = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.late), amount: normalizeMoneyValue(String(x.paid)) })),
+    );
+    const monthlyTotals = new Map<string, Money>();
+    r.rows.forEach((x, i) => {
+      const month = String(x.month);
+      monthlyTotals.set(month, addMoney(monthlyTotals.get(month) ?? ZERO_MONEY, translatedPaid[i]!));
+    });
+    const months = [...monthlyTotals.values()].filter((v) => compareMoney(v, ZERO_MONEY) > 0).sort(compareMoney);
     const mid = Math.floor(months.length / 2);
     const median = months.length ? (months.length % 2 !== 0 ? months[mid]! : divideMoney(addMoney(months[mid - 1]!, months[mid]!), "2")) : ZERO_MONEY;
     let baseAmount = isSet(cat.expectedWeek) ? median : divideMoney(median, "4.345");
@@ -1016,8 +1092,8 @@ export async function categoryWeekly(
       vendors: vids.length,
       ...(cat.partyName ? { vendor: cat.partyName } : {}),
     };
-    breakdown = (r.rows)
-      .map((x) => ({ name: String(x.month), amount: normalizeMoneyValue(String(x.paid)), type: "Source Month" }))
+    breakdown = [...monthlyTotals.entries()]
+      .map(([month, amount]) => ({ name: month, amount, type: "Source Month" }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } else if (cat.method === "credit_card_cycle" && (cat.cardAccountIds?.length || cat.accountIds?.length)) {
     const accountIds = cat.cardAccountIds?.length ? cat.cardAccountIds : cat.accountIds!;
@@ -1026,28 +1102,55 @@ export async function categoryWeekly(
     const historyStart = addDays(asOf, -lookbackDays);
     const ids = sql.join(accountIds.map((a) => sql`${a}`), sql`, `);
     // Charges push the card liability (amount < 0), payments release it (> 0).
+    // Legs carry their functional currency: each (day, functional) leg is
+    // translated at its day BEFORE the merge, so two subsidiaries' card
+    // activity never adds raw.
     const r = (await analyticsQuery<CashDailyRow>(sql`
-      select e.posting_date::text as day,
+      select e.posting_date::text as day, sub.base_currency as func,
              sum(case when l.amount < 0 then -l.amount else 0 end) as spend,
              sum(case when l.amount > 0 then l.amount else 0 end) as paid
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
+      join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
-      group by 1
+      group by 1, 2
     `));
+    const translatedSpend = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.spend)) })),
+    );
+    const translatedPaid = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.paid)) })),
+    );
     const balR = (await analyticsQuery(sql`
-      select coalesce(sum(l.amount), 0) as bal
+      select sub.base_currency as func, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
+      join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
+      group by 1
     `));
-    const totalCurrentBalance = absMoney(normalizeMoneyValue(String(balR.rows[0]?.bal ?? ZERO_MONEY)));
+    // A point-in-time stock has no flow date: translate every functional
+    // balance at the forecast date before adding.
+    const translatedBal = await translateHistoryLegs(
+      orgId,
+      balR.rows.map((x) => ({ func: x.func, date: asOfIso, amount: normalizeMoneyValue(String(x.bal)) })),
+    );
+    const totalCurrentBalance = absMoney(sumMoney(translatedBal));
 
     interface DayTotals { date: Date; spend: Money; paid: Money }
-    const days: DayTotals[] = r.rows.map((x) => ({ date: parseISO(x.day), spend: normalizeMoneyValue(String(x.spend)), paid: normalizeMoneyValue(String(x.paid)) }));
+    const mergedDays = new Map<string, DayTotals>();
+    r.rows.forEach((x, i) => {
+      const cur = mergedDays.get(String(x.day)) ?? { date: parseISO(String(x.day)), spend: ZERO_MONEY, paid: ZERO_MONEY };
+      cur.spend = addMoney(cur.spend, translatedSpend[i]!);
+      cur.paid = addMoney(cur.paid, translatedPaid[i]!);
+      mergedDays.set(String(x.day), cur);
+    });
+    const days: DayTotals[] = [...mergedDays.values()];
     const grandTotalSpend = sumMoney(days.map((d) => d.spend));
 
     // Monthly payment rollups with the largest payment's day of month.
@@ -1245,16 +1348,30 @@ export async function categoryWeekly(
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 3));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
     const r = (await analyticsQuery<CashPaymentEventRow>(sql`
-      -- Same functional-currency translation as the payment history above.
-      select coalesce(d.document_date, d.posting_date)::text as day, sum(round(abs(d.total * d.fx_rate), 4)) as paid
+      -- Same functional-currency translation as the payment history above,
+      -- then into presentation currency per (day, functional) leg: daily
+      -- totals never add two subsidiaries' functionals raw.
+      select coalesce(d.document_date, d.posting_date)::text as day, sub.base_currency as func,
+             sum(round(abs(d.total * d.fx_rate), 4)) as paid,
+             max(coalesce(d.document_date, d.posting_date))::text as late
       from documents d
+      join subsidiaries sub on sub.id = d.subsidiary_id
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
-      group by 1
+      group by 1, 2
     `));
-    const events = r.rows
-      .map((x) => ({ date: parseISO(x.day), amount: normalizeMoneyValue(String(x.paid)) }))
+    const translatedEvents = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.late ?? x.day), amount: normalizeMoneyValue(String(x.paid)) })),
+    );
+    const mergedEvents = new Map<string, Money>();
+    r.rows.forEach((x, i) => {
+      const day = String(x.day);
+      mergedEvents.set(day, addMoney(mergedEvents.get(day) ?? ZERO_MONEY, translatedEvents[i]!));
+    });
+    const events = [...mergedEvents.entries()]
+      .map(([day, amount]) => ({ date: parseISO(day), amount }))
       .sort((a, b) => b.date.getTime() - a.date.getTime());
     if (events.length >= 2) {
       const intervals: number[] = [];
@@ -1324,32 +1441,67 @@ export async function categoryWeekly(
       ? sql` and (${sql.join(keywords.map((k) => sql`coalesce(d.memo, e.memo, '') ilike ${"%" + k + "%"}`), sql` or `)})`
       : sql``;
     const r = (await analyticsQuery<CashRegisterLineRow>(sql`
-      -- Transfers net PER ENTRY over the in-scope bank legs: a plain move
-      -- between two selected banks nets to zero, a fee-bearing one (bank A
-      -- -100, bank B +95, fee expense +5) counts only the negative remainder
-      -- (-100 + 95 = -5, so 5 of outflow), and a transfer to an out-of-scope
-      -- account keeps its full leg — cash really left the viewed set. This
-      -- assumes one outflow leg per transfer entry, which is how transfers
-      -- post (one debit, one credit, plus any fee legs).
+      -- One row per in-scope bank leg with its functional currency. Transfers
+      -- net PER ENTRY over the in-scope bank legs (see the merge below): a
+      -- plain move between two selected banks nets to zero, a fee-bearing one
+      -- (bank A -100, bank B +95, fee expense +5) counts only the negative
+      -- remainder (-100 + 95 = -5, so 5 of outflow), and a transfer to an
+      -- out-of-scope account keeps its full leg — cash really left the viewed
+      -- set. Translating legs BEFORE netting keeps multi-subsidiary transfers
+      -- honest; a single-functional entry nets exactly as before.
       select e.posting_date::text as day, coalesce(d.kind, 'journal') as kind,
              d.document_number as doc_number, coalesce(p.display_name, '') as party,
              coalesce(d.memo, e.memo, '') as memo,
-             case when coalesce(d.kind, 'journal') = 'transfer'
-               then greatest(-((
-                 select coalesce(sum(l2.amount), 0) from journal_lines l2
-                  where l2.entry_id = l.entry_id and l2.org_id = l.org_id
-                    and l2.account_id in (${ids})
-               )), 0)
-               else -l.amount end as amount
+             l.entry_id::text as entry_id, l.amount as raw_amount, sub.base_currency as func
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
+      join subsidiaries sub on sub.id = l.subsidiary_id
+      where l.org_id = ${orgId} and l.account_id in (${ids})
+        and (l.amount < 0 or coalesce(d.kind, 'journal') = 'transfer')
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `));
+    const translatedLegs = await translateHistoryLegs(
+      orgId,
+      r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.raw_amount)) })),
+    );
+    // Non-transfer legs contribute their outflow directly; transfer legs net
+    // per entry over the translated in-scope legs (inflows included — they
+    // are in the rows above precisely so the net sees them).
+    interface RegisterContribution { day: string; kind: string; doc_number: string | null; party: string; memo: string; amount: Money }
+    const contributions: RegisterContribution[] = [];
+    const transferEntries = new Map<string, { day: string; kind: string; doc_number: string | null; party: string; memo: string; outflow: RegisterContribution | null; total: Money }>();
+    r.rows.forEach((x, i) => {
+      const amount = translatedLegs[i]!;
+      if (String(x.kind) !== "transfer") {
+        contributions.push({
+          day: String(x.day), kind: String(x.kind), doc_number: (x.doc_number as string | null) ?? null,
+          party: String(x.party ?? ""), memo: String(x.memo ?? ""), amount: normalizeMoneyValue(String(moneyNeg(amount))),
+        });
+        return;
+      }
+      const entryId = String(x.entry_id);
+      const cur = transferEntries.get(entryId) ?? {
+        day: String(x.day), kind: String(x.kind), doc_number: (x.doc_number as string | null) ?? null,
+        party: String(x.party ?? ""), memo: String(x.memo ?? ""), outflow: null, total: ZERO_MONEY,
+      };
+      cur.total = addMoney(cur.total, amount);
+      if (compareMoney(amount, ZERO_MONEY) < 0 && cur.outflow === null) {
+        cur.outflow = { day: String(x.day), kind: String(x.kind), doc_number: (x.doc_number as string | null) ?? null, party: String(x.party ?? ""), memo: String(x.memo ?? ""), amount: ZERO_MONEY };
+      }
+      transferEntries.set(entryId, cur);
+    });
+    for (const entry of transferEntries.values()) {
+      // The entry-level net: a plain in-scope move nets to zero, a
+      // fee-bearing one keeps only the negative remainder.
+      const net = normalizeMoneyValue(String(moneyNeg(entry.total)));
+      if (compareMoney(net, ZERO_MONEY) <= 0) continue;
+      const display = entry.outflow ?? entry;
+      contributions.push({ day: entry.day, kind: entry.kind, doc_number: entry.doc_number, party: display.party, memo: entry.memo, amount: net });
+    }
     // Same data-start rule as the GL path (see historyWindowDivisor),
     // measured in this strategy's own read scope: bank legs matching its
     // kind/memo filters, unbounded in time.
@@ -1376,8 +1528,8 @@ export async function categoryWeekly(
     const weeklyHistory: Record<string, Money> = {};
     const currentWeekKey = toISO(weekStart(asOf));
     const startKey = toISO(tStart);
-    for (const x of r.rows) {
-      const amount = normalizeMoneyValue(String(x.amount));
+    for (const x of contributions) {
+      const amount = x.amount;
       if (compareMoney(amount, ZERO_MONEY) <= 0) continue;
       const wk = toISO(weekStart(parseISO(x.day)));
       weeklyHistory[wk] = addMoney(weeklyHistory[wk] ?? ZERO_MONEY, amount);
