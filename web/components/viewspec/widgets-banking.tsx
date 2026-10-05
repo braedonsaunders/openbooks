@@ -9,6 +9,7 @@ import { NewSetupRecordButton, PaymentOperationsEditor, PaymentOperationsTabs, P
 import { ReconcileStats, ReconcileStatusBadge } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
 import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
 import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
+import { PayoutsWorkspace } from '../../app/(app)/banking/payouts/sections'
 import { PspDisputeReviewDrawer } from '../../app/(app)/banking/psp-settlements/reviews/ReviewDrawer'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
@@ -220,6 +221,7 @@ export const BANKING_WIDGETS = {
   'psp-settlements': (props) => (
     <PspSettlementsWorkspace
       canReconcile={props.canReconcile === true}
+      canSetup={props.canSetup === true}
       strings={props.strings as ComponentProps<typeof PspSettlementsWorkspace>['strings']}
       initialRows={
         (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>['initialRows']) ?? null
@@ -230,6 +232,24 @@ export const BANKING_WIDGETS = {
       initialAccounts={
         (props.initialAccounts as ComponentProps<typeof PspSettlementsWorkspace>['initialAccounts']) ?? []
       }
+      initialConfigs={
+        (props.initialConfigs as ComponentProps<typeof PspSettlementsWorkspace>['initialConfigs']) ?? []
+      }
+    />
+  ),
+  /** One widget, not three: tiles, queue, batches and the payout drawer
+   *  share one state graph (the drawer refreshes the queue after every
+   *  match), so the renderer passes the console whole. */
+  'payouts-console': (props) => (
+    <PayoutsWorkspace
+      canReconcile={props.canReconcile === true}
+      tiles={props.tiles as ComponentProps<typeof PayoutsWorkspace>['tiles']}
+      queue={props.queue as ComponentProps<typeof PayoutsWorkspace>['queue']}
+      batches={props.batches as ComponentProps<typeof PayoutsWorkspace>['batches']}
+      reportHref={str(props, 'reportHref') ?? '/reports/payout-reconciliation'}
+      strings={props.strings as ComponentProps<typeof PayoutsWorkspace>['strings']}
+      emptyTitle={str(props, 'emptyTitle') ?? ''}
+      emptyDescription={str(props, 'emptyDescription') ?? ''}
     />
   ),
 

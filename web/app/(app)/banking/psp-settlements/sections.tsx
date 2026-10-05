@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
+import { Switch } from '@/components/switch'
 import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 
@@ -288,12 +289,20 @@ async function requestSettlement<T>(
  * with no loading flash; the component still reloads after every mutation,
  * exactly as it does natively.
  */
+export interface PspProviderPullConfig {
+  provider: string
+  displayName: string
+  pullEnabled: boolean
+}
+
 export function PspSettlementsWorkspace({
   canReconcile,
+  canSetup,
   strings,
   initialRows,
   initialSubsidiaries,
   initialAccounts,
+  initialConfigs,
 }: {
   /** Loader-resolved banking.reconcile grant: without it the import form
    *  and the post/reverse buttons stay hidden, since every one of those
@@ -348,6 +357,11 @@ export function PspSettlementsWorkspace({
   /** Loader-resolved postable chart accounts for the house pickers. The
    *  stored import value stays the UUID — only the affordance changes. */
   initialAccounts?: PspAccountOption[] | null
+  /** Scheduled-pull toggles for the provider configs, loader-resolved for
+   *  unrestricted callers. Flipping one POSTs saveConfig with
+   *  admin.setup.manage, so the section stays hidden without canSetup. */
+  canSetup?: boolean
+  initialConfigs?: PspProviderPullConfig[] | null
 }) {
   const reversalDateId = useId()
   const reversalReasonId = useId()
@@ -391,6 +405,29 @@ export function PspSettlementsWorkspace({
   const [detail, setDetail] = useState<SettlementDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailFailed, setDetailFailed] = useState(false)
+  // Scheduled-pull toggles (configure depth): the scheduler pulls each
+  // enabled provider on the psp_payout_pull scan; the toggle is the only
+  // writer of pullEnabled outside the config API.
+  const [pullConfigs, setPullConfigs] = useState<PspProviderPullConfig[]>(initialConfigs ?? [])
+  const [pullSaving, setPullSaving] = useState<string | null>(null)
+
+  const flipPull = async (provider: string, next: boolean) => {
+    setPullSaving(provider)
+    const result = await requestSettlement<{ ok: boolean }>({
+      action: 'saveConfig',
+      provider,
+      pullEnabled: next,
+    })
+    setPullSaving(null)
+    if (!result.ok) {
+      setErr(result.error ?? t('pullFailed'))
+      return
+    }
+    setPullConfigs((configs) =>
+      configs.map((config) => (config.provider === provider ? { ...config, pullEnabled: next } : config)),
+    )
+    setMsg(t('pullSaved'))
+  }
 
   // Adopt provided rows by leaving the loading state, during render (same
   // committed value, no extra render). Transition-based so a manual reload
@@ -874,6 +911,25 @@ export function PspSettlementsWorkspace({
           {strings.importDraft}
         </Button>
       </Card>
+      )}
+
+      {canSetup && pullConfigs.length > 0 && (
+        <DisclosureSection title={t('pullTitle')} summary={t('pullSummary')} forceOpen={false}>
+          <ul className="space-y-2 pt-1">
+            {pullConfigs.map((config) => (
+              <li key={config.provider} className="flex items-center gap-2 text-sm">
+                <Switch
+                  on={config.pullEnabled}
+                  disabled={pullSaving !== null}
+                  onToggle={() => void flipPull(config.provider, !config.pullEnabled)}
+                  label={config.displayName}
+                />
+                <span className="font-medium">{config.displayName}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('pullHint')}</span>
+              </li>
+            ))}
+          </ul>
+        </DisclosureSection>
       )}
 
       <Card className="p-4">

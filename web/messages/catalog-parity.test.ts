@@ -316,6 +316,15 @@ const COGNATES = new Set<string>([
   // “Production” is spelled identically in French.
   'fr:admin.roles.named.production.name|Production',
   'fr:agents.drawer.assignment.roles.production|Production',
+  // The payouts workspace headers are single financial nouns French spells
+  // exactly like English (un document, une action, une date, net).
+  'fr:banking.payouts.documentHead|Document',
+  'fr:banking.payouts.actionHead|Action',
+  'fr:banking.payouts.dateHead|Date',
+  'fr:banking.payouts.netHead|Net',
+  // The payout reconciliation report column is the same noun as the channel
+  // sales document column already declared above.
+  'fr:reports.catalog.columns.payout_reconciliation.document_number|Document',
   // “Promotion(s)” and “Document” are spelled identically in French.
   'fr:admin.features.promotions.title|Promotions',
   'fr:salesOrders.promotion.chip|Promotion',
