@@ -4,7 +4,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
 import { flowRates, presentationCurrency, type FlowRates } from "../fx-presentation";
-import { add, cmp, mulDecimal, sum } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, mulDecimal, sum } from "@openbooks/engine/money";
 import { ForbiddenError, type Authz } from "../authz";
 import { sentinelAccessDenied } from "./sentinel-access";
 import { auditEventArgs, type ConformityCode, type SentinelStrings, sentinelStrings } from "./sentinel-strings";
@@ -95,10 +95,10 @@ export const RISK_SCORING: Record<
       span3Days: { labelKey: "analytics.sentinel.scoring.spanBump", params: { days: 3, points: 15 }, days: 3, points: 15 },
       span7Days: { labelKey: "analytics.sentinel.scoring.spanBump", params: { days: 7, points: 10 }, days: 7, points: 10 },
       sharedReference: { labelKey: "analytics.sentinel.scoring.sharedReference", params: { points: 10 }, points: 10 },
-      confSharedReference: { labelKey: "analytics.sentinel.scoring.confShared", params: { pct: "95%" }, confidence: 0.95 },
-      confSpan3Days: { labelKey: "analytics.sentinel.scoring.confSpan", params: { days: 3, pct: "90%" }, days: 3, confidence: 0.9 },
-      confSpan7Days: { labelKey: "analytics.sentinel.scoring.confSpan", params: { days: 7, pct: "85%" }, days: 7, confidence: 0.85 },
-      confOtherwise: { labelKey: "analytics.sentinel.scoring.confOtherwise", params: { pct: "75%" }, confidence: 0.75 },
+      confSharedReference: { labelKey: "analytics.sentinel.scoring.confShared", params: {}, confidence: 0.95 },
+      confSpan3Days: { labelKey: "analytics.sentinel.scoring.confSpan", params: { days: 3 }, days: 3, confidence: 0.9 },
+      confSpan7Days: { labelKey: "analytics.sentinel.scoring.confSpan", params: { days: 7 }, days: 7, confidence: 0.85 },
+      confOtherwise: { labelKey: "analytics.sentinel.scoring.confOtherwise", params: {}, confidence: 0.75 },
     },
   },
   weekend: {
@@ -158,7 +158,7 @@ export const RISK_SCORING: Record<
       tierHigh: TIER("analytics.sentinel.config.fields.highRiskAmount.label", 15),
       tierBase: { labelKey: "analytics.sentinel.scoring.tierOtherwise", params: { points: 5 }, points: 5 },
       perType: { labelKey: "analytics.sentinel.scoring.perType", params: { points: 8 }, points: 8 },
-      worstShare: { labelKey: "analytics.sentinel.scoring.worstShare", params: { pct: "30%" }, share: 0.3 },
+      worstShare: { labelKey: "analytics.sentinel.scoring.worstShare", params: {}, share: 0.3 },
     },
   },
   summary: {
@@ -358,6 +358,9 @@ export interface AuditEvent {
 export type SentinelConfig = ConfigValuesOf<"sentinel">;
 
 export interface SentinelData {
+  /** The severity model, shipped so Configuration renders it read-only
+   * from this object — never from restated prose. */
+  scoring: Record<string, RiskScoringSection>;
   period: { from: string; to: string; label: string };
   meta: { totalDocs: number; totalAmount: string; presentationCurrency: string; days: number; queryMs: number };
   config: SentinelConfig;
@@ -1552,6 +1555,7 @@ export async function sentinelData(
   const days = Math.round((end.getTime() - new Date(from + "T00:00:00Z").getTime()) / 86_400_000) + 1;
 
   return {
+    scoring: RISK_SCORING,
     period,
     meta: { totalDocs: metaCount, totalAmount: metaTotal, presentationCurrency: presentationCcy, days, queryMs: Date.now() - t0 },
     config: cfg,
