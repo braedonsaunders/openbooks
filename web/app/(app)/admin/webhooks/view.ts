@@ -25,7 +25,6 @@ export type WebhooksData = {
   currentParams: Record<string, string | string[] | undefined>
   emptyTitle: string
   emptyDescription: string
-  showNew: boolean
   drawer: {
     endpoint: WebhookEndpointDrawerProps['endpoint']
     closeHref: string
@@ -86,7 +85,6 @@ export async function loadWebhooks(
     currentParams: sp,
     emptyTitle: t('webhooks.list.emptyTitle'),
     emptyDescription: t('webhooks.list.emptyDescription'),
-    showNew: creating && canManage,
     drawer: endpointParam && (!creating || canManage)
       ? {
           endpoint: creating
@@ -121,17 +119,9 @@ export function webhooksSpec(data: WebhooksData): PageSpec {
         emptyAction: data.canManage ? newEndpoint : null,
         emptyTitle: data.emptyTitle,
         emptyDescription: data.emptyDescription,
-        drawer: [
-          data.showNew
-            ? {
-                widget: 'webhook-endpoint-drawer',
-                props: {
-                  drawer: { endpoint: null, closeHref: '/admin/webhooks', canManage: data.canManage, eventTypes: [...FANOUT_EVENT_TYPES] },
-                },
-              }
-            : null,
-          data.drawer ? { widget: 'webhook-endpoint-drawer', props: { drawer: data.drawer } } : null,
-        ].filter(Boolean),
+        // One shell per record: the loader's drawer entry already covers
+        // creation (endpoint null), so no second create entry may render.
+        drawer: data.drawer ? [{ widget: 'webhook-endpoint-drawer', props: { drawer: data.drawer } }] : [],
       }),
     ],
   })

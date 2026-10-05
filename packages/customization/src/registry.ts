@@ -1063,7 +1063,7 @@ const WEBHOOK_ENDPOINT: RecordTypeMeta = {
   headerFields: [],
   lineFields: [],
   listColumns: [
-    { key: "key", labelKey: "admin.webhooks.columns.key", kind: "text", sortable: true, sortKey: "key", locked: true },
+    { key: "key", labelKey: "admin.webhooks.columns.key", kind: "reference", sortable: true, sortKey: "key", locked: true },
     { key: "url", labelKey: "admin.webhooks.columns.url", kind: "text", sortable: true, sortKey: "key" },
     { key: "events_count", labelKey: "admin.webhooks.columns.events", kind: "text", sortable: false },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
