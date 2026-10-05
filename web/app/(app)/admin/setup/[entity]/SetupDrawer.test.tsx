@@ -443,3 +443,10 @@ test('each nested drawer stays above its parent and Escape closes only the deepe
   await act(async () => document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
   assert.deepEqual(closed, ['component'], 'closing a nested record must preserve both parents')
 })
+
+
+test('effective-dated policy versions stay readable without offering an edit action', async (t) => {
+  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000001', rate_kind: 'closing', max_age_days: 7, effective_from: '2026-07-01' }, () => new Response('{}'), 'fx-rate-age-policies', undefined, undefined, undefined, false)
+  assert.equal([...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Edit'), false)
+  assert.equal(seen.length, 0)
+})

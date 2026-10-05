@@ -100,3 +100,25 @@ export const closeRuns = pgTable(
     index("close_runs_org_status").on(t.orgId, t.status, t.targetCloseDate),
   ],
 );
+
+/**
+ * Effective-dated maximum exchange-rate age per rate kind. FX revaluation
+ * (closing) and consolidation translation (closing and average) refuse a
+ * period whose newest usable rate is older than the limit in force at the
+ * period end; with no row the engine's documented default applies.
+ */
+export const fxRateAgePolicies = pgTable(
+  "fx_rate_age_policies",
+  {
+    id: id(),
+    orgId: orgRef(),
+    rateKind: text("rate_kind", { enum: ["closing", "average"] }).notNull(),
+    maxAgeDays: integer("max_age_days").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("fx_rate_age_policies_org_id_id_key").on(t.orgId, t.id),
+    unique("fx_rate_age_policies_effective_unique").on(t.orgId, t.rateKind, t.effectiveFrom),
+  ],
+);

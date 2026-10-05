@@ -1,8 +1,9 @@
 import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql } from "drizzle-orm";
 import { periodLockBlocksPosting } from "../periods/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
-import { averageSpotRate, lookupSpotRate } from "../fx/spot-rate.ts";
-import { db, orgContext, withOrgContext } from "../platform/db.ts";
+import { averageSpotRateWithinAgeLimit, closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
+import { db, orgContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { addCalendarDays, isoDateOf } from "../platform/business-date.ts";
 import { PNL_TYPES } from "../records/account-types.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
@@ -835,7 +836,7 @@ export async function deriveConsolidatedRates(
   periodId: string,
   actorId: string | null = null,
 ): Promise<number> {
-  return deriveConsolidatedRatesIn(orgId, periodId, db, actorId);
+  return withOrgTransaction(orgId, () => deriveConsolidatedRatesIn(orgId, periodId, db, actorId));
 }
 
 /** The columns a consolidated rate row is audited and compared by. */
@@ -890,6 +891,7 @@ async function deriveConsolidatedRatesIn(
   exec: Runner,
   actorId: string | null,
 ): Promise<number> {
+  await lockLedgerSetupFence(exec, orgId, "shared");
   const periodRes = (await exec.execute<{
     id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number;
     is_adjustment: boolean; fiscal_calendar_id: string;
@@ -907,14 +909,20 @@ async function deriveConsolidatedRatesIn(
     // Spot coverage is direct-or-inverse through the shared FX lookup: an
     // org storing only the inverse pair derives exactly like one storing the
     // direct pair (direct wins same-date ties). Uncovered pairs still refuse
-    // with rates-missing — never a defaulted 1.
-    const spotCurrent = await lookupSpotRate(exec, orgId, pair.from, pair.to, period.ends_on);
+    // with rates-missing — never a defaulted 1. A rate older than the
+    // organization's age limit is refused by name the same way: the newest
+    // quote of a stopped feed is not this period's rate.
+    const closing = await closingSpotRateWithinAgeLimit(exec, orgId, pair.from, pair.to, period.ends_on);
+    if (closing.refusal) throw new ConsolidationError(closing.refusal, 'rates-missing');
+    const spotCurrent = closing.rate;
     if (!spotCurrent) {
       throw new ConsolidationError(
         `no spot rate for ${pair.from}→${pair.to} on or before ${period.ends_on} — load fx_rates first`,
       'rates-missing');
     }
-    const spotAverage = await averageSpotRate(exec, orgId, pair.from, pair.to, period.starts_on, period.ends_on);
+    const averaged = await averageSpotRateWithinAgeLimit(exec, orgId, pair.from, pair.to, period.starts_on, period.ends_on);
+    if (averaged.refusal) throw new ConsolidationError(averaged.refusal, 'rates-missing');
+    const spotAverage = averaged.rate;
     // A period average needs quotes inside the period. Substituting the
     // closing spot would translate the whole period's income at one day's
     // rate without anyone choosing that, so it is refused by name.

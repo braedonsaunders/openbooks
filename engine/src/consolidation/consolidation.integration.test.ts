@@ -479,6 +479,18 @@ test("rate derivation refuses a period with no quotes instead of averaging the c
       values (${org.orgId}, 'USD', 'CAD', '2026-06-30', 'spot', '1.3000000000', 'manual')`);
     await assert.rejects(deriveConsolidatedRates(org.orgId, org.periodId, actorId),
       /no spot rates for USD→CAD are dated inside 2026-07-01 to 2026-07-31, so the period average cannot be derived/);
+    await db.execute(sql`insert into fx_rate_age_policies (org_id,rate_kind,max_age_days,effective_from)
+      values (${org.orgId},'closing',60,'2026-07-01'),(${org.orgId},'average',7,'2026-07-01')`);
+    await db.execute(sql`insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate)
+      values (${org.orgId},'USD','CAD','2026-07-01','spot','1.3000000000')`);
+    await assert.rejects(deriveConsolidatedRates(org.orgId,org.periodId,actorId),
+      (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
+        && /USD→CAD.*2026-07-01.*30 days old.*7-day limit for average/.test(error.message)
+        && error.message.includes('Setup → FX Rate Age Policies'));
+    assert.equal((await db.execute(sql`select id from consolidated_fx_rates where org_id=${org.orgId}`)).rows.length,0);
+    await db.execute(sql`insert into fx_rate_age_policies (org_id,rate_kind,max_age_days,effective_from)
+      values (${org.orgId},'average',45,'2026-07-15')`);
+    assert.equal(await deriveConsolidatedRates(org.orgId,org.periodId,actorId),1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -2384,7 +2396,7 @@ test("rate derivation without a spot rate refuses typed rates-missing", { skip: 
   } finally { await dropScratchOrg(org.orgId); }
 });
 
-test("an asset-transfer-only period reports a null elimination entry with transfers listed separately", { skip: !DB }, async () => {
+test("a later asset-transfer period eliminates the outstanding intercompany balance and lists asset true-ups separately", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
@@ -2492,15 +2504,19 @@ test("an asset-transfer-only period reports a null elimination entry with transf
       consolidateAssetTransfers(tx, org.orgId, august, adminId),
     );
     assert.equal(augustAssets.length, 1);
-    // September carries no transfer legs — only the received asset's
-    // depreciation and its group-basis true-up — so elimination has no
-    // intercompany activity while the asset phase still posts.
+    // September has no new transfer legs, but August's unpaid receivable and
+    // payable remain on the balance sheet and must stay eliminated.
     const septemberDep = await runDepreciation(org.orgId, "2026-09-30", submitterId, received);
     assert.deepEqual(septemberDep.problems, []);
     // The elimination run consolidates September's asset true-up itself.
     const elimination = await runAutoElimination(org.orgId, september, adminId);
-    assert.equal(elimination.entryId, null);
-    assert.equal(elimination.status, "no_elimination_required");
+    assert.ok(elimination.entryId);
+    assert.equal(elimination.status, "eliminated");
+    const balanceLines = (await db.execute<{account_id:string; amount:string}>(sql`
+      select account_id,amount::text from journal_lines
+       where org_id=${org.orgId} and entry_id=${elimination.entryId}`)).rows;
+    assert.deepEqual(balanceLines.map(line=>[line.account_id,line.amount]).sort(),
+      [[dueFrom,'-2400.0000'],[dueTo,'2400.0000']].sort());
     assert.equal(elimination.assetEntryIds?.length, 1);
     const assetJournal = await db.execute<{ id: string; origin: string }>(sql`
       select id, origin from journal_entries
@@ -2511,7 +2527,7 @@ test("an asset-transfer-only period reports a null elimination entry with transf
       select count(*)::int as n from journal_entries
        where org_id=${org.orgId} and period_id=${september} and origin='intercompany'
     `);
-    assert.equal(intercompany.rows[0]!.n, 0, "no elimination journal exists to open");
+    assert.equal(intercompany.rows[0]!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -1,0 +1,1 @@
+Creates the new org-isolated fx_rate_age_policies table and registers it with the query catalog; no existing tenant rows are read, rewritten or removed, so there is nothing to probe before applying.

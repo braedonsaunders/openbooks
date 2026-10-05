@@ -886,6 +886,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "fx_provider_runs.error_message",
   "fx_provider_runs.status",
   "fx_provider_runs.trigger",
+  "fx_rate_age_policies.rate_kind",
   "fx_rates.from_currency",
   "fx_rates.rate_type",
   "fx_rates.source",

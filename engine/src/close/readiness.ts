@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { financialClosePeriodScope, revaluationReadiness } from "./fx-revaluation.ts";
+import { resolveFxRateAgeLimit } from "../fx/rate-age-policy.ts";
 import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.ts";
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -99,6 +100,14 @@ export async function periodFingerprint(
                  ',' order by cf.from_currency, cf.to_currency), '')
          from consolidated_fx_rates cf
         where cf.org_id = ${orgId} and cf.period_id = ${periodId} and ${includeGroupEvidence}) as consolidated_rates,
+      -- Effective policy changes invalidate the readiness evidence they govern.
+      (select coalesce(string_agg(policy.rate_kind || ':' || policy.max_age_days::text || ':' || policy.effective_from::text,
+                 ',' order by policy.rate_kind), '') from (
+          select distinct on (rate_kind) rate_kind,max_age_days,effective_from
+            from fx_rate_age_policies
+           where org_id=${orgId} and effective_from<=${period.ends_on}
+           order by rate_kind,effective_from desc
+        ) policy) as fx_rate_age_policy,
       (select coalesce(string_agg(e.id::text || ':' || e.updated_at::text || ':' || l.id::text || ':' || l.amount::text, ',' order by l.id), '')
         from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
         join accounts a on a.id=l.account_id and a.org_id=l.org_id
@@ -159,6 +168,9 @@ export async function readinessChecks(
   // sign-offs while the policy is on; off returns readiness to statements.
   // Absent on pre-seed orgs reads as on (see sourceEvidencePolicyActive).
   const sourceEvidenceOn = await sourceEvidencePolicyActive(orgId);
+  // A spot rate older than the closing-rate age limit is not usable at
+  // period end: revaluation and consolidation refuse it, so coverage does too.
+  const closingRateLimit = await resolveFxRateAgeLimit(db, orgId, "closing", ctx.ends_on);
 
   const [postingEffects, drafts, missingPeriod, bank, depreciation, recognition, fx, fxReval, intercompany, variancePolicy] =
     (await Promise.all([
@@ -286,6 +298,7 @@ export async function readinessChecks(
            and ((f.from_currency=c.currency and f.to_currency=c.base_currency)
              or (f.from_currency=c.base_currency and f.to_currency=c.currency))
            and f.rate_type = 'spot' and f.rate > 0 and f.as_of <= ${ctx.ends_on}
+           and f.as_of >= ${ctx.ends_on}::date - ${closingRateLimit.maxAgeDays}::int
        )`),
       // The revaluation ENGINE decides fx readiness: the same monetary
       // population, spot-rate lookup, and delta arithmetic runRevaluation
