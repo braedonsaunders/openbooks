@@ -523,6 +523,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'subcontracts-workspace': { props: [], open: true },
   'submitted-document-cell': { props: ['documentNumber', 'href'] },
   'subsidiary-switcher': { props: ['label', 'picker', 'value'] },
+  'billing-history-console': { props: [] },
   'sync-console': { props: [] },
   'tab-nav': { props: ['ariaLabel', 'tabs'] },
   'tax-depreciation-header': { props: ['description', 'descriptionClassName', 'tabs', 'tabsAria', 'title'] },

@@ -2716,6 +2716,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/sync/billing-history': {
+    route: '/sync/billing-history',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/sync/billing-history/view')
+      return {
+        load: () => m.loadBillingHistory(),
+        spec: () => m.billingHistorySpec(),
+      }
+    },
+  },
   '/tax': {
     route: '/tax',
     segments: [],
