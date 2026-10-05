@@ -1,5 +1,5 @@
 import { CommerceError } from "./errors.ts";
-import type { SalesChannelAdapter } from "./contracts.ts";
+import type { ChannelWorkspaceTab, SalesChannelAdapter } from "./contracts.ts";
 
 /**
  * The adapter registry: one adapter per storefront kind. Production adapters
@@ -51,4 +51,15 @@ export function channelAdapter(kind: string): SalesChannelAdapter {
 
 export function registeredChannelKinds(): string[] {
   return [...adapters.keys()].sort();
+}
+
+/**
+ * Workspace tabs contributed by one kind's adapter. A kind with no installed
+ * connector contributes none — the workspace renders its built-in tabs
+ * alone. This never refuses: verification and settings paths keep the
+ * strict lookup above, but an uninstalled connector must not take down a
+ * channel the operator is already inspecting.
+ */
+export function workspaceTabsFor(kind: string): ChannelWorkspaceTab[] {
+  return adapters.get(kind)?.workspaceTabs() ?? [];
 }
