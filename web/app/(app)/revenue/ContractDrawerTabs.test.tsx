@@ -139,6 +139,16 @@ function twoObligationPayload(): Payload {
   };
 }
 
+function payloadWithChanges(): Payload {
+  return {
+    ...payload(),
+    changes: [
+      { id: "change-1", operation: "modify", effective_on: "2026-02-01", status: "approved" },
+      { id: "change-2", operation: "cancel", effective_on: "2026-03-01", status: "applied" },
+    ],
+  };
+}
+
 function stripTab(label: string): HTMLButtonElement {
   const strip = document.querySelector("nav[aria-label='Contract sections']");
   assert.ok(strip, "the drawer must offer the Overview/Obligations strip");
@@ -288,5 +298,72 @@ test("selecting an obligation shows only its recognition schedule", async (t) =>
     pane.textContent ?? "",
     /2026-01/,
     "the previously selected period leaves the focused pane",
+  );
+});
+
+/**
+ * Billings and accounting events are independent concepts: with both
+ * populated, the billings table and the events list never share a visible
+ * body — the events keep their deep links on the sibling tab.
+ */
+test("billings and accounting events never share a visible body", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <MoneyProvider currency="USD">
+          <ContractDrawer payload={payloadWithChanges()} canRun={false} />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+    await tick();
+  });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  const eventsTab = stripTab("Accounting events");
+  assert.ok(eventsTab, "populated events earn their own sibling tab");
+
+  // Headings, not strip tabs: the events tab button carries the same text
+  // as the events title, so exact-text lookup would find the tab first.
+  const headingOf = (text: string): Element | null =>
+    Array.from(document.querySelectorAll("h3")).find(
+      (element) => element.textContent === text,
+    ) ?? null;
+
+  const billingsHeading = headingOf("Billings");
+  assert.ok(billingsHeading, "the billings table keeps its heading");
+  assert.equal(
+    billingsHeading.closest("div[hidden]"),
+    null,
+    "the billings body starts visible",
+  );
+  const eventsHeading = headingOf("Accounting events");
+  assert.ok(eventsHeading, "the events list keeps its title");
+  assert.ok(
+    eventsHeading.closest("div[hidden]"),
+    "the events body starts hidden behind its sibling tab",
+  );
+
+  await act(async () => {
+    click(eventsTab);
+    await tick();
+  });
+
+  assert.equal(
+    headingOf("Accounting events")?.closest("div[hidden]"),
+    null,
+    "selecting the events tab shows the events body",
+  );
+  assert.ok(
+    headingOf("Billings")?.closest("div[hidden]"),
+    "the billings body hides while events show",
   );
 });
