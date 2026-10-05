@@ -1860,6 +1860,8 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "property_units.name",
   "property_units.status",
   "property_units.unit_type",
+  "psp_payout_accruals.currency",
+  "psp_payout_accruals.status",
   "psp_provider_configs.display_name",
   "psp_provider_configs.last_error",
   "psp_provider_configs.provider",
