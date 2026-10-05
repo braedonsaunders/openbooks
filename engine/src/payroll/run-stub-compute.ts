@@ -32,6 +32,7 @@ import { resolveWorkSchedule, scheduledHoursPerWeek } from "./work-schedules.ts"
 import { type StubComputation, storedTaxCertificates, resolvePayRate } from "./run-calculation-support.ts";
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
+import { applyBankDrawdown } from "./run-bank-drawdown.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
@@ -423,6 +424,15 @@ export async function calculateStub(
     employeeName: emp.display_name ?? employeePartyId,
     employmentId: emp.employment_id ?? undefined, policyDate: run.period_end!, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
+  });
+
+  // Bank drawdown runs after accrual by construction: the accrual basis above
+  // never sees payout lines, and this run's accrual movements already sit in
+  // entitlementMovements, so the overdraw check counts them as available.
+  await applyBankDrawdown(tx, {
+    orgId, documentId, payDate: run.pay_date!, employeePartyId,
+    employeeName: emp.display_name ?? employeePartyId,
+    terminationRun, plans, lines, entitlementMovements,
   });
 
   await applyEarningPaymentKinds(tx, {

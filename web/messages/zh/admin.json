@@ -3587,6 +3587,8 @@
       "accrualValue": "计提值",
       "accrualComponentId": "计提组成",
       "payoutComponentId": "发放组成",
+      "depositComponentId": "存入组成",
+      "allowNegativeBalance": "允许负余额",
       "capBehavior": "达到上限时",
       "planId": "计划",
       "employeePartyId": "员工",
@@ -3842,6 +3844,10 @@
       "entitlementDirection": "计提：雇主欠员工。欠付：员工欠雇主——余额为负，从未来工资中扣还，直到恰好为零。",
       "entitlementAccrualValue": "按收入比例的计划填百分比（4 即 4%），否则填每小时或每发薪期金额。",
       "entitlementPayoutComponent": "支付该银行的收入项。对“欠付”计划，此处是扣回的扣款项。",
+      "entitlementDepositComponent": "负工时明细存入时间而非支付的收入项。正数明细支付已存入的时间。",
+      "entitlementAllowNegativeBalance": "开启时，支取可使余额变为负数。关闭时，超出余额的支付将被拒绝。",
+      "entitlementDepositComponent": "以负工时明细为工时银行注资的收入项。除非将工作时间存入银行而非支付，否则留空。",
+      "entitlementAllowNegativeBalance": "允许支付使银行余额为负。否则，超过可用余额的支付将被拒绝。",
       "entitlementLiabilityAccount": "该银行在资产负债表中的位置。留空则本计划仅供报表使用。",
       "entitlementCapBehavior": "警告会记录计提并标记。阻止会停住该员工的工资运行。自动发放则封顶银行并支付超出部分。",
       "entitlementScope": "最多设置一个范围。各范围全留空则为计划级默认。",
@@ -5530,6 +5536,7 @@
       "electionHint": "固定选择不会随工龄上限提高而改变。遵循政策会使用生效费率和工龄上限。",
       "electedRateHint": "按缴款单位输入实际选择的费率，与最高额度分开。",
       "arrearsHint": "使用原生金额欠款余额、手动累计，并以此员工扣款作为支付项目。明确补收期数。",
+      "countedComponentsHint": "只有收入类工资组成才包含可计工时。按数量计算的单位（如出差或餐补）不包含工时，永不计入。",
       "options": {
         "kind": {
           "employee_deduction": "员工扣款",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "全部付薪工时",
           "regular_paid": "正常付薪工时",
-          "scheduled_paid": "排定付薪工时"
+          "scheduled_paid": "排定付薪工时",
+          "selected_components": "所选工资组成工时"
         },
         "pay": {
           "all_cash_earnings": "全部现金工资",

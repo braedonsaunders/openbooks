@@ -3676,6 +3676,8 @@
       "observedOn": "Datum",
       "packKey": "Gesetzlicher Feiertag",
       "payoutComponentId": "Auszahlungskomponente",
+      "depositComponentId": "Einzahlungskomponente",
+      "allowNegativeBalance": "Negativsaldo zulassen",
       "planId": "Plan",
       "programType": "Kontoart",
       "protectionBase": "Geschützte Bezugsgrundlage",
@@ -3907,6 +3909,10 @@
       "entitlementMaxBalance": "Die harte Obergrenze, in der Einheit des Plans.",
       "entitlementNotifyBalance": "Die weiche Schwelle, die einen Mitarbeiter als nahe am Limit markiert.",
       "entitlementPayoutComponent": "Der Bezug, der das Konto auszahlt. Bei einem Schulden-Plan ist dies der Abzug, der es zurückfordert.",
+      "entitlementDepositComponent": "Der Bezug, dessen negative Stunden stattdessen dem Konto gutgeschrieben werden. Positive Zeilen zahlen gutgeschriebene Zeit aus.",
+      "entitlementAllowNegativeBalance": "Wenn aktiv, dürfen Abhebungen das Konto ins Minus treiben. Wenn inaktiv, wird eine Auszahlung über den Saldo hinaus verweigert.",
+      "entitlementDepositComponent": "Der Bezug, dessen Negativstunden-Zeilen ein Stundenkonto aus einem Lauf speisen. Leer lassen, es sei denn, Arbeitszeit wird statt Auszahlung gebankt.",
+      "entitlementAllowNegativeBalance": "Auszahlungen dürfen das Konto unter null drücken. Sonst wird eine Auszahlung über dem verfügbaren Saldo verweigert.",
       "entitlementScope": "Höchstens einen Bereich setzen. Alle Bereiche leer lassen für den planweiten Standard.",
       "entitlementTierTarget": "Entweder einen Plan setzen (um dessen Ansammlungswert zu erhöhen) oder einen Lohnbestandteil (um ihn anspruchsberechtigt zu machen) – nicht beides.",
       "entitlementUnit": "Geld wird dringend empfohlen. Ein in Stunden geführtes Konto wird bei jeder Lohnerhöhung neu bewertet, was den Arbeitgeber stillschweigend die Differenz kostet.",
@@ -5530,6 +5536,7 @@
       "electionHint": "Eine feste Wahl bleibt bei steigenden Grenzen fest. Richtlinienfolge nutzt den gültigen Satz und die Grenzen.",
       "electedRateHint": "Geben Sie den tatsächlich gewählten Satz ein, getrennt vom Höchstangebot.",
       "arrearsHint": "Nutzen Sie eine Geldbank mit Richtung Schuld, manueller Ansammlung und diesem Abzug. Geben Sie Rückforderungsperioden an.",
+      "countedComponentsHint": "Nur Verdienstkomponenten enthalten zählbare Stunden. Mengenbasierte Einheiten wie Fahrten oder Mahlzeiten enthalten keine Stunden und zählen nie.",
       "options": {
         "kind": {
           "employee_deduction": "Mitarbeiterabzug",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "Alle bezahlten Stunden",
           "regular_paid": "Reguläre bezahlte Stunden",
-          "scheduled_paid": "Geplante bezahlte Stunden"
+          "scheduled_paid": "Geplante bezahlte Stunden",
+          "selected_components": "Stunden ausgewählter Komponenten"
         },
         "pay": {
           "all_cash_earnings": "Alle Geldbezüge",

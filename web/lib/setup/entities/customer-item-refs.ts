@@ -7,7 +7,7 @@ import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
 import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
 import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
-import { validateContributionWrite, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
+import { validateContributionWrite, validateEntitlementPlan, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
 
 type CurrentIdentifier = { item_id: string; unit: string | null }
 type CurrentCustomerItemRef = { customer_id: string; item_id: string }
@@ -53,6 +53,7 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   [PAYROLL_SERVICE_CREDITS_ENTITY.key]: validateServiceCredit,
   [PAYROLL_VACATION_TERMS_ENTITY.key]: validateVacationTerm,
   'entitlement-service-tiers': validateServiceTier,
+  'entitlement-plans': validateEntitlementPlan,
   'item-identifiers': validateIdentifierWrite,
   'customer-item-refs': validateCustomerItemRefWrite,
   'marketplace-facilitators': validateMarketplaceFacilitatorWrite,

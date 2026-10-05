@@ -110,4 +110,5 @@ export { computeEmploymentServiceCredit, resolveEmploymentServiceCredit, validat
 
 export { resolveVacationTerms, validateVacationTermConfiguration, type VacationTerms, type VacationMethod } from "./vacation-terms.ts";
 export { validateEntitlementServiceTierConfiguration } from "./entitlement-service-config.ts";
+export { validateEntitlementPlanConfiguration } from "./entitlement-plan-config.ts";
 export { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";

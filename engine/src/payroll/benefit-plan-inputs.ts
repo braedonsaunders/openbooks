@@ -19,7 +19,8 @@ interface EnrollmentSource {
   id: string; planId: string; employerSubsidiaryId: string | null; currency: string; classKey: string | null; matchEligible: boolean | null;
   effectiveFrom: string; effectiveTo: string | null; planCode: string;
   terms: (RecurringBenefitTerm & { sourceDecimal: string | null; provenance: unknown })[];
-  rules: (RecurringBenefitRule & { sourceDecimal: string | null; provenance: unknown })[];
+  rules: (RecurringBenefitRule & { sourceDecimal: string | null; provenance: unknown;
+    selectedComponentIds: string[]; selectedComponents: { id: string; kind: string; code: string; name: string }[] })[];
   tiers: (BenefitContributionTier & { classKey: string; effectiveFrom: string; effectiveTo: string | null })[];
   components: Record<string, unknown>[];
   recoveryPlans: Record<string, unknown>[];
@@ -54,6 +55,11 @@ export async function recurringBenefitSource(tx: Executor, args: {
       'rules',coalesce((select jsonb_agg(jsonb_build_object(
         'id',r.id,'planId',r.plan_id,'ruleKey',r.rule_key,'name',r.name,'kind',r.kind,'payComponentId',r.pay_component_id,
         'basis',r.basis,'rate',r.rate::text,'rateFormula',r.rate_formula,'hoursBasis',r.hours_basis,'payBasis',r.pay_basis,
+        'selectedComponentIds',coalesce((select jsonb_agg(rc.pay_component_id order by rc.pay_component_id)
+          from hrm_benefit_contribution_rule_components rc where rc.org_id=r.org_id and rc.rule_id=r.id),'[]'::jsonb),
+        'selectedComponents',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'kind',c.kind,'code',c.code,'name',c.name) order by c.code)
+          from hrm_benefit_contribution_rule_components rc join pay_components c on c.org_id=rc.org_id and c.id=rc.pay_component_id
+          where rc.org_id=r.org_id and rc.rule_id=r.id),'[]'::jsonb),
         'runApplicability',r.run_applicability,'unpaidPeriodTreatment',r.unpaid_period_treatment,'arrearsPlanId',r.arrears_plan_id,'arrearsRecoveryPeriods',r.arrears_recovery_periods,
         'monthsPerYear',r.months_per_year,'periodsPerYear',r.periods_per_year,'proration',r.proration,'matchRuleId',r.match_rule_id,
         'requiresMatchEligibility',r.requires_match_eligibility,'enforcePolicyCap',r.enforce_policy_cap,'position',r.position,
@@ -153,7 +159,20 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         salaryLine.hours = scheduled;
       }
       const regular = (line: Line) => !['overtime','double_time'].includes(line.classification ?? '') && !line.nonPeriodic;
-      const hourLines = rule.hoursBasis === 'regular_paid' ? baseLines.filter(regular) : baseLines;
+      // A counted component list names earning components by id — never a
+      // country, a code, or a kind the generic layer would have to interpret.
+      // Quantity-based units (trips, meals, incentive units) carry no stub
+      // hours, so listing one matches nothing; a listed deduction or
+      // contribution is refused by name instead of silently under-counting.
+      if (rule.hoursBasis === 'selected_components') {
+        for (const selected of rule.selectedComponents ?? []) {
+          if (selected.kind !== 'earning') throw new PayrollError(`Benefit rule ${rule.ruleKey} counts ${selected.code} (${selected.name}), which is not an earning component — list only earning components whose hours count`);
+        }
+        if ((rule.selectedComponentIds?.length ?? 0) === 0) throw new PayrollError(`Benefit rule ${rule.ruleKey} counts selected components but none are listed — list the earning components whose hours count in Benefits → Contribution rules`);
+      }
+      const selected = rule.hoursBasis === 'selected_components' ? new Set(rule.selectedComponentIds ?? []) : null;
+      const hourLines = rule.hoursBasis === 'regular_paid' ? baseLines.filter(regular)
+        : selected !== null ? baseLines.filter(l => l.componentId !== null && selected.has(l.componentId)) : baseLines;
       const payLines = rule.payBasis === 'regular_cash_earnings'
         ? coveredBaseLines(args.regularCashLines, from, to, args.periodStart, args.periodEnd).filter(regular) : baseLines;
       const tier = source.service ? enrollment.tiers.filter(t => meetsServiceYears(source.service!, t.minimumServiceYears)).at(-1) ?? null : null;

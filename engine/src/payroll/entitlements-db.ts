@@ -48,6 +48,8 @@ function planFromRow(row: Record<string, unknown>): EntitlementPlan {
     accrualValue: row.accrual_value != null ? String(row.accrual_value) : null,
     accrualComponentId: row.accrual_component_id != null ? String(row.accrual_component_id) : null,
     payoutComponentId: row.payout_component_id != null ? String(row.payout_component_id) : null,
+    depositComponentId: row.deposit_component_id != null ? String(row.deposit_component_id) : null,
+    allowNegativeBalance: row.allow_negative_balance === true,
     liabilityAccountId: row.liability_account_id != null ? String(row.liability_account_id) : null,
     capBehavior: String(row.cap_behavior) as EntitlementCapBehavior,
   };

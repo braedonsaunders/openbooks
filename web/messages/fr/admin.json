@@ -3544,6 +3544,8 @@
       "parentSubsidiaryId": "Filiale mère",
       "payDateOffsetDays": "Décalage de la date de paie (jours)",
       "payoutComponentId": "Composant de versement",
+      "depositComponentId": "Composant de dépôt",
+      "allowNegativeBalance": "Autoriser un solde négatif",
       "pensionable": "Pensionnable",
       "periodsPerYear": "Périodes de prélèvement par an",
       "planId": "Régime",
@@ -3794,6 +3796,10 @@
       "entitlementMaxBalance": "Le plafond absolu, dans l’unité du régime.",
       "entitlementNotifyBalance": "Le seuil souple qui signale qu’un employé approche de la limite.",
       "entitlementPayoutComponent": "Le gain qui verse la banque. Pour un régime « devoir », c’est la retenue qui la récupère.",
+      "entitlementDepositComponent": "Le gain dont les lignes d’heures négatives mettent du temps en banque au lieu de le payer. Les lignes positives versent le temps mis en banque.",
+      "entitlementAllowNegativeBalance": "Quand c’est activé, les retraits peuvent rendre la banque négative. Sinon, un versement au-delà du solde est refusé.",
+      "entitlementDepositComponent": "Le gain dont les lignes d’heures négatives alimentent une banque d’heures depuis une paie. Laissez vide sauf si le temps travaillé est mis en banque au lieu d’être payé.",
+      "entitlementAllowNegativeBalance": "Autorise les versements à passer la banque sous zéro. Sinon, un versement supérieur au solde disponible est refusé.",
       "entitlementScope": "Définissez au plus une portée. Laissez chaque portée vide pour le défaut du régime.",
       "entitlementTierTarget": "Définissez soit un régime (pour augmenter sa valeur d’accumulation), soit un composant de paie (pour le rendre admissible) — pas les deux.",
       "entitlementUnit": "L’argent est fortement recommandé. Une banque libellée en heures se réévalue à chaque hausse de salaire, ce qui coûte discrètement la différence à l’employeur.",
@@ -5530,6 +5536,7 @@
       "electionHint": "Un choix fixe reste fixe lorsque les plafonds augmentent. Suivre le régime applique le taux et les plafonds effectifs.",
       "electedRateHint": "Saisissez le taux réellement choisi, distinct de l’offre maximale.",
       "arrearsHint": "Utilisez un compte monétaire À devoir, acquisition manuelle et cette retenue comme paiement. Précisez les périodes de récupération.",
+      "countedComponentsHint": "Seules les composantes de gains contiennent des heures comptabilisables. Les unités basées sur des quantités, comme les déplacements ou les repas, ne contiennent aucune heure et ne comptent jamais.",
       "options": {
         "kind": {
           "employee_deduction": "Retenue salariale",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "Toutes les heures payées",
           "regular_paid": "Heures régulières payées",
-          "scheduled_paid": "Heures prévues payées"
+          "scheduled_paid": "Heures prévues payées",
+          "selected_components": "Heures des composantes sélectionnées"
         },
         "pay": {
           "all_cash_earnings": "Tous les gains monétaires",

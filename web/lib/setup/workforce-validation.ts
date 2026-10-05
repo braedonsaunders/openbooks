@@ -20,6 +20,24 @@ export const validateServiceCredit: SetupEntityValidationHook = async ({ body, o
 }
 
 
+export const validateEntitlementPlan: SetupEntityValidationHook = async ({ body, orgId, rowId, executor }) => {
+  const { sql } = await import('drizzle-orm')
+  const { validateEntitlementPlanConfiguration } = await import('@openbooks/engine/payroll/entitlements')
+  const { PayrollError } = await import('@openbooks/engine/payroll/entitlements')
+  let values = { ...body }
+  if (rowId) {
+    const row = (await executor.execute<Record<string, unknown>>(sql`select payout_component_id, deposit_component_id from entitlement_plans where org_id=${orgId} and id=${rowId}`)).rows[0]
+    if (!row) return 'Entitlement plan no longer exists; reopen Benefits programs'
+    values = {
+      payoutComponentId: row.payout_component_id ?? null,
+      depositComponentId: row.deposit_component_id ?? null,
+      ...values,
+    }
+  }
+  try { await validateEntitlementPlanConfiguration(executor, orgId, values); return null }
+  catch (error) { if (error instanceof PayrollError) return error.message; throw error }
+}
+
 export const validateVacationTerm: SetupEntityValidationHook = async ({ body, orgId, rowId, executor }) => {
   const { sql } = await import('drizzle-orm')
   const { validateVacationTermConfiguration } = await import('@openbooks/engine/payroll/entitlements')

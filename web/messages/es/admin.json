@@ -3544,6 +3544,8 @@
       "parentSubsidiaryId": "Filial matriz",
       "payDateOffsetDays": "Desfase de fecha de pago (días)",
       "payoutComponentId": "Componente de pago",
+      "depositComponentId": "Componente de depósito",
+      "allowNegativeBalance": "Permitir saldo negativo",
       "pensionable": "Pensionable",
       "periodsPerYear": "Períodos de cobro al año",
       "planId": "Plan",
@@ -3794,6 +3796,10 @@
       "entitlementMaxBalance": "El techo absoluto, en la unidad del plan.",
       "entitlementNotifyBalance": "El umbral flexible que señala que un empleado se acerca al límite.",
       "entitlementPayoutComponent": "La percepción que paga el banco. Para un plan de «deber», es la deducción que lo recupera.",
+      "entitlementDepositComponent": "La percepción cuyas líneas de horas negativas abonan tiempo en lugar de pagarlo. Las líneas positivas pagan el tiempo abonado.",
+      "entitlementAllowNegativeBalance": "Si está activado, los retiros pueden dejar el banco en negativo. Si no, un pago superior al saldo se rechaza.",
+      "entitlementDepositComponent": "La percepción cuyas líneas de horas negativas alimentan un banco de horas desde una nómina. Déjelo vacío salvo que el tiempo trabajado se guarde en lugar de pagarse.",
+      "entitlementAllowNegativeBalance": "Permite que los pagos dejen el banco en negativo. En caso contrario, un pago mayor que el saldo disponible se rechaza.",
       "entitlementScope": "Defina como máximo un alcance. Deje todos los alcances vacíos para el valor predeterminado del plan.",
       "entitlementTierTarget": "Defina un plan (para elevar su valor de devengo) o un componente de nómina (para hacerlo elegible), no ambos.",
       "entitlementUnit": "El dinero es muy recomendable. Un banco denominado en horas se revalúa cada vez que suben los salarios, lo que cuesta discretamente la diferencia al empleador.",
@@ -5530,6 +5536,7 @@
       "electionHint": "La elección fija no aumenta con los límites. Seguir política usa la tasa y límites vigentes.",
       "electedRateHint": "Introduzca la tasa realmente elegida, distinta de la oferta máxima.",
       "arrearsHint": "Use un banco monetario de deuda, acumulación manual y esta deducción. Indique períodos de recuperación.",
+      "countedComponentsHint": "Solo los componentes de ingresos contienen horas contables. Las unidades basadas en cantidad, como viajes o comidas, no contienen horas y nunca cuentan.",
       "options": {
         "kind": {
           "employee_deduction": "Deducción del empleado",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "Todas las horas pagadas",
           "regular_paid": "Horas regulares pagadas",
-          "scheduled_paid": "Horas programadas pagadas"
+          "scheduled_paid": "Horas programadas pagadas",
+          "selected_components": "Horas de componentes seleccionados"
         },
         "pay": {
           "all_cash_earnings": "Todos los ingresos monetarios",
