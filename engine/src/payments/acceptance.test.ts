@@ -291,9 +291,12 @@ test("stripe webhook: refunds and disputes key off the persisted payment intent"
 
   const dispute = stripeEvent(secret, "charge.dispute.created", { id: "dp_1", payment_intent: "pi_async_1" });
   assert.ok(dispute);
-  assert.equal(dispute.status, "refunded");
+  assert.equal(dispute.status, "disputed");
   assert.equal(dispute.externalRef, "pi_async_1");
   assert.equal(dispute.intentRef, "pi_async_1");
+  assert.equal(dispute.dispute, true);
+  assert.equal(dispute.disputeDetail?.id, "dp_1");
+  assert.equal(dispute.disputeDetail?.state, "opened");
 });
 
 test("webhook claims: only pre-terminal states are claimable so redeliveries dedupe", () => {
@@ -301,12 +304,16 @@ test("webhook claims: only pre-terminal states are claimable so redeliveries ded
   assert.deepEqual(CLAIMABLE_FROM.processing, ["initiated"]);
   assert.deepEqual(CLAIMABLE_FROM.failed, ["initiated"]);
   assert.deepEqual(CLAIMABLE_FROM.cancelled, ["initiated"]);
-  // Refunds arrive after settlement succeeded — or before it ever settled.
-  assert.deepEqual(CLAIMABLE_FROM.refunded, ["succeeded", "initiated"]);
-  // No event may re-claim a settled or refunded attempt back into motion.
+  // Returns arrive after settlement succeeded — or before it ever settled —
+  // and a second return (a partial after a partial, a dispute after a
+  // refund) must still claim: redeliveries converge on the per-event
+  // automation record instead of posting twice.
+  assert.deepEqual(CLAIMABLE_FROM.refunded, ["succeeded", "initiated", "refunded"]);
+  assert.deepEqual(CLAIMABLE_FROM.disputed, ["succeeded", "initiated", "refunded"]);
+  // Only returns may re-claim a settled or refunded attempt back into motion.
   for (const status of Object.keys(CLAIMABLE_FROM) as (keyof typeof CLAIMABLE_FROM)[]) {
-    assert.ok(!CLAIMABLE_FROM[status].includes("refunded"), `${status} must not claim a refunded attempt`);
-    if (status !== "refunded") {
+    if (status !== "refunded" && status !== "disputed") {
+      assert.ok(!CLAIMABLE_FROM[status].includes("refunded"), `${status} must not claim a refunded attempt`);
       assert.ok(!CLAIMABLE_FROM[status].includes("succeeded"), `${status} must not claim a settled attempt`);
     }
   }
