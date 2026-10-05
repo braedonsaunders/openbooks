@@ -697,7 +697,7 @@ function LifetimeTab({
         <KpiCard icon={FileText} accent="sky" label={t('kpi.totalInvoiced')} value={money(k.totalInvoiced)} sub={t('sub.invoiced')} />
         {projectsEnabled && profitability ? (
           <>
-            <KpiCard icon={HandCoins} accent={cmp(profitability.summary.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={fmtMoney(profitability.summary.totalGrossProfit, { compact: true })} sub={profitability.summary.avgMarginPct === null ? '—' : t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
+            <KpiCard icon={HandCoins} accent={cmp(profitability.summary.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={fmtMoney(profitability.summary.totalGrossProfit, { compact: true })} sub={profitability.summary.avgMarginPct === null ? t('margin.noRevenue') : t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
             <KpiCard icon={AlertTriangle} accent={k.fakeChampions === null ? 'sky' : k.fakeChampions > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={k.fakeChampions === null ? '—' : String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin', { share: data.config.profitLeakRevenueSharePct, margin: data.config.profitLeakMarginTarget })} tone={k.fakeChampions === null ? undefined : k.fakeChampions > 0 ? 'negative' : 'positive'} />
           </>
         ) : null}
@@ -757,7 +757,7 @@ function LifetimeTab({
                   <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitleShort')}> ⚠️</span> : null}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.revenue)}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', marginClass(r.marginPct, bands))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', marginClass(r.marginPct, bands))}>{r.marginPct === null ? (r.grossProfit === null ? '—' : t('margin.noRevenue')) : `${r.marginPct.toFixed(1)}%`}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.annualValue)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionFactor} bands={{ good: data.config.gradeB, fair: data.config.gradeD }} /></SharedTableCell>
@@ -1013,7 +1013,7 @@ function ProfitabilityTab({ p, leak, bands }: { p: Profitability; leak: { share:
   const fmtMoney = useAnalyticsMoney()
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const marginLabel = (m: number | null, bands: MarginBands): string => {
-    if (m === null) return '—'
+    if (m === null) return t('margin.noRevenue')
     if (m >= bands.high) return t('margin.excellent')
     if (m >= bands.medium) return t('margin.good')
     if (m >= bands.low) return t('margin.fair')
@@ -1102,7 +1102,7 @@ function ProfitabilityTab({ p, leak, bands }: { p: Profitability; leak: { share:
                         <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</SharedTableCell>
                         <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</SharedTableCell>
                         <SharedTableCell className={cn('px-3 py-2.5 text-right font-medium tabular-nums', cmp(c.grossProfit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</SharedTableCell>
-                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct, bands))}>{c.marginPct === null ? '—' : `${c.marginPct.toFixed(1)}%`}</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct, bands))}>{c.marginPct === null ? t('margin.noRevenue') : `${c.marginPct.toFixed(1)}%`}</SharedTableCell>
                         <SharedTableCell className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></SharedTableCell>
                       </InteractiveTableRow>
                       {isOpen
@@ -1119,7 +1119,7 @@ function ProfitabilityTab({ p, leak, bands }: { p: Profitability; leak: { share:
                               <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</SharedTableCell>
                               <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.costs)}</SharedTableCell>
                               <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', cmp(j.profit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</SharedTableCell>
-                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct, bands))}>{j.marginPct === null ? '—' : `${j.marginPct.toFixed(1)}%`}</SharedTableCell>
+                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct, bands))}>{j.marginPct === null ? t('margin.noRevenue') : `${j.marginPct.toFixed(1)}%`}</SharedTableCell>
                               <SharedTableCell />
                             </SharedTableRow>
                           ))

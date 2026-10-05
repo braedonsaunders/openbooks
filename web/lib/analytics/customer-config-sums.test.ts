@@ -11,18 +11,20 @@ function fullSave(overrides: Record<string, number | string> = {}) {
   return { ...ANALYTICS_CONFIG.customerIntelligence.defaults, ...overrides }
 }
 
-test('a save carrying the defaults passes and keeps every scoring default', () => {
+test('a save carrying the defaults passes with whole weight groups and ordered ladders', () => {
+  const spec = ANALYTICS_CONFIG.customerIntelligence
   const cleaned = cleanConfigValues('customerIntelligence', fullSave())
-  assert.equal(cleaned.healthWeightRecency, 25)
-  assert.equal(cleaned.healthWeightPayment, 20)
-  assert.equal(cleaned.gradeAPlus, 90)
-  assert.equal(cleaned.recencyGoodDays, 30)
-  assert.equal(cleaned.churnHighDays, 120)
-  assert.equal(cleaned.tierPlatinumPct, 10)
-  assert.equal(cleaned.concentrationCriticalShare, 25)
-  assert.equal(cleaned.profitHighMargin, 40)
-  assert.equal(cleaned.paymentDsoHighDays, 60)
-  assert.equal(cleaned.growthYoyWindowMonths, 15)
+  // The save round-trips every default: nothing dropped, nothing invented.
+  assert.deepEqual(cleaned, fullSave())
+  const byKey = cleaned as Record<string, number>
+  for (const group of spec.sumsTo ?? []) {
+    const actual = group.keys.reduce((sum, key) => sum + (byKey[key] ?? 0), 0)
+    assert.equal(actual, group.total)
+  }
+  for (const ladder of spec.ordered ?? []) {
+    const values = ladder.map((key) => byKey[key] ?? Number.NaN)
+    for (let i = 1; i < values.length; i++) assert.ok(values[i]! > values[i - 1]!)
+  }
 })
 
 test('health weights that do not sum to 100 are refused by name', () => {

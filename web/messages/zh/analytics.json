@@ -1073,10 +1073,6 @@
           "label": "增长 — 趋势窗口（月）",
           "help": "比较近期与前期窗口时每侧的月数"
         },
-        "growthYoyWindowMonths": {
-          "label": "增长 — 同比窗口（月）",
-          "help": "同比比较两侧的尾端月数"
-        },
         "cohortActiveMonths": {
           "label": "同期群 — 活跃期（月）",
           "help": "在此月数内下过单的客户计为活跃"
@@ -1164,7 +1160,8 @@
       "good": "良好",
       "loss": "亏损",
       "low": "偏低",
-      "profit": "盈利"
+      "profit": "盈利",
+      "noRevenue": "本期无收入"
     },
     "metrics": {
       "avgDso": "平均DSO",

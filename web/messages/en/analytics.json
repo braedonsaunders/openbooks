@@ -938,7 +938,8 @@
       "fair": "Fair",
       "low": "Low",
       "loss": "Loss",
-      "profit": "Profit"
+      "profit": "Profit",
+      "noRevenue": "No revenue in period"
     },
     "profitTier": {
       "high": "High",
@@ -1284,10 +1285,6 @@
         "growthTrendWindowMonths": {
           "label": "Growth — trend window (months)",
           "help": "Months per side when comparing the recent window against the prior one"
-        },
-        "growthYoyWindowMonths": {
-          "label": "Growth — YoY window (months)",
-          "help": "Trailing months on each side of the year-on-year comparison"
         },
         "cohortActiveMonths": {
           "label": "Cohorts — active within (months)",
