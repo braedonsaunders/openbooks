@@ -34,6 +34,8 @@ test('vendor month labels render in the request locale', { skip: !env.OPENBOOKS_
     await withBypass(async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${vend}, ${org.orgId}, 'vendor', 'Acme', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
+        values (${randomUUID()}, ${org.orgId}, ${vend})`)
       const entry = randomUUID()
       await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
         values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'BILL-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
@@ -48,7 +50,7 @@ test('vendor month labels render in the request locale', { skip: !env.OPENBOOKS_
       const julyFr = localized.monthly.find((m) => m.month === '2026-07')!
       assert.equal(julyFr.label, "juil. '26")
       assert.equal(localized.rows[0]?.name, 'Acme')
-      assert.equal(julyFr.spend, 100)
+      assert.equal(julyFr.spend, "100.0000")
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

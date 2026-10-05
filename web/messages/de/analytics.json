@@ -1890,6 +1890,10 @@
       "transactional": {
         "desc": "Geringe Ausgaben, geringe Bindung — automatisieren / bündeln",
         "label": "Transaktional"
+      },
+      "unrated": {
+        "label": "Unbewertet",
+        "desc": "Noch keine Zahlungshistorie — Rechnungen begleichen, um zu bewerten"
       }
     },
     "sub": {
@@ -3511,6 +3515,10 @@
     },
     "unit": {
       "months": "Monate"
+    },
+    "labels": {
+      "unknownParty": "Unbekannt",
+      "accountFallback": "Konto {id}"
     }
   },
   "sentinel": {
