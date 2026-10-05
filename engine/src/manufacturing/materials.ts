@@ -17,6 +17,7 @@ import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
+import { absorbOperationConversion, type OperationTimeInput } from "./conversion.ts";
 
 export interface MaterialIssueLine {
   materialId: string;
@@ -25,7 +26,7 @@ export interface MaterialIssueLine {
   serialId?: string | null;
 }
 
-export interface OperationCompletion {
+export interface OperationCompletion extends OperationTimeInput {
   doneQty: string;
   measuredQty?: string | null;
 }
@@ -557,15 +558,22 @@ export async function completeWorkOrderOperation(
   if (toUnits(doneQty) > maximumUnits) {
     refuse(`Operation ${operation.sequence} completed quantity ${doneQty} exceeds its planned quantity ${operation.quantity_planned} plus the ${policies.completionTolerancePct}% completion tolerance.`, "completion_tolerance_exceeded", "Revise the order quantity.");
   }
+  // Conversion cost is absorbed in the same transaction as the transition,
+  // so an operation is never done without its labor and overhead in WIP.
+  const conversion = await absorbOperationConversion(tx, orgId, actorId, order, operationId, doneQty, input);
   const updated = await tx.execute<{ id: string; sequence: number; status: string; quantity_done: string; measured_qty: string | null }>(sql`
     update mfg_wo_operations set status='done', quantity_done=${doneQty}, measured_qty=${measuredQty},
+      actual_setup_minutes=${conversion.setupMinutes}, actual_run_minutes=${conversion.runMinutes},
+      actual_labor_minutes=${conversion.laborMinutes},
       completed_at=now(), updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='running'
      returning id, sequence, status, quantity_done::text, measured_qty::text`);
   const after = rowOrNotFound(updated.rows);
   if (updated.rows.length !== 1) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update",
-    before: operation, after: { ...after, reason: `Operation completed with ${doneQty} units.` } });
+    before: operation, after: { ...after, actualSetupMinutes: conversion.setupMinutes, actualRunMinutes: conversion.runMinutes,
+      actualLaborMinutes: conversion.laborMinutes, conversionEntryId: conversion.entryId,
+      reason: `Operation completed with ${doneQty} units.` } });
   await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "finish");
   return after;
 }
