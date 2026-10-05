@@ -597,6 +597,13 @@
           "label": "Anomalie-Schwelle (σ)",
           "help": "Monate, die um mehr als so viele Standardabweichungen vom Mittel abweichen, werden als Anomalien gemeldet"
         }
+      },
+      "groups": {
+        "profitability": "Rentabilitätsziele",
+        "liquiditySolvency": "Liquiditäts- und Solvenzziele",
+        "efficiencyOperating": "Effizienz- und Betriebsziele",
+        "grading": "Notenstufen und Bewertungsbänder",
+        "findings": "Schwellenwerte für Hinweise"
       }
     },
     "ratioCard": {

@@ -597,6 +597,13 @@
           "label": "Limite de anomalia (σ)",
           "help": "Meses além deste número de desvios-padrão da média são relatados como anomalias"
         }
+      },
+      "groups": {
+        "profitability": "Metas de rentabilidade",
+        "liquiditySolvency": "Metas de liquidez e solvência",
+        "efficiencyOperating": "Metas de eficiência e operação",
+        "grading": "Notas e faixas de pontuação",
+        "findings": "Limites dos achados"
       }
     },
     "ratioCard": {

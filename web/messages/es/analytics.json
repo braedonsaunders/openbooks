@@ -597,6 +597,13 @@
           "label": "Umbral de anomalía (σ)",
           "help": "Los meses que se alejan de la media más de estas desviaciones típicas se informan como anomalías"
         }
+      },
+      "groups": {
+        "profitability": "Objetivos de rentabilidad",
+        "liquiditySolvency": "Objetivos de liquidez y solvencia",
+        "efficiencyOperating": "Objetivos de eficiencia y operación",
+        "grading": "Calificaciones y bandas de puntuación",
+        "findings": "Umbrales de hallazgos"
       }
     },
     "ratioCard": {

@@ -23,6 +23,7 @@ import type { AnalyticsConfigValues, ConfigField } from '../../../../lib/analyti
  */
 interface ConfigPayload {
   fields: ConfigField[]
+  groups?: { labelKey: string; fields: string[] }[]
   values: AnalyticsConfigValues
   defaults: AnalyticsConfigValues
   currency: string
@@ -170,6 +171,13 @@ export function ConfigEditor({
   }
 
   const label = (key: string) => t(key, { currency: config.currency })
+  // Declared sections first, in order; any field in no section renders last.
+  const grouped = new Set((config.groups ?? []).flatMap((g) => g.fields))
+  const byKey = new Map(fields.map((f) => [f.key, f]))
+  const sections: { labelKey: string | null; fields: ConfigField[] }[] = [
+    ...(config.groups ?? []).map((g) => ({ labelKey: g.labelKey, fields: g.fields.map((k) => byKey.get(k)).filter((f): f is ConfigField => !!f) })),
+    { labelKey: null, fields: fields.filter((f) => !grouped.has(f.key)) },
+  ].filter((section) => section.fields.length > 0)
   const defaultText = (f: ConfigField) => {
     const value = config.defaults[f.key]
     if (value === '' || value === undefined) return te('notSet')
@@ -180,61 +188,68 @@ export function ConfigEditor({
 
   return (
     <Panel title={te('title')} icon={Settings2} hint={te('hint')}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {fields.map((f) => (
-          <label key={f.key} className="block">
-            <span className="flex items-baseline justify-between gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-              {label(f.labelKey)}
-              <span className="shrink-0 font-normal text-slate-400 dark:text-slate-500">{te('default', { value: defaultText(f) })}</span>
-            </span>
-            {f.kind === 'toggle' ? (
-              <input
-                type="checkbox"
-                checked={draft[f.key] === '1'}
-                disabled={!canEdit}
-                onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.checked ? '1' : '0' }))}
-                className="mt-2 h-4 w-4 rounded border-slate-300 text-teal-600 disabled:opacity-60 dark:border-slate-600"
-              />
-            ) : f.kind === 'select' ? (
-              <select
-                value={draft[f.key]}
-                disabled={!canEdit}
-                onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-              >
-                {(f.options ?? []).map((option) => (
-                  <option key={option} value={option}>{f.optionsKey ? t(`${f.optionsKey}.${option}`) : option}</option>
-                ))}
-              </select>
-            ) : f.kind === 'money' ? (
-              <span className="mt-1 flex items-center gap-1.5">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={draft[f.key]}
-                  placeholder={f.optional ? te('notSet') : undefined}
-                  disabled={!canEdit}
-                  onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                />
-                <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">{config.currency}</span>
-              </span>
-            ) : (
-              <input
-                type="number"
-                value={draft[f.key]}
-                min={f.min}
-                max={f.max}
-                step={f.step}
-                disabled={!canEdit}
-                onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-              />
-            )}
-            <span className="mt-0.5 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">{label(f.helpKey)}</span>
-          </label>
+      {sections.map((section, i) => (
+        <section key={section.labelKey ?? `rest-${i}`} className={i > 0 ? 'mt-5 border-t border-slate-100 pt-4 dark:border-slate-800' : undefined}>
+          {section.labelKey ? (
+            <h4 className="mb-3 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{label(section.labelKey)}</h4>
+          ) : null}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {section.fields.map((f) => (
+              <label key={f.key} className="block">
+                <span className="flex items-baseline justify-between gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+                  {label(f.labelKey)}
+                  <span className="shrink-0 font-normal text-slate-400 dark:text-slate-500">{te('default', { value: defaultText(f) })}</span>
+                </span>
+                {f.kind === 'toggle' ? (
+                  <input
+                    type="checkbox"
+                    checked={draft[f.key] === '1'}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.checked ? '1' : '0' }))}
+                    className="mt-2 h-4 w-4 rounded border-slate-300 text-teal-600 disabled:opacity-60 dark:border-slate-600"
+                  />
+                ) : f.kind === 'select' ? (
+                  <select
+                    value={draft[f.key]}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                    className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  >
+                    {(f.options ?? []).map((option) => (
+                      <option key={option} value={option}>{f.optionsKey ? t(`${f.optionsKey}.${option}`) : option}</option>
+                    ))}
+                  </select>
+                ) : f.kind === 'money' ? (
+                  <span className="mt-1 flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={draft[f.key]}
+                      placeholder={f.optional ? te('notSet') : undefined}
+                      disabled={!canEdit}
+                      onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    />
+                    <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">{config.currency}</span>
+                  </span>
+                ) : (
+                  <input
+                    type="number"
+                    value={draft[f.key]}
+                    min={f.min}
+                    max={f.max}
+                    step={f.step}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                    className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  />
+                )}
+                <span className="mt-0.5 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">{label(f.helpKey)}</span>
+              </label>
         ))}
-      </div>
+          </div>
+        </section>
+      ))}
       <div className="mt-4 flex items-center gap-2">
         {canEdit ? (
           <>

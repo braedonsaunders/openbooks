@@ -61,6 +61,11 @@ export interface AnalyticsConfigSpec {
   fields: ConfigField[];
   defaults: AnalyticsConfigValues;
   ordered?: readonly (readonly string[])[];
+  /**
+   * Sections the editor renders, in order, each a catalog heading and the
+   * fields under it. Fields in no section render last, without a heading.
+   */
+  groups?: readonly { labelKey: string; fields: readonly string[] }[];
 }
 
 const pct = (key: string, labelKey: string, min = 0, max = 100, step = 1): ConfigField => ({
@@ -152,6 +157,13 @@ export const ANALYTICS_CONFIG = {
       ["gradeDPercent", "gradeCPercent", "gradeBPercent", "gradeAPercent"],
       ["scoreAverage", "scoreGood", "scoreExcellent"],
       ["insightCriticalPercent", "insightWarningPercent"],
+    ],
+    groups: [
+      { labelKey: "analytics.financialHealth.config.groups.profitability", fields: ["grossMarginTarget", "operatingMarginTarget", "ebitdaMarginTarget", "netMarginTarget", "roaTarget", "roeTarget", "roicTarget", "roceTarget"] },
+      { labelKey: "analytics.financialHealth.config.groups.liquiditySolvency", fields: ["currentRatioTarget", "quickRatioTarget", "debtToEquityTarget", "liabilitiesToEquityTarget", "interestCoverageTarget"] },
+      { labelKey: "analytics.financialHealth.config.groups.efficiencyOperating", fields: ["revenuePerEmployee", "gpPerEmployee", "assetTurnoverTarget", "cogsRatioTarget", "opexRatioTarget", "operatingLeverageTarget", "ruleOf40Target"] },
+      { labelKey: "analytics.financialHealth.config.groups.grading", fields: ["gradeDPercent", "gradeCPercent", "gradeBPercent", "gradeAPercent", "scoreAverage", "scoreGood", "scoreExcellent"] },
+      { labelKey: "analytics.financialHealth.config.groups.findings", fields: ["insightCriticalPercent", "insightWarningPercent", "revenueDeclineAlertPercent", "revenueTrendAlertPercent", "marginCompressionPoints", "breakevenSafetyPercent", "anomalySigma"] },
     ],
   },
   customerIntelligence: {

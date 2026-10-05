@@ -597,6 +597,13 @@
           "label": "异常阈值（σ）",
           "help": "偏离均值超过此标准差数的月份报告为异常"
         }
+      },
+      "groups": {
+        "profitability": "盈利能力目标",
+        "liquiditySolvency": "流动性与偿债能力目标",
+        "efficiencyOperating": "效率与经营目标",
+        "grading": "等级与分数区间",
+        "findings": "发现阈值"
       }
     },
     "ratioCard": {
