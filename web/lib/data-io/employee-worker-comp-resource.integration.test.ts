@@ -45,7 +45,10 @@ test('classification preview writes nothing; apply preserves employee facts, aud
   const fx = await fixture()
   try {
     const before = await fx.snapshot()
-    assert.equal((await fx.resource.write([fx.row], 'upsert', { ...fx.context, dryRun: true })).updated, 1)
+    const resolvedKeys: (readonly (string | null)[])[] = []
+    assert.equal((await fx.resource.write([fx.row], 'upsert', { ...fx.context, dryRun: true, recordKeys: async keys => { resolvedKeys.push(keys) } })).updated, 1)
+    assert.equal((await fx.resource.write([{ ...fx.row, employee: fx.employeeId.toUpperCase() }], 'upsert', { ...fx.context, dryRun: true, recordKeys: async keys => { resolvedKeys.push(keys) } })).updated, 1)
+    assert.deepEqual(resolvedKeys, [[fx.employeeId], [fx.employeeId]], 'separate transfer pages identify the same employee even when the UUID case differs')
     assert.deepEqual(await fx.snapshot(), before)
     const roleBefore = (await db.execute<Record<string, unknown>>(sql`select * from employee_roles where org_id=${fx.orgId} and party_id=${fx.employeeId}`)).rows[0]!
     assert.equal((await fx.resource.write([fx.row], 'upsert', fx.context)).updated, 1)
