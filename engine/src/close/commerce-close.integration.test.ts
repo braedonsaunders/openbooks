@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -320,6 +321,81 @@ test("a stray journal to the gift liability fails naming the account", { skip: !
     const ties = (storedValue.details as { ties: { name: string; gap: string }[] }).ties;
     assert.equal(ties[0]!.name, "Gift Card Liability");
     assert.equal(ties[0]!.gap, "5.0000");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("the stored-value tie is scoped by entity and measured in functional currency", { skip: !DB }, async () => {
+  const fx = await seedCommerceOrg();
+  try {
+    // A second legal entity owing USD: its card ties in USD while the CAD
+    // entity stays clean — the old par-valued tie would read this as a gap.
+    const usId = randomUUID();
+    await withBypass(() => db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usId}, ${fx.org.orgId}, ${fx.org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`));
+    const usLiability = await withBypass(() =>
+      seedPostingAccount(fx.org.orgId, "2320", "US Gift Card Liability", "liability_current_other", usId));
+    const usClearing = await withBypass(() =>
+      seedPostingAccount(fx.org.orgId, "1016", "US Clearing", "asset_current_other", usId));
+    const program = await withBypass(() =>
+      createProgram({ orgId: fx.org.orgId, name: "US gift cards", kind: "gift_card", liabilityAccountId: usLiability, actorId: fx.actor }));
+    await withBypass(() =>
+      issueStoredValue({
+        orgId: fx.org.orgId,
+        programId: program.id,
+        amountMinor: 250000n,
+        currency: "USD",
+        subsidiaryId: usId,
+        idempotencyKey: `close-proof-us-${fx.org.orgId}`,
+        debitAccountId: usClearing,
+        postingDate: DAY,
+        actorId: fx.actor,
+      }));
+    const clean = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    assert.equal(byCode(clean, "commerce-stored-value-gap").count, 0);
+    // A stray manual journal on the US entity breaks only its tie.
+    await withBypass(() =>
+      postEntry(db, {
+        orgId: fx.org.orgId,
+        bookId: fx.org.bookId,
+        subsidiaryId: usId,
+        entryNumber: "STRAY-US-1",
+        postingDate: DAY,
+        periodId: fx.org.periodId,
+        origin: "commerce_close_fixture",
+        idempotencyKey: `close-proof-stray-us-${fx.org.orgId}`,
+        currency: "USD",
+        actorId: fx.actor,
+        lines: [
+          { accountId: usLiability, amount: "3.0000", currency: "USD", txnAmount: "3.0000" },
+          { accountId: fx.org.accounts.revenue, amount: "-3.0000", currency: "USD", txnAmount: "-3.0000" },
+        ],
+      }));
+    const scopedToCad = await withBypass(() =>
+      commerceCloseChecks(
+        fx.org.orgId,
+        { ...SCOPE(fx.org), subsidiaryIds: [fx.org.subsidiaryId] },
+        { storefrontTotals: matchingProvider() },
+      ));
+    assert.equal(byCode(scopedToCad, "commerce-stored-value-gap").count, 0);
+    const scopedToUs = await withBypass(() =>
+      commerceCloseChecks(
+        fx.org.orgId,
+        { ...SCOPE(fx.org), subsidiaryIds: [usId] },
+        { storefrontTotals: matchingProvider() },
+      ));
+    const storedValue = byCode(scopedToUs, "commerce-stored-value-gap");
+    assert.equal(storedValue.count, 1);
+    const ties = (storedValue.details as {
+      ties: { name: string; subsidiaryName: string; functionalCurrency: string; gap: string }[];
+    }).ties;
+    assert.equal(ties[0]!.name, "US Gift Card Liability");
+    assert.equal(ties[0]!.subsidiaryName, "US Co");
+    assert.equal(ties[0]!.functionalCurrency, "USD");
+    assert.equal(ties[0]!.gap, "3.0000");
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }
