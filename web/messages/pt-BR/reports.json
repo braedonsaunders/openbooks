@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "Ajustes da transportadora",
         "description": "Correções de cobrança aplicadas após a compra, com motivo e estado de lançamento."
+      },
+      "stored_value_movements": {
+        "label": "Movimentações de vales e créditos",
+        "description": "Uma linha por lançamento — emissão, resgate, ajuste, expiração e quebra — com programa, código mascarado, cliente e saldo. Agrupe por programa e mês para a evolução do passivo."
+      },
+      "stored_value_balances": {
+        "label": "Saldos de vales e créditos",
+        "description": "Uma linha por conta com saldo em aberto, região do cliente e última atividade. Filtre por situação e agrupe por região e mês de atividade para revisar valores abandonados."
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "Estado de lançamento",
         "occurred_at": "Ocorrido em",
         "entry_id": "Lançamento de ajuste (id)"
+      },
+      "stored_value_movements": {
+        "id": "Chave do lançamento",
+        "program": "Programa",
+        "program_kind": "Tipo de programa",
+        "account_code": "Conta",
+        "customer": "Cliente",
+        "kind": "Movimentação",
+        "amount": "Valor",
+        "balance_after": "Saldo após",
+        "currency": "Moeda",
+        "entered_on": "Registrado em",
+        "reason": "Motivo",
+        "document_id": "Chave do documento"
+      },
+      "stored_value_balances": {
+        "account_code": "Conta",
+        "customer": "Cliente",
+        "customer_region": "Região do cliente",
+        "program": "Programa",
+        "program_kind": "Tipo de programa",
+        "status": "Situação",
+        "balance": "Saldo em aberto",
+        "currency": "Moeda",
+        "last_activity_on": "Última atividade",
+        "expires_on": "Expira em",
+        "inactivity_months": "Limite de inatividade do programa (meses)"
       }
     },
     "enumValues": {

@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "Frachtkorrekturen",
         "description": "Nachträgliche Abrechnungskorrekturen des Frachtführers, mit Grund und Buchungsstand."
+      },
+      "stored_value_movements": {
+        "label": "Guthabenbewegungen",
+        "description": "Eine Zeile je Guthabenbuchung — Ausgabe, Einlösung, Korrektur, Ablauf und Nichteinlösung — mit Programm, maskiertem Code, Kunde und laufendem Kontostand. Nach Programm und Monat gruppieren für den Verbindlichkeitsnachweis."
+      },
+      "stored_value_balances": {
+        "label": "Guthabenbestände",
+        "description": "Eine Zeile je Guthabenkonto mit offenem Saldo, Kundenregion und letzter Aktivität. Nach Status filtern und nach Region und Aktivitätsmonat gruppieren für die Prüfung nicht beanspruchter Guthaben."
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "Buchungsstand",
         "occurred_at": "Entstanden am",
         "entry_id": "Korrekturbuchung (ID)"
+      },
+      "stored_value_movements": {
+        "id": "Buchungsschlüssel",
+        "program": "Programm",
+        "program_kind": "Programmart",
+        "account_code": "Konto",
+        "customer": "Kunde",
+        "kind": "Bewegung",
+        "amount": "Betrag",
+        "balance_after": "Kontostand danach",
+        "currency": "Währung",
+        "entered_on": "Erfasst am",
+        "reason": "Grund",
+        "document_id": "Belegschlüssel"
+      },
+      "stored_value_balances": {
+        "account_code": "Konto",
+        "customer": "Kunde",
+        "customer_region": "Kundenregion",
+        "program": "Programm",
+        "program_kind": "Programmart",
+        "status": "Kontostatus",
+        "balance": "Offener Saldo",
+        "currency": "Währung",
+        "last_activity_on": "Letzte Aktivität",
+        "expires_on": "Läuft ab am",
+        "inactivity_months": "Inaktivitätsschwelle des Programms (Monate)"
       }
     },
     "enumValues": {

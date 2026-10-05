@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "承运商调账",
         "description": "购买后适用的账单更正，含原因及入账状态。"
+      },
+      "stored_value_movements": {
+        "label": "储值变动",
+        "description": "每条储值台账一行——发行、兑换、调整、过期和余值确认，含方案、脱敏卡号、客户和账户余额。按方案和月份分组，编制负债变动表。"
+      },
+      "stored_value_balances": {
+        "label": "储值余额",
+        "description": "每个储值账户一行，含未清余额、客户地区和最近活动。按状态筛选，按地区和活动月份分组，复核无人认领款项。"
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "入账状态",
         "occurred_at": "发生时间",
         "entry_id": "调账分录 (ID)"
+      },
+      "stored_value_movements": {
+        "id": "分录键",
+        "program": "方案",
+        "program_kind": "方案类型",
+        "account_code": "账户",
+        "customer": "客户",
+        "kind": "变动类型",
+        "amount": "金额",
+        "balance_after": "变动后余额",
+        "currency": "币种",
+        "entered_on": "入账日期",
+        "reason": "原因",
+        "document_id": "单据键"
+      },
+      "stored_value_balances": {
+        "account_code": "账户",
+        "customer": "客户",
+        "customer_region": "客户地区",
+        "program": "方案",
+        "program_kind": "方案类型",
+        "status": "状态",
+        "balance": "未清余额",
+        "currency": "币种",
+        "last_activity_on": "最近活动",
+        "expires_on": "到期日",
+        "inactivity_months": "方案休眠阈值（月）"
       }
     },
     "enumValues": {

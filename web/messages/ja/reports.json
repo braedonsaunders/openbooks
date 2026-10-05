@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "運送会社調整",
         "description": "購入後に適用された請求補正。理由と計上状態付き。"
+      },
+      "stored_value_movements": {
+        "label": "ストアドバリューの異動",
+        "description": "発行・利用・調整・期限切れ・失効益の台帳を1行ずつ表示します。プログラム、コード下4桁、顧客、口座残高付き。プログラム別・月別に集計して負債の増減内訳にします。"
+      },
+      "stored_value_balances": {
+        "label": "ストアドバリュー残高",
+        "description": "口座ごとに未利用残高、顧客地域、最終利用日を1行ずつ表示します。ステータスで絞り込み、地域別・最終利用月別に集計して休眠残高を確認します。"
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "計上状態",
         "occurred_at": "発生日時",
         "entry_id": "調整仕訳 (ID)"
+      },
+      "stored_value_movements": {
+        "id": "エントリキー",
+        "program": "プログラム",
+        "program_kind": "プログラム種別",
+        "account_code": "口座",
+        "customer": "顧客",
+        "kind": "異動種別",
+        "amount": "金額",
+        "balance_after": "異動後残高",
+        "currency": "通貨",
+        "entered_on": "登録日",
+        "reason": "理由",
+        "document_id": "伝票キー"
+      },
+      "stored_value_balances": {
+        "account_code": "口座",
+        "customer": "顧客",
+        "customer_region": "顧客地域",
+        "program": "プログラム",
+        "program_kind": "プログラム種別",
+        "status": "ステータス",
+        "balance": "未利用残高",
+        "currency": "通貨",
+        "last_activity_on": "最終利用日",
+        "expires_on": "有効期限",
+        "inactivity_months": "休眠判定月数"
       }
     },
     "enumValues": {

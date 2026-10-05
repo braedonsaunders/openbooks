@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "Ajustes del transportista",
         "description": "Correcciones de facturación aplicadas después de la compra, con motivo y estado de registro."
+      },
+      "stored_value_movements": {
+        "label": "Movimientos de tarjetas regalo y crédito",
+        "description": "Una fila por apunte — emisión, canje, ajuste, caducidad y quiebre — con programa, código enmascarado, cliente y saldo. Agrupe por programa y mes para el informe de pasivo."
+      },
+      "stored_value_balances": {
+        "label": "Saldos de tarjetas regalo y crédito",
+        "description": "Una fila por cuenta con su saldo, la región del cliente y la última actividad. Filtre por estado y agrupe por región y mes de actividad para revisar saldos abandonados."
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "Estado de registro",
         "occurred_at": "Ocurrido",
         "entry_id": "Asiento de ajuste (id)"
+      },
+      "stored_value_movements": {
+        "id": "Clave de apunte",
+        "program": "Programa",
+        "program_kind": "Tipo de programa",
+        "account_code": "Cuenta",
+        "customer": "Cliente",
+        "kind": "Movimiento",
+        "amount": "Importe",
+        "balance_after": "Saldo posterior",
+        "currency": "Moneda",
+        "entered_on": "Fecha de registro",
+        "reason": "Motivo",
+        "document_id": "Clave de documento"
+      },
+      "stored_value_balances": {
+        "account_code": "Cuenta",
+        "customer": "Cliente",
+        "customer_region": "Región del cliente",
+        "program": "Programa",
+        "program_kind": "Tipo de programa",
+        "status": "Estado",
+        "balance": "Saldo abierto",
+        "currency": "Moneda",
+        "last_activity_on": "Última actividad",
+        "expires_on": "Vence el",
+        "inactivity_months": "Umbral de inactividad del programa (meses)"
       }
     },
     "enumValues": {
