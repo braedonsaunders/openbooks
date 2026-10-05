@@ -1072,6 +1072,7 @@
       "ap": "Contas a pagar",
       "ar": "Contas a receber",
       "stored_value": "Vales e créditos",
+      "cash_sales": "Vendas à vista",
       "usage": "Faturamento por uso",
       "contract-costs": "Custos de contrato",
       "autopay": "Cobrança automática",
@@ -1124,6 +1125,9 @@
     "stored_value_read": "Ver cartões-presente e créditos",
     "stored_value_manage": "Emitir e resgatar cartões-presente e créditos",
     "stored_value_adjust": "Ajustar saldos fora de documentos",
+    "cash_sales_read": "Ver vendas à vista e reembolsos",
+    "cash_sales_create": "Criar e enviar vendas à vista e reembolsos",
+    "cash_sales_post": "Lançar vendas à vista e reembolsos no razão",
     "usage_read": "Ver o uso medido",
     "usage_manage": "Gerenciar medidores, planos de tarifas e registros de uso importados",
     "usage_bill": "Tarifar o uso e faturar cobranças de assinatura",
@@ -6100,6 +6104,10 @@
     "promotions": {
       "title": "Promoções",
       "description": "Códigos de desconto e campanhas aplicados aos documentos de venda, com relatório de desempenho."
+    },
+    "cashSales": {
+      "title": "Vendas à vista",
+      "description": "Recibos de venda pagos no ato e reembolsos com formas de pagamento, sem contas a receber."
     },
     "revenueRecognition": {
       "title": "Reconhecimento de receita",

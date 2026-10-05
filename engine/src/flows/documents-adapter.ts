@@ -60,6 +60,8 @@ const RECORD_ROUTES: Record<string, (id: string) => string> = {
   vendor_credit: (id) => `/ap/bills?doc=${id}`,
   customer_invoice: (id) => `/ar/invoices?doc=${id}`,
   customer_credit: (id) => `/ar/invoices?doc=${id}`,
+  cash_sale: (id) => `/cash-sales?doc=${id}`,
+  cash_refund: (id) => `/cash-sales?doc=${id}`,
   card_charge: (id) => `/banking/transactions?doc=${id}`,
   card_refund: (id) => `/banking/transactions?doc=${id}`,
   check: (id) => `/banking/transactions?doc=${id}`,

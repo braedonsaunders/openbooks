@@ -89,6 +89,25 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
+  // Cash sale (sales receipt): paid at the point of sale, so the party is
+  // optional (walk-in) via optionalPartyRole, there is no due date, no open
+  // item and no balance — tenders settle the total in full. Money in needs
+  // no credit approval, so it direct-posts like the other tender documents.
+  cash_sale: {
+    kind: 'cash_sale', closeModule: 'ar', family: 'ar', numberPrefix: 'CS-', i18n: 'ar',
+    partyRole: null, optionalPartyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true,
+    hasDueDate: false, hasReference: true, fundingSource: null, isOpenItem: false, showsBalance: false,
+    directPost: true,
+  },
+  // Cash refund: money back out, so it keeps the credit memo's approval step.
+  // Restocking lines restore stock at original cost; lines without
+  // return evidence (damaged goods) are purely financial.
+  cash_refund: {
+    kind: 'cash_refund', closeModule: 'ar', family: 'ar', numberPrefix: 'CR-', i18n: 'ar',
+    partyRole: null, optionalPartyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true,
+    hasDueDate: false, hasReference: true, fundingSource: null, isOpenItem: false, showsBalance: false,
+    directPost: false,
+  },
   rma: {
     kind: 'rma', closeModule: 'ar', family: 'ar', numberPrefix: 'RMA-', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: false, hasDueDate: false,
@@ -159,6 +178,8 @@ export const DOC_KINDS: Record<string, DocKindConfig> = Object.fromEntries(
 export const AP_KINDS = ['vendor_bill', 'vendor_credit'] as const
 export const AR_KINDS = ['customer_invoice', 'customer_credit'] as const
 export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'] as const
+/** Paid-at-sale documents: one list, not two — refunds filter by kind. */
+export const CASH_SALE_KINDS = ['cash_sale', 'cash_refund'] as const
 
 /**
  * Kinds creatable through the uniform unsaved-create slice: every shared
@@ -170,6 +191,8 @@ export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'deposit', 'tr
 export const DOCUMENT_CREATE_KINDS = [
   'customer_invoice',
   'customer_credit',
+  'cash_sale',
+  'cash_refund',
   'rma',
   'vendor_bill',
   'vendor_credit',

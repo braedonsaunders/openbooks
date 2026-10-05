@@ -234,8 +234,9 @@ export async function calculateForecast(scope: ForecastScope) {
     )`
   /**
    * Closed is a net-revenue basis, not a tax-inclusive takings total:
-   * invoices contribute their subtotal (tax excluded) and posted customer
-   * credits against the same revenue subtract theirs. A credit follows its
+   * invoices and cash sales contribute their subtotal (tax excluded) and
+   * posted customer credits and cash refunds against the same revenue
+   * subtract theirs. A credit follows its
    * revenue — the invoice it settles (through a live application) or the
    * opportunity it is linked to — so an unrelated credit never reduces
    * another owner's or team's figure. The credit side of an application is
@@ -265,8 +266,8 @@ export async function calculateForecast(scope: ForecastScope) {
     )`
   const teamActualsFilter = scope.salesTeamId ? sql`
     and (
-      (d.kind = 'customer_invoice' and ${teamScopedDocument})
-      or (d.kind = 'customer_credit' and (
+      (d.kind in ('customer_invoice', 'cash_sale') and ${teamScopedDocument})
+      or (d.kind in ('customer_credit', 'cash_refund') and (
         ${teamScopedDocument}
         or ${creditAppliesToScopedInvoice(sql`
           exists (
@@ -280,10 +281,10 @@ export async function calculateForecast(scope: ForecastScope) {
     )` : sql``
   const ownerActualsFilter = scope.ownerUserId ? sql`
     and (
-      (d.kind = 'customer_invoice' and exists (
+      (d.kind in ('customer_invoice', 'cash_sale') and exists (
         select 1 from crm_account_profiles cp
          where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId}
-      )) or (d.kind = 'customer_credit' and (
+      )) or (d.kind in ('customer_credit', 'cash_refund') and (
         exists (
           select 1 from crm_account_profiles cp
            where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId}
@@ -320,19 +321,19 @@ export async function calculateForecast(scope: ForecastScope) {
     ), document_events as (
       select d.id as document_id, d.document_date::date as event_date, 1::int as direction
         from documents d
-       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
          and d.status in ('posted', 'voided')
       union all
       select d.id as document_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as event_date, -1::int as direction
         from documents d
         left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
-       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
          and d.status = 'voided' and d.voided_at is not null
     ), actuals as (
-      select d.currency, coalesce(sum(case when d.kind = 'customer_invoice' then d.subtotal * events.direction else -d.subtotal * events.direction end), 0)::numeric(19,4) as closed_amount
+      select d.currency, coalesce(sum(case when d.kind in ('customer_invoice', 'cash_sale') then d.subtotal * events.direction else -d.subtotal * events.direction end), 0)::numeric(19,4) as closed_amount
         from documents d
         join document_events events on events.document_id = d.id
-       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope.allowedSubsidiaryIds == null ? null : new Set(scope.allowedSubsidiaryIds))}
          and events.event_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${ownerActualsFilter}

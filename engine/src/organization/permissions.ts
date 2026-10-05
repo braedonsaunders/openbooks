@@ -42,6 +42,12 @@ export const PERMISSION_CATALOGUE = [
   "stored_value.read",
   "stored_value.manage",
   "stored_value.adjust",
+  // Paid-at-sale documents (cash sales and cash refunds): separate from ar.*
+  // so till operators can sell and refund without holding the receivables
+  // book. Granted to the sales and accounting roles below.
+  "cash_sales.read",
+  "cash_sales.create",
+  "cash_sales.post",
   // Usage billing: see metered usage and the charges rated from it.
   "usage.read",
   "usage.manage",
@@ -443,6 +449,15 @@ export const PERMISSION_GROUPS: {
       { key: "stored_value.read", labelKey: permissionLabelKey("stored_value.read") },
       { key: "stored_value.manage", labelKey: permissionLabelKey("stored_value.manage") },
       { key: "stored_value.adjust", labelKey: permissionLabelKey("stored_value.adjust") },
+    ],
+  },
+  {
+    key: "cash_sales",
+    labelKey: "permissions.groups.cash_sales",
+    permissions: [
+      { key: "cash_sales.read", labelKey: permissionLabelKey("cash_sales.read") },
+      { key: "cash_sales.create", labelKey: permissionLabelKey("cash_sales.create") },
+      { key: "cash_sales.post", labelKey: permissionLabelKey("cash_sales.post") },
     ],
   },
   {
@@ -863,6 +878,9 @@ export const BUILT_IN_ROLES: Record<
       "stored_value.read",
       "stored_value.manage",
       "stored_value.adjust",
+      "cash_sales.read",
+      "cash_sales.create",
+      "cash_sales.post",
       "usage.read",
       "usage.manage",
       "usage.bill",
@@ -995,6 +1013,9 @@ export const BUILT_IN_ROLES: Record<
       "ar.pay",
       "stored_value.read",
       "stored_value.manage",
+      "cash_sales.read",
+      "cash_sales.create",
+      "cash_sales.post",
       "usage.read",
       "usage.manage",
       "usage.bill",
@@ -1119,7 +1140,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "cash_sales.read"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -1131,6 +1152,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "stored_value.manage", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "channels.read",
+      "cash_sales.read", "cash_sales.create",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
@@ -1149,6 +1171,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.forecasts.read", "crm.forecasts.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "channels.read",
+      "cash_sales.read", "cash_sales.create",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",

@@ -113,6 +113,8 @@ const taxReturn: AssistantToolDef = {
 const TAXABLE_KIND_PERM: Record<string, string> = {
   customer_invoice: "ar.read",
   customer_credit: "ar.read",
+  cash_sale: "cash_sales.read",
+  cash_refund: "cash_sales.read",
   vendor_bill: "ap.read",
   vendor_credit: "ap.read",
   expense_report: "expenses.read",
@@ -124,10 +126,10 @@ const documentsMissingTaxCode: AssistantToolDef = {
   description:
     "Pre-filing review: posted documents in a period with non-zero lines lacking a tax code. Per-kind counts, untaxed amount, capped document list. Some lines are legitimately tax-free — a review list, not errors. Read-only.",
   category: "search",
-  gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "expenses.read"] },
+  gate: { mode: "anyOf", perms: ["ar.read", "cash_sales.read", "ap.read", "expenses.read"] },
   inputSchema: z.object({
     kinds: z.array(z.string().max(40)).max(6).optional()
-      .describe("Subset of customer_invoice, customer_credit, vendor_bill, vendor_credit, expense_report, card_charge; default all the caller may read"),
+      .describe("Subset of customer_invoice, customer_credit, cash_sale, cash_refund, vendor_bill, vendor_credit, expense_report, card_charge; default all the caller may read"),
     status: z.enum(["posted", "approved", "pending_approval", "draft"]).optional().describe("Default posted"),
     ...rangeInputFields,
     limit: z.number().int().min(1).max(100).optional().describe("Default 25 documents"),

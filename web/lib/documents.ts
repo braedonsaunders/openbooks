@@ -48,6 +48,7 @@ import { resolveOrgId } from './org-scope'
 import { resolveExternalRefPair } from './external-ref'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
+import { CASH_TENDER_KINDS } from '@openbooks/engine/sales/cash-tenders'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 
@@ -1133,6 +1134,63 @@ export async function applyDocumentEdit(
     }
   }
 
+  // Paid-at-sale tenders (cash_sale/cash_refund custom.tenders): each names
+  // the clearing or bank account the money settled into. Like the funding
+  // override above, these are native account pointers inside custom jsonb
+  // (not registered custom fields), so prove uuid shape, org ownership, and
+  // subsidiary scope here — a foreign id would otherwise persist as a silent
+  // cross-tenant pointer. Only supplied tenders are fenced, so legacy bags
+  // cannot lock unrelated edits; the kernel still cross-foots tenders to the
+  // document total at posting.
+  if (body.custom !== undefined && (current.kind === 'cash_sale' || current.kind === 'cash_refund')) {
+    const suppliedTenders = (body.custom as Record<string, unknown>).tenders
+    if (suppliedTenders !== undefined) {
+      if (!Array.isArray(suppliedTenders) || suppliedTenders.length === 0) {
+        throw new DocumentEditError(422, `a ${current.kind === 'cash_sale' ? 'cash sale' : 'cash refund'} needs at least one tender — name the clearing or bank account and the amount`)
+      }
+      const validated: Record<string, unknown>[] = []
+      for (let i = 0; i < suppliedTenders.length; i++) {
+        const entry = suppliedTenders[i] as Record<string, unknown>
+        const label = `tender ${i + 1}`
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          throw new DocumentEditError(422, `${label} is not an object — rebuild the tenders on the document`)
+        }
+        if (typeof entry.kind !== 'string' || !(CASH_TENDER_KINDS as readonly string[]).includes(entry.kind)) {
+          throw new DocumentEditError(422, `${label} kind must be one of ${CASH_TENDER_KINDS.join(', ')}`)
+        }
+        if (typeof entry.accountId !== 'string' || !isUuid(entry.accountId)) {
+          throw new DocumentEditError(422, `${label} must name a valid clearing or bank account`)
+        }
+        const owned = await runner.execute<{ id: string; type: string }>(sql`
+          select a.id, a.type from accounts a
+           where a.org_id = ${orgId} and a.id = ${entry.accountId}::uuid
+             and a.is_active and not a.is_summary
+             and ${referenceSubsidiaryScope}
+           for key share
+        `)
+        const account = owned.rows[0]
+        if (!account) throw new DocumentEditError(404, `${label} account not found for this subsidiary`)
+        if (account.type === 'asset_receivable' || account.type === 'liability_payable') {
+          throw new DocumentEditError(422, `${label} cannot settle into a receivable or payable control account — pick the clearing or bank account the money moved through`)
+        }
+        const exact = typeof entry.amount === 'string' ? canonicalDecimal(entry.amount, 4) : null
+        if (exact === null || cmp(exact, '0') <= 0) {
+          throw new DocumentEditError(422, `${label} amount must be a positive decimal number`)
+        }
+        if (entry.reference !== undefined && entry.reference !== null && typeof entry.reference !== 'string') {
+          throw new DocumentEditError(422, `${label} reference must be text`)
+        }
+        validated.push({
+          kind: entry.kind,
+          accountId: entry.accountId,
+          amount: exact,
+          ...(typeof entry.reference === 'string' && entry.reference.length > 0 ? { reference: entry.reference } : {}),
+        })
+      }
+      headerCustom = { ...(headerCustom ?? current.custom ?? {}), tenders: validated }
+    }
+  }
+
   // Pre-validate + prepare lines before touching the DB, so a bad line fails
   // without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
@@ -2016,7 +2074,7 @@ export async function applyDocumentEdit(
       `)
 
       const effectivePartyId = body.partyId !== undefined ? body.partyId : current.partyId
-      if (effectivePartyId && ['customer_invoice', 'customer_credit', 'customer_payment'].includes(current.kind)) {
+      if (effectivePartyId && ['customer_invoice', 'customer_credit', 'customer_payment', 'cash_sale', 'cash_refund'].includes(current.kind)) {
         const promotion = await promoteCrmAccount(tx, {
           orgId,
           partyId: effectivePartyId,

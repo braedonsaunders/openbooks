@@ -46,8 +46,8 @@ async function defaultStockLocation(
   return r.rows.length === 1 ? r.rows[0]!.id : null;
 }
 
-const INBOUND_DOCUMENT_KINDS = new Set(["vendor_bill", "purchase_receipt", "customer_credit"]);
-const OUTBOUND_DOCUMENT_KINDS = new Set(["customer_invoice", "sales_fulfillment", "vendor_credit"]);
+const INBOUND_DOCUMENT_KINDS = new Set(["vendor_bill", "purchase_receipt", "customer_credit", "cash_refund"]);
+const OUTBOUND_DOCUMENT_KINDS = new Set(["customer_invoice", "cash_sale", "sales_fulfillment", "vendor_credit"]);
 
 /** Which way a document's stock lines move, for warehouse admission. */
 function documentStockDirection(kind: string): StockMovementDirection {

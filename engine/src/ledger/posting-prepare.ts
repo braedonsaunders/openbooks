@@ -106,7 +106,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   }
   deps = await resolveMarketplaceClearingForDocument(db, doc, deps);
   try {deps = { ...deps, agencyByLine: await resolveAgencyPosting(db, doc.orgId, doc.id) }} catch(error) {if(error instanceof AgencyError)throw new PostingError(error.message);throw error}
-  if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
+  if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.deferralAccountByLine) {
     deps = {
       ...deps,
       deferralAccountByLine: await resolveDeferralAccounts(db, doc.id, doc.orgId),
@@ -147,7 +147,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       );
     }
   }
-  if (doc.kind === "customer_invoice" && !deps.migration) {
+  if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.migration) {
     try {
       await assertInvoiceIssuesPostable(db, doc.orgId, doc.id);
     } catch (error) {
@@ -188,7 +188,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     }
   }
 
-  if (doc.kind === "customer_credit" && !deps.migration) {
+  if ((doc.kind === "customer_credit" || doc.kind === "cash_refund") && !deps.migration) {
     // Same backstop as the vendor leg: a return whose evidence cannot be
     // satisfied must fail BEFORE the journal commits, not inside the
     // post-commit effects drain where the credit is already posted and the

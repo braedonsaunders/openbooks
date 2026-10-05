@@ -130,7 +130,7 @@ export async function regenerateGlImpactTx(
   }
   deps = await resolveMarketplaceClearingForDocument(tx, doc, deps);
   deps = { ...deps, agencyByLine: await resolveAgencyPosting(tx, doc.orgId, doc.id) };
-  if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
+  if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.deferralAccountByLine) {
     deps = {
       ...deps,
       deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id, doc.orgId),

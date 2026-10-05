@@ -1060,6 +1060,7 @@
       "ap": "Accounts payable",
       "ar": "Accounts receivable",
       "stored_value": "Stored value",
+      "cash_sales": "Cash sales",
       "usage": "Usage billing",
       "contract-costs": "Contract costs",
       "autopay": "Autopay",
@@ -1113,6 +1114,9 @@
     "stored_value_read": "View gift cards and store credit",
     "stored_value_manage": "Issue and redeem gift cards and store credit",
     "stored_value_adjust": "Adjust stored-value balances outside documents",
+    "cash_sales_read": "View cash sales and refunds",
+    "cash_sales_create": "Create and submit cash sales and refunds",
+    "cash_sales_post": "Post cash sales and refunds to the ledger",
     "usage_read": "View metered usage",
     "usage_manage": "Manage usage meters, rating plans, and imported usage records",
     "usage_bill": "Rate usage and bill subscription charges",
@@ -6092,6 +6096,10 @@
     "promotions": {
       "title": "Promotions",
       "description": "Discount codes and campaigns applied to sales documents, with promotion performance reporting."
+    },
+    "cashSales": {
+      "title": "Cash sales",
+      "description": "Paid-at-sale receipts and refunds with tenders, posting with no receivable."
     },
     "revenueRecognition": {
       "title": "Revenue recognition",

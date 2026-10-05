@@ -56,7 +56,7 @@ export async function createObligationsFromInvoice(
   }
   const docRes = (await db.execute<{ id: string; document_number: string; party_id: string | null; currency: string | null; document_date: string; subsidiary_id: string | null }>(sql`
     select id, document_number, party_id, currency, document_date, subsidiary_id
-      from documents where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'`));
+      from documents where id = ${documentId} and org_id = ${orgId} and kind in ('customer_invoice', 'cash_sale')`));
   const doc = docRes.rows[0];
   if (!doc || !doc.party_id) return { created: 0, contractId: null, obligationIds: [] };
 

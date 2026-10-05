@@ -2,6 +2,7 @@
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
 import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/brands.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
+import { assertTendersMatchTotal, parseCashTenders, type CashTender } from "../sales/cash-tenders.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
@@ -64,6 +65,10 @@ const cardRule: RuleFn = (doc, lines, deps) => {
     },
   ];
 };
+
+/** Tender-leg memo: the channel plus the operator's reference when one was taken. */
+const tenderMemo = (t: CashTender): string | null =>
+  t.reference ? `${t.kind} ${t.reference}` : t.kind;
 
 const dims = (d: Doc, l?: DocLine) => ({
   departmentId: l?.departmentId ?? d.departmentId,
@@ -381,6 +386,51 @@ export const RULES: Record<string, RuleFn> = {
         isOpenItem: true,
         ...dims(doc),
       },
+      ...income,
+      ...tax,
+    ];
+  },
+
+  /**
+   * Cash sale (sales receipt): paid at the point of sale, so there is no
+   * receivable and no open item. The income and tax legs mirror
+   * customer_invoice exactly (agency pass-through, deferred-revenue routing,
+   * discount lines debiting their discount account); the control leg is
+   * replaced by one debit per tender into its clearing or bank account.
+   * Tenders must sum to the document total to the minor unit — a mismatch,
+   * including any rounding difference, is a named refusal, never a plug.
+   */
+  cash_sale: (doc, lines, deps) => {
+    const income: KernelLine[] = lines.flatMap((l): KernelLine[] => {
+      const agency = deps.agencyByLine?.get(l.id);
+      if (agency) return [{accountId: resolvedLineAccount(l), amount: negMoney(add(l.amount,neg(agency.vendorAmount))),memo: l.description,partyId:l.partyId ?? doc.partyId,...dims(doc,l)},
+        {accountId:agency.accountId,amount:negMoney(agency.vendorAmount),memo:"Vendor pass-through consideration",partyId:l.partyId ?? doc.partyId,...dims(doc,l)}];
+      return [{
+      // Rev-rec lines credit deferred revenue; recognition drains it over the
+      // term. All other lines credit income directly.
+      accountId: resolvedLineAccount(
+        l,
+        deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
+      ),
+      amount: negMoney(l.amount), // credit income / deferred revenue
+      memo: l.description,
+      partyId: l.partyId ?? doc.partyId,
+      ...dims(doc, l),
+    }]; });
+    const tax = salesTaxLines(doc, lines, deps, 1);
+    const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
+    const tenders = parseCashTenders(doc.custom, doc.documentNumber, "cash sale");
+    assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash sale");
+    return [
+      // Tender legs are bank legs, not AR legs: they carry no party and are
+      // never open items, so a paid sale can never appear in aging, dunning,
+      // or statements of balance.
+      ...tenders.map((t): KernelLine => ({
+        accountId: t.accountId,
+        amount: t.amount, // debit clearing/bank
+        memo: tenderMemo(t),
+        ...dims(doc),
+      })),
       ...income,
       ...tax,
     ];
@@ -825,6 +875,39 @@ export const RULES: Record<string, RuleFn> = {
       };
     return [
       creditLeg,
+      ...income,
+      ...tax,
+    ];
+  },
+
+  /**
+   * Cash refund: the reverse of a cash sale. Revenue and tax legs mirror
+   * customer_credit (debit income, reverse the sales tax); each tender pays
+   * out of its clearing or bank account. Lines that restock carry
+   * inventory-return evidence and restore stock at original cost through the
+   * customer-return engine; lines without it (damaged goods, fee adjustments)
+   * are purely financial. Tenders must sum to the refund total, as on a sale.
+   */
+  cash_refund: (doc, lines, deps) => {
+    const income: KernelLine[] = lines.map((l) => ({
+      accountId: resolvedLineAccount(l),
+      amount: parseMoney(l.amount), // debit income (reverse of cash sale)
+      memo: l.description,
+      partyId: l.partyId ?? doc.partyId,
+      ...dims(doc, l),
+    }));
+    const tax = salesTaxLines(doc, lines, deps, -1);
+    const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
+    const tenders = parseCashTenders(doc.custom, doc.documentNumber, "cash refund");
+    assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash refund");
+    return [
+      // Payout legs mirror the sale's tender legs: no party, never open items.
+      ...tenders.map((t): KernelLine => ({
+        accountId: t.accountId,
+        amount: negMoney(t.amount), // credit clearing/bank
+        memo: tenderMemo(t),
+        ...dims(doc),
+      })),
       ...income,
       ...tax,
     ];

@@ -40,6 +40,12 @@ export const FEATURES: FeatureDef[] = [
   { key: 'salesManagement', defaultEnabled: true, category: 'sales', parentKey: 'crm', navModules: ['crm-sales'] },
   { key: 'geographicTerritories', defaultEnabled: false, category: 'sales', parentKey: 'salesManagement' },
   { key: 'orders', defaultEnabled: true, category: 'sales', navModules: ['estimates', 'sales-orders', 'purchase-orders'] },
+  // Paid-at-sale documents: cash sales (sales receipts) and cash refunds post
+  // revenue, tax, and COGS with tenders straight to clearing/bank — no
+  // receivable, no open item. Off by default; hiding the surface never
+  // deletes posted sales or their history. The nav module link lands with the
+  // cash-sales list page, which must be feature-gated the same day.
+  { key: 'cashSales', defaultEnabled: false, category: 'sales' },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'sales', navModules: ['revenue'] },
   // Revenue contracts spanning orders, subscriptions and several invoices.
   // Off by default: without it every invoice keeps its own contract. A child

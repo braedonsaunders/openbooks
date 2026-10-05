@@ -11,6 +11,7 @@ type ProviderTaxPlan = {
 
 export function providerTaxDocumentKind(kind: string): boolean {
   return kind === "customer_invoice" || kind === "customer_credit" ||
+    kind === "cash_sale" || kind === "cash_refund" ||
     kind === "vendor_bill" || kind === "vendor_credit";
 }
 
@@ -24,6 +25,8 @@ export interface ShipToSnapshot {
 const SHIP_TO_SNAPSHOT_KINDS: ReadonlySet<string> = new Set([
   "customer_invoice",
   "customer_credit",
+  "cash_sale",
+  "cash_refund",
 ]);
 
 /**

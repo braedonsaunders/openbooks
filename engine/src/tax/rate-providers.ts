@@ -37,7 +37,7 @@ export interface TaxComponentQuote {
   rateIsBlendedFallback?: boolean;
 }
 
-export type ProviderDocumentKind = "customer_invoice" | "vendor_bill" | "customer_credit" | "vendor_credit";
+export type ProviderDocumentKind = "customer_invoice" | "vendor_bill" | "customer_credit" | "vendor_credit" | "cash_sale" | "cash_refund";
 
 export interface TaxQuoteRequest {
   taxableAmount: string;
@@ -936,7 +936,10 @@ export interface AvalaraQuoteConfig {
  */
 export function avalaraDocumentType(documentKind: ProviderDocumentKind | undefined): string {
   if (documentKind === "vendor_bill") return "PurchaseOrder";
-  if (documentKind === "customer_credit" || documentKind === "vendor_credit") return "ReturnOrder";
+  // A cash sale quotes exactly like an invoice and a cash refund exactly
+  // like a credit memo: the non-committing estimate types above are what
+  // quotes use, so both cash kinds ride the existing mappings unchanged.
+  if (documentKind === "customer_credit" || documentKind === "vendor_credit" || documentKind === "cash_refund") return "ReturnOrder";
   return "SalesOrder";
 }
 

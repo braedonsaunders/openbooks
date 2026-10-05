@@ -1072,6 +1072,7 @@
       "ap": "Cuentas por pagar",
       "ar": "Cuentas por cobrar",
       "stored_value": "Tarjetas regalo y crédito",
+      "cash_sales": "Ventas en efectivo",
       "usage": "Facturación por uso",
       "contract-costs": "Costos de contrato",
       "autopay": "Cobro automático",
@@ -1124,6 +1125,9 @@
     "stored_value_read": "Ver tarjetas regalo y crédito",
     "stored_value_manage": "Emitir y canjear tarjetas regalo y crédito",
     "stored_value_adjust": "Ajustar saldos fuera de los documentos",
+    "cash_sales_read": "Ver ventas en efectivo y reembolsos",
+    "cash_sales_create": "Crear y enviar ventas en efectivo y reembolsos",
+    "cash_sales_post": "Contabilizar ventas en efectivo y reembolsos en el libro mayor",
     "usage_read": "Ver el uso medido",
     "usage_manage": "Gestionar medidores, planes de tarifas y registros de uso importados",
     "usage_bill": "Tarifar el uso y facturar cargos de suscripción",
@@ -6100,6 +6104,10 @@
     "promotions": {
       "title": "Promociones",
       "description": "Códigos de descuento y campañas aplicados a los documentos de venta, con informe de rendimiento."
+    },
+    "cashSales": {
+      "title": "Ventas en efectivo",
+      "description": "Recibos de venta pagados al momento y reembolsos con formas de pago, sin cuentas por cobrar."
     },
     "revenueRecognition": {
       "title": "Reconocimiento de ingresos",

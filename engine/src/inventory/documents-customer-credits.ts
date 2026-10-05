@@ -305,17 +305,23 @@ async function validateCustomerReturnSource(
         `so raise the credit without inventory-return evidence instead of returning balance-forward stock`,
     );
   }
-  // Stock leaves either on the invoice (combined ship-and-bill) or on a
-  // shipment against the sales order; both name the customer.
+  // Stock leaves on an invoice or a paid-at-sale cash sale (both combined
+  // ship-and-bill) or on a shipment against the sales order; all three name
+  // the customer that received the goods.
   if (
     source.source_document_kind !== "customer_invoice" &&
+    source.source_document_kind !== "cash_sale" &&
     source.source_document_kind !== SALES_FULFILLMENT_DOCUMENT_KIND
   ) {
     throw new InventoryError(
       `${label} source shipment is attached to a non-sales document`,
     );
   }
-  if (!customerId || source.source_customer_id !== customerId) {
+  // A walk-in cash sale and its refund both name no customer, so both-null
+  // matches; anything else must return to the customer that received the
+  // goods. Refunding a named customer's goods to nobody (or to someone else)
+  // stays refused.
+  if (source.source_customer_id !== customerId) {
     throw new InventoryError(
       `${label} source shipment belongs to a different customer`,
     );
@@ -608,8 +614,8 @@ export async function applyCustomerCreditInventoryReturns(
     select kind, party_id from documents
      where org_id = ${orgId} and id = ${documentId}
   `)).rows[0];
-  if (!document || document.kind !== "customer_credit") {
-    throw new InventoryError("inventory customer return requires a customer credit");
+  if (!document || (document.kind !== "customer_credit" && document.kind !== "cash_refund")) {
+    throw new InventoryError("inventory customer return requires a customer credit or cash refund");
   }
   // Evidence-less historical/migration credits remain financial documents; a
   // credit line only restores stock when it explicitly claims a return.

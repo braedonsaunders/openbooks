@@ -60,6 +60,8 @@ const DOCUMENT_CLOSE_MODULES = {
   vendor_credit: "ap",
   customer_invoice: "ar",
   customer_credit: "ar",
+  cash_sale: "ar",
+  cash_refund: "ar",
   card_charge: "ap",
   card_refund: "ap",
   check: "ap",

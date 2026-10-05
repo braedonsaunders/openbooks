@@ -89,6 +89,7 @@
     "./banking/csv": "./src/banking/public-csv.ts",
     "./hrm/processes": "./src/hrm/public-processes.ts",
     "./hrm/recruiting": "./src/hrm/public-recruiting.ts",
-    "./payments/autopay": "./src/payments/public-autopay.ts"
+    "./payments/autopay": "./src/payments/public-autopay.ts",
+    "./sales/cash-tenders": "./src/sales/public-cash-tenders.ts"
   }
 }

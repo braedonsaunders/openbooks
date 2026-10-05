@@ -1072,6 +1072,7 @@
       "ap": "Comptes fournisseurs",
       "ar": "Comptes clients",
       "stored_value": "Cartes cadeaux et avoirs",
+      "cash_sales": "Ventes au comptant",
       "usage": "Facturation à l’usage",
       "contract-costs": "Coûts de contrat",
       "autopay": "Prélèvement automatique",
@@ -1124,6 +1125,9 @@
     "stored_value_read": "Voir les cartes cadeaux et les avoirs",
     "stored_value_manage": "Émettre et utiliser les cartes cadeaux et les avoirs",
     "stored_value_adjust": "Ajuster les soldes hors documents",
+    "cash_sales_read": "Consulter les ventes au comptant et les remboursements",
+    "cash_sales_create": "Créer et soumettre des ventes au comptant et des remboursements",
+    "cash_sales_post": "Comptabiliser les ventes au comptant et les remboursements au grand livre",
     "usage_read": "Consulter la consommation mesurée",
     "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
     "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",
@@ -6100,6 +6104,10 @@
     "promotions": {
       "title": "Promotions",
       "description": "Codes de réduction et campagnes appliqués aux documents de vente, avec rapport de performance."
+    },
+    "cashSales": {
+      "title": "Ventes au comptant",
+      "description": "Reçus de vente payés immédiatement et remboursements avec modes de règlement, sans créances clients."
     },
     "revenueRecognition": {
       "title": "Reconnaissance des revenus",

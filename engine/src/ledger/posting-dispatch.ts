@@ -79,7 +79,10 @@ export async function runPostDocumentEffects(
     const effectActorId = options.actorId ?? claimed?.actor_id ?? null;
     const postingDate = doc.postingDate ?? claimed?.posting_date ?? doc.documentDate;
     const entryId = doc.postedEntryId ?? claimed?.entry_id ?? null;
-    if (doc.kind === "customer_invoice") {
+    if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
+      // A cash sale issues stock and defers rev-rec lines exactly like an
+      // invoice; walk-in (party-less) sales simply produce no obligations,
+      // since recognition needs a counterparty contract.
       await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
       await applyInventoryIssuesForInvoice(
         doc.orgId,
@@ -115,11 +118,11 @@ export async function runPostDocumentEffects(
         postingDate,
         await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
       );
-    } else if (doc.kind === "customer_credit") {
+    } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
       // The sell-side mirror of vendor_credit. Without it a sales return was
       // a purely commercial credit: revenue reversed, the goods never came
       // back into stock, and COGS kept the cost of units the customer had
-      // returned.
+      // returned. Cash refunds restock through the same return engine.
       await applyInventoryReturnsForCustomerCredit(
         doc.orgId,
         effectActorId,

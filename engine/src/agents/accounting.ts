@@ -166,7 +166,7 @@ export async function accountingFindings(
         from documents
        where org_id = ${orgId} and status in ('draft','pending_approval')
          and document_date <= ${staleOnOrBefore}
-         and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
+         and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','cash_sale','cash_refund','expense_report','journal')
     `));
     const staleRow = stale.rows[0];
     if (staleRow && Number(staleRow.document_count) > 0) {
@@ -175,7 +175,7 @@ export async function accountingFindings(
           from documents
          where org_id = ${orgId} and status in ('draft','pending_approval')
            and document_date <= ${staleOnOrBefore}
-           and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
+           and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','cash_sale','cash_refund','expense_report','journal')
          order by document_date, abs(total) desc limit 10
       `));
     const materiality = moneyAbs(staleRow.materiality);

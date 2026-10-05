@@ -47,7 +47,7 @@ export async function taxFindings(
   if (codesPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(codesPolicy, agentThreshold);
     const from = addCalendarDays(today, -codesPolicy.parameters.lookbackDays!);
-    for (const kind of ["customer_invoice", "customer_credit", "vendor_bill", "vendor_credit", "expense_report", "card_charge"]) {
+    for (const kind of ["customer_invoice", "customer_credit", "cash_sale", "cash_refund", "vendor_bill", "vendor_credit", "expense_report", "card_charge"]) {
       const agg = (await db.execute<{ documents: number; untaxed_amount: string }>(sql`
         select count(distinct d.id)::int as documents, coalesce(sum(dl.amount), 0)::text as untaxed_amount
           from documents d

@@ -1072,6 +1072,7 @@
       "ap": "買掛金",
       "ar": "売掛金",
       "stored_value": "ストアドバリュー",
+      "cash_sales": "現金売上",
       "usage": "従量課金",
       "contract-costs": "契約コスト",
       "autopay": "自動引き落とし",
@@ -1124,6 +1125,9 @@
     "stored_value_read": "ギフトカードとストアクレジットを表示する",
     "stored_value_manage": "ギフトカードとストアクレジットを発行・利用する",
     "stored_value_adjust": "伝票外でストアドバリュー残高を調整する",
+    "cash_sales_read": "現金売上と返金・払戻しを表示",
+    "cash_sales_create": "現金売上と返金・払戻しを作成および提出",
+    "cash_sales_post": "現金売上と返金・払戻しを元帳に記帳",
     "usage_read": "計測された利用量を表示",
     "usage_manage": "使用量メーター、料金プラン、インポートした使用量レコードを管理",
     "usage_bill": "使用量を料金計算し、サブスクリプション料金を請求",
@@ -6328,6 +6332,10 @@
     "promotions": {
       "title": "プロモーション",
       "description": "売上伝票に適用する割引コードとキャンペーン。実績レポート付き。"
+    },
+    "cashSales": {
+      "description": "売掛金を経由しない、その場で支払われる売上レシートと返金（支払方法別）です。",
+      "title": "現金売上"
     },
     "projects": {
       "description": "予算・原価・請求・収益性とともに案件を管理します。",

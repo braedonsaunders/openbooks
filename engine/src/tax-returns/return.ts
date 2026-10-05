@@ -948,7 +948,7 @@ async function sumReturnGlRaw(
                   and (
                     ${src.basis === "tax_collected" ? sql`c.collected_account_id = l.account_id` : sql`c.paid_account_id = l.account_id`}
                     or (
-                      ${src.basis === "tax_collected" ? sql`c.collected_account_id is null and sd.kind in ('customer_invoice', 'customer_credit')` : sql`c.paid_account_id is null and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')`}
+                      ${src.basis === "tax_collected" ? sql`c.collected_account_id is null and sd.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')` : sql`c.paid_account_id is null and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')`}
                     )
                   )
              )
@@ -1036,7 +1036,7 @@ async function sumReturnGlRaw(
     const purchaseArray = uuidArray(purchaseCodes);
     const r = (await runner.execute<{ total: string }>(sql`
       select coalesce(sum(
-               round(((case when d.kind in ('customer_credit', 'vendor_credit') then -dl.amount else dl.amount end) * d.fx_rate)::numeric, 4)
+               round(((case when d.kind in ('customer_credit', 'vendor_credit', 'cash_refund') then -dl.amount else dl.amount end) * d.fx_rate)::numeric, 4)
              ), 0)::text as total
         from document_lines dl
         join documents d on d.id = dl.document_id and d.org_id = dl.org_id
@@ -1046,7 +1046,7 @@ async function sumReturnGlRaw(
          ${docScope}
          and (
            (
-             d.kind in ('customer_invoice', 'customer_credit')
+             d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
              and (
                dl.tax_code_id = any(${salesArray}::uuid[])
                or exists (
