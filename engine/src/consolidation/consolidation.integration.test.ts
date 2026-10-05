@@ -877,14 +877,14 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
       values
         (${usdSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb),
         (${eurSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Euro Co', 'EUR', 'DE', '{}'::jsonb, false, true, '{}'::jsonb)`);
-    // Spot coverage for USD→CAD only, dated before the period so the average
-    // falls back to the carried current rate. EUR→CAD has no spot history at
+    // Spot coverage for USD→CAD only, inside the period for both closing
+    // and average derivation. EUR→CAD has no spot history at
     // all — the API's wrapped derivation (web/app/api/consolidation drives
     // deriveConsolidatedRates inside withOrgTransaction) must refuse without
     // committing ANY pair, leaving no partially refreshed period behind.
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
-      values (${org.orgId}, 'USD', 'CAD', '2026-06-20', 'spot', '0.7300000000')`);
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-20', 'spot', '0.7300000000')`);
 
     await assert.rejects(
       withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId)),
@@ -895,8 +895,7 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
     assert.equal(partial.rows[0]!.n, 0);
 
     // With every needed pair covered, the same wrapped call commits the whole
-    // period at once. USD retains the prior-period control above (average
-    // falls back to current), while EUR's two in-period observations exercise
+    // period at once. USD has one in-period quote, while EUR's two observations exercise
     // PostgreSQL's wider-scale avg(numeric) result and prove it is normalized
     // to the persisted numeric(19,10) FX boundary.
     await db.execute(sql`
@@ -942,6 +941,8 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
     await db.execute(sql`
       update consolidated_fx_rates set source = 'manual'
        where org_id = ${org.orgId} and period_id = ${org.periodId} and from_currency = 'USD'`);
+    // The manual row is also the offered remedy when a spot feed is absent.
+    await db.execute(sql`delete from fx_rates where org_id=${org.orgId} and from_currency='USD' and to_currency='CAD'`);
     // The count is the number of rows the refresh actually created or
     // updated: the pinned USD row is skipped by the upsert predicate, so only
     // EUR is written (the earlier "2" counted pairs attempted, not rows).
@@ -1964,7 +1965,8 @@ test("derived historical rates carry into an adjustment period from the period i
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
       values
         (${org.orgId}, 'USD', 'CAD', '2026-07-15', 'spot', '1.3000000000'),
-        (${org.orgId}, 'USD', 'CAD', '2026-08-20', 'spot', '1.3500000000')`);
+        (${org.orgId}, 'USD', 'CAD', '2026-08-20', 'spot', '1.3500000000'),
+        (${org.orgId}, 'USD', 'CAD', '2026-08-31', 'spot', '1.3500000000')`);
     assert.equal(await deriveConsolidatedRates(org.orgId, org.periodId, actorId), 1);
     assert.equal(await deriveConsolidatedRates(org.orgId, augustId, actorId), 1);
     // A controller pins August's historical rate so the two predecessors are
