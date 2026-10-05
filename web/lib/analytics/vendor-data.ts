@@ -232,9 +232,11 @@ export async function vendorData(
     // Payment behaviour: collapse applications to one row per AP open-item
     // line before rolling up by vendor. A bill paid in installments must still
     // contribute one paid bill, one on-time decision, and one days-to-pay
-    // observation only after full settlement. Timeliness runs from the bill's
-    // own due date, else the vendor's payment terms counted from the bill
-    // date; settled lines with neither are excluded from the on-time rate
+    // observation only after full settlement. Timeliness runs from the open
+    // item's own due date first (journal AP lines and migrated or opening
+    // balances carry one with no linked vendor bill), else the bill's due
+    // date, else the vendor's payment terms counted from the bill date;
+    // settled lines with none of the three are excluded from the on-time rate
     // and late spend and counted as undated. Days-to-pay needs no due date
     // and keeps every settled line. Late spend also includes partial payments
     // actually made after due, within the report cutoff.
@@ -242,7 +244,7 @@ export async function vendorData(
       with bill_applications as (
         select bl.id as bill_line_id, bl.party_id, be.posting_date as bill_date,
           abs(bl.txn_amount) as bill_total, a.target_transaction_amount as applied_amount,
-          coalesce(bill.due_date, case when pt.net_days is not null then (be.posting_date + pt.net_days)::date end) as due_date,
+          coalesce(bl.due_date, bill.due_date, case when pt.net_days is not null then (be.posting_date + pt.net_days)::date end) as due_date,
           pe.posting_date as payment_date,
           sub.base_currency as func,
           a.amount
