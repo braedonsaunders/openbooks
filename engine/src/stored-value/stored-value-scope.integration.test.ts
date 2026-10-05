@@ -33,6 +33,7 @@ interface ScopeFixture {
   date: string;
   bank: string;
   bank2: string;
+  offset: string;
   actorId: string;
   giftProgram: string;
   expiringProgram: string;
@@ -124,6 +125,7 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
     date: org.date,
     bank: org.accounts.bank,
     bank2,
+    offset: org.accounts.cogs,
     actorId,
     giftProgram: giftProgram.id,
     expiringProgram: expiringProgram.id,
@@ -204,7 +206,7 @@ test("a restricted actor's adjustment of a foreign-entity account reads as missi
           allowedSubsidiaryIds: scope,
           deltaMinor: toUnits("5"),
           reason: "Counting error on issue",
-          offsetAccountId: fx.bank,
+          offsetAccountId: fx.offset,
           postingDate: fx.date,
           idempotencyKey: `scope-adjust-${randomUUID()}`,
           actorId: fx.rootActor,
@@ -398,7 +400,7 @@ test("the permitted same-entity path still adjusts, freezes, and redeems", { ski
         allowedSubsidiaryIds: scope,
         deltaMinor: toUnits("5"),
         reason: "Counting error on issue",
-        offsetAccountId: fx.bank,
+        offsetAccountId: fx.offset,
         postingDate: fx.date,
         idempotencyKey: `scope-own-${randomUUID()}`,
         actorId: fx.rootActor,
@@ -488,7 +490,7 @@ test("absent and hidden accounts refuse identically, before any lifecycle messag
           allowedSubsidiaryIds: scope,
           deltaMinor: toUnits("5"),
           reason: "Counting error on issue",
-          offsetAccountId: fx.bank,
+          offsetAccountId: fx.offset,
           postingDate: fx.date,
           idempotencyKey: `scope-twin-${randomUUID()}`,
           actorId: fx.rootActor,
