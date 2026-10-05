@@ -3405,6 +3405,30 @@ const COGNATES = new Set<string>([
   // reviewed enumValues entry.
   'fr:reports.catalog.columns.shipment_labels.service|Service',
   'fr:reports.catalog.columns.shipping_adjustments.service|Service',
+  // Storefront channel copy: the two decision outcomes are ICU-only
+  // templates with no translatable words, identical in every locale by
+  // construction; Shopify is the storefront brand name; Code is the
+  // German and French noun itself.
+  'de:channels.products.proposalConflict|{message}',
+  'es:channels.products.proposalConflict|{message}',
+  'fr:channels.products.proposalConflict|{message}',
+  'ja:channels.products.proposalConflict|{message}',
+  'pt-BR:channels.products.proposalConflict|{message}',
+  'zh:channels.products.proposalConflict|{message}',
+  'de:channels.products.proposalRefused|{message}',
+  'es:channels.products.proposalRefused|{message}',
+  'fr:channels.products.proposalRefused|{message}',
+  'ja:channels.products.proposalRefused|{message}',
+  'pt-BR:channels.products.proposalRefused|{message}',
+  'zh:channels.products.proposalRefused|{message}',
+  'de:channels.locations.columnShopify|Shopify',
+  'es:channels.locations.columnShopify|Shopify',
+  'fr:channels.locations.columnShopify|Shopify',
+  'ja:channels.locations.columnShopify|Shopify',
+  'pt-BR:channels.locations.columnShopify|Shopify',
+  'zh:channels.locations.columnShopify|Shopify',
+  'de:channels.products.codeLabel|Code',
+  'fr:channels.products.codeLabel|Code',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {

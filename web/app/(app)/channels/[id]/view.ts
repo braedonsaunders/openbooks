@@ -14,7 +14,10 @@ export async function loadChannelWorkspace(): Promise<ChannelWorkspaceData> {
   return {}
 }
 
-const WORKSPACE_TABS = ['overview', 'activity', 'settings'] as const
+// Connector-contributed tabs ride the same `?tab=` slot under an
+// `adapter:` prefix; the shell only links the keys the channel's adapter
+// actually contributes, so other kinds never resolve them.
+const WORKSPACE_TABS = ['overview', 'activity', 'settings', 'adapter:products', 'adapter:locations'] as const
 export type ChannelWorkspaceTab = (typeof WORKSPACE_TABS)[number]
 
 export function channelWorkspaceSpec(

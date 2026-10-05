@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -54,6 +55,7 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "dest
 };
 
 export function ChannelsConsole() {
+  const router = useRouter();
   const { dateTime } = useViewerFormat();
   const fmt = (ts: string | null) => (ts ? dateTime(new Date(ts)) : "—");
   const t = useTranslations("channels");
@@ -84,6 +86,17 @@ export function ChannelsConsole() {
         setLoading(false);
       });
   }, [t]);
+
+  // Kinds with a guided connect flow leave the generic drawer for
+  // their wizard: OAuth and the match review cannot run inside a
+  // name-and-secret form.
+  function connect(kind: string) {
+    if (kind === "shopify") {
+      router.push("/channels/connect");
+      return;
+    }
+    setConnectKind(kind);
+  }
 
   function retryLoad() {
     setLoadError(null);
@@ -148,7 +161,7 @@ export function ChannelsConsole() {
                 label={t("home.connect")}
                 busyLabel={tCommon("actions.loading")}
                 items={kinds.map((kind) => ({ key: kind, label: kind }))}
-                onSelect={(key) => setConnectKind(key)}
+                onSelect={(key) => connect(key)}
               />
             ) : null
           }
@@ -174,7 +187,7 @@ export function ChannelsConsole() {
                 label={t("home.connect")}
                 busyLabel={tCommon("actions.loading")}
                 items={kinds.map((kind) => ({ key: kind, label: kind }))}
-                onSelect={(key) => setConnectKind(key)}
+                onSelect={(key) => connect(key)}
               />
             ) : (
               <Button asChild>

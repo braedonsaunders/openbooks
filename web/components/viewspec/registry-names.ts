@@ -549,6 +549,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'subsidiary-switcher',
   'billing-history-console',
   'sync-console',
+  'shopify-connect',
   'tab-nav',
   'tax-depreciation-header',
   'tax-depreciation-overview',

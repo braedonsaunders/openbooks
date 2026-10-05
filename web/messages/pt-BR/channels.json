@@ -73,7 +73,9 @@
     "healthEmpty": "Nenhum fluxo informa ainda. A saúde aparece quando o conector executa.",
     "recentTitle": "Entregas recentes",
     "recentEmpty": "Nenhuma entrega ainda. O primeiro webhook da loja aparece aqui.",
-    "settingsHint": "Contas contábeis e locais de estoque deste canal. Mudanças valem para novos pedidos; o histórico nunca é reescrito."
+    "settingsHint": "Contas contábeis e locais de estoque deste canal. Mudanças valem para novos pedidos; o histórico nunca é reescrito.",
+    "reviewBanner": "Esta conexão terminou de importar e está pronta para revisão: correspondências, locais e contas propostos.",
+    "reviewCta": "Revisar e iniciar sincronização"
   },
   "activity": {
     "loading": "Carregando entregas…",
@@ -112,7 +114,16 @@
       "loadFailed": "As entregas não carregaram (status {status}).",
       "replayFailed": "A repetição não foi concluída (status {status}).",
       "replayed": "{count, plural, one {# entrega} other {# entregas}} na fila de novo."
-    }
+    },
+    "title": "Entregas de webhook",
+    "emptyHint": "Entregas verificadas da Shopify chegam aqui, recentes primeiro, com o resultado.",
+    "replayHint": "Reenfileire esta entrega com um motivo. A tentativa é auditada.",
+    "columnReceived": "Recebida",
+    "columnTopic": "Tópico",
+    "columnEvent": "Evento",
+    "columnStatus": "Estado",
+    "columnAttempts": "Tentativas",
+    "columnOutcome": "Resultado"
   },
   "status": {
     "draft": "Rascunho",
@@ -133,5 +144,107 @@
       "unlinkFailed": "A desvinculação não foi concluída (status {status}).",
       "unlinked": "ID externo desvinculado."
     }
+  },
+  "tabs": {
+    "products": "Produtos",
+    "locations": "Locais"
+  },
+  "actions": {
+    "connect": "Conectar Shopify",
+    "match": "Vincular",
+    "createItem": "Criar item",
+    "createFamily": "Criar família",
+    "ignore": "Ignorar",
+    "unmatch": "Desvincular",
+    "map": "Mapear",
+    "applySimilar": "Aplicar a {count} semelhantes",
+    "startSyncing": "Iniciar sincronização",
+    "backToChannels": "Voltar aos canais",
+    "reimport": "Reimportar"
+  },
+  "connect": {
+    "title": "Conectar Shopify",
+    "stepShop": "Loja",
+    "stepMethod": "Acesso",
+    "stepReview": "Revisão",
+    "shopLabel": "Domínio da loja",
+    "shopHint": "O domínio xxx.myshopify.com das Configurações no admin da Shopify.",
+    "oauthTitle": "Entrar com a Shopify",
+    "oauthHint": "Aprove o OpenBooks numa aba da Shopify e volte aqui para a revisão.",
+    "openShopify": "Abrir consentimento da Shopify",
+    "waitingOAuth": "Aguardando aprovação da Shopify…",
+    "tokenTitle": "Token de app personalizado",
+    "tokenLabel": "Token de acesso da Admin API",
+    "tokenHint": "De Apps → Desenvolver apps → Instalar no admin da Shopify, com os escopos listados em Configurações.",
+    "secretLabel": "Segredo do cliente",
+    "secretHint": "O segredo do cliente do app personalizado — as entregas são verificadas contra ele.",
+    "pushLabel": "Enviar alterações do catálogo à Shopify",
+    "pushHint": "Desligado salvo precificação no OpenBooks. Permite gravar preço e título nas variantes.",
+    "reviewTitle": "Revisar antes de sincronizar",
+    "matchedLine": "{sku} por SKU · {barcode} por código de barras · {queued} precisam de decisão",
+    "locationsLine": "{mapped} de {total} locais mapeados",
+    "accountsTitle": "Contas de lançamento",
+    "accountsHint": "Papéis sem mapa recusam no lançamento — aceitar cedo nunca lança errado.",
+    "unmapped": "Sem mapa",
+    "acceptHint": "Salvar grava as contas e ativa o canal."
+  },
+  "products": {
+    "searchPlaceholder": "Buscar título, SKU ou código…",
+    "selected": "{count} selecionados",
+    "matchTitle": "Vincular “{title}”",
+    "matchHint": "Vincule esta variante ao item que ela já é.",
+    "createItemTitle": "Criar item de “{title}”",
+    "createFamilyTitle": "Criar família de “{title}”",
+    "createFamilyHint": "Cada variante na fila vira seu próprio item; o SKU da Shopify vira o código se livre.",
+    "ignoreHint": "Estacione esta linha sem vincular. Reimportar nunca a reativa.",
+    "unmatchHint": "Remova o vínculo com um motivo. A linha volta à fila.",
+    "codeLabel": "Código",
+    "nameLabel": "Nome",
+    "reasonLabel": "Motivo",
+    "itemLabel": "Item",
+    "emptyTitle": "Tudo conciliado.",
+    "emptyHint": "Variantes novas e alteradas aguardam aqui uma decisão.",
+    "proposalSkuChanged": "SKU alterado na Shopify de {from} para {to}. Confirme que ainda é este item.",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "Excluído na Shopify. Desvincule para liberar o link.",
+    "proposalRefused": "{message}",
+    "columnProduct": "Produto",
+    "columnMatch": "Vínculo",
+    "columnProposal": "Revisar",
+    "queueBadge": "Na fila"
+  },
+  "locations": {
+    "emptyTitle": "Nenhum local importado ainda.",
+    "emptyHint": "Importe os locais da loja e mapeie cada um ao estoque de onde atende.",
+    "unmapped": "Sem mapa",
+    "unmappedHint": "Pedidos deste local aguardam na fila de exceções — nada se move até mapear.",
+    "mapTitle": "Mapear “{name}”",
+    "stockLabel": "Local de estoque",
+    "syncStock": "Sincronizar estoques",
+    "fulfils": "Atende pedidos",
+    "columnShopify": "Shopify",
+    "columnStock": "Local de estoque"
+  },
+  "settings": {
+    "title": "Configurações do canal",
+    "autoImport": "Importar produtos novos sozinho",
+    "autoImportHint": "Variantes novas entram sozinhas na fila de conciliação.",
+    "syncInventory": "Acompanhar níveis de estoque",
+    "syncInventoryHint": "Estoques da loja ficam registrados nas entregas.",
+    "push": "Enviar alterações do catálogo à Shopify",
+    "pushHint": "Permite gravar preço e título dos itens nas variantes vinculadas. Desligado por padrão.",
+    "advanced": "Avançado",
+    "advancedSummary": "Versão de API, teto de requisições e tópicos",
+    "apiVersion": "Versão da Admin API",
+    "apiVersionHint": "Versão trimestral fixa para cada chamada. Mude só para adotar um Shopify mais novo.",
+    "rateLimit": "Teto de requisições",
+    "rateLimitHint": "Custo máximo de API por importação antes de parar. Reimportar continua.",
+    "topics": "Tópicos de webhook assinados",
+    "saveSettings": "Salvar configurações",
+    "webhookUrl": "URL de webhook",
+    "webhookUrlHint": "Aponte aqui as notificações do app da Shopify. As entregas são verificadas contra o segredo guardado."
+  },
+  "toast": {
+    "loadFailed": "Não foi possível carregar. Verifique sua conexão e tente novamente."
   }
 }

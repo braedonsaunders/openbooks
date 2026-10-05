@@ -73,7 +73,9 @@
     "healthEmpty": "Aún no informa ningún flujo. El estado aparece cuando el conector funciona.",
     "recentTitle": "Entregas recientes",
     "recentEmpty": "Aún no hay entregas. El primer webhook de la tienda aparece aquí.",
-    "settingsHint": "Cuentas contables y ubicaciones de existencias de este canal. Los cambios rigen para pedidos nuevos; el historial nunca se reescribe."
+    "settingsHint": "Cuentas contables y ubicaciones de existencias de este canal. Los cambios rigen para pedidos nuevos; el historial nunca se reescribe.",
+    "reviewBanner": "Esta conexión terminó de importar y está lista para revisar: se proponen coincidencias, ubicaciones y cuentas contables.",
+    "reviewCta": "Revisar y empezar a sincronizar"
   },
   "activity": {
     "loading": "Cargando entregas…",
@@ -112,7 +114,16 @@
       "loadFailed": "Las entregas no se cargaron (estado {status}).",
       "replayFailed": "La repetición no se completó (estado {status}).",
       "replayed": "{count, plural, one {# entrega} other {# entregas}} en cola de nuevo."
-    }
+    },
+    "title": "Entregas de webhooks",
+    "emptyHint": "Las entregas verificadas de Shopify llegan aquí, primero las recientes, con su resultado.",
+    "replayHint": "Reencole esta entrega con un motivo. El intento queda auditado.",
+    "columnReceived": "Recibida",
+    "columnTopic": "Tema",
+    "columnEvent": "Evento",
+    "columnStatus": "Estado",
+    "columnAttempts": "Intentos",
+    "columnOutcome": "Resultado"
   },
   "status": {
     "draft": "Borrador",
@@ -133,5 +144,107 @@
       "unlinkFailed": "La desvinculación no se completó (estado {status}).",
       "unlinked": "ID externo desvinculado."
     }
+  },
+  "tabs": {
+    "products": "Productos",
+    "locations": "Ubicaciones"
+  },
+  "actions": {
+    "connect": "Conectar Shopify",
+    "match": "Vincular",
+    "createItem": "Crear artículo",
+    "createFamily": "Crear familia",
+    "ignore": "Ignorar",
+    "unmatch": "Desvincular",
+    "map": "Asignar",
+    "applySimilar": "Aplicar a {count} similares",
+    "startSyncing": "Iniciar sincronización",
+    "backToChannels": "Volver a Canales",
+    "reimport": "Reimportar"
+  },
+  "connect": {
+    "title": "Conectar Shopify",
+    "stepShop": "Tienda",
+    "stepMethod": "Acceso",
+    "stepReview": "Revisión",
+    "shopLabel": "Dominio de la tienda",
+    "shopHint": "El dominio xxx.myshopify.com de Ajustes en el admin de Shopify.",
+    "oauthTitle": "Iniciar sesión con Shopify",
+    "oauthHint": "Apruebe OpenBooks en una pestaña de Shopify y vuelva aquí para la revisión.",
+    "openShopify": "Abrir consentimiento de Shopify",
+    "waitingOAuth": "Esperando aprobación de Shopify…",
+    "tokenTitle": "Token de app personalizada",
+    "tokenLabel": "Token de acceso de la Admin API",
+    "tokenHint": "De Apps → Desarrollar apps → Instalar en el admin de Shopify, con los permisos listados en Ajustes.",
+    "secretLabel": "Secreto de cliente",
+    "secretHint": "El secreto de cliente de la app personalizada — las entregas se verifican contra él.",
+    "pushLabel": "Enviar cambios del catálogo a Shopify",
+    "pushHint": "Desactivado salvo que fije precios en OpenBooks. Permite escribir precio y título en las variantes.",
+    "reviewTitle": "Revisar antes de sincronizar",
+    "matchedLine": "{sku} por SKU · {barcode} por código de barras · {queued} necesitan decisión",
+    "locationsLine": "{mapped} de {total} ubicaciones asignadas",
+    "accountsTitle": "Cuentas de contabilización",
+    "accountsHint": "Los roles sin asignar se rechazan al contabilizar — aceptar antes nunca contabiliza mal.",
+    "unmapped": "Sin asignar",
+    "acceptHint": "Guardar almacena las cuentas y activa el canal."
+  },
+  "products": {
+    "searchPlaceholder": "Buscar título, SKU o código…",
+    "selected": "{count} seleccionados",
+    "matchTitle": "Vincular «{title}»",
+    "matchHint": "Vincule esta variante con el artículo que ya es.",
+    "createItemTitle": "Crear artículo desde «{title}»",
+    "createFamilyTitle": "Crear familia desde «{title}»",
+    "createFamilyHint": "Cada variante en cola se vuelve su propio artículo; el SKU de Shopify será el código si está libre.",
+    "ignoreHint": "Aparcar esta fila sin vincularla. Reimportar nunca la reactiva.",
+    "unmatchHint": "Quitar el vínculo con un motivo. La fila vuelve a la cola.",
+    "codeLabel": "Código",
+    "nameLabel": "Nombre",
+    "reasonLabel": "Motivo",
+    "itemLabel": "Artículo",
+    "emptyTitle": "Todo conciliado.",
+    "emptyHint": "Las variantes nuevas y cambiadas esperan aquí una decisión.",
+    "proposalSkuChanged": "SKU cambiado en Shopify de {from} a {to}. Confirme que sigue siendo este artículo.",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "Eliminado en Shopify. Desvincule para liberar el enlace.",
+    "proposalRefused": "{message}",
+    "columnProduct": "Producto",
+    "columnMatch": "Vínculo",
+    "columnProposal": "Revisar",
+    "queueBadge": "En cola"
+  },
+  "locations": {
+    "emptyTitle": "Aún no hay ubicaciones importadas.",
+    "emptyHint": "Importe las ubicaciones de la tienda y asigne cada una a la ubicación de stock desde la que sirve.",
+    "unmapped": "Sin asignar",
+    "unmappedHint": "Los pedidos con esta ubicación esperan en la cola de excepciones — nada se mueve hasta asignarla.",
+    "mapTitle": "Asignar «{name}»",
+    "stockLabel": "Ubicación de stock",
+    "syncStock": "Sincronizar existencias",
+    "fulfils": "Suministra pedidos",
+    "columnShopify": "Shopify",
+    "columnStock": "Ubicación de stock"
+  },
+  "settings": {
+    "title": "Ajustes del canal",
+    "autoImport": "Importar productos nuevos automáticamente",
+    "autoImportHint": "Las variantes nuevas entran solas a la cola de conciliación.",
+    "syncInventory": "Seguir niveles de inventario",
+    "syncInventoryHint": "Las existencias de la tienda quedan registradas en sus entregas.",
+    "push": "Enviar cambios del catálogo a Shopify",
+    "pushHint": "Permite escribir precio y título de artículos en las variantes vinculadas. Desactivado por defecto.",
+    "advanced": "Avanzado",
+    "advancedSummary": "Versión de API, presupuesto de peticiones y temas",
+    "apiVersion": "Versión de la Admin API",
+    "apiVersionHint": "Versión trimestral fijada para cada llamada. Cámbiela solo para adoptar un Shopify más nuevo.",
+    "rateLimit": "Presupuesto de peticiones",
+    "rateLimitHint": "Coste máximo de API por importación antes de detenerse. Reimportar continúa.",
+    "topics": "Temas de webhook suscritos",
+    "saveSettings": "Guardar ajustes",
+    "webhookUrl": "URL de webhook",
+    "webhookUrlHint": "Apunte aquí las notificaciones de la app de Shopify. Las entregas se verifican contra el secreto guardado."
+  },
+  "toast": {
+    "loadFailed": "No se pudo cargar. Compruebe su conexión e inténtelo de nuevo."
   }
 }

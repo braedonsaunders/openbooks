@@ -73,7 +73,9 @@
     "healthEmpty": "まだ同期ストリームの報告がありません。コネクタの実行後に表示されます。",
     "recentTitle": "最近の配信",
     "recentEmpty": "まだ配信がありません。ストアの最初のWebhookがここに表示されます。",
-    "settingsHint": "このチャネルの転記勘定と在庫拠点。変更は新しい注文に適用されます。履歴は書き換えません。"
+    "settingsHint": "このチャネルの転記勘定と在庫拠点。変更は新しい注文に適用されます。履歴は書き換えません。",
+    "reviewBanner": "この接続はインポートを完了し、レビュー可能です。マッチ、ロケーション、記帳勘定が提案されています。",
+    "reviewCta": "レビューして同期を開始"
   },
   "activity": {
     "loading": "配信を読み込み中…",
@@ -112,7 +114,16 @@
       "loadFailed": "配信を読み込めませんでした(ステータス {status})。",
       "replayFailed": "再実行を完了できませんでした(ステータス {status})。",
       "replayed": "{count} 件の配信を再登録しました。"
-    }
+    },
+    "title": "Webhook配信",
+    "emptyHint": "検証済みのShopify配信が結果とともに新しい順に届きます。",
+    "replayHint": "理由を付けてこの配信を再キューします。試行は監査されます。",
+    "columnReceived": "受信",
+    "columnTopic": "トピック",
+    "columnEvent": "イベント",
+    "columnStatus": "状態",
+    "columnAttempts": "試行",
+    "columnOutcome": "結果"
   },
   "status": {
     "draft": "下書き",
@@ -133,5 +144,107 @@
       "unlinkFailed": "リンクを解除できませんでした(ステータス {status})。",
       "unlinked": "外部IDのリンクを解除しました。"
     }
+  },
+  "tabs": {
+    "products": "商品",
+    "locations": "ロケーション"
+  },
+  "actions": {
+    "connect": "Shopifyを接続",
+    "match": "照合",
+    "createItem": "品目を作成",
+    "createFamily": "ファミリーを作成",
+    "ignore": "無視",
+    "unmatch": "照合を解除",
+    "map": "紐付け",
+    "applySimilar": "類似の{count}件に適用",
+    "startSyncing": "同期を開始",
+    "backToChannels": "チャネルに戻る",
+    "reimport": "再インポート"
+  },
+  "connect": {
+    "title": "Shopifyを接続",
+    "stepShop": "ストア",
+    "stepMethod": "アクセス",
+    "stepReview": "確認",
+    "shopLabel": "ストアドメイン",
+    "shopHint": "Shopify管理画面の設定にあるxxx.myshopify.comドメイン。",
+    "oauthTitle": "Shopifyでサインイン",
+    "oauthHint": "ShopifyのタブでOpenBooksを承認し、確認のためここに戻ります。",
+    "openShopify": "Shopifyの同意画面を開く",
+    "waitingOAuth": "Shopifyの承認待ち…",
+    "tokenTitle": "カスタムアプリのトークン",
+    "tokenLabel": "Admin APIアクセストークン",
+    "tokenHint": "Shopify管理画面のアプリ→アプリ開発→インストールから。設定に記載のスコープ付き。",
+    "secretLabel": "クライアントシークレット",
+    "secretHint": "カスタムアプリのクライアントシークレット。Webhook配信はこれで検証します。",
+    "pushLabel": "カタログ変更をShopifyへ送信",
+    "pushHint": "OpenBooksで価格管理しない限りオフ。品目の価格・タイトルの更新をバリアントへ書き戻せます。",
+    "reviewTitle": "同期前に確認",
+    "matchedLine": "SKU照合{sku}件・バーコード照合{barcode}件・要判断{queued}件",
+    "locationsLine": "ロケーション{total}件中{mapped}件を紐付け",
+    "accountsTitle": "記帳勘定",
+    "accountsHint": "未紐付けの役割は記帳時に拒否されます。早めの承認が誤記帳することはありません。",
+    "unmapped": "未紐付け",
+    "acceptHint": "保存すると勘定が確定しチャネルが有効になります。"
+  },
+  "products": {
+    "searchPlaceholder": "タイトル・SKU・バーコードを検索…",
+    "selected": "{count}件を選択",
+    "matchTitle": "「{title}」を照合",
+    "matchHint": "このバリアントを既存の品目に紐付けます。",
+    "createItemTitle": "「{title}」から品目を作成",
+    "createFamilyTitle": "「{title}」からファミリーを作成",
+    "createFamilyHint": "キュー内の各バリアントが品目になります。空いていればShopifyのSKUが品目コードになります。",
+    "ignoreHint": "紐付けずにこの行を保留します。再インポートで復活しません。",
+    "unmatchHint": "理由を付けてリンクを外します。行はキューに戻ります。",
+    "codeLabel": "コード",
+    "nameLabel": "名称",
+    "reasonLabel": "理由",
+    "itemLabel": "品目",
+    "emptyTitle": "すべて照合済みです。",
+    "emptyHint": "新規・変更されたバリアントはここで判断待ちになります。",
+    "proposalSkuChanged": "ShopifyでSKUが{from}から{to}に変更されました。この品目のままか確認してください。",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "Shopifyで削除されました。照合を解除してリンクを外してください。",
+    "proposalRefused": "{message}",
+    "columnProduct": "商品",
+    "columnMatch": "照合",
+    "columnProposal": "要確認",
+    "queueBadge": "キュー"
+  },
+  "locations": {
+    "emptyTitle": "ロケーションはまだインポートされていません。",
+    "emptyHint": "ストアのロケーションをインポートし、出荷元の在庫ロケーションに紐付けます。",
+    "unmapped": "未紐付け",
+    "unmappedHint": "このロケーションの受注は例外キューに滞留します。紐付けるまで何も動きません。",
+    "mapTitle": "「{name}」を紐付け",
+    "stockLabel": "在庫ロケーション",
+    "syncStock": "在庫数を同期",
+    "fulfils": "受注を出荷",
+    "columnShopify": "Shopify",
+    "columnStock": "在庫ロケーション"
+  },
+  "settings": {
+    "title": "チャネル設定",
+    "autoImport": "新商品を自動インポート",
+    "autoImportHint": "新しいバリアントは自動で照合キューに入ります。",
+    "syncInventory": "在庫数を追跡",
+    "syncInventoryHint": "ストアの在庫数は配信ごとに記録されます。",
+    "push": "カタログ変更をShopifyへ送信",
+    "pushHint": "品目の価格・タイトルの更新をリンク済みバリアントへ書き戻せます。既定はオフ。",
+    "advanced": "詳細",
+    "advancedSummary": "APIバージョン、レート上限、Webhookトピック",
+    "apiVersion": "Admin APIバージョン",
+    "apiVersionHint": "全呼び出しに固定する四半期バージョン。新しいShopify対応時のみ変更。",
+    "rateLimit": "インポートのレート上限",
+    "rateLimitHint": "1回のインポートが使うAPIコストの上限。超過時は再インポートで再開。",
+    "topics": "購読中のWebhookトピック",
+    "saveSettings": "設定を保存",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlHint": "Shopifyアプリの通知先をここに向けます。配信は保存済みシークレットで検証されます。"
+  },
+  "toast": {
+    "loadFailed": "読み込めませんでした。接続を確認して再試行してください。"
   }
 }

@@ -150,6 +150,12 @@ const TOKEN_SURFACES: TokenSurface[] = [
     refusalMarker: /invalid signature/,
   },
   {
+    dir: join(webApp, "api", "channels", "[id]", "webhooks"),
+    kind: "api",
+    tokenMarker: /receiveInboundEvent/,
+    refusalMarker: /is a 401 and is stored nowhere/,
+  },
+  {
     dir: join(webApp, "survey"),
     kind: "page",
     tokenMarker: /verifySurveyInvitationToken/,

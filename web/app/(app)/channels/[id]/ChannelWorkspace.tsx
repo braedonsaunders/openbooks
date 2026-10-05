@@ -12,6 +12,9 @@ import { DetailHeader } from "@openbooks/ui";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { ChannelActions } from "./ChannelActions";
 import { ChannelActivity } from "./ChannelActivity";
+import { ProductsTab } from "./ProductsTab";
+import { LocationsTab } from "./LocationsTab";
+import { SettingsTab } from "./SettingsTab";
 import { SetupEntitySection } from "../../admin/setup/[entity]/SetupEntitySection";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
@@ -31,9 +34,10 @@ async function loadChannel(orgId: string, channelId: string) {
 
 /**
  * One storefront's workspace. Overview and Settings render on the server;
- * the Activity tab is a client table over the events endpoint. Adapter packs
- * contribute further tabs through `workspaceTabs()`; with no connector
- * installed the core three stand alone.
+ * Activity, Products and Locations are client tables over the channel
+ * endpoints. Adapter packs contribute further tabs through
+ * `workspaceTabs()`; with no connector installed the core three stand
+ * alone.
  */
 export async function ChannelWorkspace({
   channelId,
@@ -49,11 +53,14 @@ export async function ChannelWorkspace({
   if (!can(authz, "channels.read")) notFound();
   const t = await getTranslations("channels");
   const channel = await loadChannel(authz.user.orgId, channelId);
-  const activeTab = tab === "activity" || tab === "settings" ? tab : "overview";
   const canManage = can(authz, "channels.manage");
-  // Connector-contributed tabs (none installed yet): a kind with no adapter
-  // contributes none, so the built-in tabs stand alone instead of refusing.
+  // Connector-contributed tabs arrive through the channel adapter's
+  // `workspaceTabs()`; a kind with no adapter contributes none, so the
+  // built-in tabs stand alone instead of refusing. An adapter key the
+  // channel's own adapter did not contribute falls back to overview.
   const adapterTabs = workspaceTabsFor(channel.kind);
+  const adapterKeys = new Set(adapterTabs.map((adapterTab) => `adapter:${adapterTab.key}`));
+  const activeTab = tab === "activity" || tab === "settings" || adapterKeys.has(tab) ? tab : "overview";
   const statusLabel = t.has(`status.${channel.status}`) ? t(`status.${channel.status}`) : channel.status;
 
   return (
@@ -85,7 +92,6 @@ export async function ChannelWorkspace({
             ...adapterTabs.map((adapterTab) => ({
               key: `adapter:${adapterTab.key}` as const,
               label: t.has(adapterTab.labelKey) ? t(adapterTab.labelKey) : adapterTab.labelKey,
-              disabled: true,
             })),
           ]}
         />
@@ -95,6 +101,10 @@ export async function ChannelWorkspace({
         <WorkspaceOverview channelId={channel.id} />
       ) : activeTab === "activity" ? (
         <ChannelActivity channelId={channel.id} canManage={canManage} />
+      ) : activeTab === "adapter:products" ? (
+        <ProductsTab channelId={channel.id} currency={channel.currency} canManage={canManage} />
+      ) : activeTab === "adapter:locations" ? (
+        <LocationsTab channelId={channel.id} canManage={canManage} />
       ) : (
         <WorkspaceSettings channelId={channel.id} canManage={canManage} sp={sp} />
       )}
@@ -112,6 +122,14 @@ async function WorkspaceOverview({ channelId }: { channelId: string }) {
   const outstanding = events.filter((event) => event.status === "failed" || event.status === "dead").length;
   return (
     <div className="space-y-5">
+      {channel.status === "connecting" ? (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
+          {t("workspace.reviewBanner")}{" "}
+          <a className="font-medium underline" href={`/channels/connect?channel=${channel.id}`}>
+            {t("workspace.reviewCta")}
+          </a>
+        </p>
+      ) : null}
       {outstanding > 0 ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           {t("workspace.attentionBanner", { count: outstanding })}
@@ -199,6 +217,7 @@ async function WorkspaceSettings({
         fixedFilter={{ fieldKey: "channelId", value: channelId }}
         hideHeader={false}
       />
+      <SettingsTab channelId={channelId} />
     </div>
   );
 }

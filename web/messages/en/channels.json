@@ -73,7 +73,9 @@
     "healthEmpty": "No sync streams report yet. Health appears once the connector runs.",
     "recentTitle": "Recent deliveries",
     "recentEmpty": "No deliveries yet. The storefront's first webhook appears here.",
-    "settingsHint": "Posting accounts and stock locations for this channel. Changes take effect for new orders; history is never rewritten."
+    "settingsHint": "Posting accounts and stock locations for this channel. Changes take effect for new orders; history is never rewritten.",
+    "reviewBanner": "This connection finished importing and is ready to review: matches, locations and posting accounts are proposed.",
+    "reviewCta": "Review and start syncing"
   },
   "activity": {
     "loading": "Loading deliveries…",
@@ -112,7 +114,16 @@
       "loadFailed": "Deliveries did not load (status {status}).",
       "replayFailed": "Replay did not complete (status {status}).",
       "replayed": "{count, plural, one {# delivery} other {# deliveries}} requeued."
-    }
+    },
+    "title": "Webhook deliveries",
+    "emptyHint": "Verified Shopify deliveries land here newest first, with their outcome.",
+    "replayHint": "Requeue this delivery with a reason. The attempt is audited.",
+    "columnReceived": "Received",
+    "columnTopic": "Topic",
+    "columnEvent": "Event",
+    "columnStatus": "Status",
+    "columnAttempts": "Attempts",
+    "columnOutcome": "Outcome"
   },
   "status": {
     "draft": "Draft",
@@ -133,5 +144,107 @@
       "unlinkFailed": "Unlink did not complete (status {status}).",
       "unlinked": "External ID unlinked."
     }
+  },
+  "tabs": {
+    "products": "Products",
+    "locations": "Locations"
+  },
+  "actions": {
+    "connect": "Connect Shopify",
+    "match": "Match",
+    "createItem": "Create item",
+    "createFamily": "Create family",
+    "ignore": "Ignore",
+    "unmatch": "Unmatch",
+    "map": "Map",
+    "applySimilar": "Apply to {count} similar",
+    "startSyncing": "Start syncing",
+    "backToChannels": "Back to Channels",
+    "reimport": "Re-import"
+  },
+  "connect": {
+    "title": "Connect Shopify",
+    "stepShop": "Shop",
+    "stepMethod": "Access",
+    "stepReview": "Review",
+    "shopLabel": "Shop domain",
+    "shopHint": "The xxx.myshopify.com domain from Shopify admin Settings.",
+    "oauthTitle": "Sign in with Shopify",
+    "oauthHint": "Approve OpenBooks in a Shopify tab, then return here for the review.",
+    "openShopify": "Open Shopify consent",
+    "waitingOAuth": "Waiting for Shopify approval…",
+    "tokenTitle": "Custom-app token",
+    "tokenLabel": "Admin API access token",
+    "tokenHint": "From Shopify admin Apps → Develop apps → Install, with the scopes listed in Settings.",
+    "secretLabel": "Client secret",
+    "secretHint": "The custom app's client secret — webhook deliveries verify against it.",
+    "pushLabel": "Push catalog changes to Shopify",
+    "pushHint": "Off unless you price in OpenBooks. Lets item price and title updates write back to variants.",
+    "reviewTitle": "Review before syncing",
+    "matchedLine": "{sku} matched by SKU · {barcode} matched by barcode · {queued} need a decision",
+    "locationsLine": "{mapped} of {total} locations mapped",
+    "accountsTitle": "Posting accounts",
+    "accountsHint": "Unmapped roles refuse at posting time — accepting early never mis-posts.",
+    "unmapped": "Unmapped",
+    "acceptHint": "Saving stores the accounts and activates the channel."
+  },
+  "products": {
+    "searchPlaceholder": "Search title, SKU or barcode…",
+    "selected": "{count} selected",
+    "matchTitle": "Match “{title}”",
+    "matchHint": "Link this variant to the item it already is.",
+    "createItemTitle": "Create item from “{title}”",
+    "createFamilyTitle": "Create family from “{title}”",
+    "createFamilyHint": "Every queued variant becomes its own item; the Shopify SKU becomes the item code when free.",
+    "ignoreHint": "Park this row without linking it. Re-import never un-ignores it.",
+    "unmatchHint": "Remove the link with a reason. The row queues again.",
+    "codeLabel": "Code",
+    "nameLabel": "Name",
+    "reasonLabel": "Reason",
+    "itemLabel": "Item",
+    "emptyTitle": "Everything is matched.",
+    "emptyHint": "New and changed storefront variants queue here for a decision.",
+    "proposalSkuChanged": "SKU changed at Shopify from {from} to {to}. Confirm it still means this item.",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "Deleted at Shopify. Unmatch to release the link.",
+    "proposalRefused": "{message}",
+    "columnProduct": "Product",
+    "columnMatch": "Match",
+    "columnProposal": "Needs a look",
+    "queueBadge": "Queued"
+  },
+  "locations": {
+    "emptyTitle": "No locations imported yet.",
+    "emptyHint": "Import the storefront locations, then map each to the stock location it fulfils from.",
+    "unmapped": "Unmapped",
+    "unmappedHint": "Orders naming this location park in the exception queue — nothing moves until it is mapped.",
+    "mapTitle": "Map “{name}”",
+    "stockLabel": "Stock location",
+    "syncStock": "Sync stock levels",
+    "fulfils": "Fulfils orders",
+    "columnShopify": "Shopify",
+    "columnStock": "Stock location"
+  },
+  "settings": {
+    "title": "Channel settings",
+    "autoImport": "Import new products automatically",
+    "autoImportHint": "New storefront variants join the match queue on their own.",
+    "syncInventory": "Track inventory levels",
+    "syncInventoryHint": "Storefront stock levels are recorded on their deliveries.",
+    "push": "Push catalog changes to Shopify",
+    "pushHint": "Lets item price and title updates write back to linked variants. Off by default.",
+    "advanced": "Advanced",
+    "advancedSummary": "API version, rate budget and webhook topics",
+    "apiVersion": "Admin API version",
+    "apiVersionHint": "Pinned quarterly version for every call. Change only to adopt a newer Shopify release.",
+    "rateLimit": "Import rate budget",
+    "rateLimitHint": "Maximum API cost one import may spend before stopping. Re-import resumes.",
+    "topics": "Subscribed webhook topics",
+    "saveSettings": "Save settings",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlHint": "Point the Shopify app notifications here. Deliveries verify against the stored app secret."
+  },
+  "toast": {
+    "loadFailed": "Could not load. Check your connection and try again."
   }
 }
