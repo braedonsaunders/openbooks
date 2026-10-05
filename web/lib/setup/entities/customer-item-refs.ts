@@ -7,6 +7,7 @@ import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
 import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
 import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
+import { validatePromotionWrite, validateRestockingFeeWrite } from '../sales-validation'
 import { validateContributionWrite, validateDepartmentExpenseWrite, validateEntitlementPlan, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
 
 type CurrentIdentifier = { item_id: string; unit: string | null }
@@ -57,6 +58,8 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   'item-identifiers': validateIdentifierWrite,
   'customer-item-refs': validateCustomerItemRefWrite,
   'marketplace-facilitators': validateMarketplaceFacilitatorWrite,
+  'promotions': validatePromotionWrite,
+  'restocking-fee-policies': validateRestockingFeeWrite,
   'pay-component-department-expenses': validateDepartmentExpenseWrite,
 }
 
