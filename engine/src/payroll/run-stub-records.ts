@@ -50,6 +50,8 @@ export interface Line {
   /** Exact recurring election allocation represented by this native line. */
   benefitAllocationId?: string;
   entitlementMovementKey?: string;
+  /** False only for newly earned cash paid independently of an entitlement bank. */
+  fundedByEntitlementBank?: boolean;
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   // Brand boundary: every stub amount is canonical ledger money by the time
