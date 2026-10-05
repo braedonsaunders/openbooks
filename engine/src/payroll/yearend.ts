@@ -1446,9 +1446,16 @@ function usFicaSplitRates(taxYear: number): UsFicaSplitRates {
  * Security wages), 5 (Medicare wages), and — via the wage-implied split of
  * the combined FICA carry-in — 4 (Social Security tax) and 6 (Medicare tax).
  * `pensionable_ytd` is the prior provider's FICA wage base for the wage
- * boxes. A null rate set leaves boxes 4/6 as the committed FICA taxes (the
- * pre-split behavior for callers with no year to split under).
+ * boxes. Box 3 is capped at the year's Social Security wage base together
+ * with the committed stubs (box 5 has no cap): the SSA rejects a box 3 above
+ * the base, and a carry-in can exceed it on its own. A null rate set leaves
+ * boxes 3, 4 and 6 uncapped and unsplit (callers with no year to split
+ * under); `w2Slips` always supplies the rates when a FICA carry-in exists.
  */
+function capSsWages(wages: string, rates: UsFicaSplitRates | null): string {
+  return rates && cmp(wages, rates.ssWageBase) > 0 ? normalizeMoney(rates.ssWageBase) : wages;
+}
+
 export function openingYtdIntoW2Slip(
   slip: W2Slip,
   opening: OpeningYearEndYtd,
@@ -1461,7 +1468,7 @@ export function openingYtdIntoW2Slip(
     ...slip,
     box1Wages: add(slip.box1Wages, opening.taxableYtd),
     box2FederalIncomeTax: add(slip.box2FederalIncomeTax, opening.taxYtd),
-    box3SsWages: add(slip.box3SsWages, opening.pensionableYtd),
+    box3SsWages: capSsWages(add(slip.box3SsWages, opening.pensionableYtd), ficaRates),
     box4SsTax: split ? add(slip.box4SsTax, split.ssTax) : slip.box4SsTax,
     box5MedicareWages: add(slip.box5MedicareWages, opening.pensionableYtd),
     box6MedicareTax: split ? add(slip.box6MedicareTax, split.medicareTax) : slip.box6MedicareTax,
@@ -1486,7 +1493,7 @@ export function openingAccountYtdIntoW2Slip(
     ...slip,
     box1Wages: add(slip.box1Wages, taxableYtd),
     box2FederalIncomeTax: add(slip.box2FederalIncomeTax, taxYtd),
-    box3SsWages: add(slip.box3SsWages, ficaWages),
+    box3SsWages: capSsWages(add(slip.box3SsWages, ficaWages), ficaRates),
     box4SsTax: split ? add(slip.box4SsTax, split.ssTax) : slip.box4SsTax,
     box5MedicareWages: add(slip.box5MedicareWages, ficaWages),
     box6MedicareTax: split ? add(slip.box6MedicareTax, split.medicareTax) : slip.box6MedicareTax,
@@ -1691,16 +1698,19 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     localByGroup.set(key, list);
   }
   // The carry-in lands on boxes 1 / 2 / 3 / 5. The SS and Medicare wage bases
-  // are explicitly stored as `pensionable_ytd` for US openings, and the
-  // combined FICA carry-in splits into boxes 4/6 under the year's published
-  // rates — resolved only when some opening actually carries FICA
-  // withholding, so years and orgs without one see zero behavior change.
+  // are stored as `pensionable_ytd` or per EIN for US openings; box 3 is
+  // capped at the year's Social Security wage base and the combined FICA
+  // carry-in splits into boxes 4/6 under the year's published rates —
+  // resolved whenever some opening carries FICA wages or withholding, so an
+  // untranscribed year refuses by name rather than filing an uncapped box 3.
   // State lines come from committed stubs only: an opening balance carries no
   // state attribution, so pre-adoption state wages and withholding stay in the
   // federal boxes (the slip says so).
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
-  const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0
-    || (o.accountBasesYtd?.[US_FICA_WITHHELD_ACCOUNT_BASE] ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0))
+  const ficaRates = [...openings.values()].some((o) =>
+    cmp(o.ficaWithheldYtd, "0") !== 0 || cmp(o.pensionableYtd, "0") !== 0
+    || [US_FICA_WITHHELD_ACCOUNT_BASE, US_FICA_WAGES_ACCOUNT_BASE].some((key) =>
+      (o.accountBasesYtd?.[key] ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0)))
     ? usFicaSplitRates(taxYear)
     : null;
   type StateGroup = {
