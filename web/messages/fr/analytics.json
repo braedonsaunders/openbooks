@@ -137,7 +137,10 @@
       "growth": "Sur un an {pct}",
       "grossProfit": "MB : {amount}",
       "opex": "Charges : {amount}",
-      "perMonth": "par mois"
+      "perMonth": "par mois",
+      "noPriorYear": "Aucun CA sur la même période l’an dernier",
+      "forPeriod": "CA nécessaire sur cette période",
+      "noBreakeven": "Nécessite une marge brute positive"
     },
     "score": {
       "title": "Score de santé financière",
@@ -145,12 +148,16 @@
       "excellent": "Excellent",
       "good": "Bon",
       "average": "Moyen",
-      "needsWork": "À améliorer"
+      "needsWork": "À améliorer",
+      "notScored": "Rien n’a encore pu être noté pour cette période.",
+      "unscored": "Non noté"
     },
     "categories": {
       "profitability": "Rentabilité",
       "efficiency": "Efficacité",
-      "operating": "Exploitation"
+      "operating": "Exploitation",
+      "liquidity": "Liquidité",
+      "solvency": "Solvabilité"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "Marge brute",
         "formula": "Marge brute / Chiffre d'affaires",
         "desc": "Part du chiffre d'affaires restante après le coût direct de production.",
-        "interpret": "Plus c'est élevé, mieux c'est. Les sociétés de services visent typiquement 35–50 %."
+        "interpret": "Plus c’est élevé, mieux c’est ; les niveaux usuels varient fortement selon le secteur, fixez un objectif adapté."
       },
       "operating_margin": {
         "label": "Marge d'exploitation",
         "formula": "Résultat d'exploitation / Chiffre d'affaires",
         "desc": "Rentabilité des opérations courantes, avant intérêts et éléments non opérationnels.",
-        "interpret": "Au-dessus de 15 %, c'est solide pour la plupart des entreprises."
+        "interpret": "Plus c’est élevé, mieux c’est ; comparez-le à l’objectif que vous avez fixé."
       },
       "ebitda_margin": {
         "label": "Marge d'EBITDA",
         "formula": "(Résultat d'exploitation + Dotations aux amortissements) / Chiffre d'affaires",
         "desc": "Rentabilité opérationnelle avant charges non cash et financement.",
-        "interpret": "Au-dessus de 20 %, c'est sain ; utile pour comparer les structures de capital."
+        "interpret": "Utile pour comparer des structures de capital différentes ; comparez-le à l’objectif que vous avez fixé."
       },
       "net_margin": {
         "label": "Marge nette",
         "formula": "Résultat net / Chiffre d'affaires",
         "desc": "Profit net en part du chiffre d'affaires, après tout.",
-        "interpret": "Au-dessus de 10 %, c'est sain dans la plupart des secteurs."
+        "interpret": "Plus c’est élevé, mieux c’est ; comparez-le à l’objectif que vous avez fixé."
       },
       "roa": {
         "label": "Rentabilité des actifs",
         "formula": "Résultat net / Total des actifs",
-        "desc": "Efficacité avec laquelle les actifs génèrent du profit.",
-        "interpret": "Au-dessus de 8 %, les actifs sont bien utilisés."
+        "desc": "Efficacité avec laquelle les actifs génèrent du bénéfice, annualisée pour les périodes infra-annuelles.",
+        "interpret": "Plus c’est élevé, mieux c’est ; comparez-le à l’objectif que vous avez fixé."
       },
       "roe": {
         "label": "Rentabilité des capitaux propres",
         "formula": "Résultat net / Capitaux propres",
-        "desc": "Rendement généré sur les capitaux propres.",
-        "interpret": "Au-dessus de 15 %, c'est généralement solide."
+        "desc": "Rendement des capitaux propres, annualisé pour les périodes infra-annuelles. Sans signification si les capitaux propres sont négatifs.",
+        "interpret": "Plus c’est élevé, mieux c’est ; comparez-le à l’objectif que vous avez fixé."
       },
       "roic": {
         "label": "Rentabilité des capitaux investis",
         "formula": "NOPAT / Capitaux investis",
-        "desc": "Rendement de tout le capital investi. NOPAT = Résultat d'exploitation × (1 − 25 % d'impôt supposé). Capitaux investis = Capitaux propres + Dette long terme.",
-        "interpret": "Au-dessus du coût du capital (typiquement 8–12 %), cela crée de la valeur."
+        "desc": "Rendement de tout le capital investi. NOPAT = résultat d’exploitation × (1 − taux d’imposition), avec le taux effectif comptabilisé sur la période ou, à défaut, le taux légal de la configuration fiscale. Capital investi = capitaux propres + la dette portant intérêt que vous classez.",
+        "interpret": "Au-dessus de votre coût du capital, il crée de la valeur ; comparez-le à l’objectif que vous avez fixé."
       },
       "roce": {
         "label": "Rentabilité des capitaux employés",
-        "formula": "Résultat d'exploitation / Capitaux investis",
-        "desc": "Rendement opérationnel avant impôt des capitaux employés.",
-        "interpret": "Au-dessus de 15 %, le capital est déployé efficacement."
+        "formula": "Résultat d’exploitation / (Total actif − Passif courant)",
+        "desc": "Rendement d’exploitation avant impôt du capital employé à long terme, annualisé pour les périodes infra-annuelles.",
+        "interpret": "Plus c’est élevé, mieux c’est ; comparez-le à l’objectif que vous avez fixé."
       },
       "rev_per_employee": {
         "label": "Chiffre d'affaires par salarié",
-        "formula": "Chiffre d'affaires / Effectif en fin de période",
+        "formula": "Chiffre d’affaires annualisé / Effectif en fin de période",
         "desc": "Productivité commerciale des effectifs.",
-        "interpret": "Les benchmarks varient fortement selon le secteur, la géographie et la devise."
+        "interpret": "Les références varient selon le secteur, la géographie et la devise ; il n’est noté que par rapport à un objectif que vous fixez."
       },
       "gp_per_employee": {
         "label": "Marge brute par salarié",
-        "formula": "Marge brute / Effectif en fin de période",
+        "formula": "Marge brute annualisée / Effectif en fin de période",
         "desc": "Valeur apportée par chaque salarié après coûts directs.",
         "interpret": "Un signal de productivité plus pur que le chiffre d'affaires par tête."
       },
       "asset_turnover": {
         "label": "Rotation des actifs",
         "formula": "Chiffre d'affaires / Total des actifs",
-        "desc": "Chiffre d'affaires généré par euro d'actif.",
-        "interpret": "Au-dessus de 1,0x, les actifs tournent plus d'une fois par an."
+        "desc": "Chiffre d’affaires généré par unité d’actif, annualisé pour les périodes infra-annuelles.",
+        "interpret": "Au-dessus de 1,0×, les actifs tournent plus d’une fois par an."
       },
       "cogs_ratio": {
         "label": "Ratio du coût des ventes",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "Couverture des intérêts",
-        "formula": "Résultat d'exploitation / Autres charges",
-        "desc": "Nombre de fois que le résultat d'exploitation couvre les charges non opérationnelles (intérêts).",
-        "interpret": "Au-dessus de 5x, c'est confortable ; sous 1,5x, c'est un signal d'alerte."
+        "formula": "Résultat d’exploitation / Charges d’intérêts",
+        "desc": "Nombre de fois où le résultat d’exploitation couvre les charges d’intérêts des comptes que vous classez comme intérêts.",
+        "interpret": "Plus c’est élevé, plus c’est sûr ; comparez-le à votre objectif et aux covenants de vos prêteurs."
       },
       "rule_of_40": {
         "label": "Règle des 40",
         "formula": "Croissance du chiffre d'affaires % + Marge d'exploitation %",
         "desc": "Équilibre croissance et rentabilité en un seul chiffre.",
-        "interpret": "40 ou plus, c'est excellent — arbitrez entre croissance et marge."
+        "interpret": "Arbitrez croissance et marge ; comparez-le à l’objectif que vous avez fixé."
+      },
+      "current_ratio": {
+        "label": "Ratio de liquidité générale",
+        "formula": "Actif courant / Passif courant",
+        "desc": "Actifs à court terme disponibles pour chaque unité d’obligations à échéance d’un an.",
+        "interpret": "En dessous de 1,0×, les obligations courantes dépassent l’actif courant."
+      },
+      "quick_ratio": {
+        "label": "Ratio de liquidité réduite",
+        "formula": "(Trésorerie + Créances) / Passif courant",
+        "desc": "Couverture des obligations à un an par la seule trésorerie et les créances, sans vendre de stocks.",
+        "interpret": "À partir de 1,0×, les obligations à court terme sont couvertes sans les stocks."
+      },
+      "working_capital": {
+        "label": "Fonds de roulement",
+        "formula": "Actif courant − Passif courant",
+        "desc": "Les ressources à court terme restant après les obligations à échéance d’un an.",
+        "interpret": "Un fonds de roulement négatif signifie que les obligations courantes dépassent l’actif courant."
+      },
+      "debt_to_equity": {
+        "label": "Dette sur capitaux propres",
+        "formula": "Dette portant intérêt / Capitaux propres",
+        "desc": "Levier financier : emprunts par unité de capitaux propres, selon les comptes de dette que vous classez. Plus bas, plus sûr.",
+        "interpret": "Plus bas, plus sûr ; comparez-le à votre objectif et aux covenants de vos prêteurs."
+      },
+      "liabilities_to_equity": {
+        "label": "Passif sur capitaux propres",
+        "formula": "Total passif / Capitaux propres",
+        "desc": "Tout ce que l’entreprise doit par unité de capitaux propres. Plus bas, plus sûr.",
+        "interpret": "Plus bas, plus sûr ; comparez-le à l’objectif que vous avez fixé."
       }
     },
     "ratioNotes": {
-      "noDA": "Aucun compte de dotations aux amortissements trouvé",
+      "noDA": "Des immobilisations figurent au bilan, mais aucun amortissement n’a été trouvé sur la période",
       "noBalanceSheet": "Aucune donnée de bilan",
       "noHeadcount": "Aucun salarié actif",
       "noInterestExpense": "Aucune charge d'intérêts",
       "unavailable": "Données non disponibles",
-      "perEmployees": "{revenue} / {count, plural, one {# salarié} other {# salariés}}"
+      "perEmployees": "{revenue} / {count, plural, one {# salarié} other {# salariés}}",
+      "noRevenue": "Aucun chiffre d’affaires sur la période",
+      "noCurrentLiabilities": "Aucun passif courant en fin de période",
+      "noPriorComparison": "Nécessite un chiffre d’affaires sur la même période l’an dernier",
+      "equityNotPositive": "Les capitaux propres sont nuls ou négatifs",
+      "investedCapitalNotPositive": "Le capital investi est nul ou négatif",
+      "debtNotClassified": "Choisissez vos comptes de dette portant intérêt dans Santé financière → Configuration",
+      "interestNotClassified": "Choisissez vos comptes de charges d’intérêts dans Santé financière → Configuration",
+      "noTaxRate": "Aucun impôt sur le résultat n’est comptabilisé sur la période et aucun taux n’est configuré — ajoutez-en un dans Configuration → Taxes → Taux d’impôt sur le résultat",
+      "mixedTaxRates": "Les entités affichées sont imposées à des taux légaux différents ; le rendement du capital investi utilise le taux effectif dès que l’impôt de la période est comptabilisé",
+      "annualized": "annualisé sur {periodDays} jours sur {yearDays}",
+      "effectiveTaxRate": "taux d’imposition effectif {rate}",
+      "statutoryTaxRate": "taux d’imposition légal {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "Référence pour la note ROIC (nécessite des données de bilan)"
         },
         "revenuePerEmployee": {
-          "label": "Chiffre d’affaires par employé ({currency})",
-          "help": "Référence de productivité des effectifs"
+          "label": "Objectif de chiffre d’affaires par employé ({currency})",
+          "help": "Montant annuel par employé ; laissez vide pour afficher le ratio sans note"
         },
         "gpPerEmployee": {
-          "label": "Marge brute par employé ({currency})",
-          "help": "Référence de productivité des effectifs"
+          "label": "Objectif de marge brute par employé ({currency})",
+          "help": "Montant annuel par employé ; laissez vide pour afficher le ratio sans note"
+        },
+        "roceTarget": {
+          "label": "Objectif de rendement du capital employé (%)",
+          "help": "Référence pour la note ROCE (nécessite des données de bilan)"
+        },
+        "currentRatioTarget": {
+          "label": "Objectif de liquidité générale (×)",
+          "help": "Actif courant par unité de passif courant considéré comme conforme à l’objectif"
+        },
+        "quickRatioTarget": {
+          "label": "Objectif de liquidité réduite (×)",
+          "help": "Trésorerie et créances par unité de passif courant considérées comme conformes"
+        },
+        "debtToEquityTarget": {
+          "label": "Plafond dette sur capitaux propres (×)",
+          "help": "Plus bas, mieux c’est : à ce niveau ou en dessous, l’objectif est atteint"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "Plafond passif sur capitaux propres (×)",
+          "help": "Plus bas, mieux c’est : à ce niveau ou en dessous, l’objectif est atteint"
+        },
+        "interestCoverageTarget": {
+          "label": "Objectif de couverture des intérêts (×)",
+          "help": "Nombre de fois que le résultat d’exploitation doit couvrir les intérêts"
+        },
+        "assetTurnoverTarget": {
+          "label": "Objectif de rotation des actifs (×)",
+          "help": "Chiffre d’affaires annuel par unité d’actif considéré comme conforme"
+        },
+        "cogsRatioTarget": {
+          "label": "Plafond du coût des ventes (% du CA)",
+          "help": "Plus bas, mieux c’est : à ce niveau ou en dessous, l’objectif est atteint"
+        },
+        "opexRatioTarget": {
+          "label": "Plafond des charges d’exploitation (% du CA)",
+          "help": "Plus bas, mieux c’est : à ce niveau ou en dessous, l’objectif est atteint"
+        },
+        "operatingLeverageTarget": {
+          "label": "Objectif de levier opérationnel (×)",
+          "help": "Croissance du résultat d’exploitation par unité de croissance du CA"
+        },
+        "ruleOf40Target": {
+          "label": "Objectif de la règle des 40 (points)",
+          "help": "Croissance du CA en % plus marge d’exploitation en % considérées comme conformes"
+        },
+        "gradeDPercent": {
+          "label": "Note D à partir de (% de l’objectif)",
+          "help": "Atteinte de l’objectif (inversée si plus bas est mieux) requise pour cette note ; sous D, c’est F"
+        },
+        "gradeCPercent": {
+          "label": "Note C à partir de (% de l’objectif)",
+          "help": "Atteinte de l’objectif (inversée si plus bas est mieux) requise pour cette note ; sous D, c’est F"
+        },
+        "gradeBPercent": {
+          "label": "Note B à partir de (% de l’objectif)",
+          "help": "Atteinte de l’objectif (inversée si plus bas est mieux) requise pour cette note ; sous D, c’est F"
+        },
+        "gradeAPercent": {
+          "label": "Note A à partir de (% de l’objectif)",
+          "help": "Atteinte de l’objectif (inversée si plus bas est mieux) requise pour cette note ; sous D, c’est F"
+        },
+        "scoreAverage": {
+          "label": "Score « Moyen » à partir de",
+          "help": "Score global (0–100) requis pour ce libellé"
+        },
+        "scoreGood": {
+          "label": "Score « Bon » à partir de",
+          "help": "Score global (0–100) requis pour ce libellé"
+        },
+        "scoreExcellent": {
+          "label": "Score « Excellent » à partir de",
+          "help": "Score global (0–100) requis pour ce libellé"
+        },
+        "insightCriticalPercent": {
+          "label": "Constat critique sous (% de l’objectif)",
+          "help": "Une marge inférieure à cette part de son objectif est signalée comme critique"
+        },
+        "insightWarningPercent": {
+          "label": "Constat d’alerte sous (% de l’objectif)",
+          "help": "Une marge inférieure à cette part de son objectif est signalée comme nettement sous l’objectif"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "Alerte de baisse du CA (%)",
+          "help": "Une baisse par rapport à la même période l’an dernier au-delà de ce seuil est signalée"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "Alerte de tendance du CA sur trois mois (%)",
+          "help": "Une baisse sur les trois derniers mois au-delà de ce seuil est signalée comme tendance baissière"
+        },
+        "marginCompressionPoints": {
+          "label": "Alerte de compression de marge (points)",
+          "help": "Une baisse de marge brute sur trois mois supérieure à ce nombre de points"
+        },
+        "breakevenSafetyPercent": {
+          "label": "Marge de sécurité sur le point mort (%)",
+          "help": "Un CA dans cette part au-dessus du point mort est signalé comme marge mince"
+        },
+        "anomalySigma": {
+          "label": "Seuil d’anomalie (σ)",
+          "help": "Les mois s’écartant de la moyenne de plus de ce nombre d’écarts-types sont signalés comme anomalies"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "N/D",
+      "ungraded": "Sans objectif",
+      "noTarget": "Aucun objectif — non noté",
+      "target": "Objectif : {target}",
+      "versusTarget": "pour un objectif de {target}",
+      "formula": "Formule",
+      "meaning": "Signification",
+      "interpretation": "Interprétation",
+      "thisPeriod": "Cette période"
+    },
+    "dupont": {
+      "title": "Analyse DuPont",
+      "hint": "ROE = Marge nette × Rotation des actifs × Multiplicateur de capitaux propres",
+      "netMargin": "Marge nette",
+      "netMarginSub": "Résultat net ÷ chiffre d’affaires",
+      "assetTurnover": "Rotation des actifs",
+      "assetTurnoverSub": "CA annualisé ÷ total actif",
+      "equityMultiplier": "Multiplicateur de capitaux propres",
+      "equityMultiplierSub": "Total actif ÷ capitaux propres (levier)",
+      "roe": "Rendement des capitaux propres"
+    },
+    "grading": {
+      "title": "Calcul des notes",
+      "body": "Chaque ratio est comparé à son objectif. Atteindre {a} de l’objectif ou plus vaut un A, {b} un B, {c} un C et {d} un D ; en dessous, c’est un F. Pour les ratios où plus bas est mieux (coûts, endettement), la comparaison est inversée. Un ratio sans objectif, ou sans les données nécessaires, est affiché mais non noté.",
+      "labels": "Le score moyenne les catégories notées : à partir de {excellent}, Excellent ; de {good}, Bon ; de {average}, Moyen ; en dessous, À améliorer. Toutes ces valeurs se règlent dans Seuils."
+    },
+    "ratioInputs": {
+      "title": "Données des ratios",
+      "hint": "Comptes lus par les ratios d’endettement",
+      "notDecided": "Pas encore choisi — les ratios concernés indiquent pourquoi ils sont indisponibles.",
+      "add": "Ajouter un compte…",
+      "remove": "Retirer {account}",
+      "save": "Enregistrer",
+      "saved": "Enregistré — les ratios sont recalculés.",
+      "saveFailed": "La classification n’a pas pu être enregistrée.",
+      "loadFailed": "Les classifications n’ont pas pu être chargées.",
+      "interest_expense": {
+        "title": "Charges d’intérêts",
+        "help": "Comptes de charges enregistrant les intérêts d’emprunts. La couverture des intérêts divise le résultat d’exploitation par leur total.",
+        "none": "Aucun compte de charges d’intérêts — la couverture des intérêts est sans objet.",
+        "confirmNone": "Nous n’avons pas de charges d’intérêts"
+      },
+      "interest_bearing_debt": {
+        "title": "Dette portant intérêt",
+        "help": "Comptes de passif portant prêts, lignes de crédit, obligations et autres emprunts — parts courantes et à long terme. Le ratio dette/capitaux propres et le rendement du capital investi lisent leurs soldes.",
+        "none": "Aucune dette portant intérêt — le ratio dette/capitaux propres vaut zéro.",
+        "confirmNone": "Nous n’avons aucune dette portant intérêt"
       }
     }
   },

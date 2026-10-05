@@ -15,3 +15,4 @@ export {
   ossReturnToIrelandXml,
   type OssMemberState,
 } from "./oss-exports.ts";
+export { enactedIncomeTaxRate, type EnactedRate } from "./income-tax-provision.ts";

@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 
 const stateKey = Symbol.for("openbooks.analytics-config-revision-integration");
 interface RouteState {
-  authz: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null;
+  authz: { user: { orgId: string; id: string; roles: { key: string }[] }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null;
 }
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
@@ -43,9 +43,12 @@ const hooks = registerHooks({
       return { url: "mock:analytics-config-authz", shortCircuit: true };
     }
     if (
-      specifier === "../../../../../lib/features" &&
-      (context.parentURL?.includes("analytics/config/[dashboard]/route") === true ||
-        context.parentURL?.includes("analytics/config/%5Bdashboard%5D/route") === true)
+      (specifier === "../../../../../lib/features" &&
+        (context.parentURL?.includes("analytics/config/[dashboard]/route") === true ||
+          context.parentURL?.includes("analytics/config/%5Bdashboard%5D/route") === true)) ||
+      // The route resolves each dashboard's Company Features gate through the
+      // analytics catalog's availability check.
+      (specifier === "../features" && context.parentURL?.includes("/lib/analytics/dashboard-access") === true)
     ) {
       return { url: "mock:analytics-config-features", shortCircuit: true };
     }
@@ -83,7 +86,8 @@ async function seed(): Promise<{ orgId: string; actorId: string }> {
   const actorId = await createScratchUser(org.orgId, "Config Admin", "admin");
   // Dashboard config is an org-wide write: the route demands explicit null
   // (unrestricted), and an absent scope fails closed.
-  routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null };
+  // An administrator: every dashboard's grants and the Setup permission.
+  routeState.authz = { user: { orgId: org.orgId, id: actorId, roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
   return { orgId: org.orgId, actorId };
 }
 
