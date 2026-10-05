@@ -6403,6 +6403,10 @@
       "title": "Facturación consolidada",
       "description": "Una factura por pagador para las suscripciones de una jerarquía — matrices, distribuidores y franquicias — incluso entre entidades legales con asientos entre compañías."
     },
+    "customerPortal": {
+      "title": "Portal del cliente",
+      "description": "Acceso de clientes sin contraseña con facturas y pago inmediato, métodos de pago, cambios de suscripción, seguimiento de pedidos, devoluciones de autoservicio y consulta de tarjetas regalo."
+    },
     "storedValue": {
       "title": "Tarjetas regalo y crédito",
       "description": "Tarjetas regalo y crédito en tienda registrados como pasivo, con emisión, canje, caducidad y deterioro."

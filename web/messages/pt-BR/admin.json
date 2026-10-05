@@ -6475,6 +6475,10 @@
       "title": "Faturamento consolidado",
       "description": "Uma fatura por pagador para as assinaturas de uma hierarquia — matrizes, revendedores e franquias — inclusive entre entidades legais com lançamentos intercompanhia."
     },
+    "customerPortal": {
+      "title": "Portal do cliente",
+      "description": "Acesso do cliente sem senha com faturas e pagamento imediato, métodos de pagamento, alterações de assinatura, rastreamento de pedidos, devoluções de autoatendimento e consulta de vales-presente."
+    },
     "storedValue": {
       "title": "Vales e créditos",
       "description": "Cartões-presente e créditos em loja registrados no passivo, com emissão, resgate, expiração e breakage."
