@@ -40,38 +40,26 @@ function fullSpend(values: Record<string, number | string>): Record<string, numb
   return { ...ANALYTICS_CONFIG.spendVelocity.defaults, ...values };
 }
 
-test("an inverted HHI ladder is refused by name", () => {
-  assert.throws(
-    () => cleanConfigValues("spendVelocity", fullSpend({ hhiWarning: 2500, hhiCritical: 2500 })),
-    (e: unknown) => e instanceof Error && /'hhiCritical'/.test(e.message),
-  );
-});
-
-test("an inverted vendor grade ladder is refused by name", () => {
-  const values = { ...ANALYTICS_CONFIG.vendorPerformance.defaults, gradeB: 90 };
-  assert.throws(
-    () => cleanConfigValues("vendorPerformance", values),
-    (e: unknown) => e instanceof Error && /'gradeB'/.test(e.message),
-  );
+test("broken thresholds are refused by name", () => {
+  const cases: Array<{ name: string; dashboard: "spendVelocity" | "vendorPerformance"; values: Record<string, number | string>; key: string }> = [
+    { name: "inverted HHI ladder", dashboard: "spendVelocity", values: fullSpend({ hhiWarning: 2500, hhiCritical: 2500 }), key: "hhiCritical" },
+    { name: "inverted vendor grade ladder", dashboard: "vendorPerformance", values: { ...ANALYTICS_CONFIG.vendorPerformance.defaults, gradeB: 90 }, key: "gradeB" },
+    { name: "negative money threshold", dashboard: "spendVelocity", values: fullSpend({ minBaseAmount: "-5" }), key: "minBaseAmount" },
+    { name: "unknown key", dashboard: "vendorPerformance", values: { ...ANALYTICS_CONFIG.vendorPerformance.defaults, bogus: 1 }, key: "bogus" },
+  ];
+  for (const c of cases) {
+    const key = c.key;
+    assert.throws(
+      () => cleanConfigValues(c.dashboard, c.values),
+      (e: unknown) => e instanceof Error && new RegExp(`'${key}'`).test(e.message),
+      c.name,
+    );
+  }
 });
 
 test("an empty optional money threshold saves as unset", () => {
   const out = cleanConfigValues("spendVelocity", fullSpend({ minBaseAmount: "" }));
   assert.equal(out.minBaseAmount, "");
-});
-
-test("a negative money threshold is refused by name", () => {
-  assert.throws(
-    () => cleanConfigValues("spendVelocity", fullSpend({ minBaseAmount: "-5" })),
-    (e: unknown) => e instanceof Error && /'minBaseAmount'/.test(e.message),
-  );
-});
-
-test("an unknown key is refused by name", () => {
-  assert.throws(
-    () => cleanConfigValues("vendorPerformance", { ...ANALYTICS_CONFIG.vendorPerformance.defaults, bogus: 1 }),
-    (e: unknown) => e instanceof Error && /'bogus'/.test(e.message),
-  );
 });
 
 test("a money threshold saved in another currency reads as unset", () => {

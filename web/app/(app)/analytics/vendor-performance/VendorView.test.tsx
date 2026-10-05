@@ -1,156 +1,23 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { ReactElement } from 'react'
-import type { VendorData } from '../../../../lib/analytics/vendor-data'
-import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
+import { bootViewTests, mountView, captureCsvDownload } from '../_view-test-harness'
+import { vendorFixture, unratedRow } from './vendor-view-fixtures'
 
 // Vendor CSVs must carry exact spend and average-bill values: the export
 // passes the ledger amounts straight through instead of rounding them.
 
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/analytics/vendor-performance', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
-
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '@openbooks/analytics/viz') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function InsightChart(){return null}export function InsightResultView(){return null}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
-
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
+// Deferred past boot: the view pulls charts that must resolve after jsdom.
+await bootViewTests('http://localhost:4800/analytics/vendor-performance')
 const { VendorView } = await import('./VendorView')
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-
-function fixture(): VendorData {
-  return {
-    period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
-    config: { ...ANALYTICS_CONFIG.vendorPerformance.defaults },
-    rows: [
-      {
-        id: 'v-acme',
-        name: 'Acme Supplies',
-        spend: '9876.5430',
-        priorSpend: '9000.0000',
-        yoyPct: 0.097,
-        sharePct: 0.42,
-        bills: 80,
-        avgBill: '123.4560',
-        lastBill: '2026-07-28',
-        recencyDays: 3,
-        tier: 'strategic',
-        paidBills: 78,
-        undatedBills: 0,
-        avgDaysToPay: 21,
-        onTimePct: 0.95,
-        latePct: 0.05,
-        lateSpend: '100.0000',
-        score: 82.4,
-        grade: 'A',
-        performance: 88,
-        quadrant: 'strategic',
-        unratedReason: null,
-      },
-    ],
-    monthly: [],
-    totals: {
-      vendors: 1,
-      spend: '9876.5430',
-      priorSpend: '9000.0000',
-      yoyPct: 0.097,
-      bills: 80,
-      avgBill: '123.4560',
-      top5SharePct: 42,
-      top10SharePct: 42,
-      hhi: 0.2,
-      hhiScaled: 2000,
-      strategic: 1,
-      onTimePct: 0.95,
-      avgDaysToPay: 21,
-      lateSpend: '100.0000',
-      undatedBills: 0,
-    },
-    tierBreakdown: [{ tier: 'strategic', count: 1, spend: '9876.5430' }],
-    gradeBreakdown: [{ grade: 'A', count: 1, spend: '9876.5430' }],
-    quadrantBreakdown: [{ quadrant: 'strategic', count: 1, spend: '9876.5430' }],
-  } as unknown as VendorData
-}
-
-function providers(ui: ReactElement) {
-  return (
-    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <MoneyProvider currency="USD">
-        <BusinessDateProvider today="2026-08-28">{ui}</BusinessDateProvider>
-      </MoneyProvider>
-    </NextIntlClientProvider>
-  )
-}
-
-async function click(el: Element) {
-  await act(async () => {
-    el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  await tick()
-}
-
 test('vendor CSV exports retain spend and average bill decimals', async () => {
-  let blob: Blob | undefined
-  let downloadedFile = ''
-  let clickedHref = ''
-  const realCreateObjectURL = URL.createObjectURL
-  const realRevokeObjectURL = URL.revokeObjectURL
-  URL.createObjectURL = (value: Blob) => {
-    blob = value
-    return 'blob:vendor-export-test'
-  }
-  URL.revokeObjectURL = () => {}
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  const { host, click, cleanup } = await mountView(<VendorView data={vendorFixture()} />, 'Vendors')
   try {
-    await act(async () => {
-      root.render(providers(<VendorView data={fixture()} />))
-      await tick()
-    })
-    await tick()
-    const vendorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Vendors')
-    assert.ok(vendorsTab, 'the vendors tab must exist')
-    await click(vendorsTab)
-    const realCreate = document.createElement.bind(document)
-    document.createElement = ((tag: string, opts?: ElementCreationOptions) => {
-      const el = realCreate(tag, opts)
-      if (tag === 'a') {
-        const anchor = el as HTMLAnchorElement
-        anchor.click = () => {
-          clickedHref = anchor.href
-          downloadedFile = anchor.download
-        }
-      }
-      return el
-    }) as typeof document.createElement
-    try {
+    const { text, downloadedFile, clickedHref } = await captureCsvDownload(async () => {
       const exportButton = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('CSV'))
       assert.ok(exportButton, 'the vendors table must offer a CSV export')
       await click(exportButton)
-    } finally {
-      document.createElement = realCreate
-    }
-    assert.ok(blob, 'clicking export must produce a download blob')
-    const text = await blob!.text()
+    }, 'blob:vendor-export-test')
     assert.ok(text.includes('9876.543'), `spend must stay decimal, got:\n${text}`)
     assert.ok(text.includes('123.456'), `average bill must stay decimal, got:\n${text}`)
     assert.ok(!text.includes('9877'), `spend must not be rounded, got:\n${text}`)
@@ -158,52 +25,27 @@ test('vendor CSV exports retain spend and average bill decimals', async () => {
     assert.equal(downloadedFile, 'vendors-2026-08-28.csv')
     assert.equal(clickedHref, 'blob:vendor-export-test')
   } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-    URL.createObjectURL = realCreateObjectURL
-    URL.revokeObjectURL = realRevokeObjectURL
+    await cleanup()
   }
 })
 
-/** One unrated row: no settled bills at all, or settled bills with no dates. */
-function unratedRow(id: string, name: string, reason: 'no-payments' | 'undated', paidBills: number): VendorData['rows'][number] {
-  return {
-    id, name, spend: '500.0000', priorSpend: '0', yoyPct: null, sharePct: 0.05, bills: 2,
-    avgBill: '250.0000', lastBill: '2026-07-20', recencyDays: 11, tier: 'tail',
-    paidBills, undatedBills: paidBills, avgDaysToPay: paidBills ? 9 : null,
-    onTimePct: null, latePct: null, lateSpend: '0', score: 20, grade: 'D',
-    performance: null, quadrant: 'unrated', unratedReason: reason,
-  }
-}
-
 test('unrated vendors read Unrated with a per-cause remedy, never a neutral score', async () => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  const data = vendorFixture()
+  data.rows.push(unratedRow('v-new', 'Brand New Co', 'no-payments', 0))
+  data.rows.push(unratedRow('v-undated', 'Undated Bills Co', 'undated', 1))
+  const { host, click, cleanup } = await mountView(<VendorView data={data} />)
   try {
-    const data = fixture()
-    data.rows.push(unratedRow('v-new', 'Brand New Co', 'no-payments', 0))
-    data.rows.push(unratedRow('v-undated', 'Undated Bills Co', 'undated', 1))
-    await act(async () => {
-      root.render(providers(<VendorView data={data} />))
-      await tick()
-    })
-    await tick()
     const scorecardTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Scorecard')
     assert.ok(scorecardTab, 'the scorecard tab must exist')
     await click(scorecardTab)
-    assert.ok(host.textContent?.includes('Unrated'), `an unrated vendor must be named as Unrated, got:\n${host.textContent}`)
+    assert.ok((host.textContent ?? '').includes('Unrated'), `an unrated vendor must be named as Unrated, got:\n${host.textContent}`)
     const matrixTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Leverage Matrix')
     assert.ok(matrixTab, 'the matrix tab must exist')
     await click(matrixTab)
-    assert.ok(host.textContent?.includes('settle bills to rate'), `a vendor with no payments must be told to settle bills, got:\n${host.textContent}`)
-    assert.ok(host.textContent?.includes('add due dates or payment terms'), `a settled-but-undated vendor must be told to date its bills, got:\n${host.textContent}`)
+    const text = host.textContent ?? ''
+    assert.ok(text.includes('settle bills to rate'), `a vendor with no payments must be told to settle bills, got:\n${text}`)
+    assert.ok(text.includes('add due dates or payment terms'), `a settled-but-undated vendor must be told to date its bills, got:\n${text}`)
   } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+    await cleanup()
   }
 })
