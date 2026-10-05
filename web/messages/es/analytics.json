@@ -2118,7 +2118,8 @@
         "title": "Desequilibrio entre velocidad de compras y ventas",
         "message": "La velocidad de OC ({po} %/mes) supera la de OV ({so} %/mes) en un {gap} % — ratio OC/OV: {ratio}×",
         "actionWithMonths": "Riesgo de presión de caja en ~{months} meses. Revisar los compromisos de compra.",
-        "actionMonitor": "Vigilar la velocidad de compras y alinearla con el pipeline de ventas."
+        "actionMonitor": "Vigilar la velocidad de compras y alinearla con el pipeline de ventas.",
+        "messageNoVelocity": "ratio OC/OV: {ratio}× sin velocidades medibles"
       },
       "seasonalHigh": "El gasto elevado suele concentrarse en {months}",
       "seasonalLow": "El gasto reducido suele concentrarse en {months}",
@@ -2527,7 +2528,8 @@
       "fragmentation": "{txns} trans./mes, prom. {avg}",
       "frog": "+{rate} %/mes durante {months} meses",
       "seasonal": "{deviation} % vs mes promedio",
-      "zombie": "{amount}/mes sin cambios durante {months} meses"
+      "zombie": "{amount}/mes sin cambios durante {months} meses",
+      "cliffNoVelocity": "ratio {ratio}× — velocidades no medibles"
     },
     "detectors": {
       "anomaly": {
@@ -2538,7 +2540,8 @@
       "cliff": {
         "desc": "Brecha de velocidad pedidos a proveedores vs de clientes",
         "label": "Abismo de compromisos",
-        "sub": "Velocidad de pedidos"
+        "sub": "Velocidad de pedidos",
+        "insufficientHistory": "Velocidad no medible"
       },
       "concentration": {
         "desc": "Dependencia excesiva de una categoría",
