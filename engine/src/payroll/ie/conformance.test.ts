@@ -84,6 +84,13 @@ const GOLDENS: Golden[] = [
   { year: 2026, label: "October edition €377 → €8.57 at 4.35%, credit unchanged", citation: OCTOBER, input: { pay: "377", payDate: "2026-11-15" }, expected: { edition: "2026-oct", prsiEmployee: "8.5700", prsiEmployer: "34.5000" } },
   // 750/2 = 375 per week, each SW14 row 375 (€7.58) → €15.16; employer 750 × 9% = 67.50.
   { year: 2026, label: "fortnightly PRSI decomposes to two weeks: €750 → €15.16", citation: "DSP: PRSI charged per week worked in the fortnight", input: { pay: "750", periodsPerYear: 26, reckonablePayWeeks: ["375", "375"] }, expected: { prsiSubclass: "AX", prsiEmployee: "15.1600", prsiEmployer: "67.5000" } },
+  // Uneven fortnights price each week on the weekly bands, whatever band the total falls in.
+  // €700 + €200 = €900 (fortnightly AL): week 1 A1 700 × 4.2% = 29.40, employer 700 × 11.25% = 78.75;
+  // week 2 A0 nil, employer 200 × 9% = 18.00 → €29.40 / €96.75 (not 37.80 / 81.00 on the total).
+  { year: 2026, label: "uneven fortnight above AX prices per week: €700 + €200 → €29.40 / €96.75", citation: "DSP: PRSI charged per week worked in the fortnight", input: { pay: "900", periodsPerYear: 26, reckonablePayWeeks: ["700", "200"] }, expected: { prsiSubclass: "A1", prsiEmployee: "29.4000", prsiEmployer: "96.7500" } },
+  // €600 + €100 = €700 (fortnightly A0): week 1 A1 600 × 4.2% = 25.20, employer 600 × 11.25% = 67.50;
+  // week 2 nil, employer 100 × 9% = 9.00 → €25.20 / €76.50 (not nil / 63.00 on the total).
+  { year: 2026, label: "uneven fortnight inside A0 prices per week: €600 + €100 → €25.20 / €76.50", citation: "DSP: PRSI charged per week worked in the fortnight", input: { pay: "700", periodsPerYear: 26, reckonablePayWeeks: ["600", "100"] }, expected: { prsiSubclass: "A1", prsiEmployee: "25.2000", prsiEmployer: "76.5000" } },
   // AL monthly band €1,837.01–€2,392: 2000 × 4.2% = 84.00; × 9.00% = 180.00.
   { year: 2026, label: "monthly €2,000 AL → €84.00 / €180.00", citation: "DSP advance notice, monthly PRSI bands", input: { pay: "2000", payDate: "2026-03-31", periodsPerYear: 12 }, expected: { prsiSubclass: "AL", prsiEmployee: "84.0000", prsiEmployer: "180.0000" } },
 ];
