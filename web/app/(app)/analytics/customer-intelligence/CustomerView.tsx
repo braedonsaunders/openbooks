@@ -123,7 +123,7 @@ const SEGMENT_STYLE: Record<Segment, string> = {
   lost: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
 }
 
-const GRADE_STYLE: Record<CustomerRow['healthGrade'], string> = {
+const GRADE_STYLE: Record<Exclude<CustomerRow['healthGrade'], null>, string> = {
   'A+': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   A: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   B: 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300',
@@ -349,7 +349,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const groups = useMemo(() => {
     if (groupBy === 'none') return null
     const keyOf = (r: CustomerRow) =>
-      groupBy === 'segment' ? t(`segment.${r.segment}`) : groupBy === 'tier' ? t(`tier.${r.tier}`) : groupBy === 'churn' ? t(`risk.${r.churnLevel}`) : r.healthGrade
+      groupBy === 'segment' ? t(`segment.${r.segment}`) : groupBy === 'tier' ? t(`tier.${r.tier}`) : groupBy === 'churn' ? t(`risk.${r.churnLevel}`) : (r.healthGrade ?? '—')
     const map = new Map<string, CustomerRow[]>()
     for (const r of rows) {
       const key = keyOf(r)
@@ -368,10 +368,12 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const excellentAt = data.config.gradeA
   const warningAt = data.config.gradeD
   const warningBelow = data.config.gradeC
-  const excellent = rows.filter((r) => r.healthScore >= excellentAt).length
-  const warning = rows.filter((r) => r.healthScore < warningBelow && r.healthScore >= warningAt).length
-  const critical = rows.filter((r) => r.healthScore < warningAt).length
-  const avgHealth = rows.length ? Math.round(rows.reduce((a, r) => a + r.healthScore, 0) / rows.length) : 0
+  // Unscored customers sit outside the bands: no score is not the lowest score.
+  const scored = rows.filter((r): r is CustomerRow & { healthScore: number } => r.healthScore !== null)
+  const excellent = scored.filter((r) => r.healthScore >= excellentAt).length
+  const warning = scored.filter((r) => r.healthScore < warningBelow && r.healthScore >= warningAt).length
+  const critical = scored.filter((r) => r.healthScore < warningAt).length
+  const avgHealth = scored.length ? Math.round(scored.reduce((a, r) => a + r.healthScore, 0) / scored.length) : null
   const noPaymentCount = rows.filter((r) => r.scoredWithoutPayment).length
 
   const Row = ({ r }: { r: CustomerRow }) => (
@@ -381,8 +383,12 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
         <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('lastActive', { days: r.recencyDays === null ? '—' : t('daysAgo', { days: r.recencyDays }) })}</p>
       </SharedTableCell>
       <SharedTableCell className="px-4 py-2 text-center">
-        <span className={cn('mr-1.5 rounded-full px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.healthGrade])}>{r.healthGrade}</span>
-        <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">{r.healthScore}</span>
+        {r.healthGrade === null ? (
+          <span className="mr-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-400 dark:bg-slate-800 dark:text-slate-500">—</span>
+        ) : (
+          <span className={cn('mr-1.5 rounded-full px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.healthGrade])}>{r.healthGrade}</span>
+        )}
+        <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">{r.healthScore === null ? '—' : r.healthScore}</span>
       </SharedTableCell>
       <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.invoicedRevenue)}</SharedTableCell>
@@ -413,7 +419,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={HeartPulse} accent="teal" label={t('kpi.avgHealth')} value={String(avgHealth)} sub={t('sub.weightedRfm')} />
+        <KpiCard icon={HeartPulse} accent="teal" label={t('kpi.avgHealth')} value={avgHealth === null ? '—' : String(avgHealth)} sub={t('sub.weightedRfm')} />
         <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.excellent')} value={String(excellent)} sub={t('sub.scoreHigh', { cutoff: excellentAt })} tone="positive" />
         <KpiCard icon={AlertTriangle} accent={warning > 0 ? 'amber' : 'emerald'} label={t('kpi.warning')} value={String(warning)} sub={t('sub.scoreMid', { low: warningAt, high: warningBelow - 1 })} />
         <KpiCard icon={AlertOctagon} accent={critical > 0 ? 'red' : 'emerald'} label={t('kpi.critical')} value={String(critical)} sub={t('sub.scoreLow', { cutoff: warningAt })} tone={critical > 0 ? 'negative' : 'positive'} />
@@ -440,7 +446,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
             </Select>
             <button
               type="button"
-              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('table.invoiced'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, r.revenue, r.invoicedRevenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), t(`rating.${r.paymentRating}`), t(`rec.${r.recommendation}`)]), today)}
+              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('table.invoiced'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore ?? '', r.healthGrade ?? '', r.revenue, r.invoicedRevenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), t(`rating.${r.paymentRating}`), t(`rec.${r.recommendation}`)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
@@ -1152,7 +1158,7 @@ function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: bool
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.newCustomersBold')}</span>{t('sources.newCustomersTail')}</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.cohortsBold')}</span>{t('sources.cohortsTail')}</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.profitabilityBold')}</span>{t('sources.profitabilityTail')}</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.intelligenceBold')}</span> {t('sources.intelligenceTail', { score: data.intelligence.score, grade: data.intelligence.grade })}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.intelligenceBold')}</span> {data.intelligence.score === null ? data.intelligence.reason : t('sources.intelligenceTail', { score: data.intelligence.score, grade: data.intelligence.grade })}</li>
         </ul>
       </Panel>
     </div>

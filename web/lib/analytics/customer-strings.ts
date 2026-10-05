@@ -60,6 +60,8 @@ export interface CustomerStrings {
   paymentStatsUnavailable(): string;
   /** Loader refusal when a hand-edited weight group no longer sums to 100. */
   scoringWeightsInvalid(keys: string, total: number, actual: number): string;
+  /** Loader refusal when no intelligence term carries weight under the configured weights. */
+  intelligenceUnavailable(): string;
 }
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
@@ -127,5 +129,6 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
     paymentStatsUnavailable: () => t("customer.errors.paymentStatsUnavailable"),
     scoringWeightsInvalid: (keys, total, actual) =>
       t("customer.errors.scoringWeightsInvalid", { keys, total, actual }),
+    intelligenceUnavailable: () => t("customer.errors.intelligenceUnavailable"),
   };
 }

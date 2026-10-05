@@ -1394,7 +1394,8 @@
     "txnsCount": "{count} transações",
     "errors": {
       "paymentStatsUnavailable": "As estatísticas de pagamento de clientes não foram carregadas. Recarregue este painel.",
-      "scoringWeightsInvalid": "Os pesos {keys} somam {actual}, não {total} — corrija na Configuração deste painel."
+      "scoringWeightsInvalid": "Os pesos {keys} somam {actual}, não {total} — corrija na Configuração deste painel.",
+      "intelligenceUnavailable": "Nenhum indicador de inteligência de clientes pontua com os pesos configurados — corrija na Configuração deste painel."
     },
     "rating": {
       "excellent": "excelente",
