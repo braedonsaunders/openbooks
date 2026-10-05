@@ -96,10 +96,20 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
     }
     case 'money': {
       // The drawer posts storage minors converted from operator majors, so
-      // the server guards the stored shape exactly like an integer: the
-      // major-unit grammar lives in the form, the minor-unit bounds here.
+      // the server guards the stored shape: whole minor units judged by the
+      // shared plain-decimal grammar at scale zero. Safe-integer JSON
+      // numbers are accepted explicitly as their plain spelling; scientific
+      // and hex strings are refused by the grammar rather than admitted
+      // through Number. The major-unit grammar lives in the form, the
+      // minor-unit bounds here.
       if (!present) return { column, value: null }
-      const n = typeof raw === 'number' || typeof raw === 'string' ? Number(raw) : NaN
+      const text = typeof raw === 'number'
+        ? (Number.isSafeInteger(raw) ? String(raw) : null)
+        : typeof raw === 'string' ? raw : null
+      if (text === null) return { error: `${field.key} must be a whole number of minor units` }
+      const exact = canonicalDecimal(text, 0)
+      if (exact === null) return { error: `${field.key} must be a whole number of minor units` }
+      const n = Number(exact)
       if (!Number.isSafeInteger(n)) return { error: `${field.key} must be a whole number of minor units` }
       if (field.min !== undefined && n < field.min) return { error: `${field.key} must be at least ${field.min}` }
       if (field.max !== undefined && n > field.max) return { error: `${field.key} must be at most ${field.max}` }

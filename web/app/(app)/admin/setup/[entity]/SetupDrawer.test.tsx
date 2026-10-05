@@ -23,6 +23,12 @@ registerHooks({
         url: `data:text/javascript,export const toast={success(m){(globalThis.__setupDrawerToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__setupDrawerToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__setupDrawerToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}`,
       }
     }
+    if (specifier === '../../../../../lib/confirm') {
+      return {
+        shortCircuit: true,
+        url: `data:text/javascript,export async function confirmDialog(){((globalThis.__setupDrawerConfirms??=[]).push(1));return globalThis.__setupDrawerConfirmResult ?? true}`,
+      }
+    }
     if (specifier === '@/app/(app)/accounting/changes/LossOfControlButton') {
       return {
         shortCircuit: true,
@@ -494,4 +500,29 @@ test('a known-precision amount reopens as majors and saves minors', async (t) =>
   assert.ok(String(seen[0]!.url).endsWith('/channel-ad-spend/command'), 'command-owned rows save through their command')
   assert.ok(seen[0]!.headers['idempotency-key'], 'the command save carries its idempotency key')
   assert.deepEqual((seen[0]!.body as Record<string, unknown>)['amountMinor'], 12050)
+})
+
+test('a cancelled re-entry restores the precision lock for the next save', async (t) => {
+  // Typing into a locked field clears its lock while editing; cancelling
+  // must restore the lock with the blank, or the next untouched save would
+  // silently clear the stored figure. The promotion amount is optional, so
+  // no required-field refusal can hide the precision remedy here.
+  const { seen } = await mountDrawer(t, {
+    id: 'promo-1', code: 'P1', name: 'Promo', kind: 'amount', status: 'draft', amount_minor: 500, currency: 'XX9',
+  }, () => Response.json({ ok: true }), 'promotions', undefined, '/api/admin/setup', undefined, true, spendCurrencies())
+  const amount = () => document.querySelector('input[aria-label="Discount amount"]') as HTMLInputElement | null
+  assert.ok(amount(), 'the locked amount stays editable for deliberate re-entry')
+  assert.equal(amount()!.value, '', 'stored minors never show as a major amount')
+  await act(async () => { setTextInput('Discount amount', '5.00'); await tick() })
+  await tick()
+  assert.equal(amount()!.value, '5.00')
+  await act(async () => { clickButton('Cancel').click(); await tick(); await tick() })
+  await tick()
+  assert.equal(document.querySelector('[role="dialog"] input[aria-label="Discount amount"]'), null, 'cancel leaves editing')
+  await act(async () => { clickButton('Edit').click(); await tick() })
+  await tick()
+  assert.equal(amount()!.value, '', 'cancel restores the blank, not the typed figure')
+  await clickSave(false)
+  assert.deepEqual(seen, [], 'the restored lock still guards the save')
+  assert.match(alertText() ?? '', /500/, 'the original precision remedy returns')
 })

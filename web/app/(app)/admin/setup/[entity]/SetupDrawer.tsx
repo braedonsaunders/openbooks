@@ -201,6 +201,10 @@ export function SetupDrawer({
     }
   }
   const [moneyLocked, setMoneyLocked] = useState(initialMoneyLocks)
+  // The pristine locks advance with the pristine form: Cancel restores both
+  // baselines, so typing into a locked field and cancelling cannot smuggle
+  // a cleared lock past the next untouched save.
+  const [initialMoneyLocked, setInitialMoneyLocked] = useState(initialMoneyLocks)
   const [form, setForm] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
     for (const f of entity.fields) {
@@ -435,7 +439,7 @@ export function SetupDrawer({
       }
       toast.success(creating ? t('created') : t('updated'))
       if (creating) router.push(destination)
-      else { setInitialForm(form); setEditing(false); setFieldError(null) }
+      else { setInitialForm(form); setInitialMoneyLocked(moneyLocked); setEditing(false); setFieldError(null) }
       onSaved?.()
       router.refresh()
     } catch (e) {
@@ -524,7 +528,7 @@ export function SetupDrawer({
 
   async function cancelEditing() {
     if (!await confirmDiscard()) return
-    setForm(initialForm); setFieldError(null); setEditing(false)
+    setForm(initialForm); setMoneyLocked(initialMoneyLocked); setFieldError(null); setEditing(false)
   }
 
   return (
