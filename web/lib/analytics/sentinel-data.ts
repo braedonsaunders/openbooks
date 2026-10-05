@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
@@ -227,6 +227,51 @@ type LogicRuleLeaf = { op: string; field?: string; value?: unknown; rules?: Logi
  * compares amounts to limits in the same currency and never translates
  * either side. Non-positive and unreadable values are not limits.
  */
+/**
+ * Latest spot rate from a row's functional currency to presentation on or
+ * before the row's date — the same selection flowRates makes in TypeScript
+ * (direct quotes win ties, inverse otherwise, 1 when identical). NULL when
+ * uncovered: every caller pairs this with assertFloorCoverage, so an
+ * uncovered row refuses by name instead of dropping silently or pricing at
+ * zero. `func` and `date` are SQL fragments over the caller's row.
+ */
+function spotRateSql(func: SQL, date: SQL, pres: string, org: string): SQL {
+  return sql`(select s.rate from (
+    select rate, as_of, 0 as priority from fx_rates
+     where org_id = ${org} and from_currency = ${func}
+       and to_currency = ${pres} and rate_type = 'spot' and as_of <= ${date}::date
+    union all
+    select (1 / rate)::numeric(19,10), as_of, 1 as priority from fx_rates
+     where org_id = ${org} and from_currency = ${pres}
+       and to_currency = ${func} and rate_type = 'spot' and as_of <= ${date}::date
+  ) s order by s.as_of desc, s.priority asc limit 1)`;
+}
+
+/**
+ * Fail closed before a translated floor comparison: every functional
+ * currency in the scan scope must have spot coverage on or before its own
+ * earliest row, or flowRates throws the named missing-rate refusal. Without
+ * this, the NULL lateral rate would silently drop rows from the detector.
+ */
+async function assertFloorCoverage(
+  orgId: string,
+  pres: string,
+  scope: SQL,
+): Promise<void> {
+  const funcs = await db.execute<{ func: string; mind: string }>(sql`
+    select coalesce(s.base_currency, ${pres}) as func,
+           min(coalesce(d.document_date, d.posting_date))::text as mind
+      from documents d
+      left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
+     where ${scope}
+     group by 1
+  `);
+  await flowRates(
+    orgId,
+    funcs.rows.map((r) => ({ func: r.func, date: r.mind })),
+  );
+}
+
 export function extractFlowAmountLimits(
   flows: ReadonlyArray<{ subjectKind: string; graph: unknown }>,
 ): FlowAmountLimit[] {
@@ -544,6 +589,33 @@ export async function sentinelData(
       and coalesce(d.document_date, d.posting_date) <= ${to}
       and abs(coalesce(d.total, 0)) * power(10, coalesce(cu.minor_units, 2)) >= 100`;
 
+  // Translated floor comparisons refuse by name before scanning: every
+  // functional currency in the duplicate window must have spot coverage, or
+  // the NULL lateral rate would silently drop candidates. Single-currency
+  // scopes resolve to 1 with no rate rows and never throw here.
+  if (duplicateFloor !== null) {
+    await assertFloorCoverage(
+      orgId,
+      presentationCcy,
+      sql`d.org_id = ${orgId} and d.voided_at is null
+        and d.kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
+        and d.party_id is not null
+        and coalesce(d.document_date, d.posting_date) >= ${DUPLICATE_SCAN_FROM}
+        and coalesce(d.document_date, d.posting_date) <= ${DUPLICATE_SCAN_TO}`,
+    );
+  }
+  // Same refusal up front for the vendor-statistics baseline and period
+  // windows, whose RSF and z-score floors now compare translated money.
+  await assertFloorCoverage(
+    orgId,
+    presentationCcy,
+    sql`d.org_id = ${orgId} and d.voided_at is null
+      and d.kind in (${kindsIn})
+      and d.party_id is not null
+      and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
+      and coalesce(d.document_date, d.posting_date) <= ${to}`,
+  );
+
   const [
     aggRows, trapRows, dupAll, weekendDetail, weekendIds,
     vendorStatRows, seqDetail, seqIds, ghostRows, auditRows, auditAgg,
@@ -646,20 +718,29 @@ export async function sentinelData(
       ? Promise.resolve({ rows: [] as DuplicateGroupRow[] })
       : db.execute(sql`
       with cand as materialized (
-        select id, document_number, kind, party_id, memo, reference_number, currency, fx_rate,
-               abs(total) as amt, round(abs(total) * fx_rate, 4) as func_amt,
-               coalesce(s.base_currency, ${presentationCcy}) as func_ccy,
-               coalesce(document_date, posting_date) as ddate
-          from documents d
-          left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
-         where org_id = ${orgId} and voided_at is null
-           and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
-           and party_id is not null
-           and abs(coalesce(total, 0)) >= ${duplicateFloor}::numeric
-           and coalesce(document_date, posting_date) >= ${DUPLICATE_SCAN_FROM}
-           and coalesce(document_date, posting_date) <= ${DUPLICATE_SCAN_TO}
+        -- pres_amt translates each candidate into presentation money at its
+        -- own document-date spot (total × fx_rate × func→presentation), so
+        -- the floor below compares translated money with translated money.
+        -- Uncovered currencies refuse up front (assertFloorCoverage); a NULL
+        -- rate here is unreachable, never a silent drop.
+        select *, round(abs(total) * fx_rate * pres_rate, 4) as pres_amt from (
+          select id, document_number, kind, party_id, memo, reference_number, currency, fx_rate,
+                 abs(total) as amt, round(abs(total) * fx_rate, 4) as func_amt,
+                 coalesce(s.base_currency, ${presentationCcy}) as func_ccy,
+                 coalesce(document_date, posting_date) as ddate,
+                 case when coalesce(s.base_currency, ${presentationCcy}) = ${presentationCcy} then 1
+                      else ${spotRateSql(sql`coalesce(s.base_currency, ${presentationCcy})`, sql`coalesce(d.document_date, d.posting_date)`, presentationCcy, orgId)} end as pres_rate
+            from documents d
+            left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
+           where org_id = ${orgId} and voided_at is null
+             and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
+             and party_id is not null
+             and coalesce(document_date, posting_date) >= ${DUPLICATE_SCAN_FROM}
+             and coalesce(document_date, posting_date) <= ${DUPLICATE_SCAN_TO}
+        ) base
       ), keyed as (
         select *, lower(trim(coalesce(reference_number, ''))) as refkey from cand
+         where pres_amt >= ${duplicateFloor}::numeric
       ), grouped as materialized (
         select party_id, kind, currency, amt, refkey,
           count(*) as cnt, min(ddate) as first_date, max(ddate) as last_date,
@@ -765,22 +846,32 @@ export async function sentinelData(
     // (capped for display) union with the result's full count and the slim
     // full id set, so the counts always cover everything.
     (db.execute(sql`
+      -- Baseline and period rows translate into presentation money at each
+      -- row's own document-date spot, so the floors below compare translated
+      -- money with translated money. Partitions stay per (vendor, document
+      -- currency) — no currency ever blends into another's baseline. Rows
+      -- without spot coverage refuse up front (assertFloorCoverage); a NULL
+      -- rate here is unreachable, never a silent drop.
       with baseline as materialized (
         select d.party_id, d.currency, abs(d.total) as amount,
+          round(abs(d.total) * d.fx_rate * pres_rate, 4) as pres_amt,
           row_number() over w as rn,
           count(*) over w as cnt,
-          avg(abs(d.total)) over w as avg_amount,
-          stddev_samp(abs(d.total)) over w as std_amount
+          avg(round(abs(d.total) * d.fx_rate * pres_rate, 4)) over w as avg_amount,
+          stddev_samp(round(abs(d.total) * d.fx_rate * pres_rate, 4)) over w as std_amount
         from documents d
+        left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id,
+        lateral (select case when coalesce(s.base_currency, ${presentationCcy}) = ${presentationCcy} then 1
+                             else ${spotRateSql(sql`coalesce(s.base_currency, ${presentationCcy})`, sql`coalesce(d.document_date, d.posting_date)`, presentationCcy, orgId)} end as pres_rate) fxr
         where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
           and d.party_id is not null and abs(coalesce(d.total, 0)) > 0
           and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
           and coalesce(d.document_date, d.posting_date) <= ${to}
-        window w as (partition by d.party_id, d.currency order by abs(d.total) desc
+        window w as (partition by d.party_id, d.currency order by round(abs(d.total) * d.fx_rate * pres_rate, 4) desc
                      rows between unbounded preceding and unbounded following)
       ), stats as (
         select party_id, currency,
-          max(amount) filter (where rn = 2) as second_amount,
+          max(pres_amt) filter (where rn = 2) as second_amount,
           max(cnt) as cnt, max(avg_amount) as avg_amount, max(std_amount) as std_amount
         from baseline group by party_id, currency
       ), period as materialized (
@@ -789,36 +880,39 @@ export async function sentinelData(
           abs(d.total)::text as amount, d.currency as currency,
           round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
           coalesce(s.base_currency, ${presentationCcy}) as func,
+          round(abs(d.total) * d.fx_rate * pres_rate, 4) as pres_amt,
           d.party_id, coalesce(p.display_name, 'Unknown') as party_name
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
-        left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
+        left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id,
+        lateral (select case when coalesce(s.base_currency, ${presentationCcy}) = ${presentationCcy} then 1
+                             else ${spotRateSql(sql`coalesce(s.base_currency, ${presentationCcy})`, sql`coalesce(d.document_date, d.posting_date)`, presentationCcy, orgId)} end as pres_rate) fxr
         where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
           and d.party_id is not null
           and coalesce(d.document_date, d.posting_date) >= ${from}
           and coalesce(d.document_date, d.posting_date) <= ${to}
       ), rsf as (
-        -- The baseline floor is a noise gate in the document's own currency:
-        -- a near-zero historical 2nd-largest turns the multiple into noise.
+        -- The baseline floor is a noise gate in presentation money: a
+        -- near-zero historical 2nd-largest turns the multiple into noise.
         -- No LIMIT: outlier sets are inherently small, and the flagged union
         -- below needs every flagged id — display slices cap client-side.
         select pd.*, s.second_amount::text as second_amount, s.cnt as baseline_count,
           null::text as avg_amount, null::text as std_amount,
-          pd.amount::numeric / s.second_amount as metric
+          pd.pres_amt / s.second_amount as metric
         from period pd
         join stats s on s.party_id = pd.party_id and s.currency = pd.currency
           and s.second_amount >= ${cfg.rsfBaselineFloor}::numeric
-        where pd.amount::numeric / s.second_amount >= ${cfg.rsfThreshold}
+        where pd.pres_amt / s.second_amount >= ${cfg.rsfThreshold}
         order by metric desc
       ), zs as (
         select pd.*, null::text as second_amount, s.cnt as baseline_count,
           s.avg_amount::text as avg_amount, s.std_amount::text as std_amount,
-          (pd.amount::numeric - s.avg_amount) / s.std_amount as metric
+          (pd.pres_amt - s.avg_amount) / s.std_amount as metric
         from period pd
         join stats s on s.party_id = pd.party_id and s.currency = pd.currency
           and s.cnt >= ${cfg.zscoreMinBaseline} and s.std_amount > ${cfg.zscoreSigmaFloor}::numeric
-        where abs((pd.amount::numeric - s.avg_amount) / s.std_amount) >= ${cfg.zscoreThreshold}
-        order by abs((pd.amount::numeric - s.avg_amount) / s.std_amount) desc
+        where abs((pd.pres_amt - s.avg_amount) / s.std_amount) >= ${cfg.zscoreThreshold}
+        order by abs((pd.pres_amt - s.avg_amount) / s.std_amount) desc
       )
       select 'rsf' as src, * from rsf
       union all
