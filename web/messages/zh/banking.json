@@ -706,6 +706,7 @@
       "arCoverageHint": "（现金＋应收）/ 应付",
       "cashCycle": "现金周期",
       "cashCycleHint": "DSO / DPO",
+      "noHistory": "无付款历史",
       "netFlow": "期间净流量",
       "netFlowHint": "流入 − 流出",
       "runway": "现金可维持"
@@ -746,6 +747,7 @@
       "dsoLabel": "全局回款/付款天数",
       "dsoValue": "{dso}天 / {dpo}天",
       "dsoNote": "往来方无付款历史时使用的备用平均值",
+      "dsoUnknown": "不可用 — 暂无付款历史",
       "apTitle": "应付付款规则",
       "apHint": "在应付驾驶舱中配置",
       "capLabel": "每周付款上限",

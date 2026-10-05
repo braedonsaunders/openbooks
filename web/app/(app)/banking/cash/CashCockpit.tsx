@@ -168,7 +168,7 @@ export function CashCockpit({
           <div key={key} className={cn('grid grid-cols-1 gap-3', hero ? 'content-start lg:col-span-2' : 'shrink-0')}>
             <Vital icon={Flame} ring="from-violet-500 to-fuchsia-500" label={t('vitals.burnRate')} value={moneyCompact(data.burnRate)} hint={t('vitals.burnRateHint')} badge={t('vitals.weekly')} />
             <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label={t('vitals.arCoverage')} value={data.arCoverage === null ? '—' : `${formatExactRatio(data.arCoverage)}×`} hint={t('vitals.arCoverageHint')} />
-            <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label={t('vitals.cashCycle')} value={`${data.dso} / ${data.dpo}`} hint={t('vitals.cashCycleHint')} split />
+            <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label={t('vitals.cashCycle')} value={`${data.dso ?? t('vitals.noHistory')} / ${data.dpo ?? t('vitals.noHistory')}`} hint={t('vitals.cashCycleHint')} split />
           </div>
         )
       case 'accounts':
