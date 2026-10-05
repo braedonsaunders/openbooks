@@ -203,6 +203,7 @@ export function AllocationRuleWizard({ closeHref, payrollExpenses = false }: { c
   const dimensionOptions = (dimension: string): Option[] => {
     if (!options) return []
     if (dimension === 'department') return options.departments
+    if (dimension === 'payComponent') return options.payComponents
     if (dimension === 'account') return options.accounts
     if (dimension === 'location') return options.locations
     if (dimension === 'class') return options.classes
@@ -219,6 +220,7 @@ export function AllocationRuleWizard({ closeHref, payrollExpenses = false }: { c
 
   const dimLabel = (dimension: string): string => {
     if (dimension === 'department') return t('rules.definition.filters.department')
+    if (dimension === 'payComponent') return t('rules.definition.filters.payComponent')
     if (dimension === 'account') return t('rules.targets.account')
     if (dimension === 'location') return t('rules.definition.filters.location')
     if (dimension === 'class') return t('rules.definition.filters.class')
@@ -870,6 +872,7 @@ export function AllocationRuleWizard({ closeHref, payrollExpenses = false }: { c
         <StepFrame title={t('wizard.review.title')} description={t('wizard.review.description')}>
           <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
             <ReviewLine>{t('wizard.review.when', { mode: modeLabel(draft.mode) })}</ReviewLine>
+            <ReviewLine>{t('rules.versions.effective', { from: effectiveFrom || today, to: effectiveTo || t('rules.versions.openEnded') })}</ReviewLine>
             <ReviewLine>
               {draft.documentKinds.length === 0
                 ? t('wizard.review.sourceAnyKind')
@@ -1139,6 +1142,12 @@ function sourceReviewLines(
   valuesFor: (dimension: string) => Option[],
 ): string[] {
   const lines: string[] = []
+  if (draft.payComponentFilter.mode === 'specific') {
+    lines.push(t('wizard.review.sourceValues', {
+      dimension: labelFor('payComponent'),
+      values: draft.payComponentFilter.ids.map((id) => valuesFor('payComponent').find((item) => item.id === id)?.label ?? id).join(', '),
+    }))
+  }
   for (const key of SOURCE_FILTER_KEYS) {
     const filter = draft.sourceFilters[key]
     if (filter.mode === 'any') continue

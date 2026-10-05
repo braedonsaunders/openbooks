@@ -13,9 +13,9 @@ import { cn } from '@openbooks/ui'
  * stepper rather than a lookalike. Step CONTENT stays with the caller; this
  * component owns only the composition.
  *
- * z-50 is the drawer/modal layer (see packages/ui drawer scale). SearchSelect,
- * confirm, and other body-portaled menus sit at z-[60]; toasts at z-70. A
- * higher wizard scrim hides those destination lists behind the modal.
+ * The native modal owns the browser's top layer. SearchSelect portals into
+ * this dialog, outside its scrolling content, so destination menus remain
+ * interactive while the rest of the page is inert.
  */
 export function WizardShell(props: {
   testId: string
