@@ -78,18 +78,18 @@ const DASHBOARD = "sentinel";
 // must name every declared threshold, so this tracks the spec, not a subset.
 const DEFAULTS = {
   duplicateDays: 14,
-  duplicateMinAmount: "100.0000",
+  duplicateMinAmount: "",
   sequentialMinCount: 3,
   sequentialMinDays: 7,
   summaryFlaggedMedium: 20,
   summaryFlaggedHigh: 50,
-  moderateRiskAmount: "1000.0000",
-  highRiskAmount: "10000.0000",
-  criticalRiskAmount: "25000.0000",
-  aggregateHighAmount: "50000.0000",
-  aggregateCriticalAmount: "100000.0000",
-  rsfBaselineFloor: "100.0000",
-  zscoreSigmaFloor: "10.0000",
+  moderateRiskAmount: "",
+  highRiskAmount: "",
+  criticalRiskAmount: "",
+  aggregateHighAmount: "",
+  aggregateCriticalAmount: "",
+  rsfBaselineFloor: "",
+  zscoreSigmaFloor: "",
   zscoreThreshold: 3,
   zscoreMinBaseline: 5,
   rsfThreshold: 10,
@@ -167,7 +167,7 @@ test(
     // Admin B edited a different threshold from the same base version. Its
     // whole-object write must not restore A's threshold to the stale value.
     const adminB = await PUT(
-      putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateMinAmount: 250 } }),
+      putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateMinAmount: "250.0000" } }),
       params(),
     );
     assert.equal(adminB.status, 409);
@@ -187,7 +187,7 @@ test(
     const retry = await PUT(
       putRequest({
         expectedRevision: conflict.revision,
-        values: { ...conflict.values, duplicateMinAmount: 250 },
+        values: { ...conflict.values, duplicateMinAmount: "250.0000" },
       }),
       params(),
     );

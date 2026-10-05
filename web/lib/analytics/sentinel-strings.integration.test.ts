@@ -40,6 +40,10 @@ test('sentinel flag reasons render in the request locale', { skip: !process.env.
           values (${org.orgId},${id},1,${org.accounts.cogs},1,5000,5000)`)
         await db.execute(sql`update documents set status='approved' where id=${id}`)
       }
+      // The duplicate detector is excluded by name while its floor is unset;
+      // without a floor there is no French reason to assert.
+      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
+        '{"duplicateMinAmount": "1.00", "duplicateDays": 14}') where id = ${org.orgId}`)
     })
     const user: SessionUser = { id: actor, orgId: org.orgId, name: 'Forensic reviewer', email: 'forensics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
     const authz: Authz = { user, permissions: new Set(['reports.read', 'admin.audit.read']), allowedSubsidiaryIds: null }

@@ -37,6 +37,29 @@ async function seedVendorBills(orgId: string, subsidiaryId: string, name: string
   return vendorId
 }
 
+// Noise floors exclude their detectors by name while unset, so scenarios
+// asserting a detector's findings configure its floor first — otherwise the
+// detector reports nothing and the assertions pass vacuously.
+async function configureSentinel(orgId: string, values: Record<string, string | number>) {
+  await withBypass(async () => {
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
+      ${JSON.stringify(values)}::jsonb) where id = ${orgId}`)
+  })
+}
+
+async function seedApprovalLimit(orgId: string, limit: number) {
+  const graph = {
+    nodes: [
+      { id: 'limit', position: { x: 0, y: 0 }, data: { kind: 'condition', rule: { op: 'gte', field: 'total', value: limit } } },
+    ],
+    edges: [],
+  }
+  await withBypass(async () => {
+    await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      values (${randomUUID()}, ${orgId}, 'Vendor bill approvals', 'vendor_bill', true, ${JSON.stringify(graph)}::jsonb)`)
+  })
+}
+
 async function runSentinel(orgId: string): Promise<Data> {
   const authz = {
     user: { orgId, id: randomUUID() },
@@ -66,6 +89,7 @@ test('sentinel RSF baselines never cross document currencies', { skip: !env.OPEN
       ...flatBaseline('RSF-B'),
       { num: 'RSF-B-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'RSF-B-C1' },
     ])
+    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.00' })
     const data = await runSentinel(org.orgId)
     // Exactly one RSF finding: the genuine same-currency outlier.
     assert.equal(data.rsf.total, 1)
@@ -93,6 +117,7 @@ test('sentinel z-scores run per currency so foreign bills cannot mask outliers',
       { num: 'Z-USD', currency: 'USD', fx: '1.35', total: '150', date: '2026-07-10', ref: 'Z-U1' },
       { num: 'Z-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'Z-C1' },
     ])
+    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.00', zscoreSigmaFloor: '1.00' })
     const data = await runSentinel(org.orgId)
     const hits = data.zscore.items.filter((i) => cmp(i.amount, '150') === 0)
     assert.equal(hits.length, 1)
@@ -136,9 +161,13 @@ test('sentinel benford runs one distribution per document currency', { skip: !en
     // currency — never blended, never zero: USD 120 + 1800 behind digit 1,
     // CAD 410 behind digit 4.
     const usd = slices!.find((s) => s.currency === 'USD')!
-    assert.equal(usd.digits.find((d) => d.digit === 1)?.amount, 1920)
+    const usdDigit1 = usd.digits.find((d) => d.digit === 1)
+    assert.ok(usdDigit1, 'digit 1 is present in the USD slice')
+    assert.equal(cmp(usdDigit1.amount, '1920'), 0)
     const cad = slices!.find((s) => s.currency === 'CAD')!
-    assert.equal(cad.digits.find((d) => d.digit === 4)?.amount, 410)
+    const cadDigit4 = cad.digits.find((d) => d.digit === 4)
+    assert.ok(cadDigit4, 'digit 4 is present in the CAD slice')
+    assert.equal(cmp(cadDigit4.amount, '410'), 0)
     // The legacy top-level shape carries the largest slice, not a blend.
     assert.equal(data.benford1D.totalTransactions, 3)
   } finally {
@@ -179,12 +208,15 @@ test('sentinel traps stay transaction-denominated with translated totals', { ski
     await seedVendorBills(org.orgId, org.subsidiaryId, 'Trap Vendor', [
       { num: 'TRAP-1', currency: 'USD', fx: '1.35', total: '99', date: '2026-07-14', ref: 'T-1' },
     ])
+    // The trap detector is unavailable by name with no Flows amount
+    // condition; the USD 99 bill sits inside the 5% band under this limit.
+    await seedApprovalLimit(org.orgId, 100)
     const data = await runSentinel(org.orgId)
     assert.equal(data.thresholdTrap.total, 1)
-    assert.equal(data.thresholdTrap.items[0]!.amount, 99)
+    assert.equal(cmp(data.thresholdTrap.items[0]!.amount, '99'), 0)
     assert.equal((data.thresholdTrap.items[0] as unknown as { currency?: string }).currency, 'USD')
-    assert.equal(data.thresholdTrap.totalAmount, 133.65)
-    assert.equal(data.meta.totalAmount, 133.65)
+    assert.equal(cmp(data.thresholdTrap.totalAmount, '133.65'), 0)
+    assert.equal(cmp(data.meta.totalAmount, '133.65'), 0)
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }
@@ -203,20 +235,22 @@ test('sentinel consolidated money translates at document FX', { skip: !env.OPENB
       { num: 'M-CAD', currency: 'CAD', fx: '1', total: '100', date: '2026-07-13', ref: 'M-C' },
     ])
     const data = await runSentinel(org.orgId)
-    assert.equal(data.meta.totalAmount, 235)
+    assert.equal(cmp(data.meta.totalAmount, '235'), 0)
     assert.equal(data.duplicates.total, 0)
     // 2026-07-11 is a Saturday: the weekend aggregate carries the USD bill
     // translated, not the nominal 100.
     assert.equal(data.weekend.total, 1)
-    assert.equal(data.weekend.totalAmount, 135)
-    assert.equal(data.summary.totalAtRisk, 135)
+    assert.equal(cmp(data.weekend.totalAmount, '135'), 0)
+    assert.equal(cmp(data.summary.totalAtRisk, '135'), 0)
     const sat = data.calendar.find((c) => c.date === '2026-07-11')
     const mon = data.calendar.find((c) => c.date === '2026-07-13')
-    assert.equal(sat?.amount, 135)
-    assert.equal(mon?.amount, 100)
+    assert.ok(sat, 'the Saturday bucket is present')
+    assert.ok(mon, 'the Monday bucket is present')
+    assert.equal(cmp(sat.amount, '135'), 0)
+    assert.equal(cmp(mon.amount, '100'), 0)
     // Vendor risk rolls flagged (weekend) money up translated.
     assert.equal(data.vendorRisk.length, 1)
-    assert.equal(data.vendorRisk[0]!.totalAmount, 135)
+    assert.equal(cmp(data.vendorRisk[0]!.totalAmount, '135'), 0)
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }

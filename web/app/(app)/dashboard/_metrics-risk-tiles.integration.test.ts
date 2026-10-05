@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const { stubModules } = await import("../../../testing/stub-modules");
@@ -115,8 +118,18 @@ test("risk widget reader refuses the duplicate tile by name when the floor is un
     assert.ok(risk2 !== null && risk2 !== undefined && risk2.available);
     const dup = metrics.duplicatePayments;
     assert.ok(dup !== null && dup !== undefined && !dup.available);
-    assert.equal(typeof dup.reason, "string");
-    assert.ok(dup.reason.length > 0);
+    // The intl stub resolves keys verbatim, so the refusal must carry the
+    // duplicate-floor key — and the catalog behind that key must name the
+    // remedy, not just the problem.
+    assert.equal(dup.reason, "sentinel.forensics.duplicateFloorUnset");
+    const catalog = JSON.parse(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "messages", "en", "analytics.json"), "utf8"),
+    ) as { sentinel: { forensics: Record<string, string> } };
+    assert.match(
+      catalog.sentinel.forensics["duplicateFloorUnset"] ?? "",
+      /Sentinel → Configuration/,
+      "the refusal names where to set the floor",
+    );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
