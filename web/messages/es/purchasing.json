@@ -1,6 +1,7 @@
 {
   "home": {
     "title": "Compras",
+    "unknownVendor": "Proveedor desconocido",
     "description": "Su espacio de compra a pago — compromisos, facturas, pagos y gasto de proveedores en un solo lugar.",
     "subsidiary": "Filial",
     "tabs": {

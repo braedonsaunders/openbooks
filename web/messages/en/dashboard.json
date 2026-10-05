@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "Review due",
+    "unlimited": "Unlimited",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "HRM items waiting",
     "attentionPayrollSetup": "Payroll setup needs control accounts",
     "attentionBankLines": "Bank lines unmatched",

@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "Überprüfung fällig",
+    "unlimited": "Unbegrenzt",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "HRM-Vorgänge warten",
     "attentionPayrollSetup": "Lohnabrechnung benötigt Verrechnungskonten",
     "attentionBankLines": "Nicht zugeordnete Bankzeilen",
