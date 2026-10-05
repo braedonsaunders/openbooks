@@ -21,19 +21,27 @@ export type CashLowestPoint = {
   horizonWeeks: number
 }
 
+export type CashBurn = {
+  weeklyOutflow: string
+  netChange: string
+  horizonWeeks: number
+}
+
 export type CashWidgetMetrics = {
   cashLowest: WidgetValue<CashLowestPoint> | null
+  cashBurn: WidgetValue<CashBurn> | null
 }
 
 export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
   cashLowest: null,
+  cashBurn: null,
 }
 
 export async function loadCashWidgetMetrics(
   ctx: DashboardWidgetContext,
   need: (...fields: (keyof CashWidgetMetrics)[]) => boolean,
 ): Promise<Partial<CashWidgetMetrics>> {
-  if (!need('cashLowest')) return {}
+  if (!need('cashLowest', 'cashBurn')) return {}
   const read = ctx.cashPosition
   if (!read) return {}
   let position
@@ -44,12 +52,17 @@ export async function loadCashWidgetMetrics(
     // runway tile answers the same condition with no-data); anything else
     // still throws.
     if (error instanceof MissingExchangeRateError) {
-      return { cashLowest: { available: false, reason: error.message } }
+      const refused = { available: false as const, reason: error.message }
+      const out: Partial<CashWidgetMetrics> = {}
+      if (need('cashLowest')) out.cashLowest = refused
+      if (need('cashBurn')) out.cashBurn = refused
+      return out
     }
     throw error
   }
-  return {
-    cashLowest: {
+  const out: Partial<CashWidgetMetrics> = {}
+  if (need('cashLowest')) {
+    out.cashLowest = {
       available: true,
       value: {
         amount: position.lowestCash,
@@ -57,6 +70,17 @@ export async function loadCashWidgetMetrics(
         status: position.runwayStatus,
         horizonWeeks: position.horizonWeeks,
       },
-    },
+    }
   }
+  if (need('cashBurn')) {
+    out.cashBurn = {
+      available: true,
+      value: {
+        weeklyOutflow: position.burnRate,
+        netChange: position.netChange,
+        horizonWeeks: position.horizonWeeks,
+      },
+    }
+  }
+  return out
 }

@@ -613,6 +613,16 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     maxSize: { w: 6, h: 4 },
     analyticsSource: 'cashflow',
   },
+  'kpi-cash-burn': {
+    id: 'kpi-cash-burn',
+    category: 'cash',
+    labelKey: 'widgets.cashBurn',
+    descriptionKey: 'catalog.cashBurn',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    analyticsSource: 'cashflow',
+  },
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   'kpi-customer-concentration': {

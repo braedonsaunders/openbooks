@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { TrendingDown } from 'lucide-react'
+import { Flame, TrendingDown } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { MetricTile, type WidgetCardProps } from './_widget-tiles'
@@ -48,6 +48,31 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
           href={HREF}
           tone={tone}
           hint={t('metricContext.weekOf', { date: fmtDay(lowest.value.week) })}
+        />
+      )
+    }
+    case 'kpi-cash-burn': {
+      const burn = data.cashBurn
+      if (!burn || !burn.available) {
+        return (
+          <MetricTile
+            icon={<Flame size={15} />}
+            label={t('widgets.cashBurn')}
+            value="—"
+            href={HREF}
+            tone="slate"
+            hint={burn?.available === false ? burn.reason : t('analytics.loading')}
+          />
+        )
+      }
+      return (
+        <MetricTile
+          icon={<Flame size={15} />}
+          label={t('widgets.cashBurn')}
+          value={money(burn.value.weeklyOutflow, { currency: data.baseCurrency })}
+          href={HREF}
+          tone="amber"
+          hint={t('widgets.cashBurnNet', { net: money(burn.value.netChange, { currency: data.baseCurrency }) })}
         />
       )
     }
