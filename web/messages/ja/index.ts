@@ -52,9 +52,10 @@ import nav from './nav.json'
 import nonprofit from './nonprofit.json'
 import parties from './parties.json'
 import payments from './payments.json'
-import planning from './planning.json'
 import payroll from './payroll.json'
 import pdfTemplates from './pdfTemplates.json'
+import planning from './planning.json'
+import portal from './portal.json'
 import projectTypes from './projectTypes.json'
 import projects from './projects.json'
 import purchaseOrders from './purchaseOrders.json'
@@ -127,8 +128,10 @@ export default {
   nonprofit,
   parties,
   payments,
-  planning,  payroll,
+  payroll,
   pdfTemplates,
+  planning,
+  portal,
   projectTypes,
   projects,
   purchaseOrders,

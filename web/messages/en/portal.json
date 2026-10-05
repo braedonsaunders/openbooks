@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "Back",
+    "viewAll": "View all"
+  },
+  "request": {
+    "title": "Customer sign-in",
+    "detail": "Enter your billing or contact email and we will send a one-time sign-in link.",
+    "email": "Email address",
+    "submit": "Send sign-in link",
+    "sent": "Check your inbox — if that address belongs to a customer, a link is on its way."
+  },
+  "home": {
+    "title": "Hello, {name}",
+    "openInvoices": "Open invoices",
+    "noInvoices": "No open invoices. New invoices appear here as soon as they are issued.",
+    "subscriptions": "Subscriptions",
+    "noSubscriptions": "No subscriptions yet.",
+    "balances": "Credit and prepaid balances",
+    "storeCredit": "Store credit",
+    "prepaid": "Prepaid usage",
+    "orders": "Recent orders",
+    "noOrders": "No orders yet."
+  },
+  "nav": {
+    "invoices": "Invoices",
+    "methods": "Payment methods",
+    "subscriptions": "Subscriptions",
+    "orders": "Orders",
+    "returns": "Returns",
+    "giftCards": "Gift cards"
+  },
+  "invoices": {
+    "title": "Invoices",
+    "empty": "No open invoices. New invoices appear here as soon as they are issued.",
+    "payNow": "Pay now",
+    "downloadPdf": "Download PDF",
+    "ofTotal": "of {total}"
+  },
+  "subscriptions": {
+    "title": "Subscriptions",
+    "empty": "No subscriptions yet.",
+    "status": "Status: {status}",
+    "nextBill": "Next bill {date}",
+    "quantity": "Quantity",
+    "price": "Price per unit",
+    "preview": "Preview change",
+    "apply": "Apply change",
+    "increase": "Increase",
+    "decrease": "Decrease",
+    "charge": "Extra charge",
+    "credit": "Credit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancelTitle": "Cancel subscription",
+    "cancelReason": "Why are you canceling?",
+    "cancelReasonPlaceholder": "Tell us in a sentence",
+    "cancel": "Cancel subscription",
+    "takeOffer": "Take this offer"
+  },
+  "methods": {
+    "title": "Payment methods",
+    "empty": "No saved payment methods. Add one to pay invoices in one click.",
+    "default": "Default",
+    "setDefault": "Make default",
+    "remove": "Remove",
+    "add": "Add payment method"
+  },
+  "orders": {
+    "title": "Orders",
+    "empty": "No orders yet.",
+    "fulfilment": "Fulfilment: {status}",
+    "noTrackingNumber": "Tracking not shared yet"
+  },
+  "returns": {
+    "title": "Returns",
+    "empty": "No invoices to return from yet.",
+    "window": "Returns are accepted within {days} days of the invoice.",
+    "start": "Start return",
+    "nothingReturnable": "Nothing on this invoice can be returned online — contact your supplier.",
+    "available": "Returnable: {quantity}",
+    "quantity": "Qty",
+    "reason": "Reason",
+    "resolution": "Outcome",
+    "submit": "Request return",
+    "submitted": "Return requested",
+    "refund": "Refund",
+    "exchange": "Exchange",
+    "storeCredit": "Store credit"
+  },
+  "giftCards": {
+    "title": "Gift cards",
+    "lookupTitle": "Check a balance",
+    "code": "Card code",
+    "check": "Check balance",
+    "yours": "Your credit",
+    "empty": "No store credit or prepaid balances.",
+    "storeCredit": "Store credit",
+    "prepaid": "Prepaid usage"
+  }
+}

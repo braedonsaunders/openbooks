@@ -3437,6 +3437,11 @@
         "title": "配送设置",
         "singular": "配送设置",
         "description": "承担面单成本的账目、补齐缺失尺寸的包裹，以及运费、加价、保险、签名和报关的默认值。"
+      },
+      "customer-portal": {
+        "title": "客户门户",
+        "singular": "门户设置",
+        "description": "客户登录后所见：名称、版块、退货规则与挽留优惠（带生效日期）。"
       }
     },
     "fields": {
@@ -4798,6 +4803,10 @@
         "none": "无需签名",
         "direct": "本人签收",
         "adult": "成人签收"
+      },
+      "portalOfferKind": {
+        "pause": "改为暂停",
+        "discount": "促销折扣"
       }
     },
     "payroll": {
@@ -6083,6 +6092,40 @@
       "signatureExpiryDays": "链接有效期（天）",
       "orderFormTemplateId": "订单模板",
       "orderFormTemplateHelp": "签署视图的 PDF 模板。留空则使用报价默认模板。"
+    },
+    "customerPortalFields": {
+      "portalName": "门户名称",
+      "effectiveFrom": "生效日期",
+      "effectiveFromHelp": "新规则自该日期起适用于新请求；历史请求沿用当时规则。",
+      "sectionsInvoices": "发票",
+      "sectionsPaymentMethods": "付款方式",
+      "sectionsSubscriptions": "订阅",
+      "sectionsUsage": "用量与余额",
+      "sectionsOrders": "订单",
+      "sectionsReturns": "退货",
+      "sectionsGiftCards": "礼品卡",
+      "returnWindowDays": "退货期限（天）",
+      "returnReasons": "退货原因",
+      "returnReasonsHelp": "供客户选择的简短标签，如破损、发错货。",
+      "resolutionRefund": "提供退款",
+      "resolutionExchange": "提供换货",
+      "resolutionStoreCredit": "提供储值",
+      "storeCreditBonusPercent": "储值奖励 %",
+      "storeCreditBonusHelp": "以储值结算时额外赠送的信用。",
+      "saveOffers": "挽留优惠",
+      "saveOffersHelp": "取消前展示：暂停订阅或用促销打折。",
+      "saveOffer": "优惠",
+      "addSaveOffer": "添加优惠",
+      "offerLabel": "展示文案",
+      "offerKind": "类型",
+      "promotionCode": "促销码",
+      "note": "备注"
+    },
+    "customerPortalSections": {
+      "branding": "名称与生效日期",
+      "sections": "可见版块",
+      "returns": "退货规则",
+      "saveOffers": "挽留优惠"
     }
   },
   "flows": {

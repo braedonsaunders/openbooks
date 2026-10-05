@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "Retour",
+    "viewAll": "Tout voir"
+  },
+  "request": {
+    "title": "Connexion client",
+    "detail": "Saisissez votre e-mail de facturation ou de contact — nous vous enverrons un lien de connexion unique.",
+    "email": "Adresse e-mail",
+    "submit": "Envoyer le lien",
+    "sent": "Vérifiez votre boîte — si cette adresse appartient à un client, un lien est en route."
+  },
+  "home": {
+    "title": "Bonjour, {name}",
+    "openInvoices": "Factures ouvertes",
+    "noInvoices": "Aucune facture ouverte. Les nouvelles apparaissent ici dès leur émission.",
+    "subscriptions": "Abonnements",
+    "noSubscriptions": "Aucun abonnement.",
+    "balances": "Avoirs et soldes prépayés",
+    "storeCredit": "Avoir en magasin",
+    "prepaid": "Usage prépayé",
+    "orders": "Commandes récentes",
+    "noOrders": "Aucune commande."
+  },
+  "nav": {
+    "invoices": "Factures",
+    "methods": "Moyens de paiement",
+    "subscriptions": "Abonnements",
+    "orders": "Commandes",
+    "returns": "Retours",
+    "giftCards": "Cartes cadeaux"
+  },
+  "invoices": {
+    "title": "Factures",
+    "empty": "Aucune facture ouverte. Les nouvelles apparaissent ici dès leur émission.",
+    "payNow": "Payer",
+    "downloadPdf": "Télécharger le PDF",
+    "ofTotal": "sur {total}"
+  },
+  "subscriptions": {
+    "title": "Abonnements",
+    "empty": "Aucun abonnement.",
+    "status": "Statut : {status}",
+    "nextBill": "Prochaine facture {date}",
+    "quantity": "Quantité",
+    "price": "Prix unitaire",
+    "preview": "Aperçu",
+    "apply": "Appliquer",
+    "increase": "Augmenter",
+    "decrease": "Réduire",
+    "charge": "Supplément",
+    "credit": "Avoir",
+    "pause": "Suspendre",
+    "resume": "Reprendre",
+    "cancelTitle": "Résilier l’abonnement",
+    "cancelReason": "Pourquoi résiliez-vous ?",
+    "cancelReasonPlaceholder": "Dites-le en une phrase",
+    "cancel": "Résilier l’abonnement",
+    "takeOffer": "Accepter l’offre"
+  },
+  "methods": {
+    "title": "Moyens de paiement",
+    "empty": "Aucun moyen enregistré. Ajoutez-en un pour payer en un clic.",
+    "default": "Défaut",
+    "setDefault": "Par défaut",
+    "remove": "Retirer",
+    "add": "Ajouter un moyen de paiement"
+  },
+  "orders": {
+    "title": "Commandes",
+    "empty": "Aucune commande.",
+    "fulfilment": "Expédition : {status}",
+    "noTrackingNumber": "Suivi pas encore partagé"
+  },
+  "returns": {
+    "title": "Retours",
+    "empty": "Aucune facture à retourner.",
+    "window": "Retours acceptés dans les {days} jours suivant la facture.",
+    "start": "Démarrer un retour",
+    "nothingReturnable": "Rien de cette facture ne peut être retourné en ligne — contactez votre fournisseur.",
+    "available": "Retour possible : {quantity}",
+    "quantity": "Qté",
+    "reason": "Motif",
+    "resolution": "Issue",
+    "submit": "Demander le retour",
+    "submitted": "Retour demandé",
+    "refund": "Remboursement",
+    "exchange": "Échange",
+    "storeCredit": "Avoir en magasin"
+  },
+  "giftCards": {
+    "title": "Cartes cadeaux",
+    "lookupTitle": "Vérifier un solde",
+    "code": "Code",
+    "check": "Vérifier",
+    "yours": "Votre avoir",
+    "empty": "Aucun avoir ni solde prépayé.",
+    "storeCredit": "Avoir en magasin",
+    "prepaid": "Usage prépayé"
+  }
+}

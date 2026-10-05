@@ -1,4 +1,4 @@
-/** Setup-registry commerce entities: channel posting maps, channel locations, and the external-identity map. */
+/** Setup-registry commerce entities: channel posting maps, channel locations, the external-identity map, and the customer portal. */
 import type { SetupEntity } from '../types'
 import { CHANNEL_ACCOUNT_ROLES } from '@openbooks/engine/commerce/contracts'
 
@@ -105,6 +105,62 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     ],
     fields: [
       { key: 'nativeId', kind: 'text', required: true },
+    ],
+  },
+  {
+    key: 'customer-portal',
+    table: 'customer_portal_settings',
+    actorCols: true,
+    groupKey: 'billing',
+    featureKey: 'customerPortal',
+    iconKey: 'user-round',
+    singularTitleKey: 'entities.customer-portal.singular',
+    orderBy: 'effective_from',
+    orgScoped: true,
+    hasActive: false,
+    columns: [
+      { key: 'portalName', kind: 'text' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'returnWindowDays', kind: 'text' },
+    ],
+    // Effective-dated portal rules: every save opens a new effective row (or
+    // rewrites today's), so past portal requests keep the rules they ran
+    // under. Generic CRUD refuses command-owned entities; writes go through
+    // the savePortalSettings command with its strict schema.
+    command: { name: 'savePortalSettings', permission: 'documents.manage', feature: 'customerPortal' },
+    formSections: [
+      { titleKey: 'customerPortalSections.branding', fields: ['portalName', 'effectiveFrom'] },
+      { titleKey: 'customerPortalSections.sections', fields: ['sectionsInvoices', 'sectionsPaymentMethods', 'sectionsSubscriptions', 'sectionsUsage', 'sectionsOrders', 'sectionsReturns', 'sectionsGiftCards'] },
+      { titleKey: 'customerPortalSections.returns', fields: ['returnWindowDays', 'returnReasons', 'resolutionRefund', 'resolutionExchange', 'resolutionStoreCredit', 'storeCreditBonusPercent'] },
+      { titleKey: 'customerPortalSections.saveOffers', fields: ['saveOffers'] },
+    ],
+    fields: [
+      { key: 'portalName', labelKey: 'customerPortalFields.portalName', kind: 'text', required: true, fullWidth: true },
+      { key: 'effectiveFrom', labelKey: 'customerPortalFields.effectiveFrom', kind: 'date', required: true, helpTextKey: 'customerPortalFields.effectiveFromHelp' },
+      { key: 'sectionsInvoices', labelKey: 'customerPortalFields.sectionsInvoices', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsPaymentMethods', labelKey: 'customerPortalFields.sectionsPaymentMethods', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsSubscriptions', labelKey: 'customerPortalFields.sectionsSubscriptions', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsUsage', labelKey: 'customerPortalFields.sectionsUsage', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsOrders', labelKey: 'customerPortalFields.sectionsOrders', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsReturns', labelKey: 'customerPortalFields.sectionsReturns', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'sectionsGiftCards', labelKey: 'customerPortalFields.sectionsGiftCards', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'returnWindowDays', labelKey: 'customerPortalFields.returnWindowDays', kind: 'integer', required: true, min: 0, max: 365, defaultValue: 30 },
+      { key: 'returnReasons', labelKey: 'customerPortalFields.returnReasons', kind: 'stringArray', required: true, helpTextKey: 'customerPortalFields.returnReasonsHelp' },
+      { key: 'resolutionRefund', labelKey: 'customerPortalFields.resolutionRefund', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'resolutionExchange', labelKey: 'customerPortalFields.resolutionExchange', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'resolutionStoreCredit', labelKey: 'customerPortalFields.resolutionStoreCredit', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
+      { key: 'storeCreditBonusPercent', labelKey: 'customerPortalFields.storeCreditBonusPercent', kind: 'percent', defaultValue: '0', helpTextKey: 'customerPortalFields.storeCreditBonusHelp' },
+      { key: 'saveOffers', labelKey: 'customerPortalFields.saveOffers', kind: 'objectArray',
+        helpTextKey: 'customerPortalFields.saveOffersHelp',
+        itemTitleKey: 'customerPortalFields.saveOffer', itemTitleField: 'label', addLabelKey: 'customerPortalFields.addSaveOffer', fields: [
+        { key: 'label', labelKey: 'customerPortalFields.offerLabel', kind: 'text', required: true },
+        { key: 'kind', labelKey: 'customerPortalFields.offerKind', kind: 'select', required: true, options: [
+          { value: 'pause', labelKey: 'options.portalOfferKind.pause' },
+          { value: 'discount', labelKey: 'options.portalOfferKind.discount' },
+        ] },
+        { key: 'promotionCode', labelKey: 'customerPortalFields.promotionCode', kind: 'text' },
+        { key: 'note', labelKey: 'customerPortalFields.note', kind: 'text' },
+      ] },
     ],
   },
 ]

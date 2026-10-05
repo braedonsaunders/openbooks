@@ -3437,6 +3437,11 @@
         "title": "Shipping settings",
         "singular": "Shipping settings",
         "description": "Which ledger accounts carry label cost, which package fills in missing sizes, and the rate, markup, insurance, signature, and customs defaults."
+      },
+      "customer-portal": {
+        "title": "Customer portal",
+        "singular": "Portal settings",
+        "description": "What customers see after sign-in: branding, sections, return rules and cancel save offers, effective-dated."
       }
     },
     "fields": {
@@ -4798,6 +4803,10 @@
         "none": "No signature",
         "direct": "Direct signature",
         "adult": "Adult signature"
+      },
+      "portalOfferKind": {
+        "pause": "Pause instead",
+        "discount": "Discount with promotion"
       }
     },
     "payroll": {
@@ -6083,6 +6092,40 @@
       "signatureExpiryDays": "Signing-link expiry (days)",
       "orderFormTemplateId": "Order-form template",
       "orderFormTemplateHelp": "PDF template rendering the signing presentation. Empty keeps the quote default."
+    },
+    "customerPortalFields": {
+      "portalName": "Portal name",
+      "effectiveFrom": "Effective from",
+      "effectiveFromHelp": "New rules apply to requests from this date; past requests keep the rules they ran under.",
+      "sectionsInvoices": "Invoices",
+      "sectionsPaymentMethods": "Payment methods",
+      "sectionsSubscriptions": "Subscriptions",
+      "sectionsUsage": "Usage and balances",
+      "sectionsOrders": "Orders",
+      "sectionsReturns": "Returns",
+      "sectionsGiftCards": "Gift cards",
+      "returnWindowDays": "Return window (days)",
+      "returnReasons": "Return reasons",
+      "returnReasonsHelp": "Short labels the customer picks from, e.g. damaged, wrong item.",
+      "resolutionRefund": "Offer refunds",
+      "resolutionExchange": "Offer exchanges",
+      "resolutionStoreCredit": "Offer store credit",
+      "storeCreditBonusPercent": "Store credit bonus %",
+      "storeCreditBonusHelp": "Extra credit added when a return settles as store credit.",
+      "saveOffers": "Save offers",
+      "saveOffersHelp": "Offers shown before canceling: pause the subscription or discount it with a promotion.",
+      "saveOffer": "Offer",
+      "addSaveOffer": "Add offer",
+      "offerLabel": "Offer label",
+      "offerKind": "Offer kind",
+      "promotionCode": "Promotion code",
+      "note": "Note"
+    },
+    "customerPortalSections": {
+      "branding": "Branding and timing",
+      "sections": "Visible sections",
+      "returns": "Return rules",
+      "saveOffers": "Cancel save offers"
     }
   },
   "flows": {

@@ -3482,6 +3482,11 @@
         "title": "Versandeinstellungen",
         "singular": "Versandeinstellungen",
         "description": "Welche Konten die Etikettkosten tragen, welche Vorlage fehlende Größen ergänzt, und die Vorgaben für Tarif, Aufschlag, Versicherung, Unterschrift und Zoll."
+      },
+      "customer-portal": {
+        "title": "Kundenportal",
+        "singular": "Portaleinstellungen",
+        "description": "Was Kunden nach der Anmeldung sehen: Name, Bereiche, Retourenregeln und Bleibeangebote, mit Gültigkeitsdatum."
       }
     },
     "fields": {
@@ -4843,6 +4848,10 @@
         "none": "Keine Unterschrift",
         "direct": "Direkte Unterschrift",
         "adult": "Unterschrift eines Erwachsenen"
+      },
+      "portalOfferKind": {
+        "pause": "Stattdessen pausieren",
+        "discount": "Rabatt per Aktion"
       }
     },
     "bankFeeds": {
@@ -6083,6 +6092,40 @@
       "signatureExpiryDays": "Linklaufzeit (Tage)",
       "orderFormTemplateId": "Auftragsvorlage",
       "orderFormTemplateHelp": "PDF-Vorlage für die Signaturansicht. Leer behält den Angebotsstandard."
+    },
+    "customerPortalFields": {
+      "portalName": "Portalname",
+      "effectiveFrom": "Gültig ab",
+      "effectiveFromHelp": "Neue Regeln gelten für Anfragen ab diesem Datum; alte Anfragen behalten ihre Regeln.",
+      "sectionsInvoices": "Rechnungen",
+      "sectionsPaymentMethods": "Zahlungsmethoden",
+      "sectionsSubscriptions": "Abos",
+      "sectionsUsage": "Nutzung und Guthaben",
+      "sectionsOrders": "Bestellungen",
+      "sectionsReturns": "Retouren",
+      "sectionsGiftCards": "Geschenkkarten",
+      "returnWindowDays": "Rückgabefrist (Tage)",
+      "returnReasons": "Retourengründe",
+      "returnReasonsHelp": "Kurze Labels zur Auswahl, z. B. beschädigt, falscher Artikel.",
+      "resolutionRefund": "Erstattung anbieten",
+      "resolutionExchange": "Umtausch anbieten",
+      "resolutionStoreCredit": "Guthaben anbieten",
+      "storeCreditBonusPercent": "Guthabenbonus %",
+      "storeCreditBonusHelp": "Zusatzguthaben, wenn eine Retoure als Guthaben abgerechnet wird.",
+      "saveOffers": "Bleibeangebote",
+      "saveOffersHelp": "Angebote vor der Kündigung: Abo pausieren oder per Aktion rabattieren.",
+      "saveOffer": "Angebot",
+      "addSaveOffer": "Angebot hinzufügen",
+      "offerLabel": "Angebotstext",
+      "offerKind": "Angebotsart",
+      "promotionCode": "Aktionscode",
+      "note": "Notiz"
+    },
+    "customerPortalSections": {
+      "branding": "Name und Gültigkeit",
+      "sections": "Sichtbare Bereiche",
+      "returns": "Retourenregeln",
+      "saveOffers": "Bleibeangebote"
     }
   },
   "flows": {

@@ -18,6 +18,7 @@ import {
   upsertAccountMap,
   upsertChannelLocation,
 } from "@openbooks/engine/commerce";
+import { savePortalSettings } from "@openbooks/engine/portal";
 
 export const runtime = "nodejs";
 
@@ -78,6 +79,31 @@ const channelLocationBody = z.strictObject({
   fulfilsOrders: z.boolean().nullish(),
   bufferQuantity: z.string().trim().min(1).max(30).nullish(),
   stopSellingAtZero: z.boolean().nullish(),
+});
+
+const portalSettingsBody = z.strictObject({
+  portalName: z.string().min(1).max(80).optional(),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  sectionsInvoices: z.boolean().optional(),
+  sectionsPaymentMethods: z.boolean().optional(),
+  sectionsSubscriptions: z.boolean().optional(),
+  sectionsUsage: z.boolean().optional(),
+  sectionsOrders: z.boolean().optional(),
+  sectionsReturns: z.boolean().optional(),
+  sectionsGiftCards: z.boolean().optional(),
+  returnWindowDays: z.number().int().min(0).max(365).optional(),
+  returnReasons: z.array(z.string().min(1).max(40)).min(1).max(20).optional(),
+  resolutionRefund: z.boolean().optional(),
+  resolutionExchange: z.boolean().optional(),
+  resolutionStoreCredit: z.boolean().optional(),
+  storeCreditBonusPercent: z.union([z.string(), z.number()]).optional(),
+  saveOffers: z.array(z.strictObject({
+    id: z.string().max(80).optional(),
+    label: z.string().min(1).max(120),
+    kind: z.enum(["pause", "discount"]),
+    promotionCode: z.string().max(32).optional(),
+    note: z.string().max(200).optional(),
+  })).max(10).optional(),
 });
 
 /** Domain refusals keep typed status with message, code, remedy, and field. */
@@ -153,6 +179,49 @@ async function runCommandBody(
         fulfilsOrders: parsed.data.fulfilsOrders ?? undefined,
         bufferQuantity: parsed.data.bufferQuantity ?? null,
         stopSellingAtZero: parsed.data.stopSellingAtZero ?? undefined,
+      });
+    }
+    case "savePortalSettings": {
+      const parsed = portalSettingsBody.safeParse(raw);
+      if (!parsed.success) throw invalidCommandBody();
+      const data = parsed.data;
+      const sections = {
+        ...(data.sectionsInvoices !== undefined ? { invoices: data.sectionsInvoices } : {}),
+        ...(data.sectionsPaymentMethods !== undefined ? { paymentMethods: data.sectionsPaymentMethods } : {}),
+        ...(data.sectionsSubscriptions !== undefined ? { subscriptions: data.sectionsSubscriptions } : {}),
+        ...(data.sectionsUsage !== undefined ? { usage: data.sectionsUsage } : {}),
+        ...(data.sectionsOrders !== undefined ? { orders: data.sectionsOrders } : {}),
+        ...(data.sectionsReturns !== undefined ? { returns: data.sectionsReturns } : {}),
+        ...(data.sectionsGiftCards !== undefined ? { giftCards: data.sectionsGiftCards } : {}),
+      };
+      return savePortalSettings(orgId, actorId, {
+        ...(data.portalName !== undefined ? { portalName: data.portalName } : {}),
+        ...(data.effectiveFrom !== undefined ? { effectiveFrom: data.effectiveFrom } : {}),
+        ...(Object.keys(sections).length > 0 ? { sections } : {}),
+        ...(data.returnWindowDays !== undefined ? { returnWindowDays: data.returnWindowDays } : {}),
+        ...(data.returnReasons !== undefined ? { returnReasons: data.returnReasons } : {}),
+        ...((data.resolutionRefund !== undefined || data.resolutionExchange !== undefined
+          || data.resolutionStoreCredit !== undefined || data.storeCreditBonusPercent !== undefined)
+          ? {
+            returnResolutions: {
+              ...(data.resolutionRefund !== undefined ? { refund: data.resolutionRefund } : {}),
+              ...(data.resolutionExchange !== undefined ? { exchange: data.resolutionExchange } : {}),
+              ...(data.resolutionStoreCredit !== undefined ? { storeCredit: data.resolutionStoreCredit } : {}),
+              ...(data.storeCreditBonusPercent !== undefined ? { storeCreditBonusPercent: String(data.storeCreditBonusPercent) } : {}),
+            },
+          }
+          : {}),
+        ...(data.saveOffers !== undefined
+          ? {
+            saveOffers: data.saveOffers.map((offer, index) => ({
+              id: offer.id?.trim() || `offer-${index + 1}-${offer.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+              kind: offer.kind,
+              label: offer.label.trim(),
+              ...(offer.promotionCode?.trim() ? { promotionCode: offer.promotionCode.trim() } : {}),
+              ...(offer.note?.trim() ? { note: offer.note.trim() } : {}),
+            })),
+          }
+          : {}),
       });
     }
   }

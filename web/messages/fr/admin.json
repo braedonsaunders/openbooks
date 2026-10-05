@@ -3362,6 +3362,11 @@
         "title": "Réglages d’expédition",
         "singular": "Réglages d’expédition",
         "description": "Les comptes qui portent le coût des étiquettes, le format qui complète les tailles manquantes, et les réglages de tarif, majoration, assurance, signature et douane."
+      },
+      "customer-portal": {
+        "title": "Portail client",
+        "singular": "Réglages du portail",
+        "description": "Ce que voient les clients après connexion : nom, rubriques, règles de retour et offres de rétention, avec date d’effet."
       }
     },
     "fields": {
@@ -4723,6 +4728,10 @@
         "none": "Sans signature",
         "direct": "Signature directe",
         "adult": "Signature d’un adulte"
+      },
+      "portalOfferKind": {
+        "pause": "Suspendre plutôt",
+        "discount": "Remise avec promotion"
       }
     },
     "laborCosting": {
@@ -6083,6 +6092,40 @@
       "signatureExpiryDays": "Durée du lien (jours)",
       "orderFormTemplateId": "Modèle de bon de commande",
       "orderFormTemplateHelp": "Modèle PDF de la vue de signature. Vide conserve celui du devis."
+    },
+    "customerPortalFields": {
+      "portalName": "Nom du portail",
+      "effectiveFrom": "En vigueur le",
+      "effectiveFromHelp": "Les nouvelles règles s’appliquent dès cette date ; les demandes passées gardent les leurs.",
+      "sectionsInvoices": "Factures",
+      "sectionsPaymentMethods": "Moyens de paiement",
+      "sectionsSubscriptions": "Abonnements",
+      "sectionsUsage": "Usage et soldes",
+      "sectionsOrders": "Commandes",
+      "sectionsReturns": "Retours",
+      "sectionsGiftCards": "Cartes cadeaux",
+      "returnWindowDays": "Délai de retour (jours)",
+      "returnReasons": "Motifs de retour",
+      "returnReasonsHelp": "Libellés courts au choix, p. ex. endommagé, article erroné.",
+      "resolutionRefund": "Proposer le remboursement",
+      "resolutionExchange": "Proposer l’échange",
+      "resolutionStoreCredit": "Proposer l’avoir",
+      "storeCreditBonusPercent": "Bonus d’avoir %",
+      "storeCreditBonusHelp": "Avoir supplémentaire quand le retour est soldé en avoir.",
+      "saveOffers": "Offres de rétention",
+      "saveOffersHelp": "Offres avant résiliation : suspendre l’abonnement ou le remiser via une promotion.",
+      "saveOffer": "Offre",
+      "addSaveOffer": "Ajouter une offre",
+      "offerLabel": "Libellé",
+      "offerKind": "Type d’offre",
+      "promotionCode": "Code promo",
+      "note": "Note"
+    },
+    "customerPortalSections": {
+      "branding": "Nom et vigueur",
+      "sections": "Rubriques visibles",
+      "returns": "Règles de retour",
+      "saveOffers": "Offres de rétention"
     }
   },
   "flows": {

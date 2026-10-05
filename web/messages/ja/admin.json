@@ -3482,6 +3482,11 @@
         "title": "配送設定",
         "singular": "配送設定",
         "description": "ラベル原価を計上する勘定、不足サイズを補う梱包、運賃・割増・保険・署名・通関の初期値。"
+      },
+      "customer-portal": {
+        "title": "カスタマーポータル",
+        "singular": "ポータル設定",
+        "description": "サインイン後に顧客が見る内容：名称、セクション、返品ルール、解約防止オファー（適用日付き）。"
       }
     },
     "fields": {
@@ -4843,6 +4848,10 @@
         "none": "署名なし",
         "direct": "直接署名",
         "adult": "成人の署名"
+      },
+      "portalOfferKind": {
+        "pause": "代わりに一時停止",
+        "discount": "プロモーション割引"
       }
     },
     "invoicing": {
@@ -6083,6 +6092,40 @@
       "signatureExpiryDays": "リンク有効期限（日）",
       "orderFormTemplateId": "注文書テンプレート",
       "orderFormTemplateHelp": "署名表示のPDFテンプレート。空欄の場合は見積の標準を使用。"
+    },
+    "customerPortalFields": {
+      "portalName": "ポータル名",
+      "effectiveFrom": "適用開始日",
+      "effectiveFromHelp": "この日以降のリクエストに新ルールを適用します。過去分は当時のルールのままです。",
+      "sectionsInvoices": "請求書",
+      "sectionsPaymentMethods": "支払方法",
+      "sectionsSubscriptions": "サブスク",
+      "sectionsUsage": "利用状況と残高",
+      "sectionsOrders": "注文",
+      "sectionsReturns": "返品",
+      "sectionsGiftCards": "ギフトカード",
+      "returnWindowDays": "返品期限（日）",
+      "returnReasons": "返品理由",
+      "returnReasonsHelp": "顧客が選ぶ短いラベル（例：破損、誤配送）。",
+      "resolutionRefund": "返金を提供",
+      "resolutionExchange": "交換を提供",
+      "resolutionStoreCredit": "クレジットを提供",
+      "storeCreditBonusPercent": "クレジットボーナス %",
+      "storeCreditBonusHelp": "ストアクレジット精算時に上乗せする分。",
+      "saveOffers": "解約防止オファー",
+      "saveOffersHelp": "解約前に提示：一時停止かプロモーション割引。",
+      "saveOffer": "オファー",
+      "addSaveOffer": "オファーを追加",
+      "offerLabel": "表示文言",
+      "offerKind": "種類",
+      "promotionCode": "プロモコード",
+      "note": "メモ"
+    },
+    "customerPortalSections": {
+      "branding": "名称と適用日",
+      "sections": "表示セクション",
+      "returns": "返品ルール",
+      "saveOffers": "解約防止オファー"
     }
   },
   "flows": {

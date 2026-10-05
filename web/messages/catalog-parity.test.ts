@@ -246,7 +246,8 @@ const COGNATES = new Set<string>([
   'de:admin.setup.agents.activity.statusColumn|Status',
   'de:admin.setup.agents.overview.columns.pack|Pack',
   'de:admin.setup.agents.overview.columns.status|Status',
-  // Person and Details are established German loanwords.
+  // Person and Details are established German loanwords; Status is too.
+  'de:portal.subscriptions.status|Status: {status}',
   'de:resourcing.board.person|Person',
   'de:resourcing.assignments.details|Details',
   'de:resourcing.assignments.person|Person',
@@ -309,6 +310,8 @@ const COGNATES = new Set<string>([
   'pt-BR:reports.catalog.enumValues.manual|Manual',
   'fr:reports.catalog.columns.order_economics.promotion|Promotion',
   'de:reports.catalog.columns.order_economics.region|Region',
+  // French spells the save-offer label “Note” (une note) identically.
+  'fr:admin.setup.customerPortalFields.note|Note',
   // French spells the sales term “commission” (une commission) identically.
   'fr:contractCosts.costType.commission|Commission',
   // French spells the column header “type” (un type) identically.
