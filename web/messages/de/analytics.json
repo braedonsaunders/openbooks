@@ -3495,7 +3495,7 @@
     "title": "Sentinel",
     "backToHub": "Analytik",
     "basis": {
-      "note": "Die Erkennung läuft pro Transaktionswährung — eine Rechnung über 100 USD wird niemals mit einer über 100 CAD verglichen. Konsolidierte Beträge stehen in {currency}, jeweils zum eigenen Belegkurs umgerechnet."
+      "note": "Prüfung je Transaktionswährung — eine Rechnung über 100 USD wird nie mit einer über 100 CAD verglichen. Sammelbeträge stehen in {currency}, je zum Tageskurs des Belegdatums umgerechnet."
     },
     "table": {
       "currency": "Währung",
@@ -3598,8 +3598,8 @@
     "analysis": {
       "calendar": "Kalender",
       "rsfFull": "Relativer Größenfaktor",
-      "rsfNote": " = Betrag ÷ zweitgrößte historische Transaktion des Lieferanten in derselben Währung (36-Monats-Basis, in einem Fensterfunktions-Durchlauf berechnet). RSF ≥ 10 bedeutet eine für diesen Lieferanten völlig unmaßstäbliche Transaktion — ein klassisches Fehler-/Betrugssignal.",
-      "zscoreNote": " misst, wie viele Standardabweichungen eine Transaktion vom eigenen Mittel dieses Lieferanten in derselben Währung entfernt liegt (lieferanten- und währungsweise Basen über 36 Monate, ein Aggregatdurchlauf). |z| ≥ 3 markiert unternehmensspezifische Ausreißer, die globale Schwellen übersehen.",
+      "rsfNote": " = Betrag ÷ zweitgrößter historischer Transaktion des Lieferanten in gleicher Währung ({months}-Monats-Basis, in einem Fensterfunktionslauf berechnet). RSF ≥ {threshold} heißt: Transaktion völlig außerhalb der Größenordnung dieses Lieferanten — ein klassisches Fehler-/Betrugssignal.",
+      "zscoreNote": " misst, wie viele Standardabweichungen eine Transaktion vom eigenen Schnitt des Lieferanten in gleicher Währung entfernt liegt (Basis je Lieferant und Währung über {months} Monate, ein Aggregatlauf). |z| ≥ {threshold} markiert lieferantenspezifische Ausreißer, die globale Schwellen übersehen.",
       "zscoreWord": "Z-Wert"
     },
     "auditNote": "Nativer Prüfpfad. Die meisten Datensätze dieses Hauptbuchs wurden massenmigriert, die Änderungshistorie beginnt daher beim Go-live — der Pfad wächst mit der Arbeit der Anwender in openbooks.",
@@ -3615,16 +3615,16 @@
     },
     "config": {
       "benfordConformity": "Benford-Konformität",
-      "benfordNote": "1D-Bänder 0,006/0,012/0,015 · 2D-Bänder 0,0012/0,0022/0,0033",
+      "benfordNote": "1D-Bänder 0,006/0,012/0,015 · 2D-Bänder 0,0012/0,0018/0,0022",
       "duplicatesNote": "Gleicher Lieferant, Art, Währung, Betrag und Referenz im Fenster; Gutschriften ausgenommen; ein Befund pro Gruppe",
       "fields": {
         "duplicateDays": {
-          "help": "Paare aus gleichem Lieferanten, Art und Betrag in so vielen Tagen werden markiert",
+          "help": "Gleicher Lieferant, Art und Betrag in so vielen Tagen markieren eine Gruppe",
           "label": "Duplikatfenster (Tage)"
         },
         "duplicateMinAmount": {
-          "help": "Paare unter diesem Betrag werden ignoriert",
-          "label": "Duplikatminimum ($)"
+          "label": "Duplikatminimum ({currency})",
+          "help": "Paare unter diesem umgerechneten Betrag werden ignoriert"
         },
         "sequentialMinCount": {
           "help": "Lückenlose Rechnungsnummernläufe brauchen mindestens so viele Dokumente",
@@ -3633,14 +3633,82 @@
         "sequentialMinDays": {
           "help": "Läufe über weniger Tage gelten als Stapelerfassung, nicht als Befund",
           "label": "Sequenzspanne (Tage)"
+        },
+        "moderateRiskAmount": {
+          "label": "Moderates Risiko ({currency})",
+          "help": "Umgerechnete Dokumentbeträge ab diesem Wert erhalten zusätzliche Risikopunkte"
+        },
+        "highRiskAmount": {
+          "label": "Hohes Risiko ({currency})",
+          "help": "Umgerechnete Dokumentbeträge ab diesem Wert erhalten Hochrisiko-Punkte"
+        },
+        "criticalRiskAmount": {
+          "label": "Kritisches Risiko ({currency})",
+          "help": "Umgerechnete Dokumentbeträge ab diesem Wert erhalten Punkte für kritisches Risiko"
+        },
+        "aggregateHighAmount": {
+          "label": "Hohe Sammelbeträge ({currency})",
+          "help": "Umgerechnete Summen mehrerer Belege ab diesem Wert erhalten Hochrisiko-Punkte"
+        },
+        "aggregateCriticalAmount": {
+          "label": "Kritische Sammelbeträge ({currency})",
+          "help": "Umgerechnete Summen mehrerer Belege ab diesem Wert erhalten Punkte für kritisches Risiko"
+        },
+        "rsfBaselineFloor": {
+          "label": "RSF-Basisuntergrenze ({currency})",
+          "help": "Lieferanten, deren zweitgrößter Beleg darunter umgerechnet wird, überspringt die RSF-Prüfung"
+        },
+        "zscoreSigmaFloor": {
+          "label": "Z-Wert-Rauschgrenze ({currency})",
+          "help": "Lieferantenverläufe, deren Streuung darunter umgerechnet wird, überspringt die Z-Wert-Prüfung"
+        },
+        "zscoreThreshold": {
+          "label": "Z-Wert-Schwelle",
+          "help": "Ein Beleg markiert, wenn er so viele Standardabweichungen vom Lieferantenschnitt abweicht"
+        },
+        "zscoreMinBaseline": {
+          "label": "Z-Wert-Mindestverlauf",
+          "help": "Lieferanten mit weniger Altbelegen überspringt die Z-Wert-Prüfung"
+        },
+        "rsfThreshold": {
+          "label": "RSF-Schwelle",
+          "help": "Ein Beleg markiert, wenn er dieses Vielfache des zweitgrößten Lieferantenbelegs erreicht"
+        },
+        "baselineMonths": {
+          "label": "Lieferantenverlauf (Monate)",
+          "help": "Vergleichsmonate, gegen die RSF- und Z-Wert-Prüfung jeden Beleg prüfen"
+        },
+        "sequentialHighRiskDays": {
+          "label": "Sequenz-Hochrisiko (Tage)",
+          "help": "Lückenlose Nummernfolgen ab dieser Dauer gelten als Hochrisiko"
+        },
+        "benfordMinSample": {
+          "label": "Benford-Mindeststichprobe",
+          "help": "Währungsscheiben mit weniger Belegen melden unzureichende Daten und werten nie"
+        },
+        "trapBandPercent": {
+          "label": "Genehmigungsband (%)",
+          "help": "Knapp-darunter-Beträge markieren nur innerhalb dieses Anteils unter einer echten Genehmigungsgrenze aus Flows"
+        },
+        "duplicateAreaMin": {
+          "label": "Duplikatminimum für Risikobereich",
+          "help": "Weniger Duplikatfunde heben keinen Top-Risikobereich hervor"
+        },
+        "ghostNameMinLength": {
+          "label": "Geistname-Mindestlänge",
+          "help": "Kürzere Mitarbeiternamen gleichen nie einem Lieferantennamen"
         }
       },
-      "rsfNote": "Betrag ÷ Zweitgrößtem des Lieferanten über 36-Monats-Basis ({floor} Basisuntergrenze)",
-      "sequentialNote": "Lückenlose Lieferanten-Referenznummern; Spannen ab 30 Tagen gelten als hochriskant",
+      "rsfNote": "Betrag ÷ Zweitgrößtem des Lieferanten über {months}-Monats-Basis ({floor} Basisuntergrenze)",
+      "sequentialNote": "Lückenlose Lieferanten-Referenznummern; Spannen ab {days} Tagen gelten als hochriskant",
       "sequentialRuns": "Sequenzläufe",
-      "trapNote": "Glatte Dollarendungen (.00 oder .99 Cent) knapp unter runden Grenzen",
+      "trapNote": "Knapp-darunter-Endungen nahe einer echten Genehmigungsgrenze aus Flows, je Belegwährung gelesen",
       "weekendNote": "Belegdatum der Buchung (migrierte Daten tragen Importstempel, die Systemerstellungszeit ist hier daher nicht aussagekräftig)",
-      "zscoreNote": "Mittel-/σ-Basis je Lieferant, ≥5 Transaktionen und σ > {sigma}"
+      "zscoreNote": "Mittel-/σ-Basis je Lieferant, ≥{minTxns} Transaktionen und σ > {sigma}",
+      "rsfValue": "mindestens {threshold}×",
+      "zscoreValue": "|z| mindestens {threshold}",
+      "trapValue": "{band} % unter einer Flows-Grenze",
+      "sequentialValue": "{count} Ref. · {days}+ Tage"
     },
     "coverage": {
       "benfordBold": "Benford",
@@ -3655,7 +3723,8 @@
       "sequentialItem": " — fängt verdächtig lückenlose Folgen von Lieferanten-Referenznummern."
     },
     "csv": {
-      "kind": "Art"
+      "kind": "Art",
+      "label": "CSV"
     },
     "detectors": {
       "auditEvents": "Prüfereignisse",
@@ -3783,11 +3852,11 @@
       "higherRiskWeighting": "höhere Risikogewichtung",
       "inPeriod": "im Zeitraum",
       "limitGaming": "mögliches Grenzumgehen",
-      "offExpected25": ">25 % neben Erwartung",
-      "offExpected50": ">50 % neben Erwartung, n≥5",
+      "offExpected25": "Z-Test-Ausreißer",
+      "offExpected50": "Z-Test-Ausreißer, n≥5",
       "recordsRemoved": "entfernte Datensätze",
       "seeThresholdTrap": "siehe Schwellenfalle",
-      "sumPairAmounts": "Mehrfachexemplare zu Dokumentsätzen",
+      "sumPairAmounts": "Mehrfachexemplare zum Umrechnungswert",
       "twoD": "2D: {value}",
       "twoDigitPairs": "Paare erster zwei Ziffern"
     },
@@ -3800,7 +3869,7 @@
       "overview": "Überblick",
       "vendors": "Lieferanten"
     },
-    "trapNote": "Beträge knapp unter runden Schwellen (endend auf 99, 999 oder 9999) deuten auf Einkäufe hin, die unter einer Genehmigungsgrenze bleiben sollen. Wiederkehrende Fallen desselben Anforderers oder Lieferanten verdienen Prüfung. Fallen lesen immer den Dokumentbetrag: 99 USD markieren als 99er-Falle, selbst wenn der umgerechnete Wert keiner Schwelle nahekommt.",
+    "trapNote": "Beträge knapp unter einer echten Genehmigungsgrenze (endend auf 99, 999 oder 9999) deuten auf Einkäufe hin, die unter dieser Grenze bleiben sollen. Grenzen stammen aus den Genehmigungs-Flows; ohne Betragsbedingung meldet diese Prüfung „nicht verfügbar“ statt Risiko. Fallen lesen immer den Dokumentbetrag in seiner Währung.",
     "vendors": {
       "drillSub": "{flags} Befunde · {amount} markiert"
     },

@@ -3495,7 +3495,7 @@
     "title": "Sentinel",
     "backToHub": "Analyses",
     "basis": {
-      "note": "La détection s'exécute par devise de transaction — une facture de 100 USD n'est jamais comparée à une facture de 100 CAD. Les montants consolidés sont en {currency}, chacun converti à son propre taux du document."
+      "note": "Détection par devise de transaction — une facture de 100 USD n’est jamais comparée à une facture de 100 CAD. Les montants consolidés sont en {currency}, chacun converti au taux de sa date de document."
     },
     "table": {
       "currency": "Devise",
@@ -3598,8 +3598,8 @@
     "analysis": {
       "calendar": "Calendrier",
       "rsfFull": "Facteur de taille relative",
-      "rsfNote": " = montant ÷ la 2ᵉ plus grosse transaction historique du fournisseur dans la même devise (référence 36 mois, calculée en un seul passage de fonction de fenêtre). Un RSF ≥ 10 signale une transaction hors d’échelle pour ce fournisseur — un signal classique d’erreur/fraude.",
-      "zscoreNote": " mesure à combien d’écarts-types une transaction se situe de la moyenne propre de ce fournisseur dans la même devise (références par fournisseur et par devise sur 36 mois, en un seul passage agrégé). |z| ≥ 3 signale des valeurs atypiques propres à l’entité que les seuils globaux manquent.",
+      "rsfNote": " = montant ÷ la 2ᵉ plus grosse transaction historique du fournisseur dans la même devise (référence {months} mois, calculée en une passe de fonctions de fenêtre). RSF ≥ {threshold} signifie une transaction hors d’échelle pour ce fournisseur — un signal classique d’erreur/fraude.",
+      "zscoreNote": " mesure à combien d’écarts-types une transaction se situe de la moyenne de son fournisseur dans la même devise (références par fournisseur et devise sur {months} mois, une passe agrégée). |z| ≥ {threshold} signale des valeurs propres à l’entité que les seuils globaux manquent.",
       "zscoreWord": "Score Z"
     },
     "auditNote": "Journal d’audit natif. La plupart des enregistrements de ce grand livre ont été migrés en masse, l’historique des modifications commence donc à la mise en service — la piste s’enrichit au fil du travail des utilisateurs dans openbooks.",
@@ -3615,16 +3615,16 @@
     },
     "config": {
       "benfordConformity": "Conformité à Benford",
-      "benfordNote": "Bandes 1D 0,006/0,012/0,015 · bandes 2D 0,0012/0,0022/0,0033",
+      "benfordNote": "Bandes 1D 0,006/0,012/0,015 · bandes 2D 0,0012/0,0018/0,0022",
       "duplicatesNote": "Même fournisseur, nature, devise, montant et référence dans la fenêtre ; avoirs exclus ; un constat par groupe",
       "fields": {
         "duplicateDays": {
-          "help": "Une paire même fournisseur, nature et montant dans ce délai est signalée",
+          "help": "Même fournisseur, nature et montant dans ce délai signalent un groupe",
           "label": "Fenêtre de doublons (jours)"
         },
         "duplicateMinAmount": {
-          "help": "Les paires sous ce montant sont ignorées",
-          "label": "Minimum doublons ($)"
+          "label": "Minimum doublons ({currency})",
+          "help": "Les paires sous ce montant converti sont ignorées"
         },
         "sequentialMinCount": {
           "help": "Les séries de numéros de facture sans interruption doivent compter au moins autant de documents",
@@ -3633,14 +3633,82 @@
         "sequentialMinDays": {
           "help": "Les séries réparties sur moins de jours sont traitées comme une saisie en lot, pas comme un signal",
           "label": "Étendue séquentielle (jours)"
+        },
+        "moderateRiskAmount": {
+          "label": "Risque modéré ({currency})",
+          "help": "Les documents convertis dès ce montant marquent des points de risque"
+        },
+        "highRiskAmount": {
+          "label": "Risque élevé ({currency})",
+          "help": "Les documents convertis dès ce montant marquent des points de risque élevé"
+        },
+        "criticalRiskAmount": {
+          "label": "Risque critique ({currency})",
+          "help": "Les documents convertis dès ce montant marquent des points de risque critique"
+        },
+        "aggregateHighAmount": {
+          "label": "Total élevé ({currency})",
+          "help": "Les totaux convertis de plusieurs documents dès ce montant marquent des points de risque élevé"
+        },
+        "aggregateCriticalAmount": {
+          "label": "Total critique ({currency})",
+          "help": "Les totaux convertis de plusieurs documents dès ce montant marquent des points de risque critique"
+        },
+        "rsfBaselineFloor": {
+          "label": "Plancher de base RSF ({currency})",
+          "help": "Les fournisseurs dont le deuxième plus gros document converti reste en dessous sont exclus du contrôle de taille relative"
+        },
+        "zscoreSigmaFloor": {
+          "label": "Plancher de bruit Z ({currency})",
+          "help": "Les historiques dont la dispersion convertie reste en dessous sont exclus du contrôle Z"
+        },
+        "zscoreThreshold": {
+          "label": "Seuil Z",
+          "help": "Un document est signalé quand il s’écarte d’autant d’écarts-types de la moyenne du fournisseur"
+        },
+        "zscoreMinBaseline": {
+          "label": "Historique minimum Z",
+          "help": "Les fournisseurs avec moins de documents passés sont exclus du contrôle Z"
+        },
+        "rsfThreshold": {
+          "label": "Seuil de taille relative",
+          "help": "Un document est signalé quand il atteint ce multiple du deuxième plus gros document du fournisseur"
+        },
+        "baselineMonths": {
+          "label": "Historique fournisseur (mois)",
+          "help": "Mois passés auxquels chaque document est comparé en taille relative et en Z"
+        },
+        "sequentialHighRiskDays": {
+          "label": "Séquence à haut risque (jours)",
+          "help": "Les séries sans rupture dès cette durée sont classées à haut risque"
+        },
+        "benfordMinSample": {
+          "label": "Échantillon minimum Benford",
+          "help": "Les devises avec moins de documents signalent des données insuffisantes et ne notent jamais"
+        },
+        "trapBandPercent": {
+          "label": "Bande d’approbation (%)",
+          "help": "Un montant juste en dessous n’est signalé que dans cette part sous une vraie limite d’approbation de Flows"
+        },
+        "duplicateAreaMin": {
+          "label": "Minimum de zone des doublons",
+          "help": "Moins de doublons ne soulève pas une zone de risque principale"
+        },
+        "ghostNameMinLength": {
+          "label": "Longueur minimale du nom fantôme",
+          "help": "Les noms d’employé plus courts ne correspondent jamais à un fournisseur"
         }
       },
-      "rsfNote": "Montant ÷ 2ᵉ plus gros du fournisseur sur une référence 36 mois (plancher de référence {floor})",
-      "sequentialNote": "Numéros de référence fournisseurs sans interruption ; les étendues de 30 jours et plus sont à haut risque",
+      "rsfNote": "Montant ÷ 2ᵉ plus gros du fournisseur sur une référence {months} mois (plancher de référence {floor})",
+      "sequentialNote": "Numéros de référence fournisseurs sans interruption ; les étendues de {days} jours et plus sont à haut risque",
       "sequentialRuns": "Séries séquentielles",
-      "trapNote": "Montants ronds en dollars (.00 ou .99 centimes) juste sous des seuils ronds",
+      "trapNote": "Terminaisons juste en dessous près d’une vraie limite d’approbation de Flows, lues par devise du document",
       "weekendNote": "Date comptable du document (les données migrées portent des horodatages d’import, l’heure système de création n’est donc pas significative ici)",
-      "zscoreNote": "Référence moyenne/σ par fournisseur, ≥5 transactions et σ > {sigma}"
+      "zscoreNote": "Référence moyenne/σ par fournisseur, ≥{minTxns} transactions et σ > {sigma}",
+      "rsfValue": "au moins {threshold}×",
+      "zscoreValue": "|z| au moins {threshold}",
+      "trapValue": "{band} % sous une limite Flows",
+      "sequentialValue": "{count} réf. · {days}+ jours"
     },
     "coverage": {
       "benfordBold": "Benford",
@@ -3655,7 +3723,8 @@
       "sequentialItem": " — détecte les suites suspectes et ininterrompues de numéros de référence fournisseurs."
     },
     "csv": {
-      "kind": "Nature"
+      "kind": "Nature",
+      "label": "CSV"
     },
     "detectors": {
       "auditEvents": "Événements d’audit",
@@ -3783,11 +3852,11 @@
       "higherRiskWeighting": "pondération de risque plus forte",
       "inPeriod": "sur la période",
       "limitGaming": "contournement potentiel de seuils",
-      "offExpected25": ">25 % d’écart à l’attendu",
-      "offExpected50": ">50 % d’écart à l’attendu, n≥5",
+      "offExpected25": "valeurs aberrantes (test Z)",
+      "offExpected50": "valeurs aberrantes (test Z), n≥5",
       "recordsRemoved": "enregistrements supprimés",
       "seeThresholdTrap": "voir Piège de seuil",
-      "sumPairAmounts": "exemplaires en trop aux taux des documents",
+      "sumPairAmounts": "exemplaires en trop à la valeur convertie",
       "twoD": "2D : {value}",
       "twoDigitPairs": "paires des deux premiers chiffres"
     },
@@ -3800,7 +3869,7 @@
       "overview": "Vue d’ensemble",
       "vendors": "Fournisseurs"
     },
-    "trapNote": "Les montants juste sous des seuils ronds (finissant en 99, 999 ou 9999) peuvent signaler des achats calibrés pour rester sous un seuil d’approbation. Des pièges récurrents du même demandeur ou fournisseur méritent examen. Les pièges lisent toujours le montant du document : un 99 USD est signalé comme piège-99 même si sa valeur convertie est loin de tout seuil.",
+    "trapNote": "Les montants juste sous une vraie limite d’approbation (finissant en 99, 999 ou 9999) peuvent signaler des achats calibrés pour rester sous cette limite. Les limites viennent des flux d’approbation ; sans condition de montant dans Flows, ce contrôle se déclare indisponible plutôt qu’un risque. Les pièges lisent toujours le montant du document dans sa devise.",
     "vendors": {
       "drillSub": "{flags} signaux · {amount} signalés"
     },

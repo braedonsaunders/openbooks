@@ -3495,7 +3495,7 @@
     "title": "Sentinel",
     "backToHub": "Analítica",
     "basis": {
-      "note": "La detección se ejecuta por moneda de transacción — una factura de 100 USD nunca se compara con una de 100 CAD. Los importes consolidados están en {currency}, cada uno convertido a su propio tipo de cambio del documento."
+      "note": "Detección por divisa de transacción — una factura de 100 USD nunca se compara con una de 100 CAD. Los importes consolidados están en {currency}, cada uno convertido al tipo de cambio de su fecha de documento."
     },
     "table": {
       "currency": "Moneda",
@@ -3598,8 +3598,8 @@
     "analysis": {
       "calendar": "Calendario",
       "rsfFull": "Factor de tamaño relativo",
-      "rsfNote": " = importe ÷ la 2.ª mayor transacción histórica del proveedor en la misma moneda (base de 36 meses, calculada en una sola pasada de función de ventana). Un RSF ≥ 10 indica una transacción desproporcionada para ese proveedor — una señal clásica de error/fraude.",
-      "zscoreNote": " mide a cuántas desviaciones estándar está una transacción de la media propia de ese proveedor en la misma moneda (bases por proveedor y moneda en 36 meses, en una sola pasada agregada). |z| ≥ 3 marca atípicos propios de la entidad que los umbrales globales no ven.",
+      "rsfNote": " = importe ÷ la 2.ª mayor transacción histórica del proveedor en la misma divisa (base de {months} meses, calculada en una pasada de funciones de ventana). RSF ≥ {threshold} significa una transacción fuera de escala para ese proveedor — una señal clásica de error/fraude.",
+      "zscoreNote": " mide a cuántas desviaciones estándar está una transacción de la media de su proveedor en la misma divisa (bases por proveedor y divisa sobre {months} meses, una pasada agregada). |z| ≥ {threshold} marca atípicos propios de la entidad que los umbrales globales no detectan.",
       "zscoreWord": "Puntuación Z"
     },
     "auditNote": "Registro de auditoría nativo. La mayoría de los registros de este libro mayor se migraron en masa, así que el historial de cambios empieza en la salida en vivo — la pista crece a medida que los usuarios trabajan en openbooks.",
@@ -3615,16 +3615,16 @@
     },
     "config": {
       "benfordConformity": "Conformidad con Benford",
-      "benfordNote": "Bandas 1D 0,006/0,012/0,015 · bandas 2D 0,0012/0,0022/0,0033",
+      "benfordNote": "Bandas 1D 0,006/0,012/0,015 · bandas 2D 0,0012/0,0018/0,0022",
       "duplicatesNote": "Mismo proveedor, tipo, moneda, importe y referencia en la ventana; créditos excluidos; un hallazgo por grupo",
       "fields": {
         "duplicateDays": {
-          "help": "Una pareja del mismo proveedor, tipo e importe en estos días se marca",
+          "help": "Mismo proveedor, tipo e importe en estos días marcan un grupo",
           "label": "Ventana de duplicados (días)"
         },
         "duplicateMinAmount": {
-          "help": "Las parejas bajo este importe se ignoran",
-          "label": "Mínimo de duplicados ($)"
+          "label": "Mínimo de duplicados ({currency})",
+          "help": "Las parejas bajo este importe convertido se ignoran"
         },
         "sequentialMinCount": {
           "help": "Las series de números de factura sin huecos necesitan al menos estos documentos",
@@ -3633,14 +3633,82 @@
         "sequentialMinDays": {
           "help": "Las series en menos días se tratan como carga en lote, no como señal",
           "label": "Alcance secuencial (días)"
+        },
+        "moderateRiskAmount": {
+          "label": "Riesgo moderado ({currency})",
+          "help": "Los documentos convertidos desde este importe suman puntos de riesgo"
+        },
+        "highRiskAmount": {
+          "label": "Riesgo alto ({currency})",
+          "help": "Los documentos convertidos desde este importe suman puntos de riesgo alto"
+        },
+        "criticalRiskAmount": {
+          "label": "Riesgo crítico ({currency})",
+          "help": "Los documentos convertidos desde este importe suman puntos de riesgo crítico"
+        },
+        "aggregateHighAmount": {
+          "label": "Total alto ({currency})",
+          "help": "Los totales convertidos de varios documentos desde este importe suman puntos de riesgo alto"
+        },
+        "aggregateCriticalAmount": {
+          "label": "Total crítico ({currency})",
+          "help": "Los totales convertidos de varios documentos desde este importe suman puntos de riesgo crítico"
+        },
+        "rsfBaselineFloor": {
+          "label": "Suelo base RSF ({currency})",
+          "help": "Los proveedores cuyo segundo mayor documento convertido queda debajo se omiten en la comprobación de tamaño relativo"
+        },
+        "zscoreSigmaFloor": {
+          "label": "Suelo de ruido Z ({currency})",
+          "help": "Los historiales cuya dispersión convertida queda debajo se omiten en la comprobación Z"
+        },
+        "zscoreThreshold": {
+          "label": "Umbral Z",
+          "help": "Un documento se marca cuando se aparta tantas desviaciones estándar de la media del proveedor"
+        },
+        "zscoreMinBaseline": {
+          "label": "Historial mínimo Z",
+          "help": "Los proveedores con menos documentos previos se omiten en la comprobación Z"
+        },
+        "rsfThreshold": {
+          "label": "Umbral de tamaño relativo",
+          "help": "Un documento se marca cuando alcanza este múltiplo del segundo mayor documento del proveedor"
+        },
+        "baselineMonths": {
+          "label": "Historial de proveedor (meses)",
+          "help": "Meses pasados contra los que cada documento se compara en tamaño relativo y Z"
+        },
+        "sequentialHighRiskDays": {
+          "label": "Secuencia de alto riesgo (días)",
+          "help": "Las series correlativas sin huecos desde esta duración se consideran de alto riesgo"
+        },
+        "benfordMinSample": {
+          "label": "Muestra mínima Benford",
+          "help": "Las divisas con menos documentos informan datos insuficientes y nunca puntúan"
+        },
+        "trapBandPercent": {
+          "label": "Banda de aprobación (%)",
+          "help": "Un importe justo por debajo solo se marca dentro de esta parte bajo un límite real de aprobación de Flows"
+        },
+        "duplicateAreaMin": {
+          "label": "Mínimo de área de duplicados",
+          "help": "Menos hallazgos de duplicados no elevan un área de riesgo principal"
+        },
+        "ghostNameMinLength": {
+          "label": "Longitud mínima de nombre fantasma",
+          "help": "Los nombres de empleado más cortos nunca coinciden con un proveedor"
         }
       },
-      "rsfNote": "Importe ÷ 2.º mayor del proveedor en base de 36 meses (base mínima {floor})",
-      "sequentialNote": "Números de referencia de proveedores sin huecos; alcances de 30+ días son de alto riesgo",
+      "rsfNote": "Importe ÷ 2.º mayor del proveedor en base de {months} meses (base mínima {floor})",
+      "sequentialNote": "Números de referencia de proveedores sin huecos; alcances de {days}+ días son de alto riesgo",
       "sequentialRuns": "Series secuenciales",
-      "trapNote": "Terminaciones redondas en dólares (.00 o .99 centavos) justo bajo límites redondos",
+      "trapNote": "Terminaciones justo por debajo cerca de un límite real de aprobación de Flows, leídas por divisa del documento",
       "weekendNote": "Fecha contable del documento (los datos migrados traen marcas de importación, así que la hora de creación del sistema no es significativa aquí)",
-      "zscoreNote": "Base media/σ por proveedor, ≥5 transacciones y σ > {sigma}"
+      "zscoreNote": "Base media/σ por proveedor, ≥{minTxns} transacciones y σ > {sigma}",
+      "rsfValue": "al menos {threshold}×",
+      "zscoreValue": "|z| al menos {threshold}",
+      "trapValue": "{band} % bajo un límite de Flows",
+      "sequentialValue": "{count} refs. · {days}+ días"
     },
     "coverage": {
       "benfordBold": "Benford",
@@ -3655,7 +3723,8 @@
       "sequentialItem": " — detecta secuencias sospechosamente continuas de números de referencia de proveedores."
     },
     "csv": {
-      "kind": "Tipo"
+      "kind": "Tipo",
+      "label": "CSV"
     },
     "detectors": {
       "auditEvents": "Eventos de auditoría",
@@ -3783,11 +3852,11 @@
       "higherRiskWeighting": "mayor ponderación de riesgo",
       "inPeriod": "en el período",
       "limitGaming": "posible juego con límites",
-      "offExpected25": ">25 % del esperado",
-      "offExpected50": ">50 % del esperado, n≥5",
+      "offExpected25": "atípicos de prueba Z",
+      "offExpected50": "atípicos de prueba Z, n≥5",
       "recordsRemoved": "registros eliminados",
       "seeThresholdTrap": "ver Trampa de umbral",
-      "sumPairAmounts": "copias de más a tasas de documentos",
+      "sumPairAmounts": "copias de más a valor convertido",
       "twoD": "2D: {value}",
       "twoDigitPairs": "parejas de dos primeros dígitos"
     },
@@ -3800,7 +3869,7 @@
       "overview": "Resumen",
       "vendors": "Proveedores"
     },
-    "trapNote": "Los importes justo bajo umbrales redondos (terminados en 99, 999 o 9999) pueden indicar compras calibradas para no superar un límite de aprobación. Las trampas recurrentes del mismo solicitante o proveedor merecen revisión. Las trampas siempre leen el importe del documento: un 99 USD se marca como trampa-99 aunque su valor convertido esté lejos de cualquier umbral.",
+    "trapNote": "Los importes justo bajo un límite real de aprobación (terminados en 99, 999 o 9999) pueden indicar compras calibradas para no superarlo. Los límites vienen de los flujos de aprobación; sin condición de importe en Flows esta comprobación informa no disponible en lugar de riesgo. Las trampas siempre leen el importe del documento en su divisa.",
     "vendors": {
       "drillSub": "{flags} señales · {amount} marcado"
     },

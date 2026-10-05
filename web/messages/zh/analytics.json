@@ -3495,7 +3495,7 @@
     "title": "Sentinel",
     "backToHub": "分析",
     "basis": {
-      "note": "检测按交易货币分别运行 — 100美元账单永远不会与100加元账单比较。合并金额以{currency}计价，每笔按其单据汇率折算。"
+      "note": "按交易币种检测 — 100美元账单永不与100加元账单比较。合并金额以{currency}计，均按单据日期汇率折算。"
     },
     "table": {
       "currency": "货币",
@@ -3598,8 +3598,8 @@
     "analysis": {
       "calendar": "日历",
       "rsfFull": "相对规模系数",
-      "rsfNote": " ＝ 金额 ÷ 同一币种下该供应商历史第二大交易（36个月基准，一次窗口函数计算）。RSF ≥ 10意味着该笔交易远超该供应商的正常规模——典型的差错/舞弊信号。",
-      "zscoreNote": " 表示一笔交易偏离该供应商自身均值（同一币种）多少个标准差（分供应商、分币种36个月基准，一次聚合计算）。|z| ≥ 3可发现全局阈值遗漏的供应商特异异常。",
+      "rsfNote": " = 同一币种下供应商历史第二大交易的金额比（{months}个月基准，一次窗口函数计算）。RSF ≥ {threshold}表示该笔交易远超该供应商量级——典型的错误/舞弊信号。",
+      "zscoreNote": " 衡量交易偏离该供应商同一币种均值的标准差数（分供应商、分币种{months}个月基准，一次聚合计算）。|z| ≥ {threshold}标记全局阈值遗漏的个体异常。",
       "zscoreWord": "Z分数"
     },
     "auditNote": "原生审计日志。本账簿多数记录为批量迁移，因此变更历史自上线日起——随着用户在openbooks中的操作，轨迹持续累积。",
@@ -3615,7 +3615,7 @@
     },
     "config": {
       "benfordConformity": "本福德符合度",
-      "benfordNote": "1D区间 0.006/0.012/0.015 · 2D区间 0.0012/0.0022/0.0033",
+      "benfordNote": "1D区间 0.006/0.012/0.015 · 2D区间 0.0012/0.0018/0.0022",
       "duplicatesNote": "窗口期内同一供应商、类型、币种、金额与参考号；贷项除外；每组一条",
       "fields": {
         "duplicateDays": {
@@ -3623,8 +3623,8 @@
           "label": "重复窗口（天）"
         },
         "duplicateMinAmount": {
-          "help": "低于该金额的不予考虑",
-          "label": "重复下限（$）"
+          "label": "重复下限 ({currency})",
+          "help": "折算后低于该金额的不予考虑"
         },
         "sequentialMinCount": {
           "help": "无断号发票序列至少需要该数量单据",
@@ -3633,14 +3633,82 @@
         "sequentialMinDays": {
           "help": "跨度更短的序列视为批量录入而非标记",
           "label": "连续跨度（天）"
+        },
+        "moderateRiskAmount": {
+          "label": "中风险金额 ({currency})",
+          "help": "折算后单据金额达到该值即计风险分"
+        },
+        "highRiskAmount": {
+          "label": "高风险金额 ({currency})",
+          "help": "折算后单据金额达到该值即计高风险分"
+        },
+        "criticalRiskAmount": {
+          "label": "严重风险金额 ({currency})",
+          "help": "折算后单据金额达到该值即计严重风险分"
+        },
+        "aggregateHighAmount": {
+          "label": "高风险合计 ({currency})",
+          "help": "折算后多单据合计达到该值即计高风险分"
+        },
+        "aggregateCriticalAmount": {
+          "label": "严重风险合计 ({currency})",
+          "help": "折算后多单据合计达到该值即计严重风险分"
+        },
+        "rsfBaselineFloor": {
+          "label": "相对规模基准下限 ({currency})",
+          "help": "历史第二大账单折算后低于该值的供应商跳过相对规模检查"
+        },
+        "zscoreSigmaFloor": {
+          "label": "Z分数噪声下限 ({currency})",
+          "help": "离散度折算后低于该值的历史跳过Z分数检查"
+        },
+        "zscoreThreshold": {
+          "label": "Z分数阈值",
+          "help": "偏离供应商均值达该标准差倍数的账单即被标记"
+        },
+        "zscoreMinBaseline": {
+          "label": "Z分数最少历史",
+          "help": "历史账单少于该数的供应商跳过Z分数检查"
+        },
+        "rsfThreshold": {
+          "label": "相对规模阈值",
+          "help": "达到供应商历史第二大账单该倍数即被标记"
+        },
+        "baselineMonths": {
+          "label": "供应商历史窗口（月）",
+          "help": "相对规模与Z分数检查所比较的过往月数"
+        },
+        "sequentialHighRiskDays": {
+          "label": "连号高风险跨度（天）",
+          "help": "无断号的发票号连续达到该天数即为高风险"
+        },
+        "benfordMinSample": {
+          "label": "本福德最少样本",
+          "help": "单据少于该数的币种报数据不足且不参与评分"
+        },
+        "trapBandPercent": {
+          "label": "审批限额区间 (%)",
+          "help": "仅在Flows真实审批限额之下该比例内的临界金额才被标记"
+        },
+        "duplicateAreaMin": {
+          "label": "重复风险域下限",
+          "help": "重复发现少于该数不构成主要风险域"
+        },
+        "ghostNameMinLength": {
+          "label": "幽灵名称最短长度",
+          "help": "短于该长度的员工姓名永不与供应商匹配"
         }
       },
-      "rsfNote": "金额 ÷ 供应商历史第二大金额（36个月基准，下限{floor}）",
-      "sequentialNote": "无断号的供应商参考号；跨度30天以上列为高风险",
+      "rsfNote": "金额 ÷ 供应商历史第二大金额（{months}个月基准，下限{floor}）",
+      "sequentialNote": "无断号的供应商参考号；跨度{days}天以上列为高风险",
       "sequentialRuns": "连续序列",
-      "trapNote": "略低于整数关口的整数尾数（.00或.99美分）",
+      "trapNote": "接近Flows真实审批限额的临界尾数，按单据币种判定",
       "weekendNote": "会计单据日期（迁移数据带有导入时间戳，因此系统创建时间在此无意义）",
-      "zscoreNote": "分供应商均值/σ基准，≥5笔交易且σ > {sigma}"
+      "zscoreNote": "分供应商均值/σ基准，≥{minTxns}笔交易且σ > {sigma}",
+      "rsfValue": "至少{threshold}倍",
+      "zscoreValue": "|z|至少{threshold}",
+      "trapValue": "低于Flows限额{band}%",
+      "sequentialValue": "{count}个单号 · {days}+天"
     },
     "coverage": {
       "benfordBold": "本福德",
@@ -3655,7 +3723,8 @@
       "sequentialItem": " ——捕捉供应商参考号可疑的无断号连续序列。"
     },
     "csv": {
-      "kind": "类型"
+      "kind": "类型",
+      "label": "CSV"
     },
     "detectors": {
       "auditEvents": "审计事件",
@@ -3783,11 +3852,11 @@
       "higherRiskWeighting": "更高风险权重",
       "inPeriod": "本期内",
       "limitGaming": "可能博弈限额",
-      "offExpected25": "偏离预期>25%",
-      "offExpected50": "偏离预期>50%，n≥5",
+      "offExpected25": "Z检验异常值",
+      "offExpected50": "Z检验异常值（n≥5）",
       "recordsRemoved": "已删除记录",
       "seeThresholdTrap": "见阈值陷阱",
-      "sumPairAmounts": "按单据费率的超额部分",
+      "sumPairAmounts": "按折算价值的超额部分",
       "twoD": "2D：{value}",
       "twoDigitPairs": "前两位数字对"
     },
@@ -3800,7 +3869,7 @@
       "overview": "概览",
       "vendors": "供应商"
     },
-    "trapNote": "以99、999或9999结尾、略低于整数关口的金额，可能表明为规避审批限额而刻意安排的采购。同一申请人或供应商反复出现陷阱金额应予复核。陷阱一律按单据金额判定：一份99美元单据即使折算后远低于阈值，仍判定为99陷阱。",
+    "trapNote": "略低于真实审批限额（以99、999或9999结尾）的金额，可能表明为规避该限额而刻意安排的采购。限额来自审批流；Flows中没有金额条件时，本项检查报\"不可用\"而非风险。陷阱一律按单据币种的单据金额判定。",
     "vendors": {
       "drillSub": "{flags}个标记 · 标记金额{amount}"
     },
