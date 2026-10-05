@@ -11,6 +11,7 @@ import { loadItem } from '../_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
+import { emitItemUpdated } from '@openbooks/engine/webhooks'
 
 
 const ITEM_KINDS = [
@@ -457,6 +458,8 @@ export const PATCH = defineRoute({
           (${user.orgId}, 'items', ${id}, 'update', ${JSON.stringify(changes)}::jsonb,
            ${user.id}, ${request.headers.get('X-Request-Id')}, now())
       `)
+      // Subscriber event joins the save transaction: a rolled-back save announces nothing.
+      await emitItemUpdated(db, user.orgId, id)
       return after
     })
     if (!updated) return notFound("record")

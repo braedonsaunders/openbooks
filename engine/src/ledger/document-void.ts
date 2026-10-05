@@ -22,6 +22,7 @@ import { InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
 
@@ -1236,6 +1237,17 @@ export async function completeRequestedDocumentVoid(
         before,
         after,
       });
+      // Subscriber event joins the void transaction: a rolled-back void announces nothing.
+      await emitDocumentVoided(tx, orgId, documentId, {
+        reversalEntryId,
+        reason: String(doc.void_reason),
+      });
+      if (pairedDocumentId) {
+        await emitDocumentVoided(tx, orgId, pairedDocumentId, {
+          reversalEntryId,
+          reason: String(doc.void_reason),
+        });
+      }
       return {
         reversalEntryId,
         kind: String(doc.kind),
