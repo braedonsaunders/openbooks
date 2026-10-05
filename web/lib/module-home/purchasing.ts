@@ -36,15 +36,17 @@ export interface PurchasingHome {
   dueNext7: string
   openPoValue: string
   openPos: number
-  spend30d: number
+  /** Exact decimal string, never a float — the cockpit formats it, the chart converts at its boundary. */
+  spend30d: string
   topExposure: VendorExposureRow[]
-  /** Weekly billed spend (posted vendor bills), oldest → newest. */
-  trend: { weekStart: string; spend: number }[]
+  /** Weekly billed spend (posted vendor bills) as exact decimal strings, oldest → newest. */
+  trend: { weekStart: string; spend: string }[]
   badges: {
     openPos: number
     openBills: number
     payments7d: number
-    paid7dValue: number
+    /** Exact decimal string, never a float. */
+    paid7dValue: string
     unpostedExpenses: number
     vendors: number
   }
@@ -287,14 +289,14 @@ export async function purchasingHome(
     const spend = mulDecimal(String(r.spend ?? 0), trendCtx!.rateAt((r.func ?? null) as string | null, late))
     byWeek.set(wk, add(byWeek.get(wk) ?? '0.0000', spend))
   }
-  const paid7dValue = grants.ap ? Number(await translateFlows(
+  const paid7dValue = grants.ap ? await translateFlows(
     orgId,
     paidRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
-  )) : 0
-  const spend30d = grants.ap ? Number(await translateFlows(
+  ) : '0'
+  const spend30d = grants.ap ? await translateFlows(
     orgId,
     spendRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
-  )) : 0
+  ) : '0'
 
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (ordersOn && !orgCurrency) throw new Error('organization currency is not configured')
@@ -382,7 +384,7 @@ export async function purchasingHome(
     openPos: Number(badge.open_pos ?? 0),
     spend30d,
     topExposure,
-    trend: weekStarts.map((weekStart) => ({ weekStart, spend: Number(byWeek.get(weekStart) ?? '0.0000') })),
+    trend: weekStarts.map((weekStart) => ({ weekStart, spend: byWeek.get(weekStart) ?? '0.0000' })),
     badges: {
       openPos: Number(badge.open_pos ?? 0),
       openBills,
