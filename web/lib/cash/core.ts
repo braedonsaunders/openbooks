@@ -6,6 +6,8 @@ import { advanceAnchoredMonth } from "@openbooks/engine/src/billing/cadence.ts";
 import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, daysInCivilMonth, parseIsoDate, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
+import { ANALYTICS_CONFIG } from "../analytics/config-spec";
+import { analyticsConfig } from "../analytics/config";
 import { evaluateFormula } from "./formula";
 import { agingBasisDate, agingBucketIndex } from "../aging-basis";
 import { monthYearLabel } from "../format";
@@ -269,8 +271,83 @@ export interface SideSummary {
   scheduled: Money; // amount predicted within the horizon
   /** Current-bucket share as an exact 0..1 ratio. */
   pctCurrent: Money;
-  avgDays: number;
+  /** Mean days to settle behind the forecast (null = no payment history). */
+  avgDays: number | null;
   buckets: Bucket[];
+  /** Open items placed in NO week: no history and no due date to anchor to. */
+  unplaced: { count: number; total: Money };
+}
+
+/**
+ * The forecast-model knobs, resolved once per load from the cashflow
+ * analytics config (see ANALYTICS_CONFIG.cashflow) and threaded through the
+ * pure prediction below. Day counts and sigma multiples are model
+ * coefficients (ordinary numbers); every monetary result stays exact.
+ */
+export interface ForecastModelParams {
+  settleBufferSigma: number;
+  overduePushShortDays: number;
+  overduePushMidDays: number;
+  overduePushLongDays: number;
+  overdueMidThresholdDays: number;
+  overdueLongThresholdDays: number;
+  cardTrajectoryTolerance: number;
+  cardMedianBlendWeight: number;
+  vendorOutlierSigma: number;
+  cardStatementCloseDays: number;
+  cardDefaultPayDay: number;
+  cardStalePaymentDays: number;
+}
+
+const CASHFLOW_MODEL_DEFAULTS: ForecastModelParams = {
+  settleBufferSigma: ANALYTICS_CONFIG.cashflow.defaults.settleBufferSigma,
+  overduePushShortDays: ANALYTICS_CONFIG.cashflow.defaults.overduePushShortDays,
+  overduePushMidDays: ANALYTICS_CONFIG.cashflow.defaults.overduePushMidDays,
+  overduePushLongDays: ANALYTICS_CONFIG.cashflow.defaults.overduePushLongDays,
+  overdueMidThresholdDays: ANALYTICS_CONFIG.cashflow.defaults.overdueMidThresholdDays,
+  overdueLongThresholdDays: ANALYTICS_CONFIG.cashflow.defaults.overdueLongThresholdDays,
+  cardTrajectoryTolerance: ANALYTICS_CONFIG.cashflow.defaults.cardTrajectoryTolerance,
+  cardMedianBlendWeight: ANALYTICS_CONFIG.cashflow.defaults.cardMedianBlendWeight,
+  vendorOutlierSigma: ANALYTICS_CONFIG.cashflow.defaults.vendorOutlierSigma,
+  cardStatementCloseDays: ANALYTICS_CONFIG.cashflow.defaults.cardStatementCloseDays,
+  cardDefaultPayDay: ANALYTICS_CONFIG.cashflow.defaults.cardDefaultPayDay,
+  cardStalePaymentDays: ANALYTICS_CONFIG.cashflow.defaults.cardStalePaymentDays,
+};
+
+/**
+ * Fill a partial model (a test double's or a legacy read) with the spec
+ * defaults, so every knob always has the organization's value. Explicit
+ * undefined entries fall back too — a spread would let them shadow a default
+ * with nothing.
+ */
+export function forecastModelParams(
+  values: { [K in keyof ForecastModelParams]?: ForecastModelParams[K] | undefined },
+): ForecastModelParams {
+  return {
+    settleBufferSigma: values.settleBufferSigma ?? CASHFLOW_MODEL_DEFAULTS.settleBufferSigma,
+    overduePushShortDays: values.overduePushShortDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushShortDays,
+    overduePushMidDays: values.overduePushMidDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushMidDays,
+    overduePushLongDays: values.overduePushLongDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushLongDays,
+    overdueMidThresholdDays: values.overdueMidThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueMidThresholdDays,
+    overdueLongThresholdDays: values.overdueLongThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueLongThresholdDays,
+    cardTrajectoryTolerance: values.cardTrajectoryTolerance ?? CASHFLOW_MODEL_DEFAULTS.cardTrajectoryTolerance,
+    cardMedianBlendWeight: values.cardMedianBlendWeight ?? CASHFLOW_MODEL_DEFAULTS.cardMedianBlendWeight,
+    vendorOutlierSigma: values.vendorOutlierSigma ?? CASHFLOW_MODEL_DEFAULTS.vendorOutlierSigma,
+    cardStatementCloseDays: values.cardStatementCloseDays ?? CASHFLOW_MODEL_DEFAULTS.cardStatementCloseDays,
+    cardDefaultPayDay: values.cardDefaultPayDay ?? CASHFLOW_MODEL_DEFAULTS.cardDefaultPayDay,
+    cardStalePaymentDays: values.cardStalePaymentDays ?? CASHFLOW_MODEL_DEFAULTS.cardStalePaymentDays,
+  };
+}
+
+/** The organization's forecast-model knobs (one analytics-config read). */
+export async function cashflowModel(orgId: string): Promise<ForecastModelParams> {
+  return forecastModelParams(await analyticsConfig(orgId, "cashflow"));
+}
+
+/** The trailing payment-history window, in months (one analytics-config read). */
+export async function paymentHistoryMonths(orgId: string): Promise<number> {
+  const cfg = await analyticsConfig(orgId, "cashflow");
+  return cfg.paymentHistoryMonths ?? ANALYTICS_CONFIG.cashflow.defaults.paymentHistoryMonths;
 }
 
 export interface OpenItem {
@@ -286,7 +363,7 @@ export interface OpenItem {
   remaining: Money;
 }
 
-export type PaymentStats = { map: Map<string, { avg: number; sd: number; n: number }>; globalAvg: number };
+export type PaymentStats = { map: Map<string, { avg: number; sd: number; n: number }>; globalAvg: number | null };
 
 /**
  * The same weeks with their per-transaction arrays withheld. Totals and counts
@@ -339,9 +416,12 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[], includeNull = 
 
 /**
  * Per-party avg days (+ σ) from invoice/bill date to the applied payment.
- * Forecast policy: history restricted to the trailing 365 days (paymentHistoryDays),
- * global average weighted by data point (globalSum/globalCount over all payments,
- * not an average of per-party averages), and 45-day default when no history exists.
+ * Forecast policy: history restricted to the trailing paymentHistoryMonths
+ * (the cashflow analytics threshold, default 12), global average weighted by
+ * data point (globalSum/globalCount over all payments, not an average of
+ * per-party averages), and null when no history exists — never an invented
+ * figure. Callers forecast history-less items at their due date, or leave
+ * them unplaced when they carry none.
  */
 export async function paymentStats(side: Side, asOfIso: string, subIds?: string[], orgId?: string): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
@@ -355,6 +435,9 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
   // Explicit orgId lets org-parameterized callers (analytics hubs) thread
   // their tenant through; ambient resolution keeps every existing caller.
   const resolvedOrgId = await resolveOrgId(orgId);
+  // Exact calendar window: the trailing paymentHistoryMonths ending at asOf,
+  // clamped to real month ends (Jan 31 looks back to Dec 31, not Dec 1).
+  const historyStart = addMonthsClamped(asOfIso, -(await paymentHistoryMonths(resolvedOrgId)));
   // The company rollup intentionally has no entity dimension. Restricted
   // readers reconstruct the same sufficient statistics from visible source
   // and target lines, so another entity cannot influence their forecast.
@@ -362,7 +445,7 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
     select party_id, settled_on, n, sum_days, sum_days_sq
       from party_payment_stats
      where org_id = ${resolvedOrgId} and account_type = ${acctType}
-       and settled_on >= ${asOfIso}::date - 365
+       and settled_on >= ${historyStart}::date
        and settled_on <= ${asOfIso}::date
   ` : sql`
     select bl.party_id, pl.posting_date as settled_on, count(*) as n,
@@ -375,7 +458,7 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
      where x.org_id = ${resolvedOrgId} and x.unapplied_at is null
        and bl.party_id is not null and bl.posting_date is not null
        and a.type = ${acctType}
-       and pl.posting_date >= ${asOfIso}::date - 365
+       and pl.posting_date >= ${historyStart}::date
        and pl.posting_date <= ${asOfIso}::date
        ${subScope(sql`bl.subsidiary_id`, subIds)}
        ${subScope(sql`pl.subsidiary_id`, subIds)}
@@ -405,7 +488,9 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
     sum += avg * n;
     count += n;
   }
-  return { map, globalAvg: count > 0 ? Math.round(sum / count) : 45 };
+  // No history is null, never an invented figure: a new org's forecast must
+  // say "no history", not "45 days".
+  return { map, globalAvg: count > 0 ? Math.round(sum / count) : null };
 }
 
 /** Load configured categories from orgs.settings.analytics.cashflowCategories. */
@@ -1437,38 +1522,61 @@ function daysPastDue(it: OpenItem, asOf: Date): number {
   return daysBetween(agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate })!, asOf);
 }
 
-/** Predict collection/payment date for one open item. */
+/**
+ * Predict collection/payment date for one open item. A party with history
+ * forecasts from its own average (+ the configured sigma buffer); a party
+ * without history falls back to the global average; with neither, the item
+ * forecasts at its due date — the contractual date, a fact. An item with
+ * neither history nor a due date cannot be placed: null, so the caller
+ * counts it instead of inventing a date for it.
+ */
 export function predict(
   item: OpenItem,
   asOf: Date,
   stats: PaymentStats,
-): { date: Date; method: string } {
-  let date: Date;
+  model: ForecastModelParams = CASHFLOW_MODEL_DEFAULTS,
+): { date: Date; method: string } | null {
+  let date: Date | null = null;
   let method = "Global avg";
   const s = item.partyId ? stats.map.get(item.partyId) : undefined;
   if (s) {
-    const buffer = s.sd ? Math.ceil(s.sd * 0.5) : 0;
+    const buffer = s.sd ? Math.ceil(s.sd * model.settleBufferSigma) : 0;
     date = addDays(item.tranDate, Math.round(s.avg) + buffer);
     method = "Statistical";
-  } else {
+  } else if (stats.globalAvg !== null) {
     date = addDays(item.tranDate, stats.globalAvg);
+  } else if (item.dueDate) {
+    date = new Date(item.dueDate);
+    method = "Due date";
+  } else {
+    return null;
   }
   // Floor at due date.
   if (item.dueDate && date < item.dueDate) {
-    date = item.dueDate;
+    date = new Date(item.dueDate);
     method = "Due date";
   }
-  // Overdue → push forward.
+  // Overdue → push forward (the configured push ladder).
   if (date < asOf) {
     const overdue = daysBetween(date, asOf);
-    const push = overdue > 60 ? 28 : overdue > 30 ? 14 : 7;
+    const push = overdue > model.overdueLongThresholdDays
+      ? model.overduePushLongDays
+      : overdue > model.overdueMidThresholdDays
+        ? model.overduePushMidDays
+        : model.overduePushShortDays;
     date = addDays(asOf, push);
     method = "Overdue push";
   }
   return { date: businessDay(date), method };
 }
 
-export function summariseSide(items: OpenItem[], asOf: Date, scheduled: Money, avgDays: number): SideSummary {
+export function summariseSide(
+  items: OpenItem[],
+  asOf: Date,
+  scheduled: Money,
+  avgDays: number | null,
+  unplaced: { count: number; total: Money } = { count: 0, total: ZERO_MONEY },
+): SideSummary {
   const buckets = new Map<string, Money>([
     ["Current", ZERO_MONEY], ["1-30", ZERO_MONEY], ["31-60", ZERO_MONEY], ["61-90", ZERO_MONEY], ["90+", ZERO_MONEY],
   ]);
@@ -1486,6 +1594,7 @@ export function summariseSide(items: OpenItem[], asOf: Date, scheduled: Money, a
     pctCurrent: compareMoney(outstanding, ZERO_MONEY) > 0 ? divideMoney(current, outstanding) : ZERO_MONEY,
     avgDays,
     buckets: [...buckets.entries()].map(([label, amount], index) => ({ label, amount, index })),
+    unplaced,
   };
 }
 
@@ -1501,12 +1610,27 @@ export function scheduleForecast(
   asOf: Date,
   start: Date,
   end: Date,
-): { byWeek: Map<string, ForecastEntry[]>; entries: ForecastEntry[]; scheduled: Money } {
+  model: ForecastModelParams = CASHFLOW_MODEL_DEFAULTS,
+): {
+    byWeek: Map<string, ForecastEntry[]>;
+    entries: ForecastEntry[];
+    scheduled: Money;
+    /** Items placed in no week (no history and no due date), counted, never dropped. */
+    unplaced: { count: number; total: Money };
+  } {
   const byWeek = new Map<string, ForecastEntry[]>();
   const entries: ForecastEntry[] = [];
   let scheduled = ZERO_MONEY;
+  let unplacedCount = 0;
+  let unplacedTotal = ZERO_MONEY;
   for (const it of items) {
-    const { date, method } = predict(it, asOf, stats);
+    const predicted = predict(it, asOf, stats, model);
+    if (!predicted) {
+      unplacedCount += 1;
+      unplacedTotal = addMoney(unplacedTotal, it.remaining);
+      continue;
+    }
+    const { date, method } = predicted;
     if (date < start || date > end) continue;
     const wk = toISO(weekStart(date));
     const dpd = daysPastDue(it, asOf);
@@ -1531,5 +1655,5 @@ export function scheduleForecast(
     entries.push(entry);
     scheduled = addMoney(scheduled, it.remaining);
   }
-  return { byWeek, entries, scheduled };
+  return { byWeek, entries, scheduled, unplaced: { count: unplacedCount, total: unplacedTotal } };
 }

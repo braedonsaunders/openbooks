@@ -4,6 +4,7 @@ import {
   addMoney,
   bankBalances,
   buildWeekGrid,
+  cashflowModel,
   categoryWeekly,
   compareMoney,
   daysBetween,
@@ -75,7 +76,8 @@ export interface ApPosition {
   dueThisWeek: string;
   /** Predicted to be paid within 30 days. */
   dueNext30: string;
-  dpo: number;
+  /** Mean days to settle behind the forecast (null = no payment history). */
+  dpo: number | null;
   summary: SideSummary;
   weeks: ApWeek[];
   byVendor: VendorPayable[];
@@ -139,18 +141,19 @@ export async function apPosition(
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
   const exactApSettings: ApSettings = { ...apSettings, weeklyCap: normalizeMoneyValue(String(apSettings.weeklyCap)) };
 
-  const [apItems, arItems, apStats, arStats, banks, catConfigs] = await Promise.all([
+  const [apItems, arItems, apStats, arStats, banks, catConfigs, model] = await Promise.all([
     openItems(orgId, "ap", asOfIso, subIds),
     openItems(orgId, "ar", asOfIso, subIds),
     paymentStats("ap", asOfIso, subIds, orgId),
     paymentStats("ar", asOfIso, subIds, orgId),
     bankBalances(asOfIso, subIds, orgId),
     loadCategories(orgId),
+    cashflowModel(orgId),
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
-  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
+  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
@@ -166,7 +169,7 @@ export async function apPosition(
     locale,
   });
 
-  const summary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg);
+  const summary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg, ap.unplaced);
   const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY;
   const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
   const overdueCount = apItems.filter((it) => it.dueDate && daysBetween(it.dueDate, grid.asOf) > 0).length;

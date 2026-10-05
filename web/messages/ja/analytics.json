@@ -1599,8 +1599,8 @@
       "burnBadge": "週間",
       "arCoverage": "売掛カバレッジ",
       "arHint": "(現金 + 売掛) / 買掛",
-      "cashCycle": "資金循環",
-      "cashCycleHint": "DSO / DPO",
+      "cashCycle": "平均決済日数",
+      "cashCycleHint": "回収 / 支払",
       "netFlow": "期間純フロー",
       "netFlowHint": "流入 - 流出",
       "runway": "資金繰り余裕",
@@ -1722,7 +1722,9 @@
           "help": "有意なカード支払がない場合に報告する最終支払からの日数"
         }
       }
-    }
+    },
+    "unplacedAr": "期日も支払履歴もない請求書が{count}件 · {total}は予測対象外。期日を登録すると予測に含まれます。",
+    "unplacedAp": "期日も支払履歴もない請求書（仕入）が{count}件 · {total}は予測対象外。期日を登録すると予測に含まれます。"
   },
   "trueCost": {
     "title": "真のコスト",

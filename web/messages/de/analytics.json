@@ -1599,8 +1599,8 @@
       "burnBadge": "Wöchentlich",
       "arCoverage": "AR-Abdeckung",
       "arHint": "(Cash + AR) / AP",
-      "cashCycle": "Cash-Zyklus",
-      "cashCycleHint": "DSO / DPO",
+      "cashCycle": "Ø Begleichungstage",
+      "cashCycleHint": "Einzug / Zahlung",
       "netFlow": "Nettofluss der Periode",
       "netFlowHint": "Zuflüsse - Abflüsse",
       "runway": "Cash-Reichweite",
@@ -1722,7 +1722,9 @@
           "help": "Gemeldete Tage seit letzter Zahlung, wenn keine wesentliche Kartenzahlung vorliegt"
         }
       }
-    }
+    },
+    "unplacedAr": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert. Hinterlegen Sie ein Fälligkeitsdatum, um sie einzuplanen.",
+    "unplacedAp": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert. Hinterlegen Sie ein Fälligkeitsdatum, um sie einzuplanen."
   },
   "trueCost": {
     "title": "Echte Kosten",

@@ -11,6 +11,7 @@ import {
   addMoney,
   compareMoney,
   divideMoney,
+  forecastModelParams,
   loadCategories,
   isCategoryVisibleInScope,
   normalizeMoneyValue,
@@ -129,12 +130,16 @@ export async function cashflowData(
   ]);
   const weeklyCap = normalizeMoneyValue(String(apCfg.weeklyApCap ?? 0));
   const restrictToSafe = (apCfg.restrictToSafe ?? 0) >= 1;
+  // The forecast-model knobs ride the config already read above — no second
+  // read, and a double returning only the legacy keys still forecasts (on
+  // spec defaults) instead of crashing on undefined.
+  const model = forecastModelParams(apCfg);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
 
   // Predict each open item into a week bucket ().
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
-  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
+  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
@@ -174,8 +179,8 @@ export async function cashflowData(
   const runwayStatus: "healthy" | "caution" | "critical" =
     compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, "8.0000") < 0 ? "caution" : "healthy";
 
-  const arSummary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg);
-  const apSummary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg);
+  const arSummary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg, ar.unplaced);
+  const apSummary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg, ap.unplaced);
 
   const partyTotalsFor = (side: "ar" | "ap") => {
     const byParty = new Map<string, { name: string; amount: string; count: number }>();

@@ -1599,8 +1599,8 @@
       "burnBadge": "Weekly",
       "arCoverage": "AR Coverage",
       "arHint": "(Cash + AR) / AP",
-      "cashCycle": "Cash Cycle",
-      "cashCycleHint": "DSO / DPO",
+      "cashCycle": "Avg Days to Settle",
+      "cashCycleHint": "Collect / pay",
       "netFlow": "Net Period Flow",
       "netFlowHint": "Inflows − Outflows",
       "runway": "Cash Runway",
@@ -1722,7 +1722,9 @@
           "help": "Days since last payment reported when no significant card payment is seen"
         }
       }
-    }
+    },
+    "unplacedAr": "{count, plural, one {# invoice has} other {# invoices have}} no due date and no payment history · {total} not forecast. Add a due date to place them.",
+    "unplacedAp": "{count, plural, one {# bill has} other {# bills have}} no due date and no payment history · {total} not forecast. Add a due date to place them."
   },
   "trueCost": {
     "title": "True Cost",

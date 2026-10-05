@@ -1599,8 +1599,8 @@
       "burnBadge": "Semanal",
       "arCoverage": "Cobertura AR",
       "arHint": "(Caja + AR) / AP",
-      "cashCycle": "Ciclo de caja",
-      "cashCycleHint": "DSO / DPO",
+      "cashCycle": "Días prom. de liquidación",
+      "cashCycleHint": "Cobro / pago",
       "netFlow": "Flujo neto del período",
       "netFlowHint": "Entradas - Salidas",
       "runway": "Autonomía de caja",
@@ -1722,7 +1722,9 @@
           "help": "Días desde el último pago cuando no se observa ningún pago significativo"
         }
       }
-    }
+    },
+    "unplacedAr": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar. Añada una fecha de vencimiento para incluirlas.",
+    "unplacedAp": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar. Añada una fecha de vencimiento para incluirlas."
   },
   "trueCost": {
     "title": "Costo real",

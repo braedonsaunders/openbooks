@@ -31,7 +31,9 @@ import {
   addDays,
   bankBalances,
   buildWeekGrid,
+  cashflowModel,
   compareMoney,
+  forecastModelParams,
   normalizeMoneyValue,
   parseISO,
   paymentStats,
@@ -41,6 +43,7 @@ import {
   sumMoney,
   toISO,
   ZERO_MONEY,
+  type ForecastModelParams,
   type OpenItem,
   type PaymentStats,
 } from '@/lib/cash/core'
@@ -216,9 +219,10 @@ export type DashboardMetrics = {
   expectedReceipts30d: string | null
   expectedPayments30d: string | null
   /**
-   * Collection / payment day averages feeding the forecast above — the same
-   * paymentStats.globalAvg the cockpits label DSO/DPO, surfaced on the open
-   * AR/AP tiles as hint text rather than minted as tiles of their own.
+   * Mean days to settle feeding the forecast above — the same
+   * paymentStats.globalAvg the cockpits forecast from (null with no payment
+   * history), surfaced on the open AR/AP tiles as hint text rather than
+   * minted as tiles of their own. The tile omits the hint when null.
    */
   receivablesDso: number | null
   payablesDpo: number | null
@@ -729,11 +733,15 @@ export async function loadDashboardMetrics(
   // summarised: scheduleForecast with the same stats the cockpits use, cut
   // at the same +30d the cockpits' expectedNext30/dueNext30 use (a 5-week
   // grid covers the cut-off either way — the grid only bounds the
-  // prediction, the cut-off selects it).
+  // prediction, the cut-off selects it). The organization's forecast-model
+  // knobs ride along, so a tuned push ladder moves the tile and the cockpit
+  // together.
+  const wantExpected = need('expectedReceipts30d') || need('expectedPayments30d')
+  const expectedModel: ForecastModelParams = wantExpected ? await cashflowModel(orgId) : forecastModelParams({})
   const forecast30d = (items: OpenItem[], stats: PaymentStats | null): string | null => {
     if (!stats) return null
     const grid = buildWeekGrid(today, 5)
-    const forecast = scheduleForecast(items, stats, grid.asOf, grid.start, grid.end)
+    const forecast = scheduleForecast(items, stats, grid.asOf, grid.start, grid.end, expectedModel)
     const cutoff = toISO(addDays(grid.asOf, 30))
     return sumMoney(forecast.entries.filter((e) => e.predictedDate <= cutoff).map((e) => e.amount))
   }

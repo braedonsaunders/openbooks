@@ -5,6 +5,7 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   addDays,
   addMoney,
+  cashflowModel,
   compareMoney,
   divideMoney,
   bankBalances,
@@ -165,9 +166,9 @@ export interface CashPosition {
   runwayWeeks: string | null;
   runwayStatus: "healthy" | "caution" | "critical";
   deferredBeyondHorizon: string;
-  /** Global avg collect / pay days (forecast-model fallbacks). */
-  dso: number;
-  dpo: number;
+  /** Mean days to settle behind the forecast (null = no payment history). */
+  dso: number | null;
+  dpo: number | null;
   /** Open AR / AP totals and coverage ratio: (cash + AR) / AP. */
   arOutstanding: string;
   apOutstanding: string;
@@ -235,7 +236,7 @@ export async function cashPosition(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows, model] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds),
@@ -273,13 +274,14 @@ export async function cashPosition(
         ${subsidiaryVisibleFilter(sql`s.id`, allowedSubsidiaryIds)}
       order by s.name
     `),
+    cashflowModel(orgId),
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
   const arOutstanding = sumMoney(arItems.map((i) => i.remaining));
   const apOutstanding = sumMoney(apItems.map((i) => i.remaining));
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
-  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
+  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = {

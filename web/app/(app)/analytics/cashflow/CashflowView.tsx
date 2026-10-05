@@ -123,14 +123,14 @@ function OverviewTab({ data }: { data: CashflowData }) {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <AgingPanel title={t('panels.ar')} side={data.ar} accent="text-sky-600 dark:text-sky-400" />
-        <AgingPanel title={t('panels.ap')} side={data.ap} accent="text-red-600 dark:text-red-400" />
+        <AgingPanel title={t('panels.ar')} side={data.ar} accent="text-sky-600 dark:text-sky-400" unplacedKind="ar" />
+        <AgingPanel title={t('panels.ap')} side={data.ap} accent="text-red-600 dark:text-red-400" unplacedKind="ap" />
       </div>
     </div>
   )
 }
 
-function AgingPanel({ title, side, accent }: { title: string; side: SideSummary; accent: string }) {
+function AgingPanel({ title, side, accent, unplacedKind }: { title: string; side: SideSummary; accent: string; unplacedKind: 'ar' | 'ap' }) {
   const t = useTranslations('analytics.cashflow')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
@@ -153,6 +153,13 @@ function AgingPanel({ title, side, accent }: { title: string; side: SideSummary;
           </div>
         ))}
       </div>
+      {/* Items with no history and no due date sit in no week: the forecast
+        names how many and their total instead of silently excluding them. */}
+      {side.unplaced.count > 0 ? (
+        <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          {t(unplacedKind === 'ar' ? 'unplacedAr' : 'unplacedAp', { count: side.unplaced.count, total: money(side.unplaced.total) })}
+        </p>
+      ) : null}
     </Panel>
   )
 }

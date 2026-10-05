@@ -1599,8 +1599,8 @@
       "burnBadge": "每周",
       "arCoverage": "应收覆盖率",
       "arHint": "(现金 + 应收) / 应付",
-      "cashCycle": "现金周期",
-      "cashCycleHint": "DSO / DPO",
+      "cashCycle": "平均结算天数",
+      "cashCycleHint": "收款 / 付款",
       "netFlow": "期间净流量",
       "netFlowHint": "流入 - 流出",
       "runway": "现金跑道",
@@ -1722,7 +1722,9 @@
           "help": "未见显著卡片付款时报告的距上次付款天数"
         }
       }
-    }
+    },
+    "unplacedAr": "有{count}张发票既无到期日又无付款历史 · {total}未纳入预测。添加到期日即可纳入。",
+    "unplacedAp": "有{count}张应付单既无到期日又无付款历史 · {total}未纳入预测。添加到期日即可纳入。"
   },
   "trueCost": {
     "title": "真实成本",
