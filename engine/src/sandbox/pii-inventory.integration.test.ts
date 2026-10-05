@@ -453,6 +453,17 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "consolidation_control_losses.retained_method",
   "contacts.role",
   "contacts.title",
+  // Capitalized contract costs: amortization basis and life source are
+  // policy enums; cost type, currency, method and status are codes; the
+  // asset source carries structured origin refs (import row, payroll line,
+  // vendor bill line), never free-text personal data.
+  "contract_cost_policies.basis",
+  "contract_cost_policies.customer_life_source",
+  "contract_cost_assets.cost_type",
+  "contract_cost_assets.currency",
+  "contract_cost_assets.method",
+  "contract_cost_assets.status",
+  "contract_cost_assets.source",
   "crew_time_batch_events.kind",
   "crew_time_batch_events.reason",
   "crew_time_batch_lines.cost_code_ref",
