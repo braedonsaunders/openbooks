@@ -47,3 +47,13 @@ test("the 0.28 fixture can no longer produce the contradictory pair", () => {
     "a highly-concentrated portfolio must never read Balanced on the gauge",
   );
 });
+
+test("configured bands move the verdict with the organization", () => {
+  // An org that tolerates concentration to 3000 reads 2000 as diversified.
+  assert.equal(concentrationBand(2000, 2500, 3000), "diversified");
+  assert.equal(concentrationVerdict(2000, 2500, 3000).subKey, "sub.diversified");
+  // The same portfolio under the default bands reads moderate.
+  assert.equal(concentrationBand(2000), "moderate");
+  // A strict org reads 1600 as already highly concentrated.
+  assert.equal(concentrationBand(1600, 1000, 1500), "highlyConcentrated");
+});
