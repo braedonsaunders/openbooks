@@ -847,7 +847,7 @@ test("a claimed but ineligible order never asks for re-ingest", { skip: !DB }, a
   }
 });
 
-test("hidden, draft and missing sale documents share one neutral answer", { skip: !DB }, async () => {
+test("hidden posted and hidden draft sale documents share one neutral answer", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
@@ -855,9 +855,10 @@ test("hidden, draft and missing sale documents share one neutral answer", { skip
     const draftId = (await db.execute<{ id: string }>(sql`
       select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
     // Legacy cross-posted evidence: the home order points at receipts the
-    // caller may not use the way a pre-control posting left them. Posted,
-    // draft and missing targets must answer identically: the remedy never
-    // infers posting state from denied visibility.
+    // caller may not use the way a pre-control posting left them. Posted and
+    // draft targets must answer identically: the remedy never infers posting
+    // state from denied visibility. A dangling id would prove the same null
+    // branch, but the posting-document foreign key requires a live target.
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-hidden-sale-1", currency: "CAD", issuedAt: "2026-07-10" },
       [{ id: "txn-hidden-sale-1", type: "charge", amount: "60.40", currency: "CAD", sourceOrderId: "gid://shopify/Order/8801" }],
@@ -867,7 +868,7 @@ test("hidden, draft and missing sale documents share one neutral answer", { skip
       clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
     }, null)).batchId;
     const remedies: string[] = [];
-    for (const [label, documentId] of [["posted", docB.id], ["draft", draftId], ["missing", randomUUID()]] as const) {
+    for (const [label, documentId] of [["posted", docB.id], ["draft", draftId]] as const) {
       const moved = await db.execute(sql`update channel_orders set posting_document_id = ${documentId}
          where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
       assert.equal(moved.rowCount, 1, `the home order carries the ${label} receipt`);
@@ -887,13 +888,13 @@ test("hidden, draft and missing sale documents share one neutral answer", { skip
       }
       remedies.push(verdict.remedy);
     }
-    assert.deepEqual(remedies, [remedies[0], remedies[0], remedies[0]], "posting state never steers the answer");
+    assert.deepEqual(remedies, [remedies[0], remedies[0]], "posting state never steers the answer");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("hidden, draft and missing summary documents share one neutral answer", { skip: !DB }, async () => {
+test("hidden posted and hidden draft summary documents share one neutral answer", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
@@ -907,6 +908,8 @@ test("hidden, draft and missing summary documents share one neutral answer", { s
     const moved = await db.execute(sql`update channel_orders set posting_document_id = null, summary_id = ${summaryId}
        where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
     assert.equal(moved.rowCount, 1, "the home order summarizes in the channel");
+    // Posted and draft targets must answer identically here too; a dangling
+    // id is likewise barred by the summary posting-document foreign key.
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-hidden-summary-1", currency: "CAD", issuedAt: "2026-07-10" },
       [{ id: "txn-hidden-sum-1", type: "charge", amount: "60.40", currency: "CAD", sourceOrderId: "8801" }],
@@ -916,7 +919,7 @@ test("hidden, draft and missing summary documents share one neutral answer", { s
       clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
     }, null)).batchId;
     const remedies: string[] = [];
-    for (const [label, documentId] of [["posted", docB.id], ["draft", draftId], ["missing", randomUUID()]] as const) {
+    for (const [label, documentId] of [["posted", docB.id], ["draft", draftId]] as const) {
       const pointed = await db.execute(sql`update channel_daily_summaries set posting_document_id = ${documentId}
          where org_id = ${org.orgId} and id = ${summaryId}`);
       assert.equal(pointed.rowCount, 1, `the summary carries the ${label} receipt`);
@@ -936,7 +939,7 @@ test("hidden, draft and missing summary documents share one neutral answer", { s
       }
       remedies.push(verdict.remedy);
     }
-    assert.deepEqual(remedies, [remedies[0], remedies[0], remedies[0]], "posting state never steers the answer");
+    assert.deepEqual(remedies, [remedies[0], remedies[0]], "posting state never steers the answer");
   } finally {
     await dropScratchOrg(org.orgId);
   }
