@@ -3259,6 +3259,16 @@ const COGNATES = new Set<string>([
   'pt-BR:sync.runs.kind.incremental|Incremental',
   'pt-BR:sync.runs.stats.sourceBook|{kind} {ref}',
   'zh:sync.runs.stats.sourceBook|{kind} {ref}',
+  // OpenBooks is the product name, identical in every locale; Coupons and
+  // Source are French nouns spelled exactly like English.
+  'de:billingImport.openbooksValue|OpenBooks',
+  'es:billingImport.openbooksValue|OpenBooks',
+  'fr:billingImport.count_coupons|Coupons',
+  'fr:billingImport.openbooksValue|OpenBooks',
+  'fr:billingImport.sourceValue|Source',
+  'ja:billingImport.openbooksValue|OpenBooks',
+  'pt-BR:billingImport.openbooksValue|OpenBooks',
+  'zh:billingImport.openbooksValue|OpenBooks',
   'de:timesheets.field.cornersPlaceholder|43.6532,-79.3832',
   'de:timesheets.field.geoLabel|Geo',
   'de:timesheets.field.kioskPin|PIN',
