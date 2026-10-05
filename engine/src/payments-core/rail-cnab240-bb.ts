@@ -1,5 +1,6 @@
 import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText } from "./rail-text.ts";
 
 // ---------------------------------------------------------------------------
 // CNAB 240 — Banco do Brasil variant: counterparty coordinates + originator
@@ -330,17 +331,14 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     throw new PaymentError("CNAB 240 NSA must be 6 digits and greater than zero");
   }
 
-  // CNAB channel text: uppercase, unaccented. Accents strip deterministically
-  // (NFD + mark removal) and anything outside the channel set becomes a
-  // space — mirroring the channel rather than letting the bank mangle names
+  // CNAB channel text: uppercase, unaccented. Accents fold deterministically
+  // to ASCII (rail-text.ts: "AÇÃO" → "ACAO", ß → SS) and a character with no
+  // ASCII spelling is refused by name; ASCII outside the channel set becomes
+  // a space — mirroring the channel rather than letting the bank mangle names
   // unpredictably. Lengths are the published field widths; over-length text
-  // fails here rather than shifting every field after it. (Non-ASCII never
-  // reaches this writer through the payroll path either: the artifact
-  // refuses non-ASCII on fixed-width rails before rendering.)
-  const text = (value: string, len: number, what: string, allowBlank = false): string => {
-    const mapped = value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+  // is cut to the field, never shifting the fields after it.
+  const text = (value: string, len: number, what: string, remedy: string, allowBlank = false): string => {
+    const mapped = asciiRailText(value, "CNAB 240", what, remedy)
       .toUpperCase()
       .replace(/[^A-Z0-9 .,/&+\-:;()?]/g, " ")
       .slice(0, len);
@@ -417,7 +415,7 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
   const empresaConta = conta(s.conta, "debit conta");
   const empresaAgDv = dv(s.agenciaDv, "debit agência DV");
   const empresaContaDv = dv(s.contaDv, "debit conta DV");
-  const nomeEmpresa = text(s.nomeEmpresa, 30, "company name");
+  const nomeEmpresa = text(s.nomeEmpresa, 30, "company name", ORIGINATOR_REMEDY);
   const cnpj = normalizeCpfCnpj(s.cnpjEmpresa);
   if (cnpj?.length !== 14) throw new PaymentError("CNAB 240 employer inscription must be a 14-digit CNPJ");
 
@@ -443,7 +441,7 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     empresaContaDv + // 71 DV conta
     "0" + // 72 DV ag/conta: '0' for a BB debit account (3)
     nomeEmpresa + // 73–102 nome da empresa
-    text("BANCO DO BRASIL", 30, "bank name") + // 103–132 nome do banco
+    text("BANCO DO BRASIL", 30, "bank name", ORIGINATOR_REMEDY) + // 103–132 nome do banco
     " ".repeat(10) + // 133–142 uso exclusivo FEBRABAN
     "1" + // 143 remessa
     ddmmaaaa(run.creationDateTime.slice(0, 10), "file generation date") + // 144–151 data de geração
@@ -546,8 +544,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
         conta(p.conta, "favorecido conta") + // 30–41 conta
         dv(p.contaDv, "favorecido conta DV") + // 42 DV conta
         (p.dac == null || p.dac === "" ? " " : dv(p.dac, "favorecido DAC")) + // 43 DAC: blank for BB accounts (3); second DV carried verbatim for TED
-        text(p.favorecidoNome, 30, "favorecido name") + // 44–73 nome do favorecido
-        text(p.seuNumero, 20, "seu número", true) + // 74–93 seu número (G064): blank acceptable per (2)
+        text(p.favorecidoNome, 30, "favorecido name", PAYEE_NAME_REMEDY) + // 44–73 nome do favorecido
+        text(p.seuNumero, 20, "seu número", "Edit the reference to Latin letters without that character, then generate the file again.", true) + // 74–93 seu número (G064): blank acceptable per (2)
         ddmmaaaa(run.paymentDate, "payment date") + // 94–101 data do pagamento
         "BRL" + // 102–104 tipo da moeda: (2) kills the SISPAG-'009' reading for this variant
         "0".repeat(15) + // 105–119 quantidade da moeda: zeros for reais (1)(2)(3)

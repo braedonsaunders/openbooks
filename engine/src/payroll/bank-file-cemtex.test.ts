@@ -168,6 +168,14 @@ test("every golden record is exactly 120 characters with the terminator outside 
   assert.equal(records[3]![0], "7");
 });
 
+test("an accented employee name folds to ASCII and keeps every record at 120 bytes", () => {
+  const inputs = cemtexInputs();
+  inputs.credits[0]!.employeeName = "Zoë Ångström";
+  const records = renderCemtex(inputs).content.split("\r\n").filter((line) => line.length > 0);
+  for (const record of records) assert.equal(Buffer.byteLength(record, "utf8"), 120);
+  assert.ok(records.some((record) => record.slice(30, 62) === "Zoe Angstrom".padEnd(32, " ")));
+});
+
 test("the golden trailer ties to the run at its published offsets", () => {
   const result = renderCemtex();
   const trailer = result.content.split("\r\n").find((line) => line[0] === "7")!;

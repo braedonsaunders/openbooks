@@ -1,5 +1,6 @@
 import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText, isPrintableAscii } from "./rail-text.ts";
 
 // ---------------------------------------------------------------------------
 // Cemtex (Australian ABA) originator settings
@@ -188,6 +189,10 @@ export function buildCemtexFile(run: CemtexRun): string {
     );
   }
 
+  // Free text is folded to ASCII before it is measured: the file is us-ascii
+  // and fixed-offset, so one multi-byte character would shift every field
+  // after it (see rail-text.ts).
+  const originator = (value: string, field: string) => asciiRailText(value, "Cemtex", field, ORIGINATOR_REMEDY);
   const padR = (value: string, len: number): string => {
     if (value.length > len) throw new PaymentError(`field value "${value}" does not fit in ${len} characters`);
     return value.padEnd(len, " ");
@@ -247,7 +252,7 @@ export function buildCemtexFile(run: CemtexRun): string {
     "01" + // 19–20: reel sequence number (single-file batch)
     s.bankAbbreviation + // 21–23: processing bank's APCA abbreviation
     padR("", 7) + // 24–30: reserved, blank
-    padR(s.userName, 26) + // 31–56: user preferred name
+    padR(originator(s.userName, "user preferred name"), 26) + // 31–56: user preferred name
     padL0(s.userId, 6) + // 57–62: BECS User Identification Number
     padR("PAYROLL", 12) + // 63–74: file description — this file IS a payroll file
     ddmmyy(run.processingDate) + // 75–80: release date DDMMYY
@@ -265,13 +270,18 @@ export function buildCemtexFile(run: CemtexRun): string {
       " " + // 18: indicator — blank (no new/varied details, no dividend/interest withholding)
       "53" + // 19–20: transaction code 53, Pay
       padL0(String(p.amountCents), 10) + // 21–30: cents, unsigned zero-filled
-      padR(p.accountTitle, 32) + // 31–62
-      padR(p.lodgementReference, 18) + // 63–80
+      // 31–62: the title is cut to width after folding, as every rail cuts
+      // names — folding can lengthen it (ß → ss) past a pre-cut name.
+      padR(asciiRailText(p.accountTitle, "Cemtex", "account title", PAYEE_NAME_REMEDY).slice(0, 32), 32) +
+      padR(asciiRailText(p.lodgementReference, "Cemtex", "lodgement reference", "Edit the reference to Latin letters without that character, then generate the file again."), 18) + // 63–80
       traceBsb + // 81–87
       traceAccount + // 88–96
-      padR(s.remitterName, 16) + // 97–112
+      padR(originator(s.remitterName, "remitter name"), 16) + // 97–112
       padL0("0", 8); // 113–120: withholding tax — zero (PAYG goes to the ATO, not here)
     if (record.length !== 120) throw new PaymentError("internal error: Cemtex detail record is not 120 characters");
+    if (!isPrintableAscii(record)) {
+      throw new PaymentError("Cemtex detail record contains a character with no ASCII form, which would shift every field after it");
+    }
     return record;
   });
 

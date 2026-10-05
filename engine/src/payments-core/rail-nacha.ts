@@ -4,6 +4,7 @@ import { unsealJson } from "../platform/secrets.ts";
 import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { paymentFormatRails } from "./rail-descriptors.ts";
+import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText, isPrintableAscii } from "./rail-text.ts";
 
 export interface NachaSettings {
   /** ODFI 9-digit routing/ABA number (the originating bank). */
@@ -217,6 +218,11 @@ export function buildNachaFile(opts: {
     };
   };
 
+  // Names are folded to ASCII before they are cut to width: the file is
+  // us-ascii and fixed-offset, so one multi-byte character would shift every
+  // field after it (see rail-text.ts).
+  const originator = (value: string, field: string) => asciiRailText(value, "NACHA", field, ORIGINATOR_REMEDY);
+
   const creation = stampParts(opts.creationDateTime);
   const creationYymmdd = creation.yymmdd;
   const creationHhmm = creation.hhmm;
@@ -226,12 +232,12 @@ export function buildNachaFile(opts: {
   rows.push(
     "1" + "01" + nachaField(s.immediateDestination, 10, "r") + nachaField(s.immediateOrigin, 10, "r") +
     creationYymmdd + creationHhmm + modifier + "094" + "10" + "1" +
-    nachaField(s.destinationName, 23) + nachaField(s.originName, 23) + nachaField("", 8),
+    nachaField(originator(s.destinationName, "immediate destination name"), 23) + nachaField(originator(s.originName, "immediate origin name"), 23) + nachaField("", 8),
   );
   // 5 — Batch Header (220 = credits only)
   rows.push(
-    "5" + "220" + nachaField(s.companyName, 16) + nachaField("", 20) + nachaField(s.companyId, 10) + sec +
-    nachaField(s.entryDescription ?? "PAYMENT", 10) + nachaField("", 6) + yymmdd(opts.effectiveDate, "effective date") + nachaField("", 3) +
+    "5" + "220" + nachaField(originator(s.companyName, "company name"), 16) + nachaField("", 20) + nachaField(s.companyId, 10) + sec +
+    nachaField(originator(s.entryDescription ?? "PAYMENT", "company entry description"), 10) + nachaField("", 6) + yymmdd(opts.effectiveDate, "effective date") + nachaField("", 3) +
     "1" + odfi8 + nachaField("0000001", 7, "r", "0"),
   );
   // 6 — Entry Details
@@ -255,7 +261,7 @@ export function buildNachaFile(opts: {
     const trace = odfi8 + String(i + 1).padStart(7, "0");
     rows.push(
       "6" + e.transactionCode + rt8 + checkDigit + nachaField(e.accountNumber, 17) + nachaNumeric(String(e.amountCents), 10, "payment amount") +
-      nachaField(e.individualId, 15) + nachaField(e.individualName, 22) + nachaField("", 2) + "0" + trace,
+      nachaField(e.individualId, 15) + nachaField(asciiRailText(e.individualName, "NACHA", "receiver name", PAYEE_NAME_REMEDY), 22) + nachaField("", 2) + "0" + trace,
     );
   });
   const hashMod = nachaNumeric((entryHash % 10_000_000_000n).toString(), 10, "entry hash");
@@ -274,7 +280,15 @@ export function buildNachaFile(opts: {
   );
   // pad with 9-filler records to a full 10-record block
   while (rows.length % 10 !== 0) rows.push("9".repeat(94));
-  for (const r of rows) if (r.length !== 94) throw new PaymentError(`NACHA record is ${r.length} chars, not 94`);
+  rows.forEach((r, i) => {
+    if (r.length !== 94) throw new PaymentError(`NACHA record is ${r.length} chars, not 94`);
+    if (!isPrintableAscii(r)) {
+      throw new PaymentError(
+        `NACHA record ${i + 1} contains a character with no ASCII form, which would shift every field after it — ` +
+          `edit the account number, reference or originator settings on that record to ASCII`,
+      );
+    }
+  });
   return rows.join("\n") + "\n";
 }
 

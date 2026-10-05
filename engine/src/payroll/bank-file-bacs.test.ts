@@ -206,6 +206,14 @@ test("every golden record carries its label and exact width, terminators outside
   assert.equal(records[9]!.slice(0, 4), "UTL1");
 });
 
+test("an accented employee name folds to ASCII and keeps every record's byte width", () => {
+  const inputs = bacsInputs();
+  inputs.credits[0]!.employeeName = "Zoë Ångström";
+  const records = renderBacs(inputs).content.split("\r\n").filter((line) => line.length > 0);
+  for (const record of records) assert.equal(Buffer.byteLength(record, "utf8"), record.slice(0, 4) in { VOL1: 1, HDR1: 1, HDR2: 1, UHL1: 1, EOF1: 1, EOF2: 1, UTL1: 1 } ? 80 : 100);
+  assert.ok(records.some((record) => record.slice(82, 100) === "ZOE ANGSTROM".padEnd(18, " ")));
+});
+
 test("the golden trailer ties to the run at its published offsets", () => {
   const result = renderBacs();
   const trailer = result.content.split("\r\n").find((line) => line.slice(0, 4) === "UTL1")!;

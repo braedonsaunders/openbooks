@@ -1,6 +1,7 @@
 import { PaymentError } from "./payment-errors.ts";
 import { parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { type EftSettings } from "./rail-settings.ts";
+import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText, isPrintableAscii } from "./rail-text.ts";
 
 export interface Cpa005Payment {
   /** Amount in cents (positive integer, max 10 digits). */
@@ -135,7 +136,13 @@ export function buildCpa005File(run: Cpa005Run): string {
   }
   if (run.payments.length === 0) throw new PaymentError("run has no payments to export");
 
-  const originatorId = alpha(s.originatorId, 10);
+  // Names are folded to ASCII before they are cut to width: the file is
+  // us-ascii and fixed-offset, so one multi-byte character would shift every
+  // field after it (see rail-text.ts).
+  const originator = (value: string, field: string) => asciiRailText(value, "CPA-005", field, ORIGINATOR_REMEDY);
+  const originatorId = alpha(originator(s.originatorId, "originator id"), 10);
+  const originatorShortName = alpha(originator(s.originatorShortName, "originator short name"), 15);
+  const originatorLongName = alpha(originator(s.originatorLongName, "originator long name"), 30);
   const fileCreationNo = num(run.fileCreationNumber, 4);
   const originControl = `${originatorId}${fileCreationNo}`; // positions 11–24
   // The creation day arrives already zoned (a civil-day string from the
@@ -186,9 +193,9 @@ export function buildCpa005File(run: Cpa005Run): string {
         itemSequence: i + 1,
       }) +
       "0".repeat(3) + // stored transaction type (3)
-      alpha(s.originatorShortName, 15) + // originator short name (15)
-      alpha(p.payeeName, 30) + // payee name (30)
-      alpha(s.originatorLongName, 30) + // originator long name (30)
+      originatorShortName + // originator short name (15)
+      alpha(asciiRailText(p.payeeName, "CPA-005", "payee name", PAYEE_NAME_REMEDY), 30) + // payee name (30)
+      originatorLongName + // originator long name (30)
       originatorId + // originating direct clearer's user id (10)
       alpha(p.crossReference, 19) + // originator cross-reference (19)
       returnRouting + // institutional id for returns (9)
@@ -228,8 +235,14 @@ export function buildCpa005File(run: Cpa005Run): string {
     ).padEnd(RECORD_LEN, " "),
   );
 
-  for (const rec of records) {
+  records.forEach((rec, i) => {
     if (rec.length !== RECORD_LEN) throw new PaymentError("internal error: CPA-005 record is not 1464 characters");
-  }
+    if (!isPrintableAscii(rec)) {
+      throw new PaymentError(
+        `CPA-005 record ${i + 1} contains a character with no ASCII form, which would shift every field after it — ` +
+          `edit the account number, cross-reference or originator settings on that record to ASCII`,
+      );
+    }
+  });
   return records.join("\r\n") + "\r\n";
 }

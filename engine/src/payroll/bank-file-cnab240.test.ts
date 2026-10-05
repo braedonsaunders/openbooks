@@ -395,6 +395,13 @@ test("accented names map to the channel without shifting any field", () => {
   assert.equal(segA.slice(43, 73), "JOSE ACAO".padEnd(30, " "));
 });
 
+test("a name with no ASCII spelling is refused by name, never blanked into the channel", () => {
+  const inputs = cnabInputs();
+  inputs.credits[0]!.employeeName = "JOSÉ 王";
+  assert.throws(() => renderCnab(inputs), (error: Error) =>
+    /favorecido name "JOSÉ 王" contains "王"/.test(error.message) && /Edit the payee's name/.test(error.message));
+});
+
 test("a second TED check digit rides position 43 verbatim, blank otherwise", () => {
   const inputs = cnabInputs();
   inputs.credits[1]!.cnab240 = { ...inputs.credits[1]!.cnab240!, dac: "7" };

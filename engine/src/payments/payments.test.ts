@@ -7,6 +7,7 @@ import { carryingAmountForSettlement, persistPaymentFxRate, realizedFxControlAdj
 import { type EftSettings, validateEftSettings } from "../payments-core/rail-settings.ts";
 import { type NachaSettings } from "../payments-core/rail-nacha.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
+import { assertDeclaredAsciiCharset } from "../payments-core/rail-text.ts";
 
 test("payment FX rates share the positive, invertible numeric storage domain", () => {
   assert.equal(persistPaymentFxRate("1.25"), "1.2500000000");
@@ -70,7 +71,7 @@ const NACHA: NachaSettings = {
   companyId: "1123456789",
 };
 
-function nachaFile(accountNumber: string): string {
+function nachaFile(accountNumber: string, individualName = "FIRST PAYEE"): string {
   return buildNachaFile({
     settings: NACHA,
     effectiveDate: "2026-03-05",
@@ -82,7 +83,7 @@ function nachaFile(accountNumber: string): string {
       accountNumber,
       amountCents: 12500n,
       individualId: "BILL-0001",
-      individualName: "FIRST PAYEE",
+      individualName,
     }],
   });
 }
@@ -177,6 +178,51 @@ test("composing the item trace number leaves every other credit-segment offset a
   const records = buildCpa005File(cpa005Run()).split("\r\n").filter((r) => r !== "");
   assert.deepEqual(records.map((r) => r[0]), ["A", "C", "Z"]);
   for (const record of records) assert.equal(record.length, 1464);
+});
+
+// ---------------------------------------------------------------------------
+// Fixed-width rails are ASCII byte for byte — accents fold, never shift
+// ---------------------------------------------------------------------------
+
+/** Each record's UTF-8 byte length — what the bank's offsets actually read. */
+const recordBytes = (content: string, separator: string) =>
+  content.split(separator).filter((r) => r !== "").map((r) => Buffer.byteLength(r, "utf8"));
+
+test("an accented payee name folds to ASCII and keeps every NACHA record at 94 bytes", () => {
+  const content = nachaFile("998877", "Béton Québec Straße");
+  assert.deepEqual(new Set(recordBytes(content, "\n")), new Set([94]));
+  const entry = content.split("\n").find((r) => r.startsWith("6"))!;
+  assert.equal(entry.slice(54, 76), "Beton Quebec Strasse  ");
+  assert.equal(entry.slice(79), "021000020000001"); // trace number still at 80–94
+});
+
+test("an accented payee name folds to ASCII and keeps every CPA-005 record at 1464 bytes", () => {
+  const run = cpa005Run();
+  run.payments[0]!.payeeName = "Béton Québec Ltée";
+  const content = buildCpa005File(run);
+  assert.deepEqual(new Set(recordBytes(content, "\r\n")), new Set([1464]));
+  const [first, second] = creditSegments(content);
+  assert.equal(first!.slice(80, 110), "Beton Quebec Ltee".padEnd(30, " "));
+  assert.equal(second!.slice(80, 110), "SECOND PAYEE".padEnd(30, " ")); // later segment unshifted
+});
+
+test("a payee name with no ASCII spelling is refused naming the payee, the field and the remedy", () => {
+  const run = cpa005Run();
+  run.payments[0]!.payeeName = "北京建設";
+  for (const render of [() => nachaFile("998877", "北京建設"), () => buildCpa005File(run)]) {
+    assert.throws(render, (error: Error) =>
+      error instanceof PaymentError
+      && /(receiver|payee) name "北京建設" contains "北"/.test(error.message)
+      && /Edit the payee's name to Latin letters/.test(error.message));
+  }
+});
+
+test("a file declared us-ascii is refused at storage when any line is not ASCII, naming the line", () => {
+  assert.throws(
+    () => assertDeclaredAsciiCharset("text/plain; charset=us-ascii", "HEADER\r\nBéton,12.00\r\n"),
+    (error: Error) => error instanceof PaymentError && /line 2 contains "é"/.test(error.message),
+  );
+  assert.doesNotThrow(() => assertDeclaredAsciiCharset("text/csv; charset=utf-8", "Béton,12.00\r\n"));
 });
 
 // ---------------------------------------------------------------------------
