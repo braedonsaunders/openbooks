@@ -16,7 +16,14 @@ stubModules({ navigation: false, intl: 'export async function getTranslations(){
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__sentinelAccess.user}" };
   if (specifier.endsWith("/lib/periods") && /\/analytics\/sentinel\/(?:page\.tsx|view\.ts)$/.test(context.parentURL ?? "")) {
-    return { shortCircuit: true, url: "data:text/javascript,export async function resolvePeriod(){return globalThis.__sentinelAccess.period}" };
+    // Re-export the real period module and override only the clock: a
+    // hand copy would go stale on the next export the graph gains (it just
+    // did — MissingAccountingPeriodError), failing the file to link with
+    // zero tests instead of failing loudly.
+    const realPeriods = new URL("./periods.ts", import.meta.url).href;
+    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+      `export * from ${JSON.stringify(realPeriods)}; export async function resolvePeriod(){return globalThis.__sentinelAccess.period}`,
+    ) };
   }
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
