@@ -23,6 +23,7 @@ import { TAX_ENTITIES } from './entities/taxes'
 import { DIMENSION_ENTITIES } from './entities/dimensions'
 import { BILLING_ENTITIES } from './entities/billing'
 import { SALES_SETUP_ENTITIES } from './entities/sales'
+import { STORED_VALUE_ENTITIES } from './entities/stored-value'
 import { REVENUE_ENTITIES } from './entities/revenue'
 import { INVENTORY_ENTITIES } from './entities/inventory'
 import { WAREHOUSE_ENTITIES } from './entities/warehouses'
@@ -47,6 +48,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...DIMENSION_ENTITIES,
   ...BILLING_ENTITIES,
   ...SALES_SETUP_ENTITIES,
+  ...STORED_VALUE_ENTITIES,
   ...REVENUE_ENTITIES,
   ...INVENTORY_ENTITIES,
   ...WAREHOUSE_ENTITIES,

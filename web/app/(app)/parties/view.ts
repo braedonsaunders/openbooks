@@ -270,6 +270,8 @@ export async function loadParties(
     complianceEnabled,
     autopayEnabled,
     crossBorderTaxOn,
+    storedValueEnabled,
+    storeCreditBalances,
   ] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
@@ -320,6 +322,15 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'subcontractorCompliance'),
     isFeatureEnabled(orgId, 'autopay'),
     isFeatureEnabled(orgId, 'crossBorderTax'),
+    isFeatureEnabled(orgId, 'storedValue'),
+    partyId && partyId !== 'new' && isUuid(partyId)
+      ? db.execute<{ currency: string; total: string }>(sql`
+          select currency, (sum(balance_minor)::numeric / 10000)::text as total
+            from stored_value_accounts
+           where org_id = ${orgId} and customer_party_id = ${partyId}
+             and status in ('active', 'frozen')
+           group by currency`)
+      : { rows: [] as { currency: string; total: string }[] },
   ])
   const resolvedPartyForm =
     (openParty || creating) && pickers && role
@@ -434,6 +445,14 @@ export async function loadParties(
           complianceEnabled,
           canManageCompliance: can(authz, 'compliance.manage'),
           compliance,
+          storedValue: storedValueEnabled && can(authz, 'stored_value.read') && openParty?.customer != null
+            ? {
+              balances: storeCreditBalances.rows.map((row) => ({
+                currency: String(row.currency),
+                total: String(row.total),
+              })),
+            }
+            : null,
           initialTab: creating ? 'overview' : partyTab,
           initialMode:
             creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',

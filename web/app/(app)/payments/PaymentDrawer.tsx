@@ -26,6 +26,7 @@ import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { promptDialog } from '../../../lib/prompt'
+import { StoredValueTendersSection, type CustomerCreditOption, type TenderDraft } from './StoredValueTendersSection'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 
@@ -253,6 +254,14 @@ export function PaymentDrawer({
   /** Surface label for the unsaved title (no number exists yet). The section
    *  already translates it per surface — no new keys. */
   createTitle?: string
+  /** Stored-value tenders (AR receipts only, feature on): already-saved
+   *  snapshots plus the customer's verified credit for the picker. Null =
+   *  gated, so the section never renders without the read surface behind
+   *  it. Fresh codes verify on save; echoes re-verify the same way. */
+  storedValue?: {
+    tenders: { accountId: string; codeLast4: string; amount: string }[]
+    customerCredits: CustomerCreditOption[]
+  } | null
 }) {
   const { money } = useMoney()
   const t = useTranslations('payments.drawer')
@@ -295,6 +304,25 @@ export function PaymentDrawer({
   const [allocs, setAllocs] = useState<Record<string, AllocationClient>>(() =>
     Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])),
   )
+  // Stored-value tenders ride the same explicit Save as allocations: fresh
+  // codes typed this session plus echoes of already-saved snapshots (the
+  // code itself is shown once at issue, so echoes carry the account id).
+  const initialTenderDrafts = (): TenderDraft[] =>
+    (storedValue?.tenders ?? []).map((tender) => ({
+      key: `saved-${tender.accountId}`,
+      code: null,
+      accountId: tender.accountId,
+      codeLast4: tender.codeLast4,
+      amount: tender.amount,
+      available: null,
+    }))
+  const [tenderDrafts, setTenderDrafts] = useState<TenderDraft[]>(initialTenderDrafts)
+  const showTenders = side === 'ar' && storedValue != null
+  const tenderPatch = showTenders
+    ? tenderDrafts.map((draft) => draft.code
+      ? { code: draft.code, amount: draft.amount }
+      : { accountId: draft.accountId ?? '', amount: draft.amount })
+    : null
   const settlementRateKey = `${doc.currency}:${documentDate}:${side}:${openItems.map((item) => item.currency).join(',')}`
   const [settlementRateResult, setSettlementRateResult] = useState<{
     key: string
@@ -429,8 +457,9 @@ export function PaymentDrawer({
       referenceNumber,
       memo,
       allocations: validAllocations,
+      ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, doc.updated_at],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, tenderPatch, doc.updated_at],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -470,6 +499,7 @@ export function PaymentDrawer({
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
     setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])))
+    setTenderDrafts(initialTenderDrafts())
     // Restoring the party must not trip the party-change reset on the next
     // render: sync its tracking and bring back the loaded open items, or the
     // wipe clears the restored applications and a later save deletes them.
@@ -500,6 +530,7 @@ export function PaymentDrawer({
       referenceNumber,
       memo,
       allocations: validAllocations,
+      ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }
     const ok = await execute(
       () =>
@@ -947,6 +978,18 @@ export function PaymentDrawer({
             )}
           </div>
         </div>}
+
+        {showTenders && (editable || tenderDrafts.length > 0) ? (
+          <StoredValueTendersSection
+            currency={doc.currency}
+            receiptTotal={total}
+            partyId={partyId || null}
+            drafts={tenderDrafts}
+            onChange={setTenderDrafts}
+            initialCredits={storedValue?.customerCredits ?? []}
+            disabled={!editable}
+          />
+        ) : null}
 
         {isDraft ? (
           <div className="space-y-2">

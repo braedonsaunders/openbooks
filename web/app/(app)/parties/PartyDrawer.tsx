@@ -41,6 +41,7 @@ import { ReadOnlyValue } from '../../../components/read-only-value'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import { PartyPulseSection } from './PartyPulseSection'
+import { StoreCreditPanel } from './StoreCreditPanel'
 import { PartyRelationshipSection } from './PartyRelationshipSection'
 
 export function PartyDrawer({
@@ -69,6 +70,7 @@ export function PartyDrawer({
   canManageCompliance = false,
   compliance = null,
   taxIds = null,
+  storedValue = null,
   hrm = null,
   role,
   autopay = null,
@@ -132,6 +134,10 @@ export function PartyDrawer({
   compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null
   /** Customer tax IDs: identity plus the manage grant; rows load in the section. Null hides the section. */
   taxIds?: { partyId: string; canManage: boolean } | null
+  /** stored_value.read + the Stored value feature — shows the Store credit
+   *  tab with this customer's available balances (null = gated, so the tab
+   *  never renders without the read surface behind it). */
+  storedValue?: { balances: { currency: string; total: string }[] } | null
   /** Company Settings → Features. The HRM switch plus hrm.employment.read
    *  gate the employee Employment tab; the ids are the party's scoped
    *  employments (null = gated, so the tab never renders without the read
@@ -165,6 +171,7 @@ export function PartyDrawer({
   closeHref?: string
 }) {
   const t = useTranslations('parties.drawer')
+  const tsv = useTranslations('storedValue')
   const tc = useTranslations('common')
   const th = useTranslations('hrm')
   const tEntities = useTranslations('entities')
@@ -195,6 +202,11 @@ export function PartyDrawer({
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
   const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
+  // The Store credit tab needs a customer in a stored-value-enabled org
+  // whose viewer may read balances — the same predicate gates the tab
+  // button, the deep-link fallback, and the panel, so a stale
+  // ?partyTab=store-credit can never strand the drawer on a missing panel.
+  const showStoreCreditTab = storedValue != null && (role === 'customer' || (!role && payload.customer != null))
   /**
    * `role` says which role's FIELDS to show, and opening a record from the
    * account list used to mean "force the customer role on". It cannot any
@@ -223,6 +235,7 @@ export function PartyDrawer({
     (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
     (initialTab === 'compliance' && !showComplianceTab) ||
     (initialTab === 'paymentMethods' && !showPaymentMethodsTab) ||
+    (initialTab === 'store-credit' && !showStoreCreditTab) ||
     (initialTab === 'employment' && !showEmploymentTab)
       ? 'overview'
       : initialTab
@@ -950,6 +963,7 @@ export function PartyDrawer({
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
     ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pricing' as const, label: t('tabs.pricing') }] : []),
     ...(showPaymentMethodsTab ? [{ key: 'paymentMethods' as const, label: t('tabs.paymentMethods') }] : []),
+    ...(showStoreCreditTab ? [{ key: 'store-credit' as const, label: tsv('customer.tabLabel') }] : []),
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
     ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
@@ -1582,6 +1596,8 @@ export function PartyDrawer({
             canManageAutopay={autopay?.canManageAutopay ?? false}
             defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
           />
+        {tab === 'store-credit' && showStoreCreditTab && storedValue ? (
+          <StoreCreditPanel balances={storedValue.balances} />
         ) : null}
         {tab === 'pricing' && taxIds && !isPlaceholderName ? (
           <PartyTaxIdSection partyId={taxIds.partyId} canManage={taxIds.canManage} />
