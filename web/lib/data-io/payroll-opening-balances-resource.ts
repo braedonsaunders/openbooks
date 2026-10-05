@@ -546,6 +546,7 @@ function entitlementFields(plans: readonly EntitlementPlan[]): ResourceField[] {
       required: true,
     },
     { key: 'amount', label: 'Balance carried in', kind: 'currency', required: true },
+    { key: 'note', label: 'Reason or source reference', kind: 'text' },
   ]
 }
 
@@ -708,6 +709,7 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             movementDate: asOf,
+            note: String(src.note ?? '').trim() || null,
             mode,
             rows: [{ employeePartyId: employee.id, amounts: { [plan.code]: amount } }],
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
