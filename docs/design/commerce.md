@@ -250,7 +250,10 @@ complexity sits at the depth where it is needed.
    effective dating, overrides, per-jurisdiction rules, posting detail, in a
    `DisclosureSection` (`packages/ui/src/disclosure.tsx`) that stays collapsed
    and summarizes what it resolves to. Advanced content that needs attention
-   is forced open.
+   is forced open. Separate entity or concept tables belong in shared
+   subtabs or related-record drawers, never vertically stacked in the same
+   active body. A disclosure does not exempt another concept's table from
+   this rule.
 2. **Defaults over setup.** Connecting a channel or enabling a feature
    proposes a complete working configuration (suggested accounts by type and
    name, SKU auto-match, location match by name, the org's default tax
