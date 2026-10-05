@@ -342,6 +342,16 @@ function packFactLabel(country: string, column: string): string {
   return column
 }
 
+/** Pack-declared whole-number employee facts stored on the profile row. */
+const PACK_FACT_COUNT_COLUMNS = [
+  'pl_rok_urodzenia',
+  'es_ano_nacimiento',
+  'es_grupo_cotizacion',
+  'jp_hyojun_hoshu',
+  'br_dependentes',
+  'br_salario_familia_filhos',
+] as const
+
 /**
  * A pack-declared `count` answer (birth years, grupo 1–11, dependent
  * counts, whole-yen grades) against the band the pack declares for the
@@ -361,8 +371,19 @@ function packFactCount(
   const label = packFactLabel(country, column)
   const bounds = profileColumnCountBounds(country, column)
   if (!bounds) return { ok: false, error: `${label} is not declared by the ${country} payroll pack — it cannot be stored here` }
-  const n = Number(text)
-  if (!Number.isInteger(n) || n < bounds.min || n > bounds.max) {
+  // Text reads through the shared decimal classifier, never Number(): a
+  // thousands separator, full-width digits or a currency suffix refuses by
+  // name with its own remedy instead of collapsing to NaN, and scientific
+  // notation is never silently expanded into a stored grade.
+  let n: number
+  if (typeof text === 'number') {
+    n = text
+  } else {
+    const canonical = canonicalDecimal(text, 0)
+    if (canonical === null) return { ok: false, error: decimalNullRefusal(label, 'a whole number', value, 0) }
+    n = Number(canonical)
+  }
+  if (!Number.isSafeInteger(n) || n < bounds.min || n > bounds.max) {
     const band = bounds.max >= Number.MAX_SAFE_INTEGER
       ? `a whole number at least ${bounds.min}`
       : `${bounds.min}–${bounds.max}`
@@ -777,16 +798,11 @@ export const POST = defineRoute({
     // fact's operator-facing label, never the engine key. An answer for a
     // column the pack does not declare is refused rather than stored where no
     // engine reads it; a blank answer saves as null (unknown), and readiness
-    // names the gap before calculation rather than the save refusing it.
+    // names the gap before calculation rather than the save refusing it —
+    // except a blank that would clear a required answer already on file,
+    // which is refused below once the stored row is read.
     const factValues: Record<string, number | string | null> = {}
-    for (const column of [
-      'pl_rok_urodzenia',
-      'es_ano_nacimiento',
-      'es_grupo_cotizacion',
-      'jp_hyojun_hoshu',
-      'br_dependentes',
-      'br_salario_familia_filhos',
-    ]) {
+    for (const column of PACK_FACT_COUNT_COLUMNS) {
       const parsed = packFactCount(country, column, (body as Record<string, unknown>)[packFactBodyKey(column)])
       if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 422 })
       factValues[column] = parsed.value
@@ -1047,6 +1063,25 @@ export const POST = defineRoute({
               ? Number(derived.value) : derived.value
           }
         }
+      }
+      // A required whole-number fact that is answered on file is never
+      // cleared by a save: a blank arriving for it is either an operator
+      // deleting the answer the engine prices from, or an unreadable entry
+      // the client lost on the way (JSON carries NaN as null). Either way the
+      // stored answer stands and the save refuses by name. A profile that has
+      // never answered it still saves; readiness names that gap. Runs after
+      // the pack's derivation, which fills a blank from the identifier.
+      for (const column of PACK_FACT_COUNT_COLUMNS) {
+        const stored = before?.[column]
+        if (factValues[column] !== null || stored === null || stored === undefined) continue
+        if (before?.country !== country || !profileColumnField(country, column)?.required) continue
+        return NextResponse.json(
+          {
+            error: `${packFactLabel(country, column)} is required and is on file as ${String(stored)}; `
+              + 'this save would clear it. Enter the whole-number value to keep or change it.',
+          },
+          { status: 422 },
+        )
       }
       const after = (await db.execute<Record<string, unknown>>(sql`
         insert into employee_payroll_profiles

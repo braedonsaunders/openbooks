@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 
 export interface ScheduleOption {
   id: string
@@ -360,8 +361,17 @@ export function ProfileEditor(props: {
   for (const flag of pack?.exemptionFlags ?? []) declaredColumns.add(flag.column)
   const kept = (column: string, value: string | null): string | null =>
     declaredColumns.has(column) ? value : null
-  const keptCount = (column: string, raw: string): number | null =>
-    raw === '' || !declaredColumns.has(column) ? null : Number(raw)
+  // Whole-number answers read through the shared classifier, never a bare
+  // Number(): an unreadable entry ("300,000", full-width digits, a currency
+  // suffix) is NaN, which JSON posts as null — a silent clear of the stored
+  // answer. save() refuses those by name first; anything it did not see is
+  // posted as typed so the server refuses it rather than clearing.
+  const wholeNumber = (raw: string): number | string => {
+    const canonical = canonicalDecimal(raw, 0)
+    return canonical === null ? raw : Number(canonical)
+  }
+  const keptCount = (column: string, raw: string): number | string | null =>
+    raw.trim() === '' || !declaredColumns.has(column) ? null : wholeNumber(raw)
 
   // Column → state, so the generic field renderer below can bind whatever the
   // pack declares without naming a single form's fields.
@@ -483,10 +493,10 @@ export function ProfileEditor(props: {
   const columnOf = (field: DeclaredProfileField): string | null =>
     field.storage?.kind === 'column' ? field.storage.column : null
 
-  // An amount answer, resolved exactly as the inputs below bind it: bespoke
-  // column state, then the generic extra-column read, then the row answers.
-  // Blank means unknown (the server stores null); anything else must read
-  // through the shared decimal classifier before it is posted.
+  // An amount or whole-number answer, resolved exactly as the inputs below
+  // bind it: bespoke column state, then the generic extra-column read, then
+  // the row answers. Blank means unknown (the server stores null); anything
+  // else must read through the shared decimal classifier before it is posted.
   const amountValue = (
     certificate: DeclaredProfileCertificate,
     field: DeclaredProfileField,
@@ -502,13 +512,13 @@ export function ProfileEditor(props: {
     // round trip that discards every other answer with it.
     for (const certificate of applicableCertificates) {
       for (const field of certificate.fields) {
-        if (field.kind !== 'amount') continue
+        if (field.kind !== 'amount' && field.kind !== 'count') continue
         const column = columnOf(field)
         const refusal = moneyFieldError(
           fieldLabel(column, field.label),
-          'a money amount',
+          field.kind === 'count' ? 'a whole number' : 'a money amount',
           amountValue(certificate, field, column),
-          4,
+          field.kind === 'count' ? 0 : 4,
         )
         if (refusal !== null) {
           toast.error(refusal)
@@ -532,10 +542,10 @@ export function ProfileEditor(props: {
           const raw = extraColumns[column]
             ?? props.derivedColumns?.[column]
             ?? rowCellText(column)
-          if (raw === '') {
+          if (raw.trim() === '') {
             extraFactSave[columnBodyKey(column)] = null
           } else if (field.kind === 'count') {
-            extraFactSave[columnBodyKey(column)] = Number(raw)
+            extraFactSave[columnBodyKey(column)] = wholeNumber(raw)
           } else {
             extraFactSave[columnBodyKey(column)] = raw
           }
@@ -747,7 +757,16 @@ export function ProfileEditor(props: {
       return (
         <div key={field.key}>
           <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
-          <Input id={id} inputMode="numeric" value={value} onChange={(e) => set(e.target.value)} placeholder="0" />
+          <MoneyInput
+            id={id}
+            ariaLabel={label}
+            value={value}
+            onChange={set}
+            field={label}
+            noun="a whole number"
+            maxScale={0}
+            placeholder="0"
+          />
         </div>
       )
     }

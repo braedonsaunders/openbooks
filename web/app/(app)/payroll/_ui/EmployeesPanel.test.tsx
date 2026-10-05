@@ -523,3 +523,25 @@ test('an unreadable pack amount names its cause and remedy', () => {
   assert.match(html, /must use .* as the decimal point/)
   assert.match(html, /12\.34/)
 })
+
+// A typed whole-number fact is classified exactly like an amount: a
+// thousands separator or full-width digits refuse under the field rather
+// than reaching the save as NaN, which JSON would post as a silent clear.
+test('an unreadable whole-number fact names its cause instead of clearing it', () => {
+  const pack: PackProfileDeclaration = {
+    ...xxPack,
+    certificates: [...xxPack.certificates, {
+      key: 'xx_grade', form: 'XX-3', label: 'Fixture grade notice',
+      citation: 'Fixture pension authority, Fixture Form XX-3 (2026)',
+      storage: 'profile_columns' as const, scope: { level: 'country' },
+      fields: [{
+        key: 'grade', label: 'Fixture grade', kind: 'count', min: '0', required: true,
+        storage: { kind: 'column', column: 'xx_grade' }, help: 'The fixture grade in whole units.',
+      }],
+    }],
+  }
+  assert.match(render({}, { XX: pack }, ['XX'], [], { xx_grade: '300,000' }),
+    /Fixture grade is ambiguous — .*could mean 300000 \(thousands separator\) or 300\.000/)
+  assert.match(render({}, { XX: pack }, ['XX'], [], { xx_grade: '３００００００' }),
+    /Fixture grade must be a whole number — .*is not a number/)
+})
