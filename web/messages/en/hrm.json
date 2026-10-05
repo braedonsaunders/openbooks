@@ -2157,6 +2157,7 @@
       "newFamily": "New job family",
       "newLevel": "New job level",
       "newBand": "New pay band",
+      "newSnapshot": "New snapshot",
       "settingsDescription": "Company-wide rules for pay comparisons, information requests, and workforce planning.",
       "unrestrictedRequired": "Organization-wide access is required to generate pay equity snapshots. Ask your administrator for an unrestricted compensation manager role.",
       "snapshotReport": "Snapshot history report",
