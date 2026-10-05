@@ -95,6 +95,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'budget-variance': ['reports.read'],
 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
+  'kpi-cash-lowest-point': ['reports.read'],
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   // Customer figures, like the top-customers list: AR visibility, not GL.
