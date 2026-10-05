@@ -375,4 +375,94 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
       { key: "document_number", label: "Document", kind: "text", expr: "d.document_number" },
     ],
   },
+  {
+    ...channelShared,
+    key: "order_economics",
+    label: "Order economics",
+    description:
+      "Stored contribution-margin facts per channel order line — net revenue, discounts, actual issue cost, processor and marketplace fees, carrier labels, returns with restocking income, and allocated ad spend — with margin as formula measures, never stored ratios.",
+    // One row per current margin fact. Only current facts read: restated
+    // history stays in the table for audit, out of the sums. Every join
+    // stays inside the base organization so a restricted subsidiary scope
+    // cannot leak rows. Channel orders carry no subsidiary, so this entity
+    // is org-scoped by design, like channel sales.
+    from: `channel_order_economics f join channel_orders o on o.org_id=f.org_id and o.id=f.order_id and f.is_current
+      join sales_channels c on c.org_id=f.org_id and c.id=f.channel_id
+      join currencies cur on cur.code=f.currency`,
+    orgColumn: "f.org_id",
+    timeKey: "ordered_day",
+    defaultSort: { column: "ordered_day", direction: "desc" },
+    columns: [
+      { key: "channel", label: "Channel", kind: "text", expr: "c.name" },
+      { key: "ordered_day", label: "Ordered day", kind: "date", expr: "o.ordered_at::date" },
+      { key: "order_number", label: "Order", kind: "text", expr: "o.external_number" },
+      {
+        key: "customer",
+        label: "Customer",
+        kind: "text",
+        expr: "coalesce(nullif(o.customer_email, ''), o.customer_name, '')",
+      },
+      {
+        key: "customer_cohort",
+        label: "Customer cohort",
+        kind: "enum",
+        expr: `case
+          when coalesce(o.customer_party_id::text, nullif(lower(o.customer_email), '')) is null then 'unidentified'
+          when exists (select 1 from channel_orders o2
+            where o2.org_id=o.org_id and o2.channel_id=o.channel_id and o2.ordered_at < o.ordered_at
+              and coalesce(o2.customer_party_id::text, nullif(lower(o2.customer_email), '')) = coalesce(o.customer_party_id::text, nullif(lower(o.customer_email), ''))) then 'returning'
+          else 'new' end`,
+        options: ["new", "returning", "unidentified"],
+      },
+      {
+        key: "region",
+        label: "Region",
+        kind: "text",
+        expr: `coalesce(o.customer_address->>'province', o.customer_address->>'province_code', o.customer_address->>'region', o.customer_address->>'state', o.customer_address->>'city', '')`,
+      },
+      {
+        key: "country",
+        label: "Country",
+        kind: "text",
+        expr: `coalesce(o.customer_address->>'country', o.customer_address->>'country_code', '')`,
+      },
+      { key: "sku", label: "Item code", kind: "text", expr: "coalesce(f.sku, '')" },
+      {
+        key: "promotion",
+        label: "Promotion",
+        kind: "text",
+        expr: "coalesce(nullif(f.promotion_code, ''), '(none)')",
+      },
+      { key: "line", label: "Order line", kind: "text", expr: "f.line_key" },
+      {
+        key: "component",
+        label: "Cost component",
+        kind: "enum",
+        expr: "f.component",
+        options: ["net_revenue", "discount", "cogs", "processor_fee", "shipping_label", "marketplace_fee", "stored_value_funding", "returns", "restocking_fee", "ad_spend"],
+      },
+      {
+        key: "source",
+        label: "Cost source",
+        kind: "enum",
+        expr: "f.source_kind",
+        options: ["posting", "fulfilment", "label", "payout", "refund", "estimate", "import", "manual"],
+      },
+      {
+        key: "costing",
+        label: "Costing",
+        kind: "enum",
+        expr: "case when f.estimated then 'estimated' else 'settled' end",
+        options: ["settled", "estimated"],
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "f.currency" },
+      {
+        key: "amount",
+        label: "Amount",
+        kind: "money",
+        expr: "f.amount_minor::numeric / (10 ^ cur.minor_units)",
+        txnCurrency: true,
+      },
+    ],
+  },
 ];
