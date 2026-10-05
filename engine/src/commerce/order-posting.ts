@@ -432,6 +432,19 @@ async function resolveLineTaxes(
 }
 
 /**
+ * The tax effect of a discount on a taxed line. The storefront computes tax
+ * after the discount, so the product line already carries the authoritative
+ * tax figure; the discount line carries one zero-tax component per tax of the
+ * discounted line, with the (negative) discount as its taxable amount. Taxable
+ * bases then net to the discounted amount in every return — those summing line
+ * amounts by tax code and those summing component taxable amounts — while the
+ * zero tax amounts leave the journal and the line tax crossfoot untouched.
+ */
+function discountTaxes(taxes: ResolvedTax[]): ResolvedTax[] {
+  return taxes.map((tax) => ({ ...tax, amountMinor: 0n }));
+}
+
+/**
  * Resolve one stored order into postable lines, tenders and totals.
  * Throws OrderPostException to park (the boundary records it), or
  * CommerceError to propagate (missing policy, unknown channel: the event
@@ -591,8 +604,8 @@ export async function resolveOrderForPosting(
         amountMinor: -line.discountMinor,
         kind: "discount",
         promotionId,
-        marketplaceFacilitator: null,
-        taxes: [],
+        marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+        taxes: discountTaxes(taxes),
       });
     }
   }
@@ -632,8 +645,8 @@ export async function resolveOrderForPosting(
         amountMinor: -ship.discountMinor,
         kind: "discount",
         promotionId: null,
-        marketplaceFacilitator: null,
-        taxes: [],
+        marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+        taxes: discountTaxes(taxes),
       });
     }
   }
