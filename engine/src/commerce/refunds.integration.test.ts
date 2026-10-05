@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -445,6 +446,95 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
       select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
     assert.ok(BigInt(after.balance_minor) - BigInt(before.balance_minor) > 0n);
     assert.equal(after.balance_minor, "500000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a mixed kit restocks its stocked components and settles the service line in money", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const { channelId } = await setup(org, actor, "per_order");
+    // A gift set: one stocked unit plus a commercial-only service line that
+    // never touches the shelf (and carries no costing profile).
+    const kitId = randomUUID();
+    await db.execute(sql`
+      insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation, income_account_id)
+      values (${kitId}, ${org.orgId}, 'kit', 'Gift Set', false, true, '{}'::jsonb, 'billing', 'normal', ${org.accounts.revenue})`);
+    await db.execute(sql`update items set code = 'KIT-MIXED' where id = ${kitId} and org_id = ${org.orgId}`);
+    // The kit line itself carries a profile like any stocked line, even
+    // though only its components ever move.
+    await db.execute(sql`
+      insert into item_inventory_profiles
+        (id, org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
+         variance_account_id, received_not_billed_account_id, standard_cost, base_unit, unit_conversions)
+      values (${randomUUID()}, ${org.orgId}, ${kitId}, 'fifo', 'none', ${org.accounts.invAsset}, ${org.accounts.cogs},
+        ${org.accounts.adjustment}, ${org.accounts.adjustment}, ${org.accounts.clearing}, null, 'ea', '{}'::jsonb)`);
+    for (const [componentId, sortOrder] of [[org.items.fifo, 0], [org.items.service, 1]] as const) {
+      await db.execute(sql`
+        insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
+        values (${randomUUID()}, ${org.orgId}, ${kitId}, ${componentId}, '1', ${sortOrder})`);
+    }
+    const order: ChannelOrder = {
+      ...paidOrder("2001"),
+      lines: [{
+        sku: "KIT-MIXED", variantExternalId: null, title: "Gift Set", quantity: "1",
+        priceMinor: 2500n, discountMinor: 0n, discountCode: null,
+        taxLines: [{ jurisdiction: "NY", collectedBy: "merchant", amountMinor: 216n, ratePercent: "8.625" }],
+        giftCard: false, promotionId: null,
+      }],
+      shippingLines: [],
+      subtotalMinor: 2500n,
+      taxMinor: 216n,
+      shippingMinor: 0n,
+      discountMinor: 0n,
+      totalMinor: 2716n,
+      tenders: [{ gateway: "shopify_payments", amountMinor: 2716n, giftCardExternalId: null, authorizationRef: "auth-kit-1" }],
+    };
+    const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
+    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    // The sale moved the stocked unit and nothing else.
+    const sold = await stockPosition(org.orgId, org.items.fifo, org.stockLocationId);
+    assert.equal(Number(sold.quantity), 9);
+    const serviceMoves = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*)::text as count from inventory_movements
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`))).rows[0]!;
+    assert.equal(serviceMoves.count, "0");
+    const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2001", {
+      kind: "refund",
+      externalId: "r-kit-1",
+      refund: {
+        externalId: "r-kit-1",
+        orderExternalId: "2001",
+        reason: "changed mind",
+        restock: true,
+        totalMinor: 2716n,
+        lines: [{ lineExternalId: "1", sku: "KIT-MIXED", variantExternalId: null, quantity: "1", amountMinor: 2500n, taxMinor: null, restock: true }],
+        shippingMinor: 0n,
+        tenders: [{ gateway: "shopify_payments", amountMinor: 2716n }],
+        refundedAt: "2026-07-16T09:00:00Z",
+      },
+      occurredAt: "2026-07-16T09:00:00Z",
+    }));
+    const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    assert.equal(outcome.status, "posted");
+    assert.ok(outcome.documentId);
+    assert.equal(await journalSum(org.orgId, outcome.documentId!), 0n);
+    // The stocked unit is back at its original cost; the service line moved
+    // money only and still has no movement behind it.
+    const tee = await stockPosition(org.orgId, org.items.fifo, org.stockLocationId);
+    assert.equal(Number(tee.quantity), 10);
+    assert.equal(tee.value, "20.0000");
+    const after = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*)::text as count from inventory_movements
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`))).rows[0]!;
+    assert.equal(after.count, "0");
+    const evidence = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*)::text as count from document_lines
+       where document_id = ${outcome.documentId} and org_id = ${org.orgId}
+         and custom ? 'inventoryReturn'`))).rows[0]!;
+    assert.equal(evidence.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
   }

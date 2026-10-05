@@ -982,16 +982,9 @@ export async function buildCashRefundLines(
           });
           kitLocation = kitLocation ?? slices[0]!.stockLocationId;
         }
-        if (kitSources.length > 0 && kitSources.length !== components.length) {
-          // The return engine restores every component together: a kit
-          // mixing stocked and non-stocked components cannot be evidenced
-          // as one line, so it parks instead of half-returning.
-          park(
-            "tax_mismatch",
-            `Refund ${resolved.externalId} restocks kit "${line.title}" with both stocked and non-stocked components.`,
-            "Record the component returns directly against the sale, then post the money refund again without restock.",
-          );
-        }
+        // Components the sale never moved (non-stocked recipe lines) carry no
+        // source and settle in money only: the return engine restores exactly
+        // the stocked sources named here, so a mixed kit restocks what moved.
         if (kitSources.length === 0) {
           // No stocked components moved: the kit refund reverses money only.
           push({

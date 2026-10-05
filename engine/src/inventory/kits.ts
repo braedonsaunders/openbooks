@@ -32,6 +32,18 @@ export async function itemKinds(
   return new Map(rows.map((row) => [row.id, row.kind]));
 }
 
+/**
+ * Whether a kit component moves stock when its kit sells or is returned.
+ * Only stocked kinds (`inventory`, `assembly`) issue and receive movements;
+ * service, non-inventory and charge components are commercial-only lines on
+ * the kit's recipe and never touch the shelf. One predicate serves the sale
+ * explosion, the return guard and the channel refund builder, so a component
+ * the sale skipped can never be demanded back by the return.
+ */
+export function kitComponentMovesStock(kind: string): boolean {
+  return kind === "inventory" || kind === "assembly";
+}
+
 /** Display label for a kit refusal: code when set, else name, else id. */
 export async function kitLabel(
   runner: Runner,
