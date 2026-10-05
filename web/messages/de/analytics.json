@@ -1093,6 +1093,18 @@
           "label": "Reibung — mittel ab (Punkte)",
           "help": "Gutschriftspunkte ab dieser Schwelle gelten als mittel"
         }
+      },
+      "groups": {
+        "scores": "Werte & Gewichtungen",
+        "grades": "Notenstufen",
+        "recency": "Aktualitätsbänder",
+        "churn": "Abwanderung & Tempo",
+        "payment": "Zahlungszeitpunkt",
+        "clv": "Kundenwert & Stufen",
+        "concentration": "Konzentration",
+        "friction": "Reibung",
+        "profit": "Rentabilität",
+        "growth": "Wachstum, Kohorten & Hinweise"
       }
     },
     "csv": {

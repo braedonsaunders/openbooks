@@ -1093,6 +1093,18 @@
           "label": "Atrito — médio desde (pontos)",
           "help": "Pontos iguais ou acima indicam atrito médio"
         }
+      },
+      "groups": {
+        "scores": "Pontuações e pesos",
+        "grades": "Escala de notas",
+        "recency": "Faixas de recentidade",
+        "churn": "Churn e ritmo",
+        "payment": "Pontualidade de pagamento",
+        "clv": "Valor vitalício e faixas",
+        "concentration": "Concentração",
+        "friction": "Atrito",
+        "profit": "Rentabilidade",
+        "growth": "Crescimento, coortes e insights"
       }
     },
     "csv": {

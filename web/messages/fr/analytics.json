@@ -1093,6 +1093,18 @@
           "label": "Friction — moyenne dès (points)",
           "help": "Les points égaux ou supérieurs valent friction moyenne"
         }
+      },
+      "groups": {
+        "scores": "Scores et pondérations",
+        "grades": "Échelle de notes",
+        "recency": "Tranches d’ancienneté",
+        "churn": "Attrition et rythme",
+        "payment": "Délais de paiement",
+        "clv": "Valeur vie client et niveaux",
+        "concentration": "Concentration",
+        "friction": "Friction",
+        "profit": "Rentabilité",
+        "growth": "Croissance, cohortes et signaux"
       }
     },
     "csv": {
