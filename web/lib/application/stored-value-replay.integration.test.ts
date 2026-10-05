@@ -13,6 +13,7 @@ const { actorAllowedSubsidiaryIds } = await import('@openbooks/engine/src/organi
 const { createProgram, issueStoredValue, lookupStoredValueByCode } = await import('@openbooks/engine/src/stored-value/accounts.ts')
 const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
 const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
+const { utcDateFromParts } = await import('@openbooks/engine/src/platform/civil-date.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 
@@ -60,7 +61,7 @@ async function seedReplayOrg(): Promise<ReplayFixture> {
   const today = new Date().toISOString().slice(0, 10)
   const year = Number(today.slice(0, 4))
   const month = Number(today.slice(5, 7))
-  const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)
+  const endsOn = utcDateFromParts(year, month, 0).toISOString().slice(0, 10)
   await withBypass(() => db.execute(sql`
     insert into accounting_periods
       (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
