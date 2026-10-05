@@ -162,10 +162,10 @@ export function FamilyDrawer({ familyId, canManage }: { familyId: string; canMan
         </p>
       </div>
 
-      {/* Every visited panel stays mounted and hides instead of
-        unmounting: switching tabs must never discard an unsaved draft in
-        the options, defaults or pricing editors, and the dialog DOM stays
-        the same node throughout. */}
+      {/* All four panels mount with the drawer and hide instead of
+        unmounting: switching tabs never discards an unsaved draft in the
+        options, defaults or pricing editors, and the dialog DOM stays the
+        same node throughout. */}
       <section className="space-y-3" hidden={activeTab !== 'variants'}>
         <div>
           <h3 className="text-base font-semibold">{t('variants.title')}</h3>
