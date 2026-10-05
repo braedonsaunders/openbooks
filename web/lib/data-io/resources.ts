@@ -19,6 +19,7 @@ import {
   PRIOR_PAYROLL_REGISTER_KEY,
   priorPayrollRegisterResource,
 } from './prior-payroll-register-resource'
+import { PAYROLL_RUN_INPUTS_DESCRIPTOR, PAYROLL_RUN_INPUTS_KEY, payrollRunInputsResource } from './payroll-run-inputs-resource'
 import {
   PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
   PAYROLL_EMPLOYER_LEVY_OPENINGS_KEY,
@@ -260,6 +261,7 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
         PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR,
         PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
+        PAYROLL_RUN_INPUTS_DESCRIPTOR,
       ]
     : []
   const usage = featureEnabled(features, 'usageBilling') ? [USAGE_RECORDS_DESCRIPTOR] : []
@@ -286,6 +288,10 @@ export async function getResource(
   if (key === PRIOR_PAYROLL_REGISTER_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(priorPayrollRegisterResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === PAYROLL_RUN_INPUTS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
+    return bindReadScope(payrollRunInputsResource(orgId), orgId, allowedSubsidiaryIds)
   }
   if (key === PAYROLL_OPENING_BALANCES_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
