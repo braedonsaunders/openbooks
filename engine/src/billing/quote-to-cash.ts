@@ -7,6 +7,7 @@ import { appBaseUrl } from "../flows/email-tokens.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { add, cmp, mul, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { addMonthsClamped, addMonthsStart } from "../platform/civil-date.ts";
+import { isUuid } from "../platform/uuid.ts";
 import {
   hashPossessionToken,
   mintPossessionToken,
@@ -1166,7 +1167,7 @@ export async function saveQuoteToCashSettings(
     throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
   }
   if (input.orderFormTemplateId !== undefined && input.orderFormTemplateId !== null) {
-    if (!/^[0-9a-fA-F-]{36}$/.test(input.orderFormTemplateId)) {
+    if (!isUuid(input.orderFormTemplateId)) {
       throw new QuoteToCashError("That order-form template is not a template id — pick one in the PDF template designer");
     }
   }

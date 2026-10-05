@@ -18,6 +18,7 @@ const { v1CreateOrder, v1IssueOrder, v1ReplaceOrderLines } = await import(
 const { createApplicationOrder } = await import("../../../../lib/application/orders.ts");
 const { applyOrderEdit } = await import("../../../../lib/order-draft-edit.ts");
 const { orderEditServices } = await import("../../_order/handlers.ts");
+const { isUuid } = await import("../../../../lib/list-params.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Setup {
@@ -126,7 +127,7 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
       taxTotal: string;
       lines: Array<Record<string, unknown>>;
     };
-    assert.match(result.id, /^[0-9a-f-]{36}$/);
+    assert.ok(isUuid(result.id));
     assert.match(result.documentNumber, /^SO-/);
     assert.match(result.expectedUpdatedAt, /^\d{1,20}$/, "the create returns the revision token");
     assert.equal(result.lines.length, 2);

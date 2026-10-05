@@ -24,6 +24,7 @@ import {
 } from "../../testing/hrm-harness.ts";
 import { installEngineSeams } from "../../composition/install.ts";
 import { decideGate } from "../../flows/gates.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import { BenefitsError } from "./errors.ts";
 import {
   activateBenefitProgram,
@@ -394,7 +395,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
       const tx = db;
       await tx.execute(sql`set local app.bypass_rls = 'on'`);
       await tx.execute(sql`set local openbooks.amend = 'on'`);
-      assert.match(orgId, /^[0-9a-f-]{36}$/i);
+      assert.ok(isUuid(orgId));
       await tx.execute(sql.raw(`set local app.current_org = '${orgId}'`));
       const foreign = (
         await tx.execute<{ id: string }>(sql`
