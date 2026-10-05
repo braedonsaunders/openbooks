@@ -1,11 +1,13 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import {
-  addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
+  addCalendarDays, businessToday, weekStartsEndingOn,
 } from '@openbooks/engine/src/platform/business-date.ts'
 import { isoDateOf } from '@openbooks/engine/src/platform/civil-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { agingBasisDate } from '../aging-basis'
+import { resolvePeriod } from '../periods'
 import { flowRates, translateFlows } from '../fx-presentation'
 import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'
@@ -207,7 +209,10 @@ export async function customersHome(
       : subArr
         ? sql` and d.subsidiary_id = any(${subArr})`
         : sql``
-  const q = calendarQuarterBounds(today)
+  // The pipeline forecast covers the FISCAL quarter (declared calendars
+  // honoured), never the calendar quarter — the cockpit and the forecast
+  // it quotes must agree on which quarter "this quarter" is.
+  const quarter = await resolvePeriod('this_fiscal_quarter', { orgId, today })
 
   const [arItems, dsoStats, trendRes, badgeRes, collectedRowsRes, forecast, orgRes, oppRes] = (await Promise.all([
     arGranted ? openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
@@ -256,7 +261,7 @@ export async function customersHome(
         from (${customerPaymentMovements(orgId, ago7, today, docScope)}) movement
        group by 1, 2
     `) : Promise.resolve({ rows: [] }),
-    crmOn && crmGranted ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
+    crmOn && crmGranted ? calculateForecast({ orgId, periodStart: quarter.from, periodEnd: quarter.to, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
     db.execute<{ baseCurrency: string }>(sql`
       select base_currency as "baseCurrency" from orgs where id = ${orgId}
     `),
@@ -317,7 +322,13 @@ export async function customersHome(
     openInvoices += 1
     arOutstanding = add(arOutstanding, item.remaining)
     const due = item.dueDate ? isoDateOf(item.dueDate) : null
-    if (due && due < today) {
+    // Past due follows the shared aging rule: an item ages from its due
+    // date, else its posting date — an untermed invoice is due on issue, so
+    // it can never hide as permanently current here while the aging report
+    // shows it 90+ days past due.
+    const basis = agingBasisDate({ dueDate: item.dueDate, postingDate: item.tranDate })
+    const basisIso = basis ? isoDateOf(basis) : null
+    if (basisIso && basisIso < today) {
       cur.overdue = add(cur.overdue, item.remaining)
       arOverdue = add(arOverdue, item.remaining)
       overdueInvoices += 1
