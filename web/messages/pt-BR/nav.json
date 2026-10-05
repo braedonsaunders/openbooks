@@ -50,6 +50,7 @@
     "automations": "Automações",
     "cash-sales": "Vendas à vista",
     "collections": "Cobranças",
+    "stored-value": "Vales e créditos",
     "compliance": "Visão geral",
     "compliance-vendors": "Subcontratados",
     "continuous-close": "Monitor de Fechamento",
@@ -207,7 +208,8 @@
   "modulesShort": {
     "ap": "Contas a pagar",
     "ar": "Contas a receber",
-    "provisions": "Provisões e contingências"
+    "provisions": "Provisões e contingências",
+    "stored-value": "Vales e créditos"
   },
   "localWorkspaces": {
     "hrm-people": "Funcionários",

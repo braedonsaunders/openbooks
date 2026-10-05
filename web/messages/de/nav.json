@@ -50,6 +50,7 @@
     "automations": "Automatisierungen",
     "cash-sales": "Barverkäufe",
     "collections": "Forderungseinzug",
+    "stored-value": "Guthaben",
     "compliance": "Übersicht",
     "compliance-vendors": "Subunternehmer",
     "continuous-close": "Abschlussmonitor",
@@ -207,7 +208,8 @@
   "modulesShort": {
     "ap": "Kreditoren",
     "ar": "Debitoren",
-    "provisions": "Rückstellungen und Eventualverpflichtungen"
+    "provisions": "Rückstellungen und Eventualverpflichtungen",
+    "stored-value": "Guthaben"
   },
   "localWorkspaces": {
     "hrm-people": "Mitarbeiter",

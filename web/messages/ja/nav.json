@@ -50,6 +50,7 @@
     "automations": "自動化",
     "cash-sales": "現金売上",
     "collections": "債権回収",
+    "stored-value": "ストアドバリュー",
     "compliance": "概要",
     "compliance-vendors": "下請業者",
     "continuous-close": "決算モニター",
@@ -207,7 +208,8 @@
   "modulesShort": {
     "ap": "買掛金",
     "ar": "売掛金",
-    "provisions": "引当金および偶発事項"
+    "provisions": "引当金および偶発事項",
+    "stored-value": "ストアドバリュー"
   },
   "localWorkspaces": {
     "hrm-people": "従業員",
