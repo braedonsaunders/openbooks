@@ -84,6 +84,13 @@
       "hint": "截至各月末的在职人数，直到今天。",
       "series": "人员数量"
     },
+    "workforce": {
+      "title": "员工队伍",
+      "today": "今日在职",
+      "since": "{month}末",
+      "net": "净变化",
+      "mix": "按部门"
+    },
     "attention": {
       "title": "需要处理",
       "allClear": "没有需要处理的事项。",

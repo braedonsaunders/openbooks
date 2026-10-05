@@ -185,13 +185,16 @@ function fixture(overrides: Partial<HrmHomeData> = {}): HrmHomeData {
     pendingValue: "2",
     pendingSub: "requests",
     pendingAccent: "amber",
+    pendingHasActivity: true,
     startingLabel: "Starting",
     startingValue: "1",
     startingSub: "next 30 days",
     onLeaveLabel: "On leave",
     onLeaveValue: "0",
     onLeaveSub: "today",
-    trendTitle: "Trend",
+    workforceTitle: "Workforce",
+    workforcePulse: [{ label: "Today", value: "42" }],
+    mixTitle: "By department",
     trendHint: "12 months",
     trendSeriesName: "Headcount",
     trendLabels: ["Jan"],
@@ -250,7 +253,9 @@ test("the pending queue leads the hero column with subordinate panels below it",
     assert.ok(at > 0, `${widget} renders below the pending queue, never above it`);
   }
   assert.ok(first.includes("hrm-recent-changes"), "the hero column carries recent changes");
-  assert.ok(first.includes("trend-chart"), "the hero column carries the trend chart");
+  const workforce = panels.find((panel) => panel.widgets.includes("hrm-headcount-mix"));
+  assert.ok(workforce?.widgets.includes("trend-chart"), "the workforce panel carries the trend chart beside the department mix");
+  assert.ok(workforce?.widgets.includes("hrm-pulse"), "the workforce panel leads with its pulse figures");
 });
 
 test("quiet modules collapse behind their activity flags", () => {
@@ -263,6 +268,7 @@ test("quiet modules collapse behind their activity flags", () => {
   assert.equal(gated["hrm-leave-panel"], "leaveHasActivity");
   assert.equal(gated["hrm-benefits-panel"], "benefitsHasActivity");
   assert.equal(gated["hrm-recruiting-panel"], "recruitingHasActivity");
+  assert.equal(gated["hrm-pending-requests"], "pendingHasActivity", "a clear queue collapses; a refusal keeps it open");
 
   const quiet = panelsIn(
     heroGrid(hrmSpec(fixture({ onboarding: null, leavePanel: null, benefitsPanel: null, recruiting: null })) as unknown as Tree),
@@ -294,22 +300,22 @@ test("the header carries the shared New dropdown with loader grants", () => {
   assert.equal(props?.canCreateProcess, true, "process creation keeps its loader-resolved grant");
 });
 
-test("the headcount hero is a table block with a subsidiary column only for multi-entity orgs", () => {
-  const single = tables(heroGrid(hrmSpec(fixture({ multiSubsidiary: false })) as unknown as Tree));
-  const hero = single.find((table) => {
-    const rows = table.rows;
-    return isFieldRef(rows) && rows.$ === "groups";
+test("the department mix binds the census and names the employer only for multi-entity orgs", () => {
+  const mix = (multiSubsidiary: boolean): Tree | undefined => {
+    let found: Tree | undefined;
+    walk(heroGrid(hrmSpec(fixture({ multiSubsidiary })) as unknown as Tree), (entry) => {
+      if (entry.widget === "hrm-headcount-mix") found = entry.props as Tree;
+    });
+    return found;
+  };
+  const groups = [{ id: "Main / Ops", subsidiary: "Main", department: "Ops", headcount: 3 }];
+  let props: Tree | undefined;
+  walk(heroGrid(hrmSpec(fixture({ groups })) as unknown as Tree), (entry) => {
+    if (entry.widget === "hrm-headcount-mix") props = entry.props as Tree;
   });
-  assert.ok(hero, "the headcount hero binds the loader-resolved groups");
-  assert.equal(hero?.variant, "app", "the hero uses the shared app table primitives");
-  assert.equal((hero?.columns as unknown[]).length, 2, "a single-entity org sees departments, never a subsidiary column");
-
-  const multi = tables(heroGrid(hrmSpec(fixture({ multiSubsidiary: true })) as unknown as Tree));
-  const heroMulti = multi.find((table) => {
-    const rows = table.rows;
-    return isFieldRef(rows) && rows.$ === "groups";
-  });
-  assert.equal((heroMulti?.columns as unknown[]).length, 3, "a multi-entity org gains the employer column");
+  assert.equal(props?.rows, groups, "the mix renders the loader-resolved census rows");
+  assert.equal(mix(false)?.showEmployer, false, "a single-entity org sees departments, never an employer line");
+  assert.equal(mix(true)?.showEmployer, true, "a multi-entity org gains the employer line");
 });
 
 // HRM is a default-off feature owning exactly one nav module: the cockpit.

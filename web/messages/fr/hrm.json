@@ -84,6 +84,13 @@
       "hint": "En service à chaque fin de mois, jusqu'à aujourd'hui.",
       "series": "Effectif"
     },
+    "workforce": {
+      "title": "Effectifs",
+      "today": "En poste aujourd’hui",
+      "since": "Fin {month}",
+      "net": "Variation nette",
+      "mix": "Par service"
+    },
     "attention": {
       "title": "À traiter",
       "allClear": "Rien à traiter.",
