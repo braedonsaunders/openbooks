@@ -106,7 +106,13 @@
     "rowCount": "{n, plural, one {# linha} other {# linhas}}",
     "parsing": "Lendo arquivo…",
     "pastedData": "Dados colados",
-    "reviewHint": "Confira as quantidades e os erros antes de importar. Nenhum registro foi importado ainda."
+    "reviewHint": "Confira as quantidades e os erros antes de importar. Nenhum registro foi importado ainda.",
+    "commitBlocked": {
+      "errors": "{n, plural, one {# linha tem um erro} other {# linhas têm erros}}. Corrija-as no arquivo e gere a prévia novamente; nada é importado até que todas as linhas sejam válidas.",
+      "stale": "O arquivo, o mapeamento ou as opções mudaram após esta prévia. Gere a prévia novamente antes de importar.",
+      "nothing": "Nenhuma linha seria criada ou atualizada, então não há nada para importar.",
+      "notReady": "A prévia ainda está sendo preparada. A importação ficará disponível quando terminar."
+    }
   },
   "history": {
     "title": "Histórico de importações",

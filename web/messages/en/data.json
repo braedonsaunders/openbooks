@@ -106,7 +106,13 @@
     "rowCount": "{n, plural, one {# row} other {# rows}}",
     "parsing": "Reading file…",
     "pastedData": "Pasted data",
-    "reviewHint": "Review the counts and any errors before importing. No records have been imported yet."
+    "reviewHint": "Review the counts and any errors before importing. No records have been imported yet.",
+    "commitBlocked": {
+      "errors": "{n, plural, one {# row has an error} other {# rows have errors}}. Fix them in the file and preview again; nothing is imported until every row passes.",
+      "stale": "The file, mapping or options changed after this preview. Preview again before importing.",
+      "nothing": "No rows would be created or updated, so there is nothing to import.",
+      "notReady": "The preview is still being prepared. Import becomes available when it finishes."
+    }
   },
   "history": {
     "title": "Import history",

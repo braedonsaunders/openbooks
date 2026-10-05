@@ -183,9 +183,26 @@ export function ImportWizard({ backHref = '/', backLabel }: { backHref?: string;
     />
   )
 
+  // Why Import is unavailable, named rather than left as a dead button.
+  const commitRows = preview ? preview.outcome.created + preview.outcome.updated + (job?.preview.deleted ?? 0) : 0
+  const commitBlocked = step !== 'preview' || !preview || busy
+    ? null
+    : preview.revision !== inputRevision
+      ? t('import.commitBlocked.stale')
+      : preview.outcome.failed > 0
+        ? t('import.commitBlocked.errors', { n: preview.outcome.failed })
+        : commitRows === 0
+          ? t('import.commitBlocked.nothing')
+          : job?.state !== 'ready'
+            ? t('import.commitBlocked.notReady')
+            : null
+
   const footer = (
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-muted-foreground">{t('import.step', { n: stepIndex, total: 4 })}</span>
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <span className="text-xs text-muted-foreground">{t('import.step', { n: stepIndex, total: 4 })}</span>
+        {commitBlocked ? <p role="status" className="mt-1 text-sm text-amber-700 dark:text-amber-400">{commitBlocked}</p> : null}
+      </div>
       <div className="flex gap-2">
         {step === 'mapping' && (
           <Button variant="outline" disabled={busy} onClick={() => { setError(null); setStep('source') }}>
@@ -212,9 +229,9 @@ export function ImportWizard({ backHref = '/', backLabel }: { backHref?: string;
           </Button>
         )}
         {step === 'preview' && preview && (
-          <Button onClick={doCommit} disabled={busy || preview.revision !== inputRevision || preview.outcome.failed > 0 || preview.outcome.created + preview.outcome.updated + (job?.preview.deleted ?? 0) === 0 || job?.state !== 'ready'}>
+          <Button onClick={doCommit} disabled={busy || commitBlocked !== null}>
             <Upload className="mr-2 h-4 w-4" />
-            {busy ? t('import.committing') : t('import.commit', { n: preview.outcome.created + preview.outcome.updated + (job?.preview.deleted ?? 0) })}
+            {busy ? t('import.committing') : t('import.commit', { n: commitRows })}
           </Button>
         )}
         {step === 'result' && (

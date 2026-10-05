@@ -106,7 +106,13 @@
     "rowCount": "{n, plural, one {# ligne} other {# lignes}}",
     "parsing": "Lecture du fichier…",
     "pastedData": "Données collées",
-    "reviewHint": "Vérifiez les nombres et les erreurs avant l’importation. Aucun enregistrement n’a encore été importé."
+    "reviewHint": "Vérifiez les nombres et les erreurs avant l’importation. Aucun enregistrement n’a encore été importé.",
+    "commitBlocked": {
+      "errors": "{n, plural, one {# ligne contient une erreur} other {# lignes contiennent des erreurs}}. Corrigez-les dans le fichier et relancez l'aperçu ; rien n'est importé tant que toutes les lignes ne sont pas valides.",
+      "stale": "Le fichier, le mappage ou les options ont changé depuis cet aperçu. Relancez l'aperçu avant d'importer.",
+      "nothing": "Aucune ligne ne serait créée ni mise à jour : il n'y a rien à importer.",
+      "notReady": "L'aperçu est encore en préparation. L'importation sera disponible une fois terminé."
+    }
   },
   "history": {
     "title": "Historique des imports",
