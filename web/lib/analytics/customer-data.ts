@@ -25,10 +25,15 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
  * Every subsystem and its exact parameters:
  *  - Money (TWO measures, one definition each):
  *     * revenue = RECOGNIZED (ASC 606): net income-account postings per
- *       customer — the same universe the P&L reads (REVENUE_TYPES, statement
- *       book, posted/reversed entries), net of credit memos, voids netting to
- *       zero. Attribution is line party_id plus recognition schedules through
- *       their contract customer (those legs carry no party).
+ *       customer — the same legs the P&L resolver reads (REVENUE_TYPES,
+ *       statement book, posted/reversed entries), net of credit memos, voids
+ *       netting to zero. Attribution is line party_id plus recognition
+ *       schedules through their contract customer (those legs carry no
+ *       party). Single-functional reads tie leg-for-leg (the durable recon
+ *       test pins it); multi-functional orgs translate each posting at its
+ *       own document-date spot — the native P&L readers refuse
+ *       multi-currency reads and the consolidated matrix uses per-period
+ *       average rates, so the two can differ by rate timing there.
  *     * invoicedRevenue = BILLINGS: customer-invoice document totals at the
  *       document rate, with a void recorded as a negative movement on its
  *       reversal date — gross of credits, includes sales tax, blind to
@@ -145,7 +150,7 @@ export interface CustomerRow {
   // base metrics
   /**
    * RECOGNIZED revenue (ASC 606): net income-account postings attributed to
-   * this customer in the period — the same universe the P&L reads
+   * this customer in the period — the same legs the P&L resolver reads
    * (REVENUE_TYPES, statement book, posted/reversed entries), net of credit
    * memos. Compare with `invoicedRevenue`; the `recon` bridge explains the gap.
    */
@@ -387,20 +392,18 @@ interface CustomerBaseSqlRow {
   id: string;
   name: string;
   func: string | null;
+  day: string;
   revenue: CustomerSqlNumeric;
   txn_count: CustomerSqlNumeric;
-  late: string | null;
-  first_txn: unknown;
-  last_txn: unknown;
 }
 
 interface CustomerFrictionSqlRow {
   id: string;
   func: string | null;
+  day: string;
   credit_count: CustomerSqlNumeric;
   order_count: CustomerSqlNumeric;
   credit_value: CustomerSqlNumeric;
-  late: string | null;
 }
 
 interface CustomerPaymentSqlRow {
@@ -414,11 +417,11 @@ interface CustomerPaymentSqlRow {
 interface CustomerGrowthSqlRow {
   month: string;
   func: string | null;
+  day: string;
   revenue: CustomerSqlNumeric;
   unique_customers: CustomerSqlNumeric;
   txn_count: CustomerSqlNumeric;
   new_customers: CustomerSqlNumeric;
-  late: string | null;
 }
 
 export interface ProfitTierCutoffs {
@@ -529,7 +532,7 @@ export async function customerProfitability(
       pr.id as job_id,
       coalesce(pr.name, 'Untitled project') as job_name,
       sub.base_currency as func,
-      max(e.posting_date)::text as late,
+      e.posting_date::date as day,
       -sum(case when a.type in ${REVENUE_TYPES} then l.amount else 0 end) as revenue,
       sum(case when a.type in (${PNL_COST_TYPES_SQL}) then l.amount else 0 end) as costs,
       count(distinct e.id) as txns
@@ -544,22 +547,22 @@ export async function customerProfitability(
       ${orgFilter}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       ${subsidiaryVisibleFilter(sql`pr.subsidiary_id`, allowed)}
-    group by pr.customer_id, cp.display_name, pr.id, pr.name, sub.base_currency
+    group by pr.customer_id, cp.display_name, pr.id, pr.name, sub.base_currency, e.posting_date::date
   `)));
 
   // Legs are stamped in their line entity's functional: translate each
-  // (job, functional) leg at its latest posting date, then merge per job.
-  interface ProfitLeg extends ProfitabilitySqlRow { func: string | null; late: string | null }
+  // (job, functional, posting day) leg at its own spot rate, then merge per job.
+  interface ProfitLeg extends ProfitabilitySqlRow { func: string | null; day: string }
   const legs = r.rows as unknown as ProfitLeg[];
   const profitCtx = await flowRates(orgId, legs.map((leg) => ({
     func: leg.func ?? null,
-    date: (leg.late ?? to).slice(0, 10),
+    date: String(leg.day).slice(0, 10),
   })));
   const byCustomer = new Map<string, ProfitCustomer>();
   const byJob = new Map<string, { customer_id: string; customer_name: string; job_id: string; job_name: string; revenue: string; costs: string; txns: number }>();
   for (const leg of legs) {
     const key = `${leg.customer_id} ${leg.job_id}`;
-    const date = (leg.late ?? to).slice(0, 10);
+    const date = String(leg.day).slice(0, 10);
     const cur = byJob.get(key) ?? {
       customer_id: leg.customer_id, customer_name: leg.customer_name,
       job_id: leg.job_id, job_name: leg.job_name, revenue: "0", costs: "0", txns: 0,
@@ -825,34 +828,31 @@ async function readCustomerData(
     // recognized revenue from the ledger legs, so no prior-year doc legs.
     // documents.total is transaction currency: the first leg translates at
     // the posted document rate to the posting subsidiary's functional; the
-    // second leg to presentation runs per (party, functional) below.
+    // second leg to presentation runs per posting date below, so a rate move
+    // inside the window prices each day's billings at that day's rate.
     (analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)})
       select movement.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         movement.func,
+        movement.event_date::date as day,
         sum(movement.direction) as txn_count,
-        sum(movement.amount * movement.direction) as revenue,
-        max(movement.event_date)::text as late,
-        min(movement.event_date) as first_txn,
-        max(movement.event_date) as last_txn
+        sum(movement.amount * movement.direction) as revenue
       from movement
       join parties p on p.id = movement.party_id and p.org_id = ${orgId}
-      group by movement.party_id, p.display_name, movement.func
-      having sum(movement.amount * movement.direction) <> 0 or sum(movement.direction) <> 0
+      group by movement.party_id, p.display_name, movement.func, movement.event_date::date
     `)),
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
-    // Credit value translates per (party, functional) below.
+    // Credit value translates per posting date below.
     (preview ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_credit', 'cash_refund', 'customer_invoice'], allowed, from, to)})
       select movement.party_id as id, movement.func,
+        movement.event_date::date as day,
         sum(movement.direction) filter (where movement.kind in ('customer_credit', 'cash_refund')) as credit_count,
         coalesce(sum(movement.amount * movement.direction) filter (where movement.kind in ('customer_credit', 'cash_refund')), 0) as credit_value,
-        max(movement.event_date) filter (where movement.kind in ('customer_credit', 'cash_refund'))::text as late,
         sum(movement.direction) filter (where movement.kind = 'customer_invoice') as order_count
       from movement
-      group by movement.party_id, movement.func
-      having coalesce(sum(movement.direction) filter (where movement.kind = 'customer_invoice'), 0) <> 0
+      group by movement.party_id, movement.func, movement.event_date::date
     `)),
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
     // application date − invoice date; overdue =
@@ -909,10 +909,10 @@ async function readCustomerData(
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)})
       select to_char(movement.event_date, 'YYYY-MM') as month,
         movement.func,
-        sum(movement.amount * movement.direction) as revenue,
-        max(movement.event_date)::text as late
+        movement.event_date::date as day,
+        sum(movement.amount * movement.direction) as revenue
       from movement
-      group by 1, 2 order by 1
+      group by 1, 2, 3 order by 1
     `)),
     // Growth counts — distinct customers never merge across functionals, so
     // they stay on their own month grain while revenue translates above.
@@ -939,16 +939,16 @@ async function readCustomerData(
     `)),
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
-    // Lifetime revenue translates per (party, functional) below.
+    // Lifetime revenue translates per posting date below.
     (preview || !analyticsSection('customer-intelligence', ['growth']) ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed)})
       select movement.party_id as id, movement.func,
+        movement.event_date::date as day,
         max(movement.posting_date) filter (where movement.direction > 0) as last_order,
         min(movement.posting_date) filter (where movement.direction > 0) as first_order,
-        max(movement.event_date)::text as late,
         sum(movement.amount * movement.direction) as lifetime_revenue
       from movement
-      group by movement.party_id, movement.func
+      group by movement.party_id, movement.func, movement.event_date::date
     `)),
     // Recognized revenue + recon legs, per (customer, functional) — the SAME
     // universe the P&L reads (REVENUE_TYPES legs on posted/reversed entries in
@@ -957,8 +957,9 @@ async function readCustomerData(
     // it — credit memos carry the same dims as the sale, so no unallocated
     // bucket) plus recognition schedules, whose legs carry no party and are
     // attributed through the contract customer instead. Amounts are stored
-    // base (functional), translated to presentation per leg below — never
-    // re-derived from document rates, so this cannot drift from the P&L.
+    // base (functional), translated to presentation per posting day below —
+    // never re-derived from document rates, so single-currency reads cannot
+    // drift from the P&L resolver.
     // Reversed entries and their mirrors stay IN (they net, exactly as the P&L
     // nets them); the recon separates their period effect into `voids`.
     (analyticsQuery(sql`
@@ -971,8 +972,12 @@ async function readCustomerData(
            and status in ('posted', 'reversed')
            and book_id = ${statementBookExpr(orgId)}
       )
+      -- One row per (party, functional, posting day): each bucket below
+      -- filters on that day, so translating the row at its own date prices
+      -- every posting at its own spot rate — never at the window's latest.
       select coalesce(l.party_id, rc.customer_id) as id,
         sub.base_currency as func,
+        e.posting_date::date as day,
         -sum(l.amount) filter (
           where a.type in ${REVENUE_TYPES} and e.posting_date >= ${from}) as recognized,
         -sum(l.amount) filter (
@@ -998,10 +1003,7 @@ async function readCustomerData(
         sum(l.amount) filter (
           where a.type in ${REVENUE_TYPES} and e.is_void and e.origin <> 'revenue_recognition'
             and (d.id is null or d.kind not in ('customer_invoice', 'customer_credit'))
-            and e.posting_date >= ${from}) as voids,
-        max(e.posting_date) filter (where e.posting_date >= ${from})::text as late,
-        max(e.posting_date) filter (
-          where e.posting_date >= ${pFrom} and e.posting_date <= ${pTo})::text as late_prior
+            and e.posting_date >= ${from}) as voids
       from ew e
       join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
@@ -1021,7 +1023,7 @@ async function readCustomerData(
       left join revenue_contracts rc on rc.id = po.contract_id and rc.org_id = ${orgId}
       where (l.party_id is not null or rc.customer_id is not null)
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-      group by 1, 2
+      group by 1, 2, 3
     `)),
     // Recognized revenue per month (ledger posting month — recognition timing,
     // not billing month; the gap between this and the invoiced series IS the
@@ -1037,8 +1039,8 @@ async function readCustomerData(
       )
       select to_char(e.posting_date, 'YYYY-MM') as month,
         sub.base_currency as func,
-        -sum(l.amount) as recognized,
-        max(e.posting_date)::text as late
+        e.posting_date::date as day,
+        -sum(l.amount) as recognized
       from ew e
       join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
@@ -1058,7 +1060,7 @@ async function readCustomerData(
       where a.type in ${REVENUE_TYPES}
         and (l.party_id is not null or rc.customer_id is not null)
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-      group by 1, 2 order by 1
+      group by 1, 2, 3 order by 1
     `)),
     // Lifetime recognized per customer, for cohorts (lifetime invoiced stays
     // on the document query above).
@@ -1072,8 +1074,8 @@ async function readCustomerData(
       )
       select coalesce(l.party_id, rc.customer_id) as id,
         sub.base_currency as func,
-        -sum(l.amount) as recognized,
-        max(e.posting_date)::text as late
+        e.posting_date::date as day,
+        -sum(l.amount) as recognized
       from ew e
       join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
@@ -1093,7 +1095,7 @@ async function readCustomerData(
       where a.type in ${REVENUE_TYPES}
         and (l.party_id is not null or rc.customer_id is not null)
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-      group by 1, 2
+      group by 1, 2, 3
     `)),
     preview || !analyticsSection('customer-intelligence', ['lifetime', 'profitability']) ? Promise.resolve(null) : customerProfitability(period, orgId, allowed),
     // The header "Avg DSO" is the ONE org DSO — the same settlement-weighted
@@ -1106,6 +1108,7 @@ async function readCustomerData(
   interface LedgerSqlRow {
     id: string;
     func: string | null;
+    day: string;
     recognized: CustomerSqlNumeric;
     prior_recognized: CustomerSqlNumeric;
     credits: CustomerSqlNumeric;
@@ -1114,22 +1117,19 @@ async function readCustomerData(
     inv_nonar: CustomerSqlNumeric;
     sched: CustomerSqlNumeric;
     voids: CustomerSqlNumeric;
-    late: string | null;
-    late_prior: string | null;
   }
   interface LedgerParty {
     recognized: string; priorRecognized: string; credits: string; tax: string;
     parked: string; sched: string; voids: string;
   }
-  // Legs arrive per (party, functional) in stored base amounts; translate each
-  // to presentation at its latest posting date, then merge per party — the
-  // same leg pattern the document measures use, so FX handling cannot diverge.
+  // Legs arrive per (party, functional, posting day) in stored base amounts;
+  // translate each row at its own posting date, then merge per party — the
+  // same per-date pattern the document measures use, so FX handling cannot
+  // diverge. flowRates fails closed on a missing rate: no silent 1:1.
   const ledgerLegs = ledgerRows.rows as unknown as LedgerSqlRow[];
-  const ledgerCtx = await flowRates(orgId, [
-    ...ledgerLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
-    ...ledgerLegs.filter((r) => r.prior_recognized != null)
-      .map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
-  ]);
+  const ledgerCtx = await flowRates(orgId, ledgerLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
+  })));
   const ledgerByParty = new Map<string, LedgerParty>();
   const zeroLedger = (): LedgerParty => ({
     recognized: "0", priorRecognized: "0", credits: "0", tax: "0",
@@ -1137,20 +1137,21 @@ async function readCustomerData(
   });
   for (const r of ledgerLegs) {
     const cur = ledgerByParty.get(r.id) ?? zeroLedger();
-    const at = (v: CustomerSqlNumeric, d: string | null, fallback: string) =>
-      mulDecimal(String(v ?? 0), ledgerCtx.rateAt(r.func ?? null, String(d ?? fallback).slice(0, 10)));
-    cur.recognized = add(cur.recognized, at(r.recognized, r.late, to));
+    const day = String(r.day).slice(0, 10);
+    const at = (v: CustomerSqlNumeric) =>
+      mulDecimal(String(v ?? 0), ledgerCtx.rateAt(r.func ?? null, day));
+    cur.recognized = add(cur.recognized, at(r.recognized));
     if (r.prior_recognized != null) {
-      cur.priorRecognized = add(cur.priorRecognized, at(r.prior_recognized, r.late_prior, pTo));
+      cur.priorRecognized = add(cur.priorRecognized, at(r.prior_recognized));
     }
-    cur.credits = add(cur.credits, at(r.credits, r.late, to));
-    cur.tax = add(cur.tax, at(r.tax, r.late, to));
+    cur.credits = add(cur.credits, at(r.credits));
+    cur.tax = add(cur.tax, at(r.tax));
     // Parked = invoice net routed to deferred liability: invoice income legs
     // minus every non-AR ex-tax leg on the same invoice entries (income +
     // deferred). Zero for a directly-earned invoice, the full net when parked.
-    cur.parked = add(cur.parked, at(add(String(r.inv_income ?? 0), neg(String(r.inv_nonar ?? 0))), r.late, to));
-    cur.sched = add(cur.sched, at(r.sched, r.late, to));
-    cur.voids = add(cur.voids, at(r.voids, r.late, to));
+    cur.parked = add(cur.parked, at(add(String(r.inv_income ?? 0), neg(String(r.inv_nonar ?? 0)))));
+    cur.sched = add(cur.sched, at(r.sched));
+    cur.voids = add(cur.voids, at(r.voids));
     ledgerByParty.set(r.id, cur);
   }
 
@@ -1161,23 +1162,27 @@ async function readCustomerData(
     txns: number; avgValue: string;
     first: string | null; last: string | null; recency: number | null; tenure: number;
   }
-  // Invoiced revenue arrives per (party, functional) at the posted document
-  // rate; translate each leg to presentation at its latest posting date, then
-  // merge per party. Average = translated invoiced revenue per invoice.
+  // Invoiced revenue arrives per (party, functional, posting day) at the
+  // posted document rate; translate each day at its own spot rate, then merge
+  // per party. Average = translated invoiced revenue per invoice. Parties
+  // whose translated movement nets to nothing with no transactions stay out,
+  // exactly like the query-level filter this replaces.
   const baseLegs = baseRows.rows as unknown as CustomerBaseSqlRow[];
   const baseCtx = await flowRates(orgId, baseLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   const baseByParty = new Map<string, { name: string; revenue: string; txns: number; first: string | null; last: string | null }>();
   for (const r of baseLegs) {
     const cur = baseByParty.get(r.id) ?? { name: String(r.name), revenue: "0", txns: 0, first: null as string | null, last: null as string | null };
-    cur.revenue = add(cur.revenue, mulDecimal(String(r.revenue ?? 0), baseCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    const day = String(r.day).slice(0, 10);
+    cur.revenue = add(cur.revenue, mulDecimal(String(r.revenue ?? 0), baseCtx.rateAt(r.func ?? null, day)));
     cur.txns += Number(r.txn_count ?? 0);
-    const first = r.first_txn ? String(r.first_txn).slice(0, 10) : null;
-    const last = r.last_txn ? String(r.last_txn).slice(0, 10) : null;
-    if (first && (!cur.first || first < cur.first)) cur.first = first;
-    if (last && (!cur.last || last > cur.last)) cur.last = last;
+    if (!cur.first || day < cur.first) cur.first = day;
+    if (!cur.last || day > cur.last) cur.last = day;
     baseByParty.set(r.id, cur);
+  }
+  for (const [id, c] of baseByParty) {
+    if (cmp(c.revenue, "0") === 0 && c.txns === 0) baseByParty.delete(id);
   }
   const base: Base[] = [...baseByParty.entries()].map(([id, c]) => {
     // Headline money is RECOGNIZED (ledger); invoiced stays alongside as the
@@ -1321,19 +1326,23 @@ async function readCustomerData(
   };
 
   /* ---- friction / payment lookups ---- */
-  // Credit value arrives per (party, functional): translate each leg at its
-  // latest posting date, then merge per party.
+  // Credit value arrives per (party, functional, posting day): translate each
+  // day at its own spot rate, then merge per party. Parties without invoice
+  // orders stay out, exactly like the query-level filter this replaces.
   const frictionLegs = frictionRows.rows as unknown as CustomerFrictionSqlRow[];
   const frictionCtx = await flowRates(orgId, frictionLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   const frictionByParty = new Map<string, { credits: number; orders: number; creditValue: string }>();
   for (const r of frictionLegs) {
     const cur = frictionByParty.get(r.id) ?? { credits: 0, orders: 0, creditValue: "0" };
     cur.credits += Number(r.credit_count ?? 0);
     cur.orders += Number(r.order_count ?? 0);
-    cur.creditValue = add(cur.creditValue, mulDecimal(String(r.credit_value ?? 0), frictionCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    cur.creditValue = add(cur.creditValue, mulDecimal(String(r.credit_value ?? 0), frictionCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
     frictionByParty.set(r.id, cur);
+  }
+  for (const [id, f] of frictionByParty) {
+    if (f.orders === 0) frictionByParty.delete(id);
   }
   const frictionMap = new Map<string, { points: number; level: RiskLevel; credits: number; creditValue: string; returnRate: number }>();
   for (const [id, f] of frictionByParty) {
@@ -1568,19 +1577,20 @@ async function readCustomerData(
   });
 
   /* ---- growth () ---- */
-  // Monthly INVOICED revenue arrives per (month, functional): translate each leg
-  // at its latest posting date, then merge per month. Distinct counts ride the
-  // separate month-grain query (they never merge across functionals). The
-  // recognized monthly series is built from the ledger legs just below.
+  // Monthly INVOICED revenue arrives per (month, functional, posting day):
+  // translate each day at its own spot rate, then merge per month. Distinct
+  // counts ride the separate month-grain query (they never merge across
+  // functionals). The recognized monthly series is built from the ledger
+  // legs just below.
   const gLegs = growthRows.rows as unknown as CustomerGrowthSqlRow[];
   const gCtx = await flowRates(orgId, gLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   const gRevenue = new Map<string, string>();
   for (const r of gLegs) {
     const key = String(r.month);
     gRevenue.set(key, add(gRevenue.get(key) ?? "0",
-      mulDecimal(String(r.revenue ?? 0), gCtx.rateAt(r.func ?? null, String(r.late ?? `${r.month}-01`).slice(0, 10)))));
+      mulDecimal(String(r.revenue ?? 0), gCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
   }
   interface GrowthCountRow { month: string; unique_customers: CustomerSqlNumeric; txn_count: CustomerSqlNumeric; new_customers: CustomerSqlNumeric }
   const gCounts = new Map<string, GrowthCountRow>();
@@ -1590,16 +1600,16 @@ async function readCustomerData(
   // Recognized monthly: same leg pattern over the ledger month query. Months
   // present in only one universe still appear (the other reads zero) so the
   // timing gap between billing and recognition stays visible month by month.
-  interface GrowthLedgerRow { month: string; func: string | null; recognized: CustomerSqlNumeric; late: string | null }
+  interface GrowthLedgerRow { month: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
   const glLegs = growthLedgerRows.rows as unknown as GrowthLedgerRow[];
   const glCtx = await flowRates(orgId, glLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   const gRecognized = new Map<string, string>();
   for (const r of glLegs) {
     const key = String(r.month);
     gRecognized.set(key, add(gRecognized.get(key) ?? "0",
-      mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.late ?? `${r.month}-01`).slice(0, 10)))));
+      mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
   }
   const gInvoiced = gRevenue;
   const gRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
@@ -1689,14 +1699,15 @@ async function readCustomerData(
   // Month arithmetic clamps instead of overflowing (Aug 31 minus six months
   // is Feb 28/29, never Mar 3): addMonthsClamped carries the civil calendar.
   const activeCut = addMonthsClamped(ref, -6).slice(0, 10);
-  // Lifetime INVOICED revenue arrives per (party, functional): translate each leg
-  // at its latest posting date, merge per party, then run the cohort logic on
-  // parties (never on legs). Lifetime recognized merges in from the ledger
-  // legs just below; cohort membership (first/last year) stays document-based.
-  interface CohortLeg { id: string; func: string | null; first_order: unknown; last_order: unknown; late: string | null; lifetime_revenue: CustomerSqlNumeric }
+  // Lifetime INVOICED revenue arrives per (party, functional, posting day):
+  // translate each day at its own spot rate, merge per party, then run the
+  // cohort logic on parties (never on legs). Lifetime recognized merges in
+  // from the ledger legs just below; cohort membership (first/last year)
+  // stays document-based.
+  interface CohortLeg { id: string; func: string | null; day: string; first_order: unknown; last_order: unknown; lifetime_revenue: CustomerSqlNumeric }
   const cohortLegs = cohortRows.rows as unknown as CohortLeg[];
   const cohortCtx = await flowRates(orgId, cohortLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   const cohortByParty = new Map<string, { first: string; last: string; revenue: string; invoiced: string }>();
   for (const r of cohortLegs) {
@@ -1706,13 +1717,13 @@ async function readCustomerData(
     if (first < cur.first) cur.first = first;
     if (last > cur.last) cur.last = last;
     cur.invoiced = add(cur.invoiced, mulDecimal(String(r.lifetime_revenue ?? 0),
-      cohortCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+      cohortCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
     cohortByParty.set(r.id, cur);
   }
-  interface CohortLedgerLeg { id: string; func: string | null; recognized: CustomerSqlNumeric; late: string | null }
+  interface CohortLedgerLeg { id: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
   const cohortLedgerLegs = cohortLedgerRows.rows as unknown as CohortLedgerLeg[];
   const cohortLedgerCtx = await flowRates(orgId, cohortLedgerLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   for (const r of cohortLedgerLegs) {
     const cur = cohortByParty.get(r.id);
@@ -1721,7 +1732,7 @@ async function readCustomerData(
     // still counts it, so no money is lost, only uncohortable.
     if (!cur) continue;
     cur.revenue = add(cur.revenue, mulDecimal(String(r.recognized ?? 0),
-      cohortLedgerCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+      cohortLedgerCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
   }
   const cohortMap = new Map<string, Cohort>();
   let lifetimeCustomers = 0, lifetimeActive = 0;
