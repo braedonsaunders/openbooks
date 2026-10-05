@@ -441,8 +441,15 @@ export function SetupDrawer({
       beforeClose={confirmDiscard}
       stacked={stacked}
       title={choosing && chooser ? t(chooser.titleKey) : creating ? t('drawer.newTitle', { name: entityTitle }) : editing ? t('drawer.editTitle', { name: entityTitle }) : recordTitle ?? entityTitle}
-      subtabs={!creating && recordTabs.length > 0 ? (
-        <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: detailsLabel ?? t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
+      subtabs={!creating && (recordTabs.length > 0 || ruleTabs.length > 0) ? (
+        <>
+          {recordTabs.length > 0 ? (
+            <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: detailsLabel ?? t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
+          ) : null}
+          {!nestedTabActive && ruleTabs.length > 0 ? (
+            <RecordTabs label={detailsLabel ?? t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: ruleDetailsLabel ?? t('drawer.tabs.details') }, ...ruleTabs]} active={activeRuleTab?.key ?? 'details'} onChange={selectTab} />
+          ) : null}
+        </>
       ) : undefined}
       headerActions={<>
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
@@ -480,7 +487,6 @@ export function SetupDrawer({
           onChoose={choose}
         />
       ) : nestedTabActive ? activeNestedTab?.content : <>
-      {!creating && ruleTabs.length ? <div className="mb-4"><RecordTabs label={detailsLabel ?? t('drawer.tabs.ariaLabel')} tabs={[{key:'details',label:ruleDetailsLabel ?? t('drawer.tabs.details')}, ...ruleTabs]} active={activeRuleTab?.key ?? 'details'} onChange={selectTab} /></div> : null}
       {activeRuleTab ? activeRuleTab.content : <>
       {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /><NetInvestmentButton interestId={String(row.id)} /></div> : null}
       {fieldError ? (
