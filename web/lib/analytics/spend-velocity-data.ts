@@ -167,8 +167,8 @@ export interface SpendVelocityData {
   };
   expenseAnalysis: {
     summary: { expenseReportTotal: string; vendorBillTotal: string; topSpenderCount: number; categoryIncreaseTotal: string };
-    topSpenders: { employeeId: string; employeeName: string; totalSpend: number; priorSpend: number; reportCount: number; changePct: number | null }[];
-    categories: { categoryId: string; categoryName: string; currentAmount: number; priorAmount: number; changePct: number | null }[];
+    topSpenders: { employeeId: string; employeeName: string; totalSpend: string; priorSpend: string; reportCount: number; changePct: number | null }[];
+    categories: { categoryId: string; categoryName: string; currentAmount: string; priorAmount: string; changePct: number | null }[];
     monthlyTrends: { month: string; expenseAmount: string; billAmount: string }[];
   };
 }
@@ -1065,20 +1065,20 @@ export async function spendVelocityData(
     spenderByEmployee.set(r.employee_id, cur);
   }
   const expenseReportTotal = [...spenderByEmployee.values()].reduce((s, x) => add(s, x.current), ZERO);
+  // Spender and category amounts stay exact decimal strings to the tool and
+  // any reader: chart coordinates are the only place numbers belong.
   const topSpenders = [...spenderByEmployee.entries()].map(([employeeId, s]) => {
-    const current = toChartNumber(s.current);
-    const prior = toChartNumber(s.prior);
     const priorPositive = cmp(s.prior, ZERO) > 0;
     return {
       employeeId,
       employeeName: s.name,
-      totalSpend: current,
-      priorSpend: prior,
+      totalSpend: s.current,
+      priorSpend: s.prior,
       reportCount: s.ids.size,
-      changePct: priorPositive ? r1(((current - prior) / prior) * 100) : null,
+      changePct: priorPositive ? r1(toChartNumber(div(add(s.current, neg(s.prior)), s.prior)) * 100) : null,
     };
-  }).filter((s) => s.totalSpend + s.priorSpend > 0 && (s.totalSpend > 0 || s.priorSpend > 0))
-    .sort((a, b) => b.totalSpend - a.totalSpend)
+  }).filter((s) => cmp(add(s.totalSpend, s.priorSpend), ZERO) > 0 && (cmp(s.totalSpend, ZERO) > 0 || cmp(s.priorSpend, ZERO) > 0))
+    .sort((a, b) => cmp(b.totalSpend, a.totalSpend))
     .slice(0, 50);
   let categoryIncreaseTotal = ZERO;
   const catCtx = await flowRates(orgId, [
@@ -1096,13 +1096,13 @@ export async function spendVelocityData(
   }
   const expCategories = [...catByAccount.entries()].map(([categoryId, c]) => {
     const priorPositive = cmp(c.prior, ZERO) > 0;
-    const changePct = priorPositive ? r1(((toChartNumber(c.current) - toChartNumber(c.prior)) / toChartNumber(c.prior)) * 100) : null;
+    const changePct = priorPositive ? r1(toChartNumber(div(add(c.current, neg(c.prior)), c.prior)) * 100) : null;
     if (changePct !== null && changePct > C.categoryIncreaseThreshold) {
       categoryIncreaseTotal = add(categoryIncreaseTotal, add(c.current, neg(c.prior)));
     }
-    return { categoryId, categoryName: c.name, currentAmount: toChartNumber(c.current), priorAmount: toChartNumber(c.prior), changePct };
-  }).filter((c) => c.currentAmount > 0 || c.priorAmount > 0)
-    .sort((a, b) => b.currentAmount - a.currentAmount)
+    return { categoryId, categoryName: c.name, currentAmount: c.current, priorAmount: c.prior, changePct };
+  }).filter((c) => cmp(c.currentAmount, ZERO) > 0 || cmp(c.priorAmount, ZERO) > 0)
+    .sort((a, b) => cmp(b.currentAmount, a.currentAmount))
     .slice(0, 50);
   const expenseAnalysis = {
     summary: {
