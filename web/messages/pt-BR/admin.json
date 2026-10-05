@@ -3827,7 +3827,13 @@
       "customerLifeMonths": "Vida útil esperada do cliente (meses)",
       "renewalCommensurateThresholdPercent": "Limite de proporcionalidade da renovação",
       "contractCostBasisLabel": "Base de amortização",
-      "contractCostAssetAccount": "Conta de ativo de custos do contrato"
+      "contractCostAssetAccount": "Conta de ativo de custos do contrato",
+      "amountMinor": "Desconto (unidades menores)",
+      "feeAmountMinor": "Valor da taxa (unidades menores)",
+      "feePercent": "Percentual da taxa",
+      "itemCategory": "Categoria do item",
+      "percentValue": "Percentual de desconto",
+      "usageCount": "Usos"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
@@ -3954,7 +3960,8 @@
       "zonedDateTime": "Digite uma data e hora ISO com Z ou deslocamento explícito, como 2026-10-01T09:00:00-04:00. O deslocamento é preservado.",
       "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo.",
       "contractCostPracticalExpedient": "Quando ativado, custos cujo período de benefício é de doze meses ou menos vão direto a despesa em vez de serem capitalizados.",
-      "contractCostCommensurate": "Uma comissão de renovação igual ou superior a esta parcela da comissão inicial limita a amortização ao prazo do contrato, mesmo sob base de vida do cliente."
+      "contractCostCommensurate": "Uma comissão de renovação igual ou superior a esta parcela da comissão inicial limita a amortização ao prazo do contrato, mesmo sob base de vida do cliente.",
+      "minorAmount": "Unidades menores inteiras da moeda: 1000 significa 10,00 USD."
     },
     "options": {
       "usageAggregation": {
@@ -4559,6 +4566,21 @@
       "contractCostLifeSource": {
         "manual": "Manual",
         "derived": "Derivado de métricas SaaS"
+      },
+      "promotionKind": {
+        "percent": "Desconto percentual",
+        "amount": "Valor fixo",
+        "free_shipping": "Frete grátis",
+        "buy_x_get_y": "Compre X e ganhe Y"
+      },
+      "promotionStatus": {
+        "draft": "Rascunho",
+        "active": "Ativa",
+        "archived": "Arquivada"
+      },
+      "restockingFeeKind": {
+        "percent": "Percentual do valor creditado",
+        "fixed": "Valor fixo"
       }
     },
     "payroll": {

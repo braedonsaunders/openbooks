@@ -278,6 +278,11 @@ const COGNATES = new Set<string>([
   // “Production” is spelled identically in French.
   'fr:admin.roles.named.production.name|Production',
   'fr:agents.drawer.assignment.roles.production|Production',
+  // “Promotion(s)” and “Document” are spelled identically in French.
+  'fr:admin.features.promotions.title|Promotions',
+  'fr:salesOrders.promotion.chip|Promotion',
+  'fr:reports.catalog.columns.promotion_performance.promotion_name|Promotion',
+  'fr:reports.catalog.columns.promotion_performance.document_number|Document',
   'ja:admin.features.apiAccess.title|REST API',
   'pt-BR:admin.features.scripts.title|Scripts',
   'pt-BR:admin.sandboxes.changeSets.tables.user_scripts|Scripts',

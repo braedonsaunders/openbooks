@@ -3827,7 +3827,13 @@
       "customerLifeMonths": "预计客户存续期（月）",
       "renewalCommensurateThresholdPercent": "续约相称性阈值",
       "contractCostBasisLabel": "摊销基准",
-      "contractCostAssetAccount": "合同成本资产科目"
+      "contractCostAssetAccount": "合同成本资产科目",
+      "amountMinor": "折扣金额（最小单位）",
+      "feeAmountMinor": "费用金额（最小单位）",
+      "feePercent": "费用百分比",
+      "itemCategory": "商品类别",
+      "percentValue": "折扣百分比",
+      "usageCount": "使用次数"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -3954,7 +3960,8 @@
       "zonedDateTime": "输入包含 Z 或明确时区偏移的 ISO 时间戳，例如 2026-10-01T09:00:00-04:00。偏移将原样保留。",
       "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。",
       "contractCostPracticalExpedient": "启用后，受益期为十二个月或更短的成本将直接费用化，不予资本化。",
-      "contractCostCommensurate": "续约佣金达到或超过初次佣金的这一比例时，即使采用客户生命周期基础，摊销也限定在合同期内。"
+      "contractCostCommensurate": "续约佣金达到或超过初次佣金的这一比例时，即使采用客户生命周期基础，摊销也限定在合同期内。",
+      "minorAmount": "货币的最小单位整数：1000 即 10.00 美元。"
     },
     "options": {
       "usageAggregation": {
@@ -4559,6 +4566,21 @@
       "contractCostLifeSource": {
         "manual": "手动",
         "derived": "源自SaaS指标"
+      },
+      "promotionKind": {
+        "percent": "百分比折扣",
+        "amount": "固定金额",
+        "free_shipping": "免运费",
+        "buy_x_get_y": "买X送Y"
+      },
+      "promotionStatus": {
+        "draft": "草稿",
+        "active": "启用",
+        "archived": "已归档"
+      },
+      "restockingFeeKind": {
+        "percent": "按退款金额比例",
+        "fixed": "固定金额"
       }
     },
     "payroll": {
