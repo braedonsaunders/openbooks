@@ -75,7 +75,6 @@ test("POST /api/v1/approvals/decide records the decision with the idempotency ke
   assert.deepEqual(routeState.decisions[0], {
     gateId: "gate-1",
     documentId: undefined,
-    paymentRunId: undefined,
     decision: "approved",
     comment: "looks good",
     signature: undefined,

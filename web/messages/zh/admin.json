@@ -2475,7 +2475,6 @@
         "format": "格式",
         "currency": "币种",
         "delivery": "交付",
-        "approval": "运行审批",
         "status": "状态",
         "code": "代码",
         "rail": "通道",
@@ -2533,8 +2532,6 @@
         "country": "国家/地区",
         "sftpServer": "现有 SFTP 服务器",
         "sftpFolder": "出站文件夹",
-        "requireRunApproval": "要求付款运行审批",
-        "requireFileApproval": "要求生成文件审批",
         "autoRemittance": "自动发送汇款通知",
         "discountAccount": "提前付款折扣科目",
         "positivePayAccountReference": "机构账户引用",
@@ -2558,6 +2555,7 @@
         "validFrom": "生效自",
         "expiresOn": "到期于"
       },
+      "approvalHint": "付款批次的审批在<flows>流程</flows>中设置。没有付款批次流程时，提交的批次会立即获批。",
       "secretFields": {
         "originatorId": "发起方 ID",
         "originatorShortName": "简称",
@@ -2635,8 +2633,6 @@
       },
       "empty": "无可显示的记录。",
       "manualDelivery": "手动下载",
-      "runApproval": "必需",
-      "automatic": "自动",
       "any": "任意",
       "builtInFormatHint": "此内置格式化器由付款引擎维护。其可执行定义无法在此处编辑。",
       "save": "保存",
@@ -3324,6 +3320,11 @@
         "title": "缴款",
         "singular": "缴款",
         "description": "定义每项员工扣款、雇主缴款或应税非现金福利。税务处理和记账由薪资项目管理。"
+      },
+      "benefit-contribution-rule-components": {
+        "title": "计入的收入组成",
+        "singular": "计入的收入组成",
+        "description": "选择其工时计入此项缴款的收入组成。按数量计算的单位不计为工时。"
       },
       "benefit-contribution-classes": {
         "title": "资格类别",

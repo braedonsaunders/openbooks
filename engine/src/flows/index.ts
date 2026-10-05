@@ -119,6 +119,11 @@ export {
   allocationRunsFlowAdapter,
   allocationRunSubjectProfile,
 } from "./allocation-runs-adapter.ts";
+export {
+  INBOUND_PAYMENT_RUN_SUBJECT_KIND,
+  OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
+  paymentRunSubjectKind,
+} from "./payment-runs-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
   BUILT_IN_ROLE_NAMES,

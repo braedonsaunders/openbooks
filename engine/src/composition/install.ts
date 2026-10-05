@@ -21,6 +21,11 @@ import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-chang
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcing.ts";
 import { WORK_ORDER_SUBJECT_KIND } from "../flows/manufacturing-adapter.ts";
+import {
+  INBOUND_PAYMENT_RUN_SUBJECT_KIND,
+  OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
+} from "../flows/payment-runs-adapter.ts";
+import { releasePaymentRunFlowApproval } from "../payments/flow-release.ts";
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
 import { releaseFundReleaseFlowApproval } from "../nonprofit/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
@@ -74,6 +79,8 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);
   registerFlowApprovalReleaseHandler(RESOURCING_REQUEST_SUBJECT_KIND, releaseResourcingRequestApproval);
   registerFlowApprovalReleaseHandler(WORK_ORDER_SUBJECT_KIND, releaseWorkOrderApproval);
+  registerFlowApprovalReleaseHandler(OUTBOUND_PAYMENT_RUN_SUBJECT_KIND, releasePaymentRunFlowApproval);
+  registerFlowApprovalReleaseHandler(INBOUND_PAYMENT_RUN_SUBJECT_KIND, releasePaymentRunFlowApproval);
   // Document effects: post_document and before_void completion,
   // verbatim from flows/execute.ts and flows/documents-adapter.ts. Runs
   // inline in the caller's chain, so the ambient pinned org transaction

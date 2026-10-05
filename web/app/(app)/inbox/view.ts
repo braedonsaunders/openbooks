@@ -260,7 +260,7 @@ export async function loadApprovals(
 
   // ---- My + All approvals: the unified worklist -----------------
   // The dashboard tile counts approvalWorklistForAuthz (Flows gates +
-  // gateless document approvals + pending pay runs); the center reads the
+  // gateless document approvals + pending budgets); the center reads the
   // same reader so same-labeled figures tie by construction. Same doorway
   // as the tile and get_vitals: a caller who cannot approve anything sees
   // no rows rather than a forbidden error. Same doorway as the count route.
@@ -398,26 +398,6 @@ export async function loadApprovals(
     signatureRequired: false,
   })
 
-  const payToRow = (
-    p: Extract<ApprovalWorklistItem, { kind: 'pay_run' }>,
-  ): ApprovalRow => ({
-    key: `payrun:${p.id}`,
-    gateId: null,
-    documentNumber: p.runNumber,
-    kind: 'pay_run',
-    kindLabel: kindLabel('pay_run'),
-    href: approvalRecordHref('pay_run', p.id),
-    party: null,
-    amount: formatMoney(p.totalAmount),
-    approvalTitle: p.purpose || null,
-    engineName: '',
-    requestedAt: iso(p.submittedAt ?? p.createdAt),
-    assignee: null,
-    canDelegate: false,
-    quorumAll: false,
-    signatureRequired: false,
-  })
-
   // Subject-kind detail for flow gates (party + decision summary): one
   // batched, org-scoped read through the per-kind registry — unresolvable
   // subjects stay absent and their rows keep the id fallback.
@@ -437,7 +417,6 @@ export async function loadApprovals(
   ): ApprovalRow => {
     if (item.kind === 'document') return docToRow(item)
     if (item.kind === 'budget') return budgetToRow(item)
-    if (item.kind === 'pay_run') return payToRow(item)
     return gateToRow(item, assignee)
   }
 

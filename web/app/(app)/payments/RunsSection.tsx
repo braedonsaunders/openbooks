@@ -1,4 +1,5 @@
 import { can, type Authz } from '@/lib/authz'
+import { isFeatureEnabled } from '@/lib/features'
 import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { paymentRunScopeSql, paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { getMoneyFormatter } from '@/lib/money-server'
@@ -8,6 +9,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { paymentRunReadiness } from "@openbooks/engine/src/payments/run-readiness.ts";
+import { paymentRunSubjectKind } from '@openbooks/engine/flows'
 import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
@@ -312,6 +314,9 @@ export async function RunsSection({
        where r.id = ${runId} and ${runScope} and r.direction = ${direction}
     `)))
     if (run.rows[0]) {
+      // Approval belongs to Flows; with Flows off there is no run approval
+      // to show or decide.
+      const flowsOn = await isFeatureEnabled(orgId, 'flows')
       // Payees outside the caller's subsidiary fence read as missing here,
       // exactly as GET /api/payments/runs/[id] scopes them: the same
       // visible-payee set filters the instructions, the source-document
@@ -390,6 +395,7 @@ export async function RunsSection({
           events={events.rows as unknown as PaymentEventClient[]}
           items={items.rows as unknown as PaymentRunItemClient[]}
           canApprove={canApprove}
+          approvalSubjectKind={flowsOn ? paymentRunSubjectKind(direction) : null}
           closeHref={`${basePath}?view=runs`}
           paymentBasePath={basePath}
         />

@@ -66,6 +66,7 @@ test('posting confirmation sums live instruction amounts with exact decimal prec
           events: [],
           items: [],
           canApprove: false,
+          approvalSubjectKind: null,
         }),
       }),
     }))

@@ -34,9 +34,9 @@ test("a pay run selects a posted bill whose document has no subsidiary", { skip:
     await db.execute(sql`
       insert into payment_bank_profiles
         (id, org_id, name, bank_account_id, payment_format_id, currency,
-         require_run_approval, require_file_approval, created_by, updated_by)
+         created_by, updated_by)
       values (${profileId}, ${org.orgId}, 'Null-subsidiary profile', ${org.accounts.bank},
-              ${formatId}, 'CAD', false, false, ${actor}, ${actor})
+              ${formatId}, 'CAD', ${actor}, ${actor})
     `);
 
     // The order-converted shape: approved, posted, but subsidiary_id null.

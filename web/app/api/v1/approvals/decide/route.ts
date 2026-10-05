@@ -11,7 +11,6 @@ import { decideApproval } from "../../../../../lib/application/approvals";
 const decideApprovalBody = z.looseObject({
   gateId: z.string().optional(),
   documentId: z.string().optional(),
-  paymentRunId: z.string().optional(),
   decision: z.enum(["approved", "rejected"]),
   comment: z.string().optional(),
   signature: z.string().optional(),
@@ -26,7 +25,6 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     const outcome = await decideApproval(context, {
       gateId: typeof body.gateId === "string" ? body.gateId : undefined,
       documentId: typeof body.documentId === "string" ? body.documentId : undefined,
-      paymentRunId: typeof body.paymentRunId === "string" ? body.paymentRunId : undefined,
       decision: body.decision as "approved" | "rejected",
       comment: typeof body.comment === "string" ? body.comment : undefined,
       signature: typeof body.signature === "string" ? body.signature : undefined,

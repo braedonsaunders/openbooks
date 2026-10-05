@@ -2,15 +2,15 @@
  * HR-15 flows_approval adapter — the approvals leg of the inbox.
  *
  * Wraps worklistApprovalsPage (the same paged union reader the inbox page
- * and the dashboard tile render from — documents, pay runs, budgets, flow
- * gates — so the three can never disagree) and acts through decideGate /
+ * and the dashboard tile render from — documents, budgets, flow gates — so
+ * the three can never disagree) and acts through decideGate /
  * delegateGate / decideDocumentApproval — the existing write path, never
  * a second one.
  *
- * Mapped legs: flow gates and gateless documents carry inbox actions.
- * Budget and pay-run legs are decision items with specialized decide paths
- * (checker flow, idempotent run approval) — they stay on the inbox page's
- * union table and are not inbox actions.
+ * Mapped legs: flow gates (payment runs included) and gateless documents
+ * carry inbox actions. The budget leg is a decision item with its own
+ * checker path — it stays on the inbox page's union table and is not an
+ * inbox action.
  *
  * Dedupe: gates whose subject is owned by a dedicated inbox adapter are
  * excluded here and listed there instead (leave, change request,
@@ -109,8 +109,6 @@ export const flowsApprovalAdapter: InboxAdapter = {
           ? { allowedSubsidiaryIds: scope.allowedSubsidiaryIds === null ? null : new Set(scope.allowedSubsidiaryIds) }
           : {}),
         ...(scope?.includeBudgets !== undefined ? { includeBudgets: scope.includeBudgets } : {}),
-        ...(scope?.includePayRuns !== undefined ? { includePayRuns: scope.includePayRuns } : {}),
-        ...(scope?.payDirections ? { payDirections: [...scope.payDirections] } : {}),
       },
       window,
     );
@@ -123,7 +121,7 @@ export const flowsApprovalAdapter: InboxAdapter = {
         const mapped = documentItem(item.document);
         if (mapped) out.push(mapped);
       }
-      // Budget and pay-run legs intentionally unmapped (see header).
+      // The budget leg is intentionally unmapped (see header).
     }
     return out;
   },

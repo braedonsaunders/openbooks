@@ -54,12 +54,12 @@ test("outbound payment-run creation claims each source once and ignores cross-ru
       await db.execute(sql`
         insert into payment_bank_profiles
           (id, org_id, name, bank_account_id, subsidiary_id,
-           payment_format_id, currency, require_run_approval, is_active,
+           payment_format_id, currency, is_active,
            created_by)
         values
           (${profileId}, ${org.orgId}, 'Outbound contention bank',
            ${org.accounts.bank}, ${org.subsidiaryId}, ${formatId}, 'CAD',
-           false, true, ${actorId})
+           true, ${actorId})
       `);
 
       const postBill = async (number: string): Promise<string> => {

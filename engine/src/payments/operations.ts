@@ -28,6 +28,9 @@ import { reversePaymentForReturn } from "./payment-return.ts";
 import { computeNextRunAt, runScript } from "../scripting/scripting.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { createPaymentRun } from "./run-creation.ts";
+import { runRecordFlows } from "../flows/run.ts";
+import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
+import { paymentRunSubjectKind } from "../flows/payment-runs-adapter.ts";
 export { PAYMENT_FILE_STATUSES } from "./file-statuses.ts";
 
 export type BuiltInPaymentRail =
@@ -101,8 +104,6 @@ export interface PaymentBankProfileInput {
   settings?: Record<string, unknown>;
   sftpServerId?: string | null;
   sftpFolder?: string | null;
-  requireRunApproval?: boolean;
-  requireFileApproval?: boolean;
   autoRemittance?: boolean;
   isActive?: boolean;
 }
@@ -222,8 +223,6 @@ export async function createPaymentBankProfile(
       settings: input.settings ?? {},
       sftpServerId: input.sftpServerId ?? null,
       sftpFolder: input.sftpFolder ?? null,
-      requireRunApproval: input.requireRunApproval ?? true,
-      requireFileApproval: input.requireFileApproval ?? false,
       autoRemittance: input.autoRemittance ?? false,
       isActive: input.isActive ?? true,
       createdBy: userId,
@@ -312,8 +311,6 @@ export async function updatePaymentBankProfile(
         settings = coalesce(${input.settings ? JSON.stringify(input.settings) : null}::jsonb, settings),
         sftp_server_id = case when ${input.sftpServerId === undefined} then sftp_server_id else ${input.sftpServerId ?? null}::uuid end,
         sftp_folder = case when ${input.sftpFolder === undefined} then sftp_folder else ${input.sftpFolder ?? null} end,
-        require_run_approval = coalesce(${input.requireRunApproval ?? null}, require_run_approval),
-        require_file_approval = coalesce(${input.requireFileApproval ?? null}, require_file_approval),
         auto_remittance = coalesce(${input.autoRemittance ?? null}, auto_remittance),
         is_active = coalesce(${input.isActive ?? null}, is_active),
         updated_at = now(), updated_by = ${userId}
@@ -358,103 +355,134 @@ async function event(opts: {
 }
 
 /**
- * Submit a draft payment run for approval (or straight to approved when the
- * profile requires no run approval). `userId` is the gate user for an
- * interactive submission, or null for the payment scheduler: a scheduled
- * submission is system provenance — it never impersonates the historical
- * schedule author, and the recorded maker stays "system" so any authenticated
- * human remains an independent checker.
+ * Submit a draft payment run. Approval is owned by Flows: the submit fires
+ * `on_submit` for the run's subject (outbound or inbound payment run), and an
+ * enabled flow that raises a gate parks the run in `pending_approval` until
+ * the flow decides. With no gating flow the organization has no payment-run
+ * approval, and the run is released to `approved` at once.
+ *
+ * `userId` is the gate user for an interactive submission, or null for the
+ * payment scheduler: a scheduled submission is system provenance and never
+ * impersonates the schedule's author. The run's maker stays excluded from
+ * deciding its gate either way (the subject forbids self-approval).
+ *
+ * A flow that matched but failed refuses the submission by name and leaves the
+ * run in draft; whatever the dispatch opened is cancelled, and the failed flow
+ * run is kept as retry evidence.
  */
-export async function submitPaymentRun(runId: string, orgId: string, userId: string | null): Promise<void> {
-  await withOrgTransaction(orgId, async () => {
-    const result = (await db.execute<{ status: string }>(sql`
-      update payment_runs r set
-        status = case when p.require_run_approval then 'pending_approval' else 'approved' end,
+export async function submitPaymentRun(
+  runId: string,
+  orgId: string,
+  userId: string | null,
+): Promise<{ status: "pending_approval" | "approved"; gated: boolean }> {
+  const outcome = await withOrgTransaction(orgId, async () => {
+    const run = (await db.execute<{ direction: string }>(sql`
+      select r.direction from payment_runs r
+        join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
+       where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
+         and p.is_active and r.payment_count > 0 and r.total_amount > 0
+       for update of r
+    `)).rows[0];
+    if (!run) throw new PaymentError("only a non-empty draft run with an active profile can be submitted");
+    const subjectKind = paymentRunSubjectKind(run.direction);
+    const dispatch = await runRecordFlows(
+      { kind: "on_submit", source: userId === null ? "schedule" : "ui" },
+      subjectKind,
+      runId,
+      { orgId, userId },
+    );
+    if (dispatch.failed) {
+      await cancelDispatchRuns(orgId, dispatch.runs.map((item) => item.runId), { actorId: userId });
+      return { refusal: `payment run approval routing failed: ${dispatchFailureReason(dispatch)}` } as const;
+    }
+    const gated = dispatch.gatesCreated > 0;
+    const status = gated ? "pending_approval" : "approved";
+    const submitted = (await db.execute<{ id: string }>(sql`
+      update payment_runs set
+        status = ${status},
         submitted_at = now(), submitted_by = ${userId},
-        approved_at = case when p.require_run_approval then null else now() end,
-        approved_by = case when p.require_run_approval then null else ${userId}::uuid end,
+        approved_at = ${gated ? null : sql`now()`},
+        approved_by = null,
         updated_at = now(), updated_by = ${userId}
-      from payment_bank_profiles p
-      where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
-        and p.id = r.payment_bank_profile_id and p.is_active and r.payment_count > 0 and r.total_amount > 0
-      returning r.status
-    `));
-    const row = result.rows[0];
-    if (!row) throw new PaymentError("only a non-empty draft run with an active profile can be submitted");
+      where id = ${runId} and org_id = ${orgId} and status = 'draft'
+      returning id
+    `)).rows[0];
+    if (!submitted) throw new PaymentError("the payment run changed while it was being submitted");
     await event({
       orgId,
       runId,
       eventType: "run_submitted",
       actorId: userId,
       fromStatus: "draft",
-      toStatus: row.status,
-      details: { source: userId === null ? "system" : "user" },
+      toStatus: status,
+      details: {
+        source: userId === null ? "system" : "user",
+        approval: gated ? "flow" : "not_required",
+        ...(gated ? { flowRuns: dispatch.runs.filter((item) => item.gatesCreated > 0).map((item) => item.runId) } : {}),
+      },
     });
+    return { status, gated } as const;
   });
+  if ("refusal" in outcome) throw new PaymentError(outcome.refusal);
+  return outcome;
 }
 
-/** The maker of a controlled payment artifact can never be its checker.
+/**
+ * Release a payment run's Flows approval. Called by the registered handler
+ * inside decideGate's transaction once the subject's approval resolves, so a
+ * refusal here rolls the gate decision back with it.
  *
- * Files only: a run submitted by the scheduler (null submitter) is a system
- * submission whose maker is the scheduler itself, so decidePaymentRun allows
- * any authenticated human as an independent checker (see its own guard). */
-function assertIndependentPaymentApprover(
-  kind: "run" | "file",
-  makerId: string | null,
-  approverId: string,
-): void {
-  const subject = kind === "run" ? "payment run" : "payment file";
-  const maker = kind === "run" ? "submitter" : "generator";
-  if (makerId === null) throw new PaymentError(`${subject} approval requires an identified ${maker}`);
-  if (makerId === approverId) throw new PaymentError(`the ${subject} ${maker} cannot approve the same ${kind}`);
-}
-
-export async function decidePaymentRun(
-  runId: string,
-  orgId: string,
-  userId: string,
-  decision: "approve" | "reject",
-  reason?: string | null,
-): Promise<void> {
-  if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
-  const next = decision === "approve" ? "approved" : "rejected";
-  const eventType = decision === "approve" ? "run_approved" : "run_rejected";
-  await withOrgTransaction(orgId, async () => {
-    const result = (await db.execute<{ id: string }>(sql`
-      update payment_runs set
-        status = ${next},
-        approved_at = case when ${decision} = 'approve' then now() else null end,
-        approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
-        rejected_at = case when ${decision} = 'reject' then now() else null end,
-        rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
-        rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
-        updated_at = now(), updated_by = ${userId}
-      where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
-        and (
-          ${decision} = 'reject'
-          or submitted_by is null
-          or submitted_by <> ${userId}
-        )
-      returning id
-    `));
-    if (!result.rows[0]) {
-      if (decision === "approve") {
-        const pending = (await db.execute<{ submitted_by: string | null }>(sql`
-          select submitted_by
-            from payment_runs
-           where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
-        `)).rows[0];
-        // A null submitter is a system submission (the payment scheduler): the
-        // maker is the system itself, so any authenticated human approver is an
-        // independent checker. A named submitter stays barred from approving
-        // their own run.
-        if (pending?.submitted_by === userId) {
-          throw new PaymentError("the payment run submitter cannot approve the same run");
-        }
-      }
-      throw new PaymentError("only a run pending approval can be decided");
-    }
-    await event({ orgId, runId, eventType, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
+ * Only a run still awaiting approval is released; a run that left
+ * `pending_approval` some other way is refused rather than overwritten. The
+ * decider must be a signed-in user who is neither the run's maker nor its
+ * submitter — the flows engine already refuses them for this subject, and the
+ * payments engine holds the same line so a release can never record a
+ * self-approval. A rejection carries its reason onto the run.
+ */
+export async function releasePaymentRunApproval(args: {
+  orgId: string;
+  runId: string;
+  actorId: string | null;
+  outcome: "approved" | "rejected";
+  comment?: string | null;
+}): Promise<void> {
+  const { orgId, runId, actorId, outcome } = args;
+  if (!actorId) throw new PaymentError("a payment run approval must be decided by a signed-in user");
+  const run = (await db.execute<{ status: string; created_by: string | null; submitted_by: string | null }>(sql`
+    select status, created_by, submitted_by from payment_runs
+     where id = ${runId} and org_id = ${orgId}
+     for update
+  `)).rows[0];
+  if (!run) throw new PaymentError("payment run not found");
+  if (run.status !== "pending_approval") {
+    throw new PaymentError(`the payment run is ${run.status}, not awaiting approval`);
+  }
+  if (actorId === run.submitted_by) throw new PaymentError("the payment run submitter cannot decide its approval");
+  if (actorId === run.created_by) throw new PaymentError("the user who assembled the payment run cannot decide its approval");
+  const reason = args.comment?.trim() || null;
+  if (outcome === "rejected" && !reason) throw new PaymentError("a rejection reason is required");
+  const next = outcome === "approved" ? "approved" : "rejected";
+  const released = (await db.execute<{ id: string }>(sql`
+    update payment_runs set
+      status = ${next},
+      approved_at = ${outcome === "approved" ? sql`now()` : null},
+      approved_by = ${outcome === "approved" ? actorId : null}::uuid,
+      rejected_at = ${outcome === "rejected" ? sql`now()` : null},
+      rejected_by = ${outcome === "rejected" ? actorId : null}::uuid,
+      rejection_reason = ${outcome === "rejected" ? reason : null},
+      updated_at = now(), updated_by = ${actorId}
+    where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
+    returning id
+  `)).rows[0];
+  if (!released) throw new PaymentError("the payment run changed while its approval was being released");
+  await event({
+    orgId,
+    runId,
+    eventType: outcome === "approved" ? "run_approved" : "run_rejected",
+    actorId,
+    fromStatus: "pending_approval",
+    toStatus: next,
+    details: { source: "flow", ...(reason ? { reason } : {}) },
   });
 }
 
@@ -1134,10 +1162,8 @@ export async function generatePaymentFileArtifact(
     const stored = await storeArtifactFile(orgId, userId, safeFilename, rendered.contentType, content, hash);
     const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
     const parentId = opts?.reprocessFileId ?? null;
-    const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
-      select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id} and org_id = ${orgId}
-    `));
-    const fileStatus = profile.rows[0]?.require_file_approval ? "pending_approval" : "approved";
+    // The file renders a run its approval flow already released, so it is
+    // deliverable as generated; there is no second, file-level approval.
     const total = sum(ctx.payments.map((p) => p.amount));
     const artifact = (await db.insert(schema.paymentFiles).values({
       orgId,
@@ -1154,10 +1180,10 @@ export async function generatePaymentFileArtifact(
       paymentCount: ctx.payments.length,
       totalAmount: total,
       currency: String(ctx.run.currency),
-      status: fileStatus,
+      status: "approved",
       generatedBy: userId,
-      approvedAt: fileStatus === "approved" ? now : null,
-      approvedBy: fileStatus === "approved" ? userId : null,
+      approvedAt: now,
+      approvedBy: null,
       createdBy: userId,
       updatedBy: userId,
     }).returning({ id: schema.paymentFiles.id }))[0]!;
@@ -1187,51 +1213,6 @@ export async function generatePaymentFileArtifact(
     if (!transitioned.rows[0]) throw new PaymentError("approve the payment run before generating its file");
     await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: liveStatus, toStatus: "generated", details: { hash, filename: safeFilename } });
     return { id: artifact.id, filename: safeFilename, contentType: rendered.contentType, content };
-  });
-}
-
-export async function decidePaymentFile(
-  fileId: string,
-  orgId: string,
-  userId: string,
-  decision: "approve" | "reject",
-  reason?: string | null,
-  opts: { runId?: string | null } = {},
-): Promise<void> {
-  if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
-  const eventType = decision === "approve" ? "file_approved" : "file_rejected";
-  const runPredicate = opts.runId ? sql`payment_run_id = ${opts.runId}` : undefined;
-  await withOrgTransaction(orgId, async () => {
-    const result = (await db.execute<{ payment_run_id: string }>(sql`
-      update payment_files set
-        status = ${decision === "approve" ? "approved" : "rejected"},
-        approved_at = case when ${decision} = 'approve' then now() else null end,
-        approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
-        rejected_at = case when ${decision} = 'reject' then now() else null end,
-        rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
-        rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
-        updated_at = now(), updated_by = ${userId}
-      where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
-        ${runPredicate ? sql`and ${runPredicate}` : sql``}
-        and (
-          ${decision} = 'reject'
-          or (generated_by is not null and generated_by <> ${userId})
-        )
-      returning payment_run_id
-    `));
-    if (!result.rows[0]) {
-      if (decision === "approve") {
-        const pending = (await db.execute<{ generated_by: string | null }>(sql`
-          select generated_by
-            from payment_files
-           where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
-             ${runPredicate ? sql`and ${runPredicate}` : sql``}
-        `)).rows[0];
-        if (pending) assertIndependentPaymentApprover("file", pending.generated_by, userId);
-      }
-      throw new PaymentError("only a file pending approval can be decided");
-    }
-    await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
   });
 }
 

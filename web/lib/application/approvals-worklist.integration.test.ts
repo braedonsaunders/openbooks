@@ -3,19 +3,24 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 // The approvals worklist must show everything awaiting the caller — Flows
-// gates, gateless document-status approvals, and pending pay runs — and
+// gates (payment runs among them) and gateless document-status approvals — and
 // get_vitals must count that same set. Previously listApprovalWorklist only
 // saw Flows gates, so an approver saw [] while documents sat pending.
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { submitForApproval } = await import("@openbooks/engine/src/flows/submit.ts");
+const { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } = await import("@openbooks/engine/src/flows/payment-runs-adapter.ts");
+const { submitPaymentRun } = await import("@openbooks/engine/src/payments/operations.ts");
+const { installEngineSeams } = await import("@openbooks/engine/src/composition/install.ts");
 const { decideApproval, listApprovalWorklist } = await import("./approvals.ts");
 const { orgVitals } = await import("./vitals.ts");
 const { resolveApprovalSubjects } = await import("../approval-subjects.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+// Payment-run approvals release through the engine seams.
+installEngineSeams();
 
 function ctxFor(orgId: string, userId: string, roleKeys: string[], permissions: string[]): ApplicationContext {
   return {
@@ -35,12 +40,14 @@ function ctxFor(orgId: string, userId: string, roleKeys: string[], permissions: 
   };
 }
 
-async function seed(orgId: string, subsidiaryId: string, bankId: string, actors: { submitterId: string; approver1Id: string }) {
-  await seedApprovalFlow(orgId, {
-    subjectKind: "vendor_bill",
-    assignees: [{ type: "user", userId: actors.approver1Id }],
-    mode: "any",
-  });
+async function seed(orgId: string, bankId: string, actors: { submitterId: string; approver1Id: string }) {
+  for (const subjectKind of ["vendor_bill", OUTBOUND_PAYMENT_RUN_SUBJECT_KIND]) {
+    await seedApprovalFlow(orgId, {
+      subjectKind,
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+  }
   const gatedId = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
   await submitForApproval("vendor_bill", gatedId);
   const gateless = async (): Promise<string> => {
@@ -52,15 +59,27 @@ async function seed(orgId: string, subsidiaryId: string, bankId: string, actors:
   };
   const gatelessId = await gateless();
   const sodId = await gateless();
+  const formatId = randomUUID();
+  const profileId = randomUUID();
   const runId = randomUUID();
   await db.execute(sql`
+    insert into payment_formats
+      (id, org_id, code, name, rail, direction, file_extension, content_type, created_by, updated_by)
+    values (${formatId}, ${orgId}, 'W7-WIRE', 'Worklist wire', 'wire', 'credit', 'txt', 'text/plain',
+            ${actors.submitterId}, ${actors.submitterId})`);
+  await db.execute(sql`
+    insert into payment_bank_profiles
+      (id, org_id, name, bank_account_id, payment_format_id, currency, created_by, updated_by)
+    values (${profileId}, ${orgId}, 'Worklist profile', ${bankId}, ${formatId}, 'CAD',
+            ${actors.submitterId}, ${actors.submitterId})`);
+  await db.execute(sql`
     insert into payment_runs
-      (id, org_id, run_number, bank_account_id, subsidiary_id, method,
-       direction, purpose, currency, status, payment_count, total_amount,
-       submitted_at, submitted_by, created_by, updated_by)
-    values (${runId}, ${orgId}, 'W7-RUN', ${bankId}, ${subsidiaryId}, 'eft',
-            'outbound', 'vendor_payments', 'CAD', 'pending_approval', 1,
-            '250.0000', now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})`);
+      (id, org_id, run_number, bank_account_id, payment_bank_profile_id, method,
+       direction, purpose, currency, status, payment_count, total_amount, created_by, updated_by)
+    values (${runId}, ${orgId}, 'W7-RUN', ${bankId}, ${profileId}, 'wire',
+            'outbound', 'vendor_payments', 'CAD', 'draft', 1, '250.0000',
+            ${actors.submitterId}, ${actors.submitterId})`);
+  await submitPaymentRun(runId, orgId, actors.submitterId);
   return { gatedId, gatelessId, sodId, runId };
 }
 
@@ -69,21 +88,22 @@ async function docStatus(id: string): Promise<string | null> {
   return r.rows[0]?.status ?? null;
 }
 
-test("worklist unifies gates, gateless documents, and pay runs; vitals counts the same set", { skip: !DB }, async () => {
+test("worklist unifies gates, gateless documents, and payment runs; vitals counts the same set", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
-    const ids = await withBypassContext(() => seed(org.orgId, org.subsidiaryId, org.accounts.bank, actors));
+    const ids = await withBypassContext(() => seed(org.orgId, org.accounts.bank, actors));
     const approver = ctxFor(org.orgId, actors.approver1Id, ["approver"], ["flows.approve", "ap.approve"]);
     // The worklist readers rely on ambient org scope (production provides it
     // per request); the document-decide path below self-scopes instead, so
     // only these calls need the explicit boundary.
     const items = await withOrgContext(org.orgId, () => listApprovalWorklist(approver));
     const kinds = new Map(items.map((item) => [item.id, item.kind]));
-    assert.equal(items.filter((item) => item.kind === "flow_gate").length, 1, "one pending gate");
+    const gates = items.filter((item) => item.kind === "flow_gate");
+    assert.equal(gates.length, 2, "the vendor bill's gate and the payment run's gate");
+    assert.ok(gates.some((gate) => gate.subjectId === ids.runId), "the payment run is listed through its gate");
     assert.equal(kinds.get(ids.gatelessId), "document", "gateless document listed once");
     assert.ok(!kinds.has(ids.gatedId), "gated document not duplicated as a document row");
-    assert.equal(kinds.get(ids.runId), "pay_run", "pending pay run listed");
     const vitals = await withOrgContext(org.orgId, () => orgVitals(approver));
     assert.deepEqual(vitals.approvals, { available: true, pending: items.length }, "vitals counts the unified set");
     // The benchmark case: an admin holding no assignment sees no gates, but
@@ -92,8 +112,8 @@ test("worklist unifies gates, gateless documents, and pay runs; vitals counts th
     const adminItems = await withOrgContext(org.orgId, () => listApprovalWorklist(admin));
     assert.equal(adminItems.filter((item) => item.kind === "flow_gate").length, 0, "no gate assigned to admin");
     assert.equal(
-      adminItems.filter((item) => item.kind === "document" || item.kind === "pay_run").length,
-      items.length - 1,
+      adminItems.filter((item) => item.kind === "document").length,
+      items.filter((item) => item.kind === "document").length,
       "admin still sees every gateless approval",
     );
   } finally {
@@ -148,7 +168,7 @@ test("decide paths resolve each subject kind with separation of duties", { skip:
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
-    const ids = await withBypassContext(() => seed(org.orgId, org.subsidiaryId, org.accounts.bank, actors));
+    const ids = await withBypassContext(() => seed(org.orgId, org.accounts.bank, actors));
     const approver = ctxFor(org.orgId, actors.approver1Id, ["approver"], ["flows.approve", "ap.approve"]);
     const submitter = ctxFor(org.orgId, actors.submitterId, ["accountant"], ["flows.approve", "ap.approve"]);
 
@@ -175,31 +195,15 @@ test("decide paths resolve each subject kind with separation of duties", { skip:
       "gated documents decide through their gate",
     );
 
-    // The pay-run subject lookup shares the worklist's ambient-scope
-    // assumption (unscoped it throws approval-not-found); the document
-    // decides above self-scope via withOrgTransaction and stay raw.
-    const run = await withOrgContext(org.orgId, () => decideApproval(approver, {
-      paymentRunId: ids.runId, decision: "approved", idempotencyKey: randomUUID(),
+    // A payment run decides through its Flows gate, on the same verb.
+    const runGate = (await withOrgContext(org.orgId, () => listApprovalWorklist(approver)))
+      .find((item) => item.kind === "flow_gate" && item.subjectId === ids.runId);
+    assert.ok(runGate);
+    await withOrgContext(org.orgId, () => decideApproval(approver, {
+      gateId: runGate.id, decision: "approved", idempotencyKey: randomUUID(),
     }));
-    assert.equal((run.result as { status: string }).status, "approved");
     const runStatus = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from payment_runs where id = ${ids.runId}`))).rows[0]?.status;
     assert.equal(runStatus, "approved");
-
-    // Submitter self-approval of the run is refused.
-    const runId2 = randomUUID();
-    await withBypassContext(() => db.execute(sql`
-      insert into payment_runs
-        (id, org_id, run_number, bank_account_id, subsidiary_id, method,
-         direction, purpose, currency, status, payment_count, total_amount,
-         submitted_at, submitted_by, created_by, updated_by)
-      values (${runId2}, ${org.orgId}, 'W7-RUN2', ${org.accounts.bank}, ${org.subsidiaryId}, 'eft',
-              'outbound', 'vendor_payments', 'CAD', 'pending_approval', 1,
-              '10.0000', now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})`));
-    await assert.rejects(
-      withOrgContext(org.orgId, () => decideApproval(submitter, { paymentRunId: runId2, decision: "approved", idempotencyKey: randomUUID() })),
-      /submitter cannot approve/,
-      "run submitter cannot self-approve",
-    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -216,12 +216,8 @@
     "cancelRun": "処理を取り消し",
     "downloadFile": "ファイルをダウンロード",
     "downloadBlockedTitle": "先にプロファイルと銀行情報の問題を解決してください",
-    "submitRun": "承認申請する",
-    "approve": "処理を承認",
-    "reject": "処理を却下",
+    "submitRun": "支払処理を申請する",
     "generateFile": "ファイルを生成",
-    "approveFile": "ファイルを承認",
-    "rejectFile": "ファイルを却下",
     "reprocess": "再処理",
     "resolveDelivered": "銀行の受領を確認",
     "resolveApproved": "再送のために解放",
@@ -282,12 +278,9 @@
       "deliverFailed": "ファイルを送付できませんでした",
       "delivered": "{path} に送付しました"
       ,"actionFailed": "支払アクションに失敗しました"
-      ,"submitted": "支払処理を申請しました"
+      ,"submittedForApproval": "支払処理を承認申請しました"
+      ,"submittedApproved": "支払処理を申請し、承認しました（適用される承認フローはありません）"
       ,"fileGenerated": "支払ファイルを生成しました"
-      ,"runApproved": "支払処理を承認しました"
-      ,"runRejected": "支払処理を却下しました"
-      ,"fileApproved": "支払ファイルを承認しました"
-      ,"fileRejected": "支払ファイルを却下しました"
       ,"fileReprocessed": "支払ファイルを再処理しました"
       ,"deliveryResolved": "配送の解決を記録しました"
       ,"rolledBack": "支払処理をロールバックしました"

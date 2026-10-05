@@ -85,10 +85,10 @@ async function seedDeliveryFixture(): Promise<DeliveryFixture> {
     await db.execute(sql`
       insert into payment_bank_profiles
         (id, org_id, name, bank_account_id, payment_format_id, currency,
-         require_run_approval, require_file_approval, sftp_server_id, sftp_folder,
+         sftp_server_id, sftp_folder,
          created_by, updated_by)
       values (${profileId}, ${org.orgId}, 'Delivery profile', ${org.accounts.bank},
-              ${formatId}, 'CAD', false, false, ${serverId}, 'outbound',
+              ${formatId}, 'CAD', ${serverId}, 'outbound',
               ${actorId}, ${actorId})
     `);
     await db.execute(sql`

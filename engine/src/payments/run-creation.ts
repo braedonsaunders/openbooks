@@ -204,13 +204,12 @@ async function createPaymentRunWithinTransaction(
     bank_subsidiary_id: string | null;
     subsidiary_id: string | null;
     currency: string;
-    require_run_approval: boolean;
     settings: Record<string, unknown>;
     rail: string;
     direction: string;
   }>(sql`
     select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
-           p.currency, p.require_run_approval, p.settings,
+           p.currency, p.settings,
            f.rail, f.direction
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
@@ -350,13 +349,12 @@ async function createPaymentRunWithinTransaction(
     bank_subsidiary_id: string | null;
     subsidiary_id: string | null;
     currency: string;
-    require_run_approval: boolean;
     settings: Record<string, unknown>;
     rail: string;
     direction: string;
   }>(sql`
     select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
-           p.currency, p.require_run_approval, p.settings,
+           p.currency, p.settings,
            f.rail, f.direction
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active

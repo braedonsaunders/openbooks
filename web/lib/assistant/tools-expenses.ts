@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isFeatureEnabled } from "../features";
-import { can } from "../authz";
+import { maySeeUnion } from "../approval-doorway";
 import { approvalWorklistForAuthz } from "../application/approvals";
 import { expensesDashboard } from "../expenses-dashboard";
 import { loadExpenseReport } from "../expenses";
@@ -227,7 +227,7 @@ const expenseApprovals: AssistantToolDef = {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     // The approvals hub doorway: without any approve permission the worklist
     // is empty rather than forbidden.
-    if (!can(authz, "flows.approve") && !can(authz, "ap.approve") && !can(authz, "ar.approve")) {
+    if (!maySeeUnion(authz)) {
       return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/inbox" } };
     }
     const items = await approvalWorklistForAuthz(authz);

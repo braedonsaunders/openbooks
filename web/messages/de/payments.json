@@ -216,12 +216,8 @@
     "cancelRun": "Lauf abbrechen",
     "downloadFile": "Datei herunterladen",
     "downloadBlockedTitle": "Beheben Sie zuerst die Probleme mit Profil und Bankverbindung",
-    "submitRun": "Zur Genehmigung einreichen",
-    "approve": "Lauf genehmigen",
-    "reject": "Lauf ablehnen",
+    "submitRun": "Lauf einreichen",
     "generateFile": "Datei erzeugen",
-    "approveFile": "Datei genehmigen",
-    "rejectFile": "Datei ablehnen",
     "reprocess": "Erneut verarbeiten",
     "resolveDelivered": "Bankeingang bestätigen",
     "resolveApproved": "Für erneuten Versand freigeben",
@@ -282,12 +278,9 @@
       "deliverFailed": "Die Datei konnte nicht übermittelt werden",
       "delivered": "Übermittelt an {path}"
       ,"actionFailed": "Die Zahlungsaktion ist fehlgeschlagen"
-      ,"submitted": "Zahlungslauf eingereicht"
+      ,"submittedForApproval": "Zahlungslauf zur Genehmigung eingereicht"
+      ,"submittedApproved": "Zahlungslauf eingereicht und genehmigt; kein Genehmigungs-Flow ist anwendbar"
       ,"fileGenerated": "Zahlungsdatei erzeugt"
-      ,"runApproved": "Zahlungslauf genehmigt"
-      ,"runRejected": "Zahlungslauf abgelehnt"
-      ,"fileApproved": "Zahlungsdatei genehmigt"
-      ,"fileRejected": "Zahlungsdatei abgelehnt"
       ,"fileReprocessed": "Zahlungsdatei erneut verarbeitet"
       ,"deliveryResolved": "Lieferentscheidung erfasst"
       ,"rolledBack": "Zahlungslauf zurückgerollt"

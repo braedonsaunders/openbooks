@@ -216,12 +216,8 @@
     "cancelRun": "取消批次",
     "downloadFile": "下载文件",
     "downloadBlockedTitle": "请先解决配置文件和银行明细问题",
-    "submitRun": "提交审批",
-    "approve": "批准批次",
-    "reject": "拒绝批次",
+    "submitRun": "提交批次",
     "generateFile": "生成文件",
-    "approveFile": "批准文件",
-    "rejectFile": "拒绝文件",
     "reprocess": "重新处理",
     "resolveDelivered": "确认银行已接收",
     "resolveApproved": "释放以重新投递",
@@ -282,12 +278,9 @@
       "deliverFailed": "无法投递文件",
       "delivered": "已投递至 {path}"
       ,"actionFailed": "付款操作失败"
-      ,"submitted": "付款批次已提交"
+      ,"submittedForApproval": "付款批次已提交审批"
+      ,"submittedApproved": "付款批次已提交并获批；没有适用的审批流程"
       ,"fileGenerated": "付款文件已生成"
-      ,"runApproved": "付款批次已批准"
-      ,"runRejected": "付款批次已拒绝"
-      ,"fileApproved": "付款文件已批准"
-      ,"fileRejected": "付款文件已拒绝"
       ,"fileReprocessed": "付款文件已重新处理"
       ,"deliveryResolved": "已记录投递处理结果"
       ,"rolledBack": "付款批次已回滚"

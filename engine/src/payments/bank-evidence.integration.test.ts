@@ -100,11 +100,10 @@ async function seedRailRun(
   await db.execute(sql`
     insert into payment_bank_profiles
       (id, org_id, name, bank_account_id, payment_format_id, currency, country,
-       originator_secrets_encrypted, require_run_approval, require_file_approval,
-       is_active, created_by, updated_by)
+       originator_secrets_encrypted, is_active, created_by, updated_by)
     values (${profileId}, ${org.orgId}, ${`Bank evidence profile ${method} ${profileId.slice(0, 8)}`}, ${org.accounts.bank},
             ${formatId}, 'CAD', 'CA', ${sealJson(ORIGINATOR_SECRETS[method], { orgId: org.orgId, purpose: "payment.originator.secrets" })},
-            false, false, true, ${actorId}, ${actorId})`);
+            true, ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into party_bank_accounts
       (id, org_id, party_id, bank_name, country, currency, routing,

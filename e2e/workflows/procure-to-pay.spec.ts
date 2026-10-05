@@ -436,8 +436,9 @@ test.describe("procure-to-pay workflows", () => {
       });
       shared.terms210 = str(req(d210, "POST payment-terms 2/10").id, "terms id");
 
-      // 8. ACH bank profile on the NACHA-CREDIT rail: no run/file approvals
-      //    (the bill approval is the control), automatic remittance, discount
+      // 8. ACH bank profile on the NACHA-CREDIT rail: no payment-run flow, so
+      //    a submitted run is approved at once (the bill approval is the
+      //    control), automatic remittance, discount
       //    account set. Currency falls back to the format's USD, so no
       //    multi-currency switch is needed.
       const formats = await api(page, "GET", "/api/admin/payment-operations/formats");
@@ -448,8 +449,6 @@ test.describe("procure-to-pay workflows", () => {
         name: `P2P ACH ${TAG}`,
         bankAccountId: acct["1099"],
         paymentFormatId: nacha!.id,
-        requireRunApproval: false,
-        requireFileApproval: false,
         autoRemittance: true,
         settings: { discountAccountId: acct["5000"] },
         originatorSecrets: {

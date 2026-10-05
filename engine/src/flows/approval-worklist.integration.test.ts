@@ -5,6 +5,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { worklistApprovals } from "./approval-worklist.ts";
 import { submitForApproval } from "./submit.ts";
+import { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } from "./payment-runs-adapter.ts";
+import { submitPaymentRun } from "../payments/operations.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -16,33 +18,50 @@ import {
 /**
  * The approvals worklist must show everything awaiting the caller — not just
  * Flows gates. Documents sitting in pending_approval with no pending gate
- * (migrated rows, abandoned runs, legacy direct writes) and status-based
- * payment runs are invisible to worklistGates, so today an approver sees []
- * while work waits. The unified reader returns gates AND gateless document
- * approvals AND pending pay runs, deduplicated so a gated document appears
- * once (through its gate), and never shows a caller their own submissions.
+ * (migrated rows, abandoned runs, legacy direct writes) are invisible to
+ * worklistGates, so an approver would see [] while work waits. The unified
+ * reader returns gates (payment runs among them) AND gateless document
+ * approvals, deduplicated so a gated document appears once (through its
+ * gate), and never shows a caller their own submissions.
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function seedPendingRun(orgId: string, subsidiaryId: string, bankId: string, submitterId: string): Promise<string> {
+/** A payment run submitted into its approval flow by `submitterId`. */
+async function seedSubmittedRun(orgId: string, bankId: string, submitterId: string): Promise<string> {
+  const formatId = randomUUID();
+  const profileId = randomUUID();
   const runId = randomUUID();
   await db.execute(sql`
+    insert into payment_formats
+      (id, org_id, code, name, rail, direction, file_extension, content_type, created_by, updated_by)
+    values (${formatId}, ${orgId}, 'W7-WIRE', 'Worklist wire', 'wire', 'credit', 'txt', 'text/plain',
+            ${submitterId}, ${submitterId})`);
+  await db.execute(sql`
+    insert into payment_bank_profiles
+      (id, org_id, name, bank_account_id, payment_format_id, currency, created_by, updated_by)
+    values (${profileId}, ${orgId}, 'Worklist profile', ${bankId}, ${formatId}, 'CAD', ${submitterId}, ${submitterId})`);
+  await db.execute(sql`
     insert into payment_runs
-      (id, org_id, run_number, bank_account_id, subsidiary_id, method,
-       direction, purpose, currency, status, payment_count, total_amount,
-       submitted_at, submitted_by, created_by, updated_by)
-    values (${runId}, ${orgId}, 'W7-RUN', ${bankId}, ${subsidiaryId}, 'eft',
-            'outbound', 'vendor_payments', 'CAD', 'pending_approval', 1,
-            '250.0000', now(), ${submitterId}, ${submitterId}, ${submitterId})`);
+      (id, org_id, run_number, bank_account_id, payment_bank_profile_id, method,
+       direction, purpose, currency, status, payment_count, total_amount, created_by, updated_by)
+    values (${runId}, ${orgId}, 'W7-RUN', ${bankId}, ${profileId}, 'wire',
+            'outbound', 'vendor_payments', 'CAD', 'draft', 1, '250.0000', ${submitterId}, ${submitterId})`);
+  const submitted = await submitPaymentRun(runId, orgId, submitterId);
+  assert.equal(submitted.gated, true);
   return runId;
 }
 
-test("unified worklist shows gates, gateless documents, and pay runs", { skip: !DB }, async () => {
+test("unified worklist shows gates, gateless documents, and payment runs", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
     });
@@ -55,25 +74,25 @@ test("unified worklist shows gates, gateless documents, and pay runs", { skip: !
     await db.execute(sql`update documents set status='pending_approval', submitted_by=${actors.submitterId},
       submitted_at=now(), updated_by=${actors.submitterId}, updated_at=now()
       where id=${gatelessId} and org_id=${org.orgId}`);
-    const runId = await seedPendingRun(org.orgId, org.subsidiaryId, org.accounts.bank, actors.submitterId);
+    const runId = await seedSubmittedRun(org.orgId, org.accounts.bank, actors.submitterId);
 
     const items = await worklistApprovals(org.orgId, actors.approver1Id, {
       roles: ["approver"],
       allowedSubsidiaryIds: null,
-      includePayRuns: true,
     });
     const byId = new Map(items.map((item) => [item.id, item]));
     assert.equal(byId.get(gatedId)?.kind, undefined, "gated document must not also appear as a document row");
     const gateHit = items.find((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId);
     assert.ok(gateHit, "pending gate must appear");
     assert.equal(byId.get(gatelessId)?.kind, "document", "gateless pending document must appear");
-    assert.equal(byId.get(runId)?.kind, "pay_run", "pending pay run must appear");
+    const runGate = items.find((item) => item.kind === "flow_gate" && item.gate.subjectId === runId);
+    assert.equal(runGate?.kind === "flow_gate" && runGate.gate.subjectKind, OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
+      "a payment run awaiting approval appears through its gate");
 
     // The submitter cannot approve their own work anywhere.
     const own = await worklistApprovals(org.orgId, actors.submitterId, {
       roles: ["accountant"],
       allowedSubsidiaryIds: null,
-      includePayRuns: true,
     });
     assert.deepEqual(own, [], "submitter sees none of their own submissions");
   } finally {

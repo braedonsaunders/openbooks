@@ -2430,7 +2430,6 @@
         "format": "Format",
         "currency": "Devise",
         "delivery": "Livraison",
-        "approval": "Approbation du lot",
         "status": "Statut",
         "code": "Code",
         "rail": "Réseau",
@@ -2488,8 +2487,6 @@
         "country": "Pays",
         "sftpServer": "Serveur SFTP existant",
         "sftpFolder": "Dossier sortant",
-        "requireRunApproval": "Exiger l’approbation du lot de paiements",
-        "requireFileApproval": "Exiger l’approbation du fichier généré",
         "autoRemittance": "Envoyer automatiquement l’avis de paiement",
         "discountAccount": "Compte d’escompte de paiement anticipé",
         "positivePayAccountReference": "Référence de compte de l’institution",
@@ -2513,6 +2510,7 @@
         "expiresOn": "Expire le",
         "cronHint": "Choisissez un préréglage ou saisissez une planification personnalisée (syntaxe cron) pour un contrôle total."
       },
+      "approvalHint": "L’approbation des lots de paiements se configure dans <flows>Flux</flows>. Sans flux de lots de paiements, les lots soumis sont approuvés immédiatement.",
       "secretFields": {
         "originatorId": "Identifiant de l’émetteur",
         "originatorShortName": "Nom court",
@@ -2584,8 +2582,6 @@
       "allSubsidiaries": "Toutes les filiales",
       "empty": "Aucun enregistrement correspondant.",
       "manualDelivery": "Téléchargement manuel",
-      "runApproval": "Requise",
-      "automatic": "Automatique",
       "any": "Toutes",
       "builtInFormatHint": "Ce formateur intégré est maintenu par le moteur de paiement. Sa définition exécutable ne peut pas être modifiée ici.",
       "save": "Enregistrer",
@@ -3279,6 +3275,11 @@
         "title": "Cotisations",
         "singular": "Cotisations",
         "description": "Définissez chaque retenue salariale, cotisation patronale ou avantage imposable non monétaire. Les composants de paie contrôlent le traitement fiscal et la comptabilisation."
+      },
+      "benefit-contribution-rule-components": {
+        "title": "Composantes de gains comptabilisées",
+        "singular": "Composante de gains comptabilisée",
+        "description": "Choisissez les composantes de gains dont les heures entrent dans cette cotisation. Les unités de quantité ne comptent pas comme des heures."
       },
       "benefit-contribution-classes": {
         "title": "Catégories d’admissibilité",

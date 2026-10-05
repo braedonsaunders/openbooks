@@ -216,12 +216,8 @@
     "cancelRun": "Cancel run",
     "downloadFile": "Download file",
     "downloadBlockedTitle": "Resolve the profile and bank-detail issues first",
-    "submitRun": "Submit for approval",
-    "approve": "Approve run",
-    "reject": "Reject run",
+    "submitRun": "Submit run",
     "generateFile": "Generate file",
-    "approveFile": "Approve file",
-    "rejectFile": "Reject file",
     "reprocess": "Reprocess",
     "resolveDelivered": "Confirm bank receipt",
     "resolveApproved": "Release for re-delivery",
@@ -282,12 +278,9 @@
       "deliverFailed": "Could not deliver the file",
       "delivered": "Delivered to {path}"
       ,"actionFailed": "The payment action failed"
-      ,"submitted": "Payment run submitted"
+      ,"submittedForApproval": "Payment run submitted for approval"
+      ,"submittedApproved": "Payment run submitted and approved; no approval flow applies"
       ,"fileGenerated": "Payment file generated"
-      ,"runApproved": "Payment run approved"
-      ,"runRejected": "Payment run rejected"
-      ,"fileApproved": "Payment file approved"
-      ,"fileRejected": "Payment file rejected"
       ,"fileReprocessed": "Payment file reprocessed"
       ,"deliveryResolved": "Delivery resolution recorded"
       ,"rolledBack": "Payment run rolled back"

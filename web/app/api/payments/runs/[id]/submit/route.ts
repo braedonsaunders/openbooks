@@ -12,7 +12,12 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
-  try { await submitPaymentRun(id, gate.user.orgId, gate.user.id); return NextResponse.json({ ok: true }) }
+  // `gated` tells the caller whether an approval flow now holds the run or,
+  // with none configured, it was released to approved on submit.
+  try {
+    const submitted = await submitPaymentRun(id, gate.user.orgId, gate.user.id)
+    return NextResponse.json({ ok: true, status: submitted.status, gated: submitted.gated })
+  }
   catch (e) { return paymentErrorResponse(e) }
 }
 

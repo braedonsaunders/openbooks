@@ -92,6 +92,7 @@
     "./payments/autopay": "./src/payments/public-autopay.ts",
     "./payments/refund-automation": "./src/payments/public-refund-automation.ts",
     "./payments/minor-units": "./src/payments/public-minor-units.ts",
+    "./payments/run-scope": "./src/payments-core/payment-run-scope.ts",
     "./sales/cash-tenders": "./src/sales/public-cash-tenders.ts",
     "./sales/document-tenders": "./src/sales/document-tenders.ts",
     "./sales/fulfillment": "./src/sales/public-fulfillment.ts",

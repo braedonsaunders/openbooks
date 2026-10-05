@@ -76,11 +76,11 @@ async function seedSepaDebitRun(
       insert into payment_bank_profiles
         (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
          currency, country, originator_secrets_encrypted,
-         require_run_approval, require_file_approval, is_active, created_by, updated_by)
+         is_active, created_by, updated_by)
       values
         (${profileId}, ${org.orgId}, 'SEPA collection profile', ${org.accounts.bank},
          ${org.subsidiaryId}, ${formatId}, 'CAD', 'DE', ${sealJson(ORIGINATOR_SECRETS, { orgId: org.orgId, purpose: "payment.originator.secrets" })},
-         false, false, true, ${actorId}, ${actorId})`);
+         true, ${actorId}, ${actorId})`);
     await db.execute(sql`
       insert into party_bank_accounts
         (id, org_id, party_id, bank_name, country, currency, routing,

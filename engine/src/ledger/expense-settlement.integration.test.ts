@@ -222,9 +222,9 @@ test("a reimbursement run over a three-settlement report selects only the out-of
     await db.execute(sql`
       insert into payment_bank_profiles
         (id, org_id, name, bank_account_id, payment_format_id, currency,
-         require_run_approval, require_file_approval, created_by, updated_by)
+         created_by, updated_by)
       values (${profileId}, ${s.orgId}, 'Settlement profile', ${s.deps.control.bank},
-              ${formatId}, 'CAD', false, false, ${actor}, ${actor})`);
+              ${formatId}, 'CAD', ${actor}, ${actor})`);
     const run = await createPaymentRun({ allowedSubsidiaryIds: null,
       orgId: s.orgId,
       createdBy: actor,

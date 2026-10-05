@@ -202,11 +202,10 @@ async function seedPostingClaimRun(
     await tx.execute(sql`
       insert into payment_bank_profiles
         (id, org_id, name, bank_account_id, payment_format_id, currency,
-         require_run_approval, require_file_approval, auto_remittance,
-         created_by, updated_by)
+         auto_remittance, created_by, updated_by)
       values
         (${profileId}, ${org.orgId}, ${`Posting claim ${profileId}`},
-         ${org.accounts.bank}, ${formatId}, 'CAD', false, false,
+         ${org.accounts.bank}, ${formatId}, 'CAD',
          ${options.autoRemittance ?? false},
          ${actorId}, ${actorId})
     `);

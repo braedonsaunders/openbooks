@@ -9,8 +9,10 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
-import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
+import { Download, FileCheck2, RotateCcw, Send } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { ApprovalActions } from '@/components/approval-actions'
+import { ApprovalHistory } from '@/components/approval-history'
 import { confirmDialog } from '../../../lib/confirm'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { isZero, sum } from '@openbooks/engine/src/money/money.ts'
@@ -141,6 +143,7 @@ export function RunDrawer({
   events,
   items,
   canApprove,
+  approvalSubjectKind,
   closeHref = '/payments?view=runs',
   paymentBasePath = '/payments',
 }: {
@@ -153,6 +156,11 @@ export function RunDrawer({
   events: PaymentEventClient[]
   items: PaymentRunItemClient[]
   canApprove: boolean
+  /**
+   * The run's Flows approval subject (outbound or inbound payment run), or
+   * null when Flows is off for the organization and runs carry no approval.
+   */
+  approvalSubjectKind: string | null
   closeHref?: string
   paymentBasePath?: '/payments' | '/receipts'
 }) {
@@ -168,7 +176,7 @@ export function RunDrawer({
   const [sftpServerId, setSftpServerId] = useState('')
   const [instructionQ, setInstructionQ] = useState('')
   const [instructionPage, setInstructionPage] = useState(1)
-  const [decision, setDecision] = useState<{ kind: 'rejectRun' | 'rejectFile' | 'rollback' | 'cancel' | 'resolveDelivered' | 'resolveApproved'; fileId?: string } | null>(null)
+  const [decision, setDecision] = useState<{ kind: 'rollback' | 'cancel' | 'resolveDelivered' | 'resolveApproved'; fileId?: string } | null>(null)
   const [reason, setReason] = useState('')
   const [outcomeInstruction, setOutcomeInstruction] = useState<PaymentInstructionClient | null>(null)
   const [outcomeStatus, setOutcomeStatus] = useState<'settled' | 'returned' | 'rejected'>('settled')
@@ -257,14 +265,22 @@ export function RunDrawer({
     if (ok) router.refresh()
   }
 
-  async function decideRun(decisionValue: 'approve' | 'reject', rejectionReason?: string) {
-    const ok = await action('decision', { decision: decisionValue, reason: rejectionReason }, t(`runDrawer.toasts.run${decisionValue === 'approve' ? 'Approved' : 'Rejected'}`))
-    if (ok) { setDecision(null); setReason('') }
-  }
-
-  async function decideFile(fileId: string, decisionValue: 'approve' | 'reject', rejectionReason?: string) {
-    const ok = await action(`files/${fileId}/decision`, { decision: decisionValue, reason: rejectionReason }, t(`runDrawer.toasts.file${decisionValue === 'approve' ? 'Approved' : 'Rejected'}`))
-    if (ok) { setDecision(null); setReason('') }
+  // Approval belongs to Flows: the submit either parks the run behind its
+  // approval flow or, with no flow configured, releases it at once. The
+  // toast names which happened so nobody waits on an approval that is not
+  // coming.
+  async function submitRun() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payments/runs/${run.id}/submit`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.actionFailed')))
+        return
+      }
+      const data = (await res.json()) as { gated?: boolean }
+      toast.success(data.gated ? t('runDrawer.toasts.submittedForApproval') : t('runDrawer.toasts.submittedApproved'))
+      router.refresh()
+    } catch { reportTransportFailed(t('runDrawer.toasts.actionFailed')) } finally { setBusy(false) }
   }
 
   async function resolveDelivery(fileId: string, outcome: 'delivered' | 'approved', resolutionReason: string) {
@@ -366,14 +382,13 @@ export function RunDrawer({
               {t('runDrawer.cancelRun')}
             </Button>
           ) : null}
-          {run.status === 'draft' ? <Button disabled={busy} onClick={() => action('submit', undefined, t('runDrawer.toasts.submitted'))}>{t('runDrawer.submitRun')}</Button> : null}
-          {run.status === 'pending_approval' && canApprove ? <><Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'rejectRun' }) }}><X size={15} />{t('runDrawer.reject')}</Button><Button disabled={busy} onClick={() => decideRun('approve')}><Check size={15} />{t('runDrawer.approve')}</Button></> : null}
+          {run.status === 'draft' ? <Button disabled={busy} onClick={submitRun}>{t('runDrawer.submitRun')}</Button> : null}
+          {approvalSubjectKind && run.status === 'pending_approval' ? <ApprovalActions subjectKind={approvalSubjectKind} subjectId={run.id} /> : null}
           {canGenerate ? <Button disabled={busy} onClick={generateFile}><FileCheck2 size={15} />{t('runDrawer.generateFile')}</Button> : null}
           {hasApprovedFile ? <>
             <Button variant="outline" asChild><a href={`/api/payments/runs/${run.id}/file`} download onClick={() => setTimeout(() => router.refresh(), 800)}><Download size={15} />{t('runDrawer.downloadFile')}</a></Button>
             <Button variant="outline" disabled={busy} onClick={openDeliver}><Send size={15} />{t('runDrawer.deliverSftp')}</Button>
           </> : null}
-          {latestFile?.status === 'pending_approval' && canApprove ? <><Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'rejectFile', fileId: latestFile.id }) }}><X size={15} />{t('runDrawer.rejectFile')}</Button><Button disabled={busy} onClick={() => decideFile(latestFile.id, 'approve')}><Check size={15} />{t('runDrawer.approveFile')}</Button></> : null}
           {latestFile && ['rejected', 'delivered', 'approved'].includes(latestFile.status) && ['generated', 'delivered', 'partially_failed'].includes(run.status) ? <Button variant="outline" disabled={busy} onClick={() => action(`files/${latestFile.id}/reprocess`, undefined, t('runDrawer.toasts.fileReprocessed'))}><RotateCcw size={15} />{t('runDrawer.reprocess')}</Button> : null}
           {['approved', 'generated', 'delivered', 'partially_failed'].includes(run.status) && !live.some((i) => ['sent', 'settled', 'returned'].includes(i.status)) ? <Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'rollback' }) }}>{t('runDrawer.rollback')}</Button> : null}
           {canPost ? (
@@ -418,6 +433,8 @@ export function RunDrawer({
             </AlertDescription>
           </Alert>
         ) : null}
+
+        {approvalSubjectKind && run.status !== 'draft' ? <ApprovalHistory subjectKind={approvalSubjectKind} subjectId={run.id} /> : null}
 
         {files.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.filesTitle')}</h3><div className="grid gap-2">{files.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"><div><p className="text-sm font-medium">{file.filename}</p><p className="font-mono text-[11px] text-slate-500">{String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}</p></div><div className="flex items-center gap-2"><span className="text-xs tabular-nums text-slate-500">{file.payment_count} · {money(file.total_amount, { currency: file.currency })}</span><Badge variant={file.status === 'approved' || file.status === 'delivered' ? 'success' : file.status === 'rejected' ? 'destructive' : file.status === 'delivery_uncertain' ? 'warning' : 'secondary'}>{t(`runDrawer.fileStatus.${file.status}`)}</Badge>{file.status === 'delivery_uncertain' && canApprove ? <><Button size="sm" variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'resolveDelivered', fileId: file.id }) }}>{t('runDrawer.resolveDelivered')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'resolveApproved', fileId: file.id }) }}>{t('runDrawer.resolveApproved')}</Button></> : null}</div></div>)}</div></section> : null}
 
@@ -508,7 +525,7 @@ export function RunDrawer({
           )}
         </div>
       </Drawer>
-      <Drawer open={decision !== null} onClose={() => setDecision(null)} size="sm" title={decision?.kind === 'rollback' ? t('runDrawer.rollback') : decision?.kind === 'rejectFile' ? t('runDrawer.rejectFile') : decision?.kind === 'cancel' ? t('runDrawer.cancelRun') : decision?.kind === 'resolveDelivered' ? t('runDrawer.resolveDelivered') : decision?.kind === 'resolveApproved' ? t('runDrawer.resolveApproved') : t('runDrawer.reject')} description={t('runDrawer.reasonRequired')} headerActions={<><Button variant="outline" onClick={() => setDecision(null)}>{tCommon('actions.cancel')}</Button><Button variant="destructive" disabled={busy || !reason.trim()} onClick={async () => { if (decision?.kind === 'rejectRun') await decideRun('reject', reason); else if (decision?.kind === 'rejectFile' && decision.fileId) await decideFile(decision.fileId, 'reject', reason); else if (decision?.kind === 'resolveDelivered' && decision.fileId) await resolveDelivery(decision.fileId, 'delivered', reason); else if (decision?.kind === 'resolveApproved' && decision.fileId) await resolveDelivery(decision.fileId, 'approved', reason); else if (decision?.kind === 'rollback') { const ok = await action('rollback', { reason }, t('runDrawer.toasts.rolledBack')); if (ok) { setDecision(null); setReason('') } } else if (decision?.kind === 'cancel') { const ok = await cancelRun(reason); if (ok) { setDecision(null); setReason('') } } }}>{tCommon('actions.confirm')}</Button></>}><div className="space-y-1.5 p-1"><Label>{t('runDrawer.reason')}</Label><Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} /></div></Drawer>
+      <Drawer open={decision !== null} onClose={() => setDecision(null)} size="sm" title={decision?.kind === 'rollback' ? t('runDrawer.rollback') : decision?.kind === 'cancel' ? t('runDrawer.cancelRun') : decision?.kind === 'resolveDelivered' ? t('runDrawer.resolveDelivered') : t('runDrawer.resolveApproved')} description={t('runDrawer.reasonRequired')} headerActions={<><Button variant="outline" onClick={() => setDecision(null)}>{tCommon('actions.cancel')}</Button><Button variant="destructive" disabled={busy || !reason.trim()} onClick={async () => { if (decision?.kind === 'resolveDelivered' && decision.fileId) await resolveDelivery(decision.fileId, 'delivered', reason); else if (decision?.kind === 'resolveApproved' && decision.fileId) await resolveDelivery(decision.fileId, 'approved', reason); else if (decision?.kind === 'rollback') { const ok = await action('rollback', { reason }, t('runDrawer.toasts.rolledBack')); if (ok) { setDecision(null); setReason('') } } else if (decision?.kind === 'cancel') { const ok = await cancelRun(reason); if (ok) { setDecision(null); setReason('') } } }}>{tCommon('actions.confirm')}</Button></>}><div className="space-y-1.5 p-1"><Label>{t('runDrawer.reason')}</Label><Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} /></div></Drawer>
       <Drawer open={outcomeInstruction !== null} onClose={() => setOutcomeInstruction(null)} size="sm" title={t('runDrawer.outcome.title')} description={outcomeInstruction ? t('runDrawer.outcome.description', { payee: outcomeInstruction.payee }) : ''} headerActions={<><Button variant="outline" onClick={() => setOutcomeInstruction(null)}>{tCommon('actions.cancel')}</Button><Button disabled={busy || !effectiveOn || (outcomeStatus !== 'settled' && !returnReason.trim())} onClick={saveOutcome}>{tCommon('actions.save')}</Button></>}><div className="space-y-4 p-1"><div className="space-y-1.5"><Label>{t('runDrawer.outcome.status')}</Label><Select value={outcomeStatus} onChange={(e) => setOutcomeStatus(e.target.value as typeof outcomeStatus)}><option value="settled">{t('runDrawer.outcome.settled')}</option><option value="returned">{t('runDrawer.outcome.returned')}</option><option value="rejected">{t('runDrawer.outcome.rejected')}</option></Select></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.effectiveOn')}</Label><Input type="date" value={effectiveOn} onChange={(e) => setEffectiveOn(e.target.value)} /></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.bankReference')}</Label><Input value={bankReference} onChange={(e) => setBankReference(e.target.value)} /></div>{outcomeStatus !== 'settled' ? <><div className="space-y-1.5"><Label>{t('runDrawer.outcome.returnCode')}</Label><Input value={returnCode} onChange={(e) => setReturnCode(e.target.value)} /></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.returnReason')}</Label><Textarea rows={3} value={returnReason} onChange={(e) => setReturnReason(e.target.value)} /></div><Alert variant="warning"><AlertDescription>{t('runDrawer.outcome.reversalWarning')}</AlertDescription></Alert></> : null}</div></Drawer>
     </UrlDrawer>
   )

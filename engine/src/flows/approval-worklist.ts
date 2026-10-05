@@ -12,13 +12,13 @@ import {
 /**
  * The unified approvals worklist. Flows gates are only one approval
  * mechanism: documents sitting in `pending_approval` with no pending gate
- * (migrated rows, abandoned runs, legacy direct writes), status-based
- * payment runs, and budget scenarios in `pending_approval` submitted through
- * the direct maker/checker path are invisible to worklistGates, so an
- * approver would see an empty worklist while work waits. This reader returns
- * every thing awaiting the caller — pending gates AND gateless document
- * approvals AND pending budgets AND pending pay runs — with one row per
- * actionable item:
+ * (migrated rows, abandoned runs, legacy direct writes) and budget scenarios
+ * in `pending_approval` submitted through the direct maker/checker path are
+ * invisible to worklistGates, so an approver would see an empty worklist while
+ * work waits. This reader returns every thing awaiting the caller — pending
+ * gates AND gateless document approvals AND pending budgets — with one row
+ * per actionable item. Payment runs approve through their Flows gates and
+ * arrive on the gate leg like any other subject:
  *
  * - a document WITH a pending gate appears only through its gate (never as
  *   a document row), so the assigned approver cannot be bypassed;
@@ -48,22 +48,6 @@ export interface WorklistDocument {
   createdAt: string;
 }
 
-export interface WorklistPayRun {
-  kind: "pay_run";
-  /** Decide handle for the pay-run approval path. */
-  id: string;
-  runNumber: string;
-  direction: string;
-  purpose: string;
-  currency: string | null;
-  totalAmount: string;
-  paymentCount: number;
-  subsidiaryId: string | null;
-  submittedBy: string | null;
-  submittedAt: string | null;
-  createdAt: string;
-}
-
 export interface WorklistBudget {
   kind: "budget";
   /** Scenario id — the inbox links to the budget drawer, where the module
@@ -81,17 +65,11 @@ export interface WorklistBudget {
 export type UnifiedApproval =
   | { kind: "flow_gate"; id: string; gate: WorklistGate }
   | { kind: "document"; id: string; document: WorklistDocument }
-  | { kind: "budget"; id: string; budget: WorklistBudget }
-  | { kind: "pay_run"; id: string; payRun: WorklistPayRun };
+  | { kind: "budget"; id: string; budget: WorklistBudget };
 
 export interface WorklistScope {
   roles?: Iterable<string>;
   allowedSubsidiaryIds?: GateSubsidiaryScope;
-  /**
-   * The caller holds payment approval permission (ap/ar.approve for the
-   * run's direction). Pay runs stay out of the worklist without it.
-   */
-  includePayRuns?: boolean;
   /**
    * The caller holds the budgets.approve grant. Pending budget scenarios
    * stay out of the worklist without it.
@@ -194,63 +172,6 @@ async function worklistDocumentKindCounts(
   return new Map(rows.map((row) => [row.kind, Number(row.n)]));
 }
 
-function worklistPayRunWhere(
-  orgId: string,
-  userId: string,
-  allowedSubsidiaryIds: GateSubsidiaryScope,
-  extra?: SQL,
-  kind?: string,
-  query?: string,
-): SQL {
-  const needle = query?.trim().toLowerCase()
-  return sql`r.org_id = ${orgId} and r.status = 'pending_approval'
-    and (r.submitted_by is null or r.submitted_by <> ${userId})
-    ${subsidiaryScopeSql("r", allowedSubsidiaryIds)}
-    ${extra ?? sql``}
-    ${kind && kind !== "pay_run" ? sql`and false` : sql``}
-    ${needle ? sql`and position(${needle} in lower(concat_ws(' ', r.run_number, r.direction, r.purpose))) > 0` : sql``}`;
-}
-
-async function worklistPayRuns(
-  orgId: string,
-  userId: string,
-  allowedSubsidiaryIds: GateSubsidiaryScope,
-  opts?: LegOpts & { extra?: SQL },
-): Promise<WorklistPayRun[]> {
-  const rows = (await db.execute<{
-    id: string; runNumber: string; direction: string; purpose: string;
-    currency: string | null; totalAmount: string; paymentCount: number;
-    subsidiaryId: string | null; submittedBy: string | null;
-    submittedAt: string | null; createdAt: string;
-  }>(sql`
-    select r.id, r.run_number as "runNumber", r.direction, r.purpose, r.currency,
-           r.total_amount::text as "totalAmount", r.payment_count as "paymentCount",
-           r.subsidiary_id as "subsidiaryId", r.submitted_by as "submittedBy",
-           r.submitted_at::text as "submittedAt", r.created_at::text as "createdAt"
-      from payment_runs r
-     where ${worklistPayRunWhere(orgId, userId, allowedSubsidiaryIds, opts?.extra, opts?.kind, opts?.query)}
-     order by coalesce(r.submitted_at, r.created_at), r.id
-     ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
-  return rows
-    .filter((row) => scopeAllows(allowedSubsidiaryIds, row.subsidiaryId))
-    .map((row) => ({ kind: "pay_run" as const, ...row }));
-}
-
-async function worklistPayRunCount(
-  orgId: string,
-  userId: string,
-  allowedSubsidiaryIds: GateSubsidiaryScope,
-  extra?: SQL,
-  kind?: string,
-  query?: string,
-): Promise<number> {
-  const rows = (await db.execute<{ n: string }>(sql`
-    select count(*) as n
-      from payment_runs r
-     where ${worklistPayRunWhere(orgId, userId, allowedSubsidiaryIds, extra, kind, query)}`)).rows;
-  return Number(rows[0]?.n ?? 0);
-}
-
 /**
  * Gateless budget approvals: scenarios in pending_approval with no pending
  * flow gate. Deliberately unfiltered by subsidiary — the budgets module
@@ -306,10 +227,6 @@ async function worklistBudgetCount(orgId: string, userId: string, kind?: string,
 export interface WorklistPageScope extends WorklistScope {
   /** Gate + gateless-document legs ride the flows approval grant. */
   includeFlows?: boolean;
-  /** Pay-run directions the caller may approve (ap/ar grants). */
-  payDirections?: string[];
-  /** Record-boundary scope for the pay-run leg (same fragment the decision path enforces). */
-  payScope?: SQL;
 }
 
 export interface WorklistPageResult {
@@ -324,7 +241,7 @@ export interface WorklistPageResult {
 /** Merge order key: requested-at, matching the worklist page display sort. */
 function worklistMergeMs(item: UnifiedApproval): number {
   if (item.kind === "flow_gate") return +new Date(item.gate.createdAt);
-  const row = item.kind === "document" ? item.document : item.kind === "budget" ? item.budget : item.payRun;
+  const row = item.kind === "document" ? item.document : item.budget;
   return +new Date(row.submittedAt ?? row.createdAt);
 }
 
@@ -348,24 +265,9 @@ export async function worklistApprovalsPage(
   const filtered = kind != null;
   const includeFlows = scope.includeFlows !== false;
   const includeBudgets = scope.includeBudgets === true;
-  const includePayRuns = scope.includePayRuns === true;
   const skipBudgets = filtered && kind !== "budget_scenario";
-  const skipPayRuns = filtered && kind !== "pay_run";
-  const directions = scope.payDirections;
-  // The leg WHERE slots `extra` in bare (no leading `and`), so every arm
-  // carries its own conjunction; the scope fragment is a bare predicate.
-  const scopeAnd = scope.payScope ? sql`and ${scope.payScope}` : sql``;
-  const payExtra: SQL | undefined =
-    directions == null
-      ? scope.payScope
-        ? sql`and ${scope.payScope}`
-        : undefined
-      : directions.length === 0
-        ? sql`and false`
-        : sql`and r.direction in (select jsonb_array_elements_text(${JSON.stringify(directions)}::jsonb))
-              ${scopeAnd}`;
 
-  const [gateRows, documentRows, budgetRows, payRunRows] = await Promise.all([
+  const [gateRows, documentRows, budgetRows] = await Promise.all([
     includeFlows
       ? worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, { prefix, kind, query, overdue })
       : Promise.resolve([]),
@@ -375,11 +277,8 @@ export async function worklistApprovalsPage(
     includeBudgets && !skipBudgets && !overdue
       ? worklistBudgets(orgId, userId, { prefix, kind, query })
       : Promise.resolve([]),
-    includePayRuns && !skipPayRuns && !overdue
-      ? worklistPayRuns(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query, extra: payExtra })
-      : Promise.resolve([]),
   ]);
-  const [gateCounts, documentCounts, budgetCount, payRunCount] = await Promise.all([
+  const [gateCounts, documentCounts, budgetCount] = await Promise.all([
     includeFlows
       ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue)
       : Promise.resolve(new Map<string, number>()),
@@ -389,13 +288,10 @@ export async function worklistApprovalsPage(
     includeBudgets && !skipBudgets && !overdue
       ? worklistBudgetCount(orgId, userId, kind, query)
       : Promise.resolve(0),
-    includePayRuns && !skipPayRuns && !overdue
-      ? worklistPayRunCount(orgId, userId, scope.allowedSubsidiaryIds, payExtra, kind, query)
-      : Promise.resolve(0),
   ]);
   // Kind chips ignore the kind filter (same as the unpaged page), so a
   // filtered read re-runs the aggregates unpredicated for the chips.
-  const [chipGateCounts, chipDocumentCounts, chipBudgetCount, chipPayRunCount] = filtered
+  const [chipGateCounts, chipDocumentCounts, chipBudgetCount] = filtered
     ? await Promise.all([
         includeFlows
           ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, undefined, query, overdue)
@@ -404,17 +300,13 @@ export async function worklistApprovalsPage(
           ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, undefined, query)
           : Promise.resolve(new Map<string, number>()),
         includeBudgets && !overdue ? worklistBudgetCount(orgId, userId, undefined, query) : Promise.resolve(0),
-        includePayRuns && !overdue
-          ? worklistPayRunCount(orgId, userId, scope.allowedSubsidiaryIds, payExtra, undefined, query)
-          : Promise.resolve(0),
       ])
-    : [gateCounts, documentCounts, budgetCount, payRunCount];
+    : [gateCounts, documentCounts, budgetCount];
 
   const merged: UnifiedApproval[] = [
     ...gateRows.map((gate) => ({ kind: "flow_gate" as const, id: gate.id, gate })),
     ...documentRows.map((document) => ({ kind: "document" as const, id: document.id, document })),
     ...budgetRows.map((budget) => ({ kind: "budget" as const, id: budget.id, budget })),
-    ...payRunRows.map((payRun) => ({ kind: "pay_run" as const, id: payRun.id, payRun })),
   ].sort(
     (a, b) =>
       worklistMergeMs(a) - worklistMergeMs(b) ||
@@ -433,12 +325,9 @@ export async function worklistApprovalsPage(
   if (includeBudgets && chipBudgetCount > 0) {
     kindCounts.set("budget_scenario", (kindCounts.get("budget_scenario") ?? 0) + chipBudgetCount);
   }
-  if (includePayRuns && chipPayRunCount > 0) {
-    kindCounts.set("pay_run", (kindCounts.get("pay_run") ?? 0) + chipPayRunCount);
-  }
   return {
     items: merged.slice(page.offset, page.offset + page.limit),
-    total: sum(gateCounts) + sum(documentCounts) + budgetCount + payRunCount,
+    total: sum(gateCounts) + sum(documentCounts) + budgetCount,
     kindCounts,
   };
 }
@@ -456,11 +345,6 @@ export async function worklistApprovals(
   if (scope.includeBudgets) {
     for (const budget of await worklistBudgets(orgId, userId)) {
       out.push({ kind: "budget", id: budget.id, budget });
-    }
-  }
-  if (scope.includePayRuns) {
-    for (const payRun of await worklistPayRuns(orgId, userId, scope.allowedSubsidiaryIds)) {
-      out.push({ kind: "pay_run", id: payRun.id, payRun });
     }
   }
   return out;

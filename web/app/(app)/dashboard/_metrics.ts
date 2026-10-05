@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday, startOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { type Authz, can } from '@/lib/authz'
+import { maySeeUnion } from '@/lib/approval-doorway'
 import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
 import { loadPersonaMetrics, type PersonaMetrics } from './_persona'
 import { randomUUID } from 'node:crypto'
@@ -186,7 +187,7 @@ export type DashboardMetrics = {
     lineCount: number
     totalDebits: string
   }>
-  /** Top-5 of the unified approval worklist (gates + documents + pay runs). */
+  /** Top-5 of the unified approval worklist (gates + documents + budgets). */
   pendingApprovalList: Array<{
     id: string
     targetKind: string
@@ -345,11 +346,11 @@ export async function loadDashboardMetrics(
     fields.some((f) => needed.has(f))
 
   // The tile links to /inbox?tab=all, so its number is the unified
-  // worklist (Flows gates + gateless document approvals + pending pay runs),
+  // worklist (Flows gates + gateless document approvals + pending budgets),
   // counted through the same reader as the worklist page and get_vitals —
   // never a gates-only subquery. Same doorway as get_vitals: a caller who
   // cannot approve anything has no work awaiting them.
-  const mayApprove = can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve')
+  const mayApprove = maySeeUnion(authz)
   // Pack visibility IS the doorway: without assistant.use (plus a module
   // grant per pack) the readable set is empty and the tile counts zero.
   const agentPacks = readableContinuousCloseAgents(authz)
@@ -587,16 +588,6 @@ export async function loadDashboardMetrics(
           createdAt: unionRequestedAt(item),
         }
       }
-      if (item.kind === 'pay_run') {
-        return {
-          id: item.id,
-          targetKind: 'pay_run',
-          targetId: item.id,
-          amount: item.totalAmount,
-          title: item.runNumber,
-          createdAt: unionRequestedAt(item),
-        }
-      }
       if (item.kind === 'budget') {
         return {
           id: item.id,
@@ -677,7 +668,7 @@ export async function loadDashboardMetrics(
       totalDebits: r.total_debits,
     })),
     // Both widgets list the same unified worklist the tile counts:
-    // top-5 oldest first, gates + gateless documents + pay runs.
+    // top-5 oldest first, gates + gateless documents + budgets.
     pendingApprovalList: unionTop5.map((r) => ({ ...r })),
     myApprovalList: unionTop5.map((r) => ({ ...r })),
     draftDocuments: draftDocuments.rows.map((r) => ({

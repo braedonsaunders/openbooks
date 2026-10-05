@@ -9,8 +9,8 @@ declare global {
 // the bank-profile drawer checkboxes ignored clicks in both
 // directions. The edit row arrives as raw snake_case (`select *`), every
 // Toggle/Select reads the snake key first
-// (`form.require_run_approval ?? form.requireRunApproval`), but onChange
-// wrote the camelCase twin (`set('requireRunApproval', v)`). The snake value
+// (`form.auto_remittance ?? form.autoRemittance`), but onChange
+// wrote the camelCase twin (`set('autoRemittance', v)`). The snake value
 // is never undefined on a loaded row, so the freshly written camel value was
 // shadowed forever: the control displayed (and saved) its creation value.
 // Proved here through the real editor: clicks flip the controls and the save
@@ -125,8 +125,8 @@ async function mountEditor(
 
 function profileCheckboxes(): HTMLInputElement[] {
   const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
-  assert.ok(boxes.length >= 4, `expected the four profile toggles, saw ${boxes.length} checkboxes`)
-  return boxes.slice(0, 4)
+  assert.ok(boxes.length >= 2, `expected the two profile toggles, saw ${boxes.length} checkboxes`)
+  return boxes.slice(0, 2)
 }
 
 async function clickCheckbox(box: HTMLInputElement) {
@@ -137,26 +137,27 @@ async function clickCheckbox(box: HTMLInputElement) {
   await tick()
 }
 
-test('profile approval toggles follow clicks on a snake-backed row', async () => {
+test('profile toggles follow clicks on a snake-backed row', async () => {
   const { unmount } = await mountEditor('profiles', {
     id: 'p1',
     name: 'Main profile',
-    require_run_approval: false,
-    require_file_approval: true,
     auto_remittance: false,
     is_active: true,
   })
   try {
+    // Run approval is not a profile switch: the drawer sends the operator to
+    // Flows, where payment-run approval is configured.
+    assert.ok(document.querySelector('a[href="/admin/flows"]'), 'the profile names where approval is set up')
     const boxes = profileCheckboxes()
     assert.deepEqual(
       boxes.map((box) => box.checked),
-      [false, true, false, true],
+      [false, true],
       'the toggles must display the stored snake_case row',
     )
     for (const box of boxes) await clickCheckbox(box)
     assert.deepEqual(
       profileCheckboxes().map((box) => box.checked),
-      [true, false, true, false],
+      [true, false],
       'every toggle must move — a shadowed write would leave each control on its creation value',
     )
   } finally {
