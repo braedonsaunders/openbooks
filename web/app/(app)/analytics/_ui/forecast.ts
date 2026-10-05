@@ -49,7 +49,18 @@ export interface ForecastDiagnostics {
   seasonLabel: string
 }
 
-const Z: Record<number, number> = { 80: 1.282, 90: 1.645, 95: 1.96, 99: 2.576 }
+/**
+ * The confidence levels the model can band, in ascending order. The single
+ * source of truth: the z table below and the analytics threshold spec both
+ * derive from this list, so adding a level teaches every surface at once.
+ */
+export const FORECAST_CONFIDENCE_LEVELS = [80, 90, 95, 99] as const
+
+const Z_MULTIPLIERS = [1.282, 1.645, 1.96, 2.576] as const
+
+const Z: Record<number, number> = Object.fromEntries(
+  FORECAST_CONFIDENCE_LEVELS.map((level, i) => [level, Z_MULTIPLIERS[i]]),
+)
 
 /**
  * An unknown confidence level is a refusal, never a silent z. The band
@@ -58,7 +69,7 @@ const Z: Record<number, number> = { 80: 1.282, 90: 1.645, 95: 1.96, 99: 2.576 }
  */
 export class UnknownConfidenceError extends Error {
   constructor(readonly level: number) {
-    super(`unknown forecast confidence level ${level} — choose one of 80, 90, 95, 99`)
+    super(`unknown forecast confidence level ${level} — choose one of ${FORECAST_CONFIDENCE_LEVELS.join(', ')}`)
     this.name = 'UnknownConfidenceError'
   }
 }
@@ -69,7 +80,12 @@ export function zScoreForConfidence(confidence: number): number {
   return z
 }
 
-/** Tunable smoothing and detection constants behind the forecast methods. */
+/**
+ * Tunable smoothing and detection constants behind the forecast methods.
+ * Every caller passes the organization's configured values (read through
+ * the analytics threshold spec) — the engine keeps no starting constants
+ * of its own, so a tuned policy can never be shadowed by a silent default.
+ */
 export interface ForecastModelParams {
   alpha: number
   beta: number
@@ -80,17 +96,6 @@ export interface ForecastModelParams {
   minCorrelation: number
   /** Fewest history points before auto-detection runs. */
   minPeriods: number
-}
-
-/** The starting model constants, matching the dashboard configuration defaults. */
-export const DEFAULT_FORECAST_MODEL_PARAMS: ForecastModelParams = {
-  alpha: 0.3,
-  beta: 0.1,
-  gamma: 0.2,
-  dampedPhi: 0.9,
-  ma1: 0.3,
-  minCorrelation: 0.3,
-  minPeriods: 24,
 }
 
 function sum(a: number[]): number {
@@ -133,9 +138,9 @@ export function seasonalityCandidates(periodsPerYear: number): number[] {
 
 export function detectSeasonality(
   data: number[],
-  opts: { minPeriods?: number; minCorrelation?: number; candidates?: number[] } = {},
+  opts: { minPeriods: number; minCorrelation: number; candidates: number[] },
 ): number {
-  const { minPeriods = 24, minCorrelation = 0.3, candidates = [3, 4, 6, 12] } = opts
+  const { minPeriods, minCorrelation, candidates } = opts
   const n = data.length
   if (n < minPeriods) return 0
   const mean = sum(data) / n
@@ -167,9 +172,9 @@ export function forecastETS(
   data: number[],
   horizon: number,
   seasonalPeriod: number,
-  z = 1.645,
-  phi = 1,
-  model: { alpha: number; beta: number; gamma: number } = DEFAULT_FORECAST_MODEL_PARAMS,
+  z: number,
+  phi: number,
+  model: { alpha: number; beta: number; gamma: number },
 ): ForecastResult {
   const n = data.length
   const { alpha, beta, gamma } = model
@@ -211,7 +216,7 @@ export function forecastETS(
   return { values, ...band(values, sd, z, 0.1), fitted, trend, seasonal: seasonal.length > 0, seasonalPeriod }
 }
 
-export function forecastLinear(data: number[], horizon: number, z = 1.645): ForecastResult {
+export function forecastLinear(data: number[], horizon: number, z: number): ForecastResult {
   const n = data.length
   const trend = calculateTrend(data)
   const fitted = data.map((_, i) => trend.intercept + trend.slope * i)
@@ -221,7 +226,7 @@ export function forecastLinear(data: number[], horizon: number, z = 1.645): Fore
   return { values, ...band(values, sd, z, 0.15), fitted, trend: trend.slope, seasonal: false, seasonalPeriod: 0 }
 }
 
-export function forecastSeasonal(data: number[], horizon: number, period: number, z = 1.645): ForecastResult {
+export function forecastSeasonal(data: number[], horizon: number, period: number, z: number): ForecastResult {
   const n = data.length
   const trend = calculateTrend(data)
   const seasonalIdx: number[] = []
@@ -237,7 +242,7 @@ export function forecastSeasonal(data: number[], horizon: number, period: number
   return { values, ...band(values, sd, z, 0.12), fitted, trend: trend.slope, seasonal: true, seasonalPeriod: period }
 }
 
-export function forecastMovingAvg(data: number[], horizon: number, z = 1.645): ForecastResult {
+export function forecastMovingAvg(data: number[], horizon: number, z: number): ForecastResult {
   const n = data.length
   // A moving window always spans at least one point; the floor keeps the
   // loop meaningful on the shortest admissible series, never a figure.
@@ -256,7 +261,7 @@ export function forecastMovingAvg(data: number[], horizon: number, z = 1.645): F
   return { values, ...band(values, sd, z, 0.2), fitted: ma, trend: trend.slope, seasonal: false, seasonalPeriod: 0 }
 }
 
-export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: number, z = 1.645, ma1 = 0.3): ForecastResult {
+export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: number, z: number, ma1: number): ForecastResult {
   const n = data.length
   const diff: number[] = []
   for (let i = 1; i < n; i++) diff.push(data[i]! - data[i - 1]!)
@@ -305,17 +310,20 @@ export function applyForecastMethod(
   seasonality: Seasonality,
   confidence: number,
   growthOverride: number | null = null,
-  opts: { modelParams?: ForecastModelParams; periodsPerYear?: number } = {},
+  opts: { modelParams: ForecastModelParams; periodsPerYear: number },
 ): ForecastResult {
   const n = data.length
   // Fail closed: an unlisted confidence level has no band multiplier.
   const z = zScoreForConfidence(confidence)
-  const { modelParams = DEFAULT_FORECAST_MODEL_PARAMS, periodsPerYear = 12 } = opts
+  const { modelParams, periodsPerYear } = opts
   // Seasonal cycles count fiscal periods, never assumed months: "monthly"
-  // repeats every fiscal year, "quarterly" every quarter of one. A period
-  // of 1 has no seasonal variation and collapses decomposition to the
-  // underlying linear trend.
-  const quarterlyPeriod = Math.max(2, Math.round(periodsPerYear / 4))
+  // repeats every fiscal year, "quarterly" every quarter of one. A cycle
+  // shorter than two periods carries no seasonal variation — a quarterly
+  // cycle on a quarterly calendar is a single bucket — so it collapses to
+  // the underlying trend: ETS/ARIMA run unseasonal, the seasonal method
+  // falls back to linear, instead of inventing a two-period cycle.
+  const quarterlyRaw = Math.round(periodsPerYear / 4)
+  const quarterlyPeriod = quarterlyRaw < 2 ? 0 : quarterlyRaw
   let seasonalPeriod = 0
   if (seasonality === 'auto') {
     seasonalPeriod = detectSeasonality(data, {
@@ -326,26 +334,30 @@ export function applyForecastMethod(
   }
   else if (seasonality === 'monthly') seasonalPeriod = periodsPerYear
   else if (seasonality === 'quarterly') seasonalPeriod = quarterlyPeriod
+  // A detected or declared cycle shorter than two periods is no cycle.
+  const effectiveSeasonal = seasonalPeriod < 2 ? 0 : seasonalPeriod
 
   let result: ForecastResult
   switch (method) {
     case 'ets':
-      result = forecastETS(data, horizon, seasonalPeriod, z, 1, modelParams)
+      result = forecastETS(data, horizon, effectiveSeasonal, z, 1, modelParams)
       break
     case 'ets_damped':
-      result = forecastETS(data, horizon, seasonalPeriod, z, modelParams.dampedPhi, modelParams)
+      result = forecastETS(data, horizon, effectiveSeasonal, z, modelParams.dampedPhi, modelParams)
       break
     case 'linear':
       result = forecastLinear(data, horizon, z)
       break
-    case 'seasonal':
-      result = forecastSeasonal(data, horizon, seasonalPeriod || periodsPerYear, z)
+    case 'seasonal': {
+      const period = effectiveSeasonal || (seasonality === 'quarterly' ? 0 : periodsPerYear)
+      result = period < 2 ? forecastLinear(data, horizon, z) : forecastSeasonal(data, horizon, period, z)
       break
+    }
     case 'moving_avg':
       result = forecastMovingAvg(data, horizon, z)
       break
     case 'arima':
-      result = forecastARIMA(data, horizon, seasonalPeriod, z, modelParams.ma1)
+      result = forecastARIMA(data, horizon, effectiveSeasonal, z, modelParams.ma1)
       break
     default:
       result = forecastLinear(data, horizon, z)
@@ -353,8 +365,8 @@ export function applyForecastMethod(
 
   if (growthOverride !== null && !Number.isNaN(growthOverride)) {
     const baseValue = data[n - 1]!
-    const monthlyGrowth = growthOverride / 100 / 12
-    result.values = Array.from({ length: horizon }, (_, i) => baseValue * (1 + monthlyGrowth) ** (i + 1))
+    const perPeriodGrowth = growthOverride / 100 / periodsPerYear
+    result.values = Array.from({ length: horizon }, (_, i) => baseValue * (1 + perPeriodGrowth) ** (i + 1))
   }
   return result
 }
