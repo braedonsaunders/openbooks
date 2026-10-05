@@ -17,6 +17,7 @@ export const runtime = 'nodejs'
 const bodyObjectSchema = z.object({
   expectedRevision: z.string().min(1),
   targets: z.array(z.object({
+    sequence: z.number().int().nonnegative().optional(),
     targetAccountId: z.string().uuid().nullable().optional(),
     departmentId: z.string().uuid().nullable().optional(),
     locationId: z.string().uuid().nullable().optional(),

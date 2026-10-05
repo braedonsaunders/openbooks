@@ -141,3 +141,25 @@ test('free entry adds and removes a label on an option-less control (OM-17)', as
   assert.equal(m.host.querySelector('span span.truncate'), null, 'removing the chip must clear the value')
   await m.unmount()
 })
+
+
+test('reference chips show their labels while removals retain stored identities', async () => {
+  const removed: string[][] = []
+  const view = mount(React.createElement(TagInput, {
+    value: ['department-overhead'],
+    options: [{ value: 'department-overhead', label: 'Overhead' }],
+    onChange: next => removed.push(next),
+    allowNew: false,
+  }))
+  try {
+    await view.render()
+    assert.match(view.host.textContent ?? '', /Overhead/)
+    assert.doesNotMatch(view.host.textContent ?? '', /department-overhead/)
+    const remove = view.host.querySelector('button[aria-label="remove Overhead"]') as HTMLButtonElement
+    assert.ok(remove)
+    await act(async () => remove.click())
+    assert.deepEqual(removed, [[]])
+  } finally {
+    await view.unmount()
+  }
+})

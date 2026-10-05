@@ -1222,6 +1222,11 @@ export async function publishVersion(
       if (head.mode !== "post" || version.documentKinds?.length !== 1 || version.documentKinds[0] !== "pay_run") {
         throw new AllocationRuleError("INVALID", "Payroll expense allocations must be posting rules restricted to pay runs — restore the pay-run transaction type before publishing.");
       }
+      const expenseAccounts = [...new Set([...targets.map(target => target.targetAccountId), version.dynamicTarget?.targetAccountId, version.offsetAccountId].filter((id): id is string => !!id))];
+      if (expenseAccounts.length) {
+        const accounts = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'expense_other', 'cogs') and id = any(${`{${expenseAccounts.join(",")}}`}::uuid[])`)).rows;
+        if (accounts.length !== expenseAccounts.length) throw new AllocationRuleError("INVALID", "Payroll expense allocations require active posting expense accounts — choose expense or cost-of-goods accounts for destinations and offsets; payroll liabilities must remain unchanged.");
+      }
       const componentIds = version.dimensionFilters.payComponentIds ?? [];
       if (componentIds.length) {
         const components = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') and id = any(${`{${componentIds.join(",")}}`}::uuid[])`)).rows;

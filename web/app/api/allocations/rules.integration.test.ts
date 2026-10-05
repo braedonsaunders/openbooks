@@ -3,6 +3,8 @@ import { registerHooks } from 'node:module'
 import { NextResponse } from 'next/server'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
+import { defaultWizardDraft, wizardDefinitionForm, wizardTargetPayload } from '../../(app)/admin/setup/allocations/rule-wizard.ts'
+import { definitionPayload } from '../../(app)/admin/setup/allocations/rule-drawer-form.ts'
 
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('openbooks.alloc-rules-next-response')] = { NextResponse }
 
@@ -98,6 +100,7 @@ interface Fixture {
   actorId: string
   accountA: string
   accountB: string
+  liabilityAccount: string
 }
 
 async function seed(withFeature: boolean): Promise<Fixture> {
@@ -115,7 +118,7 @@ async function seed(withFeature: boolean): Promise<Fixture> {
     allowedSubsidiaryIds: null,
   }
   routeState.requested = []
-  return { orgId: org.orgId, actorId, accountA: org.accounts.cogs, accountB: org.accounts.revenue }
+  return { orgId: org.orgId, actorId, accountA: org.accounts.cogs, accountB: org.accounts.revenue, liabilityAccount: org.accounts.ap }
 }
 
 function jsonRequest(url: string, method: string, body?: unknown): Request {
@@ -436,4 +439,64 @@ test('payroll expense creation preserves scope and refuses unsafe component sele
   const unscopedRefusal = await read<{ error: string }>(await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), ctx))
   assert.equal(unscopedRefusal.status, 422)
   assert.match(unscopedRefusal.body.error, /Payroll setup → Expense allocations/)
+  const refreshed = await read<{ revision: string }>(await versionRoute.GET(jsonRequest('http://openbooks.test/x', 'GET'), ctx))
+  const safeScope = await read<{ version: { revision: string } }>(await versionRoute.PATCH(jsonRequest('http://openbooks.test/x', 'PATCH', {
+    expectedRevision: refreshed.body.revision, dimensionFilters: { payrollExpensesOnly: true },
+  }), ctx))
+  assert.equal(safeScope.status, 200)
+  const wrongAccount = await targetsRoute.PUT(jsonRequest('http://openbooks.test/x', 'PUT', {
+    expectedRevision: safeScope.body.version.revision, targets: [{ targetAccountId: f.liabilityAccount, fixedPercent: '100' }],
+  }), ctx)
+  assert.equal(wrongAccount.status, 200)
+  const accountRefusal = await read<{ error: string }>(await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), ctx))
+  assert.equal(accountRefusal.status, 422)
+  assert.match(accountRefusal.body.error, /choose expense or cost-of-goods accounts/)
+  assert.match(accountRefusal.body.error, /payroll liabilities must remain unchanged/)
+  const afterRefusal = await read<{ revision: string }>(await versionRoute.GET(jsonRequest('http://openbooks.test/x', 'GET'), ctx))
+  const safeTarget = await read<{ revision: string }>(await targetsRoute.PUT(jsonRequest('http://openbooks.test/x', 'PUT', {
+    expectedRevision: afterRefusal.body.revision, targets: [{ targetAccountId: f.accountA, fixedPercent: '100' }],
+  }), ctx))
+  assert.equal(safeTarget.status, 200)
+  for (const accountPatch of [
+    { offsetAccountId: f.liabilityAccount },
+    { offsetAccountId: null, targetKind: 'dynamic', dynamicTarget: { dimension: 'department', targetAccountId: f.liabilityAccount } },
+  ]) {
+    const current = await read<{ revision: string }>(await versionRoute.GET(jsonRequest('http://openbooks.test/x', 'GET'), ctx))
+    const patched = await versionRoute.PATCH(jsonRequest('http://openbooks.test/x', 'PATCH', {
+      expectedRevision: current.body.revision, ...accountPatch,
+    }), ctx)
+    assert.equal(patched.status, 200)
+    const refusedAccount = await read<{ error: string }>(await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), ctx))
+    assert.equal(refusedAccount.status, 422)
+    assert.match(refusedAccount.body.error, /choose expense or cost-of-goods accounts/)
+  }
+})
+
+
+test('the payroll wizard writes its complete definition and ordered targets through the strict routes', async (t) => {
+  const f = await seed(true)
+  t.after(() => dropScratchOrg(f.orgId))
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,payroll}', 'true'::jsonb) where id = ${f.orgId}`)
+  const draft = defaultWizardDraft(true)
+  draft.name = 'Payroll expense routing'
+  draft.key = 'payroll-expense-routing'
+  draft.targetDimension = 'account'
+  draft.targets = [{ valueId: f.accountA, weight: '100' }]
+  const created = await read<{ rule: { id: string }; version: { id: string; revision: string } }>(await listRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {
+    key: draft.key, name: draft.name, mode: draft.mode, payrollExpenses: true,
+  })))
+  assert.equal(created.status, 201)
+  const ctx = { params: Promise.resolve({ id: created.body.rule.id, versionId: created.body.version.id }) }
+  const form = wizardDefinitionForm(draft, '2026-01-01', null)
+  form.payrollExpensesOnly = true
+  const edited = await read<{ version: { revision: string } }>(await versionRoute.PATCH(jsonRequest('http://openbooks.test/x', 'PATCH', definitionPayload(form, created.body.version.revision)), ctx))
+  assert.equal(edited.status, 200)
+  const saved = await read<{ targets: { sequence: number; targetAccountId: string }[] }>(await targetsRoute.PUT(jsonRequest('http://openbooks.test/x', 'PUT', {
+    expectedRevision: edited.body.version.revision, targets: wizardTargetPayload(draft),
+  }), ctx))
+  assert.equal(saved.status, 200)
+  assert.deepEqual(saved.body.targets.map(row => [row.sequence, row.targetAccountId]), [[0, f.accountA]])
+  const published = await read<{ version: { status: string } }>(await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), ctx))
+  assert.equal(published.status, 200)
+  assert.equal(published.body.version.status, 'published')
 })

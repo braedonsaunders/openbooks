@@ -587,7 +587,7 @@
     },
     "review": {
       "title": "Créer cette règle ?",
-      "description": "Ceci écrit la même règle versionnée que le tiroir modifie. Vous pouvez tout changer après.",
+      "description": "Vérifiez le périmètre, les destinations et les dates de validité. Les versions publiées sont verrouillées ; créez une nouvelle version pour les modifier.",
       "when": "Se déclenche {mode}",
       "sourceAnyKind": "Retient tous les types de transaction",
       "sourceKinds": "Retient {kinds}",

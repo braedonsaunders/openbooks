@@ -79,6 +79,7 @@ export function TagInput({
   }
 
   const selectedKeys = useMemo(() => new Set(value.map(normalizeTag)), [value])
+  const optionLabels = new Map(options.map(option => [normalizeTag(option.value), option.label ?? option.value]))
 
   const filtered = useMemo(() => {
     const q = normalizeTag(query)
@@ -201,11 +202,11 @@ export function TagInput({
             key={tag}
             className="inline-flex max-w-full items-center gap-1 rounded-md bg-teal-50 py-0.5 pr-1 pl-2 text-sm text-teal-900 dark:bg-teal-950/60 dark:text-teal-200"
           >
-            <span className="truncate">{tag}</span>
+            <span className="truncate">{optionLabels.get(normalizeTag(tag)) ?? tag}</span>
             <button
               type="button"
               disabled={disabled}
-              aria-label={t('remove', { tag })}
+              aria-label={t('remove', { tag: optionLabels.get(normalizeTag(tag)) ?? tag })}
               onClick={(e) => {
                 e.stopPropagation()
                 remove(tag)
