@@ -78,14 +78,17 @@ export function RunRulesButton({ accounts }: { accounts: AccountOpt[] }) {
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('runFailed')))
       const data = (await res.json().catch(() => null)) as {
         matched?: number; excluded?: number; suggested?: number; scanned?: number;
+        refused?: { reason: string }[];
       } | null
       if (!data) throw new Error(t('runFailed'))
+      const refused = data.refused ?? []
       if ((data.matched ?? 0) === 0 && (data.excluded ?? 0) === 0 && (data.suggested ?? 0) === 0) {
-        toast.info(t('runNoneMatched', { scanned: data.scanned ?? 0 }))
+        if (refused.length === 0) toast.info(t('runNoneMatched', { scanned: data.scanned ?? 0 }))
       } else {
         toast.success(t('runDone', { matched: data.matched ?? 0, excluded: data.excluded ?? 0 }))
         if ((data.suggested ?? 0) > 0) toast.info(t('runSuggested', { suggested: data.suggested ?? 0 }))
       }
+      if (refused.length > 0) toast.error(t('runRefused', { count: refused.length, reason: refused[0]!.reason }))
       setOpen(false)
       router.refresh()
     } catch (e) {
@@ -140,6 +143,7 @@ type PreviewData = {
     counterparty_ref: string | null
     stolenBy?: string | null
     splitPreview?: { accountId: string; amount: string }[]
+    splitRefusal?: string
   }[]
 }
 
@@ -548,6 +552,11 @@ export function RuleDrawer({
                     {action === 'categorize' && lines.length > 1 && data.matches[0]?.splitPreview ? (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {t('preview.split')}: {data.matches[0].splitPreview.map((s) => `${accountName(s.accountId).split(' · ')[0]} ${money(s.amount)}`).join(' · ')}
+                      </p>
+                    ) : null}
+                    {action === 'categorize' && data.matches.some((m) => m.splitRefusal) ? (
+                      <p role="alert" className="text-[11px] text-amber-700 dark:text-amber-300">
+                        {data.matches.find((m) => m.splitRefusal)!.splitRefusal}
                       </p>
                     ) : null}
                   </div>

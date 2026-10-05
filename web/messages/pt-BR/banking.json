@@ -215,6 +215,7 @@
       "or": "ou"
     },
     "runSuggested": "{suggested, plural, one {# linha sugerida para revisão} other {# linhas sugeridas para revisão}}",
+    "runRefused": "{count, plural, one {# linha foi recusada e ficou sem correspondência} other {# linhas foram recusadas e ficaram sem correspondência}}: {reason}",
     "modeSuggest": "Sugerir",
     "modeAuto": "Lançamento automático",
     "assignPayee": "Atribuir beneficiário",

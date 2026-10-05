@@ -210,6 +210,7 @@
     "offsetHint": "A journal is posted moving the bank line against this account, then matched automatically.",
     "excludeHint": "Matching lines are marked excluded and skipped during reconciliation.",
     "runSuggested": "{suggested, plural, one {# line suggested for review} other {# lines suggested for review}}",
+    "runRefused": "{count, plural, one {# line was refused and left unmatched} other {# lines were refused and left unmatched}}: {reason}",
     "modeSuggest": "Suggest",
     "modeAuto": "Auto-post",
     "assignPayee": "Assign payee",

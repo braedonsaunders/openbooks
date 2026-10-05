@@ -215,6 +215,7 @@
       "or": "o"
     },
     "runSuggested": "{suggested, plural, one {# línea sugerida para revisar} other {# líneas sugeridas para revisar}}",
+    "runRefused": "{count, plural, one {# línea fue rechazada y quedó sin conciliar} other {# líneas fueron rechazadas y quedaron sin conciliar}}: {reason}",
     "modeSuggest": "Sugerencia",
     "modeAuto": "Contabilización auto",
     "assignPayee": "Asignar beneficiario",

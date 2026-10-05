@@ -701,3 +701,34 @@ const consolidatedRows = [
 ] as const;
 
 for(const row of consolidatedRows) await row.register();
+
+test('applyRulesToAccount reports a refused line and still applies the rest', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const fx = await fixture()
+  try {
+    await seedExcludeRule(fx.orgId, fx.actor)
+    await importStatement(
+      {
+        accountId: fx.bankA, source: 'ofx', statementDate: fx.date, openingBalance: '33', closingBalance: '73', currency: 'CAD',
+        lines: [{ postedOn: fx.date, amount: '40', description: 'Oversplit deposit', bankTransactionId: `oversplit-${randomUUID().slice(0, 8)}` }],
+      },
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: null },
+    )
+    const offset = (await db.execute<{ id: string }>(sql`
+      select id from accounts where org_id = ${fx.orgId} and type = 'revenue' and not is_summary limit 1`)).rows[0]!.id
+    await withBypassContext(() => (db.execute(sql`
+      insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active, created_by)
+      values (${randomUUID()}, ${fx.orgId}, 'Oversplit',
+        '{"version":2,"match":{"combinator":"and","rules":[{"field":"description","op":"contains","value":"Oversplit"}]}}'::jsonb,
+        ${JSON.stringify({ action: 'categorize', version: 2, mode: 'auto', lines: [{ accountId: offset, portion: { kind: 'fixed', value: '1000' } }] })}::jsonb,
+        10, true, ${fx.actor})`)))
+    const result = await applyRulesToAccount(fx.orgId, fx.actor, fx.bankA, null)
+    assert.equal(result.excluded, 1)
+    assert.equal(result.categorized, 0)
+    assert.equal(result.refused.length, 1)
+    assert.equal(result.refused[0]!.ruleName, 'Oversplit')
+    assert.match(result.refused[0]!.reason, /over-allocates the line total of 40\.0000/)
+    const statuses = (await db.execute<{ description: string; s: string }>(sql`
+      select description, match_status as s from bank_statement_lines where org_id = ${fx.orgId} order by description`)).rows
+    assert.deepEqual(statuses.map((r) => [r.description, r.s]), [['Oversplit deposit', 'unmatched'], ['Scope probe deposit', 'excluded']])
+  } finally { await dropScratchOrg(fx.orgId) }
+})

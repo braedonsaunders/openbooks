@@ -83,6 +83,7 @@ interface MatchActionResult {
   excluded?: number
   scanned?: number
   journalLinesReconciled?: number
+  refused?: { reason: string }[]
 }
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
@@ -258,8 +259,11 @@ export function MatchWorkspace({
     if (!account) return
     const d = await call('POST', '/api/banking/rules/apply', { accountId: account.id })
     if (!d) return
-    if (d.matched === 0 && d.excluded === 0) toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned ?? 0 }))
-    else toast.success(tBanking('rules.runDone', { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }))
+    const refused = d.refused ?? []
+    if (d.matched === 0 && d.excluded === 0) {
+      if (refused.length === 0) toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned ?? 0 }))
+    } else toast.success(tBanking('rules.runDone', { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }))
+    if (refused.length > 0) toast.error(tBanking('rules.runRefused', { count: refused.length, reason: refused[0]!.reason }))
     router.refresh()
   }
 
