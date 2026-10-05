@@ -253,6 +253,8 @@ export async function loadRelatedTransactionDrawerData({
         })),
         canManage: can(authz, orderKind === 'purchase_order' ? 'ap.create' : 'ar.create'),
         layout: resolvedForm.layout,
+        quoteToCashEnabled:
+          orderKind === 'quote' ? await isFeatureEnabled(authz.user.orgId, 'quoteToCash') : false,
       },
     }
   }

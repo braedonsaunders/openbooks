@@ -65,6 +65,7 @@ export interface EstimateDrawer {
   layout: unknown
   barcodeScanningEnabled: boolean
   promotionsEnabled: boolean
+  quoteToCashEnabled: boolean
 }
 
 export interface EstimatesData {
@@ -234,6 +235,7 @@ export async function loadEstimates(
           layout: resolvedForm?.layout,
           barcodeScanningEnabled,
           promotionsEnabled: await isFeatureEnabled(authz.user.orgId, 'promotions'),
+          quoteToCashEnabled: await isFeatureEnabled(authz.user.orgId, 'quoteToCash'),
         }
       : null
 

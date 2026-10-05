@@ -450,6 +450,7 @@ export function OrderDrawer({
   barcodeScanningEnabled = false,
   customerItemRefs = [],
   promotionsEnabled = false,
+  quoteToCashEnabled = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -501,6 +502,10 @@ export function OrderDrawer({
   customerItemRefs?: { customerId: string; itemId: string; customerSku: string }[]
   /** Server-known promotions gate for the apply-promotion action and chip. */
   promotionsEnabled?: boolean
+  /** Show the quote Subscription tab: the page resolved quoteToCash on.
+   *  The tab's routes enforce the feature again. Defaults off so a caller
+   *  that never resolves the feature cannot surface a tab that only fails. */
+  quoteToCashEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -1586,7 +1591,7 @@ export function OrderDrawer({
           label: tCommon('approvalFlow.historyTitle'),
           content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />,
         },
-        ...(kind === 'quote' ? [{
+        ...(kind === 'quote' && quoteToCashEnabled ? [{
           key: 'subscription',
           label: tEstimates('quoteCash.tab'),
           content: (
