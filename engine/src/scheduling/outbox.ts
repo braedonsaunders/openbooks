@@ -92,6 +92,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "commerce_inbound",
   "demand_forecast",
   "tax_id_revalidation",
+  "consolidated_billing",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -590,6 +591,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "usage_rating_scan_failed",
       href: COLLECTIONS_HREF,
       remedy: "Review closed billing periods and rating schedules; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "consolidated_billing") {
+    const { runDueConsolidations } = await import("../billing/consolidated-billing.ts");
+    const result = await runDueConsolidations();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "consolidated billing",
+      noticeKind: "consolidated_billing_scan_failed",
+      href: "/admin/setup/consolidation-groups",
+      remedy: "Review consolidation groups and their pending drafts in Setup → Consolidation groups; the scan retries automatically.",
       problems,
       unattributed: [],
     });

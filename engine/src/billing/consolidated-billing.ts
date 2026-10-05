@@ -5,8 +5,9 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { addCalendarDays, daysInCivilMonth, mondayOfIsoWeek } from "../platform/civil-date.ts";
-import { db, withOrg, type SqlExecutor } from "../platform/db.ts";
+import { db, orgContext, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
 
 /**
  * Payer hierarchies and consolidated billing. A subscription's service-to
@@ -729,4 +730,113 @@ export async function runConsolidationGroup(
     }
     return results;
   });
+}
+
+export interface ConsolidationScanResult {
+  consolidated: number;
+  replayed: number;
+  failed: number;
+  orgErrors: { orgId: string; error: string }[];
+}
+
+/**
+ * One scan tick over every active consolidation group: each closed bucket
+ * holding pending drafts consolidates into the payer invoice, still as a
+ * draft for review — the scan never auto-posts. A bucket consolidates once;
+ * later ticks replay it without writing. Organizations with the feature off
+ * are skipped outright, and one group's failure is recorded against its org
+ * without taking the other groups down.
+ */
+export async function runDueConsolidations(asOf?: string): Promise<ConsolidationScanResult> {
+  const result: ConsolidationScanResult = { consolidated: 0, replayed: 0, failed: 0, orgErrors: [] };
+  // Simulation (and other tenant-scoped callers) run this helper while an
+  // ambient org context is active. Keep that context as a hard candidate
+  // boundary even though the scheduler's unscoped invocation legitimately
+  // scans every production tenant under bypass: without this predicate, one
+  // tenant's scan would consolidate unrelated tenants' pending drafts.
+  const scopedOrgId = orgContext.getStore()?.orgId;
+  const orgScope = scopedOrgId ? sql`and g.org_id = ${scopedOrgId}` : sql``;
+  // bypass: scheduler-tick — the unscoped scan finds active groups across
+  // every production organization.
+  const groups = await withBypass(async () =>
+    (await db.execute<{ orgId: string; groupId: string; cadence: string; cutoffDay: number }>(sql`
+      select g.org_id as "orgId", g.id as "groupId",
+             g.cadence as "cadence", g.cutoff_day as "cutoffDay"
+        from consolidation_groups g
+       where g.is_active ${orgScope}
+       order by g.org_id, g.id`)).rows);
+  const gated = new Map<string, boolean>();
+  const orgToday = new Map<string, string>();
+  const dateFailed = new Set<string>();
+  for (const group of groups) {
+    let enabled = gated.get(group.orgId);
+    if (enabled === undefined) {
+      enabled = await withOrg(group.orgId, () => orgFeatureEnabled(group.orgId, "consolidatedBilling"));
+      gated.set(group.orgId, enabled);
+    }
+    if (!enabled || dateFailed.has(group.orgId)) continue;
+    let today = asOf ?? orgToday.get(group.orgId);
+    if (!today) {
+      try {
+        today = await withOrg(group.orgId, () => businessToday(group.orgId));
+        orgToday.set(group.orgId, today);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        result.failed += 1;
+        result.orgErrors.push({ orgId: group.orgId, error: `business day unavailable: ${message}` });
+        dateFailed.add(group.orgId);
+        continue;
+      }
+    }
+    try {
+      // Tenant scope for the whole group pass: without it the pending-draft
+      // read below matches zero rows under RLS and the scan silently
+      // consolidates nothing. runConsolidationGroup re-enters the same
+      // scope (same org reuses the transaction) for each bucket.
+      await withOrg(group.orgId, () => consolidateDueBuckets(group.orgId, group, today, result));
+    } catch (e) {
+      result.failed += 1;
+      const message = (e instanceof Error ? e.message : String(e)).slice(0, 1000);
+      result.orgErrors.push({ orgId: group.orgId, error: message });
+    }
+  }
+  return result;
+}
+
+type ScanGroup = { groupId: string; cadence: string; cutoffDay: number };
+
+/**
+ * Consolidate one group's closed buckets that still hold pending drafts.
+ * Buckets derive from the drafts themselves, so an empty or fully
+ * consolidated group costs one indexed read and no run. Backlog drains
+ * twelve buckets per tick — a year of monthly periods — so one pathological
+ * group cannot hold the scan open.
+ */
+async function consolidateDueBuckets(
+  orgId: string,
+  group: ScanGroup,
+  today: string,
+  result: ConsolidationScanResult,
+): Promise<void> {
+  const shape = { cadence: group.cadence as "weekly" | "monthly", cutoffDay: group.cutoffDay };
+  const pendings = (await db.execute<{ documentDate: string }>(sql`
+    select distinct d.document_date::text as "documentDate"
+      from documents d
+     where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'draft'
+       and d.custom->>'consolidationStatus' = 'pending_consolidation'
+       and d.custom->>'consolidationGroupId' = ${group.groupId}
+     order by 1`)).rows;
+  const buckets = new Map<string, { periodStart: string; periodEnd: string }>();
+  for (const pending of pendings) {
+    const bucket = consolidationPeriodFor(shape, pending.documentDate);
+    if (bucket.periodEnd < today) buckets.set(`${bucket.periodStart}/${bucket.periodEnd}`, bucket);
+  }
+  const ordered = [...buckets.values()].sort((a, b) => (a.periodStart < b.periodStart ? -1 : 1)).slice(0, 12);
+  for (const bucket of ordered) {
+    const runs = await runConsolidationGroup(orgId, group.groupId, bucket.periodStart, bucket.periodEnd);
+    for (const run of runs) {
+      if (run.replayed) result.replayed += 1;
+      else result.consolidated += 1;
+    }
+  }
 }
