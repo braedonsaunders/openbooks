@@ -263,6 +263,46 @@ test("a dispute opened then lost posts the loss and settles the invoice", { skip
   }
 });
 
+test("a foreign-currency dispute loss posts at the hold receipt's rate with the rate as evidence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId}, 'EUR', 'CAD', '2000-01-01', 'spot', '1.5', 'test')`);
+    const h = await settleHarness(org, { disputeAccounts: true, currency: "EUR" });
+    await settle(h, 10_000, "eur");
+    const dispute = { id: "dp_fx", payment_intent: h.intentId, amount: 10_000, currency: "eur" };
+    const opened = await h.fire({ id: `evt_dp_open_${randomUUID().slice(0, 8)}`, type: "charge.dispute.created", data: { object: { ...dispute, reason: "fraudulent" } } });
+    assert.equal(opened?.status, "disputed_posted");
+    const lost = await h.fire({ id: `evt_dp_lost_${randomUUID().slice(0, 8)}`, type: "charge.dispute.closed", data: { object: { ...dispute, status: "lost" } } });
+    assert.equal(lost?.status, "disputed_posted");
+
+    const lossLine = (await db.execute<{ amount: string; currency: string; txn_amount: string; fx_rate: string; evidence: { rate: string; source: string } | null }>(sql`
+      select jl.amount::text, jl.currency, jl.txn_amount::text, jl.fx_rate::text, je.custom->'fxEvidence' as evidence
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+       where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses'`)).rows;
+    assert.equal(lossLine.length, 1);
+    assert.deepEqual(
+      { currency: lossLine[0]!.currency, txn: lossLine[0]!.txn_amount, amount: lossLine[0]!.amount, rate: Number(lossLine[0]!.fx_rate) },
+      { currency: "EUR", txn: "100.0000", amount: "150.0000", rate: 1.5 },
+    );
+    assert.equal(lossLine[0]!.evidence?.source, "dispute_hold_receipt");
+    assert.equal(Number(lossLine[0]!.evidence?.rate), 1.5);
+
+    const clearing = (await db.execute<{ functional: string; txn: string }>(sql`
+      select coalesce(sum(jl.amount), 0)::text as functional, coalesce(sum(jl.txn_amount), 0)::text as txn
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+       where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')`)).rows[0];
+    assert.deepEqual(clearing, { functional: "0.0000", txn: "0.0000" });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a duplicate refund event is a no-op", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
