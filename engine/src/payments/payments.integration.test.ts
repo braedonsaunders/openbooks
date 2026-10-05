@@ -2496,8 +2496,7 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     const initialRevision = await revision();
     await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {
       ...allocationSave,
-    }, userId, org.orgId, { expectedRevision: initialRevision },
-  { allowedSubsidiaryIds: null },
+    }, userId, org.orgId, { expectedRevision: initialRevision, allowedSubsidiaryIds: null },
 ));
     const afterSave = await revision();
     assert.notEqual(afterSave, initialRevision);
@@ -2507,8 +2506,8 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     await assert.rejects(
       withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {}, userId, org.orgId, {
         expectedRevision: initialRevision,
+        allowedSubsidiaryIds: null,
       },
-  { allowedSubsidiaryIds: null },
 )),
       (error: unknown) => error instanceof PaymentRevisionConflictError,
     );
