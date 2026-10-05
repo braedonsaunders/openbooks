@@ -157,12 +157,13 @@ export function ShopifyConnectWizard() {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 3000))
       const res = await fetch(`/api/channels/${id}/review`)
-      if (!res.ok) continue
-      const next = (await res.json()) as Review
-      if (next.channel.status !== 'draft') {
-        setReview(next)
-        setChosen(proposalChoices(next.proposals))
-        return
+      if (res.ok) {
+        const next = (await res.json()) as Review
+        if (next.channel.status !== 'draft') {
+          setReview(next)
+          setChosen(proposalChoices(next.proposals))
+          return
+        }
       }
     }
   }
