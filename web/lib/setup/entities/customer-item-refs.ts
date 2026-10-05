@@ -41,7 +41,7 @@ const validateCustomerItemRefWrite: SetupEntityValidationHook = async ({ orgId, 
 // adapts its refusal to the Setup write contract (an error string).
 const validateMarketplaceFacilitatorWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
   try {
-    await validateMarketplaceFacilitator(executor, orgId, body as Record<string, unknown>, rowId)
+    await validateMarketplaceFacilitator(executor, orgId, body as Record<string, unknown>, rowId ?? null)
     return null
   } catch (error) {
     return error instanceof Error ? error.message : 'That marketplace facilitator could not be saved'
