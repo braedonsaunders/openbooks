@@ -250,12 +250,13 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     await postOrderInvoice(org, adminId, orderId, "INV-Y2", "2027-07-15", [
       { itemId: org.items.service, amount: "12000" },
     ]);
-    contracts = (await db.execute<{ id: string; total_consideration: string; modification_seq: number }>(sql`
+    const yearTwo = (await db.execute<{ id: string; total_consideration: string; modification_seq: number }>(sql`
       select id, total_consideration::text, modification_seq from revenue_contracts
        where org_id = ${org.orgId}`)).rows;
-    assert.equal(contracts.length, 1);
-    assert.equal(contracts[0]!.total_consideration, "27000.0000");
-    assert.equal(contracts[0]!.modification_seq, 2);
+    assert.equal(yearTwo.length, 1);
+    assert.equal(yearTwo[0]!.id, shellId);
+    assert.equal(yearTwo[0]!.total_consideration, "27000.0000");
+    assert.equal(yearTwo[0]!.modification_seq, 2);
     assert.equal(await allocatedSum(org.orgId, shellId), "27000.0000");
 
     await runRevenueRecognition(org.orgId, "2027-07-31", adminId);
