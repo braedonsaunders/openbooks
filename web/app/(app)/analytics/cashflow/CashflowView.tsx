@@ -88,15 +88,22 @@ export function CashflowView({ data: initialData }: { data: CashflowData }) {
 }
 
 /**
- * The locale's narrow week unit ("w" in en) behind the runway figure —
- * never a hardcoded English suffix.
+ * The locale's narrow week unit ("w" in en, "W" in de) behind the runway
+ * figure — resolved through the locale's own narrow convention, never a
+ * hardcoded suffix. The request locale falls back to English through
+ * the same lookup; when Intl itself is unavailable there is no unit rather
+ * than an English one.
  */
 function narrowWeekUnit(locale: string): string {
-  try {
-    return new Intl.NumberFormat(locale, { style: 'unit', unit: 'week', unitDisplay: 'narrow' }).formatToParts(1).find((p) => p.type === 'unit')?.value ?? 'w'
-  } catch {
-    return 'w'
+  for (const tag of [locale, 'en']) {
+    try {
+      const unit = new Intl.NumberFormat(tag, { style: 'unit', unit: 'week', unitDisplay: 'narrow' }).formatToParts(1).find((p) => p.type === 'unit')?.value
+      if (unit) return unit
+    } catch {
+      /* try the next tag */
+    }
   }
+  return ''
 }
 
 /* ---------------------------------------------------------------- Overview */

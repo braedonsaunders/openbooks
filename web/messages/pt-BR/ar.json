@@ -181,12 +181,12 @@
       "prediction": {
         "label": "Previsão da data de recebimento",
         "value": "Estatístico → Média global → Vencimento",
-        "note": "Média de dias de recebimento por cliente (+½σ de margem), nunca antes do vencimento — sem nenhum histórico vale o próprio vencimento"
+        "note": "Média de dias de recebimento por cliente mais a margem de variabilidade configurada, nunca antes do vencimento — sem nenhum histórico vale o próprio vencimento"
       },
       "overduePush": {
         "label": "Adiamento por atraso",
-        "value": "+7 / +14 / +28 dias",
-        "note": "Faturas vencidas são deslocadas conforme o atraso (≤30 / ≤60 / >60 dias)"
+        "value": "Cresce com a antiguidade",
+        "note": "Faturas vencidas são deslocadas tanto mais quanto maior o atraso"
       },
       "businessDay": {
         "label": "Ajuste para dia útil",
@@ -194,7 +194,7 @@
         "note": "Datas previstas no fim de semana passam para o próximo dia útil"
       },
       "dso": {
-        "label": "Média de dias para receber (DSO)",
+        "label": "Média de dias para receber",
         "value": "{dso} d",
         "note": "Vazio sem histórico de pagamentos — a previsão usa os vencimentos"
       },

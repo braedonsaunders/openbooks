@@ -3272,7 +3272,7 @@
     "form": {
       "addCategory": "添加分类",
       "adjustmentPct": "调整%",
-      "amount": "金额",
+      "amount": "金额（{code}）",
       "bankAccounts": "银行账户",
       "calcMethod": "计算方法",
       "cancel": "取消",
@@ -3305,7 +3305,7 @@
       "searchBankAccounts": "搜索银行账户…",
       "searchCardAccounts": "搜索信用卡账户…",
       "searchVendors": "搜索供应商…",
-      "threshold": "大额付款阈值（$）",
+      "threshold": "大额付款阈值（{code}）",
       "thresholdHelp": "0=自动检测（付款中位数的50%）",
       "transfers": "转账",
       "type": "类型",

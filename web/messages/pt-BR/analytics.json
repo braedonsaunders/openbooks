@@ -3272,7 +3272,7 @@
     "form": {
       "addCategory": "Adicionar categoria",
       "adjustmentPct": "Ajuste %",
-      "amount": "Valor",
+      "amount": "Valor ({code})",
       "bankAccounts": "Contas bancárias",
       "calcMethod": "Método de cálculo",
       "cancel": "Cancelar",
@@ -3305,7 +3305,7 @@
       "searchBankAccounts": "Buscar contas bancárias…",
       "searchCardAccounts": "Buscar contas de cartão…",
       "searchVendors": "Buscar fornecedores…",
-      "threshold": "Limite de pagamento relevante ($)",
+      "threshold": "Limite de pagamento relevante ({code})",
       "thresholdHelp": "0 = detecção automática (50% do pagamento mediano)",
       "transfers": "Transferências",
       "type": "Tipo",
