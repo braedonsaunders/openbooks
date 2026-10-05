@@ -966,7 +966,7 @@ export async function importStripeBilling(
 
 export type StripeSkipObjectType = "customer" | "subscription";
 
-export interface StripeBillingLinkSkip {
+export type StripeBillingLinkSkip = {
   id: string;
   stripeAccount: string;
   objectType: StripeSkipObjectType;
@@ -974,7 +974,7 @@ export interface StripeBillingLinkSkip {
   reason: string | null;
   createdBy: string | null;
   createdAt: string;
-}
+};
 
 export interface StripeBillingScanResult {
   ran: number;

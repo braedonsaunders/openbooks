@@ -245,7 +245,7 @@ export async function runDueUsageRating(asOf?: string): Promise<UsageRatingScanR
   return result;
 }
 
-export interface UsageRatingSettingRow {
+export type UsageRatingSettingRow = {
   id: string;
   linkId: string | null;
   subscriptionId: string | null;
@@ -254,7 +254,7 @@ export interface UsageRatingSettingRow {
   graceDays: number;
   mode: UsageRatingMode;
   lastRatedPeriodEnd: string | null;
-}
+};
 
 export interface SaveUsageRatingScheduleInput {
   linkId?: string | null;

@@ -82,7 +82,7 @@ test("skipped Stripe customers stay out of unlinked triage until unskipped or li
     );
     // Unskipping what was never skipped refuses by name.
     await assert.rejects(
-      unskipStripeObject(org.orgId, actor, "acct_skip", "customer", "cus_missing", null),
+      unskipStripeObject(org.orgId, actor, "acct_skip", "customer", "cus_missing"),
       (error: unknown) => error instanceof UsageBillingError && error.code === "stripe_skip_missing",
     );
     // The schedule accepts only its three cadences.

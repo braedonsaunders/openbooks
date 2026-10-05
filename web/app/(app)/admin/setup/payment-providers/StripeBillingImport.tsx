@@ -46,6 +46,7 @@ type RunSummary = {
   startedAt: string;
   finishedAt: string | null;
   stripeAccount: string | null;
+  seen: { meters: number; prices: number; customers: number; subscriptions: number; summaries: number };
   created: { meters: number; prices: number; records: number; replayed: number };
   linked: number;
   skipped: number;
