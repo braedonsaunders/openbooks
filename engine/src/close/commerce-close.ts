@@ -159,21 +159,25 @@ async function orderCompletenessCheck(
   }
   const gaps: DayGap[] = [];
   const unreachable: { channelId: string; channelName: string; day: string; error: string }[] = [];
+  type DayOutcome =
+    | { day: string; skipped: true }
+    | { day: string; skipped: false; totals: StorefrontDayTotal }
+    | { day: string; skipped: false; error: string };
   // One storefront read per channel day: the external truth ingestion is
   // measured against. Days run in parallel per channel; a refusal to answer
   // is recorded as unverifiable, never as agreement.
   for (const channel of channels) {
     const days = eachDay(scope.startsOn, scope.endsOn);
-    const outcomes = await Promise.all(
-      days.map(async (day) => {
-        if (channel.kind !== "shopify") return { day, skipped: true as const };
+    const outcomes: DayOutcome[] = await Promise.all(
+      days.map(async (day): Promise<DayOutcome> => {
+        if (channel.kind !== "shopify") return { day, skipped: true };
         try {
           const totals = await provider(orgId, channel.id, day);
-          return { day, skipped: false as const, totals };
+          return { day, skipped: false, totals };
         } catch (error) {
           return {
             day,
-            skipped: false as const,
+            skipped: false,
             error: error instanceof Error ? error.message : String(error),
           };
         }
