@@ -95,6 +95,8 @@
     "asOf": "As of {date}",
     "monthToDate": "Month to date",
     "periodToDate": "{label} to date",
+    "noAccountingPeriod": "Business date {date} precedes the first accounting period {period} — configure a covering period in Close Setup",
+    "consolidatedScope": "{name} (consolidated)",
     "noData": "No data",
     "noBaseCurrency": "No base currency configured",
     "next30Days": "Next 30 days",

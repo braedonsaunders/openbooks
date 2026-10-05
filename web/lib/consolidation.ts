@@ -76,6 +76,12 @@ export interface ResolvedSubsidiaryView {
   currency?: string;
   /** The node's name + whether this is a consolidated (subtree) view. */
   label?: string;
+  /**
+   * The node's bare name, without the consolidated qualifier — presenters
+   * render the qualifier through the catalog off `consolidated` instead of
+   * shipping English inside `label`.
+   */
+  nodeName?: string;
   consolidated: boolean;
   /** Options for the filter-bar picker (elimination subs excluded). */
   options: SubsidiaryOption[];
@@ -303,6 +309,7 @@ export async function resolveSubsidiaryScope(
     },
     currency: node.baseCurrency,
     label: consolidated ? `${node.name} (consolidated)` : node.name,
+    nodeName: node.name,
     consolidated,
     options: pickerOptions,
     ratesError,
@@ -320,6 +327,7 @@ export async function resolveSubsidiaryView(
     subsidiary: scoped.subsidiary,
     currency: scoped.currency,
     label: scoped.label,
+    nodeName: scoped.nodeName,
     consolidated: scoped.consolidated,
     options: scoped.options,
   };
@@ -340,6 +348,7 @@ export async function reportSubsidiaryView(
     subsidiary: scoped.subsidiary,
     currency: scoped.currency,
     label: scoped.label,
+    nodeName: scoped.nodeName,
     consolidated: scoped.consolidated,
     options: scoped.options,
     picker: scoped.picker,
