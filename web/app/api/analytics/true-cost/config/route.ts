@@ -93,7 +93,6 @@ const profileSchema = z.strictObject({
   color: z.string().max(40).nullable().optional(),
   compositeMethod: enumKeys(COMPOSITE_KEYS, 'compositeMethod'),
   baseLaborRate: z.union([z.literal(''), exactAmount('baseLaborRate')]),
-  fringeRate: boundedRate('fringeRate', '1'),
   categorySettings: z.record(z.string(), categorySettingSchema),
   customCategories: z.array(customCategorySchema).max(30),
   baseOverrides: z.strictObject({
@@ -309,7 +308,6 @@ function cleanProfile(raw: unknown): TrueCostProfile {
     // No assumed labor rate: empty persists as unset, and the dashboard
     // derives from costed time or refuses when cascading needs one.
     baseLaborRate: p.baseLaborRate == null || p.baseLaborRate === "" ? "" : persistMoney(p.baseLaborRate, "0.0000"),
-    fringeRate: persistBoundedDecimal(p.fringeRate, "0.25", "1"),
     categorySettings,
       customCategories: Array.isArray(p.customCategories) ? p.customCategories.map(cleanCustomCategory) : [],
     baseOverrides: { squareFeet: numMap(bo.squareFeet), units: numMap(bo.units), custom: numMap(bo.custom) },
@@ -359,14 +357,30 @@ export const PUT = defineRoute({
     const revision = expectedRevision + 1;
     const config = { revision, activeProfileId, profiles };
 
+    // The save audits itself in the same statement: the previous trueCost
+    // subtree travels as before, the replacement as after, with the actor.
+    // A lost compare-and-swap writes nothing, so it audits nothing either.
     const updated = await db.execute(sql`
-      update orgs
-      set settings = jsonb_set(
-        jsonb_set(settings, '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-        '{analytics,trueCost}', ${JSON.stringify(config)}::jsonb, true)
-      where id = ${gate.user.orgId}
-        and coalesce(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0') = ${String(expectedRevision)}
-      returning settings -> 'analytics' -> 'trueCost' ->> 'revision' as revision
+      with before_cfg as (
+        select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${gate.user.orgId}
+      ),
+      updated as (
+        update orgs
+        set settings = jsonb_set(
+          jsonb_set(settings, '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
+          '{analytics,trueCost}', ${JSON.stringify(config)}::jsonb, true)
+        where id = ${gate.user.orgId}
+          and coalesce(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0') = ${String(expectedRevision)}
+        returning settings -> 'analytics' -> 'trueCost' ->> 'revision' as revision
+      ),
+      audited as (
+        insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+        select ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update', ${gate.user.id},
+          jsonb_build_object('before', (select cfg from before_cfg), 'after', ${JSON.stringify(config)}::jsonb,
+            'reason', 'True Cost configuration saved')
+        from updated
+      )
+      select revision from updated
     `);
     if (!updated.rows.length) {
       return NextResponse.json(

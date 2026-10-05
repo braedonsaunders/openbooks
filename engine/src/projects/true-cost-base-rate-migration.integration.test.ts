@@ -24,32 +24,33 @@ const preflight = () =>
     "utf8",
   );
 
-async function seedProfile(orgId: string, rate: string): Promise<void> {
+async function seedProfiles(orgId: string, rates: Record<string, string>): Promise<void> {
   // Top-level merge: jsonb_set cannot create the missing intermediate
   // analytics/trueCost objects, so a nested set would silently keep the old
   // settings (row matched, nothing changed).
+  const profiles = Object.entries(rates).map(([id, baseLaborRate]) => ({ id, name: `Profile ${id}`, baseLaborRate }));
   await db.execute(sql`update public.orgs set settings =
       coalesce(settings, '{}'::jsonb) ||
-      ${JSON.stringify({ analytics: { trueCost: { profiles: [{ id: "p1", name: "True Cost", baseLaborRate: rate }] } } })}::jsonb
+      ${JSON.stringify({ analytics: { trueCost: { profiles } } })}::jsonb
     where id = ${orgId}`);
 }
 
-async function baseRateOf(orgId: string): Promise<string | null> {
-  const rows = (await db.execute<{ rate: string | null }>(sql`select
-      settings -> 'analytics' -> 'trueCost' -> 'profiles' -> 0 ->> 'baseLaborRate' as rate
+async function baseRatesOf(orgId: string): Promise<Record<string, string>> {
+  const rows = (await db.execute<{ profiles: { id: string; baseLaborRate: string }[] }>(sql`select
+      settings -> 'analytics' -> 'trueCost' -> 'profiles' as profiles
     from public.orgs where id = ${orgId}`)).rows;
-  return rows[0]?.rate ?? null;
+  return Object.fromEntries((rows[0]?.profiles ?? []).map((p) => [p.id, p.baseLaborRate]));
 }
 
-test("0565 clears only the unaudited 50.0000 default and audits each clear", { skip: !DB }, async () => {
+test("0565 clears only the unaudited 50.0000 default, one audit row per org", { skip: !DB }, async () => {
   const clearOrg = await withBypass(() => createScratchOrg());
   const ambiguousOrg = await withBypass(() => createScratchOrg());
   const otherOrg = await withBypass(() => createScratchOrg());
   try {
     await withBypass(async () => {
-      await seedProfile(clearOrg.orgId, "50.0000");
-      await seedProfile(ambiguousOrg.orgId, "50.0000");
-      await seedProfile(otherOrg.orgId, "60.0000");
+      await seedProfiles(clearOrg.orgId, { p1: "50.0000", p2: "50.0000" });
+      await seedProfiles(ambiguousOrg.orgId, { p1: "50.0000" });
+      await seedProfiles(otherOrg.orgId, { p1: "60.0000" });
       // Audited operator write carrying baseLaborRate 50.0000: the value
       // stays, and the preflight must list the profile instead.
       await db.execute(sql`insert into public.audit_log
@@ -70,24 +71,24 @@ test("0565 clears only the unaudited 50.0000 default and audits each clear", { s
       client.release();
     }
     await withBypass(async () => {
-      assert.equal(await baseRateOf(clearOrg.orgId), "", "unaudited default returns to unset");
-      assert.equal(
-        await baseRateOf(ambiguousOrg.orgId),
-        "50.0000",
+      assert.deepEqual(await baseRatesOf(clearOrg.orgId), { p1: "", p2: "" }, "unaudited defaults return to unset");
+      assert.deepEqual(
+        await baseRatesOf(ambiguousOrg.orgId),
+        { p1: "50.0000" },
         "audited value is left for the operator to decide",
       );
-      assert.equal(await baseRateOf(otherOrg.orgId), "60.0000", "other values are untouched");
+      assert.deepEqual(await baseRatesOf(otherOrg.orgId), { p1: "60.0000" }, "other values are untouched");
 
-      const audits = (await db.execute<{ profile: string | null; actor: string | null; reason: string | null }>(sql`select
-          changes ->> 'profileId' as profile, actor_id::text as actor,
-          changes ->> 'reason' as reason
+      const audits = (await db.execute<{ before: unknown; after: unknown; actor: string | null; reason: string | null }>(sql`select
+          changes -> 'before' as before, changes -> 'after' as after,
+          actor_id::text as actor, changes ->> 'reason' as reason
         from public.audit_log
-        where org_id = ${clearOrg.orgId} and table_name = 'orgs'
-          and changes -> 'after' ->> 'baseLaborRate' = ''`)).rows;
-      assert.equal(audits.length, 1, "one audit row per cleared profile");
-      assert.equal(audits[0]!.profile, "p1");
+        where org_id = ${clearOrg.orgId} and table_name = 'orgs' and action = 'update'`)).rows;
+      assert.equal(audits.length, 1, "one audit row per changed org");
+      assert.deepEqual(audits[0]!.before, { p1: { baseLaborRate: "50.0000" }, p2: { baseLaborRate: "50.0000" } });
+      assert.deepEqual(audits[0]!.after, { p1: { baseLaborRate: "" }, p2: { baseLaborRate: "" } });
       assert.equal(audits[0]!.actor, null);
-      assert.match(audits[0]!.reason ?? "", /0565/);
+      assert.equal(audits[0]!.reason, "retired default base rate cleared; re-enter a deliberate value in True Cost configuration");
 
       const otherAudits = (await db.execute<{ n: string }>(sql`select count(*)::text as n
         from public.audit_log

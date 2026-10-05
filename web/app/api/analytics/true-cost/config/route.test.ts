@@ -35,7 +35,6 @@ const profile = {
   color: '#3b82f6',
   compositeMethod: 'sum',
   baseLaborRate: '50',
-  fringeRate: '0.25',
   categorySettings: {},
   customCategories: [],
   baseOverrides: {},
@@ -75,15 +74,17 @@ const mockSources = new Map<string, string>([
         async execute(query) {
           const text = sqlText(query)
           state.executed.push(text)
-          if (text.includes("select settings -> 'analytics' -> 'trueCost' as cfg")) {
-            return { rows: [{ cfg: { revision: String(state.revision), activeProfileId: 'profile-1', profiles: [${JSON.stringify(profile)}] } }] }
-          }
+          // The save branch first: its before-image select embeds the same
+          // subtree expression the snapshot read uses.
           if (text.includes('returning settings')) {
             const response = state.updateResponses.length
               ? state.updateResponses.shift()
               : { rows: [{ revision: String(state.revision + 1) }] }
             if (response.rows.length) state.revision += 1
             return response
+          }
+          if (text.includes("select settings -> 'analytics' -> 'trueCost' as cfg")) {
+            return { rows: [{ cfg: { revision: String(state.revision), activeProfileId: 'profile-1', profiles: [${JSON.stringify(profile)}] } }] }
           }
           throw new Error('unexpected database query: ' + text)
         },
@@ -172,6 +173,17 @@ test('restricted actors cannot write org-wide True Cost settings', async () => {
   assert.equal(response.status, 403)
   assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
   assert.equal(state.executed.length, 0)
+})
+
+test('a committed PUT audits the save with before, after and actor', async () => {
+  reset(4)
+  const response = await put({ expectedRevision: 4, activeProfileId: profile.id, profiles: [profile] })
+  assert.equal(response.status, 200)
+  const audit = state.executed.find((query) => query.includes('insert into audit_log'))
+  assert.ok(audit, 'the save writes its own audit row in the same statement')
+  assert.match(audit!, /insert into audit_log \(org_id, table_name, row_id, action, actor_id, changes\)/)
+  assert.match(audit!, /'orgs'.*'update'/)
+  assert.match(audit!, /'before'.*'after'.*'reason'/s)
 })
 
 test('two PUTs from one read cannot both commit the whole configuration', async () => {
