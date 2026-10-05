@@ -3415,6 +3415,10 @@
         "title": "政策",
         "description": "在同一工作区管理应收催收与计费。"
       },
+      "quote-to-cash-policy": {
+        "title": "Quote-to-Cash 策略",
+        "description": "SaaS 报价的折扣审批阈值、自动激活、默认条款和签署链接有效期。"
+      },
       "consolidation-groups": {
         "title": "合并结算组",
         "singular": "合并结算组",

@@ -3460,6 +3460,10 @@
         "title": "Richtlinien",
         "description": "Forderungen einziehen und Abrechnung in einem Arbeitsbereich verwalten."
       },
+      "quote-to-cash-policy": {
+        "title": "Quote-to-Cash-Richtlinie",
+        "description": "Genehmigungsgrenze für Rabatte, automatische Aktivierung, Standardkonditionen und Linklaufzeit für SaaS-Angebote."
+      },
       "consolidation-groups": {
         "title": "Konsolidierungsgruppen",
         "singular": "Konsolidierungsgruppe",

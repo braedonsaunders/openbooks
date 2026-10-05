@@ -3415,6 +3415,10 @@
         "title": "Políticas",
         "description": "Receba valores pendentes e gerencie o faturamento em um único espaço de trabalho."
       },
+      "quote-to-cash-policy": {
+        "title": "Política de quote-to-cash",
+        "description": "Limite de aprovação de descontos, ativação automática, condições padrão e validade de links para orçamentos SaaS."
+      },
       "consolidation-groups": {
         "title": "Grupos de consolidação",
         "singular": "Grupo de consolidação",

@@ -3460,6 +3460,10 @@
         "title": "ポリシー",
         "description": "一つのワークスペースで債権回収と請求を管理します。"
       },
+      "quote-to-cash-policy": {
+        "title": "Quote-to-cashポリシー",
+        "description": "SaaS見積の値引き承認しきい値、自動有効化、標準条件、署名リンク有効期限。"
+      },
       "consolidation-groups": {
         "title": "統合請求グループ",
         "singular": "統合請求グループ",
