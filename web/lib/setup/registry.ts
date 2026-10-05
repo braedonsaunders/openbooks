@@ -37,6 +37,7 @@ import { USAGE_ENTITIES } from './entities/usage'
 import { ENTITLEMENT_ENTITIES } from './entities/entitlements'
 import { NONPROFIT_SETUP_ENTITIES } from './entities/nonprofit'
 import { COMMERCE_ENTITIES } from './entities/commerce'
+import { PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY } from './payroll-compensation-packages'
 
 export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupEntityGate, SetupGroup } from './types'
 export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState, resolveSetupEntityGate, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } from './types'
@@ -64,6 +65,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...ENTITLEMENT_ENTITIES,
   ...NONPROFIT_SETUP_ENTITIES,
   ...COMMERCE_ENTITIES,
+  PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))
@@ -75,6 +77,7 @@ export function setupChildEntities(parentKey: string): SetupEntity[] {
 
 /** Collection links lead to the owning records, where the child tab is opened. */
 export function setupEntityHref(entity: SetupEntity): string {
+  if (entity.key.startsWith('payroll-compensation-')) return '/admin/setup/payroll?tab=compensation-packages'
   if (entity.key === 'benefit-programs') return '/hrm/benefits?view=programs'
   if (entity.key === 'benefit-plans') return '/hrm/benefits?view=programs'
   if (entity.key === 'entitlement-plans') return '/hrm/benefits?view=programs&type=time_off'

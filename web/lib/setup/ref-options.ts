@@ -4,15 +4,13 @@ import { featureEnabled, resolvedFeatureState } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
+import { setupReferenceSources } from './types'
 
 export type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
 
 /** Distinct ref sources declared anywhere in this entity's columns or fields. */
 export function refSources(entity: SetupEntity): SetupRefSource[] {
-  const set = new Set<SetupRefSource>()
-  for (const c of entity.columns) if (c.ref) set.add(c.ref)
-  for (const f of entity.fields) if (f.ref) set.add(f.ref)
-  return [...set]
+  return setupReferenceSources(entity)
 }
 
 /** Postable accounts for the org, matching the company-settings pickers. */
@@ -73,11 +71,28 @@ export async function loadEntityOptions(
   }
   if (source === 'worker-employments') {
     const rows = await db.execute<RefOption>(sql`select e.id::text as value,
-      p.display_name || ' · ' || s.name as label from worker_employments e
+      p.display_name || ' · ' || s.name as label,e.employer_subsidiary_id::text as "scopeValue" from worker_employments e
       join parties p on p.org_id=e.org_id and p.id=e.worker_party_id
       join subsidiaries s on s.org_id=e.org_id and s.id=e.employer_subsidiary_id
       where e.org_id=${orgId} ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowedSubsidiaryIds)}
       order by p.display_name,e.id`)
+    return rows.rows
+  }
+  if (source === 'approved-compensation-package-versions') {
+    const rows = await db.execute<RefOption>(sql`select v.id::text as value,p.code || ' · ' || v.version::text || ' · ' || v.effective_from::text as label,
+      p.id::text as "scopeValue" from payroll_compensation_versions v join payroll_compensation_packages p on p.org_id=v.org_id and p.id=v.package_id
+      where v.org_id=${orgId} and v.status='approved' and p.status='active'
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by p.code,v.version desc,v.id`)
+    return rows.rows
+  }
+  if (source === 'payroll-compensation-packages') {
+    const rows = await db.execute<RefOption>(sql`select id::text as value,code || ' · ' || name as label from payroll_compensation_packages
+      where org_id=${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code,id`)
+    return rows.rows
+  }
+  if (source === 'compensation-package-components') {
+    const rows = await db.execute<RefOption>(sql`select id::text as value,code || ' · ' || name as label from pay_components
+      where org_id=${orgId} and is_active and system_key is null and kind in ('earning','deduction','contribution') order by code,id`)
     return rows.rows
   }
   if (source === 'benefit-contribution-rules' || source === 'benefit-contribution-classes' || source === 'benefit-enrollment-rules' || source === 'benefit-recovery-deduction-rules' || source === 'benefit-recovery-premium-rules') {

@@ -10,7 +10,7 @@ export default async function SetupLayout({ children }: { children: ReactNode })
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   // Setup is available to company administrators and authorized domain setup managers.
-  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage') && !can(authz, 'hrm.performance.manage') && !can(authz, 'hrm.compensation.manage')) {
+  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage') && !can(authz, 'hrm.performance.manage') && !can(authz, 'hrm.compensation.manage') && !can(authz, 'payroll.read')) {
     redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
   }
   return <SetupWorkspace authz={authz}>{children}</SetupWorkspace>

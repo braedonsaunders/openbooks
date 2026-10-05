@@ -110,6 +110,8 @@ export type SetupDynamicOptionsSource =
 
 export interface SetupField {
   key: string
+  /** Names declared by an approved policy are record data rather than catalog keys. */
+  label?: string
   kind: SetupFieldKind
   /** Nested keys are stored verbatim, preserving the domain JSON contract. */
   fields?: SetupField[]
@@ -129,6 +131,8 @@ export interface SetupField {
   nullable?: boolean
   /** Inapplicable controls clear their value in the shared form payload. */
   clearWhenHidden?: boolean
+  /** Structured domain JSON omits inapplicable optional keys instead of sending null. */
+  omitWhenHidden?: boolean
   /** Exact decimal scale declared by the native storage contract. */
   decimalScale?: number
   /** Sibling field holding the 3-letter currency code for `money` fields. */
@@ -169,6 +173,8 @@ export interface SetupField {
   defaultHintKey?: string
   /** Initial value for a new record; database defaults remain authoritative. */
   defaultValue?: string | number | boolean | Record<string, unknown> | unknown[]
+  /** New reasons are deliberate input, rather than a replay of the stored explanation. */
+  resetOnEdit?: boolean
   /** Persisted field managed by another visible control; omit it from drawers. */
   hidden?: boolean
   /** Presentation label for a rehomed, type-specific native form. */
@@ -185,15 +191,30 @@ export interface SetupField {
    *  protection on an earning) is noise, not a disabled control. The domain
    *  rule is still enforced by the table's CHECK constraints; this only keeps
    *  the form honest. */
-  showWhen?: { field: string; in: string[] } | { field: string; present: boolean }
+  showWhen?: SetupFieldCondition
 }
 
 /** Whether a conditional field applies to the values currently in the form. */
+export type SetupFieldCondition = { field: string; in: string[] } | { field: string; present: boolean } | { all: SetupFieldCondition[] }
+
+function setupFieldValue(values: Record<string, unknown>, path: string): unknown {
+  if (Object.hasOwn(values, path)) return values[path]
+  let value: unknown = values
+  for (const key of path.split('.')) {
+    if (value === null || typeof value !== 'object' || !Object.hasOwn(value, key)) return undefined
+    value = (value as Record<string, unknown>)[key]
+  }
+  return value
+}
+
 export function setupFieldVisible(field: SetupField, values: Record<string, unknown>): boolean {
   if (field.hidden) return false
-  if (!field.showWhen) return true
-  if ('present' in field.showWhen) return field.showWhen.present === (values[field.showWhen.field] != null && values[field.showWhen.field] !== '')
-  return field.showWhen.in.includes(String(values[field.showWhen.field] ?? ''))
+  function matches(condition: SetupFieldCondition): boolean {
+    if ('all' in condition) return condition.all.every(matches)
+    const value = setupFieldValue(values, condition.field)
+    return 'present' in condition ? condition.present === (value != null && value !== '') : condition.in.includes(String(value ?? ''))
+  }
+  return !field.showWhen || matches(field.showWhen)
 }
 
 /**
@@ -210,7 +231,7 @@ export function setupFieldVisible(field: SetupField, values: Record<string, unkn
 export function setupFieldOptions(field: SetupField, values: Record<string, unknown>): SetupOption[] {
   const scoped = field.scopedOptions
   if (!scoped) return field.options ?? []
-  const scope = String(values[scoped.scopeField] ?? '')
+  const scope = String(setupFieldValue(values, scoped.scopeField) ?? '')
   if (scope !== '') return scoped.byValue[scope] ?? field.options ?? []
   const seen = new Set<string>()
   const union: SetupOption[] = []
@@ -288,7 +309,7 @@ export interface SetupCreateChoice {
   descriptionKey: string
   /** lucide icon key, mapped by the drawer. */
   iconKey: string
-  values: Record<string, string | number | boolean>
+  values: Record<string, unknown>
 }
 
 export interface SetupEntity {
@@ -305,6 +326,11 @@ export interface SetupEntity {
   /** Domain-owned aggregate endpoint. Generic row writes must refuse these
    * entities because child validation and audit evidence belong to the domain. */
   mutationPath?: string
+  /** Aggregate endpoints receive only their declared create or update contract. */
+  mutationCreateKeys?: readonly string[]
+  mutationUpdateKeys?: readonly string[]
+  /** The current server-loaded revision is included on aggregate updates. */
+  mutationRevision?: { requestKey: string; rowColumn: string }
   /** URL slug, e.g. 'tax-codes'. */
   key: string
   /** DB table name. */
@@ -476,6 +502,20 @@ export function setupEntityClientDescriptor(entity: SetupEntity): Omit<SetupEnti
 /** Direct subsidiary anchor for generic row visibility and write authorization. */
 export function setupEntitySubsidiaryField(entity: SetupEntity): SetupField | undefined {
   return entity.fields.find((field) => field.ref === 'subsidiaries')
+}
+
+/** Structured form references are loaded from the same catalog as top-level controls. */
+export function setupReferenceSources(entity: SetupEntity): SetupRefSource[] {
+  const sources = new Set<SetupRefSource>()
+  for (const column of entity.columns) if (column.ref) sources.add(column.ref)
+  function visit(fields: readonly SetupField[]) {
+    for (const field of fields) {
+      if (field.ref) sources.add(field.ref)
+      if (field.fields) visit(field.fields)
+    }
+  }
+  visit(entity.fields)
+  return [...sources]
 }
 
 /** References whose target row carries the subsidiary ownership anchor. */

@@ -716,7 +716,8 @@
       "workSchedules": "Work schedules",
       "serviceCredits": "Credited service",
       "vacationTerms": "Vacation terms",
-      "expenses": "Expense allocations"
+      "expenses": "Expense allocations",
+      "compensationPackages": "Compensation packages"
     },
     "packs": {
       "installed": "Installed",

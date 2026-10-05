@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
 import test from "node:test";
 import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
 import { PayrollError } from "./error.ts";
@@ -83,3 +84,12 @@ test("hashes use canonical declared policy and patterns share the formula langua
   assert.equal(compensationPackagePattern({ pattern: "percentage", amountInput: "base", factorInput: "percent" }), "base * percent / 100");
   assert.throws(() => compensationPackagePattern({ pattern: "hourly", amountInput: "wage" }), /factor input/);
 });
+
+test('an absent package schema names server maintenance without masking unrelated database failures', () => {
+  const error = { message: 'Query failed with private parameters', cause: { code: '42P01', message: 'relation "payroll_compensation_configuration" does not exist' } }
+  assert.match(compensationPackageSchemaRefusal(error)!.message, /administrator.*server upgrade/)
+  assert.doesNotMatch(compensationPackageSchemaRefusal(error)!.message, /relation|private parameters|payroll_compensation_/)
+  for (const cause of [{ code: '42P01', message: 'relation "worker_employments" does not exist' }, { code: '23503', message: 'relation "payroll_compensation_packages" does not exist' }]) assert.equal(compensationPackageSchemaRefusal({ cause }), null)
+  const cycle: { cause?: unknown } = {}; cycle.cause = cycle
+  assert.equal(compensationPackageSchemaRefusal(cycle), null)
+})

@@ -12,6 +12,7 @@ import {
 } from '../app/(app)/admin/audit/AuditEventDrawer'
 import { hasInspectableChanges } from '../lib/audit-diff'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import type { AuditRecordTable } from '@/lib/audit-record-types'
 
 type AuditRow = {
   id: string
@@ -46,7 +47,7 @@ function changeCount(changes: Record<string, unknown>): number {
   return auditEventDiffs(changes).length
 }
 
-export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments' | 'hrm_benefit_programs' | 'hrm_benefit_plans' | 'entitlement_plans'; recordId: string }) {
+export function AuditTrailPanel({ table, recordId }: { table: AuditRecordTable; recordId: string }) {
   const t = useTranslations('common.auditTrail')
   const ta = useTranslations('admin.audit')
   const [q, setQ] = useState('')

@@ -32,6 +32,8 @@ export const submitBody = z.strictObject({ expectedRevision: revision, reason })
 export const decisionBody = z.strictObject({ expectedRevision: revision, action: z.enum(['approve', 'reject']), reason })
 export const assignmentBody = z.strictObject({ assignmentId: id.optional(), expectedRevision: revision.optional(), versionId: id, employmentId: id,
   effectiveFrom: date, effectiveTo: date.nullable(), inputs: values, reason })
+export const versionUpdateBody = versionBody.omit({ versionId: true }).extend({ expectedRevision: revision })
+export const assignmentUpdateBody = assignmentBody.omit({ assignmentId: true }).extend({ expectedRevision: revision })
 export const assignmentActionBody = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('submit'), expectedRevision: revision, reason }),
   z.strictObject({ action: z.literal('cancel'), expectedRevision: revision, reason }),

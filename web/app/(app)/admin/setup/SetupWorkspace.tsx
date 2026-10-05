@@ -45,6 +45,7 @@ export async function SetupWorkspace({
             canExport={canExport}
             canImport={canImport}
             canManageSetup={canManageSetup}
+            canReadPayrollPackages={can(authz, 'payroll.read') && featureEnabled(features, 'payroll')}
             canManagePerformance={can(authz, 'hrm.performance.manage') && featureEnabled(features, 'hrm') && featureEnabled(features, 'hrmPerformance')}
             canManageCompensation={can(authz, 'hrm.compensation.manage') && authz.allowedSubsidiaryIds === null && featureEnabled(features, 'hrmCompensation')}
             canManageCrm={can(authz, 'crm.setup.manage')}

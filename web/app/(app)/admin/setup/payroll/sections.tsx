@@ -88,10 +88,12 @@ export function PayrollSetupHeader({
   title,
   description,
   launcher,
+  showLauncher = true,
 }: {
   title: string
   description: string
   launcher: PayrollLauncherData
+  showLauncher?: boolean
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
@@ -101,7 +103,7 @@ export function PayrollSetupHeader({
       </div>
       {/* Re-launchable from the settings page — adding a second country
           pack walks the same wizard. */}
-      <PayrollSetupLauncher variant="button" {...launcher} />
+      {showLauncher ? <PayrollSetupLauncher variant="button" {...launcher} /> : null}
     </header>
   )
 }
@@ -353,4 +355,3 @@ export async function HolidayCalendarTabSlot({
   if (!authz) return null
   return <HolidayCalendarSection orgId={authz.user.orgId} searchParams={sp} />
 }
-

@@ -716,7 +716,8 @@
       "workSchedules": "Horaires de travail",
       "serviceCredits": "Service reconnu",
       "vacationTerms": "Conditions de vacances",
-      "expenses": "Répartition des charges"
+      "expenses": "Répartition des charges",
+      "compensationPackages": "Ensembles de rémunération"
     },
     "packs": {
       "installed": "Installé",

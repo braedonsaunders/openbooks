@@ -716,7 +716,8 @@
       "workSchedules": "勤務スケジュール",
       "serviceCredits": "認定勤続期間",
       "vacationTerms": "休暇条件",
-      "expenses": "費用配賦"
+      "expenses": "費用配賦",
+      "compensationPackages": "報酬パッケージ"
     },
     "packs": {
       "installed": "インストール済み",

@@ -29,7 +29,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
-import { setupDomainPayload } from '../../../../../lib/setup/domain-payload'
+import { setupAggregatePayload, setupDomainPayload } from '../../../../../lib/setup/domain-payload'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
 import { majorToMinor, minorToMajor } from '../../../../../lib/setup/money-fields'
@@ -92,6 +92,7 @@ export function NewSetupButton({
 
 /** Initial form value for one field, read from the (snake-keyed) row. */
 function initialValue(field: SetupField, row: Record<string, unknown> | null): unknown {
+  if (row && field.resetOnEdit) return field.defaultValue ?? ''
   const raw = row ? row[toSnake(field.key)] : undefined
   if (!row && field.defaultValue !== undefined) return field.defaultValue
   switch (field.kind) {
@@ -178,7 +179,7 @@ export function SetupDrawer({
   // moment the operator saves. Such a field opens blank and locked with the
   // stored figure named as minor units, and only deliberate re-entry in a
   // known currency unlocks it.
-  const moneyLabel = (f: SetupField) => t(f.labelKey ?? `fields.${f.key}`)
+  const moneyLabel = (f: SetupField) => (f.label ?? t(f.labelKey ?? `fields.${f.key}`))
   const initialMoneyLocks: Record<string, string> = {}
   const initialMoneyMajors: Record<string, string> = {}
   if (row) {
@@ -258,6 +259,12 @@ export function SetupDrawer({
       return next
     })
   }
+  function beginEditing() {
+    const next = { ...form }
+    for (const field of entity.fields) if (field.resetOnEdit) next[field.key] = field.defaultValue ?? ''
+    setForm(next); setInitialForm(next); setFieldError(null); setEditing(true)
+    if (nestedTabActive || activeRuleTab) selectTab('details')
+  }
   // A kind chooser opens the create drawer on cards; the form appears once a
   // card pre-fills the values that decide which fields apply.
   const chooser = creating ? entity.createChooser : undefined
@@ -315,7 +322,7 @@ export function SetupDrawer({
       // legal input, never a missing requirement.
       if (f.keepDefault && (v === undefined || v === null || String(v).trim() === '')) continue
       if (v === undefined || v === null || String(v).trim() === '') {
-        return t('validation.required', { field: t(f.labelKey ?? `fields.${f.key}`) })
+        return t('validation.required', { field: (f.label ?? t(f.labelKey ?? `fields.${f.key}`)) })
       }
     }
     return null
@@ -356,7 +363,7 @@ export function SetupDrawer({
         if (typeof body[field.key] !== 'string' || String(body[field.key]).trim() === '') continue
         const currency = String(body[field.currencyField ?? 'currency'] ?? '').toUpperCase()
         const exponent = minorUnits[currency]
-        const label = t(field.labelKey ?? `fields.${field.key}`)
+        const label = (field.label ?? t(field.labelKey ?? `fields.${field.key}`))
         if (exponent === undefined) {
           const error = t('validation.moneyUnknownCurrency', { field: label, currency: currency || '—' })
           setFieldError(error); toast.error(error); setBusy(false); return
@@ -374,7 +381,7 @@ export function SetupDrawer({
         body[field.key] = minor
       }
       if (entity.mutationPath) {
-        const payload = setupDomainPayload(entity, body)
+        const payload = setupDomainPayload(entity, body, creating ? 'create' : 'update')
         if (!payload.ok) { setFieldError(payload.error); toast.error(payload.error); return }
         body = { ...payload.body, ...fixedValues }
       }
@@ -413,6 +420,9 @@ export function SetupDrawer({
       const endpoint = entity.mutationPath
         ? creating ? entity.mutationPath : `${entity.mutationPath}/${encodeURIComponent(String(row![idColumn]))}`
         : commanded ? `${mutationBasePath}/${entity.key}/command` : `${mutationBasePath}/${entity.key}`
+      const aggregate = setupAggregatePayload(entity, body, row)
+      if (!aggregate.ok) { const message = t('validation.reloadRevision'); setFieldError(message); toast.error(message); return }
+      body = aggregate.body
       const res = await fetch(endpoint, {
         method: commanded ? 'POST' : creating ? 'POST' : 'PATCH',
         headers: {
@@ -434,7 +444,7 @@ export function SetupDrawer({
         if (typeof saved.id !== 'string' || !saved.id) throw new Error(tCommon('feedback.saveFailed'))
         const target = new URL(closeHref, window.location.origin)
         target.searchParams.set(entity.createDestination.rowParam, saved.id)
-        if (entity.createDestination.tabKey) target.searchParams.set('setupTab', entity.createDestination.tabKey)
+        if (entity.createDestination.tabKey) target.searchParams.set(setupNavigationKeys(navigationPrefix).tab, entity.createDestination.tabKey)
         destination = `${target.pathname}${target.search}`
       }
       toast.success(creating ? t('created') : t('updated'))
@@ -552,7 +562,7 @@ export function SetupDrawer({
       ) : undefined}
       headerActions={<>
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
-        {!creating && !entity.readOnly && entity.allowUpdate !== false && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive || activeRuleTab) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
+        {!creating && !entity.readOnly && entity.allowUpdate !== false && !editing ? <Button variant="outline" disabled={busy} onClick={beginEditing}>{tCommon('actions.edit')}</Button> : null}
         {chooser && !choosing ? <Button variant="outline" disabled={busy} onClick={() => setChoosing(true)}>{tCommon('actions.back')}</Button> : null}
         {!choosing && !nestedTabActive && !entity.readOnly && (creating || entity.allowUpdate !== false) && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
@@ -603,7 +613,7 @@ export function SetupDrawer({
         if (!fields.length) return null
         return <InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
           <div className="grid gap-5 sm:grid-cols-2">
-            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} formValues={form} t={t} moneyLocked={moneyLocked[field.key]} />)}
+            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} referenceOptions={refOptions} formValues={form} t={t} moneyLocked={moneyLocked[field.key]} />)}
           </div>
         </InspectorPanel>
       })}
@@ -622,6 +632,7 @@ export function SetupDrawer({
               creating={creating}
               forceLocked={reviewing || !editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)}
               refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
+              referenceOptions={refOptions}
               formValues={form}
               t={t}
               moneyLocked={moneyLocked[field.key]}
@@ -704,6 +715,7 @@ export function FieldControl({
   creating,
   forceLocked,
   refOptions,
+  referenceOptions = {},
   formValues,
   t,
   moneyLocked,
@@ -714,6 +726,8 @@ export function FieldControl({
   creating: boolean
   forceLocked: boolean
   refOptions: RefOption[]
+  /** Structured children use the same native reference catalog as their owning form. */
+  referenceOptions?: Record<string, RefOption[]>
   /** Live drawer values, so a scoped select follows its scope field. */
   formValues: Record<string, unknown>
   t: ReturnType<typeof useTranslations>
@@ -723,7 +737,7 @@ export function FieldControl({
   const locale = useLocale()
   const common = useTranslations('common')
   const countries = useMemo(() => countryOptions(locale), [locale])
-  const label = t(field.labelKey ?? `fields.${field.key}`)
+  const label = (field.label ?? t(field.labelKey ?? `fields.${field.key}`))
   // Authored help renders as the `?` popover on the field label (FieldLabel);
   // without it the label falls back to its generic explanation. Inline text
   // below a control is reserved for validation/state messages only.
@@ -776,7 +790,7 @@ export function FieldControl({
       <div className="space-y-3">
         {entries.map((entry, index) => {
           const controls = <div className={field.itemTitleKey ? "grid gap-5 sm:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}>
-            {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : []} formValues={entry as Record<string, unknown>} t={t} />)}
+            {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : child.ref ? referenceOptions[child.ref] ?? [] : []} referenceOptions={referenceOptions} formValues={entry as Record<string, unknown>} t={t} />)}
           </div>
           const remove = array && !locked ? <Button type="button" variant={field.itemTitleKey ? "ghost" : "outline"} size="sm" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 size={14} />{t('structuredFields.removeRow')}</Button> : null
           if (field.itemTitleKey) return <InspectorPanel key={index} title={t(field.itemTitleKey, { number: index + 1 })} description={field.itemTitleField ? String((entry as Record<string, unknown>)[field.itemTitleField] ?? '') : undefined} actions={remove}>{controls}</InspectorPanel>
@@ -786,7 +800,7 @@ export function FieldControl({
             {remove ? <div className="mt-3 flex justify-end">{remove}</div> : null}
           </fieldset>
         })}
-        {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.key === field.itemSequenceKey ? entries.reduce((highest, entry) => { const sequence = Number((entry as Record<string, unknown>)[child.key]); return Number.isSafeInteger(sequence) && sequence > highest ? sequence : highest }, 0) + 1 : child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t(field.addLabelKey ?? 'structuredFields.addRow')}</Button> : null}
+        {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.key === field.itemSequenceKey ? entries.reduce((highest, entry) => { const sequence = Number((entry as Record<string, unknown>)[child.key]); return Number.isSafeInteger(sequence) && sequence > highest ? sequence : highest }, 0) + 1 : child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'object' ? {} : child.kind === 'objectArray' || child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t(field.addLabelKey ?? 'structuredFields.addRow')}</Button> : null}
       </div>
     </div>
   }

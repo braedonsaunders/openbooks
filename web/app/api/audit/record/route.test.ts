@@ -28,14 +28,13 @@ stubModules({
   extra: {
     "server-only": "",
     "@openbooks/engine/src/platform/db.ts": `
+      import { PgDialect } from ${JSON.stringify(import.meta.resolve('drizzle-orm/pg-core'))}
       export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
         async execute(query) {
-          state.reads++; const chunks = query?.queryChunks
-          const text = Array.isArray(chunks)
-            ? chunks.map((chunk) => Array.isArray(chunk?.value) ? chunk.value.map(String).join('') : '').join('')
-            : ''
+          state.reads++; const text = new PgDialect().sqlToQuery(query).sql
+          if (['payroll_compensation_packages','payroll_compensation_versions','payroll_compensation_assignments'].some(table=>text.includes('from '+table))) return state.recordExists ? {rows:[{kind:'compensation',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
           if (text.includes('from documents')) {
             return state.recordExists
               ? { rows: [{ org_id: 'org-1', kind: 'vendor_bill', created_at: new Date(), created_by: null,
@@ -105,3 +104,21 @@ test('benefit audit fences every program family and permits scoped lifecycle evi
     auditState.hiddenEmployer=false; const response=await get(table,EXISTING_ID); assert.equal(response.status,200,table); assert.equal((await response.json()).recordType,table==='hrm_benefit_enrollments'?'benefit_enrollment':'benefit_program',table);
   }
 });
+
+
+test('compensation audit requires payroll read and the enabled feature before disclosing scoped records', async () => {
+  for (const table of ['payroll_compensation_packages', 'payroll_compensation_versions', 'payroll_compensation_assignments']) {
+    for (const fixture of [{ permissions: ['hrm.compensation.approve'], featureOn: true }, { permissions: ['payroll.read'], featureOn: false }]) {
+      Object.assign(auditState, { ...fixture, recordExists: true, hiddenEmployer: false, reads: 0 })
+      assert.equal((await get(table, EXISTING_ID)).status, 404, table)
+      assert.equal(auditState.reads, 0, table)
+    }
+    Object.assign(auditState, { permissions: ['payroll.read'], featureOn: true, recordExists: true, hiddenEmployer: true, reads: 0 })
+    assert.equal((await get(table, EXISTING_ID)).status, 404, table)
+    Object.assign(auditState, { hiddenEmployer: false, reads: 0 })
+    const response = await get(table, EXISTING_ID)
+    assert.equal(response.status, 200, await response.clone().text())
+    const body = await response.json()
+    assert.ok(Array.isArray(body.rows), table)
+  }
+})
