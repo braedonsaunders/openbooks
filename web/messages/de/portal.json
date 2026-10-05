@@ -70,7 +70,8 @@
     "title": "Bestellungen",
     "empty": "Noch keine Bestellungen.",
     "fulfilment": "Versand: {status}",
-    "noTrackingNumber": "Noch keine Sendungsnummer"
+    "noTrackingNumber": "Noch keine Sendungsnummer",
+    "amountUnavailable": "Der Bestellbetrag in {currency} ist nicht verfügbar. Wenden Sie sich an Ihren Lieferanten, um den erfassten Betrag und die Währungsgenauigkeit zu prüfen."
   },
   "returns": {
     "title": "Retouren",

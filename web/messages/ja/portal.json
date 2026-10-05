@@ -70,7 +70,8 @@
     "title": "注文",
     "empty": "まだ注文がありません。",
     "fulfilment": "発送: {status}",
-    "noTrackingNumber": "追跡番号はまだありません"
+    "noTrackingNumber": "追跡番号はまだありません",
+    "amountUnavailable": "{currency} の注文金額を表示できません。記録された金額と通貨の小数桁数を確認するため、仕入先にお問い合わせください。"
   },
   "returns": {
     "title": "返品",

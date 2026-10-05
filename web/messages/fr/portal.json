@@ -70,7 +70,8 @@
     "title": "Commandes",
     "empty": "Aucune commande.",
     "fulfilment": "Expédition : {status}",
-    "noTrackingNumber": "Suivi pas encore partagé"
+    "noTrackingNumber": "Suivi pas encore partagé",
+    "amountUnavailable": "Le montant de la commande en {currency} est indisponible. Contactez votre fournisseur pour vérifier le montant enregistré et la précision de la devise."
   },
   "returns": {
     "title": "Retours",

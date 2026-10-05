@@ -70,7 +70,8 @@
     "title": "Pedidos",
     "empty": "Sin pedidos todavía.",
     "fulfilment": "Envío: {status}",
-    "noTrackingNumber": "Aún sin número de seguimiento"
+    "noTrackingNumber": "Aún sin número de seguimiento",
+    "amountUnavailable": "El importe del pedido en {currency} no está disponible. Contacte con su proveedor para verificar el importe registrado y la precisión de la moneda."
   },
   "returns": {
     "title": "Devoluciones",

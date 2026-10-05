@@ -44,6 +44,8 @@ export type PortalChannelOrder = {
   orderedAt: string;
   currency: string;
   totalMinor: string;
+  /** Channel totals are ISO minor units; unknown registry precision remains unreadable. */
+  minorUnits: number | null;
   financialStatus: string;
   fulfilmentStatus: string;
   postingStatus: string;
@@ -125,13 +127,15 @@ export async function portalHome(orgId: string, partyId: string, runner: SqlExec
      limit 20
   `)).rows;
   const orders = (await runner.execute<PortalChannelOrder>(sql`
-    select id, external_number as "externalNumber", ordered_at::text as "orderedAt",
-           shop_currency as currency, total_minor::text as "totalMinor",
-           financial_status as "financialStatus", fulfilment_status as "fulfilmentStatus",
-           posting_status as "postingStatus"
-      from channel_orders
-     where org_id = ${orgId} and customer_party_id = ${partyId}
-     order by ordered_at desc
+    select o.id, o.external_number as "externalNumber", o.ordered_at::text as "orderedAt",
+           o.shop_currency as currency, o.total_minor::text as "totalMinor",
+           case when c.minor_units between 0 and 4 then c.minor_units else null end as "minorUnits",
+           o.financial_status as "financialStatus", o.fulfilment_status as "fulfilmentStatus",
+           o.posting_status as "postingStatus"
+      from channel_orders o
+      left join currencies c on c.code = o.shop_currency
+     where o.org_id = ${orgId} and o.customer_party_id = ${partyId}
+     order by o.ordered_at desc
      limit 20
   `)).rows;
   const storeCredit = (await runner.execute<PortalStoredCredit>(sql`

@@ -9,6 +9,7 @@ import { createPromotion, setPromotionStatus } from '../sales/promotions.ts'
 import { PortalRefusal } from './errors.ts'
 import { consumePortalLink, requestPortalLink } from './tokens.ts'
 import { savePortalSettings } from './settings.ts'
+import { portalHome } from './workspace.ts'
 import {
   acceptSaveOffer,
   applySubscriptionChange,
@@ -24,6 +25,41 @@ const EMAIL = 'portal-customer@example.com'
 const PERIOD_START = '2026-07-01'
 const PERIOD_END = '2026-08-01'
 const AS_OF = '2026-07-15'
+
+test('portal order amounts retain registry precision and customer isolation', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  const channelId = randomUUID()
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into currencies (code, name, minor_units)
+        values ('USD', 'US Dollar', 2), ('BHD', 'Bahraini Dinar', 3), ('JPY', 'Japanese Yen', 0)
+        -- Existing seeded currencies retain their authoritative registry values.
+        on conflict (code) do nothing`)
+      assert.equal((await db.execute(sql`select code from currencies where code = 'RHD'`)).rows.length, 0,
+        'the legacy-code fixture must lack a precision entry')
+      await db.execute(sql`
+        insert into sales_channels (id, org_id, kind, name, subsidiary_id, currency, external_account)
+        values (${channelId}, ${org.orgId}, 'shopify', 'Customer orders', ${org.subsidiaryId}, 'USD', ${channelId})`)
+      for (const [currency, total] of [['USD', '12345'], ['BHD', '1234'], ['JPY', '1234'], ['RHD', '12345']] as const) {
+        await db.execute(sql`
+          insert into channel_orders (org_id, channel_id, external_id, external_number, customer_party_id,
+            shop_currency, presentment_currency, subtotal_minor, tax_minor, shipping_minor, total_minor, ordered_at)
+          values (${org.orgId}, ${channelId}, ${currency}, ${`WEB-${currency}`}, ${org.customerId},
+            ${currency}, ${currency}, ${total}, 0, 0, ${total}, '2026-10-05T10:00:00Z')`)
+      }
+    })
+    const home = await withOrgTransaction(org.orgId, (tx) => portalHome(org.orgId, org.customerId, tx))
+    const orders = new Map(home.orders.map((order) => [order.currency, order]))
+    assert.equal(orders.size, 4)
+    for (const [currency, total, precision] of [['USD', '12345', 2], ['BHD', '1234', 3], ['JPY', '1234', 0], ['RHD', '12345', null]] as const) {
+      assert.equal(orders.get(currency)?.totalMinor, total, `${currency} storage units remain unchanged`)
+      assert.equal(orders.get(currency)?.minorUnits, precision, `${currency} uses registry precision or explicit unknown`)
+    }
+    const other = await withOrgTransaction(org.orgId, (tx) => portalHome(org.orgId, org.vendorId, tx))
+    assert.deepEqual(other.orders, [], 'another customer cannot read the order amounts')
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
 
 async function enableFeatures(orgId: string, features: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
