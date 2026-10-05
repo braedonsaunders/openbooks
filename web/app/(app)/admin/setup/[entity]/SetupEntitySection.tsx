@@ -5,19 +5,12 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { minorToMajor } from '../../../../../lib/setup/money-fields'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import {
-  Badge,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@openbooks/ui'
+import { Badge } from '@openbooks/ui'
+import { requireBandsReadScope } from '@openbooks/engine/hrm/compensation'
+import { RegisteredListTable } from '../../../../../components/registered-list-table'
 import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { SearchInput } from '../../../../../components/search-input'
-import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../../../lib/list-params'
 import { setupParentScope } from '../../../../../lib/setup/parent-scope'
 import { setupEntityForFeatureState, setupChildEntities, resolveSetupEntityGate, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
@@ -265,7 +258,7 @@ export async function SetupEntitySection({
   const pageParam = paramPrefix ? `${paramPrefix}Page` : 'page'
   const inactiveParam = paramPrefix ? `${paramPrefix}ShowInactive` : 'showInactive'
   const showInactive = pickString(sp[inactiveParam]) === 'true'
-  const listOptions = { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 }
+  const listOptions = { sort: 'default', dir: 'asc' as const, allowedSorts: ['default', ...entity.columns.map((column) => column.key)], perPage: 25 }
   const list = paramPrefix ? parsePrefixedListParams(sp, paramPrefix, listOptions) : parseListParams(sp, listOptions)
   const parentScope = setupParentScope(entity, parent)
   const children = entity.recordChildren ?? setupChildEntities(entity.key)
@@ -302,8 +295,14 @@ export async function SetupEntitySection({
   const fixedPredicate = fixedFilter ? sql`and ${sql.raw(toSnake(fixedFilter.fieldKey))}=${fixedFilter.value}` : sql``
   const inheritedScope = baseEntity.fields.some((field) => ['worker-employments', 'benefit-plans', 'benefit-enrollment-configuration'].includes(field.ref ?? ''))
     ? setupEntitySubsidiaryFilter(entity, allowedSubsidiaryIds) : sql``
+  // The same employer lens applies to standalone and nested band history.
+  const bandScope = entity.key === 'hrm-pay-bands'
+    ? await requireBandsReadScope(orgId, actorId ?? '') : null
+  const bandPredicate = bandScope === null ? sql`` : sql`and
+    (employer_subsidiary_id is null or employer_subsidiary_id = any(${`{${[...bandScope].join(',')}}`}::uuid[]))`
   const rowFilter = sql`where 1 = 1
     ${inheritedScope}
+    ${bandPredicate}
     ${fixedPredicate}
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
     ${parentScope ? sql`and ${parentScope.predicate}` : sql``}
@@ -312,13 +311,22 @@ export async function SetupEntitySection({
     ${filterClauses.length ? sql.join(filterClauses, sql` `) : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
 
-  const [rowsRes, countRes, refOptions] = await Promise.all([
+  const refOptions = await loadRefOptions(entity, orgId, allowedSubsidiaryIds)
+  const sortedColumn = entity.columns.find((column) => column.key === list.sort)
+  const sortField = sortedColumn ? sql.raw(toSnake(sortedColumn.key)) : undefined
+  const sortLabels = sortedColumn?.ref ? refOptions[sortedColumn.ref] ?? [] : []
+  // Reference columns sort by their authorized display labels, not opaque ids.
+  const sortValue = sortField && sortLabels.length ? sql`case ${sql.join(sortLabels.map((option) =>
+    sql`when cast(${sortField} as text) = ${option.value} then ${option.label}`), sql` `)}
+    else cast(${sortField} as text) end` : sortField
+  const order = sortValue ? sql`${sortValue} ${sql.raw(list.dir)} nulls last, ${sql.raw(idColumn)}`
+    : sql`${sql.raw(orderExpr(entity))}, ${sql.raw(idColumn)}`
+  const [rowsRes, countRes] = await Promise.all([
     drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
-       order by ${sql.raw(orderExpr(entity))}
+       order by ${order}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
     drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
-    loadRefOptions(entity, orgId, allowedSubsidiaryIds),
   ])
   const rows = rowsRes.rows;
   const total = Number(countRes.rows[0]?.n ?? 0)
@@ -347,6 +355,7 @@ export async function SetupEntitySection({
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              ${parentScope ? sql`and ${parentScope.predicate}` : sql``}
              ${inheritedScope}
+             ${bandPredicate}
              ${fixedPredicate}
              ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
              limit 1`)
@@ -507,50 +516,40 @@ export async function SetupEntitySection({
         ) : null}
       </div>
 
-      <div className={contained ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900' : 'rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}>
-        <Table containerClassName={contained ? 'app-scroll min-h-0 flex-1 overflow-auto' : undefined}>
-          <TableHeader>
-            <TableRow>
-              {entity.columns.map((c) => (
-                <TableHead key={c.key}>{t(c.labelKey ?? `fields.${c.key}`)}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={entity.columns.length} className="text-slate-500 dark:text-slate-400">
-                  {t('empty')}
-                </TableCell>
-              </TableRow>
-            ) : null}
-            {rows.map((row) => (
-              <TableRow key={String(row[idColumn])}>
-                {entity.columns.map((c, i) => (
-                  <TableCell key={c.key}>
-                    {(canWriteEntity || (canManage && entity.readOnly)) && (i === 0 || entity.key === 'item-rate-books') ? (
-                      <Link
-                        href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
-                        className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-                      >
-                        {renderColumn?.(c, row) ??
-                          renderCell(c, row, refLabels, t, locale, currencyMinorUnits)}
-                      </Link>
-                    ) : (
-                      (renderColumn?.(c, row) ??
-                      renderCell(c, row, refLabels, t, locale, currencyMinorUnits))
-                    )}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className={contained ? 'min-h-0 flex-1 overflow-hidden' : undefined}>
+        <RegisteredListTable<Record<string, unknown>>
+          source="setup_configuration_records"
+          contained={contained}
+          rows={rows}
+          rowKey={(row) => String(row[idColumn])}
+          empty={t('empty')}
+          state={{ total, page: list.page, perPage: list.perPage }}
+          basePath={basePath}
+          currentParams={sp}
+          pageParamKey={pageParam}
+          sort={list.sort} dir={list.dir}
+          sortParamKey={paramPrefix ? `${paramPrefix}Sort` : 'sort'}
+          dirParamKey={paramPrefix ? `${paramPrefix}Dir` : 'dir'}
+          searchable={false}
+          showPerPage={false}
+          columns={entity.columns.map((column, index) => ({
+            key: column.key,
+            sortKey: column.key,
+            align: ['number', 'money', 'percent'].includes(column.kind) ? 'right' as const : 'left' as const,
+            header: t(column.labelKey ?? `fields.${column.key}`),
+            cell: (row) => {
+              const content = renderColumn?.(column, row) ??
+                renderCell(column, row, refLabels, t, locale, currencyMinorUnits)
+              return (canWriteEntity || (canManage && entity.readOnly)) && (index === 0 || entity.key === 'item-rate-books') ? (
+                <Link href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
+                  className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                  {content}
+                </Link>
+              ) : content
+            },
+          }))}
+        />
       </div>
-
-      {total > 0 ? (
-        <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} pageParamKey={pageParam} />
-      ) : null}
 
       </> : null}
 

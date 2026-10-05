@@ -3,8 +3,16 @@ import {
   preparedListSource,
   type PreparedListSourceKey,
 } from '../lib/list/prepared-sources'
+import { compareDecimal } from '../lib/exact-decimal'
+import { SortTh } from './sortable-th'
 import { PreparedPagedTable } from './prepared-paged-table'
 import { ServerPagedTable, type ServerPagedColumn } from './server-paged-table'
+
+export interface RegisteredListColumn<T> extends ServerPagedColumn<T> {
+  /** Raw values, independent of localized cell formatting. */
+  sortValue?: (row: T) => string | number | bigint | null | undefined
+  sortType?: 'decimal'
+}
 
 /** Adapt an authorized domain reader to the same registered table composition
  * as the platform users list. Cell slots retain each domain's actions and
@@ -35,7 +43,7 @@ export function RegisteredListTable<T>({
 }: {
   source: PreparedListSourceKey
   rows: T[]
-  columns: ServerPagedColumn<T>[]
+  columns: RegisteredListColumn<T>[]
   rowKey: (row: T, index: number) => string
   empty: ReactNode
   leading?: ReactNode
@@ -94,11 +102,25 @@ export function RegisteredListTable<T>({
       />
     )
   }
+  const activeColumn = columns.find((column) => column.sortKey === sort && column.sortValue)
+  const ordered = activeColumn ? [...rows].sort((a, b) => {
+    const left = activeColumn.sortValue!(a)
+    const right = activeColumn.sortValue!(b)
+    // Unconfigured values remain last in either direction.
+    if (left == null || right == null) return left == null && right == null ? 0 : left == null ? 1 : -1
+    const compared = activeColumn.sortType === 'decimal'
+      ? compareDecimal(String(left), String(right))
+      : typeof left === 'number' && typeof right === 'number' || typeof left === 'bigint' && typeof right === 'bigint'
+        ? left < right ? -1 : left > right ? 1 : 0
+        : String(left).localeCompare(String(right))
+    return compared * (dir === 'desc' ? -1 : 1)
+  }) : rows
   return (
     <PreparedPagedTable
       source={source}
       contained={contained}
-      rows={rows.map((row, index) => ({
+      resetPageKey={`${sort ?? ""}:${dir ?? "asc"}`}
+      rows={ordered.map((row, index) => ({
         id: rowKey(row, index),
         cells: columns.map((column) => column.cell(row)),
         className: rowClassName?.(row),
@@ -107,11 +129,23 @@ export function RegisteredListTable<T>({
           .join(' '),
       }))}
       columns={columns.map(
-        ({ cell: _cell, search: _search, sortKey: _sortKey, ...column }) => {
+        ({ cell: _cell, search: _search, sortValue: _sortValue, sortType: _sortType, sortKey, ...column }) => {
           void _cell
           void _search
-          void _sortKey
-          return column
+          void _sortValue
+          void _sortType
+          return {
+            ...column,
+            headerCell: column.headerCell ?? (sortKey && sort ? (
+              <SortTh basePath={basePath ?? definition.route} currentParams={currentParams}
+                column={sortKey} sort={sort} dir={dir ?? 'asc'}
+                align={column.align === 'right' ? 'right' : 'left'}
+                className={column.headerClassName} sortParamKey={sortParamKey}
+                dirParamKey={dirParamKey} pageParamKey={pageParamKey}>
+                {column.header}
+              </SortTh>
+            ) : undefined),
+          }
         },
       )}
       empty={empty}

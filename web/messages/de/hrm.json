@@ -2177,7 +2177,16 @@
       "comparisonGroupsRequired": "Das Vergleichsmerkmal muss bei Beschäftigten in mindestens zwei unterschiedlichen Gruppen befüllt sein. Ergänzen Sie diese Werte in den Beschäftigtendatensätzen, bevor Sie eine Momentaufnahme erstellen.",
       "employeeRecords": "Beschäftigtendatensätze",
       "guidelinePercentage": "Richtwert für die Gehaltsänderung (%)",
-      "guidelineHelp": "Der vorgeschlagene Prozentsatz für diese Runde. Vorschläge außerhalb des Richtwerts erfordern eine Begründung und durchlaufen das Genehmigungsverfahren der Runde."
+      "guidelineHelp": "Der vorgeschlagene Prozentsatz für diese Runde. Vorschläge außerhalb des Richtwerts erfordern eine Begründung und durchlaufen das Genehmigungsverfahren der Runde.",
+      "bandStatus": {
+        "label": "Gültigkeitsstatus",
+        "active": "Aktiv",
+        "upcoming": "Bevorstehend",
+        "past": "Vergangen"
+      },
+      "bandHistory": "Verlauf",
+      "bandVersions": "{count, plural, one {# Version anzeigen} other {# Versionen anzeigen}}",
+      "bandsEmptyFiltered": "Keine Gehaltsbänder entsprechen diesem Filter."
     }
   },
   "equity": {

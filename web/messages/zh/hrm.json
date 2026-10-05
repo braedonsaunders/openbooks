@@ -2177,7 +2177,16 @@
       "comparisonGroupsRequired": "比较属性需要在至少两个不同组别的员工记录中有值。请先在员工记录中补充这些值，再生成快照。",
       "employeeRecords": "员工记录",
       "guidelinePercentage": "薪酬调整指导比例 (%)",
-      "guidelineHelp": "此周期建议的调整比例。超出指导比例的提案必须填写原因，并遵循该周期的审批流程。"
+      "guidelineHelp": "此周期建议的调整比例。超出指导比例的提案必须填写原因，并遵循该周期的审批流程。",
+      "bandStatus": {
+        "label": "生效状态",
+        "active": "有效",
+        "upcoming": "即将生效",
+        "past": "历史"
+      },
+      "bandHistory": "历史记录",
+      "bandVersions": "查看 {count} 个版本",
+      "bandsEmptyFiltered": "没有符合此筛选条件的薪酬范围。"
     }
   },
   "equity": {

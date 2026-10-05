@@ -2177,7 +2177,16 @@
       "comparisonGroupsRequired": "L’attribut de comparaison doit être renseigné pour des employés appartenant à au moins deux groupes distincts. Ajoutez ces valeurs aux fiches des employés avant de générer un instantané.",
       "employeeRecords": "Fiches des employés",
       "guidelinePercentage": "Variation salariale indicative (%)",
-      "guidelineHelp": "Le pourcentage suggéré pour ce cycle. Les propositions qui s’écartent du barème nécessitent une justification et suivent le processus d’approbation du cycle."
+      "guidelineHelp": "Le pourcentage suggéré pour ce cycle. Les propositions qui s’écartent du barème nécessitent une justification et suivent le processus d’approbation du cycle.",
+      "bandStatus": {
+        "label": "Statut d’application",
+        "active": "Actif",
+        "upcoming": "À venir",
+        "past": "Passé"
+      },
+      "bandHistory": "Historique",
+      "bandVersions": "{count, plural, one {Afficher # version} other {Afficher # versions}}",
+      "bandsEmptyFiltered": "Aucune plage salariale ne correspond à ce filtre."
     }
   },
   "equity": {
