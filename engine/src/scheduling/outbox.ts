@@ -90,6 +90,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "tax_provider_commit",
   "commerce_inbound",
   "demand_forecast",
+  "tax_id_revalidation",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -691,6 +692,21 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "commerce_inbound") {
     const { runCommerceInboundScan } = await import("../commerce/inbound.ts");
     await runCommerceInboundScan();
+  if (row.kind === "tax_id_revalidation") {
+    const { runTaxIdRevalidationScan } = await import("../tax/vat-id-validation.ts");
+    const result = await runTaxIdRevalidationScan();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "tax ID revalidation",
+      noticeKind: "tax_id_revalidation_scan_failed",
+      href: "/admin/setup/tax-setup",
+      remedy: "Review customer tax IDs and the authority credentials in Setup → Taxes; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === ALLOCATION_RUN_OUTBOX_KIND) {
