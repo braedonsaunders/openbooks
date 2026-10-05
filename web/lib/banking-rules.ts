@@ -256,7 +256,7 @@ export async function applyRulesToAccount(
       // ineligible line never aborts the whole run. Unexpected failures still
       // abort it. A reconciliation opened inside a rolled-back savepoint is
       // gone, so its cached id is forgotten with it.
-      const reconciliationBefore = reconciliationId
+      const reconciliationBefore: string | null = reconciliationId
       let applied: RuleApplyOutcome
       try {
         applied = await withTransactionSavepoint(db, () => applyRuleIfStillCurrent(
