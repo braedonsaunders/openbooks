@@ -10,6 +10,15 @@ import { loadControlAccounts } from "../records/control-accounts.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { featureEnabled } from "../organization/feature-registry.ts";
 import {
+  accountFunctionalTotal,
+  carryingShare,
+  ensureMonetaryLiability,
+  functionalMinor,
+  loadDocumentFxContext,
+  resolveEventRate,
+  subsidiaryBaseCurrency,
+} from "./fx-amounts.ts";
+import {
   codeLast4,
   digestsEqual,
   generateStoredValueCode,
@@ -53,6 +62,7 @@ export type StoredValueAccountRow = {
   codeLast4: string;
   customerPartyId: string | null;
   currency: string;
+  subsidiaryId: string;
   issuedMinor: bigint;
   balanceMinor: bigint;
   breakageRecognizedMinor: bigint;
@@ -88,6 +98,7 @@ export async function storedValueLiabilityControlAccount(orgId: string): Promise
         "Select a stored-value liability account in Admin → Setup → Company (control accounts), then retry.",
     });
   }
+  await ensureMonetaryLiability(db, orgId, controls.storedValueLiability);
   return controls.storedValueLiability;
 }
 
@@ -113,25 +124,36 @@ async function assertPostingAccount(
   }
 }
 
-async function postingContext(
+export async function postingContext(
   runner: SqlExecutor,
   orgId: string,
   postingDate: string,
+  subsidiaryId: string | null = null,
 ): Promise<{ bookId: string; subsidiaryId: string; currency: string; periodId: string }> {
   const book = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
      limit 1 for share
   `)).rows[0];
-  const subsidiary = (await runner.execute<{ id: string; currency: string | null }>(sql`
-    select id, nullif(trim(base_currency), '') as currency from subsidiaries
-     where org_id = ${orgId} and is_active and not is_elimination and parent_id is null
-     limit 1 for share
-  `)).rows[0];
+  // A movement posts on its own legal entity; only a caller naming none
+  // falls back to the hierarchy root, the same default the document kernel
+  // applies. The row-count check turns an entity outside this org into a
+  // refusal instead of a posting to nowhere.
+  const subsidiary = subsidiaryId
+    ? (await runner.execute<{ id: string; currency: string | null }>(sql`
+      select id, nullif(trim(base_currency), '') as currency from subsidiaries
+       where org_id = ${orgId} and id = ${subsidiaryId}
+       limit 1 for share
+    `)).rows[0]
+    : (await runner.execute<{ id: string; currency: string | null }>(sql`
+      select id, nullif(trim(base_currency), '') as currency from subsidiaries
+       where org_id = ${orgId} and is_active and not is_elimination and parent_id is null
+       limit 1 for share
+    `)).rows[0];
   const period = await resolveCoveringPeriod(runner, orgId, postingDate);
-  if (!book || !subsidiary?.currency || !period) {
+  if (!book || !subsidiary?.id || !subsidiary?.currency || !period) {
     throw storedValueRefusal({
-      message: "Stored-value posting needs an active primary book, a root subsidiary currency, and a covering accounting period.",
+      message: "Stored-value posting needs an active primary book, a legal entity with a currency, and a covering accounting period.",
       code: "stored_value_posting_context_missing",
       remedy: "Configure the primary book and subsidiary currency, then choose a date in an open accounting period.",
     });
@@ -210,6 +232,7 @@ export async function programLiabilityAccount(
       "liability_payable",
       "liability_current_other",
     ]);
+    await ensureMonetaryLiability(runner, orgId, program.liabilityAccountId);
     return program.liabilityAccountId;
   }
   return storedValueLiabilityControlAccount(orgId);
@@ -371,6 +394,10 @@ interface EntryInsert {
   amountMinor: bigint;
   balanceAfter: bigint;
   currency: string;
+  /** The same movement in the account entity's functional currency. */
+  functionalAmountMinor: bigint;
+  /** The card→functional rate the functional amount was priced at. */
+  fxRate: string;
   documentId?: string | null;
   documentLineId?: string | null;
   journalEntryId?: string | null;
@@ -391,9 +418,11 @@ export async function insertStoredValueEntry(orgId: string, entry: EntryInsert):
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into stored_value_entries
       (org_id, account_id, kind, amount_minor, balance_after, currency,
+       functional_amount_minor, fx_rate,
        document_id, document_line_id, journal_entry_id, idempotency_key, reason, created_by, updated_by)
     values (${orgId}, ${entry.accountId}, ${entry.kind}, ${entry.amountMinor.toString()},
       ${entry.balanceAfter.toString()}, ${entry.currency},
+      ${entry.functionalAmountMinor.toString()}, ${entry.fxRate},
       ${entry.documentId ?? null}, ${entry.documentLineId ?? null}, ${entry.journalEntryId ?? null},
       ${entry.idempotencyKey}, ${entry.reason ?? null}, ${entry.actorId ?? null}, ${entry.actorId ?? null})
     on conflict (org_id, idempotency_key) do nothing
@@ -492,7 +521,7 @@ function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string)
 type StoredValueAccountRaw = {
   id: string; orgId: string; programId: string; kind: StoredValueKind;
   codeHash: string; codeLast4: string; customerPartyId: string | null;
-  currency: string; status: StoredValueStatus; expiresOn: string | null;
+  currency: string; subsidiaryId: string; status: StoredValueStatus; expiresOn: string | null;
   lastActivityOn: string; sourceDocumentId: string | null; liabilityAccountId: string | null;
   issuedMinorRaw: string; balanceMinorRaw: string; breakageRecognizedMinorRaw: string;
 };
@@ -501,6 +530,7 @@ export async function lockStoredValueAccount(orgId: string, accountId: string): 
   const rows = (await db.execute<StoredValueAccountRaw>(sql`
     select id, org_id as "orgId", program_id as "programId", kind, code_hash as "codeHash",
            code_last4 as "codeLast4", customer_party_id as "customerPartyId", currency,
+           subsidiary_id as "subsidiaryId",
            issued_minor::text as "issuedMinorRaw", balance_minor::text as "balanceMinorRaw",
            breakage_recognized_minor::text as "breakageRecognizedMinorRaw",
            status, expires_on::text as "expiresOn", last_activity_on::text as "lastActivityOn",
@@ -585,21 +615,33 @@ function assertRedeemable(
 export async function postStoredValueJournal(input: {
   orgId: string;
   postingDate: string;
+  subsidiaryId?: string | null;
   memo: string;
   origin: string;
   idempotencyKey: string;
   accountId: string;
+  /** Signed functional-currency decimal: positive = debit, negative = credit. */
   amount: string;
+  /** Signed card-currency decimal for the same leg. */
+  txnAmount: string;
   counterAccountId: string;
   counterAmount: string;
+  counterTxnAmount: string;
+  /** Card→functional rate pricing both legs. */
+  fxRate: string;
+  /** Card currency for both legs. */
+  currency: string;
   partyId?: string | null;
   actorId?: string | null;
   auditChanges: Record<string, unknown>;
 }): Promise<string> {
-  const context = await postingContext(db, input.orgId, input.postingDate);
+  const context = await postingContext(db, input.orgId, input.postingDate, input.subsidiaryId ?? null);
   const entryNumber = await db.transaction((tx) =>
     nextFreeEntryNumber(tx, input.orgId, `SV-${input.origin.toUpperCase()}`),
   );
+  // Both legs carry the card currency and the functional equivalent, exactly
+  // like any other multi-currency posting: the ledger balances in functional
+  // terms while the foreign exposure stays visible per line.
   const posted = await postEntry(db, {
     orgId: input.orgId,
     bookId: context.bookId,
@@ -610,16 +652,119 @@ export async function postStoredValueJournal(input: {
     memo: input.memo,
     origin: "stored_value",
     actorId: input.actorId ?? null,
-    currency: context.currency,
+    currency: input.currency,
     idempotencyKey: input.idempotencyKey,
     auditAction: "create",
     auditChanges: input.auditChanges,
     lines: [
-      { accountId: input.accountId, amount: input.amount, partyId: input.partyId ?? null },
-      { accountId: input.counterAccountId, amount: input.counterAmount, partyId: input.partyId ?? null },
+      {
+        accountId: input.accountId, amount: input.amount,
+        currency: input.currency, txnAmount: input.txnAmount, fxRate: input.fxRate,
+        partyId: input.partyId ?? null,
+      },
+      {
+        accountId: input.counterAccountId, amount: input.counterAmount,
+        currency: input.currency, txnAmount: input.counterTxnAmount, fxRate: input.fxRate,
+        partyId: input.partyId ?? null,
+      },
     ],
   });
   return posted.entryId;
+}
+
+/**
+ * Realized FX on a redemption: the redeemed slice was carried at its
+ * historical rate but relieved at the redemption rate. The restatement pair
+ * reprices that slice from the redemption rate back to its carrying rate in
+ * the card currency, and the difference posts to the realized FX gain/loss
+ * account — so the liability keeps its historical carrying value (which is
+ * what the period-end revaluation restates) while the repricing lands in P&L
+ * once and never reverses. Skipped when the rates agree: a zero P&L leg
+ * would be rejected by the kernel.
+ */
+export async function postRealizedFxJournal(input: {
+  orgId: string;
+  postingDate: string;
+  subsidiaryId: string;
+  functionalCurrency: string;
+  cardCurrency: string;
+  liabilityAccountId: string;
+  gainLossAccountId: string;
+  redeemedMinor: bigint;
+  carryingFunctionalMinor: bigint;
+  carryingRate: string;
+  currentFunctionalMinor: bigint;
+  currentRate: string;
+  documentId: string;
+  accountId: string;
+  codeLast4: string;
+  idempotencyKey: string;
+  partyId: string | null;
+  actorId?: string | null;
+}): Promise<string | null> {
+  const delta = input.currentFunctionalMinor - input.carryingFunctionalMinor;
+  if (delta === 0n) return null;
+  const context = await postingContext(db, input.orgId, input.postingDate, input.subsidiaryId);
+  const entryNumber = await db.transaction((tx) =>
+    nextFreeEntryNumber(tx, input.orgId, "SV-REALIZED"),
+  );
+  const posted = await postEntry(db, {
+    orgId: input.orgId,
+    bookId: context.bookId,
+    subsidiaryId: context.subsidiaryId,
+    entryNumber,
+    postingDate: input.postingDate,
+    periodId: context.periodId,
+    memo: `Realized FX on stored-value redemption — …${input.codeLast4}`,
+    origin: "stored_value",
+    sourceDocumentId: input.documentId,
+    actorId: input.actorId ?? null,
+    currency: input.functionalCurrency,
+    idempotencyKey: `stored-value:realized:${input.idempotencyKey}`,
+    auditAction: "create",
+    auditChanges: {
+      accountId: input.accountId,
+      kind: "realized_fx",
+      redeemedMinor: input.redeemedMinor.toString(),
+      carryingRate: input.carryingRate,
+      currentRate: input.currentRate,
+    },
+    lines: [
+      {
+        accountId: input.liabilityAccountId, amount: fromUnits(input.carryingFunctionalMinor),
+        currency: input.cardCurrency, txnAmount: fromUnits(input.redeemedMinor), fxRate: input.carryingRate,
+        partyId: input.partyId,
+      },
+      {
+        accountId: input.liabilityAccountId, amount: fromUnits(-input.currentFunctionalMinor),
+        currency: input.cardCurrency, txnAmount: fromUnits(-input.redeemedMinor), fxRate: input.currentRate,
+        partyId: input.partyId,
+      },
+      {
+        accountId: input.gainLossAccountId, amount: fromUnits(delta),
+        currency: input.functionalCurrency, txnAmount: fromUnits(delta), fxRate: "1",
+        partyId: input.partyId,
+      },
+    ],
+  });
+  return posted.entryId;
+}
+
+/**
+ * The realized FX gain/loss home for redemption repricing. Refuses by name
+ * when unset: without it a cross-rate redemption would have nowhere to book
+ * the difference but the liability, which would misstate both.
+ */
+export async function realizedFxGainLossAccount(orgId: string): Promise<string> {
+  const controls = await loadControlAccounts(orgId);
+  if (!controls.fxRealizedGainLoss) {
+    throw storedValueRefusal({
+      message: "No realized FX gain/loss account is configured for this organization.",
+      code: "stored_value_realized_fx_unset",
+      remedy: "Select a realized FX gain/loss account in Admin → Setup → Company (control accounts), then retry.",
+    });
+  }
+  return controls.fxRealizedGainLoss;
 }
 
 export interface IssueInput {
@@ -628,6 +773,8 @@ export interface IssueInput {
   /** Minor units, must be positive. */
   amountMinor: bigint;
   currency: string;
+  /** Issuing legal entity; the hierarchy root when omitted, like documents. */
+  subsidiaryId?: string | null;
   customerPartyId?: string | null;
   expiresOn?: string | null;
   sourceDocumentId?: string | null;
@@ -730,6 +877,11 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
   ]);
   const postingDate = input.postingDate ?? (await businessToday(input.orgId));
   requireDate(postingDate, "posting date");
+  // A direct issue is an off-document event: it prices at the business-date
+  // spot on its own entity, and both journal legs convert alike.
+  const context = await postingContext(db, input.orgId, postingDate, input.subsidiaryId ?? null);
+  const eventRate = await resolveEventRate(db, input.orgId, input.currency, context.currency, postingDate, null);
+  const functional = functionalMinor(input.amountMinor, eventRate.units);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateStoredValueCode();
@@ -737,10 +889,13 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into stored_value_accounts
         (org_id, program_id, kind, code_hash, code_last4, customer_party_id, currency,
+         subsidiary_id,
          issued_minor, balance_minor, expires_on, source_document_id, liability_account_id,
          created_by, updated_by)
       values (${input.orgId}, ${program.id}, ${program.kind}, ${codeHash}, ${codeLast4(code)},
-        ${input.customerPartyId ?? null}, ${input.currency}, ${input.amountMinor.toString()},
+        ${input.customerPartyId ?? null}, ${input.currency},
+        ${context.subsidiaryId},
+        ${input.amountMinor.toString()},
         ${input.amountMinor.toString()}, ${expiresOn}, ${input.sourceDocumentId ?? null},
         ${liabilityAccountId}, ${input.actorId ?? null}, ${input.actorId ?? null})
       on conflict (org_id, code_hash) do nothing
@@ -753,13 +908,18 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
     const journalEntryId = await postStoredValueJournal({
       orgId: input.orgId,
       postingDate,
+      subsidiaryId: context.subsidiaryId,
       memo: input.memo ?? `Stored-value issue — ${program.name}`,
       origin: "issue",
       idempotencyKey: `stored-value:issue:${input.idempotencyKey}`,
       accountId: input.debitAccountId,
-      amount: fromUnits(input.amountMinor),
+      amount: fromUnits(functional),
+      txnAmount: fromUnits(input.amountMinor),
       counterAccountId: liabilityAccountId,
-      counterAmount: neg(fromUnits(input.amountMinor)),
+      counterAmount: neg(fromUnits(functional)),
+      counterTxnAmount: neg(fromUnits(input.amountMinor)),
+      fxRate: eventRate.rate,
+      currency: input.currency,
       partyId: input.customerPartyId ?? null,
       actorId: input.actorId ?? null,
       auditChanges: { programId: program.id, accountId },
@@ -770,6 +930,8 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
       amountMinor: input.amountMinor,
       balanceAfter: input.amountMinor,
       currency: input.currency,
+      functionalAmountMinor: functional,
+      fxRate: eventRate.rate,
       documentId: input.sourceDocumentId ?? null,
       documentLineId: input.sourceLineId ?? null,
       journalEntryId,
@@ -803,8 +965,10 @@ export interface RedeemInput {
 /**
  * Redeem stored value against a payment: lock the account, refuse on
  * insufficient balance (naming what is available), decrement, and append the
- * redeem entry in the caller's transaction. The journal leg comes from the
- * caller's document — this function moves the subledger, never the ledger.
+ * redeem entry in the caller's transaction. The relief journal leg comes
+ * from the caller's document — this function moves the subledger, and posts
+ * only the realized FX repricing when the redemption rate differs from the
+ * redeemed slice's carrying rate.
  */
 export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: string; balanceMinor: bigint }> {
   await requireStoredValueFeature(db, input.orgId);
@@ -836,6 +1000,7 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
       });
     }
   }
+  const pricing = await priceRedemption(input, account);
   const balanceMinor = account.balanceMinor - input.amountMinor;
   const updated = (await db.execute<{ id: string }>(sql`
     update stored_value_accounts
@@ -859,6 +1024,8 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
     amountMinor: -input.amountMinor,
     balanceAfter: balanceMinor,
     currency: account.currency,
+    functionalAmountMinor: -pricing.entryFunctional,
+    fxRate: pricing.entryRate,
     documentId: input.documentId ?? null,
     documentLineId: input.documentLineId ?? null,
     journalEntryId: input.journalEntryId ?? null,
@@ -866,7 +1033,113 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
     actorId: input.actorId ?? null,
   });
   requireFreshEntry(entry, input.idempotencyKey);
+  if (pricing.realized) {
+    await postRealizedFxJournal({
+      orgId: input.orgId,
+      postingDate: pricing.realized.postingDate,
+      subsidiaryId: account.subsidiaryId,
+      functionalCurrency: pricing.realized.functionalCurrency,
+      cardCurrency: account.currency,
+      liabilityAccountId: pricing.realized.liabilityAccountId,
+      gainLossAccountId: pricing.realized.gainLossAccountId,
+      redeemedMinor: input.amountMinor,
+      carryingFunctionalMinor: pricing.entryFunctional,
+      carryingRate: pricing.entryRate,
+      currentFunctionalMinor: pricing.realized.currentFunctional,
+      currentRate: pricing.realized.currentRate,
+      documentId: pricing.realized.documentId,
+      accountId: account.id,
+      codeLast4: account.codeLast4,
+      idempotencyKey: input.idempotencyKey,
+      partyId: account.customerPartyId,
+      actorId: input.actorId ?? null,
+    });
+  }
   return { entryId: entry.entryId, balanceMinor };
+}
+
+type RedemptionPricing = {
+  /** Functional minor units the redeem entry relieves (positive). */
+  entryFunctional: bigint;
+  entryRate: string;
+  realized: {
+    postingDate: string;
+    documentId: string;
+    functionalCurrency: string;
+    liabilityAccountId: string;
+    gainLossAccountId: string;
+    currentFunctional: bigint;
+    currentRate: string;
+  } | null;
+};
+
+/**
+ * Price one redemption. The subledger always relieves the redeemed slice at
+ * its carrying rate, so the functional remainder keeps tying to the ledger
+ * liability. A document redemption additionally reprices that slice at the
+ * document's rate: when the two disagree the difference is realized FX, and
+ * the caller needs the gain/loss home and the liability account up front.
+ * An off-document redemption prices at the business-date spot with no
+ * ledger counterparty to correct.
+ */
+async function priceRedemption(
+  input: RedeemInput,
+  account: StoredValueAccountRow,
+): Promise<RedemptionPricing> {
+  const baseCurrency = await subsidiaryBaseCurrency(db, input.orgId, account.subsidiaryId);
+  const functionalPrior = await accountFunctionalTotal(db, input.orgId, account.id);
+  if (!input.documentId) {
+    const today = await businessToday(input.orgId);
+    const eventRate = await resolveEventRate(db, input.orgId, account.currency, baseCurrency, today, null);
+    return {
+      entryFunctional: functionalMinor(input.amountMinor, eventRate.units),
+      entryRate: eventRate.rate,
+      realized: null,
+    };
+  }
+  const doc = await loadDocumentFxContext(db, input.orgId, input.documentId);
+  if (doc.currency !== account.currency) {
+    throw storedValueRefusal({
+      message: `Stored-value …${account.codeLast4} holds ${account.currency}, but the document is in ${doc.currency}.`,
+      code: "stored_value_redeem_currency_mismatch",
+      remedy: `Redeem …${account.codeLast4} on a ${account.currency} document.`,
+      status: 409,
+    });
+  }
+  if (doc.subsidiaryId !== account.subsidiaryId) {
+    const accountSub = (await db.execute<{ name: string }>(sql`
+      select name from subsidiaries where org_id = ${input.orgId} and id = ${account.subsidiaryId}
+    `)).rows[0]?.name ?? account.subsidiaryId;
+    throw storedValueRefusal({
+      message: `Stored-value …${account.codeLast4} belongs to ${accountSub}, but the document posts to ${doc.subsidiaryName}: one entity cannot relieve another's debt.`,
+      code: "stored_value_cross_entity",
+      remedy: `Redeem …${account.codeLast4} on a ${accountSub} document.`,
+      status: 409,
+    });
+  }
+  const eventRate = await resolveEventRate(db, input.orgId, account.currency, baseCurrency, doc.postingDate, doc);
+  const current = functionalMinor(input.amountMinor, eventRate.units);
+  const share = carryingShare(functionalPrior, account.balanceMinor, input.amountMinor);
+  const needsRealized = current !== share.functional && account.currency !== baseCurrency;
+  if (!needsRealized) {
+    return { entryFunctional: share.functional, entryRate: share.rate, realized: null };
+  }
+  const liabilityAccountId =
+    account.liabilityAccountId ??
+    (await programLiabilityAccount(input.orgId, await loadStoredValueProgram(input.orgId, account.programId)));
+  return {
+    entryFunctional: share.functional,
+    entryRate: share.rate,
+    realized: {
+      postingDate: doc.postingDate,
+      documentId: doc.id,
+      functionalCurrency: baseCurrency,
+      liabilityAccountId,
+      gainLossAccountId: await realizedFxGainLossAccount(input.orgId),
+      currentFunctional: current,
+      currentRate: eventRate.rate,
+    },
+  };
 }
 
 export interface AdjustInput {
@@ -947,17 +1220,27 @@ export async function adjustStoredValue(input: AdjustInput): Promise<{ entryId: 
   ]);
   const postingDate = input.postingDate ?? (await businessToday(input.orgId));
   requireDate(postingDate, "posting date");
+  // A correction is an off-document event: it prices at the posting-date
+  // spot on the account's own entity, and both journal legs convert alike.
+  const baseCurrency = await subsidiaryBaseCurrency(db, input.orgId, account.subsidiaryId);
+  const eventRate = await resolveEventRate(db, input.orgId, account.currency, baseCurrency, postingDate, null);
+  const functional = functionalMinor(input.deltaMinor, eventRate.units);
   const liabilityAccountId = account.liabilityAccountId ?? (await storedValueLiabilityControlAccount(input.orgId));
   const journalEntryId = await postStoredValueJournal({
     orgId: input.orgId,
     postingDate,
+    subsidiaryId: account.subsidiaryId,
     memo: `Stored-value adjustment — …${account.codeLast4}: ${reason}`,
     origin: "adjust",
     idempotencyKey: `stored-value:adjust:${input.idempotencyKey}`,
     accountId: input.deltaMinor > 0n ? input.offsetAccountId : liabilityAccountId,
-    amount: fromUnits(input.deltaMinor > 0n ? input.deltaMinor : -input.deltaMinor),
+    amount: fromUnits(functional > 0n ? functional : -functional),
+    txnAmount: fromUnits(input.deltaMinor > 0n ? input.deltaMinor : -input.deltaMinor),
     counterAccountId: input.deltaMinor > 0n ? liabilityAccountId : input.offsetAccountId,
-    counterAmount: fromUnits(input.deltaMinor > 0n ? -input.deltaMinor : input.deltaMinor),
+    counterAmount: fromUnits(functional > 0n ? -functional : functional),
+    counterTxnAmount: fromUnits(input.deltaMinor > 0n ? -input.deltaMinor : input.deltaMinor),
+    fxRate: eventRate.rate,
+    currency: account.currency,
     partyId: account.customerPartyId,
     actorId: input.actorId ?? null,
     auditChanges: { accountId: account.id, reason },
@@ -984,6 +1267,8 @@ export async function adjustStoredValue(input: AdjustInput): Promise<{ entryId: 
     amountMinor: input.deltaMinor,
     balanceAfter: balanceMinor,
     currency: account.currency,
+    functionalAmountMinor: functional,
+    fxRate: eventRate.rate,
     journalEntryId,
     idempotencyKey: `stored-value:adjust-entry:${input.idempotencyKey}`,
     reason,
@@ -1258,16 +1543,33 @@ export async function attachDocumentIssue(input: DocumentIssueInput): Promise<Is
   else if (program.expiryMonths) {
     expiresOn = addMonthsClamped(await businessToday(input.orgId), program.expiryMonths);
   }
+  // The document's own journal already moved the consideration at the
+  // document's rate, so the account belongs to the document's entity and the
+  // entry prices at that same rate — never at par.
+  const doc = await loadDocumentFxContext(db, input.orgId, input.sourceDocumentId);
+  if (doc.currency !== input.currency) {
+    throw storedValueRefusal({
+      message: `The document is in ${doc.currency}, not ${input.currency}: it cannot fund a ${input.currency} issue.`,
+      code: "stored_value_document_currency_mismatch",
+      remedy: `Issue in ${doc.currency}, matching the document.`,
+    });
+  }
+  const baseCurrency = await subsidiaryBaseCurrency(db, input.orgId, doc.subsidiaryId);
+  const eventRate = await resolveEventRate(db, input.orgId, input.currency, baseCurrency, doc.postingDate, doc);
+  const functional = functionalMinor(input.amountMinor, eventRate.units);
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateStoredValueCode();
     const codeHash = hashStoredValueCode(input.orgId, code);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into stored_value_accounts
         (org_id, program_id, kind, code_hash, code_last4, customer_party_id, currency,
+         subsidiary_id,
          issued_minor, balance_minor, expires_on, source_document_id, liability_account_id,
          created_by, updated_by)
       values (${input.orgId}, ${program.id}, ${program.kind}, ${codeHash}, ${codeLast4(code)},
-        ${input.customerPartyId ?? null}, ${input.currency}, ${input.amountMinor.toString()},
+        ${input.customerPartyId ?? null}, ${input.currency},
+        ${doc.subsidiaryId},
+        ${input.amountMinor.toString()},
         ${input.amountMinor.toString()}, ${expiresOn}, ${input.sourceDocumentId},
         ${liabilityAccountId}, ${input.actorId ?? null}, ${input.actorId ?? null})
       on conflict (org_id, code_hash) do nothing
@@ -1282,6 +1584,8 @@ export async function attachDocumentIssue(input: DocumentIssueInput): Promise<Is
       amountMinor: input.amountMinor,
       balanceAfter: input.amountMinor,
       currency: input.currency,
+      functionalAmountMinor: functional,
+      fxRate: eventRate.rate,
       documentId: input.sourceDocumentId,
       documentLineId: input.sourceLineId ?? null,
       journalEntryId: input.journalEntryId,
@@ -1345,18 +1649,27 @@ export async function expireStoredValueAccount(input: {
     "income_other",
   ]);
   const liabilityAccountId = account.liabilityAccountId ?? (await storedValueLiabilityControlAccount(input.orgId));
+  // Expiry extinguishes the debt: there is no conversion, so the release
+  // carries the balance's historical value, and no realized FX arises.
+  const functionalPrior = await accountFunctionalTotal(db, input.orgId, account.id);
+  const share = carryingShare(functionalPrior, account.balanceMinor, account.balanceMinor);
   let journalEntryId: string | null = null;
   if (account.balanceMinor > 0n) {
     journalEntryId = await postStoredValueJournal({
       orgId: input.orgId,
       postingDate: input.postingDate,
+      subsidiaryId: account.subsidiaryId,
       memo: `Stored-value expiry — …${account.codeLast4}`,
       origin: "expire",
       idempotencyKey: `stored-value:expire:${input.idempotencyKey}`,
       accountId: liabilityAccountId,
-      amount: fromUnits(account.balanceMinor),
+      amount: fromUnits(share.functional),
+      txnAmount: fromUnits(account.balanceMinor),
       counterAccountId: program.breakageIncomeAccountId,
-      counterAmount: neg(fromUnits(account.balanceMinor)),
+      counterAmount: neg(fromUnits(share.functional)),
+      counterTxnAmount: neg(fromUnits(account.balanceMinor)),
+      fxRate: share.rate,
+      currency: account.currency,
       partyId: account.customerPartyId,
       actorId: input.actorId ?? null,
       auditChanges: { accountId: account.id },
@@ -1385,6 +1698,8 @@ export async function expireStoredValueAccount(input: {
     amountMinor: -account.balanceMinor,
     balanceAfter: 0n,
     currency: account.currency,
+    functionalAmountMinor: -share.functional,
+    fxRate: share.rate,
     journalEntryId,
     idempotencyKey: `stored-value:expire-entry:${input.idempotencyKey}`,
     actorId: input.actorId ?? null,

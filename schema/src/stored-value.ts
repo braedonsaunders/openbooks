@@ -1,12 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, date, integer, jsonb, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { auditColumns, currencyCode, id, orgRef } from './helpers';
+import { bigint, boolean, date, foreignKey, integer, jsonb, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { auditColumns, currencyCode, fxRate, id, orgRef } from './helpers';
+import { subsidiaries } from './subsidiaries';
 
 /**
  * Stored value (gift cards and store credit) is a liability, never revenue.
  * Selling a gift card credits the liability; redemption debits it against AR.
  * `stored_value_entries` is the immutable subledger; corrections are reversal
- * entries. Storage shape for migration 0495.
+ * entries. Storage shape for migration 0495, with the issuing subsidiary per
+ * account and the functional equivalent plus rate per entry from 0527.
  */
 export const storedValuePrograms = pgTable('stored_value_programs', {
   id: id(), orgId: orgRef(),
@@ -41,10 +43,17 @@ export const storedValueAccounts = pgTable('stored_value_accounts', {
   lastActivityOn: date('last_activity_on').notNull().default(sql`CURRENT_DATE`),
   sourceDocumentId: uuid('source_document_id'),
   liabilityAccountId: uuid('liability_account_id'),
+  /** The legal entity that owes the balance (→ subsidiaries). */
+  subsidiaryId: uuid('subsidiary_id').notNull(),
   custom: jsonb('custom').notNull().default({}),
   ...auditColumns,
 }, t => [uniqueIndex('stored_value_accounts_org_id_id').on(t.orgId, t.id),
-  uniqueIndex('stored_value_accounts_org_code_hash').on(t.orgId, t.codeHash)]);
+  uniqueIndex('stored_value_accounts_org_code_hash').on(t.orgId, t.codeHash),
+  foreignKey({
+    columns: [t.orgId, t.subsidiaryId],
+    foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    name: 'stored_value_accounts_subsidiary_id_fkey',
+  })]);
 
 export const storedValueEntries = pgTable('stored_value_entries', {
   id: id(), orgId: orgRef(),
@@ -53,6 +62,10 @@ export const storedValueEntries = pgTable('stored_value_entries', {
   amountMinor: bigint('amount_minor', { mode: 'bigint' }).notNull(),
   balanceAfter: bigint('balance_after', { mode: 'bigint' }).notNull(),
   currency: currencyCode('currency').notNull(),
+  /** The same movement in the account subsidiary's functional currency. */
+  functionalAmountMinor: bigint('functional_amount_minor', { mode: 'bigint' }).notNull(),
+  /** The card→functional rate the functional amount was priced at. */
+  fxRate: fxRate('fx_rate').notNull(),
   documentId: uuid('document_id'),
   documentLineId: uuid('document_line_id'),
   journalEntryId: uuid('journal_entry_id'),
