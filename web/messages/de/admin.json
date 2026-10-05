@@ -4031,7 +4031,9 @@
       "lastSyncedAt": "Zuletzt synchronisiert",
       "nativeId": "OpenBooks-Datensatz",
       "bufferQuantity": "Zurückgehaltener Bestand",
-      "stopSellingAtZero": "Verkauf bei Null stoppen"
+      "stopSellingAtZero": "Verkauf bei Null stoppen",
+      "scheme": "Verfahren",
+      "identificationState": "Mitgliedstaat der Identifizierung"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",

@@ -27,7 +27,7 @@ export const STORED_VALUE_ENTITIES: SetupEntity[] = [
       { key: 'name', kind: 'text' },
       { key: 'kind', kind: 'text' },
       { key: 'currency', kind: 'code' },
-      { key: 'breakagePolicy', kind: 'text' },
+      { key: 'breakagePolicy', labelKey: 'storedValueProgramFields.breakagePolicy', kind: 'text' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [

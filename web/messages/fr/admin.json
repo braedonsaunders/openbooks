@@ -3911,7 +3911,9 @@
       "lastSyncedAt": "Dernière synchronisation",
       "nativeId": "Enregistrement OpenBooks",
       "bufferQuantity": "Stock mis de côté",
-      "stopSellingAtZero": "Arrêter la vente à zéro"
+      "stopSellingAtZero": "Arrêter la vente à zéro",
+      "scheme": "Régime",
+      "identificationState": "État membre d’identification"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
