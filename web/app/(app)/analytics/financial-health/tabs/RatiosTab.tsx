@@ -68,6 +68,7 @@ export function RatiosTab({ data, defs }: { data: HealthData; defs: Record<strin
                 score={data.overallScore}
                 scoreLabel={t(`score.${data.scoreLabel}`)}
                 overallLabel={t('score.overall')}
+                bands={data.benchmarks.labels}
                 categories={data.categoryScores
                   .filter((c): c is { key: typeof c.key; score: number } => c.score !== null)
                   .map((c) => ({ label: t(`categories.${c.key}`), score: c.score }))}

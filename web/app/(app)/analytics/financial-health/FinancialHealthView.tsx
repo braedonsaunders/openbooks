@@ -60,6 +60,7 @@ export function FinancialHealthView({
             size={132}
             thickness={12}
             showTicks={false}
+            bands={data.benchmarks.labels}
           />
         </div>
         <KpiCard
