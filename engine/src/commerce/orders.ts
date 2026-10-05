@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { ChannelOrder, ChannelRefund, ChannelShippingLine, ChannelTaxLine, ChannelTender } from "./contracts.ts";
+import { markOrderEconomicsDirty, recomputeOrderEconomicsScoped } from "./economics.ts";
 import { CommerceError } from "./errors.ts";
 import { findNative, linkExternal } from "./external-links.ts";
 import { getPostingPolicy } from "./posting-policies.ts";
@@ -122,6 +123,19 @@ function reviveTenders(tenders: ChannelTender[] | null | undefined): ChannelOrde
 
 function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
   throw new CommerceError(code, message, remedy, { field, status });
+}
+
+/**
+ * Refresh one order's margin facts without disturbing the order flow: the
+ * recompute joins this unit of work, and a refusal parks a restatement mark
+ * for the channel scan instead of failing an ingest that already stored.
+ */
+async function refreshOrderEconomics(orgId: string, actor: string | null, orderId: string, reason: string): Promise<void> {
+  try {
+    await recomputeOrderEconomicsScoped(orgId, actor, orderId);
+  } catch {
+    await markOrderEconomicsDirty(orgId, orderId, reason).catch(() => null);
+  }
 }
 
 function cleanText(value: unknown): string | null {
@@ -347,6 +361,7 @@ export async function ingestChannelOrder(
           ${JSON.stringify({ number: order.number, totalMinor: order.totalMinor.toString() })}::jsonb,
           'ignored', now(), ${actor}, ${actor})
         on conflict (org_id, order_id, external_id) do nothing`);
+      await refreshOrderEconomics(orgId, actor, existing.id, "order updated");
       return toOrderRow(updated.rows[0]!);
     }
     // A redelivery racing the first store collides on the channel-external
@@ -380,6 +395,7 @@ export async function ingestChannelOrder(
     const row = (await db.execute<OrderDbRow>(sql`
       select ${ORDER_COLUMNS} from channel_orders where org_id = ${orgId} and id = ${id}`)).rows[0];
     if (!row) throw new Error("Channel order store returned no row; the order was lost");
+    await refreshOrderEconomics(orgId, actor, id, "order ingested");
     return toOrderRow(row);
   });
 }
@@ -439,6 +455,9 @@ export async function ingestChannelEvent(
         throw new Error("Channel order cancellation matched no row; the order posted while it was cancelled");
       }
     }
+    // Fulfilments, refunds and edits move the margin picture, so the event
+    // refreshes it in the same unit of work.
+    await refreshOrderEconomics(orgId, actor, order.id, `order ${event.kind}`);
     return { eventId, orderId: order.id };
   });
 }

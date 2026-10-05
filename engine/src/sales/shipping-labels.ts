@@ -1047,6 +1047,24 @@ export interface BoughtShippingLabel {
   duplicate: boolean;
 }
 
+/**
+ * Mark the channel order behind a label cost for margin restatement. The
+ * commerce module owns the restatement queue and this module cannot import
+ * it (commerce already depends on sales, so the edge would cycle), hence
+ * the direct insert. A label for a non-channel document matches zero rows
+ * by design, and a retried mark collides on (org, order) with the first
+ * mark winning — both benign, so neither is a failure.
+ */
+async function markChannelEconomicsDirty(tx: SqlExecutor, orgId: string, orderDocumentId: string | null, reason: string): Promise<void> {
+  if (!orderDocumentId) return;
+  await tx.execute(sql`
+    insert into channel_order_economics_pending (org_id, order_id, reason)
+    select ${orgId}, o.id, ${reason}
+      from channel_orders o
+     where o.org_id = ${orgId} and o.posting_document_id = ${orderDocumentId}
+    on conflict (org_id, order_id) do nothing`);
+}
+
 async function writeLabelAudit(
   tx: SqlExecutor,
   orgId: string,
@@ -1264,6 +1282,7 @@ export async function buyShipmentLabel(
       minorUnits,
       isReturn: input.direction === "return",
     });
+    await markChannelEconomicsDirty(tx, orgId, shipment.orderId, "shipping label cost posted");
     return {
       id: existing.id,
       shipmentId: shipment.id,
@@ -1395,6 +1414,7 @@ export async function buyShipmentLabel(
     trackingNumber: bought.trackingNumber,
     costEntryId: entryId,
   });
+  await markChannelEconomicsDirty(tx, orgId, shipment.orderId, "shipping label purchased");
   return {
     id: labelId,
     shipmentId: shipment.id,
@@ -1513,11 +1533,11 @@ export async function voidShipmentLabel(
     throw new ShippingRefusal("Give a void reason between 5 and 500 characters", "invalid_input", 422);
   }
   const label = (await tx.execute<{
-    id: string; shipment_document_id: string; account_id: string; provider: string;
+    id: string; shipment_document_id: string; order_document_id: string | null; account_id: string; provider: string;
     provider_shipment_id: string; provider_label_id: string | null; status: string;
     tracking_number: string | null; cost_entry_id: string | null; subsidiary_id: string;
   }>(sql`
-    select l.id, l.shipment_document_id, l.account_id, l.provider, l.provider_shipment_id,
+    select l.id, l.shipment_document_id, l.order_document_id, l.account_id, l.provider, l.provider_shipment_id,
            l.provider_label_id, l.status, l.tracking_number, l.cost_entry_id, d.subsidiary_id
       from shipment_labels l
       join documents d on d.id = l.shipment_document_id and d.org_id = l.org_id
@@ -1582,6 +1602,7 @@ export async function voidShipmentLabel(
     reversedEntryId: label.cost_entry_id,
     reversalEntryId,
   });
+  await markChannelEconomicsDirty(tx, orgId, label.order_document_id, "shipping label voided");
   return { labelId: label.id, reversalEntryId };
 }
 
@@ -2011,6 +2032,7 @@ export async function postBillingAdjustment(
     adjustmentId: adjustment.id,
     entryId,
   });
+  await markChannelEconomicsDirty(tx, orgId, adjustment.order_id, "carrier billing adjustment posted");
   return { adjustmentId: adjustment.id, entryId };
 }
 

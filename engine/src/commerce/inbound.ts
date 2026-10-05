@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { channelAdapter } from "./adapters.ts";
 import { postDueDailySummaries } from "./daily-summary.ts";
 import { CommerceError } from "./errors.ts";
+import { recomputePendingOrderEconomics } from "./economics.ts";
 import { postPendingChannelOrders } from "./order-posting.ts";
 import { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 import {
@@ -374,6 +375,9 @@ export async function runChannelOrderScan(): Promise<{ posted: number; parked: n
       const outcome = await postPendingChannelOrders(org.org_id, null, 100);
       posted += outcome.posted;
       parked += outcome.parked;
+      // Late label and payout costs restate beside the posting drain, so no
+      // new scheduler kind is needed for margin restatement.
+      await recomputePendingOrderEconomics(org.org_id, null, 100);
     } catch {
       continue;
     }
