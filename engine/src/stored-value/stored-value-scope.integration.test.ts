@@ -604,6 +604,60 @@ test("a reused issuance key with a changed body is refused, while an unchanged r
   }
 });
 
+test("explicit expiry, date, and memo are evidenced in both directions", { skip: !DB }, async () => {
+  const fx = await seedScopeOrg();
+  try {
+    const scope = await liveScope(fx.orgId, fx.rootActor);
+    const key = `scope-stated-${randomUUID()}`;
+    const body = {
+      orgId: fx.orgId,
+      allowedSubsidiaryIds: scope,
+      subsidiaryId: fx.subsidiaryId,
+      programId: fx.giftProgram,
+      amountMinor: toUnits("23"),
+      currency: "CAD",
+      debitAccountId: fx.bank,
+      postingDate: fx.date,
+      expiresOn: "2027-05-01",
+      memo: "Gift for Maya",
+      idempotencyKey: key,
+      actorId: fx.rootActor,
+    };
+    const first = await withOrgContext(fx.orgId, () => issueStoredValue(body));
+    assert.ok(first.code && !first.replayed);
+    const retry = (over: {
+      expiresOn?: string | null;
+      postingDate?: string;
+      memo?: string | null;
+    }) => {
+      const { expiresOn, postingDate, memo, ...rest } = body;
+      void expiresOn;
+      void postingDate;
+      void memo;
+      return withOrgContext(fx.orgId, () =>
+        issueStoredValue({
+          ...rest,
+          expiresOn: "expiresOn" in over ? over.expiresOn ?? null : body.expiresOn,
+          postingDate: "postingDate" in over ? over.postingDate! : body.postingDate,
+          memo: "memo" in over ? over.memo ?? null : body.memo,
+        }),
+      );
+    };
+    const identical = await retry({});
+    assert.equal(identical.replayed, true, "the fully stated retry replays");
+    assert.equal(identical.accountId, first.accountId);
+    const statedConflict = (error: unknown) =>
+      error instanceof StoredValueError && error.code === "stored_value_idempotency_conflict";
+    await assert.rejects(retry({ expiresOn: null }), statedConflict, "dropping a stated expiry is a changed intent");
+    await assert.rejects(retry({ expiresOn: "2027-06-01" }), statedConflict, "changing a stated expiry is a changed intent");
+    await assert.rejects(retry({ postingDate: undefined as unknown as string }), statedConflict, "dropping a stated posting date is a changed intent");
+    await assert.rejects(retry({ memo: null }), statedConflict, "dropping stated audit text is a changed intent");
+    await assert.rejects(retry({ memo: "Gift for Noah" }), statedConflict, "changing audit text is a changed intent");
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
 test("an unchanged default retry replays without restating derived dates", { skip: !DB }, async () => {
   const fx = await seedScopeOrg();
   try {
@@ -628,6 +682,15 @@ test("an unchanged default retry replays without restating derived dates", { ski
     assert.equal(replayed.replayed, true, "omitted defaults must not false-conflict on retry");
     assert.equal(replayed.code, null, "a replay never mints a second code");
     assert.equal(replayed.accountId, first.accountId);
+    // Later config changes must not reinterpret the recorded defaults: the
+    // program gains an expiry rule and a new name (which the default memo
+    // embeds), yet the identical retry still replays the original effect.
+    await withBypass(() => db.execute(sql`
+      update stored_value_programs set name = 'Renamed gift cards', expiry_months = 6
+       where id = ${fx.giftProgram} and org_id = ${fx.orgId}`));
+    const afterConfig = await withOrgContext(fx.orgId, () => issueStoredValue(body));
+    assert.equal(afterConfig.replayed, true, "config drift must not rewrite a recorded default");
+    assert.equal(afterConfig.accountId, first.accountId);
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId));
   }
