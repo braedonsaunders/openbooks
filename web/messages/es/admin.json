@@ -650,6 +650,8 @@
       "journal": "asiento contable",
       "vendorCredit": "crédito de proveedor",
       "customerCredit": "crédito de cliente",
+      "cashSale": "venta en efectivo",
+      "cashRefund": "reembolso en efectivo",
       "cardCharge": "cargo de tarjeta",
       "cardRefund": "reembolso de tarjeta",
       "check": "cheque",

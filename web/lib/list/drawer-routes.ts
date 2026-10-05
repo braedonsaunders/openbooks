@@ -5,6 +5,7 @@ import { isUuid } from '@openbooks/engine/platform/identifiers'
 export const LIST_DRAWER_ROUTES = {
   vendor_bill: { path: '/ap/bills', param: 'doc', widget: 'document-drawer', permission: 'ap.read' },
   customer_invoice: { path: '/ar/invoices', param: 'doc', widget: 'document-drawer', permission: 'ar.read' },
+  cash_sale: { path: '/cash-sales', param: 'doc', widget: 'document-drawer', permission: 'cash_sales.read', feature: 'cashSales' },
   bank_transaction: { path: '/banking/transactions', param: 'doc', widget: 'document-drawer', permission: 'banking.read' },
   quote: { path: '/estimates', param: 'estimate', widget: 'order-drawer', permission: 'ar.read', feature: 'orders' },
   sales_order: { path: '/sales-orders', param: 'order', widget: 'order-drawer', permission: 'ar.read', feature: 'orders' },

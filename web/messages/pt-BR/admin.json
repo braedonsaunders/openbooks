@@ -497,6 +497,8 @@
       "journal": "lançamento contábil",
       "vendorCredit": "crédito de fornecedor",
       "customerCredit": "crédito de cliente",
+      "cashSale": "venda à vista",
+      "cashRefund": "reembolso à vista",
       "cardCharge": "cobrança de cartão",
       "cardRefund": "estorno de cartão",
       "check": "cheque",

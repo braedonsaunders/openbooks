@@ -5,6 +5,8 @@
     "vendor_credit": "Crédito de fornecedor",
     "customer_invoice": "Fatura de cliente",
     "customer_credit": "Memorando de crédito de cliente",
+    "cash_sale": "Venda à vista",
+    "cash_refund": "Reembolso à vista",
     "card_charge": "Cobrança em cartão",
     "card_refund": "Reembolso em cartão",
     "check": "Cheque",

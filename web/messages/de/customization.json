@@ -5,6 +5,8 @@
     "vendor_credit": "Lieferantengutschrift",
     "customer_invoice": "Ausgangsrechnung",
     "customer_credit": "Kundengutschrift",
+    "cash_sale": "Barverkauf",
+    "cash_refund": "Bar-Erstattung",
     "card_charge": "Kartenbelastung",
     "card_refund": "Kartenerstattung",
     "check": "Scheck",

@@ -5,6 +5,8 @@
     "vendor_credit": "Crédito de proveedor",
     "customer_invoice": "Factura de cliente",
     "customer_credit": "Nota de crédito de cliente",
+    "cash_sale": "Venta en efectivo",
+    "cash_refund": "Reembolso en efectivo",
     "card_charge": "Cargo de tarjeta",
     "card_refund": "Reembolso de tarjeta",
     "check": "Cheque",

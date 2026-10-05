@@ -5,6 +5,8 @@
     "vendor_credit": "仕入先クレジット",
     "customer_invoice": "得意先請求書",
     "customer_credit": "得意先クレジットメモ",
+    "cash_sale": "現金売上",
+    "cash_refund": "現金返金",
     "card_charge": "カード請求",
     "card_refund": "カード返金",
     "check": "小切手",

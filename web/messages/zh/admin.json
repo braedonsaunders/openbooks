@@ -497,6 +497,8 @@
       "journal": "日记账",
       "vendorCredit": "供应商贷项",
       "customerCredit": "客户贷项",
+      "cashSale": "现金销售",
+      "cashRefund": "现金退款",
       "cardCharge": "卡片扣款",
       "cardRefund": "卡片退款",
       "check": "支票",

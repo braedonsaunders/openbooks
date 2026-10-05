@@ -46,6 +46,39 @@ export type CompanySettingsResult = { status: number; body: Record<string, unkno
 export const SETTINGS_READ_PERMISSION = "admin.users.manage";
 export const SETTINGS_WRITE_PERMISSION = "admin.setup.manage";
 
+/**
+ * Cash-sale till defaults stored under `orgs.settings.cashSales`: the
+ * customer unattributed counter sales post against, and the clearing/bank
+ * accounts new tenders prefill per channel. All four are optional; unknown
+ * keys refuse so a typo cannot silently park.
+ */
+export const CASH_SALES_SETTING_KEYS = [
+  "walkInCustomerId",
+  "defaultCashAccountId",
+  "defaultCardAccountId",
+  "defaultBankAccountId",
+] as const;
+
+export type CashSalesSettings = {
+  walkInCustomerId: string | null;
+  defaultCashAccountId: string | null;
+  defaultCardAccountId: string | null;
+  defaultBankAccountId: string | null;
+};
+
+/** Normalize the stored till defaults: unknown keys and non-id values drop. */
+export function readCashSalesSettings(raw: unknown): CashSalesSettings {
+  const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const pick = (key: string): string | null =>
+    typeof bag[key] === "string" && isUuid(bag[key] as string) ? (bag[key] as string) : null;
+  return {
+    walkInCustomerId: pick("walkInCustomerId"),
+    defaultCashAccountId: pick("defaultCashAccountId"),
+    defaultCardAccountId: pick("defaultCardAccountId"),
+    defaultBankAccountId: pick("defaultBankAccountId"),
+  };
+}
+
 function fiscalCalendarLockedResponse(): CompanySettingsResult {
   return { status: 409, body: {
       error: "fiscal-calendar-locked",
@@ -89,6 +122,7 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       requireStockCountReview:
         (settings.approvals as Record<string, unknown> | undefined)
           ?.requireStockCountReview === true,
+      cashSales: readCashSalesSettings(settings.cashSales),
     },
   } };
 }
@@ -115,6 +149,7 @@ export async function updateCompanySettings(
     reportingFramework?: unknown;
     taxFramework?: unknown;
     controlAccounts?: unknown;
+    cashSales?: unknown;
     defaultLocale?: unknown;
     timeZone?: unknown;
     reportPdfStyle?: unknown;
@@ -309,6 +344,86 @@ export async function updateCompanySettings(
       nextControl = collected as Record<string, string>;
     }
 
+    // --- cash-sale till defaults (walk-in customer, default tender accounts) ---
+    // Paid-at-sale defaults live beside the control accounts: the party
+    // unattributed counter sales post against, and the clearing/bank accounts
+    // new tenders prefill. Storing them is harmless with the feature off;
+    // the cash-sales surface hides while the data stays.
+    let nextCashSales: Record<string, string> | undefined;
+    if (body.cashSales !== undefined) {
+      if (
+        typeof body.cashSales !== "object" ||
+        body.cashSales === null ||
+        Array.isArray(body.cashSales)
+      ) {
+        return { status: 400, body: { error: "cashSales must be an object" } };
+      }
+      const input = body.cashSales as Record<string, unknown>;
+      const unknownKeys = Object.keys(input).filter(
+        (key) => !CASH_SALES_SETTING_KEYS.some((known) => known === key),
+      );
+      if (unknownKeys.length > 0) {
+        return { status: 400, body: {
+          error: unknownKeys.map((key) => `unknown cash sales setting ${key}`).join("; "),
+        } };
+      }
+      const currentCashSales =
+        settings.cashSales && typeof settings.cashSales === "object"
+          ? (settings.cashSales as Record<string, unknown>)
+          : {};
+      const collected: Record<string, unknown> = { ...currentCashSales };
+      for (const key of CASH_SALES_SETTING_KEYS) {
+        const v = input[key];
+        if (v === undefined) continue;
+        if (v === null || v === "") {
+          delete collected[key];
+          continue;
+        }
+        if (typeof v !== "string" || !isUuid(v)) {
+          return { status: 400, body: { error: `${key} must be an id` } };
+        }
+        collected[key] = v;
+      }
+      if (typeof collected.walkInCustomerId === "string") {
+        const party = await tx.execute(sql`
+          select p.id
+            from parties p
+            join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
+           where p.org_id = ${orgId} and p.id = ${collected.walkInCustomerId} and p.is_active
+           limit 1`);
+        if (!party.rows[0]) {
+          return { status: 400, body: {
+            error: "walkInCustomerId must be an active customer of this organization",
+          } };
+        }
+      }
+      const tenderAccountIds = CASH_SALES_SETTING_KEYS.filter((key) => key !== "walkInCustomerId")
+        .map((key) => collected[key])
+        .filter((id): id is string => typeof id === "string");
+      if (tenderAccountIds.length > 0) {
+        const found = await tx.execute<{ id: string; type: string }>(sql`
+          select id, type from accounts
+           where org_id = ${orgId} and id = any(${tenderAccountIds}::uuid[])
+             and is_active and not is_summary`);
+        const byId = new Map(found.rows.map((row) => [row.id, row.type]));
+        for (const key of CASH_SALES_SETTING_KEYS) {
+          if (key === "walkInCustomerId") continue;
+          const accountId = collected[key];
+          if (typeof accountId !== "string") continue;
+          const type = byId.get(accountId);
+          if (!type) {
+            return { status: 400, body: { error: `${key} must be an active, non-summary account of this organization` } };
+          }
+          if (type === "asset_receivable" || type === "liability_payable") {
+            return { status: 400, body: {
+              error: `${key} cannot be a receivable or payable control account — tenders settle into clearing or bank accounts`,
+            } };
+          }
+        }
+      }
+      nextCashSales = collected as Record<string, string>;
+    }
+
     // --- tenant default language (users without a personal locale inherit it) ---
     let nextDefaultLocale: string | undefined;
     if (body.defaultLocale !== undefined) {
@@ -406,6 +521,14 @@ export async function updateCompanySettings(
       if (JSON.stringify(curControl) !== JSON.stringify(nextControl)) {
         nextSettings.controlAccounts = nextControl;
         changes.controlAccounts = [curControl, nextControl];
+        settingsChanged = true;
+      }
+    }
+    if (nextCashSales !== undefined) {
+      const curCashSales = (settings.cashSales ?? {}) as Record<string, string>;
+      if (JSON.stringify(curCashSales) !== JSON.stringify(nextCashSales)) {
+        nextSettings.cashSales = nextCashSales;
+        changes.cashSales = [curCashSales, nextCashSales];
         settingsChanged = true;
       }
     }

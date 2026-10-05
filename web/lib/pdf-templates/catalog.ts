@@ -485,6 +485,8 @@ const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
   docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'cash_sale', docTitle: 'Sales Receipt', partyHeading: 'Sold to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'cash_refund', docTitle: 'Refund Receipt', partyHeading: 'Refunded to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true, extraFields: [

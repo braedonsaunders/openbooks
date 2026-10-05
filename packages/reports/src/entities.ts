@@ -44,6 +44,8 @@ export const TRANSACTION_KINDS = [
   'vendor_payment',
   'customer_invoice',
   'customer_credit',
+  'cash_sale',
+  'cash_refund',
   'customer_payment',
   'expense_report',
   'check',

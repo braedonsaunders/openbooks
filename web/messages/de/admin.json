@@ -497,6 +497,8 @@
       "journal": "Journal",
       "vendorCredit": "Lieferantengutschrift",
       "customerCredit": "Kundengutschrift",
+      "cashSale": "Barverkauf",
+      "cashRefund": "Bar-Erstattung",
       "cardCharge": "Kartenbelastung",
       "cardRefund": "Kartenerstattung",
       "check": "Scheck",
