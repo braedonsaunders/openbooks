@@ -212,10 +212,12 @@ export interface ChannelContext {
 export interface ChannelWorkspaceTab {
   key: string;
   /**
-   * next-intl label key the shell translates. Keys arrive fully namespaced
-   * (`channels.tabs.products`); the workspace translator is already scoped
-   * to the channels catalog, so the shell resolves the relative key and
-   * falls back to the full key text, never a raw key.
+   * next-intl label key the shell translates. Keys are fully namespaced
+   * (`channels.tabs.products`); the workspace translator is scoped to the
+   * channels catalog, so the shell strips the `channels.` prefix before
+   * resolving and renders the key path itself when no catalog entry
+   * matches. A rendered key path means the adapter declaration or the
+   * catalog is wrong, not the shell.
    */
   labelKey: string;
 }
