@@ -8,19 +8,26 @@ const periods = [
   { fiscalYear: 2026, periodNumber: 2, name: "P2", from: "2026-03-02", to: "2026-03-29" },
 ];
 
-test("declared periods keep their own names and zero-fill empty boxes", () => {
+test("declared periods keep names and labels, fallback boxes never drop", () => {
   const boxes = fiscalMonthlyBoxes(
     periods,
     "2026-01-01",
     "2026-03-31",
-    new Map([["2026-02-01", "100.0000"]]),
+    new Map([
+      ["2026-02-01", "100.0000"],
+      ["2026-01", "25.0000"],
+    ]),
     "0",
-    new Map(),
+    new Map([["2026-03-02", "P2 special"]]),
     (ym) => `M(${ym})`,
   );
+  // Declared and fallback boxes interleave in chronological order: the
+  // January fallback sorts ahead of the February period, never after the
+  // run — and a resolved label wins over the period name.
   assert.deepEqual(boxes, [
+    { month: "2026-01", label: "M(2026-01)", spend: "25.0000" },
     { month: "2026-02-01", label: "P1", spend: "100.0000" },
-    { month: "2026-03-02", label: "P2", spend: "0" },
+    { month: "2026-03-02", label: "P2 special", spend: "0" },
   ]);
 });
 
@@ -55,24 +62,3 @@ test("the prior-year window spans the matched periods, never calendar -12 months
   assert.equal(priorYearWindow([], "2026-03-02", "2026-04-05"), null);
 });
 
-test("spend outside declared coverage renders as labelled fallback boxes, never dropped", () => {
-  const boxes = fiscalMonthlyBoxes(
-    periods,
-    "2026-01-01",
-    "2026-03-31",
-    new Map([
-      ["2026-03-02", "50.0000"],
-      ["2026-01", "25.0000"],
-    ]),
-    "0",
-    new Map([["2026-03-02", "P2 special"]]),
-    (ym) => `M(${ym})`,
-  );
-  // Declared and fallback boxes interleave in chronological order: the
-  // January fallback sorts ahead of the February period, never after the run.
-  assert.deepEqual(boxes, [
-    { month: "2026-01", label: "M(2026-01)", spend: "25.0000" },
-    { month: "2026-02-01", label: "P1", spend: "0" },
-    { month: "2026-03-02", label: "P2 special", spend: "50.0000" },
-  ]);
-});
