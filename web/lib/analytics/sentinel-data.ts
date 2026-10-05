@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
-import { flowRates, presentationCurrency, type FlowRates } from "../fx-presentation";
+import { flowRates, MissingExchangeRateError, presentationCurrency, type FlowRates } from "../fx-presentation";
 import { add, cmp, mulDecimal, sum } from "@openbooks/engine/money";
 import { ForbiddenError, type Authz } from "../authz";
 import { sentinelAccessDenied } from "./sentinel-access";
@@ -33,9 +33,10 @@ import { englishCatalogMessage } from "./catalog-strings";
  *
  * Threshold doctrine: every detection cut-off (risk tiers, floors, windows,
  * baselines, bands, sample minima) is an organization threshold from the
- * analytics spec, compared only against translated amounts (tiers) or
- * per-currency unit amounts (noise floors, which read the configured figure
- * in the document's own currency). The scoring POINTS below are the
+ * analytics spec. Risk tiers compare translated amounts; the RSF and
+ * z-score statistics (rank, mean, σ, multiples, deviations) run on
+ * document-currency amounts, and only their noise gates read presentation
+ * money. The scoring POINTS below are the
  * product's fixed severity model, not business facts: they decide how loud a
  * finding is, never whether it flags.
  */
@@ -487,17 +488,30 @@ export async function sentinelData(
         and coalesce(d.document_date, d.posting_date) <= ${DUPLICATE_SCAN_TO}`,
     );
   }
-  // Same refusal up front for the vendor-statistics baseline and period
-  // windows, whose RSF and z-score floors now compare translated money.
-  await assertFloorCoverage(
-    orgId,
-    presentationCcy,
-    sql`d.org_id = ${orgId} and d.voided_at is null
-      and d.kind in (${kindsIn})
-      and d.party_id is not null
-      and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
-      and coalesce(d.document_date, d.posting_date) <= ${to}`,
-  );
+  // The statistics baseline reaches further back than any other scan. A
+  // missing historic rate must not refuse all of Sentinel, so this probe
+  // runs only while a statistics floor is set — and missing coverage marks
+  // only the statistics detectors unavailable by name instead of throwing.
+  let statsSpotRefusal: string | null = null;
+  if (rsfFloor !== null || zscoreFloor !== null) {
+    try {
+      await assertFloorCoverage(
+        orgId,
+        presentationCcy,
+        sql`d.org_id = ${orgId} and d.voided_at is null
+          and d.kind in (${kindsIn})
+          and d.party_id is not null
+          and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
+          and coalesce(d.document_date, d.posting_date) <= ${to}`,
+      );
+    } catch (error) {
+      if (error instanceof MissingExchangeRateError) {
+        statsSpotRefusal = strings.spotRateMissing(error.message);
+      } else {
+        throw error;
+      }
+    }
+  }
 
   const [
     aggRows, trapRows, dupAll, weekendDetail, weekendIds,
@@ -729,19 +743,20 @@ export async function sentinelData(
     // (capped for display) union with the result's full count and the slim
     // full id set, so the counts always cover everything.
     (db.execute(sql`
-      -- Baseline and period rows translate into presentation money at each
-      -- row's own document-date spot, so the floors below compare translated
-      -- money with translated money. Partitions stay per (vendor, document
-      -- currency) — no currency ever blends into another's baseline. Rows
-      -- without spot coverage refuse up front (assertFloorCoverage); a NULL
-      -- rate here is unreachable, never a silent drop.
+      -- Rank, mean and σ stay in the document's own currency: rate drift
+      -- inside one document currency must never move a ratio or a deviation.
+      -- Each baseline row still carries its presentation-money companion
+      -- (pres_amt at the row's own document-date spot) for the gates ONLY:
+      -- the RSF floor reads the translated 2nd-largest and the z-score floor
+      -- the translated deviation. Partitions stay per (vendor, document
+      -- currency) — no currency ever blends into another's baseline.
       with baseline as materialized (
         select d.party_id, d.currency, abs(d.total) as amount,
           round(abs(d.total) * d.fx_rate * pres_rate, 4) as pres_amt,
           row_number() over w as rn,
           count(*) over w as cnt,
-          avg(round(abs(d.total) * d.fx_rate * pres_rate, 4)) over w as avg_amount,
-          stddev_samp(round(abs(d.total) * d.fx_rate * pres_rate, 4)) over w as std_amount
+          avg(abs(d.total)) over w as avg_amount,
+          stddev_samp(abs(d.total)) over w as std_amount
         from documents d
         left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id,
         lateral (select case when coalesce(s.base_currency, ${presentationCcy}) = ${presentationCcy} then 1
@@ -750,12 +765,14 @@ export async function sentinelData(
           and d.party_id is not null and abs(coalesce(d.total, 0)) > 0
           and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
           and coalesce(d.document_date, d.posting_date) <= ${to}
-        window w as (partition by d.party_id, d.currency order by round(abs(d.total) * d.fx_rate * pres_rate, 4) desc
+        window w as (partition by d.party_id, d.currency order by abs(d.total) desc
                      rows between unbounded preceding and unbounded following)
       ), stats as (
         select party_id, currency,
-          max(pres_amt) filter (where rn = 2) as second_amount,
-          max(cnt) as cnt, max(avg_amount) as avg_amount, max(std_amount) as std_amount
+          max(amount) filter (where rn = 2) as second_amount,
+          max(pres_amt) filter (where rn = 2) as second_pres_amount,
+          max(cnt) as cnt, max(avg_amount) as avg_amount, max(std_amount) as std_amount,
+          stddev_samp(pres_amt) as std_pres_amount
         from baseline group by party_id, currency
       ), period as materialized (
         select d.id, d.document_number, d.kind,
@@ -775,8 +792,11 @@ export async function sentinelData(
           and coalesce(d.document_date, d.posting_date) >= ${from}
           and coalesce(d.document_date, d.posting_date) <= ${to}
       ), rsf as (
-        -- The baseline floor is a noise gate in presentation money: a
-        -- near-zero historical 2nd-largest turns the multiple into noise.
+        -- The multiple compares document-currency amounts; only the noise
+        -- gate reads presentation money (the translated 2nd-largest), so a
+        -- currency's own history decides the multiple while the configured
+        -- floor keeps its meaning in every currency. A missing or zero
+        -- 2nd-largest admits nothing — division needs a positive denominator.
         -- An unset floor refuses the detector: the bound NULL makes every
         -- comparison unknown, the join admits no rows, and rsfUnavailable
         -- names the exclusion in the score and sections.
@@ -784,23 +804,27 @@ export async function sentinelData(
         -- below needs every flagged id — display slices cap client-side.
         select pd.*, s.second_amount::text as second_amount, s.cnt as baseline_count,
           null::text as avg_amount, null::text as std_amount,
-          pd.pres_amt / s.second_amount as metric
+          pd.amount::numeric / s.second_amount as metric
         from period pd
         join stats s on s.party_id = pd.party_id and s.currency = pd.currency
-          and s.second_amount >= ${rsfFloor}::numeric
-        where pd.pres_amt / s.second_amount >= ${cfg.rsfThreshold}
+          and s.second_amount > 0
+          and s.second_pres_amount >= ${rsfFloor}::numeric
+        where pd.amount::numeric / s.second_amount >= ${cfg.rsfThreshold}
         order by metric desc
       ), zs as (
-        -- An unset floor refuses the detector the same way: NULL comparisons
-        -- match nothing and zscoreUnavailable names the exclusion.
+        -- Deviations compare document-currency amounts against the
+        -- document-currency mean and σ; only the σ gate reads presentation
+        -- money (the translated deviation). An unset floor refuses the
+        -- detector the same way: NULL comparisons match nothing and
+        -- zscoreUnavailable names the exclusion.
         select pd.*, null::text as second_amount, s.cnt as baseline_count,
           s.avg_amount::text as avg_amount, s.std_amount::text as std_amount,
-          (pd.pres_amt - s.avg_amount) / s.std_amount as metric
+          (pd.amount::numeric - s.avg_amount) / s.std_amount as metric
         from period pd
         join stats s on s.party_id = pd.party_id and s.currency = pd.currency
-          and s.cnt >= ${cfg.zscoreMinBaseline} and s.std_amount > ${zscoreFloor}::numeric
-        where abs((pd.pres_amt - s.avg_amount) / s.std_amount) >= ${cfg.zscoreThreshold}
-        order by abs((pd.pres_amt - s.avg_amount) / s.std_amount) desc
+          and s.cnt >= ${cfg.zscoreMinBaseline} and s.std_pres_amount > ${zscoreFloor}::numeric
+        where abs((pd.amount::numeric - s.avg_amount) / s.std_amount) >= ${cfg.zscoreThreshold}
+        order by abs((pd.amount::numeric - s.avg_amount) / s.std_amount) desc
       )
       select 'rsf' as src, * from rsf
       union all
@@ -1217,8 +1241,8 @@ export async function sentinelData(
   }
   const trapTotal = trapByTrap.reduce((s, t) => s + t.count, 0);
   const trapUnavailable = flowLimits.length === 0 ? strings.trapUnavailable : null;
-  const rsfUnavailable = rsfFloor === null ? strings.rsfFloorUnset : null;
-  const zscoreUnavailable = zscoreFloor === null ? strings.zscoreFloorUnset : null;
+  const rsfUnavailable = rsfFloor === null ? strings.rsfFloorUnset : statsSpotRefusal;
+  const zscoreUnavailable = zscoreFloor === null ? strings.zscoreFloorUnset : statsSpotRefusal;
   const amountTierUnset =
     cfg.moderateRiskAmount === "" || cfg.highRiskAmount === "" || cfg.criticalRiskAmount === "" ||
     cfg.aggregateHighAmount === "" || cfg.aggregateCriticalAmount === "";
@@ -1341,7 +1365,10 @@ export async function sentinelData(
 
   // ---- RSF ------------------------------------------------------------------------------
   const rsfRules = RISK_SCORING.rsf.rules;
-  const rsfFull = rsfRows.rows as VendorStatisticRow[];
+  // Without spot coverage the gates cannot be verified, so a refused probe
+  // darkens both detectors instead of emitting findings from a partial
+  // baseline. The unavailable flags above name the missing coverage.
+  const rsfFull = statsSpotRefusal !== null ? [] : (rsfRows.rows as VendorStatisticRow[]);
   const rsfItems = rsfFull.map((r) => {
     const rsf = Number(r.rsf);
     const translated = translatedOf(r);
@@ -1367,7 +1394,7 @@ export async function sentinelData(
   // No upper |z| bound: the most extreme outliers are the finding, and the
   // ordering already surfaces them first. Display rounds; it never filters.
   const zRules = RISK_SCORING.zscore.rules;
-  const zFull = zRows.rows as VendorStatisticRow[];
+  const zFull = statsSpotRefusal !== null ? [] : (zRows.rows as VendorStatisticRow[]);
   const zItems = zFull.map((r) => {
     const z = Number(r.z);
     const translated = translatedOf(r);

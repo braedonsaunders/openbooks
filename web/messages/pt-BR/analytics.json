@@ -3598,7 +3598,8 @@
       "trapUnavailable": "Sem limites de valor de aprovação no Flows — adicione uma condição de valor total a um fluxo de despesa no Flows. A faixa de Sentinel apenas estreita a janela em torno de um limite real.",
       "duplicateFloorUnset": "Defina o mínimo de duplicados em Sentinel → Configuração.",
       "rsfFloorUnset": "Defina o piso de referência do tamanho relativo em Sentinel → Configuração.",
-      "zscoreFloorUnset": "Defina o piso de ruído do Z-score em Sentinel → Configuração."
+      "zscoreFloorUnset": "Defina o piso de ruído do Z-score em Sentinel → Configuração.",
+      "spotRateMissing": "Sem cobertura de taxa à vista ({detail}) — importe as taxas diárias ausentes pelo provedor de taxas de câmbio."
     },
     "analysis": {
       "calendar": "Calendário",

@@ -3598,7 +3598,8 @@
       "trapUnavailable": "Flowsに承認金額の条件がありません — 支出対象のフローに合計金額の条件を追加してください。Sentinelバンドは実際の限度周辺の範囲を狭めるだけです。",
       "duplicateFloorUnset": "Sentinel → 設定で重複下限を設定してください。",
       "rsfFloorUnset": "Sentinel → 設定で相対サイズのベースライン下限を設定してください。",
-      "zscoreFloorUnset": "Sentinel → 設定でZスコアのノイズ下限を設定してください。"
+      "zscoreFloorUnset": "Sentinel → 設定でZスコアのノイズ下限を設定してください。",
+      "spotRateMissing": "スポットレートのカバレッジがありません({detail}) — 為替レートプロバイダーから不足している日次レートをインポートしてください。"
     },
     "analysis": {
       "calendar": "カレンダー",

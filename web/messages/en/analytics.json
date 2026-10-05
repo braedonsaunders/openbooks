@@ -3783,7 +3783,8 @@
       "trapUnavailable": "No approval amount limits in Flows — add a total-amount condition to a spend-subject flow in Flows. The Sentinel band only narrows the window around a real limit.",
       "duplicateFloorUnset": "Set the duplicate minimum in Sentinel → Configuration.",
       "rsfFloorUnset": "Set the relative-size baseline floor in Sentinel → Configuration.",
-      "zscoreFloorUnset": "Set the z-score noise floor in Sentinel → Configuration."
+      "zscoreFloorUnset": "Set the z-score noise floor in Sentinel → Configuration.",
+      "spotRateMissing": "No spot-rate coverage ({detail}) — import the missing daily rates through the exchange rate provider."
     },
     "config": {
       "duplicatesNote": "Same vendor, kind, currency, amount and reference within the window; credits excluded; one finding per group",
