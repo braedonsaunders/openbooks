@@ -647,7 +647,7 @@ test("forcing the CAM audit write to fail leaves no partial allocation or status
   }
 });
 
-test("a voided in-window expense with an out-of-window reversal is not billed", { skip: !DB }, async () => {
+test("a void reconciles in the window its reversal posts in, not by erasing the original", { skip: !DB }, async () => {
   const fixture = await seedCamProperty();
   try {
     const actor = await createScratchUser(fixture.org.orgId, "CAM void operator", "admin");
@@ -721,14 +721,25 @@ test("a voided in-window expense with an out-of-window reversal is not billed", 
     await postLedgerExpense(fixture, "1200");
     const created = await createCamPool({
       orgId: fixture.org.orgId, actorId: actor, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
-      name: "CAM void exclusion", fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
+      name: "CAM July", fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
       allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
     });
     await closeGlModule(fixture, actor);
-    // Without the exclusion the voided 1000 would bill (its reversal posts
-    // outside the window): 2200 instead of 1200.
-    const result = await finalizeCamPool(fixture.org.orgId, actor, null, created.id);
-    assert.equal(result.actualAmount, "1200.0000");
+    // July reports the voided 1000 as the July activity it was.
+    const july = await finalizeCamPool(fixture.org.orgId, actor, null, created.id);
+    assert.equal(july.actualAmount, "2200.0000");
+    // The August pool carries the reversal, crediting the tenant there
+    // instead of the void vanishing from every reconciliation.
+    await db.execute(sql`update property_leases set ends_on='2026-08-31' where org_id=${fixture.org.orgId} and property_id=${fixture.propertyId}`);
+    await postLedgerExpense(fixture, "1500", { postingDate: "2026-08-10", periodId: augustId });
+    const augustPool = await createCamPool({
+      orgId: fixture.org.orgId, actorId: actor, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
+      name: "CAM August", fiscalYear: 2026, periodStartsOn: "2026-08-01", periodEndsOn: "2026-08-31",
+      allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+    });
+    await closeGlModule(fixture, actor, augustId);
+    const august = await finalizeCamPool(fixture.org.orgId, actor, null, augustPool.id);
+    assert.equal(august.actualAmount, "500.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }
