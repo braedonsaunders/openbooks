@@ -5,6 +5,7 @@ import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
+import { emitAvailabilityChanged } from "../webhooks/emit.ts";
 import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
@@ -433,7 +434,12 @@ export async function receiveInventory(
 
     return { movementId, entryId, value: assetDelta };
   };
-  return input.tx ? apply(input.tx) : db.transaction(apply);
+  const result = input.tx ? await apply(input.tx) : await db.transaction(apply);
+  // Availability signal joins the caller's transaction when one is open:
+  // a rolled-back movement announces nothing, and repeats in one
+  // transaction coalesce onto one event per item and location.
+  await emitAvailabilityChanged(input.tx ?? db, orgId, input.itemId, input.stockLocationId);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -675,7 +681,11 @@ export async function issueInventory(
     }
     return { movementId, entryId, value: neg(cost) };
   };
-  return input.tx ? apply(input.tx) : db.transaction(apply);
+  const result = input.tx ? await apply(input.tx) : await db.transaction(apply);
+  // Same availability contract as receipts: join the open transaction when
+  // there is one, so a rolled-back issue announces nothing.
+  await emitAvailabilityChanged(input.tx ?? db, orgId, input.itemId, input.stockLocationId);
+  return result;
 }
 
 export interface AdjustInput {

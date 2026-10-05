@@ -9,6 +9,7 @@ import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts"
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
+import { emitDocumentPosted, emitPaymentReceived } from "../webhooks/emit.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
 /**
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
@@ -166,6 +167,15 @@ export async function runPostDocumentEffects(
     }
     if (doc.kind === "customer_payment") {
       await finalizePaymentAcceptanceForDocument(doc.id);
+    }
+    if (!options.suppressAutomation) {
+      // Domain events fan out to webhook subscribers from the posted
+      // snapshot. Emitted here — after the subledger effects — so a
+      // failed effect fails the posting instead of announcing it.
+      await emitDocumentPosted(db, doc.orgId, doc.id);
+      if (doc.kind === "customer_payment") {
+        await emitPaymentReceived(db, doc.orgId, doc.id);
+      }
     }
     if (claimed && !options.alreadyClaimed) {
       await markPostingEffectsSucceeded(claimed);

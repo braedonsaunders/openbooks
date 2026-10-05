@@ -3,6 +3,7 @@ import { db, withBypass, withOrg } from "../platform/db.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { documentBalanceDueLateral } from "../records/balance-due.ts";
 import { cmp } from "../money/money.ts";
+import { emitInvoiceOverdue, minorUnitsOf } from "../webhooks/emit.ts";
 import { enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS } from "../delivery/outbox-enqueue.ts";
 
 /**
@@ -473,6 +474,20 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
           // The grace gate lives inside selectDueStage, where it delays the
           // post-due rungs without ever holding back a pre-due one.
           const daysOverdue = calendarDaysBetween(doc.dueDate, today);
+          if (daysOverdue > 0) {
+            // Subscriber signal joins the tick's transaction: one event per
+            // overdue day per invoice, independent of which ladder rung
+            // fires. Posted invoices carry validated ISO currencies, so an
+            // unknown code below is a corrupt row and refuses loudly.
+            await emitInvoiceOverdue(db, orgId, {
+              id: doc.id,
+              documentNumber: doc.documentNumber,
+              currency: doc.currency ?? "",
+              balanceDueMinor: minorUnitsOf(doc.balanceDue, doc.currency ?? ""),
+              dueDate: doc.dueDate,
+              daysOverdue,
+            }, today);
+          }
 
           const fired = (await db.execute<{ stageId: string }>(sql`
             select stage_id as "stageId" from dunning_log

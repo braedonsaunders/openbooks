@@ -17,6 +17,7 @@ import { denyLockedOutsidePartyScope } from './bank-accounts/party-scope'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 import { notFound } from "@/lib/api/responses";
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
+import { emitCustomerUpdated } from '@openbooks/engine/webhooks'
 
 
 export const runtime = 'nodejs'
@@ -899,6 +900,16 @@ export const PATCH = defineRoute({
           ${user.id}, 'ui'
         )
       `)
+      // Subscriber event joins the save transaction. Only parties holding
+      // an active customer role announce customer.updated — vendor and
+      // employee edits are not customer changes.
+      const isCustomer = (await tx.execute<{ one: number }>(sql`
+        select 1 as one from customer_roles
+         where org_id = ${user.orgId} and party_id = ${id} and is_active limit 1
+      `)).rows[0]
+      if (isCustomer) {
+        await emitCustomerUpdated(tx, user.orgId, id)
+      }
     })
     if (lockedOutcome instanceof NextResponse) return lockedOutcome
   } catch (e: unknown) {
