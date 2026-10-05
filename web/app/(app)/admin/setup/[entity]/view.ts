@@ -52,7 +52,8 @@ import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/r
  * the mapping is spec construction, not a spec-level conditional.
  *
  * The drawer (with its nested sub-tabs and stacked child drawers) and the
- * three bespoke entity pages (company, period-close, fx-provider) arrive
+ * four bespoke entity pages (company, period-close, fx-provider,
+ * tax-provider) arrive
  * through slots in `sections.tsx` that re-derive authz server-side: an org id
  * and row payloads are capabilities, not data, and never travel through a
  * spec. The spec carries only the entity key, the URL, and presence flags.
@@ -90,6 +91,7 @@ export interface SetupEntityData {
   isCompany: boolean
   isPeriodClose: boolean
   isFxProvider: boolean
+  isTaxProvider: boolean
   isRegistryList: boolean
   canReopen: boolean
   currentParams: Record<string, string | string[] | undefined>
@@ -175,6 +177,7 @@ export async function loadSetupEntity(
   const isCompany = entityKey === 'company'
   const isPeriodClose = entityKey === 'period-close'
   const isFxProvider = entityKey === 'fx-provider'
+  const isTaxProvider = entityKey === 'tax-provider'
 
   // Bespoke tabs carry their own gates; the slots re-render the components.
   let canReopen = false
@@ -186,8 +189,8 @@ export async function loadSetupEntity(
     await requireFeatureEnabled(orgId, 'multiCurrency')
   }
 
-  const baseEntity = isCompany || isPeriodClose || isFxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!isCompany && !isPeriodClose && !isFxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed)) {
+  const baseEntity = isCompany || isPeriodClose || isFxProvider || isTaxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
+  if (!isCompany && !isPeriodClose && !isFxProvider && !isTaxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed)) {
     notFound()
   }
   const features = await resolvedFeatureState(orgId)
@@ -266,6 +269,7 @@ export async function loadSetupEntity(
     isCompany,
     isPeriodClose,
     isFxProvider,
+    isTaxProvider,
     isRegistryList,
     canReopen,
     currentParams: sp,
@@ -386,6 +390,10 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
       {
         ...widgetBlock('setup-fx', {}),
         when: f('isFxProvider'),
+      },
+      {
+        ...widgetBlock('setup-tax-provider', {}),
+        when: f('isTaxProvider'),
       },
       {
         ...grid('space-y-4', [

@@ -2255,6 +2255,40 @@
       "runSummary": "{observations} observações · {inserted} inseridas · {updated} atualizadas · {preserved} substituições manuais preservadas",
       "overridePolicy": "Taxas editadas na Configuração tornam-se substituições manuais protegidas. As importações do provedor nunca as substituem."
     },
+    "taxProvider": {
+      "title": "Provedor de alíquotas",
+      "description": "Calcule o imposto sobre vendas com Avalara ou TaxJar, e confirme os documentos lançados para alimentar declarações.",
+      "provider": "Provedor",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "Serviço fiscal próprio",
+        "manual": "Alíquotas manuais"
+      },
+      "providerHelp": {
+        "avalara": "Cota com SalesOrder e confirma com SalesInvoice. Anular um documento envia uma anulação.",
+        "taxjar": "Cota o imposto de um pedido e confirma pedidos e reembolsos. Anular um documento o exclui.",
+        "custom_http": "Seu próprio serviço fiscal por trás do contrato do provedor. As confirmações seguem as mesmas regras de repetição.",
+        "manual": "Sem provedor. O imposto é lançado a partir dos seus próprios códigos e nada é confirmado."
+      },
+      "displayName": "Nome da configuração",
+      "displayNamePlaceholder": "Conta AvaTax de produção",
+      "enabled": "Usar este provedor para cotar impostos",
+      "commitTransactions": "Confirmar as vendas lançadas ao provedor",
+      "commitHelp": "Lançar uma fatura, nota de crédito, venda à vista ou reembolso envia a transação ao provedor; anular envia uma anulação. Desative para continuar cotando sem confirmar.",
+      "saved": "Provedor de alíquotas salvo.",
+      "advanced": "Avançado",
+      "advancedSummary": "Preferência de cotação: {prefer}",
+      "preferOn": "provedor primeiro",
+      "preferOff": "códigos próprios primeiro",
+      "preferProvider": "Preferir o provedor aos seus próprios códigos",
+      "preferProviderHelp": "Quando ambos puderem calcular uma linha, o provedor vence. Seus próprios códigos ficam como reserva.",
+      "status": "Estado do provedor",
+      "lastSuccess": "Última chamada bem-sucedida",
+      "commitState": "Confirmações",
+      "commitOn": "Sim",
+      "commitOff": "Não"
+    },
     "paymentOperations": {
       "title": "Pagamentos e Bancos",
       "description": "Configure canais de pagamento, perfis de financiamento, agendas, aprovações, entrega e mandatos de débito.",
@@ -2497,6 +2531,11 @@
         "title": "Códigos de Imposto",
         "singularTitle": "Código de Imposto",
         "description": "Alíquotas que você cobra e paga, e as contas em que são lançadas."
+      },
+      "marketplace-facilitators": {
+        "title": "Facilitadores de marketplace",
+        "singularTitle": "Facilitador de marketplace",
+        "description": "Marketplaces que arrecadam e recolhem o imposto por você, e a conta de compensação para a qual o imposto é liquidado."
       },
       "tax-rates": {
         "title": "Alíquotas de Imposto",
@@ -3894,7 +3933,13 @@
         "collected": "Imposto arrecadado (saída)",
         "paid": "Imposto pago / créditos (entrada)",
         "net": "Valor líquido",
-        "tax": "Valor do imposto"
+        "tax": "Valor do imposto",
+        "marketplaceTax": "Imposto arrecadado pelo marketplace (informado, não devido)",
+        "marketplaceSales": "Vendas do marketplace nas declarações estaduais"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "O marketplace arrecada o imposto e o liquida",
+        "net": "O documento já é líquido do imposto do marketplace"
       },
       "sign": {
         "positive": "Somar (+)",

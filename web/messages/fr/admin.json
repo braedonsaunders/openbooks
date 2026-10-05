@@ -2210,6 +2210,40 @@
       "runSummary": "{observations} observations · {inserted} insérés · {updated} mis à jour · {preserved} remplacements manuels conservés",
       "overridePolicy": "Les taux modifiés dans Configuration deviennent des remplacements manuels protégés. Les importations ne les remplacent jamais."
     },
+    "taxProvider": {
+      "title": "Fournisseur de taux de taxe",
+      "description": "Chiffrez la taxe de vente avec Avalara ou TaxJar, et validez les documents comptabilisés pour alimenter déclarations.",
+      "provider": "Fournisseur",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "Service fiscal propre",
+        "manual": "Taux manuels"
+      },
+      "providerHelp": {
+        "avalara": "Chiffre avec SalesOrder et valide avec SalesInvoice. Annuler un document envoie une annulation.",
+        "taxjar": "Chiffre la taxe d'une commande et valide commandes et remboursements. Annuler un document le supprime.",
+        "custom_http": "Votre propre service fiscal derrière le contrat du fournisseur. Les validations suivent les mêmes règles de réessai.",
+        "manual": "Aucun fournisseur. La taxe est comptabilisée depuis vos propres codes et rien n'est validé."
+      },
+      "displayName": "Nom de la configuration",
+      "displayNamePlaceholder": "Compte AvaTax de production",
+      "enabled": "Utiliser ce fournisseur pour chiffrer les taxes",
+      "commitTransactions": "Valider les ventes comptabilisées auprès du fournisseur",
+      "commitHelp": "Comptabiliser une facture, un avoir, une vente au comptant ou un remboursement envoie la transaction au fournisseur ; annuler envoie une annulation. Désactivez pour continuer à chiffrer sans valider.",
+      "saved": "Fournisseur de taux enregistré.",
+      "advanced": "Avancé",
+      "advancedSummary": "Préférence de chiffrage : {prefer}",
+      "preferOn": "fournisseur d'abord",
+      "preferOff": "codes propres d'abord",
+      "preferProvider": "Préférer le fournisseur à vos propres codes",
+      "preferProviderHelp": "Quand les deux pourraient chiffrer une ligne, le fournisseur l'emporte. Vos propres codes restent le recours.",
+      "status": "État du fournisseur",
+      "lastSuccess": "Dernier appel réussi",
+      "commitState": "Validations",
+      "commitOn": "Oui",
+      "commitOff": "Non"
+    },
     "paymentOperations": {
       "title": "Paiements et services bancaires",
       "description": "Configurez les réseaux de paiement, les profils bancaires, les calendriers, les approbations, la livraison et les mandats de prélèvement.",
@@ -2442,6 +2476,11 @@
         "title": "Codes de taxe",
         "singularTitle": "Code de taxe",
         "description": "Les taux que vous facturez et payez, ainsi que les comptes auxquels ils sont imputés."
+      },
+      "marketplace-facilitators": {
+        "title": "Facilitateurs de place de marché",
+        "singularTitle": "Facilitateur de place de marché",
+        "description": "Places de marché qui collectent et reversent la taxe pour vous, et le compte de compensation sur lequel leur taxe est réglée."
       },
       "tax-rates": {
         "title": "Taux de taxe",
@@ -3797,7 +3836,13 @@
         "collected": "Taxe perçue (extrant)",
         "paid": "Taxe payée / CTI (intrant)",
         "net": "Montant net",
-        "tax": "Montant fiscal"
+        "tax": "Montant fiscal",
+        "marketplaceTax": "Taxe collectée par la place de marché (déclarée, non due)",
+        "marketplaceSales": "Ventes de la place de marché dans les déclarations"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "La place de marché collecte la taxe et la règle",
+        "net": "Le document est déjà net de la taxe de la place de marché"
       },
       "sign": {
         "positive": "Ajouter (+)",

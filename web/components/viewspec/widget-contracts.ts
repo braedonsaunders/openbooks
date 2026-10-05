@@ -502,6 +502,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'setup-readiness-check-card': { props: ['action', 'description', 'href', 'indexLabel', 'state', 'stateLabel', 'title'] },
   'setup-readiness-hero': { props: ['badgeLabel', 'badgeReady', 'description', 'kicker', 'progressLabel', 'progressMax', 'progressMin', 'progressNow', 'progressOf', 'progressPercent', 'title'] },
   'setup-section': { props: ['basePath', 'entityKey', 'rowParam', 'sp'] },
+  'setup-tax-provider': { props: [] },
   'setup-wizard': { props: [], open: true },
   'shipment-drawer': { props: ['drawer'] },
   'show-inactives-toggle': { props: ['basePath', 'currentParams'] },

@@ -126,6 +126,63 @@ export async function resolveMarketplaceClearing(
   return out;
 }
 
+/**
+ * Setup-registry write validation: merge the incoming body over the current
+ * row (partial edits send only changed keys) and enforce the full write
+ * invariant — input shape plus clearing-account suitability — before the
+ * generic writer lands it. Throws TaxMarketplaceError with the remedy.
+ */
+export async function validateMarketplaceFacilitatorWrite(
+  runner: Runner,
+  orgId: string,
+  body: Record<string, unknown>,
+  rowId: string | null,
+): Promise<void> {
+  const current = rowId
+    ? (await runner.execute<{
+        name: string;
+        clearingAccountId: string;
+        mode: MarketplaceCollectionMode;
+        states: string[] | null;
+        isActive: boolean;
+      }>(sql`
+        select name, clearing_account_id as "clearingAccountId",
+               collection_mode as mode, states, is_active as "isActive"
+          from marketplace_facilitators where id = ${rowId} and org_id = ${orgId}
+      `)).rows[0]
+    : null;
+  if (rowId && !current) {
+    throw new TaxMarketplaceError("that marketplace facilitator no longer exists — refresh the setup list and try again");
+  }
+  const merged: SaveMarketplaceFacilitatorInput = {
+    name: body.name === undefined ? (current?.name ?? "") : String(body.name),
+    clearingAccountId:
+      body.clearingAccountId === undefined
+        ? (current?.clearingAccountId ?? "")
+        : String(body.clearingAccountId),
+    collectionMode:
+      body.collectionMode === undefined
+        ? (current?.mode ?? "gross")
+        : (body.collectionMode as MarketplaceCollectionMode),
+    states:
+      body.states === undefined
+        ? (current?.states ?? [])
+        : Array.isArray(body.states)
+          ? body.states.map(String)
+          : [],
+    isActive:
+      body.isActive === undefined ? (current?.isActive ?? true) : body.isActive !== false,
+  };
+  validateMarketplaceFacilitatorInput(merged);
+  await assertSuitableClearingAccount(
+    runner,
+    orgId,
+    merged.name.trim(),
+    merged.clearingAccountId,
+    "pick an active asset account that is not a tax control account",
+  );
+}
+
 export interface SaveMarketplaceFacilitatorInput {
   id?: string;
   name: string;

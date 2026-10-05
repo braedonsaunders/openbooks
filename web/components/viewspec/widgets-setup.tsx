@@ -29,7 +29,7 @@ import { AutomationBuilder } from '../../app/(app)/admin/automations/[id]/Automa
 import { AutomationLastRunCell, AutomationNameCell, AutomationApprovalSettingsSection, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
 import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
 import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
-import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot } from '../../app/(app)/admin/setup/[entity]/sections'
+import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot, SetupTaxProviderSlot } from '../../app/(app)/admin/setup/[entity]/sections'
 import { FormDesigner, NewFormButton } from '../../app/(app)/admin/customization/FormDesigner'
 import { ListViewDesigner, NewViewButton as NewListViewButton } from '../../app/(app)/admin/customization/ListViewDesigner'
 import { CustomizationTabs, FormDefaultCell, ViewScopeCell } from '../../app/(app)/admin/customization/sections'
@@ -523,4 +523,5 @@ export const SETUP_WIDGETS = {
     />
   ),
   'setup-fx': () => <SetupFxSlot />,
+  'setup-tax-provider': () => <SetupTaxProviderSlot />,
 } satisfies Record<string, WidgetRenderer>

@@ -2255,6 +2255,40 @@
       "runSummary": "{observations} 条观测值 · 插入 {inserted} 条 · 更新 {updated} 条 · 保留 {preserved} 处手动覆盖",
       "overridePolicy": "在“设置”中编辑的汇率会成为受保护的手动覆盖。服务商导入绝不会替换它们。"
     },
+    "taxProvider": {
+      "title": "税率服务商",
+      "description": "使用 Avalara 或 TaxJar 计算销售税，并将已过账单据提交，以便生成申报表。",
+      "provider": "服务商",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "自有税务服务",
+        "manual": "手动税率"
+      },
+      "providerHelp": {
+        "avalara": "用 SalesOrder 询价，用 SalesInvoice 提交。作废单据会发送作废指令。",
+        "taxjar": "为订单计算税款并提交订单与退款。作废单据会将其删除。",
+        "custom_http": "服务商合约背后的自有税务服务。提交遵循相同的重试规则。",
+        "manual": "无服务商。税款按自有税码过账，不会向任何地方提交。"
+      },
+      "displayName": "配置名称",
+      "displayNamePlaceholder": "生产 AvaTax 账户",
+      "enabled": "使用此服务商进行税款询价",
+      "commitTransactions": "将已过账销售提交给服务商",
+      "commitHelp": "过账销售发票、贷项通知单、现金销售或退款会将交易发送给服务商；作废会发送作废指令。关闭则只询价不提交。",
+      "saved": "税率服务商已保存。",
+      "advanced": "高级",
+      "advancedSummary": "询价偏好：{prefer}",
+      "preferOn": "服务商优先",
+      "preferOff": "自有税码优先",
+      "preferProvider": "优先于自有税码使用服务商",
+      "preferProviderHelp": "当两者都能为明细定价时，服务商胜出。自有税码保留为后备。",
+      "status": "服务商状态",
+      "lastSuccess": "上次成功调用",
+      "commitState": "提交",
+      "commitOn": "开",
+      "commitOff": "关"
+    },
     "paymentOperations": {
       "title": "付款与银行业务",
       "description": "配置付款通道、资金档案、计划、审批、交付和扣款授权。",
@@ -2497,6 +2531,11 @@
         "title": "税码",
         "singularTitle": "税码",
         "description": "你收取和支付的税率，以及它们过账所至的科目。"
+      },
+      "marketplace-facilitators": {
+        "title": "平台代收方",
+        "singularTitle": "平台代收方",
+        "description": "代你代收代缴税款的平台，以及税款结算所用的清算科目。"
       },
       "tax-rates": {
         "title": "税率",
@@ -3894,7 +3933,13 @@
         "collected": "已收税额（销项）",
         "paid": "已付税额 / 进项税额抵扣（进项）",
         "net": "净额",
-        "tax": "税额"
+        "tax": "税额",
+        "marketplaceTax": "平台代收税（仅申报，不欠缴）",
+        "marketplaceSales": "州申报表中的平台销售额"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "平台代收税款并结算",
+        "net": "单据已为扣除平台税后的净额"
       },
       "sign": {
         "positive": "加（+）",
