@@ -527,7 +527,7 @@ test('profile POST validates pack-declared employee facts against the declaratio
     for (const [label, patch, status, message] of [
       ['PL birth year', { country: 'PL', province: 'PL', plRokUrodzenia: 1990 }, 200, null],
       ['PL birth year band', { country: 'PL', province: 'PL', plRokUrodzenia: 1850 }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
-      ['PL birth year unreadable', { country: 'PL', province: 'PL', plRokUrodzenia: 'sometime' }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
+      ['PL birth year unreadable', { country: 'PL', province: 'PL', plRokUrodzenia: 'sometime' }, 422, /Birth year \(rok urodzenia\) must be a whole number — "sometime" is not a number/],
       ['ES trio', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990, esContratoTemporal: 'false' }, 200, null],
       ['ES contrato closed', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990, esContratoTemporal: 'yes' }, 422, /Contrato temporal must be answered "true" or "false"/],
       ['ES grupo band', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 12, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
@@ -538,6 +538,8 @@ test('profile POST validates pack-declared employee facts against the declaratio
       ['JP grade and status', { country: 'JP', province: '13', jpHyojunHoshu: 360000, jpKaigoDainigou: 'false' }, 200, null],
       ['JP grade whole yen', { country: 'JP', province: '13', jpHyojunHoshu: -5, jpKaigoDainigou: 'false' }, 422, /must be a whole number at least 0/],
       ['JP kaigo closed', { country: 'JP', province: '13', jpHyojunHoshu: 360000, jpKaigoDainigou: 'yes' }, 422, /must be answered "true" or "false"/],
+      ['JP grade thousands separator', { country: 'JP', province: '13', jpHyojunHoshu: '300,000', jpKaigoDainigou: 'false' }, 422, /is ambiguous — "300,000" could mean 300000/],
+      ['JP grade cleared', { country: 'JP', province: '13', jpHyojunHoshu: null, jpKaigoDainigou: 'false' }, 422, /is required and is on file as 360000; this save would clear it/],
       ['BR dependentes and pensao', { country: 'BR', province: 'BR', brDependentes: 2, brPensaoMensal: '1500.00' }, 200, null],
       ['BR dependentes floor', { country: 'BR', province: 'BR', brDependentes: -1 }, 422, /Dependentes \(eSocial cadastro\) must be a whole number at least 0/],
       ['BR pensao unreadable', { country: 'BR', province: 'BR', brDependentes: 0, brPensaoMensal: 'abc' }, 422, /Pensão alimentícia mensal \(court-ordered\) must be an amount — "abc" is not a number/],
