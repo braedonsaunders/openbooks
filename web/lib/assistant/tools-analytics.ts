@@ -670,7 +670,11 @@ const sentinelTool: AssistantToolDef = {
         meta: r.meta,
         summary: r.summary,
         config: r.config,
-        duplicates: { total: r.duplicates.total, pairs: capList(r.duplicates.pairs, 50) },
+        duplicates: {
+          total: r.duplicates.total,
+          pairs: capList(r.duplicates.pairs, 50),
+          unavailable: r.duplicates.unavailable,
+        },
         benford1D: {
           totalTransactions: r.benford1D.totalTransactions,
           mad: r.benford1D.mad,
@@ -689,6 +693,7 @@ const sentinelTool: AssistantToolDef = {
           totalAmount: numberValue(r.thresholdTrap.totalAmount),
           byTrap: capList(r.thresholdTrap.byTrap, 50),
           items: capList(r.thresholdTrap.items, 50),
+          unavailable: r.thresholdTrap.unavailable,
         },
         weekend: {
           total: r.weekend.total,
@@ -697,8 +702,8 @@ const sentinelTool: AssistantToolDef = {
           sunday: r.weekend.sunday,
           items: capList(r.weekend.items, 50),
         },
-        rsf: { total: r.rsf.total, items: capList(r.rsf.items, 50) },
-        zscore: { total: r.zscore.total, items: capList(r.zscore.items, 50) },
+        rsf: { total: r.rsf.total, items: capList(r.rsf.items, 50), unavailable: r.rsf.unavailable },
+        zscore: { total: r.zscore.total, items: capList(r.zscore.items, 50), unavailable: r.zscore.unavailable },
         sequential: capList(
           r.sequential.map((g) => ({
             partyId: g.partyId,
