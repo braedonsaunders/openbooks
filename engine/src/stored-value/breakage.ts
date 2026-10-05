@@ -181,6 +181,7 @@ type ScanCandidate = {
 /** Orgs with the gate on, resolved through the same machinery the Features
  * page uses. */
 export async function storedValueBreakageTargets(): Promise<string[]> {
+  // bypass: scheduler-tick — the breakage scan finds due stored-value work across every organization.
   const rows = (await withBypassContext(() => db.execute<{ id: string; settings: unknown }>(sql`
     select id, settings from orgs
   `))).rows;

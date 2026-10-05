@@ -1716,7 +1716,7 @@ export async function receiveTrackerDelivery(
   const adapter = adapterFor(provider);
   const parsed = adapter.parseInboundEvent(safeJsonParse(rawBody));
   if (!parsed) return { status: "ignored" };
-  // bypass: connector-tracker — see the docblock above.
+  // bypass: connector-token — a sessionless tracker delivery names only provider refs; see the docblock above.
   const orgId = await withBypassContext(() => resolveTrackerOrgId(provider, parsed.tracker));
   if (!orgId) return { status: "ignored" };
   return withOrgContext(orgId, () => db.transaction((tx) =>
