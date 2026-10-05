@@ -6,7 +6,6 @@ import {
   type CarrierBoughtLabel,
   type CarrierContext,
   CarrierError,
-  type CarrierCustomsItem,
   type CarrierInboundEvent,
   type CarrierRate,
   type CarrierRateOption,
