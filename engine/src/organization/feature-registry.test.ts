@@ -40,6 +40,24 @@ test("allocations is an opt-in accounting feature with no nav modules", () => {
   assert.equal(featureEnabled({ allocations: true }, "allocations"), true);
 });
 
+test("contract costs are opt-in sales subordinate to revenue recognition", () => {
+  const def = FEATURE_BY_KEY.get("contractCosts");
+  assert.ok(def, "contractCosts must be registered before contract cost routes gate on it");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.category, "sales");
+  assert.deepEqual(def.navModules ?? [], []);
+  assert.deepEqual(def.requiresAll, ["revenueRecognition"]);
+  assert.equal(featureEnabled({}, "contractCosts"), false);
+  // A stale stored override can never light the child while the parent is off
+  // (the default-on parent resolves on when untouched, so the refusal needs
+  // an explicit off).
+  assert.equal(featureEnabled({ revenueRecognition: false, contractCosts: true }, "contractCosts"), false);
+  assert.equal(
+    featureEnabled({ revenueRecognition: true, contractCosts: true }, "contractCosts"),
+    true,
+  );
+});
+
 test("allocation binding-moment gates are subordinate to the parent", () => {
   for (const key of ["allocationsAtEntry", "allocationsAtPosting"]) {
     const def = FEATURE_BY_KEY.get(key);

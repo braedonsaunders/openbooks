@@ -1055,6 +1055,7 @@
       "ar": "Accounts receivable",
       "stored_value": "Stored value",
       "usage": "Usage billing",
+      "contract-costs": "Contract costs",
       "autopay": "Autopay",
       "reports": "Reports",
       "budgets": "Budgets & forecasts",
@@ -1108,6 +1109,9 @@
     "usage_read": "View metered usage",
     "usage_manage": "Manage usage meters, rating plans, and imported usage records",
     "usage_bill": "Rate usage and bill subscription charges",
+    "contract_costs_read": "View capitalized contract costs",
+    "contract_costs_manage": "Capitalize costs and run amortization",
+    "contract_costs_approve": "Approve impairment and policy changes",
     "payment_methods_read": "View stored payment methods",
     "payment_methods_manage": "Add, set default, and remove stored payment methods",
     "autopay_manage": "Manage autopay enrollment, retries, and suspension",
@@ -5911,6 +5915,10 @@
     "revenueRecognition": {
       "title": "Revenue recognition",
       "description": "Recognition rules, schedules, and deferred revenue for contracts."
+    },
+    "contractCosts": {
+      "title": "Contract costs",
+      "description": "Capitalized sales commissions amortized over the contract or customer life (ASC 340-40)."
     },
     "projects": {
       "title": "Projects & job costing",

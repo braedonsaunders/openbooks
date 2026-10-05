@@ -152,6 +152,48 @@ test("autopay permissions are catalogued, grouped, and granted by duty", () => {
 });
 
 /**
+ * Capitalized contract costs (ASC 340-40): read sees policies, assets and
+ * amortization; manage capitalizes, links and runs amortization; approve
+ * recognizes impairment and changes policy. The controller owns the module
+ * including approval, the accountant does day-to-day work without approval
+ * power, the approver reviews (read + approve), and the viewer only reads.
+ */
+test("contract cost permissions are catalogued, grouped, and granted by duty", () => {
+  const keys: CataloguePermission[] = ["contract_costs.read", "contract_costs.manage", "contract_costs.approve"];
+  for (const perm of keys) {
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
+      `${perm} must be seeded so someone can hold it`,
+    );
+    assert.equal(permissionLabelKey(perm), `permissions.${perm.replace(/\./g, "_")}`);
+  }
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "contract-costs");
+  assert.ok(group, "contract costs need their own catalogue group for the role picker");
+  assert.equal(group.labelKey, "permissions.groups.contract-costs");
+  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const perm of keys) {
+    assert.equal(holds("controller", perm), true, `controller must hold ${perm}`);
+  }
+  for (const perm of ["contract_costs.read", "contract_costs.manage"]) {
+    assert.equal(holds("accountant", perm), true, `accountant must hold ${perm}`);
+  }
+  assert.equal(holds("accountant", "contract_costs.approve"), false, "accountant must not approve impairment");
+  assert.equal(holds("approver", "contract_costs.read"), true);
+  assert.equal(holds("approver", "contract_costs.approve"), true);
+  assert.equal(holds("approver", "contract_costs.manage"), false, "approver must not capitalize costs");
+  assert.equal(holds("viewer", "contract_costs.read"), true);
+  assert.equal(holds("viewer", "contract_costs.manage"), false);
+  for (const role of ["sales_manager", "sales_rep"]) {
+    assert.equal(holds(role, "contract_costs.read"), false, `${role} must not see capitalized costs`);
+    assert.equal(holds(role, "contract_costs.manage"), false, `${role} must not capitalize costs`);
+  }
+  assert.equal(holds("admin", "contract_costs.approve"), true);
+});
+
+/**
  * HRM employment foundation slice plus the headcount-plan slice: read sees
  * records, manage authors changes, approve decides them (self-approval
  * refused in engine/src/hrm/authorization.ts); position read sees the

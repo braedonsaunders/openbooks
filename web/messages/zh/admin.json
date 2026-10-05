@@ -1067,6 +1067,7 @@
       "ar": "应收账款",
       "stored_value": "储值",
       "usage": "按用量计费",
+      "contract-costs": "合同成本",
       "autopay": "自动扣款",
       "reports": "报表",
       "budgets": "预算与预测",
@@ -1119,6 +1120,9 @@
     "usage_read": "查看计量用量",
     "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
     "usage_bill": "为用量定价并开具订阅费用账单",
+    "contract_costs_read": "查看资本化合同成本",
+    "contract_costs_manage": "资本化成本并运行摊销",
+    "contract_costs_approve": "批准减值和政策变更",
     "payment_methods_read": "查看保存的付款方式",
     "payment_methods_manage": "添加、设为默认和删除保存的付款方式",
     "autopay_manage": "管理自动扣款注册、重试和暂停",
@@ -5919,6 +5923,10 @@
     "revenueRecognition": {
       "title": "收入确认",
       "description": "合同的确认规则、计划与递延收入。"
+    },
+    "contractCosts": {
+      "title": "合同成本",
+      "description": "在合同期或客户生命周期内摊销的资本化销售佣金（ASC 340-40）。"
     },
     "projects": {
       "title": "项目与成本核算",

@@ -1067,6 +1067,7 @@
       "ar": "売掛金",
       "stored_value": "ストアドバリュー",
       "usage": "従量課金",
+      "contract-costs": "契約コスト",
       "autopay": "自動引き落とし",
       "reports": "レポート",
       "budgets": "予算と予測",
@@ -1119,6 +1120,9 @@
     "usage_read": "計測された利用量を表示",
     "usage_manage": "使用量メーター、料金プラン、インポートした使用量レコードを管理",
     "usage_bill": "使用量を料金計算し、サブスクリプション料金を請求",
+    "contract_costs_read": "資産化された契約コストを表示",
+    "contract_costs_manage": "コストを資産化し償却を実行",
+    "contract_costs_approve": "減損とポリシー変更を承認",
     "payment_methods_read": "保存した支払方法を表示",
     "payment_methods_manage": "保存した支払方法の追加、デフォルト設定、削除",
     "autopay_manage": "自動引き落としの登録、リトライ、利用停止を管理",
@@ -6135,6 +6139,10 @@
     "revenueRecognition": {
       "description": "契約向けの認識ルール・スケジュール・前受収益です。",
       "title": "収益認識"
+    },
+    "contractCosts": {
+      "title": "契約コスト",
+      "description": "契約または顧客ライフにわたり償却する資産化された販売手数料（ASC 340-40）。"
     },
     "subcontractorCompliance": {
       "description": "保険証券・留置権放棄書・1099-NEC/MISCとT4Aの情報申告書を、下請業者の保証失効時の支払停止付きで管理します。",
