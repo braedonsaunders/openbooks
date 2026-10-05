@@ -71,7 +71,9 @@ async function setDuplicateFloor(orgId: string) {
       || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
         || jsonb_build_object('sentinel', '{"duplicateMinAmount": "100.00", "duplicateDays": 14}'::jsonb))
       where id = ${orgId}`);
-    assert.equal((await analyticsConfig(orgId, 'sentinel')).duplicateMinAmount, '100.00');
+    // The reader canonicalizes money to four decimals: '100.00' reads back
+    // '100.0000'. Asserting the canonical form proves the floor resolved.
+    assert.equal((await analyticsConfig(orgId, 'sentinel')).duplicateMinAmount, '100.0000');
   });
 }
 

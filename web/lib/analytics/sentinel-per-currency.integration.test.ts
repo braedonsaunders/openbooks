@@ -100,7 +100,10 @@ test('sentinel RSF baselines never cross document currencies', { skip: !env.OPEN
       ...flatBaseline('RSF-B'),
       { num: 'RSF-B-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'RSF-B-C1' },
     ])
-    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.00' })
+    // Money reads back canonicalized to four decimals, so the configured
+    // floors below are written canonically — the read-back loop in
+    // configureSentinel asserts the resolved value.
+    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.0000' })
     const data = await runSentinel(org.orgId)
     // Exactly one RSF finding: the genuine same-currency outlier.
     assert.equal(data.rsf.total, 1)
@@ -128,7 +131,7 @@ test('sentinel z-scores run per currency so foreign bills cannot mask outliers',
       { num: 'Z-USD', currency: 'USD', fx: '1.35', total: '150', date: '2026-07-10', ref: 'Z-U1' },
       { num: 'Z-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'Z-C1' },
     ])
-    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.00', zscoreSigmaFloor: '1.00' })
+    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.0000', zscoreSigmaFloor: '1.0000' })
     const data = await runSentinel(org.orgId)
     const hits = data.zscore.items.filter((i) => cmp(i.amount, '150') === 0)
     assert.equal(hits.length, 1)
