@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "Ligne {line}",
+    "kitComponent": "Composant de {kit} · ligne de commande {line}",
     "lot": "N° de lot {lot}",
     "serial": "N° de série {serial}",
     "actionsFor": "Actions de la ligne {line}",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · {onHand} en stock",
     "noLines": "Saisissez une quantité sur au moins une ligne à prélever.",
     "binRequired": "Choisissez un emplacement pour la ligne de commande {line}.",
+    "pickComponentsBelow": "Préparé par composant — saisissez les quantités sur les lignes de composants ci-dessous.",
+    "kitComponent": "Composant de {kit} · ligne {line}",
+    "componentPrecision": "Ligne {line} : les quantités de composants ont quatre décimales au maximum.",
     "created": "Liste de prélèvement {number} créée.",
     "failed": "La liste de prélèvement n’a pas pu être créée."
   },

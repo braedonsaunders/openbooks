@@ -204,6 +204,26 @@
       "software": "Software (Residual)"
     }
   },
+  "kit": {
+    "tab": "Komponenten",
+    "loading": "Kit-Rezept wird geladen…",
+    "loadFailed": "Das Kit-Rezept konnte nicht geladen werden.",
+    "noRecipeSummary": "Noch kein Rezept – das Kit kann erst verkauft werden, wenn es Komponenten hat.",
+    "recipeSummary": "Bündel aus {count}: {parts}",
+    "availableBadge": "{count} verfügbar",
+    "addComponents": "Komponenten hinzufügen",
+    "editComponents": "Komponenten bearbeiten",
+    "emptyTitle": "Noch keine Komponenten",
+    "emptyDescription": "Ein Kit verkauft seine Komponenten: Legen Sie fest, was in einem Kit enthalten ist, damit es verkaufbar wird.",
+    "consequence": "Beim Verkauf werden die Komponenten versendet – das Kit selbst wird nie gelagert, und der Erlös bleibt beim Kit.",
+    "component": "Komponente",
+    "perKit": "Pro Kit",
+    "availabilityTitle": "Verfügbarkeitsdetails",
+    "availabilitySummary": "{count} über alle Standorte verkaufbar",
+    "onHand": "Bestand",
+    "committed": "Reserviert",
+    "available": "Verfügbar"
+  },
   "costing": {
     "title": "Bestandsbewertung",
     "description": "Wie der Bestand dieses Artikels bewertet und verfolgt wird — Methode, Konten und Meldebestände.",

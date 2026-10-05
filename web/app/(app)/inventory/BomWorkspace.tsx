@@ -127,23 +127,43 @@ export function BomWorkspace({
   )
 }
 
-function BomDrawer({
+/**
+ * The bill-of-materials editor, shared by the inventory workspace and the
+ * kit tab of the item drawer. A fixed assembly locks the editor onto one
+ * parent (a kit) with its own close destination and save callback, so the
+ * operator edits components in context instead of leaving the record.
+ */
+export function BomDrawer({
   assembly,
   assemblies,
   items,
+  fixedAssemblyItemId,
+  fixedAssemblyLabel,
+  closeHref,
+  stacked,
+  hideManufacturingFields,
+  onSaved,
 }: {
   assembly: BomAssembly | null
   assemblies: BomAssembly[]
   items: ItemOption[]
+  fixedAssemblyItemId?: string
+  fixedAssemblyLabel?: string
+  closeHref?: string
+  stacked?: boolean
+  /** Kits ship exactly the quantities named: manufacturing recipe features
+   *  are refused server-side for them, so the editor hides those columns. */
+  hideManufacturingFields?: boolean
+  onSaved?: () => void
 }) {
   const tSetup = useTranslations('admin.setup')
   const tInventory = useTranslations('inventory')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const creating = assembly === null
+  const creating = assembly === null && !fixedAssemblyItemId
   const [manufacturingEnabled, setManufacturingEnabled] = useState(false)
   const [detailReady, setDetailReady] = useState(false)
-  const [assemblyItemId, setAssemblyItemId] = useState(assembly?.assemblyItemId ?? '')
+  const [assemblyItemId, setAssemblyItemId] = useState(fixedAssemblyItemId ?? assembly?.assemblyItemId ?? '')
   const [lines, setLines] = useState<EditableBomLine[]>(() =>
     assembly?.components.map((line) => editableLine(line)) ?? [editableLine()],
   )
@@ -157,7 +177,8 @@ function BomDrawer({
     let current = true
     async function loadBom() {
       try {
-        const query = assembly ? `?assemblyItemId=${encodeURIComponent(assembly.assemblyItemId)}` : ''
+        const targetId = fixedAssemblyItemId ?? assembly?.assemblyItemId ?? ''
+        const query = targetId ? `?assemblyItemId=${encodeURIComponent(targetId)}` : ''
         const res = await fetch(`/api/inventory/bom${query}`)
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
@@ -183,7 +204,7 @@ function BomDrawer({
     }
     void loadBom()
     return () => { current = false }
-  }, [assembly, tCommon])
+  }, [assembly, fixedAssemblyItemId, tCommon])
   const closeGuard = useDirtyClose({
     dirty: assemblyItemId !== (assembly?.assemblyItemId ?? '') ||
       JSON.stringify(lines) !== JSON.stringify(originalLines) || reason !== '',
@@ -191,6 +212,7 @@ function BomDrawer({
     message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
   })
 
+  const showManufacturing = manufacturingEnabled && !hideManufacturingFields
   const usedAssemblies = new Set(assemblies.map((candidate) => candidate.assemblyItemId))
   const assemblyOptions = items
     .filter((item) => item.id === assemblyItemId || !usedAssemblies.has(item.id))
@@ -231,7 +253,7 @@ function BomDrawer({
       type: 'text',
       placeholder: 'YYYY-MM-DD',
     },
-    ...(manufacturingEnabled ? [
+    ...(showManufacturing ? [
       {
         key: 'operationSeq',
         label: tInventory('bom.columns.operationSeq'),
@@ -249,7 +271,7 @@ function BomDrawer({
       decimalScale: 4,
       align: 'right',
     },
-    ...(manufacturingEnabled ? [
+    ...(showManufacturing ? [
       {
         key: 'isByproduct',
         label: tInventory('bom.columns.isByproduct'),
@@ -261,7 +283,7 @@ function BomDrawer({
         ],
       },
     ] : []),
-  ], [componentOptions, manufacturingEnabled, tInventory, tSetup])
+  ], [componentOptions, showManufacturing, tInventory, tSetup])
 
   async function save() {
     const clean = lines.filter((line) => line.componentItemId || line.quantityPer)
@@ -295,7 +317,7 @@ function BomDrawer({
             effectiveFrom: line.effectiveFrom || null,
             effectiveTo: line.effectiveTo || null,
             scrapPct: line.scrapPct || null,
-            ...(manufacturingEnabled ? {
+            ...(showManufacturing ? {
               operationSeq: line.operationSeq ? Number(line.operationSeq) : null,
               isByproduct: line.isByproduct === 'true',
             } : {}),
@@ -315,7 +337,11 @@ function BomDrawer({
         throw new Error(typeof data.error === 'string' && data.error.trim() ? data.error : tCommon('feedback.saveFailed'))
       }
       toast.success(creating ? tSetup('created') : tSetup('updated'))
-      router.push('/inventory?inventoryView=bom')
+      if (onSaved) {
+        onSaved()
+      } else {
+        router.push('/inventory?inventoryView=bom')
+      }
       router.refresh()
     } catch (error) {
       const message = error instanceof Error ? error.message : tCommon('feedback.saveFailed')
@@ -329,7 +355,8 @@ function BomDrawer({
   return (
     <UrlDrawer
       open
-      closeHref="/inventory?inventoryView=bom"
+      closeHref={closeHref ?? '/inventory?inventoryView=bom'}
+      stacked={stacked}
       beforeClose={closeGuard.beforeClose}
       size="2xl"
       title={tSetup('entities.bom-components.title')}
@@ -346,18 +373,24 @@ function BomDrawer({
             {saveError}
           </p>
         ) : null}
-        <div className="space-y-1.5">
-          <Label>{tSetup('fields.assemblyItemId')} <span className="text-red-500">*</span></Label>
-          <SearchSelect
-            value={assemblyItemId}
-            onChange={setAssemblyItemId}
-            options={assemblyOptions}
-            disabled={busy || !creating}
-            placeholder={tSetup('fields.assemblyItemId')}
-            sheetTitle={tSetup('fields.assemblyItemId')}
-            ariaLabel={tSetup('fields.assemblyItemId')}
-          />
-        </div>
+        {fixedAssemblyItemId ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {fixedAssemblyLabel ?? fixedAssemblyItemId}
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            <Label>{tSetup('fields.assemblyItemId')} <span className="text-red-500">*</span></Label>
+            <SearchSelect
+              value={assemblyItemId}
+              onChange={setAssemblyItemId}
+              options={assemblyOptions}
+              disabled={busy || !creating}
+              placeholder={tSetup('fields.assemblyItemId')}
+              sheetTitle={tSetup('fields.assemblyItemId')}
+              ariaLabel={tSetup('fields.assemblyItemId')}
+            />
+          </div>
+        )}
         <LineGrid
           columns={lineColumns}
           rows={lines}

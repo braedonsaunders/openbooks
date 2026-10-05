@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "Linha {line}",
+    "kitComponent": "Componente de {kit} · linha do pedido {line}",
     "lot": "Lote {lot}",
     "serial": "Série {serial}",
     "actionsFor": "Ações da linha {line}",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · {onHand} em estoque",
     "noLines": "Informe uma quantidade em pelo menos uma linha a separar.",
     "binRequired": "Escolha um endereço de estoque para a linha do pedido {line}.",
+    "pickComponentsBelow": "Separado por componente — informe as quantidades nas linhas de componentes abaixo.",
+    "kitComponent": "Componente de {kit} · linha {line}",
+    "componentPrecision": "Linha {line}: as quantidades de componentes têm no máximo quatro casas decimais.",
     "created": "Lista de separação {number} criada.",
     "failed": "Não foi possível criar a lista de separação."
   },

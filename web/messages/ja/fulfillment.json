@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "明細 {line}",
+    "kitComponent": "{kit} の構成品・受注明細 {line}",
     "lot": "ロット {lot}",
     "serial": "シリアル {serial}",
     "actionsFor": "明細 {line} の操作",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · 在庫 {onHand}",
     "noLines": "少なくとも1つの明細にピッキング数量を入力してください。",
     "binRequired": "受注明細 {line} のロケーションを選択してください。",
+    "pickComponentsBelow": "構成品ごとにピッキングします。下の構成品行に数量を入力してください。",
+    "kitComponent": "{kit} の構成品・明細 {line}",
+    "componentPrecision": "明細 {line}：構成品の数量は小数点以下4桁までです。",
     "created": "ピッキングリスト {number} を作成しました。",
     "failed": "ピッキングリストを作成できませんでした。"
   },

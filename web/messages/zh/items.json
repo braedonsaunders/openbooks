@@ -191,6 +191,26 @@
       "software": "软件（残值法）"
     }
   },
+  "kit": {
+    "tab": "组件",
+    "loading": "正在加载套件配方…",
+    "loadFailed": "无法加载套件配方。",
+    "noRecipeSummary": "尚无配方——添加组件后才能销售该套件。",
+    "recipeSummary": "{count}件组合：{parts}",
+    "availableBadge": "可售：{count}",
+    "addComponents": "添加组件",
+    "editComponents": "编辑组件",
+    "emptyTitle": "尚无组件",
+    "emptyDescription": "套件按组件销售：登记每套包含的内容后即可销售。",
+    "consequence": "销售套件时将发出其组件——套件本身没有库存，收入记在套件上。",
+    "component": "组件",
+    "perKit": "每套",
+    "availabilityTitle": "可用量明细",
+    "availabilitySummary": "所有地点可售：{count}",
+    "onHand": "现有库存",
+    "committed": "已承诺",
+    "available": "可售"
+  },
   "costing": {
     "title": "存货计价",
     "description": "该物料存货的计价与跟踪方式——方法、科目与再订货点。",

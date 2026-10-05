@@ -201,6 +201,26 @@
       "software": "Logiciel (résiduel)"
     }
   },
+  "kit": {
+    "tab": "Composants",
+    "loading": "Chargement de la recette du kit…",
+    "loadFailed": "Impossible de charger la recette du kit.",
+    "noRecipeSummary": "Pas encore de recette : le kit ne peut pas être vendu sans composants.",
+    "recipeSummary": "Lot de {count} : {parts}",
+    "availableBadge": "{count} disponibles",
+    "addComponents": "Ajouter des composants",
+    "editComponents": "Modifier les composants",
+    "emptyTitle": "Aucun composant pour l'instant",
+    "emptyDescription": "Un kit vend ses composants : indiquez ce qu'il contient pour pouvoir le vendre.",
+    "consequence": "Vendre le kit expédie ses composants — le kit lui-même n'est jamais stocké, et le chiffre d'affaires reste sur le kit.",
+    "component": "Composant",
+    "perKit": "Par kit",
+    "availabilityTitle": "Détail de disponibilité",
+    "availabilitySummary": "{count} vendables sur tous les sites",
+    "onHand": "En stock",
+    "committed": "Engagé",
+    "available": "Disponible"
+  },
   "costing": {
     "title": "Valorisation des stocks",
     "description": "Valorisation et suivi du stock de cet article — méthode, comptes et seuils de réapprovisionnement.",

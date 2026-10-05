@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "Line {line}",
+    "kitComponent": "Component of {kit} · order line {line}",
     "lot": "Lot {lot}",
     "serial": "Serial {serial}",
     "actionsFor": "Actions for line {line}",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · {onHand} on hand",
     "noLines": "Enter a quantity on at least one line to pick.",
     "binRequired": "Choose a bin for order line {line}.",
+    "pickComponentsBelow": "Picked by component — enter quantities on the component rows below.",
+    "kitComponent": "Component of {kit} · line {line}",
+    "componentPrecision": "Line {line}: component quantities keep four decimal places at most.",
     "created": "Pick list {number} created.",
     "failed": "The pick list could not be created."
   },
