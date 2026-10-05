@@ -24,6 +24,9 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     // Posting maps are effective-dated series, not standalone rows: writes
     // close the prior open row through the commerce engine, never raw CRUD.
     command: { name: 'upsertChannelAccountMap', permission: 'channels.manage', feature: 'salesChannels' },
+    // Import rows travel the same command, so the close-out, uniqueness
+    // guard, audit evidence and feature gate match the drawer exactly.
+    importVia: 'command',
     columns: [
       { key: 'role', kind: 'text' },
       { key: 'key', kind: 'text' },
@@ -55,6 +58,9 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     // Re-syncing a storefront location refreshes its mapping in place through
     // the commerce engine, never a duplicate raw row.
     command: { name: 'upsertChannelLocation', permission: 'channels.manage', feature: 'salesChannels' },
+    // Import rows travel the same command, so the in-place refresh, audit
+    // evidence and feature gate match the workspace exactly.
+    importVia: 'command',
     columns: [
       { key: 'externalLocationId', kind: 'code' },
       { key: 'externalName', kind: 'text' },

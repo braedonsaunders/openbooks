@@ -27,6 +27,7 @@ import {
 } from '@openbooks/engine/src/billing/usage/records.ts'
 import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
 import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
+import { CommerceError, upsertAccountMap, upsertChannelLocation } from '@openbooks/engine/commerce'
 import { setupReadProjection, setupReadSource } from '../setup/read-shape'
 import {
   enforceExportRowLimit,
@@ -192,8 +193,36 @@ export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
     iconKey: entity.iconKey || 'sliders',
     readPermission: 'admin.setup.manage',
     writePermission: entity.writePermission ?? 'admin.setup.manage',
-    supportsImport: !entity.readOnly && !entity.dataSource,
+    // Command-barred entities never offer an import action: their rows
+    // either travel through the engine command ('command') or are refused
+    // by name ('none'). Export stays available — reading rows back is safe.
+    supportsImport: !entity.readOnly && !entity.dataSource && entity.importVia !== 'none',
     naturalKey: entity.naturalKey,
+  }
+}
+
+/**
+ * Named refusal for configuration no row stream can express: singleton or
+ * aggregate state owned by a command or an aggregate endpoint, and sealed
+ * material that must never travel in a file. Every arm names the remedy
+ * and the remedy exists — the owning screen or endpoint below is live.
+ */
+function setupImportRefusal(entity: SetupEntity): string {
+  switch (entity.key) {
+    case 'nonprofit-frameworks':
+    case 'fund-pairs':
+    case 'functional-mappings':
+      return `${entity.key} cannot be imported row by row; maintain it in Nonprofit Setup, which records the change with its reason and audit.`
+    case 'dunning-policies':
+      return 'dunning-policies cannot be imported row by row; maintain collection policies in Collections (Policies view), which validates the complete record.'
+    case 'quote-to-cash-policy':
+      return 'quote-to-cash-policy cannot be imported; edit the quote-to-cash policy in Setup, which validates the complete record.'
+    default:
+      // Fail closed for whatever the registry gains next: name the owning
+      // endpoint rather than inventing a screen.
+      if (entity.command) return `${entity.key} cannot be imported; it changes only through its setup command (POST /api/admin/setup/${entity.key}/command).`
+      if (entity.mutationPath) return `${entity.key} cannot be imported; it must be saved through ${entity.mutationPath}, which validates the complete record.`
+      return `${entity.key} cannot be imported.`
   }
 }
 
@@ -259,6 +288,15 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       if (entity.readOnly) return refuse('resource is read-only')
       if (entity.dataSource) return refuse('Use the module settings drawer for audited value changes')
       if (ctx.orgId !== orgId) return refuse('resource belongs to another organization')
+      // Command-barred configuration never reaches the generic row writer:
+      // 'none' is refused by name above the transaction, and a command-owned
+      // entity without its import mapping fails closed instead of writing
+      // raw rows past the command's guards. The registry guard test pins the
+      // declaration; this is the runtime backstop.
+      if (entity.importVia === 'none') return refuse(setupImportRefusal(entity))
+      if (entity.command && entity.importVia !== 'command') {
+        return refuse(`${entity.key} writes through its setup command (POST /api/admin/setup/${entity.key}/command), which this import does not support yet. Maintain it through its settings screen instead of importing rows.`)
+      }
       return withOrgTransaction(orgId, async () => {
         // Keep discovery, field validation and every row savepoint on the same
         // connection. A disable either precedes this import or waits for its
@@ -333,6 +371,74 @@ async function setupPackProblem(
     programType: String(col('program_type') ?? current?.program_type ?? ''),
     stateCode: rawState == null || rawState === '' ? null : String(rawState),
   })
+}
+
+/**
+ * One import row through its entity's engine command. The caller has already
+ * run permission checks, structured decoding and reference resolution, so
+ * `src` carries registry field keys with tenant-owned ids. Returns whether
+ * the command refreshed existing configuration ('updated') or established it
+ * ('created'): the existence read is best-effort labelling for the import
+ * summary — the command's own row locks own the write, so a concurrent
+ * change can only move the label, never duplicate the effect.
+ *
+ * Effective-dated series have no insert/update distinction: every row is a
+ * new version and the command's guards (effective date after the open row,
+ * idempotent repeat) are the duplicate protection, in both import modes.
+ */
+async function writeSetupCommandRow(
+  entity: SetupEntity,
+  src: Record<string, unknown>,
+  ctx: WriteCtx,
+): Promise<'created' | 'updated'> {
+  switch (entity.command?.name) {
+    case 'upsertChannelAccountMap': {
+      const channelId = String(src.channelId ?? '')
+      const role = String(src.role ?? '')
+      const key = src.key == null || src.key === '' ? '' : String(src.key)
+      const open = (await db.execute(sql`
+        select id from sales_channel_account_maps
+         where org_id = ${ctx.orgId} and channel_id = ${channelId}
+           and role = ${role} and key = ${key} and effective_to is null
+         limit 1`)) as { rows: { id: string }[] }
+      await upsertAccountMap(ctx.orgId, ctx.actorId, {
+        channelId,
+        role,
+        key,
+        accountId: String(src.accountId ?? ''),
+        effectiveFrom: String(src.effectiveFrom ?? ''),
+      })
+      return open.rows[0] ? 'updated' : 'created'
+    }
+    case 'upsertChannelLocation': {
+      const channelId = String(src.channelId ?? '')
+      const externalLocationId = String(src.externalLocationId ?? '')
+      // A blank optional control leaves the command default alone; any
+      // supplied spelling coerces exactly as the interactive form does.
+      const optionalBoolean = (value: unknown): boolean | undefined =>
+        value === undefined || value === null || value === '' ? undefined : coerceBoolean(value)
+      const existing = (await db.execute(sql`
+        select id from sales_channel_locations
+         where org_id = ${ctx.orgId} and channel_id = ${channelId}
+           and external_location_id = ${externalLocationId}
+         limit 1`)) as { rows: { id: string }[] }
+      await upsertChannelLocation(ctx.orgId, ctx.actorId, {
+        channelId,
+        externalLocationId,
+        externalName: String(src.externalName ?? ''),
+        stockLocationId: src.stockLocationId ? String(src.stockLocationId) : null,
+        syncInventory: optionalBoolean(src.syncInventory),
+        fulfilsOrders: optionalBoolean(src.fulfilsOrders),
+        bufferQuantity: src.bufferQuantity == null || src.bufferQuantity === '' ? null : String(src.bufferQuantity),
+        stopSellingAtZero: optionalBoolean(src.stopSellingAtZero),
+      })
+      return existing.rows[0] ? 'updated' : 'created'
+    }
+    default:
+      // A command without its import dispatch fails closed: the generic
+      // writer below must never store what the command would refuse.
+      throw new Error(`setup import cannot dispatch command ${entity.command?.name ?? 'unknown'} for ${entity.key}`)
+  }
 }
 
 /**
@@ -411,6 +517,24 @@ async function writeSetup(
       if (refError) {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: refError })
+        continue
+      }
+
+      // Command-owned rows leave the generic writer here: the engine command
+      // below performs the same validation, effective-dating, audit and
+      // feature gate as the interactive path, on preview (under the caller's
+      // savepoint, rolled back) and on commit alike. References above are
+      // already resolved to tenant-owned ids, so the command receives UUIDs.
+      if (entity.command && entity.importVia === 'command') {
+        const integrityProblem = await validateEntityIntegrity(entity, src as Record<string, unknown>, ctx.orgId, undefined)
+        if (integrityProblem) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: integrityProblem })
+          continue
+        }
+        const verdict = await writeSetupCommandRow(entity, src, ctx)
+        if (verdict === 'updated') outcome.updated++
+        else outcome.created++
         continue
       }
 
@@ -742,6 +866,12 @@ async function writeSetup(
     } catch (e) {
       outcome.failed++
       if (e instanceof UsageBillingError) {
+        outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` })
+        continue
+      }
+      // Domain refusals arrive with their remedy attached; keep it on the
+      // row error so the operator reads the fix, not a storage echo.
+      if (e instanceof CommerceError) {
         outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` })
         continue
       }
