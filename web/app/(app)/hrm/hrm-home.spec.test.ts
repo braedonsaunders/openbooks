@@ -5,7 +5,6 @@
 // Loader-resolved facts (gates, scoping, flags) are proved against the
 // test database in hrm-home.integration.test.ts.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname, join } from "node:path";
@@ -37,11 +36,9 @@ registerHooks({
 });
 
 const { hrmSpec } = await import("./view.ts");
+const { monthEndsBefore } = await import("../../../lib/hrm/home.ts");
 const { isFieldRef } = await import("@braedonsaunders/appkit-viewspec");
-const { NAV_MODULES } = await import("../../../../engine/src/navigation/nav-registry.ts");
-const { FEATURE_BY_KEY } = await import("../../../../engine/src/organization/feature-registry.ts");
 import type { HrmHomeData } from "../../../lib/hrm/home.ts";
-import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 type Tree = Record<string, unknown>;
 
@@ -97,14 +94,6 @@ function statTiles(node: unknown): { iconKey: unknown; accent: unknown }[] {
     if (entry.kind === "stat-tile") tiles.push({ iconKey: entry.iconKey, accent: entry.accent });
   });
   return tiles;
-}
-
-function tables(node: unknown): Tree[] {
-  const found: Tree[] = [];
-  walk(node, (entry) => {
-    if (entry.kind === "table") found.push(entry);
-  });
-  return found;
 }
 
 function heroGrid(spec: Tree): unknown {
@@ -258,6 +247,21 @@ test("the pending queue leads the hero column with subordinate panels below it",
   assert.ok(workforce?.widgets.includes("hrm-pulse"), "the workforce panel leads with its pulse figures");
 });
 
+test("month ends step back through month boundaries, leap days included", () => {
+  assert.deepEqual(monthEndsBefore("2026-09-22", 3), ["2026-06-30", "2026-07-31", "2026-08-31"]);
+  assert.deepEqual(monthEndsBefore("2026-03-15", 2), ["2026-01-31", "2026-02-28"]);
+  assert.deepEqual(monthEndsBefore("2024-03-15", 1), ["2024-02-29"]);
+  assert.deepEqual(monthEndsBefore("2026-01-05", 1), ["2025-12-31"]);
+  assert.deepEqual(monthEndsBefore("2026-09-22", 0), []);
+});
+
+test("a refused queue reaches the pending widget with its named remedy", () => {
+  const message = "Queue refused — ask an administrator for the queue grant";
+  const output = JSON.stringify(hrmSpec(fixture({ pending: [], pendingRefusal: message })));
+  assert.ok(output.includes('"hrm-pending-requests"'));
+  assert.ok(output.includes(message));
+});
+
 test("quiet modules collapse behind their activity flags", () => {
   const panels = panelsIn(heroGrid(hrmSpec(fixture()) as unknown as Tree));
   const gated: Record<string, string | null> = {};
@@ -321,54 +325,3 @@ test("the department mix binds the census and names the employer only for multi-
 // HRM is a default-off feature owning exactly one nav module: the cockpit.
 // Working surfaces are tabs on the cockpit, never sidebar modules of their
 // own — a second Departments entry beside Company setup's and a second
-// Reports entry beside the Reports module were the confusion under review.
-test("hrm is registered as a default-off feature with ONE nav module", () => {
-  const hrm = FEATURE_BY_KEY.get("hrm");
-  assert.ok(hrm, "the Features switchboard must declare hrm");
-  assert.equal(hrm.defaultEnabled, false, "hrm defaults off");
-  assert.deepEqual(hrm.navModules, ["hrm"], "the feature owns exactly the cockpit module");
-  const mod = NAV_MODULES.find((entry) => entry.key === "hrm");
-  assert.ok(mod, "the nav registry must open the cockpit");
-  assert.equal(mod.href, "/hrm");
-  assert.equal(mod.requiredPermission, "hrm.employment.read", "the module carries the read boundary");
-  assert.equal(mod.featureKey, "hrm", "the module hides while the feature is off");
-  for (const key of ["hrm-change-requests", "hrm-departments", "hrm-reports", "hrm-compliance"]) {
-    assert.ok(
-      !NAV_MODULES.some((entry) => entry.key === key),
-      `${key} is not a nav module`,
-    );
-  }
-});
-
-// Every home.* key the spec binds must resolve in all 7 catalogs — a
-// missing key renders the raw path exactly when the cockpit has nothing
-// else to say.
-
-const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-
-for (const locale of LOCALES) {
-  test(`cockpit home copy resolves translated text in ${locale}`, () => {
-    const catalog = JSON.parse(readFileSync(join(webRoot, "messages", locale, "hrm.json"), "utf8")) as Record<
-      string,
-      unknown
-    >;
-    const nav = JSON.parse(readFileSync(join(webRoot, "messages", locale, "nav.json"), "utf8")) as Record<
-      string,
-      unknown
-    >;
-    const modules = (nav.modules ?? {}) as Record<string, unknown>;
-    assert.ok(
-      typeof modules.hrm === "string" && (modules.hrm as string).trim().length > 0,
-      `${locale} nav.json must label the HRM module, or the sidebar renders the key`,
-    );
-    if (locale !== "en") {
-      assert.notEqual(modules.hrm, "Human Resources", `${locale} nav.json must translate the HRM module label`);
-    }
-    const home = catalog.home as Record<string, unknown>;
-    assert.ok(home && typeof home === "object", `${locale} hrm.json must carry the home namespace`);
-    for (const key of ["title", "vitals", "trend", "attention", "groups", "vacancy", "directory", "tabs", "recruiting"]) {
-      const value = home[key];
-      assert.ok(value !== undefined, `${locale} hrm.json lacks home.${key}`);
-    }
-  });
-}

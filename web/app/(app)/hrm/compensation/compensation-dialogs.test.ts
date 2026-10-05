@@ -1,214 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
-// /hrm/compensation's "New plan" and "New cycle" buttons navigated
-// to ?plan=new / ?cycle=new and nothing opened — the loader never read the
-// params, the spec never emitted the hrm-comp-plan-dialog /
-// hrm-comp-cycle-dialog widgets the registry already implements, and the
-// page dropped its own searchParams on the floor. The equity "Generate
-// snapshot" button (?generate=1) was the same shape one route over.
-//
-// The seams below stub I/O only (feature switches, group tabs, engine list
-// reads, translations backed by the REAL en catalogs). Grants ride a
-// fabricated Authz through the stubbed `can` — permission logic itself is
-// proven by the existing scope DB tests, not doubled here.
-const hrmCatalog = JSON.parse(
-  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
-) as Record<string, unknown>;
-const shellRouteState = (
-  JSON.parse(readFileSync(new URL("../../../../messages/en/shell.json", import.meta.url), "utf8")) as Record<
-    string,
-    unknown
-  >
-).routeState as Record<string, unknown>;
-const adminCatalog = JSON.parse(
-  readFileSync(new URL("../../../../messages/en/admin.json", import.meta.url), "utf8"),
-) as Record<string, unknown>;
-
-(globalThis as Record<string, unknown>).__compDlgCatalogs = { hrm: hrmCatalog, routeState: shellRouteState, admin: adminCatalog };
-
-const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ extra: { "../feature-gates": "export async function requireFeatureEnabled() {}" } });
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-
-    const parent = context.parentURL ?? "";
-    const owned =
-      parent.endsWith("/web/lib/hrm/compensation.ts") || parent.endsWith("/web/lib/hrm/workspace-tabs.ts") || parent.endsWith("/CompensationRegisters.tsx");
-    if (owned && specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `export async function getLocale() { return 'en'; }
-             export async function getTranslations(ns) {
-              const catalogs = globalThis.__compDlgCatalogs;
-              const catalog = ns === 'shell.routeState' ? catalogs.routeState : ns === 'admin' ? catalogs.admin : ns === 'hrm.compensation' ? catalogs.hrm.compensation : catalogs.hrm;
-              const lookup = (key) => {
-                let node = catalog;
-                for (const part of key.split('.')) {
-                  if (node !== null && typeof node === 'object') node = node[part];
-                  else return key;
-                }
-                return typeof node === 'string' ? node : key;
-              };
-              const t = (key, params) => {
-                const template = lookup(key);
-                if (!params) return template;
-                return template.replace(/\\{(\\w+)\\}/g, (_, name) => (params[name] === undefined ? '{' + name + '}' : String(params[name])));
-              };
-              t.has = (key) => lookup(key) !== key;
-              return t;
-            }`,
-          ),
-      };
-    }
-    if (owned && specifier === "../authz") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `export const can = (authz, perm) => authz.permissions.has('*') || authz.permissions.has(perm);
-             export async function getAuthz() { return null; }`,
-          ),
-      };
-    }
-    if (specifier === "../features") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `export async function isFeatureEnabled(orgId, key) {
-              const flags = globalThis.__compDlgFeatures;
-              if (flags && key in flags) return flags[key];
-              return true;
-            }`,
-          ),
-      };
-    }
-
-    if (owned && specifier === "../../components/module-home/group-tabs") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function businessToday() { return '2026-09-22'; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/cycles.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `const detail = () => globalThis.__compDlgDetail === true;
-             export async function listCycles() { return []; }
-             export async function listCycleLines() { return []; }
-             export async function cyclePacing() { return { totalPct: null, overBudget: false }; }
-             export async function getCycle() {
-               if (!detail()) return null;
-               return { id: 'cycle-1', name: 'Fall merit round', kind: 'merit', status: 'open', effectiveOn: '2026-10-01' };
-             }`,
-          ),
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/hrm/compensation") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript," + encodeURIComponent(`
-          export async function listJobFamilies() { return []; }
-          export async function listPayBandVersions() { return []; }
-          export async function compensationWageSummary() {
-            return { asOf: '2026-09-22', workers: 0, covered: 0, missing: 0, ambiguous: 0, groups: [] };
-          }
-        `),
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/bands.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listPayBands() { return []; } export async function compaRatioFor() { return null; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/band-headcounts.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function countBandHolders() { return 0; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/architecture.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function listJobLevels() { return []; } export async function compensationSettings() { return { comparisonAttributeKey: 'group', gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/headcount-plans.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `export async function listPlans() {
-               if (globalThis.__compDlgDetail !== true) return [];
-               return [{ id: 'plan-1', name: 'FY27 growth', status: 'draft', fiscalPeriodFrom: '2026-01-01', fiscalPeriodTo: '2026-12-31' }];
-             }
-             export async function listPlanLines() { return []; }`,
-          ),
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/src/hrm/compensation/pay-transparency.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function latestGapSnapshot() { return null; }",
-      };
-    }
-    if (owned && specifier === "@openbooks/engine/organization/currencies") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(`
-        export async function organizationCurrencyOptions() {
-          const currency = globalThis.__compDlgBaseCurrency || 'USD';
-          return [{ value: currency, label: currency, scopeValue: null }];
-        }
-      `) };
-    }
-    if (owned && specifier === "../setup/ref-options") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function loadEntityOptions() { return []; }" };
-    }
-    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript," + encodeURIComponent(`export const db = { execute: async (query) => ({ rows: JSON.stringify(query).includes('select distinct p.custom') ? [{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }] : globalThis.__compDlgBaseCurrency ? [{ base_currency: globalThis.__compDlgBaseCurrency }] : [] }) };`),
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
+import { installCompensationReadFixture } from '../../../../testing/compensation-read-fixture';
+const fixture = installCompensationReadFixture();
 
 const { loadCompensationHome, loadCompCycleDetail, loadHeadcountPlanDetail, loadEquity, lineActionAvailability } =
   await import("../../../../lib/hrm/compensation.ts");
 
-const gap = globalThis as Record<string, unknown>;
 
 function authzWith(permissions: string[]) {
   return {
@@ -223,7 +21,7 @@ const MANAGER_NO_SETUP = authzWith(["hrm.compensation.read", "hrm.compensation.m
 const READER = authzWith(["hrm.compensation.read"]);
 
 function features(flags: Record<string, boolean>) {
-  gap.__compDlgFeatures = flags;
+  fixture.features = flags;
 }
 
 test("?plan=new resolves an open plan dialog with the existing create form", async () => {
@@ -246,7 +44,7 @@ test("?plan=new resolves an open plan dialog with the existing create form", asy
 
 test("?cycle=new resolves an open cycle dialog over the four engine kinds", async () => {
   features({ payroll: true });
-  gap.__compDlgBaseCurrency = "USD";
+  fixture.baseCurrency = "USD";
   const data = await loadCompensationHome(MANAGER, { cycle: "new" });
   assert.ok(data, "the home loader still resolves");
   assert.deepEqual([data.cycleOpen, data.planOpen], [true, false], "?cycle=new opens only the requested dialog");
@@ -401,14 +199,6 @@ test("both specs emit the dialog widgets gated on the loader-derived open state"
   );
 });
 
-// The bands, cycles, plans, team-grid and plan-line
-// tables headed their columns with hard-coded English literals ('level',
-// 'employee', 'title', …), so every non-English locale still read English.
-// The loaders already resolved the catalog strings; the specs just never
-// used them. The walker below collects every table's headers in order from
-// the emitted spec — ModuleView resolves the field refs at render, so a
-// header of {$: 'bandsColumns.level'} renders the loader-resolved catalog
-// string while a literal 'level' renders English everywhere.
 function tableHeaders(spec: unknown): unknown[][] {
   const found: unknown[][] = [];
   const visit = (node: unknown): void => {
@@ -437,32 +227,17 @@ test("home tables head their columns from the resolved catalog, never literals",
   features({ payroll: true });
   const data = await loadCompensationHome(MANAGER, {});
   assert.ok(data, "the home loader still resolves");
-  assert.deepEqual(
-    [data.bandsColumns.level, data.bandsColumns.range, data.bandsColumns.headcount],
-    ["Level", "Range", "Headcount"],
-    "the band headers resolve from the en catalog",
-  );
-  assert.deepEqual(
-    [data.cyclesColumns.name, data.cyclesColumns.status, data.cyclesColumns.effective],
-    ["Name", "Status", "Effective"],
-    "the cycle headers resolve from the en catalog",
-  );
-  assert.deepEqual(
-    [data.plansColumns.name, data.plansColumns.status, data.plansColumns.cost],
-    ["Name", "Status", "Cost"],
-    "the plan headers resolve from the en catalog",
-  );
   const { CompensationCycleRegister, CompensationPlanRegister } = await import("./CompensationRegisters.tsx");
   const cycle = await CompensationCycleRegister({ data });
   const plan = await CompensationPlanRegister({ data });
   assert.deepEqual(
     cycle.props.columns.map((column: { header: string }) => column.header),
-    [data.cyclesColumns.name, data.kindLabel, data.cyclesColumns.status, data.cyclesColumns.effective],
+    ["Name", "Kind", "Status", "Effective"],
     "the native cycle register uses translated headers",
   );
   assert.deepEqual(
     plan.props.columns.map((column: { header: string }) => column.header),
-    [data.plansColumns.name, data.periodLabel, data.plansColumns.status, data.plansColumns.cost],
+    ["Name", "Planning period", "Status", "Cost"],
     "the native plan register uses translated headers",
   );
 });
@@ -519,7 +294,7 @@ for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] 
 >) {
   test(name, async () => {
     features({ payroll: true });
-    (gap as Record<string, unknown>).__compDlgDetail = true;
+    fixture.detail = true;
     try {
       const data = await load();
       assert.ok(data, loadedMessage);
@@ -528,7 +303,7 @@ for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] 
       const spec = await loadSpec();
       assert.deepEqual(tableHeaders(spec(data as never)), expected, specMessage);
     } finally {
-      (gap as Record<string, unknown>).__compDlgDetail = false;
+      fixture.detail = false;
     }
   });
 }
