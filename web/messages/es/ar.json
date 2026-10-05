@@ -572,6 +572,7 @@
       "provider": "Proveedor",
       "decline": "Motivo del rechazo",
       "nextRetry": "Próximo reintento {date}.",
+      "nextRetryHeader": "Próximo reintento",
       "attemptedAt": "Intentado el",
       "status": "Estado",
       "method": "Método",
@@ -631,7 +632,12 @@
       "breakdownTitle": "Por clase de rechazo y proveedor",
       "breakdownSummary": "Tasas de recuperación del período",
       "breakdownRow": "{failed} fallidos · {recovered} recuperados · {rate}",
-      "openReports": "Historial completo en Informes"
+      "openReports": "Historial completo en Informes",
+      "policyNotice": {
+        "title": "No hay ninguna política de cobro activa",
+        "description": "El cobro automático está activado, pero no hay ninguna política de cobro activa para las facturas de clientes: no hay calendario de reintentos. Active una política para empezar a cobrar.",
+        "action": "Abrir la configuración de cobros"
+      }
     }
   },
   "supplyEvidence": {

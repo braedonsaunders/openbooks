@@ -2727,7 +2727,7 @@ const COLLECTION_ATTEMPT: RecordTypeMeta = {
     { key: "provider", labelKey: "ar.collections.attempts.provider", kind: "text", sortable: true, sortKey: "provider" },
     { key: "decline_code", labelKey: "ar.collections.attempts.decline", kind: "text", sortable: true, sortKey: "decline_code" },
     { key: "decline_kind", labelKey: "ar.collections.attempts.declineKind", kind: "text", sortable: true, sortKey: "decline_kind", defaultWidth: 150 },
-    { key: "next_retry_on", labelKey: "ar.collections.attempts.nextRetry", kind: "date", sortable: true, sortKey: "next_retry_on", defaultWidth: 120 },
+    { key: "next_retry_on", labelKey: "ar.collections.attempts.nextRetryHeader", kind: "date", sortable: true, sortKey: "next_retry_on", defaultWidth: 120 },
     { key: "created_at", labelKey: "ar.collections.attempts.attemptedAt", kind: "date", sortable: true, sortKey: "created_at", defaultWidth: 120 },
     { key: "status", labelKey: "ar.collections.attempts.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },

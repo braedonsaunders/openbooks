@@ -572,6 +572,7 @@
       "provider": "Anbieter",
       "decline": "Ablehnungsgrund",
       "nextRetry": "Nächster Versuch {date}.",
+      "nextRetryHeader": "Nächster Versuch",
       "attemptedAt": "Versucht am",
       "status": "Status",
       "method": "Methode",
@@ -631,7 +632,12 @@
       "breakdownTitle": "Nach Ablehnungsklasse und Anbieter",
       "breakdownSummary": "Rückgewinnungsquoten für den Zeitraum",
       "breakdownRow": "{failed} fehlgeschlagen · {recovered} zurückgewonnen · {rate}",
-      "openReports": "Vollständiger Verlauf in Berichte"
+      "openReports": "Vollständiger Verlauf in Berichte",
+      "policyNotice": {
+        "title": "Keine Inkassorichtlinie aktiv",
+        "description": "Der automatische Einzug ist eingeschaltet, aber für Kundenrechnungen ist keine Inkassorichtlinie aktiv — es gibt keinen Wiederholungsplan. Aktivieren Sie eine Richtlinie, um mit dem Einzug zu beginnen.",
+        "action": "Inkasso-Einstellungen öffnen"
+      }
     }
   },
   "supplyEvidence": {

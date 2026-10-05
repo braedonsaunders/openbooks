@@ -572,6 +572,7 @@
       "provider": "プロバイダー",
       "decline": "拒否理由",
       "nextRetry": "次回リトライ{date}。",
+      "nextRetryHeader": "次回リトライ",
       "attemptedAt": "試行日時",
       "status": "ステータス",
       "method": "支払方法",
@@ -631,7 +632,12 @@
       "breakdownTitle": "拒否クラス別・プロバイダー別",
       "breakdownSummary": "期間の回収率",
       "breakdownRow": "失敗{failed} · 回収{recovered} · {rate}",
-      "openReports": "レポートで全履歴を見る"
+      "openReports": "レポートで全履歴を見る",
+      "policyNotice": {
+        "title": "有効な回収ポリシーがありません",
+        "description": "自動回収はオンですが、顧客請求書に対する有効な回収ポリシーがないため、再試行スケジュールがありません。ポリシーを有効化して回収を開始してください。",
+        "action": "回収設定を開く"
+      }
     }
   },
   "supplyEvidence": {

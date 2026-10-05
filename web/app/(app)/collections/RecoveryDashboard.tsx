@@ -1,14 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
+import { Alert, AlertDescription, AlertTitle, Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
 import { Banknote, HeartHandshake, KeyRound, Percent, ShieldAlert, Timer } from 'lucide-react'
 import { StatTile, CockpitPanel } from '../../../components/cockpit/ui'
 import { createMoneyFormatter } from '@/lib/money-format'
-import type { RecoveryDashboardData } from './view'
+import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
 
 /**
  * Revenue recovery at a glance: what automatic collection brought back in
@@ -18,12 +19,28 @@ import type { RecoveryDashboardData } from './view'
  * class/provider breakdown lives one disclosure down, and the full history
  * in the Reports hub.
  */
-export function RecoveryDashboard({ data }: { data: RecoveryDashboardData | null }) {
+export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardData | null; notice?: CollectionPolicyNotice | null }) {
   const t = useTranslations('ar.collections.recovery')
   const locale = useLocale()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
-  if (!data) return null
+  // Automatic collection is on but no collection policy is: the dashboard
+  // has no schedule to report against, so its slot carries the setup remedy
+  // and the rest of the page renders around it.
+  if (!data) {
+    if (!notice) return null
+    return (
+      <Alert variant="warning">
+        <AlertTitle>{notice.title}</AlertTitle>
+        <AlertDescription>
+          <p>{notice.description}</p>
+          <Button asChild size="sm" variant="outline" className="mt-3">
+            <Link href={notice.actionHref}>{notice.actionLabel}</Link>
+          </Button>
+        </AlertDescription>
+      </Alert>
+    )
+  }
   const { money } = createMoneyFormatter(locale, 'USD')
   const rate = data.metrics.recoveryRate
   // Recovered revenue is shown per currency — a multi-currency book never
