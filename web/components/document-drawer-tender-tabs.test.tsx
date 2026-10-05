@@ -43,10 +43,14 @@ test('cash-sale tenders have a separate active body and preserve unresolved code
       assert.ok(button, `expected a reachable ${label} tab`)
       await act(async () => { button.click(); await tick() })
     }
-    const code = dialog.querySelector<HTMLInputElement>('input[placeholder="' + messages.ar.tenders.codePlaceholder + '"]')
-    assert.ok(code, 'the stored-value code editor stays mounted while inactive')
-    assert.ok(code.closest('[hidden]'), 'tenders cannot stack beneath the lines body')
+    assert.equal(
+      dialog.querySelector('input[placeholder="' + messages.ar.tenders.codePlaceholder + '"]'),
+      null,
+      'the unvisited tender editor must not mount beneath the lines body',
+    )
     await tab(messages.ar.tenders.title)
+    const code = dialog.querySelector<HTMLInputElement>('input[placeholder="' + messages.ar.tenders.codePlaceholder + '"]')
+    assert.ok(code, 'opening Tenders must expose the stored-value code editor')
     assert.equal(code.closest('[hidden]'), null)
     await act(async () => {
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(code, 'unresolved-gift-code')
