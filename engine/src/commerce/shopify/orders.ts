@@ -243,6 +243,9 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
     ? (refund.refund_line_items as Array<Record<string, unknown>>)
     : [];
   const transactions = Array.isArray(refund.transactions) ? (refund.transactions as Array<Record<string, unknown>>) : [];
+  const adjustments = Array.isArray(refund.order_adjustments)
+    ? (refund.order_adjustments as Array<Record<string, unknown>>)
+    : [];
   const refundId = text(refund.id !== undefined && refund.id !== null ? String(refund.id) : null);
   if (!refundId) fail("The Shopify refund carries no id.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
   return {
@@ -260,13 +263,24 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
           "Replay the refunds/create delivery from Shopify, then ingest it again.",
         );
       }
+      const lineRestock = entry.restock === true;
+      const variantId = nested.variant_id !== undefined && nested.variant_id !== null ? String(nested.variant_id) : null;
+      const totalTax = entry.total_tax;
       return {
         lineExternalId: nested.id !== undefined && nested.id !== null ? String(nested.id) : null,
         sku: text(nested.sku),
+        variantExternalId: variantId,
         quantity: rawQuantity.trim(),
         amountMinor: shopMinorUnits(String(entry.subtotal ?? "0"), currency),
+        taxMinor: totalTax === undefined || totalTax === null ? null : shopMinorUnits(String(totalTax), currency),
+        restock: lineRestock,
       };
     }),
+    // Shipping comes back through order adjustments, never through a line:
+    // a shipping refund reverses shipping income on the refund document.
+    shippingMinor: adjustments
+      .filter((adjustment) => String(adjustment.kind ?? "") === "shipping_refund")
+      .reduce((sum, adjustment) => sum + shopMinorUnits(String(adjustment.amount ?? "0"), currency), 0n),
     tenders: transactions.map((txn) => ({
       gateway: text(txn.gateway) ?? "shopify_payments",
       amountMinor: shopMinorUnits(String(txn.amount ?? "0"), currency),

@@ -432,12 +432,13 @@ export async function ingestChannelEvent(
       );
     }
     // Same expected-benign collision shape as the order store above.
+    const payload = event.refund ?? event.fulfilment ?? (event.cancellationReason ? { reason: event.cancellationReason } : null);
     const inserted = await db.execute<{ id: string }>(sql`
       insert into channel_order_events
         (org_id, channel_id, order_id, kind, external_id,
          payload, posting_status, occurred_at, created_by, updated_by)
       values (${orgId}, ${channelId}, ${order.id}, ${event.kind}, ${event.externalId},
-        ${event.refund ? JSON.stringify(event.refund, (_key, value) => typeof value === "bigint" ? value.toString() : value) : "{}"}::jsonb,
+        ${payload ? JSON.stringify(payload, (_key, value) => typeof value === "bigint" ? value.toString() : value) : "{}"}::jsonb,
         'pending', ${event.occurredAt}, ${actor}, ${actor})
       on conflict (org_id, order_id, external_id) do nothing
       returning id`);
@@ -466,7 +467,24 @@ export interface ChannelEventInput {
   kind: "refund" | "cancellation" | "edit" | "fulfilment";
   externalId: string;
   refund?: ChannelRefund | null;
+  fulfilment?: ChannelFulfilment | null;
+  cancellationReason?: string | null;
   occurredAt: string;
+}
+
+/** A fulfilment or fulfilment cancellation against one channel order, in neutral terms. */
+export interface ChannelFulfilment {
+  externalId: string;
+  orderExternalId: string;
+  /** Storefront location the stock left from (or returns to on cancellation). */
+  locationExternalId: string | null;
+  status: string;
+  cancelled: boolean;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  carrierName: string | null;
+  lines: Array<{ lineExternalId: string | null; sku: string | null; variantExternalId: string | null; quantity: string }>;
+  fulfilledAt: string;
 }
 
 /** The full stored order: resolution and posting read this, never the provider payload. */
@@ -650,6 +668,139 @@ export async function linkOrderDocument(
        and posting_status = 'pending'`);
   if (updated.rowCount !== 1) {
     throw new Error("Channel order document link matched no row; the order posted or left while it linked");
+  }
+}
+
+export type ChannelEventPostingStatus = "pending" | "posted" | "exception" | "ignored";
+export type ChannelEventKind = "refund" | "cancellation" | "edit" | "fulfilment";
+
+export interface ChannelEventRow {
+  id: string;
+  channelId: string;
+  orderId: string;
+  kind: ChannelEventKind;
+  externalId: string;
+  payload: Record<string, unknown>;
+  postingStatus: ChannelEventPostingStatus;
+  postingDocumentId: string | null;
+  exceptionCode: string | null;
+  exceptionReason: string | null;
+  exceptionRemedy: string | null;
+  occurredAt: string;
+}
+
+type ChannelEventDbRow = Record<string, unknown> & {
+  id: string;
+  channel_id: string;
+  order_id: string;
+  kind: ChannelEventKind;
+  external_id: string;
+  payload: Record<string, unknown>;
+  posting_status: ChannelEventPostingStatus;
+  posting_document_id: string | null;
+  exception_code: string | null;
+  exception_reason: string | null;
+  exception_remedy: string | null;
+  occurred_at: string;
+};
+
+const EVENT_COLUMNS = sql`id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, exception_code, exception_reason, exception_remedy, occurred_at`;
+
+function toEventRow(row: ChannelEventDbRow): ChannelEventRow {
+  return {
+    id: row.id,
+    channelId: row.channel_id,
+    orderId: row.order_id,
+    kind: row.kind,
+    externalId: row.external_id,
+    payload: row.payload ?? {},
+    postingStatus: row.posting_status,
+    postingDocumentId: row.posting_document_id,
+    exceptionCode: row.exception_code,
+    exceptionReason: row.exception_reason,
+    exceptionRemedy: row.exception_remedy,
+    occurredAt: row.occurred_at,
+  };
+}
+
+/** Load one stored order event, or null when it is not in this org. */
+export async function loadChannelEvent(orgId: string, eventId: string): Promise<ChannelEventRow | null> {
+  const row = (await db.execute<ChannelEventDbRow>(sql`
+    select ${EVENT_COLUMNS} from channel_order_events
+     where org_id = ${orgId} and id = ${eventId}`)).rows[0];
+  return row ? toEventRow(row) : null;
+}
+
+/** List an order's events, oldest first: the drawer's refunds and fulfilments timeline. */
+export async function listChannelOrderEvents(orgId: string, orderId: string): Promise<ChannelEventRow[]> {
+  const rows = (await db.execute<ChannelEventDbRow>(sql`
+    select ${EVENT_COLUMNS} from channel_order_events
+     where org_id = ${orgId} and order_id = ${orderId}
+     order by occurred_at`)).rows;
+  return rows.map(toEventRow);
+}
+
+/** Link an event to its posted document. Only a pending or parked row moves. */
+export async function markChannelEventPosted(
+  orgId: string,
+  eventId: string,
+  actor: string | null,
+  documentId: string | null,
+): Promise<void> {
+  const updated = await db.execute(sql`
+    update channel_order_events
+       set posting_status = 'posted',
+           posting_document_id = ${documentId},
+           exception_code = null, exception_reason = null, exception_remedy = null,
+           updated_by = ${actor}, updated_at = now()
+     where org_id = ${orgId} and id = ${eventId}
+       and posting_status in ('pending', 'exception')`);
+  if (updated.rowCount !== 1) {
+    throw new Error("Channel event post mark matched no row; the event already posted or left while it posted");
+  }
+}
+
+/** Park an event with the code, reason and remedy the operator acts on. */
+export async function markChannelEventException(
+  orgId: string,
+  eventId: string,
+  actor: string | null,
+  exception: { code: string; reason: string; remedy: string },
+): Promise<void> {
+  const updated = await db.execute(sql`
+    update channel_order_events
+       set posting_status = 'exception',
+           posting_document_id = null,
+           exception_code = ${exception.code},
+           exception_reason = ${exception.reason},
+           exception_remedy = ${exception.remedy},
+           updated_by = ${actor}, updated_at = now()
+     where org_id = ${orgId} and id = ${eventId}
+       and posting_status in ('pending', 'exception')`);
+  if (updated.rowCount !== 1) {
+    throw new Error("Channel event exception mark matched no row; the event posted or left while it parked");
+  }
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'channel_order_events', ${eventId}, 'update',
+      ${JSON.stringify({ before: null, after: null, reason: `${exception.code}: ${exception.reason}` })}::jsonb, ${actor})`);
+}
+
+/**
+ * Retire an event without a document: a cancellation superseded by its
+ * refund, a fulfilment made redundant by a later full fulfilment. Only a
+ * pending or parked row moves, so a posted event is never rewritten.
+ */
+export async function markChannelEventIgnored(orgId: string, eventId: string, actor: string | null): Promise<void> {
+  const updated = await db.execute(sql`
+    update channel_order_events
+       set posting_status = 'ignored',
+           exception_code = null, exception_reason = null, exception_remedy = null,
+           updated_by = ${actor}, updated_at = now()
+     where org_id = ${orgId} and id = ${eventId}
+       and posting_status in ('pending', 'exception')`);
+  if (updated.rowCount !== 1) {
+    throw new Error("Channel event ignore mark matched no row; the event posted or left while it retired");
   }
 }
 
