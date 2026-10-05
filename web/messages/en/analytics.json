@@ -1820,14 +1820,16 @@
     "title": "Vendor Performance",
     "backToHub": "Analytics",
     "labels": {
-      "unknownVendor": "Unknown"
+      "unknownVendor": "Unknown",
+      "unrated": "Unrated"
     },
     "tabs": {
       "overview": "Overview",
       "payment": "Payment Behavior",
       "scorecard": "Scorecard",
       "matrix": "Leverage Matrix",
-      "vendors": "Vendors"
+      "vendors": "Vendors",
+      "configuration": "Configuration"
     },
     "gauge": {
       "diversified": "Diversified",
@@ -1931,6 +1933,92 @@
     },
     "drill": {
       "billsSpend": "{bills} bills · {spend} spend"
+    },
+    "config": {
+      "fields": {
+        "engagementCapBills": {
+          "label": "Engagement cap (bills)",
+          "help": "Bill count that earns the full engagement score"
+        },
+        "gradeA": {
+          "label": "Grade A cutoff",
+          "help": "Relationship score at or above this earns grade A"
+        },
+        "gradeB": {
+          "label": "Grade B cutoff",
+          "help": "Relationship score at or above this earns grade B"
+        },
+        "gradeC": {
+          "label": "Grade C cutoff",
+          "help": "Relationship score at or above this earns grade C"
+        },
+        "gradeD": {
+          "label": "Grade D cutoff",
+          "help": "Relationship score at or above this earns grade D"
+        },
+        "hhiCritical": {
+          "label": "HHI critical level",
+          "help": "Supplier concentration above this is highly concentrated"
+        },
+        "hhiWarning": {
+          "label": "HHI warning level",
+          "help": "Supplier concentration above this is moderately concentrated"
+        },
+        "highPerformanceScore": {
+          "label": "High-performance score",
+          "help": "Payment health at or above this counts as high performance in the leverage matrix"
+        },
+        "highSpendPercentile": {
+          "label": "High-spend percentile",
+          "help": "Spend at or above this percentile counts as high spend in the leverage matrix"
+        },
+        "neutralStabilityScore": {
+          "label": "Neutral stability score",
+          "help": "Stability score when there is no prior-period spend to compare"
+        },
+        "onTimeGoodRate": {
+          "label": "Good on-time rate (%)",
+          "help": "On-time payment at or above this reads as healthy"
+        },
+        "significanceCore": {
+          "label": "Core significance",
+          "help": "Scorecard points for vendors in the core tier"
+        },
+        "significanceStrategic": {
+          "label": "Strategic significance",
+          "help": "Scorecard points for vendors in the strategic tier"
+        },
+        "significanceTactical": {
+          "label": "Tactical significance",
+          "help": "Scorecard points for vendors in the tactical tier"
+        },
+        "significanceTail": {
+          "label": "Tail significance",
+          "help": "Scorecard points for vendors in the tail tier"
+        },
+        "slowPayDays": {
+          "label": "Slow payment (days)",
+          "help": "Average days to pay above this reads as slow"
+        },
+        "tierCorePct": {
+          "label": "Core tier (%)",
+          "help": "Vendors ranked up to this share of the vendor count form the core tier"
+        },
+        "tierStrategicPct": {
+          "label": "Strategic tier (%)",
+          "help": "Top-ranked vendors up to this share of the vendor count form the strategic tier"
+        },
+        "tierTacticalPct": {
+          "label": "Tactical tier (%)",
+          "help": "Vendors ranked up to this share of the vendor count form the tactical tier"
+        }
+      }
+    },
+    "payment": {
+      "undatedNote": "Excludes {count} bills with no due date or payment terms"
+    },
+    "matrix": {
+      "unratedNote": "{count} vendors have no payment history yet and are not plotted"
     }
   },
   "cashflow": {
@@ -2926,7 +3014,7 @@
       "anomaly": {
         "label": "Anomalies",
         "sub": "critical",
-        "desc": "Statistical outliers (>2.5σ)"
+        "desc": "Statistical outliers (>{sigma}σ)"
       },
       "zombie": {
         "label": "Zombies",
@@ -3001,7 +3089,7 @@
       },
       "anomalyThreshold": {
         "label": "Anomaly threshold",
-        "note": "Z-score for statistical outliers (critical at 3σ)"
+        "note": "Z-score for statistical outliers (critical at {critical}σ)"
       },
       "boilingFrog": {
         "label": "Boiling frog",
@@ -3047,9 +3135,322 @@
         },
         "fragmentationAvgSize": {
           "label": "Fragmentation average size",
-          "help": "Average transaction size cap for the fragmentation detector"
+          "help": "Average transaction size cap in {currency} for the fragmentation detector — empty means the detector is not configured"
+        },
+        "accelMild": {
+          "label": "Mild acceleration (%/mo)",
+          "help": "Acceleration above this reads as mild"
+        },
+        "accelStrong": {
+          "label": "Strong acceleration (%/mo)",
+          "help": "Acceleration above this reads as strong"
+        },
+        "accountFilterChange": {
+          "label": "Account filter change (%)",
+          "help": "Cutoff for the increases/decreases account filters"
+        },
+        "accountFilterHighVel": {
+          "label": "Account filter velocity (%/mo)",
+          "help": "Cutoff for the high-velocity account filter"
+        },
+        "alertBannerThreshold": {
+          "label": "Alert banner (count)",
+          "help": "Alert counts above this render the banner critical"
+        },
+        "anomalyCriticalOffset": {
+          "label": "Critical offset (σ)",
+          "help": "Anomalies beyond the threshold plus this are critical"
+        },
+        "boilingFrogCriticalCreep": {
+          "label": "Creep critical (%)",
+          "help": "Total creep above this is critical"
+        },
+        "boilingFrogMinIncrease": {
+          "label": "Creep minimum (%)",
+          "help": "Total creep at or above this flags a boiling-frog account"
+        },
+        "boilingFrogMonotonicRatio": {
+          "label": "Monotonic ratio (%)",
+          "help": "Share of creeping months needed to flag boiling frog"
+        },
+        "boilingFrogStepCap": {
+          "label": "Creep step cap (%)",
+          "help": "Only monthly increases up to this count as silent creep"
+        },
+        "boilingFrogWarningCreep": {
+          "label": "Creep warning (%)",
+          "help": "Total creep above this is a warning"
+        },
+        "categoryIncreaseThreshold": {
+          "label": "Category increase (%)",
+          "help": "Category growth above this feeds the increase total"
+        },
+        "cliffCriticalGap": {
+          "label": "Cliff critical gap (pp)",
+          "help": "PO/SO velocity gap above this is critical"
+        },
+        "cliffCriticalHorizon": {
+          "label": "Cliff critical horizon (mo)",
+          "help": "Horizon shown with a critical cliff"
+        },
+        "cliffCriticalPoints": {
+          "label": "Cliff critical points",
+          "help": "Health-score deduction for a critical cliff"
+        },
+        "cliffCriticalRatio": {
+          "label": "Cliff critical ratio",
+          "help": "PO/SO ratio above this is critical"
+        },
+        "cliffWarningGap": {
+          "label": "Cliff warning gap (pp)",
+          "help": "PO/SO velocity gap above this is a warning"
+        },
+        "cliffWarningHorizon": {
+          "label": "Cliff warning horizon (mo)",
+          "help": "Horizon shown with a warning cliff"
+        },
+        "cliffWarningPoints": {
+          "label": "Cliff warning points",
+          "help": "Health-score deduction for a warning cliff"
+        },
+        "cliffWarningRatio": {
+          "label": "Cliff warning ratio",
+          "help": "PO/SO ratio above this is a warning"
+        },
+        "concentrationHighShare": {
+          "label": "High share (%)",
+          "help": "Risk-account share above this is high severity"
+        },
+        "concentrationShareThreshold": {
+          "label": "Risk share (%)",
+          "help": "Accounts above this spend share with hot velocity are concentration risks"
+        },
+        "concentrationTop1Warning": {
+          "label": "Top-account warning (%)",
+          "help": "A top account above this share raises a concentration insight"
+        },
+        "fragmentationHighTxns": {
+          "label": "Fragmentation high (txns/mo)",
+          "help": "Monthly transactions above this are high severity"
+        },
+        "fragmentationUnitCap": {
+          "label": "Fragmentation ceiling",
+          "help": "Maximum structural points for fragmentation"
+        },
+        "fragmentationUnitWeight": {
+          "label": "Fragmentation weight",
+          "help": "Structural points per fragmented category"
+        },
+        "healthCriticalAnomalyCap": {
+          "label": "Critical anomaly ceiling",
+          "help": "Maximum deduction for critical anomalies"
+        },
+        "healthCriticalAnomalyUnit": {
+          "label": "Critical anomaly unit",
+          "help": "Deduction per critical anomaly"
+        },
+        "healthCriticalCap": {
+          "label": "Critical cap",
+          "help": "Maximum deduction for critical issues"
+        },
+        "healthCriticalFrogCap": {
+          "label": "Critical creep ceiling",
+          "help": "Maximum deduction for critical creep"
+        },
+        "healthCriticalFrogUnit": {
+          "label": "Critical creep unit",
+          "help": "Deduction per critical boiling-frog account"
+        },
+        "healthCriticalZombieCap": {
+          "label": "Critical zombie ceiling",
+          "help": "Maximum deduction for critical zombies"
+        },
+        "healthCriticalZombieUnit": {
+          "label": "Critical zombie unit",
+          "help": "Deduction per critical zombie subscription"
+        },
+        "healthGradeA": {
+          "label": "Health grade A",
+          "help": "Health score at or above this earns grade A"
+        },
+        "healthGradeB": {
+          "label": "Health grade B",
+          "help": "Health score at or above this earns grade B"
+        },
+        "healthGradeC": {
+          "label": "Health grade C",
+          "help": "Health score at or above this earns grade C"
+        },
+        "healthGradeD": {
+          "label": "Health grade D",
+          "help": "Health score at or above this earns grade D"
+        },
+        "healthStructuralCap": {
+          "label": "Structural cap",
+          "help": "Maximum deduction for structural risk"
+        },
+        "healthVelocityCap": {
+          "label": "Velocity cap",
+          "help": "Maximum health-score deduction for hot velocity"
+        },
+        "healthVelocityUnit": {
+          "label": "Velocity unit cost",
+          "help": "Deduction per hot-velocity account"
+        },
+        "healthVelocityUnitCap": {
+          "label": "Velocity unit ceiling",
+          "help": "Maximum velocity deduction per account group"
+        },
+        "healthWarningAnomalyCap": {
+          "label": "Warning anomaly ceiling",
+          "help": "Maximum deduction for non-critical anomalies"
+        },
+        "healthWarningAnomalyUnit": {
+          "label": "Warning anomaly unit",
+          "help": "Deduction per non-critical anomaly"
+        },
+        "healthWarningCap": {
+          "label": "Warning cap",
+          "help": "Maximum deduction for warnings"
+        },
+        "healthWarningFrogCap": {
+          "label": "Warning creep ceiling",
+          "help": "Maximum deduction for non-critical creep"
+        },
+        "healthWarningFrogUnit": {
+          "label": "Warning creep unit",
+          "help": "Deduction per non-critical boiling-frog account"
+        },
+        "healthWarningZombieCap": {
+          "label": "Warning zombie ceiling",
+          "help": "Maximum deduction for non-critical zombies"
+        },
+        "healthWarningZombieUnit": {
+          "label": "Warning zombie unit",
+          "help": "Deduction per non-critical zombie subscription"
+        },
+        "hhiCritical": {
+          "label": "HHI critical level",
+          "help": "Category concentration above this is concentrated"
+        },
+        "hhiWarning": {
+          "label": "HHI warning level",
+          "help": "Category concentration above this is moderate"
+        },
+        "highVelocityAlert": {
+          "label": "High-velocity alert (%/mo)",
+          "help": "Accounts above this velocity raise a growth insight"
+        },
+        "minBaseAmount": {
+          "label": "Minimum base",
+          "help": "Series below this amount in {currency} are skipped by the velocity engine — empty means no minimum"
+        },
+        "opexRatioAlert": {
+          "label": "OpEx ratio alert (%)",
+          "help": "Operating expenses above this share of revenue raise an insight"
+        },
+        "projectionCapAccount": {
+          "label": "Projection cap, account (%)",
+          "help": "Per-account projection change is clamped to this"
+        },
+        "projectionCapTotal": {
+          "label": "Projection cap, total (%)",
+          "help": "Total projection change is clamped to this"
+        },
+        "savingsCriticalPoints": {
+          "label": "Savings points, critical",
+          "help": "Deduction when the savings ratio passes the critical tier"
+        },
+        "savingsHighPoints": {
+          "label": "Savings points, high",
+          "help": "Deduction when the savings ratio passes the high tier"
+        },
+        "savingsLowPoints": {
+          "label": "Savings points, low",
+          "help": "Deduction when the savings ratio passes the low tier"
+        },
+        "savingsMediumPoints": {
+          "label": "Savings points, medium",
+          "help": "Deduction when the savings ratio passes the medium tier"
+        },
+        "savingsRatioCritical": {
+          "label": "Savings ratio, critical (%)",
+          "help": "Savings-to-spend ratio above this deducts critical points"
+        },
+        "savingsRatioHigh": {
+          "label": "Savings ratio, high (%)",
+          "help": "Savings-to-spend ratio above this deducts high points"
+        },
+        "savingsRatioLow": {
+          "label": "Savings ratio, low (%)",
+          "help": "Savings-to-spend ratio above this deducts low points"
+        },
+        "savingsRatioMedium": {
+          "label": "Savings ratio, medium (%)",
+          "help": "Savings-to-spend ratio above this deducts medium points"
+        },
+        "savingsRatioWatch": {
+          "label": "Savings ratio, watch (%)",
+          "help": "Savings-to-spend ratio above this deducts watch points"
+        },
+        "savingsWatchPoints": {
+          "label": "Savings points, watch",
+          "help": "Deduction when the savings ratio passes the watch tier"
+        },
+        "seasonalBand": {
+          "label": "Seasonal band (%)",
+          "help": "Monthly deviation beyond this marks a high or low season"
+        },
+        "seasonalCriticalDeviation": {
+          "label": "Seasonal critical (%)",
+          "help": "Absolute deviation above this is a high-severity seasonal alert"
+        },
+        "spenderIncreaseThreshold": {
+          "label": "Spender increase (%)",
+          "help": "Spender growth above this counts as a top riser"
+        },
+        "structuralTop1High": {
+          "label": "Top-share high (%)",
+          "help": "Top-account share above this adds high structural points"
+        },
+        "structuralTop1HighPoints": {
+          "label": "Top-share points (high)",
+          "help": "Structural points when the top share passes the high tier"
+        },
+        "structuralTop1Low": {
+          "label": "Top-share low (%)",
+          "help": "Top-account share above this adds low structural points"
+        },
+        "structuralTop1LowPoints": {
+          "label": "Top-share points (low)",
+          "help": "Structural points when the top share passes the low tier"
+        },
+        "structuralTop1Medium": {
+          "label": "Top-share medium (%)",
+          "help": "Top-account share above this adds medium structural points"
+        },
+        "structuralTop1MediumPoints": {
+          "label": "Top-share points (medium)",
+          "help": "Structural points when the top share passes the medium tier"
+        },
+        "topVendorsCount": {
+          "label": "Top vendors",
+          "help": "Vendors kept in the drill-down, ranked by spend"
+        },
+        "typeImbalanceGap": {
+          "label": "Type imbalance gap (pp)",
+          "help": "Bills/expenses velocity gap above this raises an insight"
+        },
+        "zombieCriticalMonths": {
+          "label": "Zombie critical (months)",
+          "help": "Unchanged subscriptions running this long are critical"
+        },
+        "zombieMaxDeviation": {
+          "label": "Zombie deviation (%)",
+          "help": "Largest variation around the mean that still reads as an unchanged subscription"
         }
-      }
+      },
+      "unsetMinimum": "No minimum — every series is scored from its first month"
     },
     "sources": {
       "intro": "Spend = expense/COGS journal lines from the four spend document types:",
@@ -3116,7 +3517,8 @@
       },
       "seasonalHigh": "Higher spending typically occurs in {months}",
       "seasonalLow": "Lower spending typically occurs in {months}",
-      "shadowItReason": "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced."
+      "shadowItReason": "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
+      "fragmentationUnconfigured": "Set the fragmentation size cap in Spend Velocity → Configuration"
     }
   },
   "sentinel": {

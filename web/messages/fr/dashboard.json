@@ -91,7 +91,13 @@
     "healthInsights": "Constats financiers",
     "revenueTrend": "Évolution du CA et des résultats",
     "marginTrend": "Évolution des marges",
-    "budgetVariance": "Budget vs réel"
+    "budgetVariance": "Budget vs réel",
+    "kpiVendorConcentration": "Concentration fournisseurs",
+    "kpiVendorPayment": "Performance de paiement fournisseurs",
+    "kpiSpendVelocity": "Vélocité des dépenses",
+    "kpiVendorConcentrationHint": "Top 5 : {share} · {period}",
+    "kpiVendorPaymentHint": "Moyenne de {days} jours de paiement · {late} en retard · {period}",
+    "kpiSpendVelocityHint": "{savings} d’économies potentielles · {period}"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -204,7 +210,10 @@
     "healthInsights": "Problèmes, recommandations et anomalies relevés par Santé financière sur la période.",
     "revenueTrend": "CA, marge brute et résultat d’exploitation mensuels des derniers mois.",
     "marginTrend": "Marges brute et d’exploitation mensuelles des derniers mois.",
-    "budgetVariance": "Le budget approuvé face au réel de la période, avec les comptes hors trajectoire."
+    "budgetVariance": "Le budget approuvé face au réel de la période, avec les comptes hors trajectoire.",
+    "kpiVendorConcentration": "HHI fournisseurs et part des 5 premiers du rendement fournisseurs.",
+    "kpiVendorPayment": "Taux de paiement ponctuel et dépenses payées en retard du rendement fournisseurs.",
+    "kpiSpendVelocity": "Alertes de dépenses ouvertes et économies potentielles de la vélocité."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",
