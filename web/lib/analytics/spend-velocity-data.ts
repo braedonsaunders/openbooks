@@ -983,7 +983,8 @@ export async function spendVelocityData(
       });
     }
   }
-  zombieList.sort((x, y) => cmp(y.annualCost, x.annualCost));
+  // Unmeasurable annuals sort last, never as zeroes among measured ones.
+  zombieList.sort((x, y) => (x.annualCost === null ? 1 : y.annualCost === null ? -1 : cmp(y.annualCost, x.annualCost)));
   const zombies = {
     summary: {
       count: zombieList.length,
