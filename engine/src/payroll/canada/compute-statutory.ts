@@ -11,7 +11,7 @@ import { calculateTp1015 } from "./quebec/tp1015.ts";
 import { qcRatesForPayDate } from "./quebec/rates.ts";
 import { ratesForPayDate, type Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
-import { payrollPack } from "../packs.ts";
+import { CA_SUPPLEMENTAL_PAY_TREATMENT } from "./supplemental-pay.ts";
 import { EMPTY_PERIOD_PRIORS, periodPriorsEmpty } from "../period-priors.ts";
 import { cumulativeHistory } from "./cumulative-history.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
@@ -198,9 +198,8 @@ export async function computeCaStatutory(
   // bonus method until a second run actually shares the period — otherwise
   // every existing bonus-carrying regular run would reprice.
   const foldBonus = supplementalMethod === "period_cumulative" && (hasPriors || runType === "supplemental");
-  const treatment = payrollPack(ctx.country).supplementalPayTreatment;
-  const priorFederalTax = treatment ? priorWithheld(treatment.federalTaxSystemKeys) : "0";
-  const priorProvincialTax = treatment ? priorWithheld(treatment.provincialTaxSystemKeys) : "0";
+  const priorFederalTax = priorWithheld(CA_SUPPLEMENTAL_PAY_TREATMENT.federalTaxSystemKeys);
+  const priorProvincialTax = priorWithheld(CA_SUPPLEMENTAL_PAY_TREATMENT.provincialTaxSystemKeys);
   // A share is never negative: annual maxima that moved under an already-paid
   // period (a mid-year edition change) floor this run at zero rather than
   // booking a refund through payroll.
