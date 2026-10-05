@@ -70,5 +70,7 @@ export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDef
       return result(periodLabel, [metric('sentinel.kpi.flagged', number(data.summary.flaggedCount)), metric('sentinel.kpi.duplicatePairs', number(data.summary.duplicateCount)), metric('sentinel.kpi.valueAtRisk', fmt.money(data.summary.totalAtRisk, { currency: data.meta.presentationCurrency })), metric('hub.riskScore', `${number(data.summary.overallRiskScore)}/100`)])
     }
   }
-  throw new Error('Analytics dashboard preview is unavailable')
+  // Unknown slugs are a caller bug, but the message still comes from the
+  // catalog — no user-facing English lives in this module.
+  throw new Error(t('preview.unavailable'))
 }

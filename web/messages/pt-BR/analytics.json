@@ -105,6 +105,10 @@
     "statesShown": "Estados do ciclo de vida exibidos",
     "calculatedAt": "Dados em {time}"
   },
+  "preview": {
+    "busy": "As métricas de análise ainda estão sendo calculadas. Tente novamente em um momento.",
+    "unavailable": "A prévia do painel de análise não está disponível"
+  },
   "financialHealth": {
     "title": "Saúde financeira",
     "description": "Índices de rentabilidade, eficiência e operação com uma pontuação composta de saúde.",
