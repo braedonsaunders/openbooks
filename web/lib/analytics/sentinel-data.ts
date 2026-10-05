@@ -303,7 +303,7 @@ export interface SentinelData {
     benford2DConformity: string;
     approvalLimitRisk: boolean;
     topRiskAreas: { area: string; severity: "critical" | "high" | "medium"; count: number; message: string }[];
-    /** Translated names of skipped scoring sources (unset floors/limits/tiers). */
+    /** Translated names of skipped Configuration-governed scoring sources (unset floors/tiers). */
     excludedDetectors: string[];
   };
   duplicates: {
@@ -1611,9 +1611,13 @@ export async function sentinelData(
       benford2DConformity: b2Top.conformity,
       approvalLimitRisk: flowLimits.length > 0 && trapTotal > 0,
       topRiskAreas,
+      // The threshold trap is governed by Flows limits, not Configuration,
+      // so it never joins this list: its unavailability is refused by name
+      // on its own panel, where the remedy (a Flows amount condition) lives.
+      // Everything named here is set in Sentinel → Configuration, which is
+      // what the score note's single remedy promises.
       excludedDetectors: [
         ...(duplicateUnavailable !== null ? [strings.detectorDuplicate] : []),
-        ...(trapUnavailable !== null ? [strings.detectorTrap] : []),
         ...(rsfUnavailable !== null ? [strings.detectorRsf] : []),
         ...(zscoreUnavailable !== null ? [strings.detectorZscore] : []),
         ...(amountTierUnset ? [strings.detectorAmountTiers] : []),
@@ -1649,7 +1653,7 @@ export interface SentinelRiskSummary {
   duplicateConfigured: boolean;
   /** Translated reason naming the missing duplicate floor; null when configured. */
   duplicateUnavailableReason: string | null;
-  /** Translated names of skipped scoring sources (unset floors/limits/tiers). */
+  /** Translated names of skipped Configuration-governed scoring sources (unset floors/tiers). */
   excludedDetectors: string[];
   presentationCurrency: string;
 }
