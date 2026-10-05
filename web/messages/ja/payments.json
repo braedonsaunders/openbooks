@@ -234,6 +234,8 @@
     "adjustments": "割引 {discount} · クレジット {credit}",
     "reason": "理由",
     "reasonRequired": "理由を入力してください。支払の監査証跡に保持されます。",
+    "bankAttestationHelp": "この支払実行のファイルは銀行に送信済みです。ロールバックすると請求書が再び支払対象になるため、まずファイルが処理されておらず今後も処理されないことを銀行に確認してください。",
+    "bankAttestationLabel": "銀行が送信済みファイルを処理していないことを証明するには {runNumber} と入力してください",
     "recordOutcome": "結果を記録",
     "outcome": { "title": "銀行の結果", "description": "{payee} の決済または返却を記録します。", "status": "結果", "settled": "決済済み", "returned": "返却済み", "rejected": "銀行により却下", "effectiveOn": "発効日", "bankReference": "銀行参照番号", "returnCode": "返却コード", "returnReason": "返却理由", "reversalWarning": "返却または却下は記帳済みの支払を逆仕訳し、対象の仕入請求書を再度未払に戻します。" },
     "columns": {

@@ -234,6 +234,8 @@
     "adjustments": "折扣 {discount} · 贷项 {credit}",
     "reason": "原因",
     "reasonRequired": "请输入原因。它将保留在付款审计追踪中。",
+    "bankAttestationHelp": "此付款批次的文件已交付银行。回滚会使其账单再次可付款，因此请先与银行确认该文件未被处理且不会被处理。",
+    "bankAttestationLabel": "输入 {runNumber} 以证明银行未处理已交付的文件",
     "recordOutcome": "记录结果",
     "outcome": { "title": "银行结果", "description": "记录 {payee} 的结算或退回。", "status": "结果", "settled": "已结算", "returned": "已退回", "rejected": "被银行拒绝", "effectiveOn": "生效日期", "bankReference": "银行参考号", "returnCode": "退回代码", "returnReason": "退回原因", "reversalWarning": "退回或拒绝将冲回已过账的付款并重新打开受影响的应付账单。" },
     "columns": {
