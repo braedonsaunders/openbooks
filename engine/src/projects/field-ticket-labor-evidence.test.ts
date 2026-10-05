@@ -1,33 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fieldTicketLaborLines, timeTypes } from "@openbooks/schema";
 import {
   captureFieldTicketLaborEvidence,
   FieldTicketLaborEvidenceError,
 } from "./field-ticket-labor-evidence.ts";
-
-test("commercial labor evidence cannot mutate the operational time ledger", () => {
-  const service = readFileSync(
-    "engine/src/projects/field-ticket-labor-evidence.ts",
-    "utf8",
-  );
-  assert.doesNotMatch(service, /\b(?:insert\s+into|update|delete\s+from)\s+time_entries\b/i);
-  assert.match(service, /operationalTimeStatusUnchanged:\s*true/);
-  assert.match(service, /for update of d, ft/i);
-});
-
-test("labor evidence is revisioned, tenant-scoped, and append-only", () => {
-  const baseline = readFileSync(
-    "schema/migrations/generated/0001_baseline.sql",
-    "utf8",
-  );
-  assert.match(baseline, /field_ticket_labor_snapshots_current[\s\S]*where \(superseded_at IS NULL\)/i);
-  assert.match(baseline, /field_ticket_labor_snapshot_retention_guard/i);
-  assert.match(baseline, /field_ticket_labor_line_immutable_guard/i);
-  assert.match(baseline, /force row level security/gi);
-  assert.match(baseline, /time-entry provenance must be an exact line on the same ticket/i);
-});
 
 test("an impossible calendar date refuses by name before any database cast", async () => {
   // ISO_DATE is shape-only: 2026-02-30 passes the regex and used to reach

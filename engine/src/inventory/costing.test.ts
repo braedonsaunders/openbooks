@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
@@ -594,31 +593,4 @@ test("a receipt re-reads a costing policy after a concurrent revision commits", 
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
-});
-
-test("movement costing snapshots are locked inside their transaction", () => {
-  const movements = readFileSync(new URL("./movements.ts", import.meta.url), "utf8");
-  // Each direct movement path must re-read the profile with FOR SHARE after
-  // locking its position; a pre-transaction profile read can race a policy PUT.
-  assert.match(movements, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/g);
-  const transfers = readFileSync(new URL("./transfers.ts", import.meta.url), "utf8");
-  assert.match(transfers, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/);
-  const landed = readFileSync(new URL("./landed-cost.ts", import.meta.url), "utf8");
-  assert.match(landed, /const profile = await resolveProfile\(orgId, target\.itemId, tx, true\)/);
-  const tracking = readFileSync(new URL("./tracking.ts", import.meta.url), "utf8");
-  assert.match(tracking, /subsidiaryIds\?: readonly string\[\] \| null/);
-});
-
-test("the costing profile PUT revalues open layers when a standard cost is revised", () => {
-  const route = readFileSync(
-    new URL("../../../web/app/api/items/[id]/costing/route.ts", import.meta.url),
-    "utf8",
-  );
-  // The PUT must treat a standard-cost change on an already-standard item as
-  // the same versioned policy event as a switch onto standard: atomic layer
-  // revaluation plus variance posting, with the revision in the audit evidence.
-  assert.match(route, /revisingStandardCost/);
-  assert.match(route, /before\?\.costing_method === 'standard'/);
-  assert.match(route, /standardCostRevision/);
-  assert.match(route, /revalueOpenLayersToStandardCost/);
 });

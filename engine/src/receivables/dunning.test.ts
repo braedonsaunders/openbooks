@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "../platform/db.ts";
@@ -82,28 +81,6 @@ test("renderTemplate substitutes known tokens and blanks unknown ones", () => {
   assert.equal(renderTemplate("{{missing}} tail", {}), " tail");
 });
 
-test("dunning defers mail through the durable outbox inside the staged-claim transaction", () => {
-  const source = readFileSync(new URL("./dunning.ts", import.meta.url), "utf8");
-  // A direct Redis enqueue commits outside Postgres: a rolled-back or crashed
-  // tick left mail queued against a staged claim that never existed, and the
-  // next tick fired the same rung again — the customer got the letter twice.
-  // The rendered notice must instead ride this org's transaction through the
-  // durable scheduler_outbox (enqueueFlowEmail), keyed by the round identity
-  // so replays collapse onto one row, and no direct queue call may remain.
-  assert.match(source, /import \{ enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS \} from "\.\.\/delivery\/outbox-enqueue\.ts";/);
-  assert.match(source, /enqueueFlowEmail\(\{/);
-  // Fresh claims defer under the rung's base identity…
-  assert.match(source, /let occurrenceKey = `dunning:\$\{doc\.id\}:\$\{stage\.id\}`/);
-  // …every re-arm rotates the key with its own re-arm time, so a retry never
-  // collapses onto a dead outbox row and reports delivery without sending…
-  assert.match(source, /occurrenceKey = `dunning:\$\{doc\.id\}:\$\{stage\.id\}:\$\{/);
-  // …the claim id rides in the outbox meta for the worker's verdict…
-  assert.match(source, /dunningLogId: claimId/);
-  // …and the runner never settles a claim to sent: queueing is not delivery.
-  assert.doesNotMatch(source, /settleClaim\("sent"/);
-  assert.doesNotMatch(source, /@openbooks\/jobs/);
-  assert.doesNotMatch(source, /\benqueueEmail\b/);
-});
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -830,17 +807,6 @@ test("a failed top-rung send retries the same rung once healed", { skip: !DB }, 
   }
 });
 
-test("the fired set counts only sent delivery rows", () => {
-  const source = readFileSync(new URL("./dunning.ts", import.meta.url), "utf8");
-  // selectDueStage's fired set must admit successful sends and nothing else:
-  // a crossed stage whose send failed — or was suppressed for want of a
-  // billing email — leaves no sent row, so it stays eligible and retries.
-  // Failed and suppressed delivery rows must never enter this set.
-  assert.match(
-    source,
-    /select stage_id as "stageId" from dunning_log\s+where document_id = \$\{doc\.id\} and org_id = \$\{orgId\} and status = 'sent'/,
-  );
-});
 
 test("the dunning log guard enforces the delivery state machine", { skip: !DB }, async () => {
   const org = await createScratchOrg();
