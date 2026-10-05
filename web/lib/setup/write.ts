@@ -2296,6 +2296,7 @@ export async function createSetupRecord(
         }
         const inserted = ((await tx.execute(sql`
           insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+          -- A concurrent create claim is verified against its audited payload below before replaying.
           on conflict (id) do nothing
           returning ${sql.raw(idColumn(entity))} as id`)))
         const insertedRow = inserted.rows[0]
@@ -2353,6 +2354,7 @@ export async function createSetupRecord(
       if (claim.kind === 'replay') return claim.id
       const inserted = ((await tx.execute(sql`
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+        -- A concurrent create claim is verified against its audited payload below before replaying.
         on conflict (id) do nothing
         returning ${sql.raw(idColumn(entity))} as id`)))
       const insertedRow = inserted.rows[0]

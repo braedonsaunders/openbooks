@@ -44,6 +44,7 @@ export async function ensureCustomizationDefaults(args: {
             ),
             true, null, ${layout}, ${args.actorId ?? null}, ${args.actorId ?? null}
           )
+          -- The existing default form retains its edited layout; its default status is reconciled below.
           on conflict (org_id, record_type, name) do nothing
         `);
         await tx.execute(sql`
@@ -82,6 +83,7 @@ export async function ensureCustomizationDefaults(args: {
           ),
           true, ${config}, ${args.actorId ?? null}, ${args.actorId ?? null}
         )
+        -- The existing default view retains its edited configuration; its default status is reconciled below.
         on conflict (org_id, scope, record_type, name) do nothing
       `);
       await tx.execute(sql`

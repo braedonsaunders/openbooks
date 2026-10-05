@@ -1566,6 +1566,7 @@ async function activateQuoteLocked(
                 ${termStart}, ${nextBillOn}, ${termStart}, false,
                 ${`Activated from quote ${quote.documentNumber}`},
                 ${quoteId}, ${term.id}, ${actor}, ${actor})
+        -- An activation replay reuses the subscription selected below for this quote term.
         on conflict (org_id, source_quote_id, source_term_id) where source_quote_id is not null do nothing
         returning id`)
     ).rows[0];

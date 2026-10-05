@@ -315,6 +315,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
       values (${provisionedId}, ${orgId}, ${OVERHEAD_SYSTEM_RULE_KEY}, ${OVERHEAD_SYSTEM_RULE_NAME},
         'Engine-owned mirror of the overhead net-zero-pair policy and rate card. Managed only through overhead settings; never hand-edited.',
         'post', 100, true, true, ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})
+      -- Concurrent provisioning reuses the locked rule below and validates its system-owned shape.
       on conflict (org_id, key) do nothing
       returning id`);
     const headRows = await db.execute<{ id: string; is_system: boolean; mode: string; current_version_id: string | null }>(sql`
@@ -395,6 +396,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
         'Engine-owned measure for the overhead net-zero pair: approved project hours priced by the published department rate card.',
         'hours', 'project', 'native_measure', ${JSON.stringify({ measure: "labor_hours" })}, true,
         ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})
+      -- Concurrent provisioning reuses the driver below and rejects a conflicting driver definition.
       on conflict (org_id, key) do nothing
       returning id`);
     const driverRows = await db.execute<{ id: string; dimension: string; source_kind: string; config: unknown; is_active: boolean }>(sql`

@@ -145,6 +145,7 @@ export async function seedAdmin(orgId: string): Promise<void> {
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into users (org_id, email, name, password_hash)
       values (${orgId}, ${email.toLowerCase()}, ${name}, ${hash})
+      -- A repeated bootstrap resolves the existing administrator without resetting its password.
       on conflict (org_id, email) do nothing
       returning id
     `));
@@ -156,6 +157,7 @@ export async function seedAdmin(orgId: string): Promise<void> {
       insert into role_assignments (org_id, user_id, role_id)
       select ${orgId}, ${userId}, id from app_roles
        where org_id = ${orgId} and key = 'admin'
+      -- A repeated bootstrap preserves the existing administrator role assignment.
       on conflict (org_id, user_id, role_id) do nothing
       returning id
     `));

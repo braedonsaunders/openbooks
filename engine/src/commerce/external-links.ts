@@ -229,6 +229,7 @@ export async function linkExternal(
         values (${orgId}, ${input.channelId ?? null}, ${provider}, ${externalAccount},
           ${objectType}, ${externalId}, ${cleanText(input.externalParentId) ?? null},
           ${nativeTable}, ${nativeId}, now(), ${actor}, ${actor})
+        -- A concurrent link is selected below and its native target must match the requested mapping.
         on conflict (org_id, provider, external_account, object_type, external_id) do nothing
         returning id`);
       if (inserted.rows.length === 1) {

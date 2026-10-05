@@ -268,6 +268,7 @@ export const POST = defineRoute({
                ${description}, 'draft', ${chargeItemId}, ${fixedAssetId}, ${rateBookId},
                ${purchasePrice}, ${acquiredOn}, ${inServiceOn}, ${serialNumber},
                ${capacityQuantity}, ${capacityUnit}, ${user.id}, ${user.id})
+            -- A retry is accepted only after the existing audited create payload is verified below.
             on conflict (id) do nothing
             returning id`);
           if (!inserted.rows[0]) {

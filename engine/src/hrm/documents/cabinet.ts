@@ -152,6 +152,7 @@ export async function storeCabinetFile(
   await tx.execute(sql`
     insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
     values (${input.orgId}, ${fileId}, ${input.recordTable}, ${input.recordId}, ${input.createdBy}, now())
+    -- The same file attachment already links this record; retry retains the link.
     on conflict (org_id, file_id, target_table, target_id) do nothing
   `);
   for (const userId of input.viewerUserIds ?? []) {
@@ -160,6 +161,7 @@ export async function storeCabinetFile(
     await tx.execute(sql`
       insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_at, updated_at)
       values (${input.orgId}, 'file', ${fileId}, 'user', ${userId}, 'viewer', now(), now())
+      -- An existing grant already gives this viewer access to the same file.
       on conflict (org_id, resource_type, resource_id, principal_type, principal_id) do nothing
     `);
   }

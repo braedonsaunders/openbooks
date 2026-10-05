@@ -74,6 +74,7 @@ export async function claimCloseAutomationExecution(
     values (${context.orgId}, ${ruleId}, ${context.runId}, ${context.taskId ?? null}, ${context.trigger},
             ${context.eventKey}, 'running', 0, gen_random_uuid(), now(),
             ${context.actorId ?? null}, ${context.actorId ?? null})
+    -- A repeated event reuses its execution row and follows the lease/state checks below.
     on conflict (rule_id, event_key) do nothing returning id, lease_token
   `));
   let claimed = inserted.rows[0];

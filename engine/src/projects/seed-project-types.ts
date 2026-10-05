@@ -26,6 +26,7 @@ export async function seedProjectTypes(
           ${JSON.stringify(t.backupProfile)}::jsonb,
           ${actorId ?? null}, ${actorId ?? null}
         )
+        -- Default provisioning preserves the existing type and any operator changes; its row is selected below.
         on conflict (org_id, key) do nothing
       `);
       const row = (await tx.execute<{ id: string }>(sql`

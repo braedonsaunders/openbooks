@@ -79,6 +79,7 @@ export async function ensureAccountGroupDefaults(
           ${group.sortOrder}, ${JSON.stringify(group.match)}::jsonb, ${group.isCatchAll},
           ${actorId}, ${actorId}
         )
+        -- Repeated provisioning preserves the existing group and operator edits.
         on conflict (org_id, dimension, key) do nothing
       `);
     } catch (error) {

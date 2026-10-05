@@ -273,6 +273,7 @@ async function ensureChannelTaxCode(
     insert into tax_codes (org_id, code, name, applies_to, collected_account_id, custom, created_by, updated_by)
     values (${orgId}, ${code}, ${`Storefront tax ${jurisdiction}`}, 'sale',
       ${liabilityAccountId}, '{}'::jsonb, ${actor}, ${actor})
+    -- Concurrent tax-code creation reuses the code selected below instead of allocating a second identity.
     on conflict do nothing
     returning id`);
   const id = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
@@ -929,6 +930,7 @@ export async function postCashSaleDraft(
     await db.execute(sql`
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
       values (${orgId}, ${salesOrderId}, ${documentId}, 'bills', ${actor}, ${actor})
+      -- The existing edge already governs this cash sale through the same source sales order.
       on conflict (org_id, from_document_id, to_document_id, link_type) do nothing`);
   }
   const submission = await submitAndReleaseIfUngated("cash_sale", documentId, actor);

@@ -190,6 +190,7 @@ export async function ensurePanelScorecards(query: {
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_scorecards (org_id, interview_id, interviewer_party_id, created_by, updated_by)
         values (${orgId}, ${interviewId}, ${partyId}, ${actorId}, ${actorId})
+        -- Rescheduling retains the existing interviewer scorecard, including any submitted verdict.
         on conflict do nothing
         returning id
       `)).rows[0];

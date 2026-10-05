@@ -230,6 +230,7 @@ async function recordInvalidScheduleCron(
             ${JSON.stringify({ message: reason })}::jsonb,
             ${JSON.stringify([{ index: 1, kind: "schedule", status: "failed", error: reason }])}::jsonb,
             ${fingerprint}, ${actorId})
+    -- Concurrent ticks retain one failed run for this invalid schedule fingerprint.
     on conflict (org_id, automation_id, subject_kind, subject_id, trigger_fingerprint) do nothing
   `);
   // ON CONFLICT DO NOTHING here is the single-record guard: the error
@@ -563,6 +564,7 @@ export async function stageAutomationEvent(input: {
     insert into automation_event_queue (org_id, event_kind, subject_kind, subject_id, trigger_fingerprint, payload)
     values (${input.orgId}, ${input.eventKind}, ${input.subjectKind ?? null}, ${input.subjectId ?? null},
             ${input.triggerFingerprint}, ${JSON.stringify(input.payload ?? {})}::jsonb)
+    -- Repeated delivery of the same trigger stages one event; its existing queue row remains authoritative.
     on conflict (org_id, event_kind, subject_kind, subject_id, trigger_fingerprint) do nothing
   `);
   // ON CONFLICT DO NOTHING is the staging dedupe: the same trigger firing

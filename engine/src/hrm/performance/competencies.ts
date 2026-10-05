@@ -498,6 +498,7 @@ export async function linkCompetency(args: {
     await db.execute(sql`
       insert into hrm_competency_links (org_id, competency_id, target_kind, target_id, created_by)
       values (${orgId}, ${competencyId}, ${args.targetKind}, ${targetId}, ${person.partyId ?? actorId})
+      -- An existing competency-target link represents the same vocabulary association and is verified below.
       on conflict do nothing
     `);
     // on conflict do nothing is benign here by construction: the link is

@@ -210,6 +210,7 @@ export async function postSummaryBatch(
         insert into channel_daily_summaries
           (org_id, channel_id, summary_date, stock_location_id, currency, created_by, updated_by)
         values (${orgId}, ${group.channelId}, ${group.day}, ${group.stockLocationId}, ${group.currency}, ${actor}, ${actor})
+        -- A cutoff replay reuses the existing batch selected below and checks its posting state.
         on conflict (org_id, channel_id, summary_date, stock_location_id, currency) do nothing
         returning id, status, posting_document_id`);
       const batch = inserted.rows[0] ?? (await db.execute<SummaryDbRow>(sql`
@@ -280,6 +281,7 @@ export async function postSummaryBatch(
           from channel_orders o
          where o.org_id = ${orgId}
            and o.id in (${sql.join(resolvedIds.map((orderId) => sql`${orderId}::uuid`), sql`, `)})
+        -- The existing order mark already requires a full margin restatement; another mark adds no work.
         on conflict (org_id, order_id) do nothing`);
       // Tonight's refunds join the batch they belong to: one refund document
       // beside the sales document, each event on its own lines. The batch

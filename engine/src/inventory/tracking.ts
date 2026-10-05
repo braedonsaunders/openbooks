@@ -82,6 +82,7 @@ export async function ensureLot(
       values
         (${orgId}, ${itemId}, ${lotNumber.trim()}, ${expiresOn ?? null},
          ${actorId}, ${actorId})
+      -- A repeated lot identity is selected below and must agree with its organization and expiry.
       on conflict (item_id, lot_number) do nothing
       returning id
     `));
@@ -145,6 +146,7 @@ export async function ensureSerial(
       values
         (${orgId}, ${itemId}, ${serialNumber.trim()}, 'registered', null,
          ${actorId}, ${actorId})
+      -- A repeated serial identity is selected below and its organization and location are verified.
       on conflict (item_id, serial_number) do nothing
       returning id
     `));

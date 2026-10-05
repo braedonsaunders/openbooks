@@ -103,6 +103,7 @@ export async function attachExisting(input: {
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
       values (${input.orgId}, ${input.fileId}, ${input.targetTable}, ${input.targetId},
               ${input.createdBy}, now())
+      -- An existing identical file-target association already attaches the file; null denotes no new link.
       on conflict (org_id, file_id, target_table, target_id) do nothing
       returning id
     `))

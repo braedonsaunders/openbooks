@@ -562,6 +562,7 @@ export async function savePriorStub(
       throw new ParallelRunStoreError("a prior register row already exists for this employee — choose upsert to replace it");
     }
 
+    // A concurrent insert is refused by the missing RETURNING row below; it must not replace register evidence.
     const conflictAction = options.mode === "insert"
       ? sql`on conflict (register_id, employee_party_id) do nothing`
       : sql`on conflict (register_id, employee_party_id) do update set

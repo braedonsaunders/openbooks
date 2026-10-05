@@ -96,6 +96,7 @@ async function ensureRecognitionPeriods(orgId: string): Promise<void> {
                                       is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${orgId}, 2027, ${month}, ${`2027-${mm}`}, ${startsOn}, ${endsOn},
               false, ${calendar.id})
+      -- The conformance fixture reuses periods already created for this calendar and year.
       on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`);
   }
 }

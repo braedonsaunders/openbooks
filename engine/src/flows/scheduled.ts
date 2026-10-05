@@ -194,6 +194,7 @@ async function claimDueFlowOccurrences(
       insert into flow_scheduled_occurrences (org_id, flow_id, node_id, occurred_at)
       select ${flow.orgId}::uuid, ${flow.id}::uuid, n.node_id, ${due.latest}
         from advanced cross join due_nodes n
+       -- A repeated due-node scan retains the one occurrence already created for this timestamp.
        on conflict (flow_id, node_id, occurred_at) do nothing
       returning id, node_id
     `));
@@ -549,6 +550,7 @@ async function executeScheduledRun(
             : (JSON.parse(JSON.stringify(evalCtx.values)) as Record<string, unknown>),
         occurrenceKey,
       })
+      // Concurrent resume reuses the occurrence run selected below instead of creating a second send.
       .onConflictDoNothing()
       .returning({ id: schema.flowRuns.id });
     runId = inserted?.id;

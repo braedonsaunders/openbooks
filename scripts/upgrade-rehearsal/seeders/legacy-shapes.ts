@@ -107,6 +107,7 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
   )).rows[0]!.id;
   await client.query(
     `insert into public.stock_locations (org_id, location_id, code)
+     -- A repeated rehearsal seed reuses the stock location resolved below.
      values ($1, $2, 'EDGE-BIN') on conflict do nothing`,
     [orgId, loc],
   );
@@ -116,6 +117,7 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
   )).rows[0]!.id;
   await client.query(
     `insert into public.items (org_id, kind, name) values ($1, 'stock', 'EDGE widget')
+     -- A repeated rehearsal seed reuses the item resolved below.
      on conflict do nothing`,
     [orgId],
   );
@@ -159,6 +161,7 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
   await client.query(
     `insert into public.parties (id, org_id, kind, display_name)
      values ('02960000-0000-4000-8000-000000000010', $1, 'vendor', 'EDGE CRA')
+     -- The fixed vendor identity is shared with the rehearsal remedy and retained on reruns.
      on conflict (id) do nothing`,
     [orgId],
   );
@@ -175,6 +178,7 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
         '{"payrollRemittance": {"from": "2026-01-01", "to": "2026-01-31", "partyId": "aaaaaaaa-bbbb-cccc-ddd-eeeeeeeeeeeee"}}'),
        ('02960000-0000-4000-8000-000000000003', $1, 'vendor_bill', 'EDGE-MISSING', '2026-01-31', 'USD',
         '{"payrollRemittance": {"from": "2026-01-01"}}')
+     -- Fixed malformed fixture identities are retained so the rehearsal remedy can target them.
      on conflict (id) do nothing`,
     [orgId],
   );
@@ -193,6 +197,7 @@ async function seedLegacy(client: pg.Client, orgId: string, subsidiaryId: string
   )).rows[0]!.id;
   await client.query(
     `insert into public.stock_locations (org_id, location_id, code)
+     -- A repeated rehearsal seed reuses the warehouse resolved below.
      values ($1, $2, 'EDGE-LEGACY-BIN') on conflict do nothing`,
     [orgId, loc],
   );
@@ -202,6 +207,7 @@ async function seedLegacy(client: pg.Client, orgId: string, subsidiaryId: string
   )).rows[0]!.id;
   await client.query(
     `insert into public.items (org_id, kind, name) values ($1, 'stock', 'EDGE legacy widget')
+     -- A repeated rehearsal seed reuses the stock location resolved below.
      on conflict do nothing`,
     [orgId],
   );
@@ -216,6 +222,7 @@ async function seedLegacy(client: pg.Client, orgId: string, subsidiaryId: string
   await client.query(
     `insert into public.account_groups (org_id, dimension, key, name, color, sort_order, match, is_catch_all)
      values ($1, 'cost_pool', 'edge-catch', 'EDGE Catch', '#111111', 10, '{}', true)
+     -- A repeated rehearsal seed reuses the item resolved below.
      on conflict (org_id, dimension, key) do nothing`,
     [orgId],
   );

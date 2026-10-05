@@ -561,6 +561,7 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                                      amount_due, currency_code, channel, status, detail)
             values (${orgId}, ${doc.id}, ${policy.id}, ${stage.id}, ${doc.partyId}, ${to},
                     ${doc.balanceDue}, ${doc.currency}, 'email', 'staged', null)
+            -- The existing document-stage claim is resolved below before any letter is re-armed or queued.
             on conflict (document_id, stage_id) do nothing
             returning id
           `);

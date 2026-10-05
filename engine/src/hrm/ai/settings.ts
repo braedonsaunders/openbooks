@@ -35,6 +35,7 @@ export async function ensureAiRailsSettings(exec: SqlExecutor, orgId: string): P
   await exec.execute(sql`
     insert into ai_rails_settings (org_id)
     values (${orgId}::uuid)
+    -- An existing organization settings row retains its operator configuration.
     on conflict (org_id) do nothing`);
 }
 

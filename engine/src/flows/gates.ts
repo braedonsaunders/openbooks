@@ -1639,6 +1639,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
         escalateAt: null,
       })),
     )
+    // A repeated replacement assignee retains its existing gate and decision state.
     .onConflictDoNothing();
 
   // Durable routing evidence, part of the same atomic unit: the scheduler

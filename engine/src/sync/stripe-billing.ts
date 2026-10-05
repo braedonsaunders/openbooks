@@ -1013,6 +1013,7 @@ export async function skipStripeObject(
     await db.execute(sql`
       insert into stripe_billing_link_skips (org_id, stripe_account, object_type, stripe_id, reason, created_by)
       values (${orgId}, ${account}, ${objectType}, ${stripeId}, ${reason}, ${actor})
+      -- A repeated skip preserves the stored decision, which is verified below before reporting success.
       on conflict (org_id, stripe_account, object_type, stripe_id) do nothing`);
     const stored = (await db.execute<{ id: string }>(sql`
       select id from stripe_billing_link_skips

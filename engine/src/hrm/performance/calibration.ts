@@ -369,6 +369,7 @@ export async function openCalibrationSession(args: { orgId: string; actorId: str
       const entry = (await db.execute<{ id: string }>(sql`
         insert into hrm_calibration_entries (org_id, session_id, review_id, proposed_rating, created_by, updated_by)
         values (${orgId}, ${id}, ${candidate.id}, ${candidate.overall_rating}::numeric, ${actorId}, ${actorId})
+        -- An existing session-review entry is selected below rather than duplicated.
         on conflict do nothing
         returning id
       `)).rows[0];

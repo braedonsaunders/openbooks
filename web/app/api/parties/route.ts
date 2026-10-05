@@ -454,6 +454,7 @@ export const POST = defineRoute({
            ${JSON.stringify(custom)}::jsonb,
            ${invoicingPreference === null ? sql`null` : sql`${JSON.stringify(invoicingPreference)}::jsonb`},
            ${subsidiaryId}, ${isActive}, ${user.id}, ${user.id})
+        -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
       `))

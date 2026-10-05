@@ -257,6 +257,7 @@ async function insertDisputeRow(
             ${row.currency}, ${row.amount}, ${row.feeAmount}, ${row.providerRef}, ${row.reason},
             ${JSON.stringify([{ status: row.status, at: new Date().toISOString(), reason: row.reason }])}::jsonb,
             ${PSP_AUTOMATION_SYSTEM_ACTOR_ID}, ${PSP_AUTOMATION_SYSTEM_ACTOR_ID})
+    -- Repeated provider delivery reuses the dispute selected below instead of recording it twice.
     on conflict (org_id, provider, provider_event_id) do nothing
     returning id
   `));

@@ -599,6 +599,7 @@ async function persistFile(input: {
       const linked = (await tx.execute<{ id: string }>(sql`
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
         values (${input.orgId}, ${fileId}, 'documents', ${documentId}, ${input.actorId}, now())
+        -- An existing attachment already links this file to this document; count only new associations.
         on conflict (org_id, file_id, target_table, target_id) do nothing
         returning id
       `));
@@ -893,6 +894,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       select ${orgId}, f.id, 'documents', v.did, ${actorId}, now()
         from (values ${values}) as v(sid, did)
         join files f on f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id = v.sid
+      -- Imported files may already have these document associations; retain each existing link.
       on conflict (org_id, file_id, target_table, target_id) do nothing
     `));
     summary.createdLinks += res.rowCount ?? 0;

@@ -487,6 +487,7 @@ export async function openSurvey(input: {
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_survey_invitations (org_id, survey_id, party_id, token_hash)
         values (${input.orgId}, ${survey.id}, ${partyId}, ${hashHrmToken(token)})
+        -- The existing survey-party invitation already owns its delivery; token collisions still fail.
         on conflict (org_id, survey_id, party_id) do nothing
         returning id
       `)).rows[0];

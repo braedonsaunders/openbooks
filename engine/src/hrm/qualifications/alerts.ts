@@ -176,6 +176,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
             (org_id, qualification_id, lead_days, due_on, channel, created_by)
           values (${orgId}::uuid, ${row.qualification_id}::uuid, ${threshold},
                   ${row.expires_on}::date, 'inbox', null)
+          -- The existing qualification threshold alert already owns its notice; do not send it twice.
           on conflict (qualification_id, lead_days) do nothing
           returning id
         `)).rows[0]?.id;

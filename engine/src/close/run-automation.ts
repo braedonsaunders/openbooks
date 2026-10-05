@@ -505,6 +505,7 @@ export async function runCloseAutomations(
                   ${workstream}, 'action', 'manual', ${gateType},
                   'ready', 9000, ${context.actorId ?? run.started_by ?? null}, ${run.target_close_date},
                   ${evidenceRequired}, ${context.actorId ?? null}, ${context.actorId ?? null})
+          -- The existing task is accepted below only when every requested task attribute is identical.
           on conflict (run_id, key) do nothing returning id`));
         if (inserted.rows.length === 0) {
           const existing = (await db.execute<{

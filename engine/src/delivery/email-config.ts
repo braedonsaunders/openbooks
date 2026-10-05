@@ -722,6 +722,7 @@ export async function claimEmailDeliveryLog(row: {
       ${row.status ?? "queued"}, ${row.categoryKey ?? null}, ${JSON.stringify(meta)}::jsonb,
       ${row.errorMessage ?? null}, ${createdBy}
     )
+    -- A repeated delivery key reuses the email log and status selected below.
     on conflict (delivery_key) where delivery_key is not null do nothing
     returning id
   `));

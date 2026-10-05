@@ -186,6 +186,7 @@ export async function createUsageMeter(
         (org_id, key, name, unit, aggregation, item_id, is_active, created_by, updated_by)
       values
         (${orgId}, ${key}, ${name}, ${unit}, ${input.aggregation}, ${input.itemId ?? null}, true, ${actor}, ${actor})
+      -- A key collision returns no row and raises the named key-in-use refusal below.
       on conflict (org_id, key) do nothing
       returning ${METER_COLUMNS}`);
     if (inserted.rows.length === 1) return inserted.rows[0]!;
@@ -471,6 +472,7 @@ export async function ingestUsageRecords(
         values
           (${orgId}, ${meter.id}, ${customerId}, ${subscriptionId}, ${occurredOn}, ${quantity},
            ${distinctKey}, ${input.source}, ${sourceRef}, ${idempotencyKey}, ${actor})
+        -- A concurrent sender retry reuses the visible immutable usage record selected below.
         on conflict (org_id, meter_id, idempotency_key) do nothing
         returning ${RECORD_COLUMNS}`);
       if (inserted.rows.length === 1) {

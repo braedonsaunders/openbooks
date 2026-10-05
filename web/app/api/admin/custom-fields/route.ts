@@ -88,6 +88,7 @@ export const POST = defineRoute({
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, sort_order, created_by, updated_by)
         values (${user.orgId}, ${body.targetTable}, ${body.targetKind ?? null}, ${body.key}, ${body.label},
                 ${body.fieldType}, ${JSON.stringify(normalizeCustomFieldConfig(body.config))}::jsonb, ${body.isRequired === true}, ${Number(body.sortOrder ?? 0)}, ${user.id}, ${user.id})
+        -- A concurrently claimed field key returns the explicit duplicate-key refusal below.
         on conflict do nothing
         returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
                   ${documentRevisionSql(sql`updated_at`)} as updated_at

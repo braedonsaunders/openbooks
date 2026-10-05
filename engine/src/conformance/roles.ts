@@ -120,6 +120,7 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
                                       is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${scratch.orgId}, 2026, ${month}, ${`2026-${mm}`}, ${startsOn}, ${endsOn},
               false, ${fiscalCalendarId})
+      -- The conformance fixture reuses periods already created for this calendar and year.
       on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`);
   }
 
@@ -127,6 +128,7 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
   await db.execute(sql`
     insert into currencies (code, name, minor_units)
     values ('USD', 'United States Dollar', 2)
+    -- USD may already exist in the shared currency registry; preserve its ISO definition.
     on conflict (code) do nothing`);
 
   // Control accounts the FX revaluation and income-tax provision services

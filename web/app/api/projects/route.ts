@@ -316,6 +316,7 @@ export const POST = defineRoute({
          ${strOrNull(body.customerPoNumber)}, ${contractValue},
          ${startsOn}, ${endsOn}, ${strOrNull(body.notes)}, ${siteJurisdiction}, ${isActive},
          ${JSON.stringify(custom)}::jsonb, ${user.id}, ${user.id})
+      -- A retry is accepted only after the existing audited create payload is verified below.
       on conflict (id) do nothing
       returning id
     `))

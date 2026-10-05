@@ -399,6 +399,7 @@ export const POST = defineRoute({
                ${unitsTotal}, ${convention}, ${assetAccountId}, ${accumAccountId},
                ${expenseAccountId}, ${JSON.stringify(customBag)}::jsonb,
                ${user.id}, ${user.id})
+            -- A retry is accepted only after the existing audited create payload is verified below.
             on conflict (id) do nothing
             returning id`);
             if (!inserted.rows[0]) {

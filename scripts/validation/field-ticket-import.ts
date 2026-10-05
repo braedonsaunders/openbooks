@@ -304,6 +304,7 @@ export async function importFieldTickets(input: {
            foreman_party_id, created_by, updated_by)
         values (${ticketDocId}, ${orgId}, 'weekly', ${ticket.begin}, ${ticket.end},
                 ${parties.get(ticket.foremanRef) ?? null}, ${actor}, ${actor})
+        -- The verified imported document may already own its native ticket header on replay.
         on conflict (document_id) do nothing
         returning document_id
       `);

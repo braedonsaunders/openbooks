@@ -1206,6 +1206,7 @@ export async function ensureFiling(args: {
       (org_id, tax_year, form_type, subsidiary_id, status, threshold, currency, created_by, updated_by)
     values (${args.orgId}, ${args.taxYear}, ${args.formType}, ${subsidiaryId}, 'draft',
             ${args.threshold ?? form.defaultThreshold}, ${currency}, ${args.actorId}, ${args.actorId})
+    -- Concurrent filing creation returns the existing filing selected below.
     on conflict do nothing
     returning id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
               status, threshold, currency

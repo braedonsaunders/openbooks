@@ -602,6 +602,7 @@ async function upsertEntry(
       ${input.externalParentId}, ${input.title}, ${input.sku}, ${input.barcode},
       ${input.priceMinor}, ${input.currency}, ${JSON.stringify(input.optionValues)}::jsonb,
       ${input.shopifyUpdatedAt}, now(), ${actorId}, ${actorId})
+    -- Concurrent import of the same variant reuses the catalog entry selected below.
     on conflict (org_id, channel_id, external_id) do nothing
     returning id`);
   const id =
@@ -1117,6 +1118,7 @@ async function decideCreateItem(
     const identifier = await db.execute(sql`
       insert into item_identifiers (org_id, item_id, kind, value, created_by, updated_by)
       values (${orgId}, ${itemId}, ${barcodeKind(barcode)}, ${barcode}, ${actorId}, ${actorId})
+      -- A barcode collision returns no row and triggers the rollback/refusal below.
       on conflict (org_id, value) do nothing`);
     if ((identifier.rowCount ?? 0) !== 1) {
       await db.execute(sql`delete from items where org_id = ${orgId} and id = ${itemId}`);

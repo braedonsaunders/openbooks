@@ -478,6 +478,7 @@ async function provisionObjects(
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, created_by, updated_by)
         values (${orgId}, ${cf.targetTable}, ${cf.targetKind}, ${cf.key}, ${cf.label}, ${cf.fieldType},
                 ${JSON.stringify(cf.config)}::jsonb, ${cf.isRequired}, ${userId}, ${userId})
+        -- A concurrent custom-field key claim raises the named conflict below instead of reporting installation.
         on conflict do nothing returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
                    ${documentRevisionSql(sql`updated_at`)} as updated_at`)
       if (!created.rows.length) throw new AppError(`custom field "${scoped}" already exists`, 409)

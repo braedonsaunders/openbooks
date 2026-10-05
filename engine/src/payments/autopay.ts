@@ -1896,6 +1896,7 @@ async function insertCollectionAttempt(
        provider, status, retry_position, created_by, updated_by)
     values (${orgId}, ${candidate.invoiceId}, ${candidate.enrollmentId}, ${methodId}, ${fallbackOf},
             ${amount}, ${currency}, ${provider}, 'initiated', ${retryPosition}, ${actorId}, ${actorId})
+    -- The existing invoice retry position already owns its charge; null makes this attempt stand down.
     on conflict (org_id, invoice_id, retry_position) do nothing
     returning id
   `));

@@ -1103,6 +1103,7 @@ async function markChannelEconomicsDirty(tx: SqlExecutor, orgId: string, orderDo
     select ${orgId}, o.id, ${reason}
       from channel_orders o
      where o.org_id = ${orgId} and o.posting_document_id = ${orderDocumentId}
+    -- An existing order mark already requires a full margin restatement including shipping costs.
     on conflict (org_id, order_id) do nothing`);
 }
 
@@ -1245,6 +1246,7 @@ async function storeLabelPdf(
   await tx.execute(sql`
     insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
     values (${orgId}, ${fileId}, 'shipment_labels', ${labelId}, ${actorId}, now())
+    -- An existing attachment already links the same label bytes to this label record.
     on conflict (org_id, file_id, target_table, target_id) do nothing`);
   return fileId;
 }
@@ -1995,6 +1997,7 @@ export async function importBillingAdjustments(
          reason, status, occurred_at, created_by, updated_by)
       values (${orgId}, ${label.id}, ${identity}, ${item.kind}, ${amountMinor.toString()}, ${item.currency},
               ${item.reason ?? null}, 'pending', ${item.occurredAt ?? null}, ${actorId}, ${actorId})
+      -- A repeated provider adjustment retains its first recorded evidence and is counted as skipped below.
       on conflict (org_id, provider_adjustment_id) do nothing
       returning id`);
     if (written.rows.length === 0) {

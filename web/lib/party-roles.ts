@@ -45,5 +45,6 @@ export async function ensurePartyRoleRow(
   await executor.execute(sql`
     insert into ${sql.raw(table)} (org_id, party_id, is_active, created_by, updated_by)
     values (${args.orgId}, ${args.partyId}, ${active}, ${args.actorId}, ${args.actorId})
+    -- An existing party role retains its active state; a kind echo cannot reactivate a disabled role.
     on conflict (party_id) do nothing`)
 }

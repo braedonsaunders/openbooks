@@ -165,6 +165,7 @@ export async function receiveInboundEvent(input: ReceiveInboundInput): Promise<I
       values (${channel.orgId}, ${input.channelId}, ${channel.kind}, ${verified.topic},
         ${verified.eventId}, ${input.rawBody},
         ${JSON.stringify(storedHeaders(input.headers))}::jsonb, true, 'pending', null)
+      -- A repeated provider event reuses the stored delivery selected below.
       on conflict (channel_id, provider_event_id) do nothing
       returning id`);
     const id = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`

@@ -401,6 +401,7 @@ export const POST = defineRoute({
           const inserted = await db.execute<{ id: string }>(sql`
             insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
             values (${actor.orgId}, ${userId}, ${roleId}, ${actor.id}, ${actor.id})
+            -- An existing identical role assignment already grants the requested role.
             on conflict (org_id, user_id, role_id) do nothing
             returning id`);
           if (inserted.rows[0]) {
@@ -782,6 +783,7 @@ export const POST = defineRoute({
           const inserted = await db.execute<{ id: string }>(sql`
             insert into users (org_id, email, name, password_hash, is_active, created_by, updated_by)
             values (${actor.orgId}, ${email}, ${name}, ${UNUSABLE_PASSWORD_HASH}, true, ${actor.id}, ${actor.id})
+            -- An existing email is re-read under lock below and is either a resumable invitation or a refusal.
             on conflict do nothing
             returning id`);
           const newUserId = inserted.rows[0]?.id;
@@ -844,6 +846,7 @@ export const POST = defineRoute({
           const reassign = await db.execute<{ id: string }>(sql`
             insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
             values (${actor.orgId}, ${existing.id}, ${roleId}, ${actor.id}, ${actor.id})
+            -- A resumed invitation preserves an already granted role rather than creating a duplicate assignment.
             on conflict (org_id, user_id, role_id) do nothing
             returning id`);
           if (reassign.rows[0]) {

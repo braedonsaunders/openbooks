@@ -111,6 +111,7 @@ export async function claimBulkRunKey(args: {
     insert into application_idempotency_keys
       (org_id, actor_id, source, operation, idempotency_key, request_hash)
     values (${args.orgId}, ${args.actorId}, ${BULK_RUN_SOURCE}, ${BULK_RUN_OPERATION}, ${args.key}, ${hash})
+    -- A retry resolves the existing claim below and verifies its request hash before replaying.
     on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
     returning id
   `));

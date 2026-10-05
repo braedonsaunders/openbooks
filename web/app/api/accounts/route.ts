@@ -296,6 +296,7 @@ export const POST = defineRoute({
            ${typeof body.monetary === "boolean" ? body.monetary : null},
            ${JSON.stringify(requiredDimensions)}::jsonb, ${JSON.stringify(custom)}::jsonb,
            ${gate.user.id}, ${gate.user.id})
+        -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
       `);

@@ -1565,6 +1565,7 @@ async function releaseVoidedPayRun(
        and l.kind <> 'adjustment'
      group by l.org_id, l.plan_id, l.employee_party_id
     having sum(l.amount) <> 0
+    -- A prior adjustment returns no row and the required reversal count refuses the void below.
     on conflict do nothing
     returning id
   `)).rows;

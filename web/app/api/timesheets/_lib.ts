@@ -433,6 +433,7 @@ export async function ensureTimesheetWeek(
            and te.worked_on >= ${week}::date
            and te.worked_on <= ${week}::date + 6
       ) seed
+    -- A concurrent weekly-header create reuses the organization and employee header resolved below.
     on conflict (org_id, employee_party_id, week_start) do nothing
     returning id, status, rejection_reason
   `))

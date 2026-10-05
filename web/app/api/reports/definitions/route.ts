@@ -132,6 +132,7 @@ export const POST = defineRoute({
           values (${requestId}, ${user.orgId}, 'custom', 'query', ${slug}, ${name}, ${description},
                   ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
                   false, ${user.id}, ${user.id})
+          -- A retry resolves the existing audited payload below; conflicting input is refused.
           on conflict (id) do nothing
           returning id, kind, slug, name, description, query, layout, updated_at
         `))

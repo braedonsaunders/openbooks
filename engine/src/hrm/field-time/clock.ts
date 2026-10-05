@@ -274,6 +274,7 @@ async function ensureWeek(orgId: string, employeePartyId: string, dateIso: strin
   await db.execute(sql`
     insert into timesheet_weeks (org_id, employee_party_id, week_start, status, created_by, updated_by)
     values (${orgId}, ${employeePartyId}, ${weekStart}::date, 'draft', ${actorUserId}, ${actorUserId})
+    -- A concurrent clock already created this employee's week; retain its workflow state.
     on conflict do nothing`);
 }
 
@@ -551,6 +552,7 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
            ${input.geo ? JSON.stringify(input.geo) : null}::jsonb, 'not_required',
            ${input.photoFileId ?? null}, ${input.clientEventId}, 'recorded',
            ${input.actorUserId}, ${input.actorUserId})
+        -- A repeated client event is selected below and verified against the same employee and source.
         on conflict (org_id, client_event_id) do nothing
         returning id::text as id`)).rows[0]);
     } catch (error) {

@@ -290,6 +290,7 @@ export async function ensureScanOutboxRows(): Promise<void> {
     await db.execute(sql`
       insert into scheduler_outbox (kind, occurrence_key, status, next_attempt_at)
       values (${kind}, ${kind}, 'pending', now())
+      -- The singleton scan row already owns this scheduler kind; retain its delivery state.
       on conflict (kind, occurrence_key) do nothing
     `);
   }

@@ -167,6 +167,7 @@ export async function executeIdempotentInventoryAction<T>(
         values
           (${orgId}, ${actorId}, ${INVENTORY_ACTION_SOURCE}, ${operation}, ${idempotencyKey}, ${hash},
            now() + interval '30 days')
+        -- A retained idempotency claim belongs to another attempt; the caller resolves that outcome.
         on conflict (org_id, actor_id, source, operation, idempotency_key)
         do nothing
         returning id`));

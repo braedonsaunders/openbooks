@@ -313,6 +313,7 @@ export async function executeAppInvocation(args: {
         (org_id, actor_id, source, operation, idempotency_key, request_hash, expires_at)
       values (${orgId}, ${actorId}, 'app', ${args.operation}, ${claimKey},
               ${args.requestHash}, now() + interval '30 days')
+      -- A retained claim is reused only for identical input; a missing claim is refused below.
       on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
       returning id`);
     const claimId = inserted.rows[0]?.id ?? prior?.id;

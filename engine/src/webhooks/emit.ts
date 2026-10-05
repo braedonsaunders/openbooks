@@ -89,6 +89,7 @@ async function insertEventRow(
     values (${input.orgId}, ${input.type}, ${input.entityKind ?? null},
             ${input.entityId ?? null}::uuid, ${JSON.stringify(input.payload)}::jsonb,
             ${input.dedupeKey}, ${occurredAt})
+    -- A dedupe-key replay resolves the existing event below rather than emitting a second event.
     on conflict (org_id, dedupe_key) do nothing
     returning id
   `)).rows[0]?.id;
@@ -115,6 +116,7 @@ async function insertDeliveryRow(
   const inserted = await executor.execute(sql`
     insert into webhook_deliveries (org_id, event_id, endpoint_id, status, next_attempt_at)
     values (${orgId}, ${eventId}::uuid, ${endpointId}::uuid, 'pending', now())
+    -- A re-fanned event retains its existing endpoint delivery instead of dispatching twice.
     on conflict (org_id, event_id, endpoint_id) do nothing
   `);
   return (inserted.rowCount ?? 0) > 0;

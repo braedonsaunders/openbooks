@@ -56,6 +56,7 @@ export const POST = defineRoute({
         dashboardId: id,
         sortOrder: Number(next.rows[0]?.n ?? 0),
       })
+      // An identical user-dashboard pin already expresses the requested pinned state.
       .onConflictDoNothing();
 
     return NextResponse.json({ pinned: true });

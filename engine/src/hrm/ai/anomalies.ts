@@ -696,6 +696,7 @@ async function persistFlags(
         ${flag.employmentId}::uuid, ${flag.kind},
         ${SEVERITY_BY_KIND[flag.kind]}, ${JSON.stringify(flag.detail)}::jsonb,
         ${flag.explanation}, 'open', ${actorId}::uuid
+      -- A matching open flag already records this anomaly; count it as already open below.
       ) on conflict do nothing
       returning id::text as id`)).rows[0];
     if (inserted) created += 1;

@@ -170,6 +170,7 @@ export async function ensureComponents(
               ${c.basis ?? "fixed_amount"},
               ${c.taxable ?? true}, ${c.pensionable ?? true}, ${c.insurable ?? true},
               ${c.vacationable ?? true}, ${c.nonPeriodic ?? false}, ${c.sequence}, ${actorId}, ${actorId})
+      -- The same country and statutory system key retain their existing component configuration.
       on conflict (org_id, country, system_key, kind) where system_key is not null do nothing
     `);
   }
