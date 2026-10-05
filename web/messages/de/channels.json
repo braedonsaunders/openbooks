@@ -279,6 +279,10 @@
     "overrideItem": "Artikel",
     "overrideBuffer": "Eigener Bestand",
     "clearOverride": "Zurücksetzen",
+    "tabs": {
+      "mapped": "Zugeordnete Standorte",
+      "ariaLabel": "Standortlisten"
+    },
     "inherited": "Vererbt"
   },
   "settings": {

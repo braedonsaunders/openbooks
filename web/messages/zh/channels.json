@@ -279,6 +279,10 @@
     "overrideItem": "商品",
     "overrideBuffer": "自有预留",
     "clearOverride": "清除",
+    "tabs": {
+      "mapped": "已映射库位",
+      "ariaLabel": "库位列表"
+    },
     "inherited": "已继承"
   },
   "settings": {
