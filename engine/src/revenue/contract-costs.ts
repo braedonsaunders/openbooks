@@ -282,7 +282,13 @@ export function minorUnitsToCanonical(amountMinor: bigint, exponent: number): st
   return fromUnits(amountMinor * 10n ** BigInt(4 - exponent));
 }
 
-async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
+/**
+ * ISO minor-unit exponent for one currency code. Shared with read paths so a
+ * missing registry row refuses by name instead of guessing 2dp (which would
+ * misprice zero- and three-decimal currencies). The global currencies
+ * registry is read-only: the remedy names recording in a registry currency.
+ */
+export async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
   const row = (await runner.execute<{ minor_units: number }>(sql`
     select minor_units from currencies where code = ${currency}`)).rows[0];
   if (!row) {

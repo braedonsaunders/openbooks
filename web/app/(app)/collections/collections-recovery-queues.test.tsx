@@ -20,9 +20,16 @@ if (typeof window.matchMedia !== "function") {
   })) as typeof window.matchMedia;
 }
 
+Object.assign(globalThis, { __recoveryToasts: [] as [string, ...unknown[]][] });
 const { registerHooks } = await import("node:module");
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "sonner") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const toast={success(...a){globalThis.__recoveryToasts.push(['success',...a])},error(...a){globalThis.__recoveryToasts.push(['error',...a])}}",
+      };
+    }
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -55,6 +62,7 @@ function populatedData(reportId: string | null = "report-recovery-1"): Dashboard
   return {
     window: { from: "2026-07-01", to: "2026-10-01" },
     recoveryReportId: reportId,
+    canRunReport: true,
     metrics: {
       attempts: 5,
       invoicesWithFailures: 3,
@@ -233,10 +241,77 @@ test("breakdown drills into the governed report definition", async () => {
 });
 
 /**
- * Until the governed definition is seeded, exactly one breakdown list stays
- * visible: decline classes render, providers do not stack underneath.
+ * A computed setup refusal must reach the operator: when the server refuses
+ * the setup session, the toast carries the server's message and remedy
+ * instead of a generic failure.
  */
-test("missing report definition falls back to one breakdown list", async () => {
+test("a refused setup link surfaces the server refusal and remedy", async (t) => {
+  const refusal = { error: "The issuer refused the setup session", remedy: "Ask the customer for a different card" };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => ({
+    ok: false,
+    status: 422,
+    json: async () => refusal,
+  })) as unknown as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = realFetch;
+  });
+  const { host, root } = await renderDashboard(populatedData());
+  try {
+    const send = [...host.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Send update link"),
+    );
+    assert.ok(send, "the expiring queue offers its remedy");
+    (globalThis.__recoveryToasts as unknown[]).length = 0;
+    await act(async () => {
+      send.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    const errors = (globalThis.__recoveryToasts as [string, ...unknown[]][]).filter(
+      ([tone]) => tone === "error",
+    );
+    assert.ok(errors.length > 0, "the refusal toasts instead of failing silently");
+    assert.ok(
+      String(errors[0]?.[1]).includes("issuer refused"),
+      "the toast carries the server refusal",
+    );
+    assert.ok(
+      String(errors[0]?.[1]).includes("different card"),
+      "the toast carries the server remedy",
+    );
+  } finally {
+    await unmountDashboard(host, root);
+  }
+});
+
+/**
+ * A seeded definition the viewer may not run is the same as unseeded: the
+ * drill link would refuse at the runner (reports.read), so the hub remedy
+ * shows instead of an action that leads to a refusal.
+ */
+test("a definition without report permission links to the Reports hub", async () => {
+  const data = populatedData("report-recovery-9");
+  data.canRunReport = false;
+  const { host, root } = await renderDashboard(data);
+  try {
+    assert.equal(
+      host.querySelector("a[href^='/reports/custom/run/']"),
+      null,
+      "no drill link renders without report permission",
+    );
+    assert.ok(host.querySelector("a[href='/reports']"), "the hub remedy shows instead");
+  } finally {
+    await unmountDashboard(host, root);
+  }
+});
+
+/**
+ * Until the governed definition is seeded, no bespoke breakdown list renders:
+ * the dashboard names the Reports hub remedy and links there instead of
+ * stacking a second analytical list under the operational queue.
+ */
+test("missing report definition links to the Reports hub with no custom list", async () => {
   const data = populatedData(null);
   data.metrics.byDeclineClass = [
     { declineClass: "hard", failedAttempts: 4, recoveredInvoices: 1, recoveryRate: 0.25 },
@@ -247,22 +322,24 @@ test("missing report definition falls back to one breakdown list", async () => {
   const { host, root } = await renderDashboard(data);
   try {
     assert.ok(
-      [...host.querySelectorAll("span")].some((element) =>
-        element.textContent?.includes("4 failed · 1 recovered"),
+      ![...host.querySelectorAll("span")].some((element) =>
+        element.textContent?.includes("failed ·"),
       ),
-      "the fallback keeps the decline-class breakdown",
+      "no decline-class list renders without a definition",
     );
     assert.ok(
       ![...host.querySelectorAll("span")].some((element) =>
         element.textContent === "stripe",
       ),
-      "the provider breakdown does not stack under the fallback",
+      "no provider list renders without a definition",
     );
     assert.equal(
       host.querySelector("a[href^='/reports/custom/run/']"),
       null,
       "no drill link renders without a definition",
     );
+    const hub = host.querySelector("a[href='/reports']");
+    assert.ok(hub, "the fallback links to the native Reports hub");
   } finally {
     await unmountDashboard(host, root);
   }

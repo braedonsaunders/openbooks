@@ -86,6 +86,9 @@ export const COMMERCE_WIDGETS = {
     <CollectionsShell
       title={str(props, 'title') ?? ''}
       description={str(props, 'description') ?? ''}
+      tabs={(props.tabs as ComponentProps<typeof CollectionsShell>['tabs']) ?? []}
+      initialView={str(props, 'initialView') ?? undefined}
+      autopayOn={props.autopayOn === true}
       worklistHref={(props.worklistHref as string | null) ?? null}
       worklistLabel={str(props, 'worklistLabel') ?? ''}
       subscriptionsEnabled={props.subscriptionsEnabled === true}

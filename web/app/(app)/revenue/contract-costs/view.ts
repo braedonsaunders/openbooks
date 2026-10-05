@@ -1,6 +1,8 @@
 import {
   assetCarryingMinor,
+  ContractCostError,
   contractCostAttentionItems,
+  currencyExponent,
   minorUnitsToCanonical,
   scheduleForAsset,
 } from '@openbooks/engine/revenue'
@@ -17,7 +19,7 @@ import {
 } from "@braedonsaunders/appkit-viewspec";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
-import { isUuid, pickString } from "../../../../lib/list-params";
+import { isUuid, mergeHref, pickString } from "../../../../lib/list-params";
 import { can, requirePermission } from "../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../lib/feature-gates";
 import { loadAccounts } from "../../../../lib/setup/ref-options";
@@ -122,8 +124,11 @@ async function loadAssetPayload(assetId: string, orgId: string): Promise<Contrac
       left join parties rep on rep.id = a.rep_party_id
      where a.org_id = ${orgId} and a.id = ${assetId}`)).rows[0];
   if (!row) return null;
-  const exponent = (await db.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${row.currency}`)).rows[0]?.minor_units ?? 2;
+  // The asset prices in its own currency through the shared ISO exponent:
+  // a missing registry row refuses by name (the registry is read-only, so
+  // the remedy is recording in a registry currency), never a 2dp guess
+  // that would misprice zero- and three-decimal currencies.
+  const exponent = await currencyExponent(db, row.currency);
   const schedule = await scheduleForAsset(db, orgId, assetId);
   const periodNames = new Map(
     (await db.execute<{ id: string; name: string }>(sql`
@@ -196,9 +201,17 @@ export async function loadContractCosts(
 
   const org = (await db.execute<{ base_currency: string }>(sql`
     select base_currency from orgs where id = ${orgId}`)).rows[0];
-  const baseCurrency = org?.base_currency ?? "USD";
-  const exponent = (await db.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${baseCurrency}`)).rows[0]?.minor_units ?? 2;
+  // The workspace totals in the organization's own base currency — never a
+  // USD guess. The column is NOT NULL, so absence means the org row itself
+  // is gone and the page refuses by name with the real remedy.
+  if (!org?.base_currency) {
+    throw new ContractCostError("No base currency is set for this organization.", {
+      code: "contract_cost_base_currency_missing",
+      remedy: "Set the base currency on the company record in Company Settings before opening the contract-cost workspace.",
+    });
+  }
+  const baseCurrency = org.base_currency;
+  const exponent = await currencyExponent(db, baseCurrency);
 
   // The balance in minor units, summed in SQL: every tagged asset leg posts
   // in the organization base currency (the engine refuses the rest), so one
@@ -320,13 +333,15 @@ export async function loadContractCosts(
     activeView,
     tabs: [
       {
-        href: "/revenue/contract-costs?view=attention",
+        // Sibling views keep the workspace filters (period and the drawer
+        // snapshot) so switching never resets the page around the tabs.
+        href: mergeHref("/revenue/contract-costs", sp, { view: "attention" }),
         label: t("views.attention"),
         active: activeView === "attention",
         count: attention.length,
       },
       {
-        href: "/revenue/contract-costs?view=assets",
+        href: mergeHref("/revenue/contract-costs", sp, { view: "assets" }),
         label: t("views.assets"),
         active: activeView === "assets",
       },

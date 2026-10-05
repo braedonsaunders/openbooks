@@ -14,6 +14,7 @@ export {
   recognizeContractCostImpairment,
   runContractCostAmortization,
   minorUnitsToCanonical,
+  currencyExponent,
   scheduleForAsset,
   type AssetScheduleLine,
   type AttentionItem,

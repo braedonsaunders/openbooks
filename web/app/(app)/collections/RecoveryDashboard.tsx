@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
+import { Alert, AlertDescription, AlertTitle, Badge, Button, EmptyState } from '@openbooks/ui'
 import { Banknote, HeartHandshake, KeyRound, Percent, ShieldAlert, Timer } from 'lucide-react'
 import { StatTile, CockpitPanel } from '../../../components/cockpit/ui'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { createMoneyFormatter } from '@/lib/money-format'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
 
 /**
@@ -19,8 +20,9 @@ import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
  * no backup on file. The queues replace each other behind the shared
  * strip, defaulting to the first with work. Every queue row carries its
  * one-click remedy; the decline/provider/month/currency breakdown lives in
- * the governed Reports definition this panel links to, with a single
- * decline-class list as the fallback until that definition is seeded.
+ * the governed Reports definition this panel links to, and until that
+ * definition is available the panel links to the Reports hub instead of
+ * rendering a second analytical list under the operational queue.
  */
 export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardData | null; notice?: CollectionPolicyNotice | null }) {
   const t = useTranslations('ar.collections.recovery')
@@ -73,6 +75,14 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
   }
 
   const sendUpdateLink = async (row: RecoveryDashboardData['expiring'][number]) => {
+    // The provider session prices in the customer's own invoice currency.
+    // Without one there is nothing honest to mint: refuse by name and point
+    // at the panel where the operator picks the currency explicitly,
+    // instead of guessing another party's.
+    if (!row.currency) {
+      toast.error(t('updateLinkNoCurrency'))
+      return
+    }
     const key = `expiring:${row.methodId}`
     setBusy(key)
     try {
@@ -81,8 +91,11 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partyId: row.partyId, provider: row.provider, currency: row.currency }),
       })
+      // A computed refusal must reach the operator: the server names the
+      // remedy in the error body, so read it instead of replacing it with
+      // a generic toast.
       if (!setupRes.ok) {
-        toast.error(t('updateLinkFailed'))
+        toast.error(await readApiErrorMessage(setupRes, t('updateLinkFailed')))
         return
       }
       const setup = (await setupRes.json()) as { setupUrl?: string }
@@ -97,7 +110,7 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
         body: JSON.stringify({}),
       })
       if (!markRes.ok) {
-        toast.error(t('outreachMarkFailed'))
+        toast.error(await readApiErrorMessage(markRes, t('outreachMarkFailed')))
         return
       }
       toast.success(t('updateLinkSent'))
@@ -225,7 +238,7 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
             </div>
           </>
         )}
-        {data.recoveryReportId ? (
+        {data.recoveryReportId && data.canRunReport !== false ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
             <Timer size={14} aria-hidden className="text-muted-foreground" />
             <div>
@@ -238,25 +251,17 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
             </Button>
           </div>
         ) : (
-          <DisclosureSection
-            title={t('breakdownTitle')}
-            summary={t('breakdownFallbackNote')}
-          >
-            <div className="flex flex-col gap-3">
-              {data.metrics.byDeclineClass.map((row) => (
-                <div key={row.declineClass} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <Badge variant="secondary">{row.declineClass}</Badge>
-                  <span className="text-muted-foreground">
-                    {t('breakdownRow', {
-                      failed: row.failedAttempts,
-                      recovered: row.recoveredInvoices,
-                      rate: row.recoveryRate === null ? '—' : `${(row.recoveryRate * 100).toFixed(1)}%`,
-                    })}
-                  </span>
-                </div>
-              ))}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
+            <Timer size={14} aria-hidden className="text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">{t('breakdownTitle')}</p>
+              <p className="text-sm text-muted-foreground">{t('breakdownHubDescription')}</p>
             </div>
-          </DisclosureSection>
+            <span className="flex-1" />
+            <Button asChild size="sm" variant="outline">
+              <Link href="/reports">{t('breakdownHubAction')}</Link>
+            </Button>
+          </div>
         )}
       </CockpitPanel>
     </div>
