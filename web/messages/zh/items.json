@@ -107,7 +107,7 @@
     "back": "更改定价方式"
   },
   "structure": {
-    "title": "单个商品还是系列？",
+    "title": "{kind}：单个商品还是系列？",
     "description": "作为单个商品销售，或作为具有尺码、颜色、材质等变体的系列销售——只需定价一次，所有变体自动继承。",
     "singleTitle": "单个商品",
     "singleDescription": "拥有独立价格的一个商品。",

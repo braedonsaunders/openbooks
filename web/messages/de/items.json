@@ -120,7 +120,7 @@
     "back": "Preismodell ändern"
   },
   "structure": {
-    "title": "Einzelartikel oder Familie?",
+    "title": "{kind}: Einzelartikel oder Familie?",
     "description": "Als einzelnen Artikel verkaufen oder als Familie von Varianten – Größen, Farben, Materialien – einmal bepreist, von allen Varianten übernommen.",
     "singleTitle": "Einzelartikel",
     "singleDescription": "Ein Artikel mit eigenem Preis.",

@@ -3039,6 +3039,7 @@ const COGNATES = new Set<string>([
   'de:items.families.fields.status|Status',
   'de:items.families.grid.barcode|Barcode',
   'de:items.families.grid.code|Code',
+  'de:items.familyCreate.previewCode|Code',
   'de:items.families.itemTab.siblingCount|{count} in {family}',
   'de:items.families.options.position|Option {position}',
   'de:items.revrec.allocationOptions.normal|Normal',
@@ -3054,6 +3055,9 @@ const COGNATES = new Set<string>([
   'fr:items.labels.code|Code',
   // Product families: Code, Options and Option are identical French spellings.
   'fr:items.families.grid.code|Code',
+  'fr:items.familyCreate.previewCode|Code',
+  // French spells “source” identically.
+  'fr:items.pricingMatrix.source|Source',
   'fr:items.families.options.position|Option {position}',
   'fr:items.families.options.title|Options',
   'fr:items.rates.documentation|Documentation',
