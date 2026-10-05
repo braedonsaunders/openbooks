@@ -319,6 +319,107 @@ test('amount promotion applies ISO fils on BHD, never hundredths', { skip: !DB }
     const stored = await withOrg(org.orgId, () => discountLines(org.orgId, documentId))
     assert.deepEqual(stored.map((line) => line.amount), ['-0.2340'])
     assert.ok(stored.every((line) => line.promotion_id === promotion.id))
+    // The audit carries the quantum with the ISO total, so the 234 stays
+    // interpretable as fils without consulting later registry state.
+    const audit = (await db.execute<{ changes: { event: string; discountMinor: string; currency: string; minorUnits: number } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${documentId}`)).rows
+    const appliedEvent = audit.find((row) => row.changes.event === 'promotion_applied')
+    assert.deepEqual(
+      [appliedEvent?.changes.discountMinor, appliedEvent?.changes.currency, appliedEvent?.changes.minorUnits],
+      ['234', 'BHD', 3],
+    )
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('fixed yen promotion with fils apportioning and stacked caps', { skip: !DB }, async () => {
+  // A configured 30 yen applies 30 whole yen on a -30.0000 line. A 2.000
+  // BHD amount over 1.234 + 2.468 lines deals largest-remainder fils
+  // [667, 1333]; a second 2.000 BHD amount is then capped at the remaining
+  // 1702 fils as [567, 1135], with the pre-cap 2000 kept in the audit.
+  await ensureIsoRegistry()
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const yenPromo = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'YEN30', name: 'Thirty yen', kind: 'amount', amountMinor: 30n, currency: 'JPY',
+      discountAccountId: org.accounts.revenue,
+    })))
+    await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, yenPromo.id, 'active')))
+    const yenDoc = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '1', unitPrice: '100', amount: '100' },
+    ], 'JPY'))
+    const yen = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId: yenDoc, code: 'YEN30', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(yen.discountMinor, '30')
+    assert.equal(yen.minorUnits, 0)
+    assert.deepEqual((await withOrg(org.orgId, () => discountLines(org.orgId, yenDoc))).map((line) => line.amount), ['-30.0000'])
+    const big = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'BIGBHD', name: 'Two dinars', kind: 'amount', amountMinor: 2000n, currency: 'BHD',
+      discountAccountId: org.accounts.revenue,
+    })))
+    const big2 = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'BIG2', name: 'Two more dinars', kind: 'amount', amountMinor: 2000n, currency: 'BHD',
+      discountAccountId: org.accounts.revenue,
+    })))
+    for (const id of [big.id, big2.id]) {
+      await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, id, 'active')))
+    }
+    const doc = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '1', unitPrice: '1.234', amount: '1.234' },
+      { itemId: org.items.service, quantity: '1', unitPrice: '2.468', amount: '2.468' },
+    ], 'BHD'))
+    const first = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId: doc, code: 'BIGBHD', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(first.discountMinor, '2000')
+    assert.deepEqual(
+      (await withOrg(org.orgId, () => discountLines(org.orgId, doc))).map((line) => line.amount),
+      ['-0.6670', '-1.3330'],
+    )
+    const second = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId: doc, code: 'BIG2', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(second.discountMinor, '1702')
+    assert.deepEqual(
+      (await withOrg(org.orgId, () => discountLines(org.orgId, doc))).map((line) => line.amount),
+      ['-0.6670', '-1.3330', '-0.5670', '-1.1350'],
+    )
+    const audit = (await db.execute<{ changes: { event: string; code: string; discountMinor: string; cappedFromMinor?: string } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${doc}`)).rows
+    const events = audit.filter((row) => row.changes.event === 'promotion_applied')
+    assert.equal(events.length, 2)
+    assert.equal(events.find((row) => row.changes.code === 'BIG2')?.changes.cappedFromMinor, '2000')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('buy-get frees cheapest whole units in fils on BHD', { skip: !DB }, async () => {
+  // Buy 1 get 1 over two 0.500 BHD units frees one 500-fil unit on a
+  // -0.5000 line: the free share quantizes to the ISO minor, not cents.
+  await ensureIsoRegistry()
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+      code: 'BHDOGO', name: 'BOGO', kind: 'buy_x_get_y', buyQuantity: 1, getQuantity: 1,
+      discountAccountId: org.accounts.revenue,
+    })))
+    await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
+    const documentId = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '2', unitPrice: '0.500', amount: '1.000' },
+    ], 'BHD'))
+    const applied = await withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId, code: 'BHDOGO', allowedSubsidiaryIds: null,
+    })))
+    assert.equal(applied.discountMinor, '500')
+    assert.equal(applied.minorUnits, 3)
+    assert.deepEqual((await withOrg(org.orgId, () => discountLines(org.orgId, documentId))).map((line) => line.amount), ['-0.5000'])
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -363,26 +464,27 @@ test('percent promotion deals fils on BHD and whole yen on JPY', { skip: !DB }, 
 })
 
 test('unknown registry precision refuses before any line is written', { skip: !DB }, async () => {
-  // XX9 is absent from the ISO registry: the application refuses with the
+  // ZZZ is alphabetic but absent from the ISO registry, so the shape check
+  // passes and the precision refusal fires: the application refuses with the
   // seeded-precision remedy and writes no discount line and no redemption.
   const rows = (await withBypassContext(() => db.execute<{ code: string }>(sql`
-    select code from currencies where code = 'XX9'`))).rows
+    select code from currencies where code = 'ZZZ'`))).rows
   assert.equal(rows.length, 0)
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enablePromotions(org.orgId)
     const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
     const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
-      code: 'XX9TEN', name: 'Ten percent', kind: 'percent', percentValue: '10',
+      code: 'ZZZTEN', name: 'Ten percent', kind: 'percent', percentValue: '10',
       discountAccountId: org.accounts.revenue,
     })))
     await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
     const documentId = await withOrg(org.orgId, () => draftSale(org, [
       { itemId: org.items.fifo, quantity: '1', unitPrice: '10', amount: '10' },
-    ], 'XX9'))
+    ], 'ZZZ'))
     await assert.rejects(
       withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
-        documentId, code: 'XX9TEN', allowedSubsidiaryIds: null,
+        documentId, code: 'ZZZTEN', allowedSubsidiaryIds: null,
       }))),
       (error: unknown) => error instanceof PromotionRefusal && error.code === 'currency_precision_unknown'
         && error.status === 422 && /platform currency seed/.test(error.remedy ?? ''),

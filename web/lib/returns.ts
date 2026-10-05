@@ -622,6 +622,7 @@ export async function inspectReturnAuthorization(input: {
         await recordRestockingFeeWaiver(db, input.orgId, input.actorId, input.documentId, {
           totalMinor: fee.unwaivedTotalMinor,
           currency: fee.currency,
+          minorUnits: fee.minorUnits,
           reason: (input.waiveReason ?? '').trim(),
         })
       }

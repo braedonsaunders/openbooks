@@ -214,11 +214,13 @@ async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<n
   `)).rows[0];
   const quantum = row?.minor_units;
   if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
+    // Same deliberate shape as the promotion writer: the registry row is the
+    // only thing consulted, so no fx edge is declared.
     throw refusal(
       `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
       "currency_precision_unknown",
       422,
-      "Ask your system administrator to restore the missing row with the platform currency seed",
+      `If ${currency} is a supported ISO 4217 code, ask your system administrator to restore the missing row with the platform currency seed; otherwise choose a supported currency code from the ISO currency registry`,
     );
   }
   return quantum;
@@ -402,12 +404,12 @@ export async function recordRestockingFeeWaiver(
   orgId: string,
   actorId: string,
   rmaDocumentId: string,
-  input: { totalMinor: string; currency: string; reason: string },
+  input: { totalMinor: string; currency: string; minorUnits: number; reason: string },
 ): Promise<void> {
   const result = await runner.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'rma_documents', ${rmaDocumentId}, 'update',
-            ${JSON.stringify({ event: "restocking_fee_waived", totalMinor: input.totalMinor, currency: input.currency, reason: input.reason })}::jsonb,
+            ${JSON.stringify({ event: "restocking_fee_waived", totalMinor: input.totalMinor, currency: input.currency, minorUnits: input.minorUnits, reason: input.reason })}::jsonb,
             ${actorId})
     returning id`);
   if (result.rows.length !== 1) throw new Error("restocking fee waiver was not audited");
