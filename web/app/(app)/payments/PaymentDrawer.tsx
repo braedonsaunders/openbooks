@@ -322,11 +322,13 @@ export function PaymentDrawer({
     }))
   const [tenderDrafts, setTenderDrafts] = useState<TenderDraft[]>(initialTenderDrafts)
   const showTenders = side === 'ar' && storedValue != null
-  const tenderPatch = showTenders
+  // A stable tender payload changes only with the draft: the dirty tracker
+  // cannot keep detecting a new array and re-rendering an untouched receipt.
+  const tenderPatch = useMemo(() => showTenders
     ? tenderDrafts.map((draft) => draft.code
       ? { code: draft.code, amount: draft.amount }
       : { accountId: draft.accountId ?? '', amount: draft.amount })
-    : null
+    : null, [showTenders, tenderDrafts])
   const settlementRateKey = `${doc.currency}:${documentDate}:${side}:${openItems.map((item) => item.currency).join(',')}`
   const [settlementRateResult, setSettlementRateResult] = useState<{
     key: string
