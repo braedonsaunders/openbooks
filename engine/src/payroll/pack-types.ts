@@ -489,6 +489,8 @@ export interface PayrollContributionProgram {
  * nothing. No pack is required to itemize what it does not exclude.
  */
 export interface PayrollEmployerLevyProgram {
+  /** True only when this pack excludes non-taxable earnings by default; operator choices override. */
+  nonTaxableEarningsExcludedByDefault?: boolean;
   /** Levy code, e.g. `wcb`. Keys earning-line applicability and exclusions. */
   key: string;
   /** Operator label, e.g. `WCB/WSIB assessable earnings`. */

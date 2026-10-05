@@ -554,3 +554,18 @@ test("new-component levy defaults exclude only non-taxable earnings", () => {
     undefined,
   );
 });
+
+test("non-taxability does not imply exclusion from an undeclared levy base", () => {
+  const pack = PAYROLL_COUNTRY_PACKS.US!;
+  const before = pack.employerLevyPrograms;
+  try {
+    pack.employerLevyPrograms = [
+      { key: "gross_assessment", label: "Gross assessment", help: "Includes non-taxable earnings." },
+      { key: "taxable_assessment", label: "Taxable assessment", help: "Excludes non-taxable earnings.", nonTaxableEarningsExcludedByDefault: true },
+    ];
+    assert.deepEqual(employerLevyProgramKeys("US"), ["gross_assessment", "taxable_assessment"]);
+    assert.deepEqual(defaultLevyExclusionsForNewComponent({ kind: "earning", taxable: false, country: "US" }), ["taxable_assessment"]);
+  } finally {
+    pack.employerLevyPrograms = before;
+  }
+});

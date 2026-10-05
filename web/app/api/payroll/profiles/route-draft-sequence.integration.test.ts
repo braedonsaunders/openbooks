@@ -12,7 +12,7 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'next-intl/server') return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}")
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual('export async function currentUser(){return globalThis.__draftProfileState.user}')
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../lib/feature-gates' || (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__draftProfileState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
@@ -25,7 +25,6 @@ const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST: postParty } = await import('../../parties/route')
-const { GET: getParty, PATCH: patchParty } = await import('../../parties/[id]/route')
 const { GET: getProfiles, POST: postProfile } = await import('./route')
 
 /**
@@ -59,7 +58,9 @@ async function createEmployee() {
     }),
   ))
   assert.equal(response.status, 201, await response.clone().text())
-  return (await response.json()) as { id: string }
+  const body = (await response.json()) as { party: { id: string } };
+  assert.match(body.party.id, /^[0-9a-f-]{36}$/);
+  return { id: body.party.id }
 }
 
 async function profileBody(employeePartyId: string, scheduleId: string) {
@@ -73,16 +74,6 @@ async function profileBody(employeePartyId: string, scheduleId: string) {
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () => postProfile(new Request('http://payroll.test/api', { method: 'POST', body: JSON.stringify(body) })))
 
-async function activateParty(id: string, displayName: string) {
-  const params = { params: Promise.resolve({ id }) }
-  const loaded = await withOrgContext(state.orgId, () => getParty(new Request('http://payroll.test/api'), params as never))
-  assert.equal(loaded.status, 200, JSON.stringify(await loaded.clone().json()))
-  const token = ((await loaded.json()) as { party: { updated_at: string } }).party.updated_at
-  const response = await withOrgContext(state.orgId, () => patchParty(new Request('http://payroll.test/api', {
-    method: 'PATCH', body: JSON.stringify({ displayName, expectedUpdatedAt: token }),
-  }), params as never))
-  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-}
 
 test('profile POST distinguishes a missing party from a missing schedule', async () => {
   const { org, scheduleId } = await fixture()
@@ -91,7 +82,6 @@ test('profile POST distinguishes a missing party from a missing schedule', async
     assert.equal(missingParty.status, 422, await missingParty.clone().text())
     assert.match(((await missingParty.json()) as { error: string }).error, /employee is not available/)
     const employee = await createEmployee()
-    await activateParty(employee.id, 'Schedule Check Hire')
     const missingSchedule = await post(await profileBody(employee.id, randomUUID()))
     assert.equal(missingSchedule.status, 422, await missingSchedule.clone().text())
     assert.match(((await missingSchedule.json()) as { error: string }).error, /pay schedule is not available/)
@@ -105,7 +95,6 @@ test('profile POST names the role when the party is active but its employee role
   const { org, scheduleId } = await fixture()
   try {
     const employee = await createEmployee()
-    await activateParty(employee.id, 'Role Check Hire')
     await withBypassContext(() => db.execute(sql`
       update employee_roles set is_active = false where org_id = ${org.orgId} and party_id = ${employee.id}`))
     const refused = await post(await profileBody(employee.id, scheduleId))
@@ -123,7 +112,6 @@ test('profile POST names reactivation when the employee has been deactivated', a
   const { org, scheduleId } = await fixture()
   try {
     const employee = await createEmployee()
-    await activateParty(employee.id, 'Former Hire')
     await withBypassContext(() => db.execute(sql`
       update parties set is_active = false where org_id = ${org.orgId} and id = ${employee.id}`))
     const refused = await post(await profileBody(employee.id, scheduleId))

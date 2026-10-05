@@ -1,18 +1,21 @@
 import { sql } from "drizzle-orm";
 import type { PayrollCountryPack } from "../pack-types.ts";
+import { CA_EMPLOYER_LEVY_PROGRAMS } from "./levy-programs.ts";
 
 /** Make existing Canadian setup defaults explicit without replacing operator choices. */
 export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisionDefaults"]> = async ({ tx, orgId, actorId }) => {
+  const excludedPrograms = CA_EMPLOYER_LEVY_PROGRAMS.filter(program => program.nonTaxableEarningsExcludedByDefault).map(program => program.key);
+  const keys = sql`array[${sql.join(excludedPrograms.map(key => sql`${key}`), sql`, `)}]::text[]`;
   // An audit marker makes this a one-time upgrade for each component. Later
   // edits, including an explicitly empty exclusion list, remain authoritative.
   await tx.execute(sql`
     with candidates as (
       select c.id, c.program_exclusions as before,
-             array(select distinct key from unnest(c.program_exclusions || array['wcb', 'eht', 'hsf', 'cnt']) key order by key) as after
+             array(select distinct key from unnest(c.program_exclusions || ${keys}) key order by key) as after
         from pay_components c
        where c.org_id = ${orgId} and c.kind = 'earning' and not c.taxable
          and (c.country is null or c.country = 'CA')
-         and not c.program_exclusions @> array['wcb', 'eht', 'hsf', 'cnt']
+         and not c.program_exclusions @> ${keys}
          and not exists (
            select 1 from audit_log a
             where a.org_id = c.org_id and a.table_name = 'pay_components' and a.row_id = c.id

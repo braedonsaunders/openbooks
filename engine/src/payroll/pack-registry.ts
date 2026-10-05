@@ -331,7 +331,7 @@ export function payrollPack(country: string): PayrollCountryPack {
  * than refusing: setup validates the country itself, and a default must
  * never be the thing that breaks a save.
  */
-export function employerLevyProgramKeys(country: string | null): string[] {
+export function employerLevyProgramKeys(country: string | null, nonTaxableDefaultsOnly = false): string[] {
   const codes = country
     ? [country]
     : installablePayrollPacks().map((pack) => pack.country);
@@ -339,7 +339,9 @@ export function employerLevyProgramKeys(country: string | null): string[] {
   for (const code of codes) {
     const pack = PAYROLL_COUNTRY_PACKS[code];
     if (!pack) continue;
-    for (const program of pack.employerLevyPrograms ?? []) keys.add(program.key);
+    for (const program of pack.employerLevyPrograms ?? []) {
+      if (!nonTaxableDefaultsOnly || program.nonTaxableEarningsExcludedByDefault) keys.add(program.key);
+    }
   }
   return [...keys].sort();
 }
@@ -349,8 +351,8 @@ export function employerLevyProgramKeys(country: string | null): string[] {
  *
  * Taxable earnings are assessable for every levy, so an omitted exclusion
  * list already says the right thing and nothing is filled. A NON-taxable
- * earning defaults to excluded from every levy in its scope — a meal
- * per-diem or an insurance premium is not assessable — and the operator
+ * earning defaults to excluded only from levies whose pack declares that
+ * treatment. Non-taxability alone never defines another levy's base. The operator
  * overrides per levy by editing the exclusions afterwards. Only an omitted
  * list is defaulted: an explicitly empty list is an operator's choice to
  * assess, and edits never rewrite stored exclusions.
@@ -366,7 +368,7 @@ export function defaultLevyExclusionsForNewComponent(input: {
   if (input.kind !== "earning") return undefined;
   if (input.programExclusions !== undefined && input.programExclusions !== null) return undefined;
   if (input.taxable !== false) return undefined;
-  const keys = employerLevyProgramKeys(input.country ?? null);
+  const keys = employerLevyProgramKeys(input.country ?? null, true);
   return keys.length > 0 ? keys : undefined;
 }
 

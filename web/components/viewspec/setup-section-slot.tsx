@@ -23,13 +23,16 @@ export async function SetupSectionSlot({
   sp,
   basePath,
   rowParam = 'row',
+  paramPrefix,
 }: {
   entityKey: string
   sp: Record<string, string | string[] | undefined>
   basePath: string
-  /** Namespaced drawer key for hosts mounting several sections (CK-09):
+  /** Namespaced drawer key for hosts mounting several sections:
    *  each section reads and writes only its own key. */
   rowParam?: string
+  /** Independent list filters and pagination for a section sharing its host. */
+  paramPrefix?: string
 }) {
   const authz = await getAuthz()
   if (!authz) return null
@@ -53,6 +56,7 @@ export async function SetupSectionSlot({
       canManage={can(authz, 'admin.setup.manage')}
       allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
       rowParam={rowParam}
+      paramPrefix={paramPrefix}
       visibleRowIds={visibleRowIds}
       fixedFilter={['payroll-service-credits', 'payroll-vacation-terms'].includes(entityKey) && typeof sp.employment === 'string' && isUuid(sp.employment) ? { fieldKey: 'employmentId', value: sp.employment } : undefined}
     />
