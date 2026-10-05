@@ -5116,7 +5116,15 @@
       "benefitComponents": "工资组成部分",
       "benefitDelivery": "发放",
       "benefitRules": "规则",
-      "benefitAdvanced": "高级缴款规则"
+      "benefitAdvanced": "高级缴款规则",
+      "payComponentIdentity": "此工资项目是什么",
+      "payComponentIdentityHelp": "显示在工资单、工资登记簿和报表上的代码和名称，以及金额的支付方式。",
+      "payComponentCalculation": "金额如何计算",
+      "payComponentCalculationHelp": "固定金额、小时费率或总工资的百分比——可按发薪期或按年设置上限。",
+      "payComponentTaxability": "税款和缴费",
+      "payComponentTaxabilityHelp": "此工资项目计入哪些预扣、法定缴费和假期工资计提。",
+      "payComponentAccounting": "会计",
+      "payComponentAccountingHelp": "金额在总账中计入的科目，以及汇缴对象。"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -5371,7 +5379,31 @@
       "reminderNumber": "提醒 {number}",
       "addReminder": "添加提醒"
     },
-    "no": "否"
+    "no": "否",
+    "payComponentChooser": {
+      "title": "这是哪种工资项目？",
+      "description": "选择此工资项目代表的内容。下一步可以修改任何设置。",
+      "earning": {
+        "label": "收入",
+        "description": "以现金支付给员工的工资、薪金、加班费、津贴、奖金及其他款项。"
+      },
+      "taxableBenefit": {
+        "label": "应税福利",
+        "description": "属于应税收入的非现金福利——雇主支付的保费、公司车辆的私人使用、雇主退休金缴款。"
+      },
+      "allowance": {
+        "label": "免税津贴",
+        "description": "以现金支付、不属于应税收入的报销或津贴——餐费、工具、工作靴、安全眼镜。"
+      },
+      "deduction": {
+        "label": "扣款",
+        "description": "从员工工资中扣除的金额——退休储蓄、保险费、工会会费、扣押、追回款项。"
+      },
+      "employerContribution": {
+        "label": "雇主缴款",
+        "description": "雇主在工资之外承担、不显示在员工工资中的费用。"
+      }
+    }
   },
   "flows": {
     "title": "流程",

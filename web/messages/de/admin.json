@@ -5188,7 +5188,15 @@
       "benefitComponents": "Abrechnungskomponenten",
       "benefitDelivery": "Auszahlung",
       "benefitRules": "Regeln",
-      "benefitAdvanced": "Erweiterte Beitragsregeln"
+      "benefitAdvanced": "Erweiterte Beitragsregeln",
+      "payComponentIdentity": "Was diese Lohnart ist",
+      "payComponentIdentityHelp": "Code und Name, die auf Lohnabrechnungen, Lohnjournalen und Berichten erscheinen, und wie der Betrag ausgezahlt wird.",
+      "payComponentCalculation": "Wie der Betrag berechnet wird",
+      "payComponentCalculationHelp": "Ein fester Betrag, ein Stundensatz oder ein Prozentsatz vom Brutto – mit optionalen Obergrenzen je Abrechnungszeitraum oder Jahr.",
+      "payComponentTaxability": "Steuern und Abgaben",
+      "payComponentTaxabilityHelp": "Welche Abzüge, gesetzlichen Beiträge und Urlaubsrückstellungen diese Lohnart berücksichtigt.",
+      "payComponentAccounting": "Buchhaltung",
+      "payComponentAccountingHelp": "Auf welches Hauptbuchkonto der Betrag gebucht wird und an wen er abgeführt wird."
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -5371,7 +5379,31 @@
       "reminderNumber": "Erinnerung {number}",
       "addReminder": "Erinnerung hinzufügen"
     },
-    "no": "Nein"
+    "no": "Nein",
+    "payComponentChooser": {
+      "title": "Welche Art von Lohnart ist das?",
+      "description": "Wählen Sie, was diese Lohnart darstellt. Jede Einstellung lässt sich im nächsten Schritt ändern.",
+      "earning": {
+        "label": "Bezug",
+        "description": "Lohn, Gehalt, Überstunden, Zuschläge, Prämien und andere Zahlungen, die der Mitarbeitende in bar erhält."
+      },
+      "taxableBenefit": {
+        "label": "Steuerpflichtiger Sachbezug",
+        "description": "Ein nicht in Geld gewährter Vorteil, der steuerpflichtig ist – vom Arbeitgeber gezahlte Prämien, private Nutzung eines Firmenwagens, Arbeitgeberbeiträge zur Altersvorsorge."
+      },
+      "allowance": {
+        "label": "Steuerfreie Zulage",
+        "description": "Eine bar ausgezahlte Erstattung oder Zulage, die kein steuerpflichtiges Einkommen ist – Verpflegung, Werkzeug, Arbeitsschuhe, Schutzbrillen."
+      },
+      "deduction": {
+        "label": "Abzug",
+        "description": "Ein Betrag, der vom Lohn einbehalten wird – Altersvorsorge, Versicherungsprämien, Gewerkschaftsbeiträge, Pfändungen, Rückforderungen."
+      },
+      "employerContribution": {
+        "label": "Arbeitgeberbeitrag",
+        "description": "Kosten, die der Arbeitgeber zusätzlich zum Lohn trägt und die nicht in der Abrechnung des Mitarbeitenden erscheinen."
+      }
+    }
   },
   "flows": {
     "title": "Flows",

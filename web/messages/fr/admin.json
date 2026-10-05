@@ -5188,7 +5188,15 @@
       "benefitComponents": "Composantes de paie",
       "benefitDelivery": "Versement",
       "benefitRules": "Règles",
-      "benefitAdvanced": "Règles de cotisation avancées"
+      "benefitAdvanced": "Règles de cotisation avancées",
+      "payComponentIdentity": "Nature de ce code de paie",
+      "payComponentIdentityHelp": "Le code et le nom affichés sur les talons de paie, les registres et les rapports, et la façon dont le montant est versé.",
+      "payComponentCalculation": "Calcul du montant",
+      "payComponentCalculationHelp": "Un montant fixe, un taux horaire ou un pourcentage du brut — avec des plafonds facultatifs par période de paie ou par année.",
+      "payComponentTaxability": "Impôts et cotisations",
+      "payComponentTaxabilityHelp": "Les retenues, cotisations obligatoires et accumulations de vacances auxquelles ce code de paie contribue.",
+      "payComponentAccounting": "Comptabilité",
+      "payComponentAccountingHelp": "Le compte du grand livre où le montant est comptabilisé et le destinataire du versement."
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -5371,7 +5379,31 @@
       "reminderNumber": "Rappel {number}",
       "addReminder": "Ajouter un rappel"
     },
-    "no": "Non"
+    "no": "Non",
+    "payComponentChooser": {
+      "title": "Quel type de code de paie est-ce ?",
+      "description": "Choisissez ce que représente ce code de paie. Vous pourrez modifier chaque paramètre à l’étape suivante.",
+      "earning": {
+        "label": "Gain",
+        "description": "Salaire, traitement, heures supplémentaires, primes et autres sommes versées en espèces à l’employé."
+      },
+      "taxableBenefit": {
+        "label": "Avantage imposable",
+        "description": "Un avantage non monétaire imposable — primes payées par l’employeur, usage personnel d’un véhicule de l’entreprise, cotisations de retraite de l’employeur."
+      },
+      "allowance": {
+        "label": "Allocation non imposable",
+        "description": "Un remboursement ou une allocation versé en espèces qui n’est pas un revenu imposable — repas, outils, bottes, lunettes de sécurité."
+      },
+      "deduction": {
+        "label": "Retenue",
+        "description": "Un montant prélevé sur la paie de l’employé — épargne-retraite, primes d’assurance, cotisations syndicales, saisies, recouvrements."
+      },
+      "employerContribution": {
+        "label": "Cotisation de l’employeur",
+        "description": "Un coût payé par l’employeur en plus des salaires, qui n’apparaît pas dans la paie de l’employé."
+      }
+    }
   },
   "flows": {
     "title": "Flux",

@@ -1,5 +1,8 @@
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
+import { installedPayrollCountries } from '@openbooks/engine/src/payroll/readiness.ts'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './types'
 
 /**
@@ -46,7 +49,7 @@ function packTreatmentOptions(country: string): SetupOption[] {
   ]
 }
 
-function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
+function dynamicOptions(source: SetupDynamicOptionsSource, packs: PayrollPackChoice[]): SetupOption[] {
   switch (source) {
     case 'payroll-filing-countries':
       return declaredPayrollFilings().map((pack) => ({
@@ -65,7 +68,7 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
       return [...options.values()]
     }
     case 'payroll-component-countries':
-      return installablePayrollPacks().map((pack) => ({
+      return packs.map((pack) => ({
         value: pack.country,
         label: pack.name,
       }))
@@ -76,7 +79,7 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
       // only renders where no country is in scope.
       const seen = new Set<string>()
       const union: SetupOption[] = []
-      for (const pack of installablePayrollPacks()) {
+      for (const pack of packs) {
         for (const option of packTreatmentOptions(pack.country)) {
           if (!seen.has(option.value)) {
             seen.add(option.value)
@@ -93,7 +96,7 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
       // do above. Free entry covers the rest; undeclared keys are inert.
       const seen = new Set<string>()
       const union: SetupOption[] = []
-      for (const { country } of installablePayrollPacks()) {
+      for (const { country } of packs) {
         for (const program of payrollPack(country).contributionPrograms ?? []) {
           if (!seen.has(program.key)) {
             seen.add(program.key)
@@ -105,7 +108,7 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
     }
     case 'payroll-statutory-reporting-categories': {
       const options = new Map<string, SetupOption>()
-      for (const pack of installablePayrollPacks()) {
+      for (const pack of packs) {
         // The list projection carries (country, name) only — the declaration
         // itself is read off the pack, like the treatment picker above.
         for (const entry of payrollPack(pack.country).statutoryReportingCodes ?? []) {
@@ -120,14 +123,61 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
 }
 
 /** Per-country treatment lists for a scoped treatment field, keyed by pack country. */
-function deductionTreatmentsByCountry(): Record<string, SetupOption[]> {
+function deductionTreatmentsByCountry(packs: PayrollPackChoice[]): Record<string, SetupOption[]> {
   return Object.fromEntries(
-    installablePayrollPacks().map((pack) => [pack.country, packTreatmentOptions(pack.country)]),
+    packs.map((pack) => [pack.country, packTreatmentOptions(pack.country)]),
   )
 }
 
-const resolve = <T extends SetupField | SetupColumn | SetupFilter>(item: T): T =>
-  item.optionsSource ? { ...item, options: dynamicOptions(item.optionsSource) } : item
+type PayrollPackChoice = ReturnType<typeof installablePayrollPacks>[number]
+
+/**
+ * What the organization itself runs, for options that only make sense
+ * against it. With no context every installable pack is offered (the
+ * registry-wide fallback); with the org's installed payroll packs the
+ * pickers offer only those, so a single-country employer is never asked
+ * which country a pay code belongs to.
+ */
+export interface SetupOptionsContext {
+  installedPayrollCountries?: readonly string[]
+}
+
+/** Dynamic sources whose choices are narrowed to the org's installed packs. */
+const PAYROLL_PACK_SOURCES = new Set<SetupDynamicOptionsSource>([
+  'payroll-component-countries',
+  'payroll-deduction-treatments',
+  'payroll-contribution-programs',
+  'payroll-statutory-reporting-categories',
+])
+
+/**
+ * Read the org facts the entity's dynamic options depend on. Only entities
+ * that declare a pack-scoped source pay for the lookup.
+ */
+export async function setupOptionsContext(orgId: string, entity: SetupEntity): Promise<SetupOptionsContext> {
+  const needsPacks = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
+    .some((item) => item.optionsSource && PAYROLL_PACK_SOURCES.has(item.optionsSource))
+  if (!needsPacks) return {}
+  const row = (await db.execute<{ payroll: Record<string, unknown> | null }>(sql`
+    select settings -> 'payroll' as payroll from orgs where id = ${orgId}
+  `)).rows[0]
+  return { installedPayrollCountries: await installedPayrollCountries(orgId, row?.payroll ?? {}) }
+}
+
+function packChoices(context: SetupOptionsContext): PayrollPackChoice[] {
+  const all = installablePayrollPacks()
+  const installed = context.installedPayrollCountries
+  return installed ? all.filter((pack) => installed.includes(pack.country)) : all
+}
+
+/**
+ * A country picker over at most one installed pack has nothing to choose:
+ * the field hides (a blank country applies the component to every
+ * employee, which on a one-pack employer is everyone) and the list drops
+ * the column and filter that could only ever show one value.
+ */
+const singleCountry = (item: SetupField | SetupColumn | SetupFilter, context: SetupOptionsContext, packs: PayrollPackChoice[]): boolean =>
+  item.optionsSource === 'payroll-component-countries' && context.installedPayrollCountries !== undefined && packs.length <= 1
 
 /**
  * A treatment field resolves twice: the flat cross-pack union replaces
@@ -136,27 +186,33 @@ const resolve = <T extends SetupField | SetupColumn | SetupFilter>(item: T): T =
  * `setupFieldOptions`. The scope field comes from the descriptor contract —
  * this module only fills the pack side of it.
  */
-const resolveField = (field: SetupField): SetupField => {
-  const resolved = resolve(field)
+const resolveField = (field: SetupField, packs: PayrollPackChoice[], context: SetupOptionsContext): SetupField => {
+  const resolved: SetupField = field.optionsSource
+    ? { ...field, options: dynamicOptions(field.optionsSource, packs) }
+    : field
+  if (singleCountry(field, context, packs)) return { ...resolved, hidden: true }
   if (field.optionsSource !== 'payroll-deduction-treatments') return resolved
   return {
     ...resolved,
-    scopedOptions: { scopeField: 'country', byValue: deductionTreatmentsByCountry() },
+    scopedOptions: { scopeField: 'country', byValue: deductionTreatmentsByCountry(packs) },
   }
 }
 
 /** The entity with every `optionsSource` materialized. Identity when none. */
-export function resolveDynamicSetupOptions(entity: SetupEntity): SetupEntity {
+export function resolveDynamicSetupOptions(entity: SetupEntity, context: SetupOptionsContext = {}): SetupEntity {
   const needsResolution = [
     ...entity.columns,
     ...entity.fields,
     ...(entity.filters ?? []),
   ].some((item) => item.optionsSource)
   if (!needsResolution) return entity
+  const packs = packChoices(context)
+  const resolve = <T extends SetupColumn | SetupFilter>(item: T): T =>
+    item.optionsSource ? { ...item, options: dynamicOptions(item.optionsSource, packs) } : item
   return {
     ...entity,
-    columns: entity.columns.map(resolve),
-    fields: entity.fields.map(resolveField),
-    filters: entity.filters?.map(resolve),
+    columns: entity.columns.filter((column) => !singleCountry(column, context, packs)).map(resolve),
+    fields: entity.fields.map((field) => resolveField(field, packs, context)),
+    filters: entity.filters?.filter((filter) => !singleCountry(filter, context, packs)).map(resolve),
   }
 }

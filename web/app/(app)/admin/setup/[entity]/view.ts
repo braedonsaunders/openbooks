@@ -37,7 +37,7 @@ import {
   type SetupColumn,
   type SetupColumnKind,
 } from '../../../../../lib/setup/registry'
-import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
+import { resolveDynamicSetupOptions, setupOptionsContext } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
@@ -199,12 +199,15 @@ export async function loadSetupEntity(
     if (baseEntity.featureKey) await requireFeatureEnabled(orgId, baseEntity.featureKey)
     notFound()
   }
-  const entity = baseEntity
-    ? resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
+  const gatedEntity = baseEntity
+    ? setupEntityForFeatureState(baseEntity, {
         multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
         equipment: featureEnabled(features, 'equipment'),
         fieldTickets: featureEnabled(features, 'fieldTickets'),
-      }))
+      })
+    : null
+  const entity = gatedEntity
+    ? resolveDynamicSetupOptions(gatedEntity, await setupOptionsContext(orgId, gatedEntity))
     : null
 
   const t = await getTranslations('admin.setup')

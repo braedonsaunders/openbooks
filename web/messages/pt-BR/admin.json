@@ -5116,7 +5116,15 @@
       "benefitComponents": "Componentes de folha",
       "benefitDelivery": "Pagamento",
       "benefitRules": "Regras",
-      "benefitAdvanced": "Regras avançadas de contribuição"
+      "benefitAdvanced": "Regras avançadas de contribuição",
+      "payComponentIdentity": "O que é esta rubrica",
+      "payComponentIdentityHelp": "O código e o nome exibidos em holerites, registros e relatórios, e como o valor é pago.",
+      "payComponentCalculation": "Como o valor é calculado",
+      "payComponentCalculationHelp": "Um valor fixo, uma taxa por hora ou um percentual do bruto, com limites opcionais por período de pagamento ou por ano.",
+      "payComponentTaxability": "Impostos e contribuições",
+      "payComponentTaxabilityHelp": "Quais retenções, contribuições obrigatórias e provisões de férias esta rubrica compõe.",
+      "payComponentAccounting": "Contabilidade",
+      "payComponentAccountingHelp": "Em qual conta do razão o valor é lançado e a quem é recolhido."
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
@@ -5371,7 +5379,31 @@
       "reminderNumber": "Lembrete {number}",
       "addReminder": "Adicionar lembrete"
     },
-    "no": "Não"
+    "no": "Não",
+    "payComponentChooser": {
+      "title": "Que tipo de rubrica é esta?",
+      "description": "Escolha o que esta rubrica representa. Você pode alterar qualquer configuração na próxima etapa.",
+      "earning": {
+        "label": "Provento",
+        "description": "Salário, horas extras, adicionais, bônus e outros pagamentos que a pessoa colaboradora recebe em dinheiro."
+      },
+      "taxableBenefit": {
+        "label": "Benefício tributável",
+        "description": "Um benefício não monetário que é renda tributável: prêmios pagos pela empresa, uso pessoal de veículo da empresa, contribuições previdenciárias da empresa."
+      },
+      "allowance": {
+        "label": "Ajuda de custo não tributável",
+        "description": "Um reembolso ou ajuda de custo pago em dinheiro que não é renda tributável: refeições, ferramentas, botas, óculos de segurança."
+      },
+      "deduction": {
+        "label": "Desconto",
+        "description": "Um valor descontado do pagamento: previdência privada, prêmios de seguro, contribuições sindicais, penhoras, recuperações."
+      },
+      "employerContribution": {
+        "label": "Encargo do empregador",
+        "description": "Um custo pago pelo empregador além dos salários, que não aparece no pagamento da pessoa colaboradora."
+      }
+    }
   },
   "flows": {
     "title": "Fluxos",
