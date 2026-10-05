@@ -27,6 +27,17 @@ const DEFAULT_STEPS = [
     evidence: true,
   },
   {
+    key: "commerce-complete",
+    title: "close.defaultSteps.commerce-complete.title",
+    description: "close.defaultSteps.commerce-complete.description",
+    workstream: "sales",
+    taskType: "reconciliation",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 2,
+    evidence: true,
+  },
+  {
     key: "ar-cutoff",
     title: "close.defaultSteps.ar-cutoff.title",
     description: "close.defaultSteps.ar-cutoff.description",
@@ -184,6 +195,7 @@ const DEFAULT_STEPS = [
 
 const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["bank-reconciled", "drafts-cleared"],
+  ["commerce-complete", "drafts-cleared"],
   ["ar-cutoff", "drafts-cleared"],
   ["ap-cutoff", "drafts-cleared"],
   ["depreciation-posted", "drafts-cleared"],

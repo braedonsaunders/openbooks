@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { financialClosePeriodScope, revaluationReadiness } from "./fx-revaluation.ts";
+import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.ts";
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
@@ -334,6 +335,25 @@ export async function readinessChecks(
         from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`),
     ]));
 
+  // Commerce completeness runs only when the run carries the task: the
+  // step is created exactly when Sales Channels is on, and every check
+  // reads clean on an org with no channel data — so a run without the task
+  // skips the storefront calls entirely instead of proving nothing.
+  let commerce: CommerceCloseCheck[] = [];
+  const commerceTask = (
+    await db.execute<{ id: string }>(sql`
+      select id from close_run_tasks
+       where run_id = ${runId} and org_id = ${orgId} and key = 'commerce-complete' limit 1`)
+  ).rows[0];
+  if (commerceTask) {
+    commerce = await commerceCloseChecks(orgId, {
+      startsOn: ctx.starts_on,
+      endsOn: ctx.ends_on,
+      bookId: ctx.book_id,
+      subsidiaryIds,
+    });
+  }
+
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
     percent: 20,
@@ -496,5 +516,6 @@ export async function readinessChecks(
         percentThreshold: Number(threshold.percent),
       },
     },
+    ...commerce,
   ];
 }
