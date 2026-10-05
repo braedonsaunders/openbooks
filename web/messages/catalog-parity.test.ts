@@ -311,6 +311,8 @@ const COGNATES = new Set<string>([
   'de:reports.catalog.columns.order_economics.region|Region',
   // French spells the sales term “commission” (une commission) identically.
   'fr:contractCosts.costType.commission|Commission',
+  // French spells the column header “type” (un type) identically.
+  'fr:ar.collections.subscriptions.advanced.entitlements.colType|Type',
   // “Production” is spelled identically in French.
   'fr:admin.roles.named.production.name|Production',
   'fr:agents.drawer.assignment.roles.production|Production',
