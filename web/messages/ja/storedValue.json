@@ -34,7 +34,9 @@
     "debitAccount": "受取勘定",
     "offsetAccount": "相手勘定",
     "postingDate": "計上日",
-    "newBalance": "新残高"
+    "newBalance": "新残高",
+    "functionalEquivalent": "機能通貨換算額",
+    "functionalAmount": "機能通貨金額"
   },
   "status": {
     "active": "有効",
@@ -79,7 +81,9 @@
     "programSection": "プログラム",
     "accountSection": "口座",
     "noExpiry": "期限なし",
-    "sourceDocument": "発行元伝票"
+    "sourceDocument": "発行元伝票",
+    "postingDetail": "計上明細",
+    "postingDetailDescription": "エンティティの機能通貨による各変動と適用レート。"
   },
   "issue": {
     "title": "ストアドバリューを発行",

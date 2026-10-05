@@ -28,6 +28,9 @@ export interface StoredValueEntryRow {
   kindLabel: string
   amountDisplay: string
   balanceAfterDisplay: string
+  /** The same movement in the entity's functional currency, with its rate. */
+  functionalDisplay: string
+  rateDisplay: string
   reason: string | null
   documentId: string | null
   journalEntryId: string | null
@@ -41,8 +44,11 @@ export interface StoredValueAccountPayload {
   codeLast4: string
   customerName: string | null
   currency: string
+  subsidiaryName: string
+  functionalCurrency: string
   issuedDisplay: string
   balanceDisplay: string
+  balanceFunctionalDisplay: string
   breakageDisplay: string
   status: string
   statusLabel: string
@@ -106,6 +112,7 @@ type KpiRow = { outstanding: string; issued: string; redeemed: string; breakage:
 type AccountRow = {
   id: string; kind: string; code_last4: string; customer_name: string | null
   currency: string; issued_minor: string; balance_minor: string; breakage_recognized_minor: string
+  subsidiary_name: string; functional_currency: string; functional_total: string
   status: string; expires_on: string | null; last_activity_on: string
   program_id: string; program_name: string; program_kind: string
   liability_account_name: string | null; breakage_income_account_name: string | null
@@ -113,6 +120,7 @@ type AccountRow = {
 }
 type EntryRow = {
   id: string; kind: string; amount_minor: string; balance_after: string
+  functional_amount_minor: string; fx_rate: string
   reason: string | null; document_id: string | null; journal_entry_id: string | null; created_at: string
 }
 
@@ -149,12 +157,17 @@ export async function loadStoredValuePage(
       ? db.execute<AccountRow>(sql`
           select sva.id, sva.kind, sva.code_last4, cust.display_name as customer_name,
                  sva.currency, sva.issued_minor, sva.balance_minor, sva.breakage_recognized_minor,
+                 sub.name as subsidiary_name, sub.base_currency as functional_currency,
+                 (select coalesce(sum(x.functional_amount_minor), 0)::text
+                    from stored_value_entries x
+                   where x.org_id = sva.org_id and x.account_id = sva.id) as functional_total,
                  sva.status, sva.expires_on::text, sva.last_activity_on::text,
                  svp.id as program_id, svp.name as program_name, svp.kind as program_kind,
                  la.name as liability_account_name, ba.name as breakage_income_account_name,
                  svp.breakage_policy, svp.breakage_rate, svp.expiry_months, svp.inactivity_months
             from stored_value_accounts sva
             join stored_value_programs svp on svp.org_id = sva.org_id and svp.id = sva.program_id
+            join subsidiaries sub on sub.org_id = sva.org_id and sub.id = sva.subsidiary_id
             left join parties cust on cust.org_id = sva.org_id and cust.id = sva.customer_party_id
             left join accounts la on la.org_id = sva.org_id and la.id = svp.liability_account_id
             left join accounts ba on ba.org_id = sva.org_id and ba.id = svp.breakage_income_account_id
@@ -163,7 +176,8 @@ export async function loadStoredValuePage(
     accountId && isUuid(accountId)
       ? Promise.all([
         db.execute<EntryRow>(sql`
-          select id, kind, amount_minor, balance_after, reason, document_id, journal_entry_id,
+          select id, kind, amount_minor, balance_after, functional_amount_minor, fx_rate::text as fx_rate,
+                 reason, document_id, journal_entry_id,
                  created_at::text from stored_value_entries
            where org_id = ${orgId} and account_id = ${accountId}
            order by created_at desc limit 100`),
@@ -203,8 +217,11 @@ export async function loadStoredValuePage(
         codeLast4: String(row.code_last4),
         customerName: row.customer_name,
         currency: String(row.currency),
+        subsidiaryName: String(row.subsidiary_name),
+        functionalCurrency: String(row.functional_currency),
         issuedDisplay: money(minorToDecimal(row.issued_minor), { currency: String(row.currency) }),
         balanceDisplay: money(minorToDecimal(row.balance_minor), { currency: String(row.currency) }),
+        balanceFunctionalDisplay: money(minorToDecimal(row.functional_total), { currency: String(row.functional_currency) }),
         breakageDisplay: money(minorToDecimal(row.breakage_recognized_minor), { currency: String(row.currency) }),
         status: String(row.status),
         statusLabel: t(`status.${row.status}`),
@@ -228,6 +245,8 @@ export async function loadStoredValuePage(
         kindLabel: t(`entryKind.${e.kind}`),
         amountDisplay: money(minorToDecimal(e.amount_minor), { currency: String(row.currency) }),
         balanceAfterDisplay: money(minorToDecimal(e.balance_after), { currency: String(row.currency) }),
+        functionalDisplay: money(minorToDecimal(e.functional_amount_minor), { currency: String(row.functional_currency) }),
+        rateDisplay: String(e.fx_rate),
         reason: e.reason,
         documentId: e.document_id ? String(e.document_id) : null,
         journalEntryId: e.journal_entry_id ? String(e.journal_entry_id) : null,

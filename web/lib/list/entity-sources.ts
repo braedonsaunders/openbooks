@@ -1489,7 +1489,10 @@ const SOURCES: Record<string, EntityListSource> = {
     defaultSort: sql`sva.created_at desc`,
     statusExpr: sql`sva.status`,
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
-    where: storedValueAccountWhere,
+    // The caller's entity visibility applies here like everywhere else: a
+    // scoped operator lists only the entities they may see.
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) =>
+      sql`${storedValueAccountWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`sva.subsidiary_id`, allowedSubsidiaryIds ?? null)}`,
     drawerParam: 'account',
     basePath: '/stored-value',
     readPermission: 'stored_value.read',

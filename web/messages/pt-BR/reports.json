@@ -2544,7 +2544,11 @@
         "currency": "Moeda",
         "entered_on": "Registrado em",
         "reason": "Motivo",
-        "document_id": "Chave do documento"
+        "document_id": "Chave do documento",
+        "functional_amount": "Valor (funcional)",
+        "fx_rate": "Taxa de câmbio",
+        "base_currency": "Moeda funcional",
+        "subsidiary": "Subsidiária"
       },
       "stored_value_balances": {
         "account_code": "Conta",
@@ -2557,7 +2561,10 @@
         "currency": "Moeda",
         "last_activity_on": "Última atividade",
         "expires_on": "Expira em",
-        "inactivity_months": "Limite de inatividade do programa (meses)"
+        "inactivity_months": "Limite de inatividade do programa (meses)",
+        "functional_balance": "Saldo em aberto (funcional)",
+        "base_currency": "Moeda funcional",
+        "subsidiary": "Subsidiária"
       },
       "demand_forecast_accuracy": {
         "item_class": "Classe de item",

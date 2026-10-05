@@ -34,7 +34,9 @@
     "debitAccount": "Cuenta receptora",
     "offsetAccount": "Contrapartida",
     "postingDate": "Fecha contable",
-    "newBalance": "Nuevo saldo"
+    "newBalance": "Nuevo saldo",
+    "functionalEquivalent": "Equivalente funcional",
+    "functionalAmount": "Importe funcional"
   },
   "status": {
     "active": "Activo",
@@ -79,7 +81,9 @@
     "programSection": "Programa",
     "accountSection": "Cuenta",
     "noExpiry": "No caduca",
-    "sourceDocument": "Documento de origen"
+    "sourceDocument": "Documento de origen",
+    "postingDetail": "Detalle contable",
+    "postingDetailDescription": "Cada movimiento en la moneda funcional de la entidad, con el tipo aplicado."
   },
   "issue": {
     "title": "Emitir saldo",

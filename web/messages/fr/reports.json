@@ -2544,7 +2544,11 @@
         "currency": "Devise",
         "entered_on": "Saisi le",
         "reason": "Motif",
-        "document_id": "Clé de pièce"
+        "document_id": "Clé de pièce",
+        "functional_amount": "Montant (fonctionnel)",
+        "fx_rate": "Taux de change",
+        "base_currency": "Monnaie fonctionnelle",
+        "subsidiary": "Filiale"
       },
       "stored_value_balances": {
         "account_code": "Compte",
@@ -2557,7 +2561,10 @@
         "currency": "Devise",
         "last_activity_on": "Dernière activité",
         "expires_on": "Expire le",
-        "inactivity_months": "Seuil d’inactivité du programme (mois)"
+        "inactivity_months": "Seuil d’inactivité du programme (mois)",
+        "functional_balance": "Solde ouvert (fonctionnel)",
+        "base_currency": "Monnaie fonctionnelle",
+        "subsidiary": "Filiale"
       },
       "demand_forecast_accuracy": {
         "item_class": "Classe d'articles",

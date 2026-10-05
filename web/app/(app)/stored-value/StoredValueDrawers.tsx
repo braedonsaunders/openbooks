@@ -77,6 +77,9 @@ export function StoredValueDrawer({ drawer }: { drawer: StoredValueDrawerData })
         <div className="rounded-lg border border-border p-3">
           <dt className="text-xs text-slate-500">{t('labels.balance')}</dt>
           <dd className="text-lg font-semibold tabular-nums">{account.balanceDisplay}</dd>
+          {account.functionalCurrency !== account.currency && (
+            <dd className="text-xs tabular-nums text-slate-500">≈ {account.balanceFunctionalDisplay}</dd>
+          )}
         </div>
         <div className="rounded-lg border border-border p-3">
           <dt className="text-xs text-slate-500">{t('labels.issued')}</dt>
@@ -127,10 +130,30 @@ export function StoredValueDrawer({ drawer }: { drawer: StoredValueDrawerData })
         <section aria-label={t('drawer.accountSection')} className="space-y-4">
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div><dt className="text-slate-500">{t('drawer.programSection')}</dt><dd className="font-medium">{program.name}</dd></div>
+            <div><dt className="text-slate-500">{common('labels.subsidiary')}</dt><dd className="font-medium">{account.subsidiaryName}</dd></div>
             <div><dt className="text-slate-500">{t('labels.expires')}</dt><dd className="font-medium">{account.expiresOn ?? t('drawer.noExpiry')}</dd></div>
             <div><dt className="text-slate-500">{t('labels.lastActivity')}</dt><dd className="font-medium">{account.lastActivityOn}</dd></div>
             {account.customerName && <div><dt className="text-slate-500">{t('labels.customer')}</dt><dd className="font-medium">{account.customerName}</dd></div>}
+            <div><dt className="text-slate-500">{t('labels.functionalEquivalent')}</dt><dd className="font-medium tabular-nums">{account.balanceFunctionalDisplay}</dd></div>
           </dl>
+          <DisclosureSection
+            title={t('drawer.postingDetail')}
+            summary={`${account.balanceDisplay} → ${account.balanceFunctionalDisplay}`}
+          >
+            <p className="mb-2 text-sm text-slate-500">{t('drawer.postingDetailDescription')}</p>
+            <PagedTable
+              rows={entries}
+              rowKey={(row) => row.id}
+              pageSize={20}
+              empty={<EmptyState title={t('drawer.ledgerTitle')} description={t('drawer.ledgerDescription')} />}
+              columns={[
+                { key: 'createdAt', header: t('labels.postingDate'), cell: (row) => <span className="whitespace-nowrap">{row.createdAt}</span> },
+                { key: 'kind', header: t('labels.entryKind'), cell: (row) => row.kindLabel },
+                { key: 'functional', header: t('labels.functionalAmount'), align: 'right', cell: (row) => <span className="tabular-nums">{row.functionalDisplay}</span> },
+                { key: 'rate', header: common('labels.rate'), align: 'right', cell: (row) => <span className="tabular-nums">{row.rateDisplay}</span> },
+              ]}
+            />
+          </DisclosureSection>
           <DisclosureSection
             title={t('drawer.programSection')}
             summary={`${program.breakagePolicyLabel} · ${program.liabilityAccountName ?? '—'}`}

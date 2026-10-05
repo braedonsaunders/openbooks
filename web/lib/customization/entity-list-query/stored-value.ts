@@ -32,8 +32,16 @@ export const STORED_VALUE_SORTS: Record<string, SQL> = {
   expires: sql`sva.expires_on`,
 }
 
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+
 function storedValueFilterPredicate(clause: FilterClause): SQL | null {
   const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  if (clause.key === 'subsidiary' && (clause.operator === 'eq' || clause.operator === 'ne')) {
+    // Fail closed on a malformed entity id: showing every entity's balances
+    // against a subsidiary filter would misstate what the entity owes.
+    if (!UUID_RE.test(value)) return sql`false`
+    return clause.operator === 'eq' ? sql`sva.subsidiary_id = ${value}` : sql`sva.subsidiary_id <> ${value}`
+  }
   if (clause.key === 'status' && (clause.operator === 'eq' || clause.operator === 'ne')) {
     return clause.operator === 'eq' ? sql`sva.status = ${value}` : sql`sva.status <> ${value}`
   }
