@@ -18,8 +18,11 @@ registerHooks({
       return virtual('export const db = globalThis.__customersPipelineDb')
     }
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
+      // businessToday and weekStartsEndingOn are impure (clock/DB) and stay
+      // stubbed; addCalendarDays is pure civil arithmetic — the real one,
+      // never a copy, so the test cannot drift from the calendar.
       return virtual(`
-        export function addCalendarDays(date, _days) { return date }
+        export { addCalendarDays } from '${root}engine/src/platform/civil-date.ts'
         export function weekStartsEndingOn(_date, _weeks) { return ['2026-01-12'] }
         export async function businessToday(_orgId) { return '2026-01-15' }
       `)
