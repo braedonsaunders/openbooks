@@ -7,6 +7,7 @@ import { withSimClock } from "../platform/clock.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createProgram, issueStoredValue, redeemStoredValue } from "./accounts.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { runStoredValueBreakage } from "./breakage.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
@@ -452,7 +453,8 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
       /Stored value is disabled/,
     );
     // A write that matches zero rows is a failure: an unknown account in
-    // the caller's own scope refuses by name.
+    // the caller's own scope reads as missing, exactly like a hidden one —
+    // the uniform neutral refusal carries no existence oracle.
     await assert.rejects(
       withBypass(() =>
         redeemStoredValue({
@@ -463,7 +465,7 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
           actorId: first.actorId,
         }),
       ),
-      /does not exist in this organization/,
+      (error: unknown) => error instanceof ScopeNotFoundError,
     );
   } finally {
     await withBypass(() => dropScratchOrg(first.org.orgId));
