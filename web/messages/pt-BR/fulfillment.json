@@ -202,6 +202,44 @@
       "void": "Não foi possível anular a etiqueta.",
       "tracking": "Não foi possível atualizar o rastreio.",
       "validation": "Não foi possível verificar o endereço."
+    },
+    "bulkAction": "Comprar etiquetas",
+    "bulk": {
+      "title": "Comprar etiquetas",
+      "description": "Precifique os envios abertos com uma regra de compra e compre as linhas prontas em uma etapa.",
+      "metaTitle": "Comprar etiquetas",
+      "loading": "Carregando envios…",
+      "emptyTitle": "Nenhum envio precisa de etiquetas",
+      "emptyDescription": "Envios abertos sem etiqueta comprada aparecem aqui.",
+      "backToShipments": "Voltar aos envios",
+      "rule": "Regra de compra",
+      "rules": {
+        "cheapest": "Mais barata",
+        "fastest": "Mais rápida",
+        "cheapest_by_date": "Mais barata que chega no prazo"
+      },
+      "promisedDate": "Deve chegar em",
+      "preview": "Ver preços",
+      "selectAll": "Selecionar todos os envios",
+      "colShipment": "Envio",
+      "colCustomer": "Cliente",
+      "colPromised": "Prometido",
+      "previewTitle": "Prévia — prontas: {ready}, para revisar: {failed}",
+      "totalLabel": "Valor total:",
+      "openShipment": "Abrir envio",
+      "buy": "Comprar etiquetas",
+      "resultTitle": "Compradas",
+      "printMerged": "Imprimir PDF combinado",
+      "boughtOne": "Comprada",
+      "duplicate": "já comprada",
+      "bought": "Etiquetas compradas.",
+      "fail": {
+        "candidates": "Não foi possível carregar os envios.",
+        "preview": "Não foi possível ver os preços.",
+        "buy": "Não foi possível comprar as etiquetas.",
+        "nothingSelected": "Selecione ao menos um envio primeiro.",
+        "dateRequired": "Escolha a data em que as etiquetas devem chegar."
+      }
     }
   }
 }

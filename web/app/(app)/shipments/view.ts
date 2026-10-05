@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { mergeHref, pickString } from '../../../lib/list-params'
 import { requirePermission } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadFulfillmentDrawerData } from '../../../lib/fulfillment-drawer-data'
 import { warehouseGroupTabs } from '../../../components/module-home/group-tabs'
@@ -32,6 +33,8 @@ type Tabs = Awaited<ReturnType<typeof warehouseGroupTabs>>
 export interface ShipmentsData {
   title: string
   description: string
+  bulkBuyLabel: string
+  showBulkBuy: boolean
   tabs: Tabs
   currentParams: Record<string, string | string[] | undefined>
   drawer: (FulfillmentDrawerData & { initialMode: DrawerMode }) | null
@@ -43,15 +46,18 @@ export async function loadShipments(sp: Record<string, string | string[] | undef
   const t = await getTranslations('fulfillment')
   const closeHref = mergeHref(BASE, sp, { [PARAM]: undefined, mode: undefined, form: undefined, transactionTab: undefined })
   const openId = pickString(sp[PARAM])
-  const [tabs, drawer] = await Promise.all([
+  const [tabs, drawer, shippingHub] = await Promise.all([
     warehouseGroupTabs(authz, BASE),
     openId
       ? loadFulfillmentDrawerData({ authz, kind: 'shipment', id: openId, formLayoutId: pickString(sp.form), closeHref })
       : null,
+    isFeatureEnabled(authz.user.orgId, 'shippingHub'),
   ])
   return {
     title: t('shipment.listTitle'),
     description: t('shipment.listDescription'),
+    bulkBuyLabel: t('shipping.bulkAction'),
+    showBulkBuy: shippingHub,
     tabs,
     currentParams: sp,
     drawer: drawer ? { ...drawer, initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view' } : null,
@@ -68,7 +74,10 @@ export function shipmentsSpec(data: ShipmentsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        actions: [
+          widget('module-home-tabs', { tabs: data.tabs }),
+          widget('link-button', { href: '/shipments/labels', label: f('bulkBuyLabel'), variant: 'outline' }, f('showBulkBuy')),
+        ],
       }),
     ],
     body: [

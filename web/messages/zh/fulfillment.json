@@ -202,6 +202,44 @@
       "void": "无法作废面单。",
       "tracking": "无法刷新追踪。",
       "validation": "无法校验地址。"
+    },
+    "bulkAction": "购买面单",
+    "bulk": {
+      "title": "购买面单",
+      "description": "按同一购买规则为待出货计价，一次性购买已就绪的行。",
+      "metaTitle": "购买面单",
+      "loading": "正在加载出货…",
+      "emptyTitle": "没有需要面单的出货",
+      "emptyDescription": "没有已购面单的待出货将显示在这里。",
+      "backToShipments": "返回出货",
+      "rule": "购买规则",
+      "rules": {
+        "cheapest": "最便宜",
+        "fastest": "最快",
+        "cheapest_by_date": "按时到达的最便宜"
+      },
+      "promisedDate": "最晚到达",
+      "preview": "预览价格",
+      "selectAll": "全选出货",
+      "colShipment": "出货",
+      "colCustomer": "客户",
+      "colPromised": "承诺日期",
+      "previewTitle": "预览 — 就绪: {ready}，需处理: {failed}",
+      "totalLabel": "合计:",
+      "openShipment": "打开出货",
+      "buy": "购买面单",
+      "resultTitle": "已购买",
+      "printMerged": "打印合并PDF",
+      "boughtOne": "已购买",
+      "duplicate": "已购买过",
+      "bought": "面单已购买。",
+      "fail": {
+        "candidates": "无法加载出货。",
+        "preview": "无法预览价格。",
+        "buy": "无法购买面单。",
+        "nothingSelected": "请至少选择一个出货。",
+        "dateRequired": "请选择面单的最晚到达日期。"
+      }
     }
   }
 }

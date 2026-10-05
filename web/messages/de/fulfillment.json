@@ -202,6 +202,44 @@
       "void": "Das Etikett konnte nicht storniert werden.",
       "tracking": "Tracking konnte nicht aktualisiert werden.",
       "validation": "Die Adresse konnte nicht geprüft werden."
+    },
+    "bulkAction": "Etiketten kaufen",
+    "bulk": {
+      "title": "Etiketten kaufen",
+      "description": "Offene Sendungen nach einer Kaufregel bepreisen und die fertigen Zeilen in einem Schritt kaufen.",
+      "metaTitle": "Etiketten kaufen",
+      "loading": "Sendungen werden geladen…",
+      "emptyTitle": "Keine Sendungen brauchen Etiketten",
+      "emptyDescription": "Offene Sendungen ohne gekauftes Etikett erscheinen hier.",
+      "backToShipments": "Zurück zu den Sendungen",
+      "rule": "Kaufregel",
+      "rules": {
+        "cheapest": "Günstigster",
+        "fastest": "Schnellster",
+        "cheapest_by_date": "Günstigster mit Terminankunft"
+      },
+      "promisedDate": "Muss ankommen bis",
+      "preview": "Preise anzeigen",
+      "selectAll": "Alle Sendungen wählen",
+      "colShipment": "Sendung",
+      "colCustomer": "Kunde",
+      "colPromised": "Zugesagt",
+      "previewTitle": "Vorschau — fertig: {ready}, zu prüfen: {failed}",
+      "totalLabel": "Summe:",
+      "openShipment": "Sendung öffnen",
+      "buy": "Etiketten kaufen",
+      "resultTitle": "Gekauft",
+      "printMerged": "Gesamt-PDF drucken",
+      "boughtOne": "Gekauft",
+      "duplicate": "bereits gekauft",
+      "bought": "Etiketten gekauft.",
+      "fail": {
+        "candidates": "Sendungen konnten nicht geladen werden.",
+        "preview": "Preise konnten nicht vorgeschaut werden.",
+        "buy": "Etiketten konnten nicht gekauft werden.",
+        "nothingSelected": "Erst mindestens eine Sendung wählen.",
+        "dateRequired": "Das Datum wählen, bis zu dem die Etiketten ankommen müssen."
+      }
     }
   }
 }

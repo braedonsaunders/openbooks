@@ -5,6 +5,7 @@ import { PutawayQueue } from '../../app/(app)/warehouse/PutawayQueue'
 import { WarehousesPanel } from '../../app/(app)/warehouse/WarehousesPanel'
 import { ReplenishmentProposals } from '../../app/(app)/reports/replenishment/ReplenishmentProposals'
 import { NewPickListDrawer } from '../../app/(app)/picks/NewPickListDrawer'
+import { BulkBuyClient } from '../../app/(app)/shipments/labels/BulkBuyClient'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Warehouse adapters: the cockpit's tie-out hero, putaway queue and create
@@ -51,4 +52,12 @@ export const WAREHOUSE_WIDGETS = {
     return <NewPickListDrawer key={drawer.salesOrder.id} data={drawer} />
   },
   'shipment-drawer': (props) => <NativeListDrawer widget="shipment-drawer" drawer={props.drawer} />,
+  /** Bulk label buying owns its selection, rule, preview and buy: client
+   *  state a spec cannot name, like the capture list's. */
+  'shipping-bulk-buy': (props) => (
+    <BulkBuyClient
+      accounts={(props.accounts as ComponentProps<typeof BulkBuyClient>['accounts']) ?? []}
+      canBuy={props.canBuy === true}
+    />
+  ),
 } satisfies Record<string, WidgetRenderer>

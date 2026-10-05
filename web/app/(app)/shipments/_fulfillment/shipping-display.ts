@@ -17,3 +17,24 @@ export function minorToMajor(minor: string, currency: string): string | null {
   const whole = padded.slice(0, -exponent) || '0'
   return `${negative ? '-' : ''}${whole}.${padded.slice(-exponent)}`
 }
+
+/**
+ * Exact sum of two non-negative rate decimals for bulk totals. String
+ * arithmetic only: forty label amounts must total to the cent the journal
+ * will post. Null for anything that is not a plain non-negative decimal —
+ * a total must never silently absorb garbage.
+ */
+export function addExact(left: string, right: string): string | null {
+  const valid = (value: string): string[] | null => {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(value)
+    return match ? [match[1]!, match[2] ?? ''] : null
+  }
+  const a = valid(left)
+  const b = valid(right)
+  if (!a || !b) return null
+  const width = Math.max(a[1]!.length, b[1]!.length)
+  const sum = BigInt(a[0]! + a[1]!.padEnd(width, '0')) + BigInt(b[0]! + b[1]!.padEnd(width, '0'))
+  const text = sum.toString().padStart(width + 1, '0')
+  if (width === 0) return text
+  return `${text.slice(0, -width) || '0'}.${text.slice(-width)}`
+}

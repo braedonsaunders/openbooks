@@ -202,6 +202,44 @@
       "void": "L’étiquette n’a pas pu être annulée.",
       "tracking": "Le suivi n’a pas pu être actualisé.",
       "validation": "L’adresse n’a pas pu être vérifiée."
+    },
+    "bulkAction": "Acheter des étiquettes",
+    "bulk": {
+      "title": "Acheter des étiquettes",
+      "description": "Tarifez les envois ouverts avec une règle d’achat et achetez les lignes prêtes en une fois.",
+      "metaTitle": "Acheter des étiquettes",
+      "loading": "Chargement des envois…",
+      "emptyTitle": "Aucun envoi sans étiquette",
+      "emptyDescription": "Les envois ouverts sans étiquette achetée apparaissent ici.",
+      "backToShipments": "Retour aux envois",
+      "rule": "Règle d’achat",
+      "rules": {
+        "cheapest": "Moins cher",
+        "fastest": "Plus rapide",
+        "cheapest_by_date": "Moins cher arrivé à temps"
+      },
+      "promisedDate": "Arrivée avant le",
+      "preview": "Voir les prix",
+      "selectAll": "Sélectionner tous les envois",
+      "colShipment": "Envoi",
+      "colCustomer": "Client",
+      "colPromised": "Promis",
+      "previewTitle": "Aperçu — prêtes : {ready}, à revoir : {failed}",
+      "totalLabel": "Total :",
+      "openShipment": "Ouvrir l’envoi",
+      "buy": "Acheter les étiquettes",
+      "resultTitle": "Achetées",
+      "printMerged": "Imprimer le PDF groupé",
+      "boughtOne": "Achetée",
+      "duplicate": "déjà achetée",
+      "bought": "Étiquettes achetées.",
+      "fail": {
+        "candidates": "Les envois n’ont pas pu être chargés.",
+        "preview": "Les prix n’ont pas pu être affichés.",
+        "buy": "Les étiquettes n’ont pas pu être achetées.",
+        "nothingSelected": "Sélectionnez d’abord au moins un envoi.",
+        "dateRequired": "Choisissez la date d’arrivée des étiquettes."
+      }
     }
   }
 }
