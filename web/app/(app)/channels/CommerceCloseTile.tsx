@@ -150,7 +150,10 @@ export function CommerceCloseTile() {
         </ul>
       )}
       <div className="mt-2">
-        <DisclosureSection summary={t("home.completeness.proofsSummary", { count: checks.length })}>
+        <DisclosureSection
+          title={t("home.completeness.proofsTitle")}
+          summary={t("home.completeness.proofsSummary", { count: checks.length })}
+        >
           <ul className="space-y-1">
             {checks.map((check) => (
               <li key={check.code} className="flex items-center justify-between gap-3 text-sm">

@@ -72,7 +72,8 @@
       "hint": "Ob die heutigen Shopverkäufe im Hauptbuch stehen — mit Lösungsweg für jeden offenen Nachweis.",
       "clear": "Die heutigen Shopverkäufe stehen vollständig in den Büchern.",
       "loadFailed": "Vollständigkeit wurde nicht geladen (Status {status}).",
-      "proofsSummary": "{count, plural, one {So wird Vollständigkeit nachgewiesen · # Nachweis} other {So wird Vollständigkeit nachgewiesen · # Nachweise}}",
+      "proofsTitle": "So wird Vollständigkeit nachgewiesen",
+      "proofsSummary": "{count, plural, one {# Nachweis} other {# Nachweise}}",
       "proven": "Nachgewiesen"
     }
   },
