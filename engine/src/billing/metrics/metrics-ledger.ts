@@ -3002,6 +3002,7 @@ export async function readRetentionStrip(orgId: string): Promise<RetentionStrip>
         const undefinedReasons: Array<string | null> = [];
         formulas.forEach((formula, index) => {
           const result = evaluated[base.length + index]!;
+          if (formula.key === undefined) throw new Error("a retention strip formula is missing its key");
           values[formula.key] = result.value;
           undefinedReasons.push(result.undefinedLabel);
         });
