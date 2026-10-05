@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/platform/database'
 import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { FANOUT_EVENT_TYPES } from '@openbooks/engine/webhooks'
 import type { EndpointDelivery, WebhookEndpointDrawerProps } from './EndpointDrawer'
 
@@ -34,6 +34,9 @@ export type WebhooksData = {
 }
 
 async function loadEndpoint(orgId: string, id: string) {
+  // List links carry the row id, but operators also bookmark the stable
+  // endpoint key: resolve either. Casting a key slug to uuid makes Postgres
+  // reject the whole query, so the key branch never reaches the cast.
   const rows = (await db.execute(sql`
     select e.id, e.key, e.url, e.description, e.events, e.status,
            e.consecutive_failures as "consecutiveFailures",
@@ -47,7 +50,7 @@ async function loadEndpoint(orgId: string, id: string) {
            (select count(*)::int from webhook_deliveries d where d.org_id = e.org_id and d.endpoint_id = e.id and d.status = 'pending') as "pendingCount",
            (select count(*)::int from webhook_deliveries d where d.org_id = e.org_id and d.endpoint_id = e.id and d.status in ('failed', 'dead')) as "failedCount"
       from webhook_endpoints e
-     where e.org_id = ${orgId} and e.id = ${id}::uuid limit 1
+     where e.org_id = ${orgId} and ${isUuid(id) ? sql`e.id = ${id}::uuid` : sql`e.key = ${id}`} limit 1
   `)).rows as WebhookEndpointDrawerProps['endpoint'][]
   return rows[0] ?? null
 }
