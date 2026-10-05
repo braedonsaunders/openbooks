@@ -1,5 +1,21 @@
 # Repository Engineering Standards
 
+## Development throughput and combined verification
+
+Independent builds and test runs are prohibited on every machine. Integrate
+ready changes into one agreed source tree, then perform one coordinated build
+and test pass against that combined tree. Do not run separate per-feature,
+per-thread, or per-worktree builds, tests, browser QA, typechecks, verification
+matrices, or CI passes.
+
+Continue source implementation and review, write necessary tests, and checkpoint
+coherent commits for integration. Report pending verification accurately; do
+not claim unrun checks passed. Stop only verification jobs you own through their
+normal controls, preserving source and evidence. Keep the shared development
+application, source synchronization, tunnels, and databases running. Available
+memory or a scheduler slot does not authorize independent verification. Pass
+this rule to current workers and successors before they begin work.
+
 ## Financial-institution-grade ERP standard
 
 All product, domain, data-model, code, API, UI, security, workflow, and architecture decisions in this repository must meet financial-institution-grade enterprise ERP standards. Prefer financial integrity, explicit controls, auditability, deterministic behavior, and long-term operability over implementation convenience.
