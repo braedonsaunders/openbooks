@@ -9,7 +9,7 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   bankBalances,
   buildWeekGrid,
-  categoryWeekly,
+  forecastCategoryOrUnavailable,
   addMoney,
   compareMoney,
   divideMoney,
@@ -149,7 +149,9 @@ export async function cashflowData(
   const visibleCategoryConfigs = catConfigs.filter((category) =>
     isCategoryVisibleInScope(category, subIds, allowedSubsidiaryIds),
   );
-  const categories = await Promise.all(visibleCategoryConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  // A refusing category contributes zeros and names its reason; the rest of
+  // the forecast still renders. Anything else still throws.
+  const categories = await Promise.all(visibleCategoryConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
 
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,

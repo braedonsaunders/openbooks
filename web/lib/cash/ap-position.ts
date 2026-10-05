@@ -5,7 +5,7 @@ import {
   bankBalances,
   buildWeekGrid,
   cashflowModel,
-  categoryWeekly,
+  forecastCategoryOrUnavailable,
   compareMoney,
   daysBetween,
   loadCategories,
@@ -160,7 +160,9 @@ export async function apPosition(
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart };
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
-  const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  // A refusing category contributes zeros and names its reason; the rest of
+  // the forecast still renders. Anything else still throws.
+  const categories = await Promise.all(visibleConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,

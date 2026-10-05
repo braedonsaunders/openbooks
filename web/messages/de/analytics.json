@@ -1626,7 +1626,8 @@
       "method": "Methode",
       "logic": "Prognoselogik",
       "perWeek": "Pro Woche (Ø)",
-      "horizonTotal": "Horizont gesamt"
+      "horizonTotal": "Horizont gesamt",
+      "unavailable": "Kategorie nicht verfügbar: {detail}"
     },
     "toggle": {
       "outflowsAp": "Abflüsse (AP)",

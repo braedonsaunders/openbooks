@@ -16,7 +16,7 @@ import { monthYearLabel } from "../format";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
 import { statementBookExpr } from '../gl-summary'
-import { flowRates, lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
+import { flowRates, lineFunctional, MissingExchangeRateError, presentationCurrency, presentationRates } from '../fx-presentation'
 
 interface CashWeeklyHistoryRow extends Record<string, unknown> {
   wk: string
@@ -311,6 +311,84 @@ export interface CategoryWeekly {
   meta: { method: string } & Record<string, string | number>;
   /** The source items the estimate was derived from. */
   breakdown: CategoryBreakdownRow[];
+  /**
+   * Set when the category refused to forecast: weekly[] is zeros and total
+   * is zero, so the timeline still sums honestly, while the UI names the
+   * reason instead of the figure. Absent = forecast as usual.
+   */
+  unavailable?: { code: "card-threshold-missing" | "missing-exchange-rate"; message: string };
+}
+
+/**
+ * A forecast category's declared refusal: it names its own remedy and maps
+ * to a per-category unavailable state in every loader, so one refusing
+ * category never takes down the rest of the forecast. Anything else still
+ * throws.
+ */
+export class CategoryForecastRefusal extends Error {
+  readonly code = "card-threshold-missing" as const;
+  readonly categoryId: string;
+  constructor(categoryId: string, categoryName: string) {
+    super(
+      `credit card category "${categoryName}" has no payment history and no significant payment threshold — set one in the category editor so the forecast knows which payments count as the last payment`,
+    );
+    this.name = "CategoryForecastRefusal";
+    this.categoryId = categoryId;
+  }
+}
+
+/**
+ * Map a category failure to its unavailable state, or null when the failure
+ * is not a declared refusal (the caller rethrows those). Pure: unit-tested
+ * without a database.
+ */
+export function toUnavailableCategory(
+  cat: ForecastCategory,
+  weekCount: number,
+  e: unknown,
+): CategoryWeekly | null {
+  const code =
+    e instanceof CategoryForecastRefusal
+      ? ("card-threshold-missing" as const)
+      : e instanceof MissingExchangeRateError
+        ? ("missing-exchange-rate" as const)
+        : null;
+  if (code === null) return null;
+  return {
+    id: cat.id,
+    name: cat.name,
+    direction: cat.direction,
+    method: cat.method,
+    weekly: Array<Money>(weekCount).fill(ZERO_MONEY),
+    total: ZERO_MONEY,
+    logic: "",
+    meta: { method: "Unavailable" },
+    breakdown: [],
+    unavailable: { code, message: (e as Error).message },
+  };
+}
+
+/**
+ * One category's forecast with its declared refusals mapped to an
+ * unavailable state: a refusing category contributes zeros to the timeline
+ * and names its reason, while the rest of the forecast still renders.
+ * Anything else still throws.
+ */
+export async function forecastCategoryOrUnavailable(
+  orgId: string,
+  cat: ForecastCategory,
+  asOfIso: string,
+  weekStarts: string[],
+  context: CategoryContext,
+  locale = "en-US",
+): Promise<CategoryWeekly> {
+  try {
+    return await categoryWeekly(orgId, cat, asOfIso, weekStarts, context, locale);
+  } catch (e) {
+    const unavailable = toUnavailableCategory(cat, weekStarts.length, e);
+    if (unavailable === null) throw e;
+    return unavailable;
+  }
 }
 
 export interface SideSummary {
@@ -1311,9 +1389,7 @@ export async function categoryWeekly(
     } else if (compareMoney(medianPayment, ZERO_MONEY) > 0) {
       effectiveThreshold = multiplyMoney(medianPayment, "0.5");
     } else {
-      throw new Error(
-        `credit card category "${cat.name}" has no payment history and no significant payment threshold — set one in the category editor so the forecast knows which payments count as the last payment`,
-      );
+      throw new CategoryForecastRefusal(cat.id, cat.name);
     }
     const significantPayments = days.filter((d) => compareMoney(d.paid, effectiveThreshold) > 0).sort((a, b) => b.date.getTime() - a.date.getTime());
     const lastPaymentDate = significantPayments[0]?.date ?? null;

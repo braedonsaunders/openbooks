@@ -1626,7 +1626,8 @@
       "method": "方法",
       "logic": "预测逻辑",
       "perWeek": "每周(平均)",
-      "horizonTotal": "期合计"
+      "horizonTotal": "期合计",
+      "unavailable": "类别不可用：{detail}"
     },
     "toggle": {
       "outflowsAp": "流出 (AP)",

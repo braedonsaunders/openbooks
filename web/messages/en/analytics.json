@@ -1626,7 +1626,8 @@
       "method": "Method",
       "logic": "Forecast Logic",
       "perWeek": "Per Week (avg)",
-      "horizonTotal": "Horizon Total"
+      "horizonTotal": "Horizon Total",
+      "unavailable": "Category unavailable: {detail}"
     },
     "toggle": {
       "outflowsAp": "Outflows (AP)",

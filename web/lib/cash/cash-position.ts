@@ -12,7 +12,7 @@ import {
   divideMoney,
   bankBalances,
   buildWeekGrid,
-  categoryWeekly,
+  forecastCategoryOrUnavailable,
   isCategoryVisibleInScope,
   loadCategories,
   openItems,
@@ -307,7 +307,9 @@ export async function cashPosition(
   // subsidiary. Unattributed ones hide (fail closed) rather than leaking
   // org-wide names and amounts into a restricted view.
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
-  const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  // A refusing category contributes zeros and names its reason; the rest of
+  // the forecast still renders. Anything else still throws.
+  const categories = await Promise.all(visibleConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,

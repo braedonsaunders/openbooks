@@ -148,6 +148,27 @@ test('the category method pill shows the translated method label', () => {
   assert.doesNotMatch(html, /gl_history_average\.label/, 'the missing-message key must not leak')
 })
 
+test('a refusing category names its reason while the rest still renders', () => {
+  const data = fixture()
+  data.categories = [
+    {
+      id: 'cat-card',
+      name: 'Card',
+      direction: 'outflow',
+      method: 'credit_card_cycle',
+      weekly: ['0.0000'],
+      total: '0.0000',
+      logic: '',
+      meta: { method: 'Unavailable' },
+      breakdown: [],
+      unavailable: { code: 'card-threshold-missing', message: 'no threshold set' },
+    },
+  ]
+  const html = renderFr(<CategoryTab data={data} />)
+  assert.match(html, /Catégorie indisponible/, 'the row carries the French unavailable frame')
+  assert.match(html, /no threshold set/, 'the row names the refusal reason')
+})
+
 test('the horizon selector renders from the catalog', () => {
   globalThis.__cfRouter = { push() {}, refresh() {}, replace() {} }
   const html = renderFr(<HorizonControl value={4} />)

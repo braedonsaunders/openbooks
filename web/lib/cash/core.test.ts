@@ -246,3 +246,36 @@ test("week labels localize month names", () => {
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+test("declared category refusals map to an unavailable state, anything else rethrows", () => {
+  // One refusing category must never take down the rest of the forecast:
+  // the declared refusals become zeros that name their reason, while an
+  // unknown failure maps to null so the caller rethrows it.
+  const source = `
+    import assert from "node:assert/strict";
+    import { CategoryForecastRefusal, toUnavailableCategory } from "./web/lib/cash/core.ts";
+    import { MissingExchangeRateError } from "./web/lib/fx-presentation.ts";
+
+    const cat = { id: "c1", name: "Card", direction: "outflow", method: "credit_card_cycle" };
+    const refused = toUnavailableCategory(cat, 4, new CategoryForecastRefusal("c1", "Card"));
+    assert.equal(refused.unavailable.code, "card-threshold-missing");
+    assert.match(refused.unavailable.message, /category editor/);
+    assert.deepEqual(refused.weekly, ["0.0000", "0.0000", "0.0000", "0.0000"]);
+    assert.equal(refused.total, "0.0000");
+    assert.equal(refused.breakdown.length, 0);
+
+    const blocked = toUnavailableCategory(cat, 4, new MissingExchangeRateError("USD", "CAD", "2026-09-01"));
+    assert.equal(blocked.unavailable.code, "missing-exchange-rate");
+    assert.match(blocked.unavailable.message, /no spot rate for USD→CAD/);
+
+    assert.equal(toUnavailableCategory(cat, 4, new Error("boom")), null);
+    assert.equal(toUnavailableCategory(cat, 4, "boom"), null);
+    console.log("category refusal mapping passed: declared refusals name themselves, unknown failures rethrow");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
