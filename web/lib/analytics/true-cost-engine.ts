@@ -184,7 +184,7 @@ export function formatRate(
   format: RateFormat | undefined,
   periodData: { laborDollars?: { total: number | string } | number | string;
     directCost?: { total: number | string } | number | string;
-    units?: { total: number | string }; monthCount?: number },
+    units?: { total: number | string }; monthCount?: number; annualFteHours?: string | null },
   category: { totalExpense?: number | string;
     expenseOverall?: number | string;
   },
@@ -207,6 +207,7 @@ export function formatRate(
     laborDollars: base(periodData.laborDollars),
     directCost: base(periodData.directCost),
     units: base(periodData.units),
+    annualFteHours: periodData.annualFteHours ?? undefined,
   });
   if (exact === null)
     throw new OverheadCalculationError(
