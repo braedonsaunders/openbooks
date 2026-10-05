@@ -193,6 +193,21 @@ export function resolveUsSuiYtd(
   return base;
 }
 
+/**
+ * California ETT's year-to-date base. ETT is levied on the same UI-taxable
+ * first $7,000 the SUI base measures, so it reads the SUI year-to-date the
+ * run priced — committed California stubs, the entered California carry-in
+ * and credited prior-state wages. Where the run priced no SUI (a
+ * non-contributory account or an SUI-exempt employee) it reads the
+ * California stubs and carry-in directly, never the stubs alone.
+ */
+export function caEttWagesYtd(
+  ytd: Pick<UsYtdRow, "suiCurrentRegion" | "suiOpeningCurrentRegion">,
+  pricedSuiWagesYtd: string | null,
+): string {
+  return pricedSuiWagesYtd ?? add(ytd.suiCurrentRegion ?? "0", ytd.suiOpeningCurrentRegion ?? "0");
+}
+
 /** Exempt employees owe no SUI, so cross-state history must not refuse their run. */
 export function resolveUsSuiYtdForCoverage(
   region: string,
@@ -856,7 +871,10 @@ export async function computeUsStatutory(
       );
     }
     if (U(reserve) > 0n) {
-      const caEtt = caEttWithholding(run.pay_date!, sum([income, nonPeriodic]), ytd.suiCurrentRegion);
+      const caEtt = caEttWithholding(
+        run.pay_date!, sum([income, nonPeriodic]),
+        caEttWagesYtd(ytd, sui && !suiExempt ? suiWagesYtd : null),
+      );
       pushStatutory("ca_ett", "employer_contribution", "CA employment training tax", caEtt, 251);
       factors.CA_ETT_EMPLOYEE = caEtt;
     } else {

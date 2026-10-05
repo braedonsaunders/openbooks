@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculatePub15T } from "./pub15t.ts";
+import { caEttWagesYtd } from "./compute-statutory.ts";
+import { caEttWithholding } from "./states/ca.ts";
 import {
   resolveUsEmployerScope, resolveUsStateSuiAccount, type UsFilingAccountRef,
 } from "./employer-scope.ts";
@@ -57,4 +59,16 @@ test("two live EINs under one legal employer refuse by name instead of merging o
   // A superseded, inactive EIN is history, not a second employer.
   const superseded = accounts.map((row) => row.id === "ein-2" ? { ...row, isActive: false } : row);
   assert.equal(resolveUsEmployerScope(superseded, "nj-sui", ACME).federalAccountId, "ein");
+});
+
+test("California ETT consumes the entered California SUI carry-in", () => {
+  // $5,000 of California UI wages carried in leaves $2,000 of the $7,000
+  // ETT base: 0.1% of $2,000 on a $3,000 period, not of the whole $3,000.
+  const carried = caEttWagesYtd({ suiCurrentRegion: "0", suiOpeningCurrentRegion: "5000" }, null);
+  assert.equal(caEttWithholding("2026-07-21", "3000", carried), "2.0000");
+  assert.equal(caEttWithholding("2026-07-21", "3000",
+    caEttWagesYtd({ suiCurrentRegion: "0", suiOpeningCurrentRegion: "7000" }, null)), "0.0000");
+  // A priced SUI year-to-date (credited prior-state wages included) is the base.
+  assert.equal(caEttWithholding("2026-07-21", "3000",
+    caEttWagesYtd({ suiCurrentRegion: "0", suiOpeningCurrentRegion: "0" }, "6500")), "0.5000");
 });
