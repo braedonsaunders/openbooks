@@ -1,6 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { dateOrFalse, pushCustomFieldFilter } from '../list-query'
-import type { EntityAdhoc, ListViewConfig } from '@openbooks/customization'
+import type { FilterClause, ListViewConfig } from '@openbooks/customization'
+import type { EntityAdhoc } from './adhoc'
 
 /**
  * Stored-value account list query. Balances are minor units at ledger
@@ -31,21 +32,21 @@ export const STORED_VALUE_SORTS: Record<string, SQL> = {
   expires: sql`sva.expires_on`,
 }
 
-function storedValueFilterPredicate(filter: { key: string; operator: string; value: unknown; to?: unknown }): SQL | null {
-  const value = Array.isArray(filter.value) ? String(filter.value[0] ?? '') : String(filter.value ?? '')
-  if (filter.key === 'status' && (filter.operator === 'eq' || filter.operator === 'ne')) {
-    return filter.operator === 'eq' ? sql`sva.status = ${value}` : sql`sva.status <> ${value}`
+function storedValueFilterPredicate(clause: FilterClause): SQL | null {
+  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  if (clause.key === 'status' && (clause.operator === 'eq' || clause.operator === 'ne')) {
+    return clause.operator === 'eq' ? sql`sva.status = ${value}` : sql`sva.status <> ${value}`
   }
-  if (filter.key === 'kind' && (filter.operator === 'eq' || filter.operator === 'ne')) {
-    return filter.operator === 'eq' ? sql`sva.kind = ${value}` : sql`sva.kind <> ${value}`
+  if (clause.key === 'kind' && (clause.operator === 'eq' || clause.operator === 'ne')) {
+    return clause.operator === 'eq' ? sql`sva.kind = ${value}` : sql`sva.kind <> ${value}`
   }
-  if (filter.key === 'expires_on') {
-    if (filter.operator === 'gte') return sql`sva.expires_on >= ${value}`
-    if (filter.operator === 'lte') return sql`sva.expires_on <= ${value}`
-    if (filter.operator === 'between') {
-      const refusedUpper = dateOrFalse(String(filter.to ?? ''))
+  if (clause.key === 'expires_on') {
+    if (clause.operator === 'gte') return sql`sva.expires_on >= ${value}`
+    if (clause.operator === 'lte') return sql`sva.expires_on <= ${value}`
+    if (clause.operator === 'between') {
+      const refusedUpper = dateOrFalse(String(clause.to ?? ''))
       if (refusedUpper) return refusedUpper
-      return sql`sva.expires_on between ${value} and ${String(filter.to ?? '')}`
+      return sql`sva.expires_on between ${value} and ${String(clause.to ?? '')}`
     }
   }
   return null
