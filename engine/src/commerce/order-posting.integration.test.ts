@@ -224,6 +224,59 @@ test("paid order posts one balanced cash sale with gateway tenders, tax and COGS
   }
 });
 
+test("discount lines net the taxable base by the discounted line's tax code without moving tax", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const { channelId, accounts } = await setup(org, actor, "per_order");
+    // 100.00 tee less 20.00 taxed 10% on 80.00; 10.00 shipping less 5.00 taxed on 5.00.
+    const order = paidOrder("1010", {
+      subtotalMinor: 10000n, taxMinor: 850n, shippingMinor: 1000n, discountMinor: 2500n, totalMinor: 9350n,
+      lines: [{
+        sku: "TEE-RED-M", variantExternalId: null, title: "Red Tee — M", quantity: "1",
+        priceMinor: 10000n, discountMinor: 2000n, discountCode: "SAVE20",
+        taxLines: [{ jurisdiction: "NY", collectedBy: "merchant", amountMinor: 800n, ratePercent: "10" }],
+        giftCard: false, promotionId: null,
+      }],
+      shippingLines: [{
+        title: "Standard", amountMinor: 1000n, discountMinor: 500n,
+        taxLines: [{ jurisdiction: "NY", collectedBy: "merchant", amountMinor: 50n, ratePercent: "10" }],
+      }],
+      tenders: [{ gateway: "shopify_payments", amountMinor: 9350n, giftCardExternalId: null, authorizationRef: null }],
+    });
+    const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
+    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    assert.equal(outcome.status, "posted");
+    const components = (await withOrgContext(org.orgId, () => db.execute<{
+      line_amount: string; tax_code_id: string; taxable_amount: string; tax_amount: string;
+    }>(sql`
+      select dl.amount::text as line_amount, c.tax_code_id, c.taxable_amount::text as taxable_amount,
+             c.tax_amount::text as tax_amount
+        from document_lines dl
+        join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
+       where dl.org_id = ${org.orgId} and dl.document_id = ${outcome.documentId}
+       order by dl.line_number`))).rows;
+    // Every line, discounts included, carries the one jurisdiction code.
+    assert.deepEqual(
+      components.map((c) => [units4(c.line_amount), units4(c.taxable_amount), units4(c.tax_amount)]),
+      [[1000000n, 1000000n, 80000n], [-200000n, -200000n, 0n], [100000n, 100000n, 5000n], [-50000n, -50000n, 0n]],
+    );
+    assert.equal(new Set(components.map((c) => c.tax_code_id)).size, 1);
+    // The taxable base a return reads for the code is the discounted 85.00.
+    assert.equal(components.reduce((sum, c) => sum + units4(c.taxable_amount), 0n), 850000n);
+    // The journal is the storefront's: tax liability 8.50, discounts 25.00.
+    const byAccount = new Map<string, bigint>();
+    for (const leg of await journalLegs(org.orgId, outcome.documentId!)) {
+      byAccount.set(leg.account_id, (byAccount.get(leg.account_id) ?? 0n) + units4(leg.amount));
+    }
+    assert.equal(byAccount.get(org.accounts.taxOutput), -85000n);
+    assert.equal(byAccount.get(accounts.discount), 250000n);
+    assert.equal(byAccount.get(accounts.clearing), 935000n);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("replaying a posted order is a no-op", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
