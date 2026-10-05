@@ -130,6 +130,21 @@ export const sum = (xs: string[]) => fromUnits(xs.reduce((acc, x) => acc + toUni
 export function toCents(value: string): bigint {
   return roundDiv(toUnits(value), 100n);
 }
+
+/**
+ * Exact scale between 4dp engine units and one ISO minor unit for a
+ * currency quantum: 10^(4 - quantum), so 100n for hundredths (USD), 10n
+ * for millis (BHD), 10000n for zero-decimal (JPY). Dividing 4dp units by
+ * the scale quantizes to ISO minors; multiplying ISO minors by the scale
+ * returns to exact 4dp units. Refuses outside 0..4 like the currency
+ * registry it mirrors.
+ */
+export function quantumScale(quantum: number): bigint {
+  if (!Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
+    throw new Error(`currency quantum must be an integer from 0 through 4, saw ${String(quantum)}`);
+  }
+  return 10n ** BigInt(4 - quantum);
+}
 export const isZero = (a: string) => toUnits(a) === 0n;
 export const cmp = (a: string, b: string) => {
   const d = toUnits(a) - toUnits(b);

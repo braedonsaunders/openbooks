@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import { fromUnits, quantumScale, roundDiv, toUnits } from "../money/money.ts";
 import { assertReturnAuthorizationsFeature } from "./returns.ts";
 
 export type RestockingFeeRefusalCode =
@@ -9,6 +9,7 @@ export type RestockingFeeRefusalCode =
   | "not_found"
   | "invalid_input"
   | "currency_mismatch"
+  | "currency_precision_unknown"
   | "waive_forbidden"
   | "waive_not_allowed"
   | "waive_reason_required";
@@ -195,8 +196,33 @@ export type ResolveRestockingFeeResult = {
   /** Fee before any waiver, so the waiver audit records what was forgiven. */
   unwaivedTotalMinor: string;
   currency: string;
+  /** The registry quantum every feeMinor uses; always present, because an
+   *  unknown precision refuses before any fee resolves. */
+  minorUnits: number;
   waived: boolean;
 };
+
+/**
+ * The credit currency's ISO quantum from the authoritative registry.
+ * Refuses before any fee resolves when the row is missing or unusable, so
+ * fixed ISO policy amounts and percent shares share one quantum without
+ * guessing hundredths.
+ */
+async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<number> {
+  const row = (await runner.execute<{ minor_units: number | null }>(sql`
+    select minor_units from currencies where code = ${currency}
+  `)).rows[0];
+  const quantum = row?.minor_units;
+  if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
+    throw refusal(
+      `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
+      "currency_precision_unknown",
+      422,
+      "Ask your system administrator to restore the missing row with the platform currency seed",
+    );
+  }
+  return quantum;
+}
 
 /**
  * Resolve the restocking fee for inspected return lines. Policies are read
@@ -230,6 +256,7 @@ export async function resolveRestockingFee(
     throw refusal(`Return date ${input.returnDate} is not a calendar date`, "invalid_input", 422, "Resolve the fee against the return date as YYYY-MM-DD");
   }
   const currency = parseCurrency(input.currency);
+  const quantum = await currencyQuantum(runner, currency);
   // An organization that never configured fee policies owes no fee: returns
   // keep working. One that did but lapsed every policy fails closed below.
   const configured = await hasAnyPolicy(runner, orgId);
@@ -260,7 +287,7 @@ export async function resolveRestockingFee(
     lines.push(input.waived ? { ...fee, feeMinor: "0", capped: false } : fee);
   }
   const total = lines.reduce((sum, line) => sum + BigInt(line.feeMinor), 0n);
-  return { lines, totalMinor: total.toString(), unwaivedTotalMinor: unwaived.toString(), currency, waived: input.waived };
+  return { lines, totalMinor: total.toString(), unwaivedTotalMinor: unwaived.toString(), currency, minorUnits: quantum, waived: input.waived };
 }
 
 async function hasAnyPolicy(runner: SqlExecutor, orgId: string): Promise<boolean> {
@@ -348,12 +375,13 @@ export type RestockingFeeCreditLine = {
 };
 
 export function restockingFeeCreditLines(resolution: ResolveRestockingFeeResult): RestockingFeeCreditLine[] {
+  const scale = quantumScale(resolution.minorUnits);
   return resolution.lines
     .filter((line) => BigInt(line.feeMinor) > 0n && line.incomeAccountId)
     .map((line) => {
-      // Minor units are cents (the engine prices 2dp currencies); money
-      // columns carry four decimals, so a cent share scales up exactly.
-      const amount = fromUnits(-BigInt(line.feeMinor) * 100n);
+      // Money columns carry four decimals; an ISO-minor fee scales up
+      // exactly, so the credit line agrees with the resolved total.
+      const amount = fromUnits(-BigInt(line.feeMinor) * scale);
       return {
         accountId: line.incomeAccountId!,
         description: `Restocking fee (${line.policyName})`,

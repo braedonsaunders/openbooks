@@ -16,7 +16,7 @@ export type ReturnRefusalCode =
   | "feature_disabled" | "not_found" | "invalid_input" | "invalid_quantity"
   | "source_unavailable" | "source_fully_returned" | "exceeds_returnable_quantity"
   | "mixed_source_documents" | "approval_pending" | "approval_routing_failed"
-  | "wrong_stage" | "changed_concurrently";
+  | "currency_precision_unknown" | "wrong_stage" | "changed_concurrently";
 
 /** A return lifecycle refusal with the stable detail returned by API routes. */
 export class ReturnRefusal extends Error {
