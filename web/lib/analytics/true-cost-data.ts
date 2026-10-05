@@ -7,7 +7,7 @@ import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, cmp, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulRatio, normalizeMoney, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   deriveOverheadCategoryDeptRates,
   deriveOverheadOverallRate,
@@ -22,6 +22,8 @@ import {
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
 import { overheadApplicationSettings } from "@openbooks/engine/src/allocations/overhead-sync.ts";
+import { resolveAnnualHoursMany } from "@openbooks/engine/src/projects/labor-costing.ts";
+import { loadWorkSchedules, pickWorkSchedule, scheduledHoursPerWeek } from "@openbooks/engine/src/payroll/work-schedules.ts";
 import {
   type AllocationBase,
   type AllocationMethod,
@@ -594,16 +596,20 @@ export async function trueCostData(
   // Employee legs merged to one presentation row each: the rate is
   // translated cost over rated hours, never an average of raw rates.
   const empTranslated: EmployeeRateSqlRow[] = [];
+  // Exact per-employee period hours (dominant department alongside) for the
+  // annual-FTE-hours weighting below.
+  const empHoursExact = new Map<string, { deptId: string | null; hours: string }>();
   // Exact per-department labor cost ÷ rated hours for the cascading composite
   // base (mirrors the Overall hours-weighted average per department).
   const deptLaborExact = new Map<string, { cost: string; rated: string }>();
   let overallLaborCostExact = "0.0000";
   let overallLaborRatedExact = "0.0000";
   {
-    const byId = new Map<string, { base: EmployeeRateSqlRow; hours: number; cost: string; rated: number; ratedExact: string }>();
+    const byId = new Map<string, { base: EmployeeRateSqlRow; hours: number; hoursExact: string; cost: string; rated: number; ratedExact: string }>();
     for (const r of empLegs) {
-      const prev = byId.get(r.id) ?? { base: r, hours: 0, cost: "0", rated: 0, ratedExact: "0.0000" };
+      const prev = byId.get(r.id) ?? { base: r, hours: 0, hoursExact: "0.0000", cost: "0", rated: 0, ratedExact: "0.0000" };
       prev.hours += Number(r.hours ?? 0);
+      prev.hoursExact = add(prev.hoursExact, normalizeMoney(String(r.hours ?? 0)));
       prev.rated += Number(r.rated_hours ?? 0);
       prev.ratedExact = add(prev.ratedExact, normalizeMoney(String(r.rated_hours ?? 0)));
       prev.cost = add(String(prev.cost), translateLeg(String(r.cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
@@ -612,6 +618,7 @@ export async function trueCostData(
     for (const v of byId.values()) {
       overallLaborCostExact = add(overallLaborCostExact, v.cost);
       overallLaborRatedExact = add(overallLaborRatedExact, v.ratedExact);
+      empHoursExact.set(v.base.id, { deptId: v.base.dept_id, hours: v.hoursExact });
       const deptId = v.base.dept_id;
       if (deptId) {
         const prev = deptLaborExact.get(deptId) ?? { cost: "0.0000", rated: "0.0000" };
@@ -628,6 +635,68 @@ export async function trueCostData(
         rated_hours: v.rated,
         rate: v.rated > 0 ? toChartNumber(div(v.cost, v.ratedExact)) : 0,
       });
+    }
+  }
+  // ---- annual FTE hours per scope -------------------------------------------
+  // A per-FTE display multiplies an hourly rate by full-time annual hours.
+  // The divisor is measured, never assumed: per employee, weekly hours from
+  // the work schedule in force (annualized × 52, the payroll stub's own
+  // annualization) else the winning labor_cost_rates.annual_hours. Each scope
+  // takes the hours-weighted exact mean over its resolved employees; with
+  // nothing resolved the per-FTE category refuses by name below.
+  const annualHoursByDept = new Map<string, string>();
+  let overallAnnualHours: string | null = null;
+  {
+    const empIds = [...empHoursExact.keys()];
+    if (empIds.length > 0) {
+      const [rateAnnual, roleRows, schedules] = await Promise.all([
+        resolveAnnualHoursMany(orgId, empIds, to),
+        db.execute<{ party_id: string; job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null }>(sql`
+          select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
+            from employee_roles er
+            join parties p on p.id = er.party_id and p.org_id = er.org_id
+           where er.org_id = ${orgId} and er.party_id = any(${empIds}::uuid[])`),
+        loadWorkSchedules(db, orgId, allowedSubsidiaryIds),
+      ]);
+      const keysByEmp = new Map(roleRows.rows.map((r) => [r.party_id, r]));
+      const annualByEmp = new Map<string, string>();
+      for (const id of empIds) {
+        const keys = keysByEmp.get(id);
+        const schedule = pickWorkSchedule(schedules, {
+          employeePartyId: id,
+          jobTitle: keys?.job_title ?? null,
+          tradeId: keys?.trade_id ?? null,
+          departmentId: keys?.department_id ?? null,
+          subsidiaryId: keys?.subsidiary_id ?? null,
+        }, to);
+        const weekly = schedule ? scheduledHoursPerWeek(schedule) : null;
+        const fromSchedule = weekly === null ? null : mulRatio(weekly, 52n, 1n);
+        const annual = fromSchedule !== null && cmp(fromSchedule, "0") > 0
+          ? fromSchedule
+          : (rateAnnual.get(id) ?? null);
+        if (annual !== null && cmp(annual, "0") > 0) annualByEmp.set(id, annual);
+      }
+      // Hours-weighted exact mean per scope, in bigint units throughout.
+      const meanAnnual = (ids: string[]): string | null => {
+        let numerator = 0n;
+        let denominator = 0n;
+        for (const id of ids) {
+          const annual = annualByEmp.get(id);
+          const hours = empHoursExact.get(id)?.hours ?? "0.0000";
+          if (annual === undefined || cmp(hours, "0") <= 0) continue;
+          numerator += toUnits(annual) * toUnits(hours);
+          denominator += toUnits(hours);
+        }
+        return denominator > 0n ? fromUnits(roundDiv(numerator, denominator)) : null;
+      };
+      overallAnnualHours = meanAnnual(empIds);
+      const deptIds = new Set<string>();
+      for (const { deptId } of empHoursExact.values()) if (deptId) deptIds.add(deptId);
+      for (const d of deptIds) {
+        const deptEmpIds = empIds.filter((id) => empHoursExact.get(id)?.deptId === d);
+        const mean = meanAnnual(deptEmpIds);
+        if (mean !== null) annualHoursByDept.set(d, mean);
+      }
     }
   }
   // Prior-window expense merged per account; prior non-billable cost summed.
@@ -954,6 +1023,13 @@ export async function trueCostData(
       deptId?: string,
     )
       : string => {
+      if (rateFormat === "per_fte") {
+        const annual = (deptId ? annualHoursByDept.get(deptId) : undefined) ?? overallAnnualHours;
+        if (annual === null || annual === undefined)
+          throw new OverheadCalculationError(
+            `Category "${name}" uses Currency/FTE but no annual FTE hours resolve${deptId ? ` for department "${deptId}"` : ""} — record annual hours on the employees' labor cost rates or weekly hours on their work schedules.`,
+          );
+      }
       const value = deriveOverheadDisplayRate({
         rawRate,
         expense,
@@ -961,6 +1037,7 @@ export async function trueCostData(
         laborDollars: deptId ? (laborBase[deptId] ?? "0") : sumExact(laborBase),
         directCost: deptId ? (costBase[deptId] ?? "0") : sumExact(costBase),
         units: deptId ? (unitBase[deptId] ?? "0") : sumExact(unitBase),
+        annualFteHours: ((deptId ? annualHoursByDept.get(deptId) : undefined) ?? overallAnnualHours) ?? undefined,
       });
       if (value === null)
         throw new OverheadCalculationError(
@@ -990,6 +1067,7 @@ export async function trueCostData(
         laborDollars: sumExact(laborBase),
         directCost: sumExact(costBase),
         units: { total: sumExact(unitBase) },
+        annualFteHours: overallAnnualHours ?? undefined,
       }, { totalExpense: overallExpense }, (value, options) => money(value, options));
     return {
       id, key, name, color, categoryType, match,
