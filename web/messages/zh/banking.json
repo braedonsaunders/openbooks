@@ -1019,6 +1019,41 @@
     "reverse": "冲销",
     "empty": "尚未导入任何结算。"
   },
+  "pspReviews": {
+    "title": "退款与争议复核",
+    "description": "按复核规则暂存的机构退款与争议。批准即记账,驳回不记账。",
+    "emptyTitle": "暂无待复核",
+    "emptyDescription": "当机构规则为复核,或自动化尚无法记账时,退款与争议显示在这里。",
+    "colReference": "参考号",
+    "colProvider": "服务商",
+    "colKind": "类型",
+    "kind": {
+      "refund": "退款",
+      "dispute": "争议"
+    },
+    "status": {
+      "pending_review": "待复核",
+      "posted": "已记账",
+      "rejected": "已驳回",
+      "opened": "争议中",
+      "won": "争议胜诉",
+      "lost": "争议败诉"
+    },
+    "drawerKind": "类型",
+    "drawerEvent": "机构事件",
+    "drawerProviderRef": "机构参考号",
+    "drawerReason": "已填原因",
+    "drawerReceipt": "收据",
+    "drawerInvoice": "发票",
+    "drawerHistory": "历史",
+    "approve": "批准",
+    "reject": "驳回",
+    "reasonLabel": "原因",
+    "reasonPlaceholder": "说明驳回原因(至少5个字符)。",
+    "decidedNote": "本次复核已完结,列表保留记录。",
+    "approvedMessage": "复核已批准并记账。",
+    "rejectedMessage": "本次复核未能处理。"
+  },
   "docStatus": {
     "draft": "草稿",
     "pending_approval": "待审批",

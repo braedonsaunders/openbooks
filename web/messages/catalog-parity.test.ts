@@ -3383,6 +3383,24 @@ COGNATES.add('de:admin.email.providers.fields.mailgunRegion.label|Region')
 for (const locale of ['de', 'es', 'pt-BR']) {
   COGNATES.add(`${locale}:admin.email.providers.fields.smtpHost.label|Host`)
 }
+// PSP provider brand names keep their shared spelling across locales, “FX”
+// is the shared finance abbreviation in German and Spanish, and French
+// spells “Type”/“Description” exactly like English.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+  for (const [key, term] of [
+    ['banking.pspSettlements.providers.shopify_payments', 'Shopify Payments'],
+    ['banking.pspSettlements.providers.paypal', 'PayPal'],
+    ['admin.setup.paymentProviders.paypalName', 'PayPal'],
+    ['admin.setup.paymentProviders.shopifyName', 'Shopify Payments'],
+  ] as const) {
+    COGNATES.add(`${locale}:${key}|${term}`)
+  }
+}
+for (const locale of ['de', 'es']) {
+  COGNATES.add(`${locale}:banking.pspSettlements.colFx|FX`)
+}
+COGNATES.add('fr:banking.pspSettlements.detailLineType|Type')
+COGNATES.add('fr:banking.pspSettlements.detailLineDescription|Description')
 // The number-sign column header is language-neutral (es renders N.º).
 for (const locale of ['de', 'fr', 'ja', 'pt-BR', 'zh']) {
   COGNATES.add(`${locale}:ar.collections.subscriptions.advanced.colNumber|#`)

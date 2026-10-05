@@ -1019,6 +1019,41 @@
     "reverse": "取消",
     "empty": "インポートされた決済明細はまだありません。"
   },
+  "pspReviews": {
+    "title": "返金と異議申立ての確認",
+    "description": "確認ルールで保留されたプロバイダーの返金と異議申立て。承認で記帳、却下では何も記帳しません。",
+    "emptyTitle": "確認待ちはありません",
+    "emptyDescription": "プロバイダーのルールが確認の場合、または自動化がまだ記帳できない場合に表示されます。",
+    "colReference": "参照番号",
+    "colProvider": "プロバイダー",
+    "colKind": "種別",
+    "kind": {
+      "refund": "返金",
+      "dispute": "異議申立て"
+    },
+    "status": {
+      "pending_review": "確認待ち",
+      "posted": "記帳済み",
+      "rejected": "却下",
+      "opened": "異議申立て中",
+      "won": "異議申立て勝訴",
+      "lost": "異議申立て敗訴"
+    },
+    "drawerKind": "種別",
+    "drawerEvent": "プロバイダーイベント",
+    "drawerProviderRef": "プロバイダー参照番号",
+    "drawerReason": "入力済みの理由",
+    "drawerReceipt": "領収書",
+    "drawerInvoice": "請求書",
+    "drawerHistory": "履歴",
+    "approve": "承認",
+    "reject": "却下",
+    "reasonLabel": "理由",
+    "reasonPlaceholder": "却下する理由 (5文字以上)。",
+    "decidedNote": "この確認は完了しています。記録として一覧に残ります。",
+    "approvedMessage": "確認を承認し記帳しました。",
+    "rejectedMessage": "この確認を処理できませんでした。"
+  },
   "docStatus": {
     "draft": "下書き",
     "pending_approval": "承認待ち",

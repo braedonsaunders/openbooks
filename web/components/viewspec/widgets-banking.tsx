@@ -9,6 +9,7 @@ import { NewSetupRecordButton, PaymentOperationsEditor, PaymentOperationsTabs, P
 import { ReconcileStats, ReconcileStatusBadge } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
 import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
 import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
+import { PspDisputeReviewDrawer } from '../../app/(app)/banking/psp-settlements/reviews/ReviewDrawer'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
@@ -208,6 +209,14 @@ export const BANKING_WIDGETS = {
     />
   ),
 
+  /** The review queue's row drawer: the loader resolves the full review, the
+   *  drawer only decides it. Approve/reject POST through the review endpoint
+   *  with banking.reconcile; readers see the same drawer without decisions. */
+  'psp-dispute-review-drawer': (props) => (
+    <PspDisputeReviewDrawer
+      review={props.review as ComponentProps<typeof PspDisputeReviewDrawer>['review']}
+    />
+  ),
   'psp-settlements': (props) => (
     <PspSettlementsWorkspace
       canReconcile={props.canReconcile === true}

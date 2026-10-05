@@ -1025,5 +1025,40 @@
     },
     "reverse": "Reverse",
     "empty": "No settlements imported yet."
+  },
+  "pspReviews": {
+    "title": "Refund and dispute reviews",
+    "description": "Provider refunds and disputes parked by the review policy. Approving posts the accounting; rejecting moves nothing.",
+    "emptyTitle": "Nothing awaiting review",
+    "emptyDescription": "Refunds and disputes appear here when a provider's policy is review, or when the automation cannot post yet.",
+    "colReference": "Reference",
+    "colProvider": "Provider",
+    "colKind": "Kind",
+    "kind": {
+      "refund": "Refund",
+      "dispute": "Dispute"
+    },
+    "status": {
+      "pending_review": "Awaiting review",
+      "posted": "Posted",
+      "rejected": "Rejected",
+      "opened": "Dispute open",
+      "won": "Dispute won",
+      "lost": "Dispute lost"
+    },
+    "drawerKind": "Kind",
+    "drawerEvent": "Provider event",
+    "drawerProviderRef": "Provider reference",
+    "drawerReason": "Reason given",
+    "drawerReceipt": "Receipt",
+    "drawerInvoice": "Invoice",
+    "drawerHistory": "History",
+    "approve": "Approve",
+    "reject": "Reject",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "Say why this review is refused (at least 5 characters).",
+    "decidedNote": "This review is resolved; the queue keeps it for the record.",
+    "approvedMessage": "Review approved and posted.",
+    "rejectedMessage": "The review could not be resolved."
   }
 }

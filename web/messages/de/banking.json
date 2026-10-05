@@ -1019,6 +1019,41 @@
     "reverse": "Stornieren",
     "empty": "Noch keine Abrechnungen importiert."
   },
+  "pspReviews": {
+    "title": "Rückerstattungs- und Disputprüfungen",
+    "description": "Geparkte Anbieter-Rückerstattungen und Dispute aus der Prüfrichtlinie. Freigeben bucht, Ablehnen bucht nichts.",
+    "emptyTitle": "Nichts zu prüfen",
+    "emptyDescription": "Rückerstattungen und Dispute erscheinen hier, wenn die Anbieterrichtlinie Prüfung vorsieht oder die Automatisierung noch nicht buchen kann.",
+    "colReference": "Referenz",
+    "colProvider": "Anbieter",
+    "colKind": "Art",
+    "kind": {
+      "refund": "Rückerstattung",
+      "dispute": "Disput"
+    },
+    "status": {
+      "pending_review": "Wartet auf Prüfung",
+      "posted": "Gebucht",
+      "rejected": "Abgelehnt",
+      "opened": "Disput offen",
+      "won": "Disput gewonnen",
+      "lost": "Disput verloren"
+    },
+    "drawerKind": "Art",
+    "drawerEvent": "Anbieterereignis",
+    "drawerProviderRef": "Anbieterreferenz",
+    "drawerReason": "Angegebener Grund",
+    "drawerReceipt": "Quittung",
+    "drawerInvoice": "Rechnung",
+    "drawerHistory": "Verlauf",
+    "approve": "Freigeben",
+    "reject": "Ablehnen",
+    "reasonLabel": "Grund",
+    "reasonPlaceholder": "Warum wird diese Prüfung abgelehnt (mindestens 5 Zeichen).",
+    "decidedNote": "Diese Prüfung ist abgeschlossen; die Liste behält sie als Nachweis.",
+    "approvedMessage": "Prüfung freigegeben und gebucht.",
+    "rejectedMessage": "Die Prüfung konnte nicht abgeschlossen werden."
+  },
   "docStatus": {
     "draft": "Entwurf",
     "pending_approval": "Zur Genehmigung",

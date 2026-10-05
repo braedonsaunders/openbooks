@@ -89,6 +89,9 @@ import {
   BANK_RULE_BUILT_IN_EXPR,
   BANK_RULE_SORTS,
   bankRuleWhere,
+  PAYMENT_DISPUTE_BUILT_IN_EXPR,
+  PAYMENT_DISPUTE_SORTS,
+  paymentDisputeWhere,
   activityWhere,
   customerWhere,
   employeeBaseJoins,
@@ -1341,6 +1344,47 @@ const SOURCES: Record<string, EntityListSource> = {
     drawerParam: 'rule',
     basePath: '/banking/rules',
     statusVariant: (row) => row.status === 'active' ? 'success' : 'secondary',
+  },
+  // Parked provider refunds and disputes awaiting an operator decision. The
+  // list reads the automation ledger with the tenant pinned in its WHERE —
+  // another tenant's rows never reach the queue.
+  payment_dispute_review: {
+    recordType: 'payment_dispute_review',
+    table: 'payment_disputes',
+    alias: 'pd',
+    baseJoins: sql``,
+    builtInExpr: PAYMENT_DISPUTE_BUILT_IN_EXPR,
+    sorts: PAYMENT_DISPUTE_SORTS,
+    defaultSort: sql`pd.created_at desc`,
+    statusExpr: sql`pd.status`,
+    countFilterKey: 'status',
+    quickFilters: [
+      { paramKey: 'status', filterKey: 'status' },
+      { paramKey: 'kind', filterKey: 'kind' },
+    ],
+    where: paymentDisputeWhere,
+    drawerParam: 'review',
+    basePath: '/banking/psp-settlements/reviews',
+    readPermission: 'banking.read',
+    extraSelect: sql`pd.currency`,
+    currencyField: 'currency',
+    statusVariant: (row) =>
+      row.status === 'posted' || row.status === 'won'
+        ? 'success'
+        : row.status === 'lost'
+          ? 'destructive'
+          : row.status === 'rejected'
+            ? 'secondary'
+            : 'warning',
+    // Stored statuses are engine vocabulary; the queue renders them through
+    // the reviews catalog. A locale without the subtree keeps the stored
+    // name, never a raw message key.
+    statusFilterKey: 'status',
+    statusDisplayName: (storedName, translate) => {
+      const fullKey = `banking.pspReviews.status.${storedName}`
+      const out = translate(fullKey)
+      return out === fullKey ? storedName : out
+    },
   },
   // Funds read the fund segment's classified values, never a standalone
   // roster: the join to the org's fund segment definition is the query half

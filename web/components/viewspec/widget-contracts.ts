@@ -441,6 +441,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'provision-recon-section': { props: ['amountLabel', 'enactedRateText', 'percentLabel', 'pretaxAmount', 'pretaxLabel', 'steps', 'summaries', 'title'] },
   'provision-runs-table': { props: ['columns', 'emptyText', 'rows'] },
   'provision-status-badge': { props: ['label', 'variant'] },
+  'psp-dispute-review-drawer': { props: ['review'] },
   'psp-settlements': { props: ['canReconcile', 'initialAccounts', 'initialRows', 'initialSubsidiaries', 'strings'] },
   'putaway-queue': { props: ['canPost', 'rows'] },
   'query-console': { props: [] },

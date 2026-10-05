@@ -162,4 +162,7 @@ export {
   BANK_RULE_BUILT_IN_EXPR,
   BANK_RULE_SORTS,
   bankRuleWhere,
+  PAYMENT_DISPUTE_BUILT_IN_EXPR,
+  PAYMENT_DISPUTE_SORTS,
+  paymentDisputeWhere,
 } from "./entity-list-query/banking"
