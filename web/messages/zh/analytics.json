@@ -105,6 +105,10 @@
     "statesShown": "显示的生命周期状态",
     "calculatedAt": "截至 {time}"
   },
+  "preview": {
+    "busy": "分析指标仍在计算中，请稍后重试。",
+    "unavailable": "分析仪表板预览不可用"
+  },
   "financialHealth": {
     "title": "财务健康",
     "description": "带综合健康评分的盈利能力、效率与经营比率。",

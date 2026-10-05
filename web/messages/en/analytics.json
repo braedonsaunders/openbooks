@@ -105,6 +105,10 @@
     "statesShown": "Lifecycle states shown",
     "calculatedAt": "As of {time}"
   },
+  "preview": {
+    "busy": "Analytics metrics are still being calculated. Retry in a moment.",
+    "unavailable": "Analytics dashboard preview is unavailable"
+  },
   "financialHealth": {
     "title": "Financial Health",
     "description": "Profitability, efficiency and operating ratios with a composite health score.",

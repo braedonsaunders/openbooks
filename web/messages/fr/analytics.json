@@ -105,6 +105,10 @@
     "statesShown": "États du cycle de vie affichés",
     "calculatedAt": "Données au {time}"
   },
+  "preview": {
+    "busy": "Les indicateurs analytiques sont encore en cours de calcul. Réessayez dans un instant.",
+    "unavailable": "L’aperçu du tableau de bord analytique n’est pas disponible"
+  },
   "financialHealth": {
     "title": "Santé financière",
     "description": "Ratios de rentabilité, d'efficacité et d'exploitation avec un score de santé composite.",
