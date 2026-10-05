@@ -318,7 +318,7 @@ test(
       );
       await assert.rejects(
         postSettlementBatch(org.orgId, usd.batchId, actor, null),
-        /requires explicit rate and functional-currency evidence/,
+        /requires payout_rate evidence/,
       );
       const usdState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
         select status, journal_entry_id

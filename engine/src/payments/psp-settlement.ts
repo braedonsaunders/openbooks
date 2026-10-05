@@ -1500,7 +1500,7 @@ export async function importSettlementBatch(
     const lineCurrency = (line.currency ?? "").toUpperCase() || currency;
     if (lineCurrency !== currency && lineCurrency !== sourceCurrency) {
       throw new PspSettlementError(
-        `settlement line ${lineIndex + 1} in ${lineCurrency} matches neither the batch currency ${currency} nor the evidenced source currency ${sourceCurrency || "(none)"}; re-import with conversion evidence for that currency`,
+        `settlement line ${lineIndex + 1} in ${lineCurrency} matches neither the batch currency ${currency} nor the evidenced source currency ${sourceCurrency || "(none)"}; re-import with conversion_rate evidence for that currency`,
       );
     }
     if (lineCurrency !== currency) {

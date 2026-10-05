@@ -22,8 +22,8 @@ function signedGcBody(secret: string, action: string, payment: string, billingRe
  * beats its settlement event claims the initiated attempt as refunded; when
  * the (real, amount-matched) succeeded event lands afterwards it must still
  * settle — collected money with no receipt, an open invoice, and a 200 to the
- * provider is a stranded collection. The clawback audit note stays for the
- * controller to reverse against if the funds were returned.
+ * provider is a stranded collection. The bank-debit return carries no amount,
+ * so it queues for review with the amount to confirm instead of posting.
  */
 test("a succeeded event arriving after its refund still settles instead of stranding", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -85,14 +85,14 @@ test("a succeeded event arriving after its refund still settles instead of stran
     // The chargeback beats the settlement event.
     const refunded = signedGcBody(secret, "charged_back", "PM-ORDER-1", "BRQ-ORDER-1");
     const first = await handleProviderWebhook("gocardless", refunded.headers, refunded.body);
-    assert.equal(first?.status, "refunded_noted");
+    assert.equal(first?.status, "refunded_pending_review");
     const stranded = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
       select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`)).rows[0]!;
     assert.equal(stranded.status, "refunded");
     assert.equal(stranded.journal_entry_id, null);
 
     // The real settlement event lands late: it must book the receipt (the
-    // clawback note above stays for the controller), not dedupe away.
+    // queued return above stays for the operator), not dedupe away.
     const confirmed = signedGcBody(secret, "confirmed", "PM-ORDER-1", "BRQ-ORDER-1");
     const second = await handleProviderWebhook("gocardless", confirmed.headers, confirmed.body);
     assert.equal(second?.status, "settled");

@@ -72,7 +72,28 @@
   {
     "path": "engine/src/payments/refund-first.integration.test.ts",
     "fn": "(top-level)",
-    "test": "a refund arriving before its success parks, settles, and notes exactly once",
+    "test": "a refund arriving before its success parks, settles, and queues exactly once",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/refund-automation.integration.test.ts",
+    "fn": "ensureOpenPeriod",
+    "test": "",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/psp-settlement-fx.integration.test.ts",
+    "fn": "ensureOpenPeriod",
+    "test": "",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/psp-pull.integration.test.ts",
+    "fn": "ensureOpenPeriod",
+    "test": "",
     "arg": "year",
     "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
   },
