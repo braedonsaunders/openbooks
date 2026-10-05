@@ -3,12 +3,15 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { addCalendarDays, addMonthsStart, calendarQuarterBounds, startOfMonth } from '@openbooks/engine/platform/civil-date'
+import { useBusinessToday } from '@/components/business-date-provider'
 import { ActionError, kindForStatus, transportError, type ActionResult } from '@braedonsaunders/appkit-errors'
 import { Badge, Button, Card, CardContent, DisclosureSection, EmptyState, Input, Label, PageHeader, Select } from '@openbooks/ui'
 import { KpiStrip } from '@/components/kpi-strip'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { ListPageLayout } from '@/components/page-layout'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
 import { formatExactPercent } from '@/lib/format'
 import { formatDecimal } from '@/lib/money-format'
 import { useAppAction } from '@/lib/use-app-action'
@@ -70,13 +73,10 @@ interface OssResult {
   totalTax: string
 }
 
-function currentQuarter(): { from: string; to: string } {
-  const now = new Date()
-  const quarter = Math.floor(now.getMonth() / 3)
-  const year = now.getFullYear()
-  const from = new Date(Date.UTC(year, quarter * 3, 1))
-  const to = new Date(Date.UTC(year, quarter * 3 + 3, 0))
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
+function schemePeriod(scheme: Scheme, anchor: string): { from: string; to: string } {
+  if (scheme === 'ioss') return { from: startOfMonth(anchor), to: addCalendarDays(addMonthsStart(anchor, 1), -1) }
+  const quarter = calendarQuarterBounds(anchor)
+  return { from: quarter.start, to: quarter.end }
 }
 
 /**
@@ -91,7 +91,8 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   const t = useTranslations('tax.oss')
   const locale = useLocale()
   const router = useRouter()
-  const defaults = useMemo(() => currentQuarter(), [])
+  const today = useBusinessToday()
+  const defaults = useMemo(() => schemePeriod('union', today), [today])
   const [scheme, setScheme] = useState<Scheme>('union')
   const [from, setFrom] = useState(defaults.from)
   const [to, setTo] = useState(defaults.to)
@@ -170,14 +171,14 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
         : <Badge variant="secondary">{t('current')}</Badge>
     ) },
     { key: 'country', header: t('columns.country'), cell: (row) => row.consumptionCountry, search: (row) => row.consumptionCountry },
-    { key: 'rate', header: t('columns.rate'), align: 'right', cell: (row) => formatExactPercent(row.ratePercent, locale, 2) },
+    { key: 'rate', header: t('columns.rate'), align: 'right', cell: (row) => formatExactPercent(normalizeDecimal(roundMoney(row.ratePercent, 2), 2), locale, 2) },
     { key: 'base', header: t('columns.base'), align: 'right', cell: (row) => formatDecimal(locale, row.baseAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
     { key: 'vat', header: t('columns.vat'), align: 'right', cell: (row) => formatDecimal(locale, row.taxAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
   ]
 
   const evidenceColumns: PagedColumn<FxEvidenceRow>[] = [
     { key: 'currency', header: t('fx.columns.currency'), cell: (row) => row.currency },
-    { key: 'rate', header: t('fx.columns.rate'), align: 'right', cell: (row) => Number(row.rate).toFixed(4) },
+    { key: 'rate', header: t('fx.columns.rate'), align: 'right', cell: (row) => formatDecimal(locale, row.rate, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) },
     { key: 'asOf', header: t('fx.columns.asOf'), cell: (row) => row.rateAsOf },
     { key: 'source', header: t('fx.columns.source'), cell: (row) => row.rateSource },
   ]
@@ -187,7 +188,15 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
       <div className="grid grid-cols-[12rem_10rem_10rem_auto] items-end gap-3">
         <div className="space-y-1.5">
           <Label>{t('scheme')}</Label>
-          <Select value={scheme} onChange={(event) => setScheme(event.target.value as Scheme)}>
+          <Select value={scheme} disabled={busy} onChange={(event) => {
+            const next = event.target.value as Scheme
+            const period = schemePeriod(next, /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : today)
+            setScheme(next)
+            setFrom(period.from)
+            setTo(period.to)
+            setResult(null)
+            setFailure(null)
+          }}>
             <option value="union">{t('schemes.union')}</option>
             <option value="non_union">{t('schemes.nonUnion')}</option>
             <option value="ioss">{t('schemes.ioss')}</option>
@@ -195,11 +204,11 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
         </div>
         <div className="space-y-1.5">
           <Label>{t('from')}</Label>
-          <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <Input type="date" value={from} disabled={busy} onChange={(event) => { setFrom(event.target.value); setResult(null); setFailure(null) }} />
         </div>
         <div className="space-y-1.5">
           <Label>{t('to')}</Label>
-          <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <Input type="date" value={to} disabled={busy} onChange={(event) => { setTo(event.target.value); setResult(null); setFailure(null) }} />
         </div>
         <Button disabled={busy} onClick={() => void prepare()}>
           {busy ? t('preparing') : t('prepare')}
@@ -308,8 +317,8 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
                   </Badge>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     {t('threshold.status', {
-                      total: Number(turnover.totalEur).toFixed(2),
-                      threshold: Number(turnover.threshold).toFixed(2),
+                      total: formatDecimal(locale, turnover.totalEur, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                      threshold: formatDecimal(locale, turnover.threshold, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                       year: turnover.year,
                     })}
                   </p>
@@ -319,8 +328,8 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
                     {turnover.translated
                       .map((line) => t('threshold.translated', {
                         currency: line.currency,
-                        base: Number(line.baseAmount).toFixed(2),
-                        rate: Number(line.rate).toFixed(4),
+                        base: formatDecimal(locale, line.baseAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                        rate: formatDecimal(locale, line.rate, { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
                         asOf: line.rateAsOf,
                       }))
                       .join(' · ')}

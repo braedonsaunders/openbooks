@@ -205,7 +205,8 @@
     "accountsTitle": "记账科目",
     "accountsHint": "未映射的角色在记账时会被拒绝，提前确认不会误记账。",
     "unmapped": "未映射",
-    "acceptHint": "保存将确定科目并激活渠道。"
+    "acceptHint": "保存将确定科目并激活渠道。",
+    "reviewTimedOut": "Shopify 授权未在五分钟内完成。请在 Shopify 中完成授权，然后刷新以重试。"
   },
   "products": {
     "searchPlaceholder": "搜索标题、SKU 或条码…",

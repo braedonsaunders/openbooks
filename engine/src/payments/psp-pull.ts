@@ -4,12 +4,14 @@ import { unsealJson } from "../platform/secrets.ts";
 import { addCalendarDays, isoDateOf } from "../platform/civil-date.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import type { FetchFn } from "./acceptance.ts";
+import { fromMinorUnits, type FetchFn } from "./acceptance.ts";
+import { cmp } from "../money/money.ts";
 import {
   importSettlementBatch,
   parsePaypalTransactions,
   parseStripeBalanceTransactions,
   PspSettlementError,
+  summarizeSettlement,
   type ImportAccounts,
   type ParsedSettlement,
   type PspProvider,
@@ -21,8 +23,8 @@ import {
  * settlement batch through importSettlementBatch, idempotent on
  * (provider, external ref) — a refetch converges instead of duplicating.
  *
- * Shopify pull arrives later: payout fetching needs the channel's
- * storefront credentials, so Shopify imports stay push-only for now.
+ * Shopify payout fetching uses the owning channel's storefront credentials
+ * in commerce/shopify; its parsed settlements share this import path.
  */
 
 export type PullFetchFn = FetchFn;
@@ -70,40 +72,75 @@ export interface StripePayoutSummary {
   id: string;
   currency: string;
   arrivalDate: string;
+  /** Independent provider payout total in currency minor units. */
+  amount?: number;
 }
 
-/** List recent Stripe payouts (ids only — balances fetch per payout). */
+/** Retrieve a complete Stripe list; missing or repeated cursors refuse. */
+async function fetchStripeRows(
+  secrets: PullSecrets,
+  path: string,
+  params: URLSearchParams,
+  label: string,
+  fetchFn: PullFetchFn,
+): Promise<Record<string, unknown>[]> {
+  if (!secrets.apiKey) throw new PaymentError("stripe secret key is not configured");
+  const base = resolveStripePullBase(secrets.apiBase);
+  const rows: Record<string, unknown>[] = [];
+  const ids = new Set<string>();
+  for (let page = 0; page < 10_000; page += 1) {
+    const res = await fetchFn(`${base}${path}?${params}`, {
+      method: "GET", redirect: "error", headers: { authorization: `Bearer ${secrets.apiKey}` },
+    });
+    const body = await readJsonBody("stripe", res);
+    if (res.status >= 400) {
+      const message = isJsonRecord(body.error) && typeof body.error.message === "string" ? body.error.message : res.status;
+      throw new PaymentError(`stripe ${label} fetch failed: ${message}; retry the complete pull`);
+    }
+    if (!Array.isArray(body.data) || typeof body.has_more !== "boolean") {
+      throw new PaymentError(`stripe ${label} returned no reliable pagination evidence; retry the complete pull`);
+    }
+    const data: Record<string, unknown>[] = [];
+    for (const value of body.data) {
+      if (!isJsonRecord(value) || typeof value.id !== "string" || !value.id || ids.has(value.id)) {
+        throw new PaymentError(`stripe ${label} returned a missing or repeated record id; retry the complete pull`);
+      }
+      ids.add(value.id);
+      data.push(value);
+    }
+    rows.push(...data);
+    if (!body.has_more) return rows;
+    const last = data.at(-1);
+    if (!last || last.id === params.get("starting_after")) {
+      throw new PaymentError(`stripe ${label} returned no advancing pagination cursor; retry the complete pull`);
+    }
+    params.set("starting_after", last.id as string);
+  }
+  throw new PaymentError(`stripe ${label} exceeds the pull pagination limit; import the complete provider settlement export instead`);
+}
+
+/** List every payout after the optional cursor; limit is the page size. */
 export async function fetchStripePayouts(
   secrets: PullSecrets,
   fetchFn: PullFetchFn = defaultFetch,
   opts: { limit?: number; startingAfter?: string } = {},
 ): Promise<StripePayoutSummary[]> {
-  if (!secrets.apiKey) throw new PaymentError("stripe secret key is not configured");
-  const base = resolveStripePullBase(secrets.apiBase);
-  const params = new URLSearchParams({ limit: String(opts.limit ?? 20) });
+  const limit = opts.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new PaymentError("stripe payout page size must be between 1 and 100");
+  const params = new URLSearchParams({ limit: String(limit) });
   if (opts.startingAfter) params.set("starting_after", opts.startingAfter);
-  const res = await fetchFn(`${base}/v1/payouts?${params}`, {
-    method: "GET",
-    redirect: "error",
-    headers: { authorization: `Bearer ${secrets.apiKey}` },
-  });
-  const body = await readJsonBody("stripe", res);
-  if (res.status >= 400) {
-    const message = isJsonRecord(body.error) && typeof body.error.message === "string" ? body.error.message : res.status;
-    throw new PaymentError(`stripe payout fetch failed: ${message}`);
-  }
-  const data = Array.isArray(body.data) ? body.data : [];
-  return data.map((row) => {
-    const payout = isJsonRecord(row) ? row : {};
+  const data = await fetchStripeRows(secrets, "/v1/payouts", params, "payout", fetchFn);
+  return data.map((payout) => {
     const id = payout.id;
     const currency = payout.currency;
     if (typeof id !== "string" || id === "" || typeof currency !== "string" || currency === "") {
       throw new PaymentError("stripe payout fetch returned a payout without id or currency");
     }
+    if (!Number.isSafeInteger(payout.amount)) throw new PaymentError(`stripe payout ${id} has no exact payout total; retry the complete pull`);
     const arrival = typeof payout.arrival_date === "number"
       ? new Date(payout.arrival_date * 1000).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
-    return { id, currency: currency.toUpperCase(), arrivalDate: arrival };
+    return { id, currency: currency.toUpperCase(), arrivalDate: arrival, amount: payout.amount as number };
   });
 }
 
@@ -113,21 +150,9 @@ export async function fetchStripePayoutSettlement(
   payout: StripePayoutSummary,
   fetchFn: PullFetchFn = defaultFetch,
 ): Promise<ParsedSettlement> {
-  if (!secrets.apiKey) throw new PaymentError("stripe secret key is not configured");
-  const base = resolveStripePullBase(secrets.apiBase);
   const params = new URLSearchParams({ payout: payout.id, limit: "100" });
-  const res = await fetchFn(`${base}/v1/balance_transactions?${params}`, {
-    method: "GET",
-    redirect: "error",
-    headers: { authorization: `Bearer ${secrets.apiKey}` },
-  });
-  const body = await readJsonBody("stripe", res);
-  if (res.status >= 400) {
-    const message = isJsonRecord(body.error) && typeof body.error.message === "string" ? body.error.message : res.status;
-    throw new PaymentError(`stripe balance fetch failed for payout ${payout.id}: ${message}`);
-  }
-  const data = Array.isArray(body.data) ? body.data : [];
-  return parseStripeBalanceTransactions(
+  const data = await fetchStripeRows(secrets, "/v1/balance_transactions", params, `balance for payout ${payout.id}`, fetchFn);
+  const parsed = parseStripeBalanceTransactions(
     data.map((row) => {
       const txn = isJsonRecord(row) ? row : {};
       return {
@@ -146,6 +171,14 @@ export async function fetchStripePayoutSettlement(
     payout.id,
     payout.arrivalDate,
   );
+  if (payout.amount !== undefined) {
+    if (!Number.isSafeInteger(payout.amount)) throw new PaymentError(`stripe payout ${payout.id} has no exact payout total; retry the complete pull`);
+    const expected = fromMinorUnits(BigInt(payout.amount), payout.currency);
+    const actual = summarizeSettlement(parsed.lines).netAmount;
+    if (cmp(actual, expected) !== 0) throw new PaymentError(`stripe payout ${payout.id} does not reconcile: provider total ${expected}, fetched settlement net ${actual}; retry the complete pull`);
+    parsed.raw = { ...parsed.raw, providerPayoutAmount: expected };
+  }
+  return parsed;
 }
 
 const PAYPAL_PULL_BASES = new Set([
@@ -189,7 +222,7 @@ async function fetchPaypalAccessToken(
   return body.access_token;
 }
 
-/** Fetch one PayPal Transaction Search page and parse it into a settlement. */
+/** Fetch every page in a PayPal Transaction Search range before parsing. */
 export async function fetchPaypalSettlement(
   secrets: PullSecrets,
   reference: string,
@@ -205,17 +238,44 @@ export async function fetchPaypalSettlement(
     page_size: "500",
     page: "1",
   });
-  const res = await fetchFn(`${base}/v1/reporting/transactions?${params}`, {
-    method: "GET",
-    redirect: "error",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-  });
-  const body = await readJsonBody("paypal", res);
-  if (res.status >= 400) {
-    const message = typeof body.message === "string" ? body.message : res.status;
-    throw new PaymentError(`paypal transaction fetch failed: ${message}`);
+  const details: Record<string, unknown>[] = [];
+  const ids = new Set<string>();
+  let totalPages: number | undefined;
+  let totalItems: number | undefined;
+  for (let page = 1; ; page += 1) {
+    params.set("page", String(page));
+    const res = await fetchFn(`${base}/v1/reporting/transactions?${params}`, {
+      method: "GET", redirect: "error",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    });
+    const body = await readJsonBody("paypal", res);
+    if (res.status >= 400) {
+      const message = typeof body.message === "string" ? body.message : res.status;
+      throw new PaymentError(`paypal transaction fetch failed on page ${page}: ${message}; retry the complete pull`);
+    }
+    if (!Array.isArray(body.transaction_details) || !Number.isSafeInteger(body.total_pages)
+      || !Number.isSafeInteger(body.total_items) || (body.total_pages as number) < 0
+      || (body.total_pages as number) > 10_000 || (body.total_items as number) < 0
+      || (body.page !== undefined && body.page !== page)) {
+      throw new PaymentError("paypal returned no reliable pagination evidence; retry the complete pull");
+    }
+    if (totalPages !== undefined && (totalPages !== body.total_pages || totalItems !== body.total_items)) {
+      throw new PaymentError("paypal transaction range changed during pagination; retry the complete pull");
+    }
+    totalPages = body.total_pages as number;
+    totalItems = body.total_items as number;
+    for (const value of body.transaction_details) {
+      const id = isJsonRecord(value) && isJsonRecord(value.transaction_info) ? value.transaction_info.transaction_id : null;
+      if (!isJsonRecord(value) || typeof id !== "string" || !id || ids.has(id)) {
+        throw new PaymentError("paypal returned a missing or repeated transaction id; retry the complete pull");
+      }
+      ids.add(id);
+      details.push(value);
+    }
+    if (page >= totalPages) break;
+    if (body.transaction_details.length === 0) throw new PaymentError("paypal returned an empty page before the end of the range; retry the complete pull");
   }
-  const details = Array.isArray(body.transaction_details) ? body.transaction_details : [];
+  if (details.length !== totalItems) throw new PaymentError(`paypal transaction count does not reconcile: provider ${totalItems}, fetched ${details.length}; retry the complete pull`);
   return parsePaypalTransactions(
     {
       reference,
@@ -242,7 +302,7 @@ export async function fetchPaypalSettlement(
 /**
  * Import pulled settlements with the provider config's default accounts.
  * Each import is idempotent on (provider, external ref); the pull cursor
- * advances only after every batch in the page imports.
+ * advances only after every fetched batch imports.
  */
 export async function importPulledSettlements(
   orgId: string,

@@ -205,7 +205,8 @@
     "accountsTitle": "Cuentas de contabilización",
     "accountsHint": "Los roles sin asignar se rechazan al contabilizar — aceptar antes nunca contabiliza mal.",
     "unmapped": "Sin asignar",
-    "acceptHint": "Guardar almacena las cuentas y activa el canal."
+    "acceptHint": "Guardar almacena las cuentas y activa el canal.",
+    "reviewTimedOut": "La aprobación de Shopify no estuvo lista en cinco minutos. Complete la aprobación en Shopify y luego actualice para volver a intentarlo."
   },
   "products": {
     "searchPlaceholder": "Buscar título, SKU o código…",

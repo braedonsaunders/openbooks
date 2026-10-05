@@ -205,7 +205,8 @@
     "accountsTitle": "記帳勘定",
     "accountsHint": "未紐付けの役割は記帳時に拒否されます。早めの承認が誤記帳することはありません。",
     "unmapped": "未紐付け",
-    "acceptHint": "保存すると勘定が確定しチャネルが有効になります。"
+    "acceptHint": "保存すると勘定が確定しチャネルが有効になります。",
+    "reviewTimedOut": "5分以内にShopifyの承認が完了しませんでした。Shopifyで承認を完了してから、更新して再試行してください。"
   },
   "products": {
     "searchPlaceholder": "タイトル・SKU・バーコードを検索…",

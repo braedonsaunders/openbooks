@@ -205,7 +205,8 @@
     "accountsTitle": "Buchungskonten",
     "accountsHint": "Nicht zugeordnete Rollen verweigern beim Buchen — frühes Bestätigen bucht nie falsch.",
     "unmapped": "Nicht zugeordnet",
-    "acceptHint": "Speichern legt die Konten fest und aktiviert den Kanal."
+    "acceptHint": "Speichern legt die Konten fest und aktiviert den Kanal.",
+    "reviewTimedOut": "Die Shopify-Freigabe war nach fünf Minuten noch nicht abgeschlossen. Schließen Sie die Freigabe in Shopify ab und klicken Sie dann auf Aktualisieren, um es erneut zu versuchen."
   },
   "products": {
     "searchPlaceholder": "Titel, SKU oder Barcode suchen…",

@@ -205,7 +205,8 @@
     "accountsTitle": "Contas de lançamento",
     "accountsHint": "Papéis sem mapa recusam no lançamento — aceitar cedo nunca lança errado.",
     "unmapped": "Sem mapa",
-    "acceptHint": "Salvar grava as contas e ativa o canal."
+    "acceptHint": "Salvar grava as contas e ativa o canal.",
+    "reviewTimedOut": "A aprovação do Shopify não foi concluída em cinco minutos. Conclua a aprovação no Shopify e atualize para tentar novamente."
   },
   "products": {
     "searchPlaceholder": "Buscar título, SKU ou código…",

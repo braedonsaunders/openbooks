@@ -163,6 +163,9 @@ declare
   rls_enabled boolean;
   rls_forced boolean;
   policy_version text;
+  expected_using text;
+  expected_check text;
+  policy_matches boolean;
   -- Bypass arm calls the role-gated predicate (0399), never the raw GUC: a SET
   -- on the runtime role must not widen this policy. The
   -- openbooks:org_isolation:v1 comment is kept so the drift check stays
@@ -174,6 +177,13 @@ declare
     )
   $pol$;
 begin
+  -- Deparse the template through PostgreSQL itself: a version comment alone
+  -- cannot prove that the installed policy still enforces tenant isolation.
+  create temporary table openbooks_org_isolation_template (org_id uuid) on commit drop;
+  execute format('create policy org_isolation on pg_temp.openbooks_org_isolation_template using (%s) with check (%s)', body, body);
+  select pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)
+    into expected_using, expected_check
+    from pg_policy p where p.polrelid = 'pg_temp.openbooks_org_isolation_template'::regclass;
   for t in
     select c.table_name
       from information_schema.columns c
@@ -198,11 +208,14 @@ begin
     if not rls_forced then
       execute format('alter table %I force row level security', t);
     end if;
-    select obj_description(p.oid, 'pg_policy')
-      into policy_version
+    select obj_description(p.oid, 'pg_policy'),
+           p.polcmd = '*' and p.polpermissive and p.polroles = array[0::oid]
+           and pg_get_expr(p.polqual, p.polrelid) = expected_using
+           and pg_get_expr(p.polwithcheck, p.polrelid) = expected_check
+      into policy_version, policy_matches
       from pg_policy p
      where p.polrelid = relation_oid and p.polname = 'org_isolation';
-    if policy_version is distinct from 'openbooks:org_isolation:v1' then
+    if policy_version is distinct from 'openbooks:org_isolation:v1' or policy_matches is distinct from true then
       execute format('drop policy if exists org_isolation on %I', t);
       execute format(
         'create policy org_isolation on %I using (%s) with check (%s)',
@@ -212,6 +225,16 @@ begin
         t, 'openbooks:org_isolation:v1');
     end if;
   end loop;
+  drop table pg_temp.openbooks_org_isolation_template;
+  -- Permissive policies combine with OR. Refuse an additional raw-flag policy
+  -- instead of letting a repaired org_isolation mask a remaining bypass.
+  select p.tablename || '.' || p.policyname into t
+    from pg_policies p where p.schemaname = 'public'
+      and (coalesce(p.qual, '') like '%app.bypass_rls%' or coalesce(p.with_check, '') like '%app.bypass_rls%')
+    order by p.tablename, p.policyname limit 1;
+  if t is not null then
+    raise exception 'Tenant policy % still trusts app.bypass_rls directly; apply the forward tenant-policy repair migration before starting the application', t;
+  end if;
 end $$;
 
 -- sandboxes: visible from either the production org that owns them or the
