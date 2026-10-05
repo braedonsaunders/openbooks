@@ -3763,7 +3763,8 @@
       "leadingDigit": "Premier chiffre",
       "noDocuments": "Aucun document ne commence par {digit}.",
       "top": "top {count}",
-      "documentsCount": "{count} pièces comptables"
+      "documentsCount": "{count} pièces comptables",
+      "loadFailed": "Le détail n’a pas pu être chargé"
     },
     "empty": {
       "noAuditEvents": "Aucun événement d’audit à haut risque sur cette période",

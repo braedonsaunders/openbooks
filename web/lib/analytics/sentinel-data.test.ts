@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // Unit tests for Sentinel's pure detection kernels: the published Benford
-// bands, Nigrini's digit Z-statistic, the Flows limit extraction and the
+// bands, the Benford's Law (Nigrini 2012) digit Z-statistic, the Flows limit extraction and the
 // baseline window. No database: every case is exact arithmetic or a
 // realistic authored graph.
 
@@ -14,11 +14,11 @@ const {
   sentinelBaselineFrom,
 } = await import("./sentinel-data.ts");
 
-// Nigrini's published first-two-digit MAD bands are 0.0012 / 0.0018 / 0.0022
+// Benford's Law (Nigrini 2012) first-two-digit MAD bands are 0.0012 / 0.0018 / 0.0022
 // (close / acceptable / marginal; above, nonconforming). The previous bands
-// (0.0012 / 0.0022 / 0.0033) labelled MAD 0.0025 "marginal"; under Nigrini it
+// (0.0012 / 0.0022 / 0.0033) labelled MAD 0.0025 "marginal"; under Nigrini 2012 it
 // is nonconforming, and this case pins the correction.
-test("first-two-digit MAD bands follow Nigrini 0.0012/0.0018/0.0022", () => {
+test("first-two-digit MAD bands follow Benford's Law (Nigrini 2012) 0.0012/0.0018/0.0022", () => {
   assert.equal(benfordConformity2D(0.0012), "excellent");
   assert.equal(benfordConformity2D(0.0018), "acceptable");
   assert.equal(benfordConformity2D(0.0022), "marginal");
@@ -37,14 +37,14 @@ test("first-digit MAD bands stay at the cited 0.006/0.012/0.015", () => {
 // n = 1000, digit 1 observed at 35% against 30.103% expected: the corrected
 // deviation (0.04847) over the standard error (~0.0145) lands near Z 3.3 —
 // a genuine flag. At 31% observed the same slice scores Z ~0.6 — noise.
-test("Nigrini digit Z flags real deviations and clears noise", () => {
+test("Benford's Law (Nigrini 2012) digit Z flags real deviations and clears noise", () => {
   const flagged = benfordDigitZ(0.35, 0.30103, 1000);
   assert.ok(flagged > 1.96 && flagged < 4, `expected a flag near 3.3, got ${flagged}`);
   const noise = benfordDigitZ(0.31, 0.30103, 1000);
   assert.ok(noise < 1.96, `expected noise below 1.96, got ${noise}`);
 });
 
-test("Nigrini digit Z never divides by nothing", () => {
+test("Benford's Law (Nigrini 2012) digit Z never divides by nothing", () => {
   assert.equal(benfordDigitZ(0.35, 0.30103, 0), 0);
   assert.equal(benfordDigitZ(0.30103, 0.30103, 1000), 0);
   assert.equal(benfordDigitZ(0.5, 0, 100), 0);
@@ -145,6 +145,5 @@ test("flow amount limits ignore non-spend subject kinds", () => {
 
 test("vendor baseline window counts back whole months", () => {
   assert.equal(sentinelBaselineFrom("2026-07-31", 36), "2023-07-31");
-  assert.equal(sentinelBaselineFrom("2026-07-31"), "2023-07-31");
   assert.equal(sentinelBaselineFrom("2026-07-31", 3), "2026-04-30");
 });

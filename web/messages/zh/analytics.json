@@ -3763,7 +3763,8 @@
       "leadingDigit": "首位数字",
       "noDocuments": "没有以{digit}开头的单据。",
       "top": "前{count}",
-      "documentsCount": "{count}笔单据"
+      "documentsCount": "{count}笔单据",
+      "loadFailed": "无法加载明细"
     },
     "empty": {
       "noAuditEvents": "本期没有高风险审计事件",

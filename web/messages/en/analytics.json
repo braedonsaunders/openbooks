@@ -3666,7 +3666,8 @@
       "documentsTotal": "{count} documents · {total}",
       "top": "top {count}",
       "noDocuments": "No documents lead with {digit}.",
-      "documentsCount": "{count} documents"
+      "documentsCount": "{count} documents",
+      "loadFailed": "Failed to load drilldown"
     },
     "analysis": {
       "rsfFull": "Relative Size Factor",

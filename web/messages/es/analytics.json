@@ -3763,7 +3763,8 @@
       "leadingDigit": "Primer dígito",
       "noDocuments": "Ningún documento empieza con {digit}.",
       "top": "top {count}",
-      "documentsCount": "{count} documentos"
+      "documentsCount": "{count} documentos",
+      "loadFailed": "No se pudo cargar el desglose"
     },
     "empty": {
       "noAuditEvents": "Sin eventos de auditoría de alto riesgo en este período",
