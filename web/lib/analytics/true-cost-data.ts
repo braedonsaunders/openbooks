@@ -21,9 +21,9 @@ import {
 } from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
-import { overheadApplicationSettings } from "@openbooks/engine/src/allocations/overhead-sync.ts";
-import { resolveAnnualHoursMany } from "@openbooks/engine/src/projects/labor-costing.ts";
-import { loadWorkSchedules, pickWorkSchedule, scheduledHoursPerWeek } from "@openbooks/engine/src/payroll/work-schedules.ts";
+import { overheadApplicationSettings } from "@openbooks/engine/allocations/overhead-application";
+import { resolveAnnualHoursMany } from "@openbooks/engine/projects/labor-costing";
+import { loadWorkSchedules, pickWorkSchedule, scheduledHoursPerWeek } from "@openbooks/engine/payroll/work-schedules";
 import {
   type AllocationBase,
   type AllocationMethod,
@@ -839,6 +839,56 @@ export async function trueCostData(
   };
 
 
+  const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
+
+  /**
+   * Exact per-department allocation-base values for one base type. Same scope
+   * as the float bundle (burden centres only): hours from the exact twins,
+   * money bases from the translated legs, headcount as integers, and config
+   * overrides quantized exactly (a no-op for ordinary decimals).
+   */
+  const baseExactFor = (base: AllocationBase): Record<string, string> => {
+    const byDept: Record<string, string> = {};
+    for (const d of departmentsBase) {
+      switch (base) {
+        case "billed_hours": byDept[d.id] = deptBilledExact.get(d.id) ?? "0.0000"; break;
+        case "total_hours": byDept[d.id] = deptTotalExact.get(d.id) ?? "0.0000"; break;
+        case "labor_dollars": byDept[d.id] = baseTranslated.get(d.id)?.labor_dollars ?? "0.0000"; break;
+        case "headcount": byDept[d.id] = String(baseTranslated.get(d.id)?.headcount ?? 0); break;
+        case "revenue": byDept[d.id] = baseTranslated.get(d.id)?.revenue ?? "0.0000"; break;
+        case "direct_cost": byDept[d.id] = baseTranslated.get(d.id)?.direct_cost ?? "0.0000"; break;
+        case "square_feet": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.squareFeet?.[d.id] ?? 0); break;
+        case "units": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.units?.[d.id] ?? 0); break;
+        case "custom": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.custom?.[d.id] ?? 0); break;
+      }
+    }
+    return byDept;
+  };
+
+  /**
+   * Distribution shares for the category's OWN allocation base — one base
+   * per category for both the monthly float spread and the exact untagged
+   * attribution, so untagged expense never defaults to billed hours. Cached
+   * per base; burden-centre scope matches baseExactFor.
+   */
+  const shareCache = new Map<AllocationBase, Map<string, number>>();
+  const sharesForBase = (base: AllocationBase): Map<string, number> => {
+    const cached = shareCache.get(base);
+    if (cached) return cached;
+    const exact = baseExactFor(base);
+    let total = 0;
+    const nums = new Map<string, number>();
+    for (const d of departmentsBase) {
+      const v = Number(exact[d.id] ?? 0);
+      nums.set(d.id, v);
+      total += v;
+    }
+    const shares = new Map<string, number>();
+    for (const [id, v] of nums) shares.set(id, total > 0 ? v / total : 0);
+    shareCache.set(base, shares);
+    return shares;
+  };
+
   // ---- classify expense into burden categories --------------------------------
   // Direct labour is the same configured cost_pool / direct_labor set that
   // feeds the labour-dollars allocation base above: one classification.
@@ -905,19 +955,22 @@ export async function trueCostData(
     if (!monthCatRate.has(r.month)) monthCatRate.set(r.month, new Map());
     monthCatRate.get(r.month)!.set(cat.key, (monthCatRate.get(r.month)!.get(cat.key) ?? 0) + amount);
 
-    // Department attribution: tagged stays; untagged allocated by billed-hours share.
-    // Exact per-department amounts resolve once below (splitUntaggedExact); the
-    // float spread here feeds only monthly rate ratios, never money totals.
+    // Department attribution: tagged stays; untagged follows the category's
+    // own allocation base. Exact per-department amounts resolve once below
+    // (splitUntaggedExact); the float spread here feeds only monthly rate
+    // ratios, never money totals.
     const spread = (deptId: string, amt: number) => {
       if (!monthDeptBurden.has(r.month)) monthDeptBurden.set(r.month, new Map());
       const md = monthDeptBurden.get(r.month)!;
       md.set(deptId, (md.get(deptId) ?? 0) + amt);
     };
+    const catBase = settingsOf(group.groupId)?.allocationBase ?? "billed_hours";
+    const catShares = sharesForBase(catBase);
     if (r.department_id && billedShare.has(r.department_id)) {
       spread(r.department_id, amount);
       cat.byDeptTaggedExact.set(r.department_id, add(cat.byDeptTaggedExact.get(r.department_id) ?? "0.0000", amountExact));
     } else {
-      for (const d of departmentsBase) spread(d.id, amount * (billedShare.get(d.id) ?? 0));
+      for (const d of departmentsBase) spread(d.id, amount * (catShares.get(d.id) ?? 0));
       // Exact untagged attribution happens once below (splitUntaggedExact):
       // per-row float shares stay display-only so rounding compounds once.
       cat.untaggedExact = add(cat.untaggedExact, amountExact);
@@ -925,20 +978,19 @@ export async function trueCostData(
   }
 
   /**
-   * Split one category's untagged exact total across burden centres by billed
-   * hours — the exact twin of the per-row float spread above. Each
-   * department's share is one exact proportional allocation (mulRatio,
-   * halves away), so the published rate compounds rounding exactly once.
+   * Split one category's untagged exact total across burden centres by the
+   * category's own allocation base — the exact twin of the per-row float
+   * spread above. Each department's share is one exact proportional
+   * allocation (mulRatio, halves away), so the published rate compounds
+   * rounding exactly once.
    */
-  const splitUntaggedExact = (tagged: Map<string, string>, untagged: string): Map<string, string> => {
+  const splitUntaggedExact = (tagged: Map<string, string>, untagged: string, base: AllocationBase): Map<string, string> => {
     const out = new Map<string, string>();
-    const totalUnits = toUnits(billedHoursExact);
-    for (const d of departmentsBase) {
-      const share =
-        totalUnits === 0n
-          ? "0.0000"
-          : mulRatio(untagged, toUnits(deptBilledExact.get(d.id) ?? "0.0000"), totalUnits);
-      out.set(d.id, add(tagged.get(d.id) ?? "0.0000", share));
+    const exact = baseExactFor(base);
+    const entries = departmentsBase.map((d) => ({ id: d.id, units: toUnits(exact[d.id] ?? "0.0000") }));
+    const totalUnits = entries.reduce((sum, e) => sum + e.units, 0n);
+    for (const e of entries) {
+      out.set(e.id, add(tagged.get(e.id) ?? "0.0000", totalUnits === 0n ? "0.0000" : mulRatio(untagged, e.units, totalUnits)));
     }
     return out;
   };
@@ -965,7 +1017,8 @@ export async function trueCostData(
       timeUntaggedExact = add(timeUntaggedExact, costExact);
     }
   }
-  const timeExpenseExactByDept = splitUntaggedExact(timeTaggedExact, timeUntaggedExact);
+  const timeBase = settingsOf(TIME_ID)?.allocationBase ?? "billed_hours";
+  const timeExpenseExactByDept = splitUntaggedExact(timeTaggedExact, timeUntaggedExact, timeBase);
   let timeTotalExact = timeUntaggedExact;
   for (const v of timeTaggedExact.values()) timeTotalExact = add(timeTotalExact, v);
   for (const [month, costExact] of timeExactByMonth) {
@@ -984,36 +1037,14 @@ export async function trueCostData(
     if (!monthDeptBurden.has(month)) monthDeptBurden.set(month, new Map());
     const md = monthDeptBurden.get(month)!;
     if (dept !== "none" && billedShare.has(dept)) md.set(dept, (md.get(dept) ?? 0) + cost);
-    else for (const d of departmentsBase) md.set(d.id, (md.get(d.id) ?? 0) + cost * (billedShare.get(d.id) ?? 0));
+    else {
+      const timeShares = sharesForBase(timeBase);
+      for (const d of departmentsBase) md.set(d.id, (md.get(d.id) ?? 0) + cost * (timeShares.get(d.id) ?? 0));
+    }
   }
 
   const totalOverheadExact = [...cats.values()].reduce((total, category) => add(total, category.total), timeTotalExact);
   const totalOverhead = toChartNumber(totalOverheadExact);
-  const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
-
-  /**
-   * Exact per-department allocation-base values for one base type. Same scope
-   * as the float bundle (burden centres only): hours from the exact twins,
-   * money bases from the translated legs, headcount as integers, and config
-   * overrides quantized exactly (a no-op for ordinary decimals).
-   */
-  const baseExactFor = (base: AllocationBase): Record<string, string> => {
-    const byDept: Record<string, string> = {};
-    for (const d of departmentsBase) {
-      switch (base) {
-        case "billed_hours": byDept[d.id] = deptBilledExact.get(d.id) ?? "0.0000"; break;
-        case "total_hours": byDept[d.id] = deptTotalExact.get(d.id) ?? "0.0000"; break;
-        case "labor_dollars": byDept[d.id] = baseTranslated.get(d.id)?.labor_dollars ?? "0.0000"; break;
-        case "headcount": byDept[d.id] = String(baseTranslated.get(d.id)?.headcount ?? 0); break;
-        case "revenue": byDept[d.id] = baseTranslated.get(d.id)?.revenue ?? "0.0000"; break;
-        case "direct_cost": byDept[d.id] = baseTranslated.get(d.id)?.direct_cost ?? "0.0000"; break;
-        case "square_feet": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.squareFeet?.[d.id] ?? 0); break;
-        case "units": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.units?.[d.id] ?? 0); break;
-        case "custom": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.custom?.[d.id] ?? 0); break;
-      }
-    }
-    return byDept;
-  };
 
   // Preview and publication share exact category rates; non-hourly units
   // remain explicitly blocked from the hourly publication card.
@@ -1115,7 +1146,7 @@ export async function trueCostData(
 
   const expenseCategories: BurdenCategory[] = burdenGroups.groups.map((g) => {
     const c = cats.get(g.id)!;
-    const exactByDept = Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact));
+    const exactByDept = Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact, settingsOf(g.id)?.allocationBase ?? "billed_hours"));
     // Display numerics cross from exact through Number at this boundary; the
     // exact maps flow separately for accumulation and the per-hour contract.
     const expenseByDept = Object.fromEntries(Object.entries(exactByDept).map(([k, v]): [string, number] => [k, Number(v)]));
