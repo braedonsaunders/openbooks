@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
+import { Button, Label, SearchSelect } from '@openbooks/ui'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 
@@ -28,8 +28,17 @@ export function DemandPlanActions({
   subsidiaries: { id: string; name: string }[]
 }) {
   const t = useTranslations('planning')
+  const tCommon = useTranslations('common')
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [busy, setBusy] = useState<string | null>(null)
+
+  function switchSubsidiary(next: string) {
+    if (!next || next === subsidiaryId) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('subsidiaryId', next)
+    router.push(`/inventory/planning?${params.toString()}`)
+  }
 
   async function readRows(status: string): Promise<SuggestionRow[]> {
     const res = await fetch(
@@ -127,9 +136,18 @@ export function DemandPlanActions({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-slate-500">
-        {subsidiaries.find((entry) => entry.id === subsidiaryId)?.name ?? ''}
-      </span>
+      {subsidiaries.length > 1 ? (
+        <span className="flex items-center gap-2">
+          <Label>{tCommon('labels.subsidiary')}</Label>
+          <SearchSelect
+            value={subsidiaryId}
+            onChange={switchSubsidiary}
+            options={subsidiaries.map((entry) => ({ value: entry.id, label: entry.name }))}
+            placeholder={tCommon('labels.subsidiary')}
+            ariaLabel={tCommon('labels.subsidiary')}
+          />
+        </span>
+      ) : null}
       <Button variant="outline" disabled={busy !== null} onClick={confirmAll}>
         {busy === 'confirm' ? t('run.running') : t('actions.confirmAll')}
       </Button>
