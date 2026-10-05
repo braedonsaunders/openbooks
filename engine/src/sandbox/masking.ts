@@ -320,6 +320,28 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // HR-14 begin: license/credential numbers are candidate PII — nulled
   // in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "hrm_worker_qualifications", columnName: "identifier", transform: "null_out" },
+  // Participant observations and feedback can contain personal or medical information.
+  { tableName: "hrm_training_participants", columnName: "notes", transform: "redact" },
+  { tableName: "payroll_compensation_packages", columnName: "name", transform: "redact" },
+  { tableName: "payroll_compensation_packages", columnName: "description", transform: "redact" },
+  { tableName: "payroll_compensation_packages", columnName: "reason", transform: "redact" },
+  { tableName: "payroll_compensation_versions", columnName: "definition", transform: "null_out" },
+  { tableName: "payroll_compensation_versions", columnName: "authorship", transform: "null_out" },
+  { tableName: "payroll_compensation_versions", columnName: "reason", transform: "redact" },
+  { tableName: "payroll_compensation_assignments", columnName: "inputs", transform: "null_out" },
+  { tableName: "payroll_compensation_assignments", columnName: "authorship", transform: "null_out" },
+  { tableName: "payroll_compensation_assignments", columnName: "reason", transform: "redact" },
+  { tableName: "payroll_compensation_calculations", columnName: "source_snapshot", transform: "null_out" },
+  { tableName: "payroll_compensation_calculations", columnName: "result_snapshot", transform: "null_out" },
+  { tableName: "hrm_training_courses", columnName: "name", transform: "redact" },
+  { tableName: "hrm_training_courses", columnName: "description", transform: "redact" },
+  { tableName: "hrm_training_courses", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_training_sessions", columnName: "name", transform: "redact" },
+  { tableName: "hrm_training_sessions", columnName: "location", transform: "redact" },
+  { tableName: "hrm_training_sessions", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_training_participants", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_training_feedback", columnName: "comments", transform: "redact" },
+  { tableName: "hrm_training_feedback", columnName: "reason", transform: "redact" },
   // HR-14 end
   { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
   // Reviewer assignments map employments to reviewer parties: linkable

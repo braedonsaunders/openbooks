@@ -1,0 +1,1 @@
+This additive migration creates empty training-delivery tables and a qualification subject index. It changes no existing employee, qualification, financial or payroll rows; foreign-key targets already have tenant-coherent unique identities.
