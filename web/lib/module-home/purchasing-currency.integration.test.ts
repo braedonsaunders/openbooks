@@ -5,6 +5,15 @@ import test from 'node:test'
 
 registerHooks({
   resolve(specifier, _context, next) {
+    // purchasingHome translates its unknown-vendor fallback through
+    // next-intl: outside a request (here) the catalog resolves to the key
+    // itself — the money assertions below never read a name.
+    if (specifier === 'next-intl/server') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (key) => key}'),
+      }
+    }
     return next(specifier)
   },
 })
