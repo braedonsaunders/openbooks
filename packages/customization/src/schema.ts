@@ -27,9 +27,10 @@ import type {
   LineColumnPlacement,
   ListColumnPlacement,
   ListViewConfig,
+  ListViewContext,
   RecordTypeKey,
 } from "./types";
-import { DEFAULT_PER_PAGE, isCustomTabKey } from "./types";
+import { DEFAULT_PER_PAGE, columnVisibleByDefault, isCustomTabKey } from "./types";
 
 const fieldKeySchema = z
   .string()
@@ -708,7 +709,7 @@ export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormL
 }
 
 /** The system-default list view: all columns (registry order), no filters. */
-export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
+export function defaultListView(recordType: RecordTypeKey, context: ListViewContext = {}): ListViewConfig {
   const meta = RECORD_TYPE_BY_KEY[recordType]
   if (!meta) throw new Error(`unknown record type: ${recordType}`)
   // A record type's declared defaultSort wins; else date-desc (transaction date
@@ -727,7 +728,7 @@ export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
     recordType,
     columns: meta.listColumns.map<ListColumnPlacement>((c) => ({
       key: c.key,
-      visible: !c.defaultHidden,
+      visible: columnVisibleByDefault(c, context),
       width: c.defaultWidth ?? null,
       labelOverride: null,
     })),

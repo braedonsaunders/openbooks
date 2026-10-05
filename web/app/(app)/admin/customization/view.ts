@@ -176,6 +176,7 @@ export interface CustomizationData {
   inventoryEnabled: boolean
   crmEnabled: boolean
   hrmEnabled: boolean
+  multiSubsidiary: boolean
 }
 
 export async function loadCustomization(
@@ -578,6 +579,7 @@ export async function loadCustomization(
     inventoryEnabled,
     crmEnabled,
     hrmEnabled,
+    multiSubsidiary: subsidiaryUiEnabled,
   }
 }
 
@@ -773,6 +775,7 @@ export function customizationSpec(data: CustomizationData): PageSpec {
           inventoryEnabled: data.inventoryEnabled,
           crmEnabled: data.crmEnabled,
           hrmEnabled: data.hrmEnabled,
+          multiSubsidiary: data.multiSubsidiary,
         },
         f('viewDrawerOpen'),
       ),

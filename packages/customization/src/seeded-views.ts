@@ -87,7 +87,10 @@ export function configMatchesSeedShape(
     // Extra columns are registry drift (custom fields, retired built-ins),
     // not an edit — only surviving columns are compared.
     if (!registered) continue;
-    if (stored.visible !== !registered.defaultHidden) return false;
+    // A legal-entity column's default depends on the organization's
+    // Multi-subsidiary state, so its stored visibility is not evidence of
+    // an edit either way.
+    if (!registered.legalEntity && stored.visible !== !registered.defaultHidden) return false;
     if ((stored.width ?? null) !== (registered.defaultWidth ?? null)) return false;
     if (stored.labelOverride != null) return false;
   }

@@ -66,6 +66,7 @@ export function ListViewDesigner({
   inventoryEnabled,
   crmEnabled,
   hrmEnabled,
+  multiSubsidiary,
 }: {
   recordType: string
   def: ViewDef | null
@@ -76,6 +77,7 @@ export function ListViewDesigner({
   inventoryEnabled: boolean
   crmEnabled: boolean
   hrmEnabled: boolean
+  multiSubsidiary: boolean
 }) {
   const t = useTranslations('customization')
   const tCommon = useTranslations('common')
@@ -88,9 +90,9 @@ export function ListViewDesigner({
     : catalog
 
   const initial = useMemo<ListViewConfig>(() => {
-    const base = (def?.config as ListViewConfig | undefined) ?? defaultListView(recordType)
+    const base = (def?.config as ListViewConfig | undefined) ?? defaultListView(recordType, { multiSubsidiary })
     return ensureCustomColumns(structuredClone(base), showInListDefs)
-  }, [def, recordType, showInListDefs])
+  }, [def, recordType, showInListDefs, multiSubsidiary])
 
   const [name, setName] = useState(def?.name ?? '')
   const [scope, setScope] = useState<'org' | 'user'>(def?.scope === 'org' ? 'org' : 'user')

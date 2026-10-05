@@ -626,7 +626,7 @@ const EMPLOYEE_HRM_COLUMNS: RecordTypeMeta["listColumns"] = [
   { key: "department", labelKey: "common.labels.department", kind: "text", sortable: true, sortKey: "department", defaultWidth: 150 },
   { key: "job_title", labelKey: "parties.drawer.jobTitle", kind: "text", sortable: true, sortKey: "job_title", defaultWidth: 170 },
   { key: "employment_status", labelKey: "hrm.directory.employmentStatus", kind: "status", sortable: true, sortKey: "employment_status", defaultWidth: 120 },
-  { key: "employer", labelKey: "hrm.home.groups.employer", kind: "text", sortable: true, sortKey: "employer", defaultWidth: 150 },
+  { key: "employer", labelKey: "hrm.home.groups.employer", kind: "text", sortable: true, sortKey: "employer", defaultWidth: 150, legalEntity: true },
   { key: "service_start", labelKey: "hrm.directory.serviceStart", kind: "date", sortable: true, sortKey: "service_start", defaultWidth: 110 },
 ];
 
@@ -1056,7 +1056,7 @@ const PROVISION_OBLIGATION: RecordTypeMeta = {
   defaultSort: { sortKey: "name", dir: "asc" },
   listColumns: [
     { key: "name", labelKey: "accounting.provisions.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
-    { key: "subsidiary", labelKey: "accounting.provisions.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary" },
+    { key: "subsidiary", labelKey: "accounting.provisions.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary", legalEntity: true },
     { key: "book", labelKey: "accounting.provisions.book", kind: "text", sortable: true, sortKey: "book" },
     { key: "currency", labelKey: "common.labels.currency", kind: "text" },
     { key: "balance", labelKey: "accounting.provisions.liability", kind: "amount", sortable: true, sortKey: "balance" },
@@ -1124,7 +1124,7 @@ const FINANCIAL_CHANGE: RecordTypeMeta = {
     {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"reference",sortable:true,sortKey:"operation",locked:true},
     {key:"subject",labelKey:"accounting.lifecycle.subject",kind:"text",sortable:true,sortKey:"subject"},
     {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"text",sortable:true,sortKey:"domain"},
-    {key:"subsidiary",labelKey:"accounting.lifecycle.legalEntity",kind:"text",sortable:true,sortKey:"subsidiary"},
+    {key:"subsidiary",labelKey:"accounting.lifecycle.legalEntity",kind:"text",sortable:true,sortKey:"subsidiary",legalEntity:true},
     {key:"reason",labelKey:"accounting.lifecycle.reason",kind:"text",sortable:true,sortKey:"reason",defaultHidden:true},
     {key:"effective_on",labelKey:"accounting.lifecycle.date",kind:"date",sortable:true,sortKey:"date"},
     {key:"status",labelKey:"accounting.lifecycle.status",kind:"status",sortable:true,sortKey:"status"},
@@ -1879,7 +1879,7 @@ const PROPERTY: RecordTypeMeta = {
       sortable: true,
       sortKey: "code",
     },
-    { key: "subsidiary", labelKey: "common.labels.subsidiary", kind: "text" },
+    { key: "subsidiary", labelKey: "common.labels.subsidiary", kind: "text", legalEntity: true },
     { key: "location", labelKey: "common.labels.location", kind: "text" },
     {
       key: "property_type",
@@ -2289,7 +2289,7 @@ const ENCUMBRANCE: RecordTypeMeta = {
     { key: "number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
     { key: "source_kind", labelKey: "nonprofit.encumbrances.sourceKind", kind: "text", sortable: true, sortKey: "source_kind" },
     { key: "account", labelKey: "nonprofit.encumbrances.account", kind: "text", sortable: true, sortKey: "account" },
-    { key: "subsidiary", labelKey: "nonprofit.encumbrances.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary" },
+    { key: "subsidiary", labelKey: "nonprofit.encumbrances.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary", legalEntity: true },
     { key: "amount", labelKey: "nonprofit.encumbrances.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
     { key: "status", labelKey: "nonprofit.encumbrances.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },

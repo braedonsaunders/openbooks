@@ -151,6 +151,7 @@ export const SETUP_WIDGETS = {
       inventoryEnabled={props.inventoryEnabled === true}
       crmEnabled={props.crmEnabled === true}
       hrmEnabled={props.hrmEnabled === true}
+      multiSubsidiary={props.multiSubsidiary === true}
     />
   ),
 

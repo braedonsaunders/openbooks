@@ -99,6 +99,7 @@ test('deleting a saved view confirms before the DELETE goes out', async () => {
           inventoryEnabled: false,
           crmEnabled: false,
           hrmEnabled: false,
+          multiSubsidiary: false,
         }),
       }),
     )
@@ -155,6 +156,7 @@ test('column move buttons expose translated names with their column context', as
           inventoryEnabled: false,
           crmEnabled: false,
           hrmEnabled: false,
+          multiSubsidiary: false,
         }),
       }),
     )
