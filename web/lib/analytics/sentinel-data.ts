@@ -1,6 +1,8 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
 import { flowRates, MissingExchangeRateError, presentationCurrency, type FlowRates } from "../fx-presentation";
@@ -556,7 +558,7 @@ export async function sentinelData(
     // distribution per currency, never blended) with exact transaction sums;
     // every other money sum is the first-leg translation, completed into the
     // presentation currency bucket by bucket below.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with base as (
         select coalesce(s.base_currency, ${presentationCcy}) as func,
                d.currency as cur,
@@ -597,7 +599,7 @@ export async function sentinelData(
     // configured band below a real Flows limit for the document's kind. Rows
     // outside every band never reach the client; with no limits at all the
     // predicate is empty and the detector reports unavailable.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total)::text as amount, d.currency as currency,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
@@ -643,7 +645,7 @@ export async function sentinelData(
     // flagged union.
     (duplicateFloor === null
       ? Promise.resolve({ rows: [] as DuplicateGroupRow[] })
-      : db.execute(sql`
+      : analyticsQuery(sql`
       with cand as materialized (
         -- pres_amt translates each candidate into presentation money at its
         -- own document-date spot (total × fx_rate × func→presentation), so
@@ -726,7 +728,7 @@ export async function sentinelData(
     // set for the flagged union. The detector itself is the accounting
     // document date — no business calendar exists yet, so weekend stays
     // Saturday/Sunday by design (see the module note).
-    (db.execute(sql`
+    (analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total)::text as amount, d.currency as currency,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
@@ -747,7 +749,7 @@ export async function sentinelData(
       order by abs(d.total) desc
       limit 200
     `)),
-    (db.execute(sql`
+    (analyticsQuery(sql`
       select d.id as doc_id,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
         coalesce(s.base_currency, ${presentationCcy}) as func,
@@ -773,7 +775,7 @@ export async function sentinelData(
     // nor inflate σ and mask a genuine same-currency outlier. Detail rows
     // (capped for display) union with the result's full count and the slim
     // full id set, so the counts always cover everything.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       -- Rank, mean and σ stay in the document's own currency: rate drift
       -- inside one document currency must never move a ratio or a deviation.
       -- Each baseline row still carries its presentation-money companion
@@ -868,7 +870,7 @@ export async function sentinelData(
     // exact and currency-blind) carry the full island count, and a second leg
     // unnests every island's invoices slim for the flagged union, so runs
     // past the display cut still count.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with refs as (
         select d.id, d.document_number, d.reference_number, d.party_id, d.currency,
           coalesce(d.document_date, d.posting_date) as doc_date, abs(d.total)::text as amount,
@@ -909,7 +911,7 @@ export async function sentinelData(
       order by i.span_days desc, i.cnt desc, i.party_id, i.currency
       limit 50
     `)),
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with refs as (
         select d.id, d.party_id, d.currency,
           abs(d.total)::text as amount,
@@ -951,7 +953,7 @@ export async function sentinelData(
     // whitespace stripped while KEEPING every script's letters and digits, so
     // accented and non-Latin addresses never collapse into each other) plus
     // postal code plus country. Detail rows carry the full match count.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with norm_addr as (
         select a.party_id,
           regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
@@ -1001,7 +1003,7 @@ export async function sentinelData(
     // Native audit trail in the org's time zone: the window compares day
     // bounds as wall midnight in the org zone, and each event carries its
     // zone-rendered wall time for display alongside the raw instant.
-    (db.execute(sql`
+    ((analyticsSection('sentinel', ["audit"]) ? analyticsQuery(sql`
       select a.id, a.table_name, a.row_id::text as row_id, a.action, a.actor_id::text as actor_id,
         a.at::text as at,
         to_char(a.at at time zone ${auditZone}, 'YYYY-MM-DD HH24:MI') as display_at,
@@ -1017,8 +1019,8 @@ export async function sentinelData(
         )
       order by a.at desc
       limit 100
-    `)),
-    (db.execute(sql`
+    `) : Promise.resolve({ rows: [] }))),
+    ((analyticsSection('sentinel', ["audit"]) ? analyticsQuery(sql`
       select count(*) as total,
         count(*) filter (where action in ('delete', 'DELETE')) as deletes,
         count(*) filter (where changes::text ~* 'bank|routing|iban|account_number|email|address') as sensitive
@@ -1026,7 +1028,7 @@ export async function sentinelData(
       where org_id = ${orgId}
         and at >= ((${from}::timestamp) at time zone ${auditZone})
         and at < (((${to}::date + 1)::timestamp) at time zone ${auditZone})
-    `)),
+    `) : Promise.resolve({ rows: [] }))),
 
   ]);
 
