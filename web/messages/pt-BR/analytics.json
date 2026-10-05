@@ -1205,6 +1205,14 @@
           "label": "Teto de atividade (faturas)",
           "help": "Número de faturas para a pontuação plena de atividade"
         },
+        "engagementMaxPoints": {
+          "label": "Pontos de atividade",
+          "help": "Pontos por atividade plena na pontuação do relacionamento"
+        },
+        "stabilityMaxPoints": {
+          "label": "Pontos de estabilidade",
+          "help": "Pontos por gasto perfeitamente estável na pontuação do relacionamento"
+        },
         "gradeA": {
           "label": "Corte de A",
           "help": "A pontuação a partir deste valor recebe nota A"

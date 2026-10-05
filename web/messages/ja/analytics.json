@@ -1205,6 +1205,14 @@
           "label": "取引上限（請求書数）",
           "help": "満点となる請求書数"
         },
+        "engagementMaxPoints": {
+          "label": "取引点数",
+          "help": "関係スコアにおけるフル取引の点数"
+        },
+        "stabilityMaxPoints": {
+          "label": "安定性点数",
+          "help": "関係スコアにおける完全に安定した支出の点数"
+        },
         "gradeA": {
           "label": "グレードA基準",
           "help": "このスコア以上でグレードAになります"
