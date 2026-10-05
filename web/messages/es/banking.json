@@ -706,6 +706,7 @@
       "arCoverageHint": "(Efectivo + CxC) / CxP",
       "cashCycle": "Ciclo de efectivo",
       "cashCycleHint": "DSO / DPO",
+      "noHistory": "sin historial de pagos",
       "netFlow": "Flujo neto del período",
       "netFlowHint": "Entradas − Salidas",
       "runway": "Autonomía de caja"
@@ -746,6 +747,7 @@
       "dsoLabel": "Días globales de cobro / pago",
       "dsoValue": "{dso} d / {dpo} d",
       "dsoNote": "Promedios de reserva cuando una contraparte no tiene historial de pagos",
+      "dsoUnknown": "No disponible — sin historial de pagos aún",
       "apTitle": "Regla de pago a proveedores",
       "apHint": "Se configura en el panel de Proveedores",
       "capLabel": "Tope semanal de pagos",

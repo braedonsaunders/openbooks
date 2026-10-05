@@ -706,6 +706,7 @@
       "arCoverageHint": "（資金＋売掛金）÷ 買掛金",
       "cashCycle": "キャッシュサイクル",
       "cashCycleHint": "DSO / DPO",
+      "noHistory": "支払い履歴なし",
       "netFlow": "期間純キャッシュフロー",
       "netFlowHint": "入金 − 出金",
       "runway": "資金繰り期間"
@@ -746,6 +747,7 @@
       "dsoLabel": "全体の回収・支払日数",
       "dsoValue": "{dso}日 / {dpo}日",
       "dsoNote": "取引先に支払履歴がない場合に使う代替平均",
+      "dsoUnknown": "利用不可 — 支払い履歴なし",
       "apTitle": "買掛金の支払ルール",
       "apHint": "買掛金コックピットで設定",
       "capLabel": "週間支払上限",

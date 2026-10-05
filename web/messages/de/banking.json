@@ -706,6 +706,7 @@
       "arCoverageHint": "(Geld + Ford.) / Verb.",
       "cashCycle": "Cash-Zyklus",
       "cashCycleHint": "DSO / DPO",
+      "noHistory": "keine Zahlungshistorie",
       "netFlow": "Perioden-Cashflow",
       "netFlowHint": "Zuflüsse − Abflüsse",
       "runway": "Liquiditätsreichweite"
@@ -746,6 +747,7 @@
       "dsoLabel": "Globale Inkasso-/Zahlungstage",
       "dsoValue": "{dso} T / {dpo} T",
       "dsoNote": "Fallback-Durchschnitte, wenn ein Geschäftspartner keine Zahlungshistorie hat",
+      "dsoUnknown": "Nicht verfügbar — noch keine Zahlungshistorie",
       "apTitle": "Kreditoren-Zahlungsregel",
       "apHint": "Wird im Kreditoren-Cockpit konfiguriert",
       "capLabel": "Wöchentliche Zahlungsobergrenze",

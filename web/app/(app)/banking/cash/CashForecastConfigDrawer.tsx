@@ -38,8 +38,8 @@ export function CashForecastConfigDrawer({
   description: string
   asOf: string
   horizonWeeks: number
-  dso: number
-  dpo: number
+  dso: number | null
+  dpo: number | null
   weeklyCap: string
   restrictToSafe: boolean
   vendorOptions: CatOption[]
@@ -56,7 +56,7 @@ export function CashForecastConfigDrawer({
     { label: t('methodLabel'), value: t('methodValue'), note: t('methodNote') },
     { label: t('overdueLabel'), value: t('overdueValue'), note: t('overdueNote') },
     { label: t('snapLabel'), value: t('snapOn'), note: t('snapNote') },
-    { label: t('dsoLabel'), value: t('dsoValue', { dso, dpo }), note: t('dsoNote') },
+    { label: t('dsoLabel'), value: dso === null || dpo === null ? t('dsoUnknown') : t('dsoValue', { dso, dpo }), note: t('dsoNote') },
   ]
 
   return (

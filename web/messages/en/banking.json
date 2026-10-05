@@ -713,6 +713,7 @@
       "arCoverageHint": "(Cash + AR) / AP",
       "cashCycle": "Cash cycle",
       "cashCycleHint": "DSO / DPO",
+      "noHistory": "no payment history",
       "netFlow": "Net period flow",
       "netFlowHint": "Inflows − Outflows",
       "runway": "Cash runway"
@@ -753,6 +754,7 @@
       "dsoLabel": "Global collect / pay days",
       "dsoValue": "{dso}d / {dpo}d",
       "dsoNote": "Fallback averages used when a party has no payment history",
+      "dsoUnknown": "Unavailable — no payment history yet",
       "apTitle": "AP payment rule",
       "apHint": "Configured on the AP cockpit",
       "capLabel": "Weekly pay cap",
