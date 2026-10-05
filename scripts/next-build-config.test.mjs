@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import config from '../web/next.config.mjs';
 
 test('production page collection and generation stay within a single-worker budget', () => {
@@ -44,6 +45,22 @@ test('development keeps its existing compiler concurrency and cache', () => {
   const result = config.webpack(webpackConfig, { dev: true });
   assert.equal(result.parallelism, 100);
   assert.equal(result.cache, cache);
+});
+
+test('compilation retention requires an explicit development-host opt-in', () => {
+  for (const [mode, enabled, expected] of [
+    ['development', '1', false],
+    ['development', '0', null],
+    ['production', '1', null],
+  ]) {
+    const script = `import config from ${JSON.stringify(new URL('../web/next.config.mjs', import.meta.url).href)}; console.log(JSON.stringify(config.experimental.turbopackMemoryEviction ?? null));`;
+    const actual = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: new URL('../web/', import.meta.url),
+      env: { ...process.env, NODE_ENV: mode, OPENBOOKS_DEV_KEEP_COMPILE_CACHE: enabled },
+      encoding: 'utf8',
+    });
+    assert.equal(JSON.parse(actual), expected, `${mode} with retention=${enabled}`);
+  }
 });
 
 test('the informational stats card does not start CI or mutate main on routine updates', () => {
