@@ -129,7 +129,44 @@
       "domainCaveatTitle": "La proyección sale del rango de la métrica",
       "domainCaveat": "{metric} no puede ser negativo, pero la proyección {model} cae por debajo de cero desde {month} porque el modelo prolonga la caída reciente. Los meses posteriores muestran lo que implica la tendencia, no {metric} alcanzables; la variante ETS de tendencia amortiguada suaviza la caída en lugar de prolongarla.",
       "domainTableNote": "Los meses desde {month} proyectan bajo cero, fuera del rango de esta métrica.",
-      "domainGrowthNote": "El crecimiento proyectado se calcula con valores fuera del rango de {metric}; consulta la advertencia anterior."
+      "domainGrowthNote": "El crecimiento proyectado se calcula con valores fuera del rango de {metric}; consulta la advertencia anterior.",
+      "title": "Pronóstico multimétrico",
+      "total": "Total de {count} meses",
+      "monthN": "Mes {count}",
+      "growth": "Crecimiento proyectado",
+      "detail": "Detalle mensual del pronóstico",
+      "table": {
+        "month": "Mes",
+        "forecast": "Pronóstico",
+        "low": "Bajo",
+        "high": "Alto",
+        "conf": "Confianza"
+      },
+      "settings": "Ajustes del pronóstico",
+      "field": {
+        "method": "Método",
+        "horizon": "Horizonte",
+        "confidence": "Confianza",
+        "seasonality": "Estacionalidad",
+        "adjustment": "Ajuste"
+      },
+      "horizonMonths": "{count} meses",
+      "confidencePct": "{count} %",
+      "diagnostics": "Diagnóstico del modelo",
+      "diag": {
+        "trend": "Tendencia",
+        "seasonality": "Estacionalidad"
+      },
+      "trend": {
+        "up": "Ascendente",
+        "down": "Descendente",
+        "flat": "Plana"
+      },
+      "seasonDetected": "Detectada ({period} m.)",
+      "seasonNone": "Ninguna",
+      "emptyTitle": "Historial insuficiente",
+      "emptyDescription": "El pronóstico necesita al menos 3 meses de actividad en el periodo elegido.",
+      "unknownLevel": "Valor no válido para {field}: „{level}“ — valores válidos: {levels}."
     },
     "scenarios": {
       "kpi": {
@@ -147,8 +184,8 @@
       "fields": {
         "growth": "Crecimiento %",
         "price": "Precio Δ %",
-        "cogs": "COGS Δ %",
-        "opex": "OpEx Δ %"
+        "cogs": "Coste de ventas Δ %",
+        "opex": "Gastos operativos Δ %"
       },
       "reset": "Restablecer a la base",
       "impact": "Impacto proyectado",
@@ -211,7 +248,7 @@
       },
       "allocation": "Asignación de ingresos",
       "allocationNames": {
-        "cogs": "COGS",
+        "cogs": "Coste de ventas",
         "opex": "Gastos operativos",
         "other": "Otro gasto",
         "net": "Resultado neto"
@@ -688,6 +725,54 @@
           "label": "Margen de seguridad cómodo (%)",
           "help": "Ingresos tan por encima del punto de equilibrio se consideran un margen cómodo"
         },
+        "forecastMethod": {
+          "label": "Método de pronóstico",
+          "help": "Modelo estadístico de la proyección de ingresos"
+        },
+        "forecastHorizon": {
+          "label": "Horizonte del pronóstico",
+          "help": "Meses proyectados al abrir la pestaña"
+        },
+        "forecastConfidence": {
+          "label": "Confianza del pronóstico",
+          "help": "Nivel de confianza de la banda"
+        },
+        "forecastSeasonality": {
+          "label": "Estacionalidad del pronóstico",
+          "help": "Ciclo estacional que busca el modelo"
+        },
+        "forecastAdjustment": {
+          "label": "Ajuste del pronóstico",
+          "help": "Ajuste macro de cada mes proyectado"
+        },
+        "forecastEtsAlpha": {
+          "label": "Suavizado ETS (α)",
+          "help": "Peso de la última observación"
+        },
+        "forecastEtsBeta": {
+          "label": "Tendencia ETS (β)",
+          "help": "Peso del último cambio de tendencia"
+        },
+        "forecastEtsGamma": {
+          "label": "Estacionalidad ETS (γ)",
+          "help": "Peso del último cambio estacional"
+        },
+        "forecastDampedPhi": {
+          "label": "Tendencia amortiguada (φ)",
+          "help": "Decaimiento mensual; 1 es sin amortiguar"
+        },
+        "forecastMa1": {
+          "label": "Persistencia del choque ARIMA",
+          "help": "Cuánto del último choque continúa"
+        },
+        "forecastSeasonalityMinCorr": {
+          "label": "Umbral de estacionalidad",
+          "help": "Correlación mínima que cuenta como estacional"
+        },
+        "forecastSeasonalityMinPeriods": {
+          "label": "Historial de estacionalidad",
+          "help": "Mínimo de puntos antes de la autodetección"
+        },
         "budgetOnTrackPercent": {
           "label": "Tolerancia presupuestaria „en línea“ (%)",
           "help": "Una desviación dentro de esta parte del presupuesto se considera en línea"
@@ -715,6 +800,41 @@
         "efficiencyOperating": "Objetivos de eficiencia y operación",
         "grading": "Calificaciones y bandas de puntuación",
         "findings": "Umbrales de hallazgos"
+      },
+      "options": {
+        "forecastMethod": {
+          "ets": "Suavizado exponencial (ETS)",
+          "ets_damped": "ETS, tendencia amortiguada",
+          "linear": "Regresión lineal",
+          "seasonal": "Descomposición estacional",
+          "moving_avg": "Media móvil",
+          "arima": "Estilo ARIMA"
+        },
+        "forecastHorizon": {
+          "3": "3 meses",
+          "6": "6 meses",
+          "12": "12 meses",
+          "24": "24 meses"
+        },
+        "forecastConfidence": {
+          "80": "80 %",
+          "90": "90 %",
+          "95": "95 %",
+          "99": "99 %"
+        },
+        "forecastSeasonality": {
+          "auto": "Autodetección",
+          "none": "Ninguna",
+          "monthly": "Mensual",
+          "quarterly": "Trimestral"
+        },
+        "forecastAdjustment": {
+          "neg10": "Recesión (−10 %)",
+          "neg05": "Pesimista (−5 %)",
+          "zero": "Ninguno",
+          "pos05": "Optimista (+5 %)",
+          "pos10": "Alto crecimiento (+10 %)"
+        }
       }
     },
     "ratioCard": {

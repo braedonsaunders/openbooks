@@ -129,7 +129,44 @@
       "domainCaveatTitle": "A projeção sai do intervalo da métrica",
       "domainCaveat": "{metric} não pode ser negativo, mas a projeção {model} cai abaixo de zero a partir de {month} porque o modelo prolonga a queda recente. Os meses seguintes mostram o que a tendência implica, não {metric} atingíveis; a variante ETS de tendência amortecida suaviza a queda em vez de prolongá-la.",
       "domainTableNote": "Os meses a partir de {month} projetam abaixo de zero, fora do intervalo desta métrica.",
-      "domainGrowthNote": "O crescimento projetado é calculado com valores fora do intervalo de {metric} — veja o aviso acima."
+      "domainGrowthNote": "O crescimento projetado é calculado com valores fora do intervalo de {metric} — veja o aviso acima.",
+      "title": "Previsão multimétrica",
+      "total": "Total de {count} meses",
+      "monthN": "Mês {count}",
+      "growth": "Crescimento projetado",
+      "detail": "Detalhe mensal da previsão",
+      "table": {
+        "month": "Mês",
+        "forecast": "Previsão",
+        "low": "Baixa",
+        "high": "Alta",
+        "conf": "Confiança"
+      },
+      "settings": "Configurações da previsão",
+      "field": {
+        "method": "Método",
+        "horizon": "Horizonte",
+        "confidence": "Confiança",
+        "seasonality": "Sazonalidade",
+        "adjustment": "Ajuste"
+      },
+      "horizonMonths": "{count} meses",
+      "confidencePct": "{count}%",
+      "diagnostics": "Diagnóstico do modelo",
+      "diag": {
+        "trend": "Tendência",
+        "seasonality": "Sazonalidade"
+      },
+      "trend": {
+        "up": "Alta",
+        "down": "Queda",
+        "flat": "Estável"
+      },
+      "seasonDetected": "Detectada ({period} m.)",
+      "seasonNone": "Nenhuma",
+      "emptyTitle": "Histórico insuficiente",
+      "emptyDescription": "A previsão precisa de pelo menos 3 meses de atividade no período escolhido.",
+      "unknownLevel": "Valor desconhecido para {field}: „{level}“ — valores válidos: {levels}."
     },
     "scenarios": {
       "kpi": {
@@ -147,8 +184,8 @@
       "fields": {
         "growth": "Crescimento %",
         "price": "Preço Δ %",
-        "cogs": "COGS Δ %",
-        "opex": "OpEx Δ %"
+        "cogs": "Custo de vendas Δ %",
+        "opex": "Despesas operacionais Δ %"
       },
       "reset": "Redefinir para a base",
       "impact": "Impacto projetado",
@@ -211,7 +248,7 @@
       },
       "allocation": "Alocação da receita",
       "allocationNames": {
-        "cogs": "COGS",
+        "cogs": "Custo de vendas",
         "opex": "Despesas operacionais",
         "other": "Outra despesa",
         "net": "Resultado líquido"
@@ -688,6 +725,54 @@
           "label": "Margem de segurança confortável (%)",
           "help": "Receita tão acima do ponto de equilíbrio é considerada uma margem confortável"
         },
+        "forecastMethod": {
+          "label": "Método de previsão",
+          "help": "Modelo estatístico da projeção de receita"
+        },
+        "forecastHorizon": {
+          "label": "Horizonte da previsão",
+          "help": "Meses projetados ao abrir a guia"
+        },
+        "forecastConfidence": {
+          "label": "Confiança da previsão",
+          "help": "Nível de confiança da banda"
+        },
+        "forecastSeasonality": {
+          "label": "Sazonalidade da previsão",
+          "help": "Ciclo sazonal que o modelo procura"
+        },
+        "forecastAdjustment": {
+          "label": "Ajuste da previsão",
+          "help": "Ajuste macro de cada mês projetado"
+        },
+        "forecastEtsAlpha": {
+          "label": "Suavização ETS (α)",
+          "help": "Peso da última observação"
+        },
+        "forecastEtsBeta": {
+          "label": "Tendência ETS (β)",
+          "help": "Peso da última mudança de tendência"
+        },
+        "forecastEtsGamma": {
+          "label": "Sazonalidade ETS (γ)",
+          "help": "Peso da última mudança sazonal"
+        },
+        "forecastDampedPhi": {
+          "label": "Tendência amortecida (φ)",
+          "help": "Decaimento mensal; 1 é sem amortecimento"
+        },
+        "forecastMa1": {
+          "label": "Persistência do choque ARIMA",
+          "help": "Quanto do último choque continua"
+        },
+        "forecastSeasonalityMinCorr": {
+          "label": "Limite de sazonalidade",
+          "help": "Correlação mínima que conta como sazonal"
+        },
+        "forecastSeasonalityMinPeriods": {
+          "label": "Histórico de sazonalidade",
+          "help": "Mínimo de pontos antes da autodetecção"
+        },
         "budgetOnTrackPercent": {
           "label": "Tolerância orçamentária “no caminho certo” (%)",
           "help": "Uma variação dentro dessa parte do orçamento é considerada no caminho certo"
@@ -715,6 +800,41 @@
         "efficiencyOperating": "Metas de eficiência e operação",
         "grading": "Notas e faixas de pontuação",
         "findings": "Limites dos achados"
+      },
+      "options": {
+        "forecastMethod": {
+          "ets": "Suavização exponencial (ETS)",
+          "ets_damped": "ETS, tendência amortecida",
+          "linear": "Regressão linear",
+          "seasonal": "Decomposição sazonal",
+          "moving_avg": "Média móvel",
+          "arima": "Estilo ARIMA"
+        },
+        "forecastHorizon": {
+          "3": "3 meses",
+          "6": "6 meses",
+          "12": "12 meses",
+          "24": "24 meses"
+        },
+        "forecastConfidence": {
+          "80": "80%",
+          "90": "90%",
+          "95": "95%",
+          "99": "99%"
+        },
+        "forecastSeasonality": {
+          "auto": "Autodetecção",
+          "none": "Nenhuma",
+          "monthly": "Mensal",
+          "quarterly": "Trimestral"
+        },
+        "forecastAdjustment": {
+          "neg10": "Recessão (−10%)",
+          "neg05": "Pessimista (−5%)",
+          "zero": "Nenhum",
+          "pos05": "Otimista (+5%)",
+          "pos10": "Alto crescimento (+10%)"
+        }
       }
     },
     "ratioCard": {

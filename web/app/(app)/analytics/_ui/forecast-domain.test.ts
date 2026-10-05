@@ -4,6 +4,7 @@ import {
   applyForecastMethod,
   checkSignDomain,
   forecastETS,
+  zScoreForConfidence,
 } from './forecast'
 
 // A metric's sign domain: revenue cannot go negative, so a projection that
@@ -56,6 +57,13 @@ test('the damped variant levels a decline off instead of extending it', () => {
     !dampedBreach.breached || dampedBreach.firstIndex >= plainBreach.firstIndex,
     'damping must not bring the zero crossing forward',
   )
+})
+
+test('an unknown confidence level refuses instead of assuming 1.645', () => {
+  assert.equal(zScoreForConfidence(90), 1.645)
+  // 97 has no band multiplier: the engine throws a named refusal rather
+  // than printing a 90% band under another name.
+  assert.throws(() => applyForecastMethod(DECLINING, 'ets', 6, 'none', 97), /unknown forecast confidence level 97/)
 })
 
 test('a flat series is identical under both ETS variants', () => {

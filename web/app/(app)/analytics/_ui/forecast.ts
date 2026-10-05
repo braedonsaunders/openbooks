@@ -51,6 +51,48 @@ export interface ForecastDiagnostics {
 
 const Z: Record<number, number> = { 80: 1.282, 90: 1.645, 95: 1.96, 99: 2.576 }
 
+/**
+ * An unknown confidence level is a refusal, never a silent z. The band
+ * multiplier has no safe assumption: 1.645 at an unlisted level would print
+ * a 90% band under another name.
+ */
+export class UnknownConfidenceError extends Error {
+  constructor(readonly level: number) {
+    super(`unknown forecast confidence level ${level} — choose one of 80, 90, 95, 99`)
+    this.name = 'UnknownConfidenceError'
+  }
+}
+
+export function zScoreForConfidence(confidence: number): number {
+  const z = Z[confidence]
+  if (z === undefined) throw new UnknownConfidenceError(confidence)
+  return z
+}
+
+/** Tunable smoothing and detection constants behind the forecast methods. */
+export interface ForecastModelParams {
+  alpha: number
+  beta: number
+  gamma: number
+  dampedPhi: number
+  ma1: number
+  /** Minimum lag correlation that counts as seasonality. */
+  minCorrelation: number
+  /** Fewest history points before auto-detection runs. */
+  minPeriods: number
+}
+
+/** The starting model constants, matching the dashboard configuration defaults. */
+export const DEFAULT_FORECAST_MODEL_PARAMS: ForecastModelParams = {
+  alpha: 0.3,
+  beta: 0.1,
+  gamma: 0.2,
+  dampedPhi: 0.9,
+  ma1: 0.3,
+  minCorrelation: 0.3,
+  minPeriods: 24,
+}
+
 function sum(a: number[]): number {
   return a.reduce((x, y) => x + y, 0)
 }
@@ -77,19 +119,35 @@ export function calculateStdDev(data: number[]): number {
   return Math.sqrt(variance)
 }
 
-export function detectSeasonality(data: number[]): number {
+/**
+ * Auto-detection lag candidates from the fiscal year's period count: the
+ * full annual cycle and its half, so a quarterly calendar tests 2 and 4
+ * instead of month counts it can never exhibit. Twelve stays exactly the
+ * classic monthly set.
+ */
+export function seasonalityCandidates(periodsPerYear: number): number[] {
+  if (periodsPerYear === 12) return [3, 4, 6, 12]
+  const half = Math.max(2, Math.round(periodsPerYear / 2))
+  return half === periodsPerYear ? [periodsPerYear] : [half, periodsPerYear]
+}
+
+export function detectSeasonality(
+  data: number[],
+  opts: { minPeriods?: number; minCorrelation?: number; candidates?: number[] } = {},
+): number {
+  const { minPeriods = 24, minCorrelation = 0.3, candidates = [3, 4, 6, 12] } = opts
   const n = data.length
-  if (n < 24) return 0
+  if (n < minPeriods) return 0
   const mean = sum(data) / n
   const variance = data.reduce((s, x) => s + (x - mean) ** 2, 0) / n
   let bestPeriod = 0
   let bestCorr = 0
-  for (const period of [3, 4, 6, 12]) {
+  for (const period of candidates) {
     if (n >= period * 2) {
       let sumCorr = 0
       for (let i = period; i < n; i++) sumCorr += (data[i]! - mean) * (data[i - period]! - mean)
       const corr = variance > 0 ? sumCorr / ((n - period) * variance) : 0
-      if (corr > bestCorr && corr > 0.3) {
+      if (corr > bestCorr && corr > minCorrelation) {
         bestCorr = corr
         bestPeriod = period
       }
@@ -105,11 +163,16 @@ function band(values: number[], sd: number, z: number, spread: number): { low: n
   }
 }
 
-export function forecastETS(data: number[], horizon: number, seasonalPeriod: number, z = 1.645, phi = 1): ForecastResult {
+export function forecastETS(
+  data: number[],
+  horizon: number,
+  seasonalPeriod: number,
+  z = 1.645,
+  phi = 1,
+  model: { alpha: number; beta: number; gamma: number } = DEFAULT_FORECAST_MODEL_PARAMS,
+): ForecastResult {
   const n = data.length
-  const alpha = 0.3
-  const beta = 0.1
-  const gamma = 0.2
+  const { alpha, beta, gamma } = model
   let level = data[0]!
   let trend = n > 1 ? data[1]! - data[0]! : 0
   const seasonal: number[] = []
@@ -191,7 +254,7 @@ export function forecastMovingAvg(data: number[], horizon: number, z = 1.645): F
   return { values, ...band(values, sd, z, 0.2), fitted: ma, trend: trend.slope, seasonal: false, seasonalPeriod: 0 }
 }
 
-export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: number, z = 1.645): ForecastResult {
+export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: number, z = 1.645, ma1 = 0.3): ForecastResult {
   const n = data.length
   const diff: number[] = []
   for (let i = 1; i < n; i++) diff.push(data[i]! - data[i - 1]!)
@@ -206,7 +269,6 @@ export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: n
     ar1 = sumX2 > 0 ? sumXY / sumX2 : 0
   }
   ar1 = Math.max(-0.9, Math.min(0.9, ar1))
-  const ma1 = 0.3
   let lastDiff = diff[diff.length - 1] || 0
   let lastValue = data[n - 1]!
   const values: number[] = []
@@ -241,36 +303,47 @@ export function applyForecastMethod(
   seasonality: Seasonality,
   confidence: number,
   growthOverride: number | null = null,
+  opts: { modelParams?: ForecastModelParams; periodsPerYear?: number } = {},
 ): ForecastResult {
   const n = data.length
-  const z = Z[confidence] ?? 1.645
+  // Fail closed: an unlisted confidence level has no band multiplier.
+  const z = zScoreForConfidence(confidence)
+  const { modelParams = DEFAULT_FORECAST_MODEL_PARAMS, periodsPerYear = 12 } = opts
+  // Seasonal cycles count fiscal periods, never assumed months: "monthly"
+  // repeats every fiscal year, "quarterly" every quarter of one. A period
+  // of 1 has no seasonal variation and collapses decomposition to the
+  // underlying linear trend.
+  const quarterlyPeriod = Math.max(2, Math.round(periodsPerYear / 4))
   let seasonalPeriod = 0
-  if (seasonality === 'auto' && n >= 12) seasonalPeriod = detectSeasonality(data)
-  // The input series is monthly, so "monthly" seasonality repeats annually.
-  // A period of 1 has no seasonal variation and collapses decomposition to
-  // the underlying linear trend.
-  else if (seasonality === 'monthly') seasonalPeriod = 12
-  else if (seasonality === 'quarterly') seasonalPeriod = 3
+  if (seasonality === 'auto') {
+    seasonalPeriod = detectSeasonality(data, {
+      minPeriods: modelParams.minPeriods,
+      minCorrelation: modelParams.minCorrelation,
+      candidates: seasonalityCandidates(periodsPerYear),
+    })
+  }
+  else if (seasonality === 'monthly') seasonalPeriod = periodsPerYear
+  else if (seasonality === 'quarterly') seasonalPeriod = quarterlyPeriod
 
   let result: ForecastResult
   switch (method) {
     case 'ets':
-      result = forecastETS(data, horizon, seasonalPeriod, z)
+      result = forecastETS(data, horizon, seasonalPeriod, z, 1, modelParams)
       break
     case 'ets_damped':
-      result = forecastETS(data, horizon, seasonalPeriod, z, 0.9)
+      result = forecastETS(data, horizon, seasonalPeriod, z, modelParams.dampedPhi, modelParams)
       break
     case 'linear':
       result = forecastLinear(data, horizon, z)
       break
     case 'seasonal':
-      result = forecastSeasonal(data, horizon, seasonalPeriod || 12, z)
+      result = forecastSeasonal(data, horizon, seasonalPeriod || periodsPerYear, z)
       break
     case 'moving_avg':
       result = forecastMovingAvg(data, horizon, z)
       break
     case 'arima':
-      result = forecastARIMA(data, horizon, seasonalPeriod, z)
+      result = forecastARIMA(data, horizon, seasonalPeriod, z, modelParams.ma1)
       break
     default:
       result = forecastLinear(data, horizon, z)

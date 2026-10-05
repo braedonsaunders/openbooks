@@ -17,6 +17,7 @@ import { healthStrings, type HealthStrings } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { analyticsConfig } from "./config";
+import { analyticsConfigSpec } from "./config-spec";
 import { isFeatureEnabled } from "../features";
 import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalRatio } from "../reports/decimals";
@@ -166,6 +167,40 @@ export interface HealthBands {
   scenario: { safety: string; comfort: string };
 }
 
+/** One macro-adjustment choice: its catalog code and its exact factor. */
+export interface ForecastAdjustmentOption {
+  code: string;
+  value: number;
+}
+
+/**
+ * The forecast model as the organization configured it: defaults, offered
+ * choices (from the threshold spec, the single source of truth) and model
+ * constants, plus the fiscal year's period count behind seasonal cycles.
+ */
+export interface HealthForecastParams {
+  periodsPerYear: number;
+  defaultMethod: string;
+  methods: string[];
+  defaultHorizon: number;
+  defaultConfidence: number;
+  defaultSeasonality: string;
+  seasonalities: string[];
+  horizons: number[];
+  confidences: number[];
+  adjustments: ForecastAdjustmentOption[];
+  defaultAdjustment: string;
+  model: {
+    alpha: number;
+    beta: number;
+    gamma: number;
+    dampedPhi: number;
+    ma1: number;
+    minCorrelation: number;
+    minPeriods: number;
+  };
+}
+
 export interface HealthData extends FinancialHealth {
   monthly: MonthPoint[];
   pnlSummary: PnlLine[];
@@ -176,6 +211,7 @@ export interface HealthData extends FinancialHealth {
   insights: Insight[];
   budget: BudgetVariance;
   bands: HealthBands;
+  forecast: HealthForecastParams;
 }
 
 type SqlNumeric = string | number | null;
@@ -975,12 +1011,13 @@ export async function healthData(
   const emptyBudget = (tolerance: BudgetTolerance): BudgetVariance =>
     ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance });
 
-  const [base, priorBase, monthly, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
+  const [base, priorBase, monthly, forecast, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
     financialHealth(period, orgId, allowedSubsidiaryIds, strings),
     analyticsSection('financial-health', ['overview', 'margin'])
       ? financialHealth({ from: prior.from, to: prior.to, label: "prior" }, orgId, allowedSubsidiaryIds, strings)
       : Promise.resolve(null),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
+    forecastParams(orgId, to),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
@@ -1002,6 +1039,7 @@ export async function healthData(
     items,
     budget,
     bands: configured.bands,
+    forecast,
     insights: buildInsights(base, monthly, policy, money, strings),
   };
 }
@@ -1030,6 +1068,56 @@ export function budgetLineStatus(
   if (favorable || Math.abs(variancePct ?? 0) * 100 <= tolerance.onTrack) return "on-track";
   if (Math.abs(variancePct ?? 0) * 100 <= tolerance.watch) return "watch";
   return type === "income" || type === "income_other" ? "under" : "over";
+}
+
+/** Declared periods per fiscal year on the organization's calendar: twelve for a monthly cadence by definition. */
+async function fiscalPeriodsPerYear(orgId: string, asOf: string): Promise<number> {
+  const declared = await defaultFiscalCalendarPeriods(orgId);
+  if (!declared || declared.cadence === "monthly" || declared.periods.length === 0) return 12;
+  const containing = declared.periods.find((p) => p.from <= asOf && asOf <= p.to);
+  const year = containing?.fiscalYear ?? Math.max(...declared.periods.map((p) => p.fiscalYear));
+  const count = declared.periods.filter((p) => p.fiscalYear === year).length;
+  return count > 0 ? count : 12;
+}
+
+/** Macro-adjustment factors behind the forecast adjustment codes (single source for the mapping). */
+function forecastAdjustmentValue(code: string): number {
+  const values: Record<string, number> = { neg10: -0.1, neg05: -0.05, zero: 0, pos05: 0.05, pos10: 0.1 };
+  const value = values[code];
+  if (value === undefined) throw new Error(`unknown forecast adjustment code "${code}"`);
+  return value;
+}
+
+/** The forecast model as configured, with offered choices from the threshold spec. */
+async function forecastParams(orgId: string, asOf: string): Promise<HealthForecastParams> {
+  const [c, periodsPerYear] = await Promise.all([
+    analyticsConfig(orgId, "financialHealth"),
+    fiscalPeriodsPerYear(orgId, asOf),
+  ]);
+  const fields = new Map(analyticsConfigSpec("financialHealth").fields.map((f) => [f.key, f]));
+  const codes = (key: string): string[] => [...(fields.get(key)?.options ?? [])];
+  return {
+    periodsPerYear,
+    defaultMethod: String(c.forecastMethod),
+    methods: codes("forecastMethod"),
+    defaultHorizon: Number(c.forecastHorizon),
+    defaultConfidence: Number(c.forecastConfidence),
+    defaultSeasonality: String(c.forecastSeasonality),
+    seasonalities: codes("forecastSeasonality"),
+    horizons: codes("forecastHorizon").map(Number),
+    confidences: codes("forecastConfidence").map(Number),
+    adjustments: codes("forecastAdjustment").map((code) => ({ code, value: forecastAdjustmentValue(code) })),
+    defaultAdjustment: String(c.forecastAdjustment),
+    model: {
+      alpha: c.forecastEtsAlpha,
+      beta: c.forecastEtsBeta,
+      gamma: c.forecastEtsGamma,
+      dampedPhi: c.forecastDampedPhi,
+      ma1: c.forecastMa1,
+      minCorrelation: c.forecastSeasonalityMinCorr,
+      minPeriods: c.forecastSeasonalityMinPeriods,
+    },
+  };
 }
 
 /** The organization's configured budget tolerance, HHI and scenario bands. */
