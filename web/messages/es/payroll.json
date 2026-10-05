@@ -26,6 +26,7 @@
       "employees": "En nómina",
       "employeesSub": "perfiles de nómina activos",
       "periodsRan": "Períodos de nómina {year}",
+      "periodsRanYears": "Períodos de nómina {years}",
       "periodsOf": "{ran} de {total}",
       "periodsRanSub": "contabilizados este año fiscal",
       "ytdGross": "Bruto acumulado",
