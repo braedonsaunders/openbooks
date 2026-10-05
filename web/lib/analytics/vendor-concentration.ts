@@ -13,10 +13,11 @@
  * diversification, the card speaks concentration — same band, consistent
  * semantics.
  *
- * The 1500/2500 defaults are the 2010 US merger-guidelines bands, used here
- * as a starting point for a supplier portfolio (which is not what those
- * bands measure): every caller passes the organization's own hhiWarning /
- * hhiCritical from its vendorPerformance analytics config.
+ * The organization's own hhiWarning / hhiCritical from its vendorPerformance
+ * analytics config arrive as required parameters (there is no second copy
+ * of those cutoffs here). Their spec defaults of 1500/2500 are the 2010 US
+ * merger-guidelines bands, used as a starting point for a supplier portfolio
+ * (which is not what those bands measure).
  *
  * Client-safe: no server imports, so VendorView.tsx can use it directly.
  */
@@ -24,7 +25,7 @@
 export type ConcentrationBand = "diversified" | "moderate" | "highlyConcentrated";
 
 /** Supplier-concentration bands on the 0–10000 scale (the same scale totals.hhiScaled uses). */
-export function concentrationBand(hhiScaled: number, warning = 1500, critical = 2500): ConcentrationBand {
+export function concentrationBand(hhiScaled: number, warning: number, critical: number): ConcentrationBand {
   if (hhiScaled > critical) return "highlyConcentrated";
   if (hhiScaled > warning) return "moderate";
   return "diversified";
@@ -43,7 +44,7 @@ export interface ConcentrationVerdict {
  * the exact number the card displays — so a hairline value can never land
  * the two words in different bands.
  */
-export function concentrationVerdict(hhiScaled: number, warning = 1500, critical = 2500): ConcentrationVerdict {
+export function concentrationVerdict(hhiScaled: number, warning: number, critical: number): ConcentrationVerdict {
   const band = concentrationBand(hhiScaled, warning, critical);
   switch (band) {
     case "highlyConcentrated":

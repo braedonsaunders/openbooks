@@ -1205,6 +1205,14 @@
           "label": "往来上限（账单数）",
           "help": "获得往来满分所需的账单数"
         },
+        "engagementMaxPoints": {
+          "label": "往来分数",
+          "help": "关系评分中完整往来的分数"
+        },
+        "stabilityMaxPoints": {
+          "label": "稳定性分数",
+          "help": "关系评分中完全稳定的支出的分数"
+        },
         "gradeA": {
           "label": "A级分数线",
           "help": "达到该关系评分即为A级"

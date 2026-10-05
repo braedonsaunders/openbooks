@@ -9,13 +9,13 @@ import { concentrationBand, concentrationVerdict } from "./vendor-concentration.
  * thresholds. Both words now derive from one shared banding.
  */
 
-test("standard HHI bands: boundaries match the DOJ/FTC 1500/2500 cutoffs", () => {
-  assert.equal(concentrationBand(0), "diversified");
-  assert.equal(concentrationBand(1500), "diversified");
-  assert.equal(concentrationBand(1501), "moderate");
-  assert.equal(concentrationBand(2500), "moderate");
-  assert.equal(concentrationBand(2501), "highlyConcentrated");
-  assert.equal(concentrationBand(10000), "highlyConcentrated");
+test("configured 1500/2500 bands: boundaries move with the organization", () => {
+  assert.equal(concentrationBand(0, 1500, 2500), "diversified");
+  assert.equal(concentrationBand(1500, 1500, 2500), "diversified");
+  assert.equal(concentrationBand(1501, 1500, 2500), "moderate");
+  assert.equal(concentrationBand(2500, 1500, 2500), "moderate");
+  assert.equal(concentrationBand(2501, 1500, 2500), "highlyConcentrated");
+  assert.equal(concentrationBand(10000, 1500, 2500), "highlyConcentrated");
 });
 
 test("gauge and card agree inside every band", () => {
@@ -32,7 +32,7 @@ test("gauge and card agree inside every band", () => {
     { hhiScaled: 2800, band: "highlyConcentrated", gaugeKey: "gauge.concentrated", subKey: "sub.highlyConcentrated" },
   ];
   for (const c of cases) {
-    const verdict = concentrationVerdict(c.hhiScaled);
+    const verdict = concentrationVerdict(c.hhiScaled, 1500, 2500);
     assert.equal(verdict.band, c.band, `hhiScaled=${c.hhiScaled}`);
     assert.equal(verdict.gaugeKey, c.gaugeKey, `hhiScaled=${c.hhiScaled} gauge`);
     assert.equal(verdict.subKey, c.subKey, `hhiScaled=${c.hhiScaled} card`);
@@ -40,7 +40,7 @@ test("gauge and card agree inside every band", () => {
 });
 
 test("the 0.28 fixture can no longer produce the contradictory pair", () => {
-  const verdict = concentrationVerdict(2800);
+  const verdict = concentrationVerdict(2800, 1500, 2500);
   assert.notEqual(
     verdict.gaugeKey,
     "gauge.balanced",
@@ -52,8 +52,8 @@ test("configured bands move the verdict with the organization", () => {
   // An org that tolerates concentration to 3000 reads 2000 as diversified.
   assert.equal(concentrationBand(2000, 2500, 3000), "diversified");
   assert.equal(concentrationVerdict(2000, 2500, 3000).subKey, "sub.diversified");
-  // The same portfolio under the default bands reads moderate.
-  assert.equal(concentrationBand(2000), "moderate");
+  // The same portfolio under the 1500/2500 bands reads moderate.
+  assert.equal(concentrationBand(2000, 1500, 2500), "moderate");
   // A strict org reads 1600 as already highly concentrated.
   assert.equal(concentrationBand(1600, 1000, 1500), "highlyConcentrated");
 });

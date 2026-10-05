@@ -1205,6 +1205,14 @@
           "label": "Bindungsobergrenze (Rechnungen)",
           "help": "Rechnungszahl für die volle Bindungswertung"
         },
+        "engagementMaxPoints": {
+          "label": "Bindungspunkte",
+          "help": "Punkte für volle Bindung in der Beziehungswertung"
+        },
+        "stabilityMaxPoints": {
+          "label": "Stabilitätspunkte",
+          "help": "Punkte für vollkommen stabile Ausgaben in der Beziehungswertung"
+        },
         "gradeA": {
           "label": "Note-A-Grenze",
           "help": "Beziehungswerte ab dieser Grenze erhalten die Note A"
