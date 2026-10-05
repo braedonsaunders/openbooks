@@ -27,8 +27,83 @@
       "spendVelocityTitle": "Vélocité des dépenses",
       "spendVelocityDesc": "Accélération des dépenses, dérive des abonnements et informatique fantôme",
       "cashflowTitle": "Trésorerie",
-      "cashflowDesc": "Prévision de trésorerie hebdomadaire, autonomie et balance âgée"
-    }
+      "cashflowDesc": "Prévision de trésorerie hebdomadaire, autonomie et balance âgée",
+      "resourceCapacityTitle": "Capacité des ressources",
+      "resourceCapacityDesc": "Prévisions de capacité des équipes, affectations confirmées et demande issue des opportunités commerciales"
+    },
+    "addAnalytics": "Ajouter des analyses",
+    "libraryTitle": "Votre bibliothèque d’analyses",
+    "libraryDescription": "Choisissez les tableaux de bord affichés sur votre page d’accueil. Ces préférences vous sont personnelles ; les fonctionnalités de l’entreprise et les autorisations d’accès restent applicables.",
+    "overviewTitle": "Votre entreprise en un coup d’œil",
+    "visibleCount": "{visible} tableaux de bord visibles sur {available}",
+    "personalLayout": "Espace de travail personnel",
+    "all": "Toutes les analyses",
+    "browseGroups": "Groupes d’analyses",
+    "refresh": "Actualiser les indicateurs",
+    "explore": "Explorer",
+    "loading": "Chargement des indicateurs en direct…",
+    "loadError": "Les indicateurs n’ont pas pu être chargés. Actualisez-les ou ouvrez le tableau de bord pour réessayer.",
+    "noneVisible": "Aucun tableau de bord visible dans ce groupe. Ajoutez des analyses pour personnaliser votre espace de travail.",
+    "saved": "Préférences enregistrées",
+    "saving": "Enregistrement des préférences…",
+    "unsaved": "Les modifications ne sont pas enregistrées",
+    "showAll": "Tout afficher",
+    "retry": "Réessayer l’enregistrement",
+    "visible": "Visible",
+    "hidden": "Masqué",
+    "snapshot": "Situation actuelle",
+    "reportRows": "Lignes du rapport",
+    "forecastWeeks": "Prévision sur {weeks} semaines",
+    "utilizationRate": "Taux d’utilisation facturable",
+    "riskScore": "Indice de risque",
+    "openForCurrency": "Voir le rapport",
+    "currencyNotice": "Ouvrez le rapport pour consulter les montants et les devises correspondantes.",
+    "base": "Socle ERP",
+    "sections": {
+      "finance": "Performance financière",
+      "cash": "Trésorerie et fonds de roulement",
+      "customers": "Clients et chiffre d’affaires",
+      "projects": "Projets et services",
+      "people": "Personnel et paie",
+      "supply": "Achats et commerce",
+      "industry": "Analyses sectorielles",
+      "risk": "Risques et contrôles"
+    },
+    "packs": {
+      "professional_services": "Services professionnels",
+      "engineering_architecture": "Ingénierie et architecture",
+      "accounting_firm": "Cabinets comptables",
+      "construction_contractor": "Bâtiment et travaux publics",
+      "wholesale_distribution": "Commerce de gros",
+      "manufacturing": "Fabrication",
+      "it_software_saas": "Logiciels et SaaS",
+      "property_management": "Gestion immobilière",
+      "nonprofit": "Organismes à but non lucratif"
+    },
+    "capabilities": {
+      "projects": "Projets",
+      "timeTracking": "Suivi du temps",
+      "allocations": "Répartitions",
+      "crm": "Gestion de la relation client",
+      "resourcing": "Planification des ressources",
+      "payroll": "Paie",
+      "fixedAssets": "Immobilisations",
+      "salesChannels": "Canaux de vente",
+      "storedValue": "Valeur prépayée",
+      "saasMetrics": "Indicateurs SaaS",
+      "revenueRecognition": "Comptabilisation du chiffre d’affaires",
+      "manufacturing": "Fabrication",
+      "propertyManagement": "Gestion immobilière",
+      "grantManagement": "Subventions",
+      "onlinePayments": "Paiements en ligne",
+      "autopay": "Paiements automatiques",
+      "salesManagement": "Gestion commerciale",
+      "subscriptionBilling": "Abonnements",
+      "hrm": "Ressources humaines"
+    },
+    "retryMetrics": "Réessayer les indicateurs indisponibles",
+    "statesShown": "États du cycle de vie affichés",
+    "calculatedAt": "Données au {time}"
   },
   "financialHealth": {
     "title": "Santé financière",
@@ -334,6 +409,46 @@
       "noInterestExpense": "Aucune charge d'intérêts",
       "unavailable": "Données non disponibles",
       "perEmployees": "{revenue} / {count, plural, one {# salarié} other {# salariés}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "Objectif de marge brute (%)",
+          "help": "Référence pour la note de marge brute"
+        },
+        "operatingMarginTarget": {
+          "label": "Objectif de marge opérationnelle (%)",
+          "help": "Référence pour la note de marge opérationnelle"
+        },
+        "ebitdaMarginTarget": {
+          "label": "Objectif de marge d’EBITDA (%)",
+          "help": "Référence pour la note de marge d’EBITDA"
+        },
+        "netMarginTarget": {
+          "label": "Objectif de marge nette (%)",
+          "help": "Référence de rentabilité nette"
+        },
+        "roaTarget": {
+          "label": "Objectif de rendement des actifs (%)",
+          "help": "Référence pour la note ROA (nécessite des données de bilan)"
+        },
+        "roeTarget": {
+          "label": "Objectif de rendement des capitaux propres (%)",
+          "help": "Référence pour la note ROE (nécessite des données de bilan)"
+        },
+        "roicTarget": {
+          "label": "Objectif de rendement du capital investi (%)",
+          "help": "Référence pour la note ROIC (nécessite des données de bilan)"
+        },
+        "revenuePerEmployee": {
+          "label": "Chiffre d’affaires par employé ({currency})",
+          "help": "Référence de productivité des effectifs"
+        },
+        "gpPerEmployee": {
+          "label": "Marge brute par employé ({currency})",
+          "help": "Référence de productivité des effectifs"
+        }
+      }
     }
   },
   "customer": {
@@ -2580,5 +2695,21 @@
       "4thWeek": "4ᵉ semaine",
       "distributed": "Réparti"
     }
+  },
+  "configEditor": {
+    "title": "Seuils",
+    "hint": "Par organisation — chaque onglet est recalculé à l’enregistrement",
+    "default": "par défaut {value}",
+    "notSet": "Non défini",
+    "on": "Activé",
+    "off": "Désactivé",
+    "save": "Enregistrer la configuration",
+    "reset": "Rétablir les valeurs par défaut",
+    "readOnly": "Lecture seule — leur modification nécessite l’autorisation Configuration sur l’ensemble de l’entreprise.",
+    "saved": "Enregistré — recalcul en cours…",
+    "conflict": "Cette configuration a changé après son ouverture — les dernières valeurs sont affichées ; réappliquez votre modification et enregistrez à nouveau.",
+    "forbidden": "L’enregistrement nécessite l’autorisation Configuration.",
+    "saveFailed": "Échec de l’enregistrement",
+    "loadFailed": "Les seuils n’ont pas pu être chargés."
   }
 }

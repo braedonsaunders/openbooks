@@ -334,6 +334,46 @@
       "noInterestExpense": "Sem despesas com juros",
       "unavailable": "Dados não disponíveis",
       "perEmployees": "{revenue} / {count, plural, one {# funcionário} other {# funcionários}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "Meta de margem bruta (%)",
+          "help": "Referência para a nota da margem bruta"
+        },
+        "operatingMarginTarget": {
+          "label": "Meta de margem operacional (%)",
+          "help": "Referência para a nota da margem operacional"
+        },
+        "ebitdaMarginTarget": {
+          "label": "Meta de margem EBITDA (%)",
+          "help": "Referência para a nota da margem EBITDA"
+        },
+        "netMarginTarget": {
+          "label": "Meta de margem líquida (%)",
+          "help": "Referência de rentabilidade final"
+        },
+        "roaTarget": {
+          "label": "Meta de retorno sobre ativos (%)",
+          "help": "Referência para a nota de ROA (requer dados do balanço)"
+        },
+        "roeTarget": {
+          "label": "Meta de retorno sobre o patrimônio (%)",
+          "help": "Referência para a nota de ROE (requer dados do balanço)"
+        },
+        "roicTarget": {
+          "label": "Meta de retorno sobre o capital investido (%)",
+          "help": "Referência para a nota de ROIC (requer dados do balanço)"
+        },
+        "revenuePerEmployee": {
+          "label": "Receita por funcionário ({currency})",
+          "help": "Referência de produtividade da equipe"
+        },
+        "gpPerEmployee": {
+          "label": "Lucro bruto por funcionário ({currency})",
+          "help": "Referência de produtividade da equipe"
+        }
+      }
     }
   },
   "customer": {
@@ -2580,5 +2620,21 @@
       "4thWeek": "4ª semana",
       "distributed": "Distribuído"
     }
+  },
+  "configEditor": {
+    "title": "Limites",
+    "hint": "Por organização — todas as abas são recalculadas ao salvar",
+    "default": "padrão {value}",
+    "notSet": "Não definido",
+    "on": "Ativado",
+    "off": "Desativado",
+    "save": "Salvar configuração",
+    "reset": "Restaurar padrões",
+    "readOnly": "Somente leitura — alterá-los exige a permissão de Configuração com escopo de toda a empresa.",
+    "saved": "Salvo — recalculando…",
+    "conflict": "Esta configuração mudou depois que você a abriu — os valores mais recentes são exibidos; reaplique sua alteração e salve novamente.",
+    "forbidden": "Salvar exige a permissão de Configuração.",
+    "saveFailed": "Falha ao salvar",
+    "loadFailed": "Não foi possível carregar os limites."
   }
 }

@@ -925,18 +925,7 @@ function ConfigTab({ data, canEdit }: { data: SentinelData; canEdit: boolean }) 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
-        <ConfigEditor
-          dashboard="sentinel"
-          canEdit={canEdit}
-          fields={[
-            { key: 'duplicateDays', label: t('config.fields.duplicateDays.label'), help: t('config.fields.duplicateDays.help'), min: 1, max: 90, step: 1 },
-            { key: 'duplicateMinAmount', label: t('config.fields.duplicateMinAmount.label'), help: t('config.fields.duplicateMinAmount.help'), min: 0, max: 100_000, step: 50 },
-            { key: 'sequentialMinCount', label: t('config.fields.sequentialMinCount.label'), help: t('config.fields.sequentialMinCount.help'), min: 2, max: 50, step: 1 },
-            { key: 'sequentialMinDays', label: t('config.fields.sequentialMinDays.label'), help: t('config.fields.sequentialMinDays.help'), min: 1, max: 365, step: 1 },
-          ]}
-          values={c}
-          defaults={{ duplicateDays: 14, duplicateMinAmount: 100, sequentialMinCount: 3, sequentialMinDays: 7 }}
-        />
+        <ConfigEditor dashboard="sentinel" canEdit={canEdit} />
         <Panel title={t('panels.detectorThresholds')} icon={SlidersHorizontal} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (

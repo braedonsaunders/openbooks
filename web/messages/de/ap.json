@@ -237,8 +237,8 @@
     "config": {
       "weeklyCapLabel": "Wöchentliches Kreditoren-Limit ({currency})",
       "weeklyCapHelp": "0 = unbegrenzt. Mit Limit werden Verbindlichkeiten pro Woche oldest-due-first bis zu diesem Betrag gewählt, der Rest wird verschoben.",
-      "restrictLabel": "Auf sichere Kapazität beschränken (0/1)",
-      "restrictHelp": "1 = nie mehr zur Zahlung vorschlagen, als in der Woche an Liquidität verfügbar ist (prognostizierte Zuflüsse − Abflüsse). Überlauf wird verschoben.",
+      "restrictLabel": "Auf sichere Kapazität beschränken",
+      "restrictHelp": "Wenn aktiviert: nie mehr zur Zahlung vorschlagen, als in der Woche an Liquidität verfügbar ist (prognostizierte Zuflüsse − Abflüsse). Überlauf wird verschoben.",
       "scheduleTitle": "Wie Rechnungen terminiert werden",
       "orderLabel": "Auswahlreihenfolge",
       "orderValue": "Älteste Fälligkeit zuerst",

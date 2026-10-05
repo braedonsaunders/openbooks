@@ -3,6 +3,7 @@ import { isUuid } from '@/lib/list-params'
 import { permissionSetCovers } from '@/lib/permissions'
 import { WIDGETS } from './_widget-registry'
 import { isAppWidgetId } from '@/lib/apps/surfaces'
+import { ANALYTICS_DASHBOARD_MAP, analyticsDashboardDenied } from '@/lib/analytics/dashboard-catalog'
 
 const GL = ['gl.read']
 const AP = ['ap.read', 'ap.approve']
@@ -69,6 +70,20 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'admin-attention': ['admin.setup.manage'],
   'workflow-errors': ['admin.setup.manage'],
   'admin-calendar': ['admin.setup.manage'],
+  // Widgets extracted from an Analytics dashboard list reports.read, the
+  // base grant every dashboard needs; canSeeWidget then applies the source
+  // dashboard's whole rule (its permission and subsidiary scope).
+  // ── Analytics: financial ratios and health (Financial Health) ──────────
+
+  // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
+
+  // ── Analytics: customers (Customer Intelligence) ───────────────────────
+
+  // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
+
+  // ── Analytics: projects (True Cost, Utilization) ───────────────────────
+
+  // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
 }
 
 function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly string[]): boolean {
@@ -113,8 +128,16 @@ function canSeeAdminWidget(authz: Authz, id: string): boolean {
     Boolean(domainPermissions?.some((permission) => hasAnyPermission(authz.permissions, [permission])))
 }
 
+/** An extract of an Analytics dashboard is visible exactly when the dashboard's grants are held. */
+function canSeeAnalyticsWidget(authz: Authz, source: string): boolean {
+  const dashboard = ANALYTICS_DASHBOARD_MAP[source]
+  return !!dashboard && analyticsDashboardDenied(authz, dashboard) === null
+}
+
 export function canSeeWidget(authz: Authz, id: string): boolean {
   if (ADMIN_PERSONA_WIDGETS.has(id)) return canSeeAdminWidget(authz, id)
+  const source = WIDGETS[id]?.analyticsSource
+  if (source && !canSeeAnalyticsWidget(authz, source)) return false
   const required = WIDGET_PERMISSIONS[id]
   // An empty entry is a reviewed public tile (see above), not a missing one.
   if (required) return required.length === 0 || hasAnyPermission(authz.permissions, required)

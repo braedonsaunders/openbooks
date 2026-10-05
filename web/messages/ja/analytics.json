@@ -334,6 +334,46 @@
       "noInterestExpense": "支払利息がありません",
       "unavailable": "データがありません",
       "perEmployees": "{revenue} / {count, plural, one {# 名} other {# 名}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "売上総利益率の目標（%）",
+          "help": "売上総利益率の評価基準"
+        },
+        "operatingMarginTarget": {
+          "label": "営業利益率の目標（%）",
+          "help": "営業利益率の評価基準"
+        },
+        "ebitdaMarginTarget": {
+          "label": "EBITDAマージンの目標（%）",
+          "help": "EBITDAマージンの評価基準"
+        },
+        "netMarginTarget": {
+          "label": "純利益率の目標（%）",
+          "help": "最終利益の収益性の基準"
+        },
+        "roaTarget": {
+          "label": "総資産利益率の目標（%）",
+          "help": "ROA評価の基準（貸借対照表データが必要）"
+        },
+        "roeTarget": {
+          "label": "自己資本利益率の目標（%）",
+          "help": "ROE評価の基準（貸借対照表データが必要）"
+        },
+        "roicTarget": {
+          "label": "投下資本利益率の目標（%）",
+          "help": "ROIC評価の基準（貸借対照表データが必要）"
+        },
+        "revenuePerEmployee": {
+          "label": "従業員1人当たり売上高（{currency}）",
+          "help": "従業員の生産性の基準"
+        },
+        "gpPerEmployee": {
+          "label": "従業員1人当たり売上総利益（{currency}）",
+          "help": "従業員の生産性の基準"
+        }
+      }
     }
   },
   "customer": {
@@ -2580,5 +2620,21 @@
       "4thWeek": "第4週",
       "distributed": "配分"
     }
+  },
+  "configEditor": {
+    "title": "しきい値",
+    "hint": "組織ごと — 保存するとすべてのタブが再計算されます",
+    "default": "既定値 {value}",
+    "notSet": "未設定",
+    "on": "オン",
+    "off": "オフ",
+    "save": "設定を保存",
+    "reset": "既定値に戻す",
+    "readOnly": "読み取り専用 — 変更するには会社全体を対象とするセットアップ権限が必要です。",
+    "saved": "保存しました — 再計算中…",
+    "conflict": "開いた後にこの設定が変更されました — 最新の値を表示しています。変更をもう一度適用して保存してください。",
+    "forbidden": "保存するにはセットアップ権限が必要です。",
+    "saveFailed": "保存に失敗しました",
+    "loadFailed": "しきい値を読み込めませんでした。"
   }
 }

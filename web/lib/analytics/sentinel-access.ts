@@ -1,5 +1,6 @@
 import "server-only";
-import { can, type Authz } from "../authz";
+import type { Authz } from "../authz";
+import { ANALYTICS_DASHBOARD_MAP, analyticsDashboardDenied } from "./dashboard-catalog";
 
 /**
  * Whole-company forensics gate — the single predicate every Sentinel
@@ -16,8 +17,7 @@ import { can, type Authz } from "../authz";
  * 403 JSON, thrown ForbiddenError, tool error).
  */
 export function sentinelAccessDenied(authz: Authz): string | null {
-  if (!can(authz, "reports.read")) return "reports.read";
-  if (!can(authz, "admin.audit.read")) return "admin.audit.read";
-  if (authz.allowedSubsidiaryIds !== null) return "unrestricted subsidiary access";
-  return null;
+  // The rule itself is the Sentinel catalog entry's: the hub, the preview
+  // API and the home-dashboard widgets read the same declaration.
+  return analyticsDashboardDenied(authz, ANALYTICS_DASHBOARD_MAP.sentinel!);
 }

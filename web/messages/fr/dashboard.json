@@ -91,7 +91,10 @@
     "ap": "Comptes fournisseurs",
     "ar": "Comptes clients",
     "personal": "Personnel",
-    "admin": "Administration"
+    "admin": "Administration",
+    "ratios": "Ratios financiers",
+    "cash": "Trésorerie",
+    "analytics": "Analytique"
   },
   "catalog": {
     "operatingExpenses": "Charges d’exploitation du mois à ce jour, hors coût des ventes, issues du compte de résultat.",
@@ -153,7 +156,8 @@
     "closePalette": "Fermer",
     "remove": "Retirer le widget",
     "cardMissing": "Carte indisponible",
-    "unknownWidget": "Widget inconnu : {id}"
+    "unknownWidget": "Widget inconnu : {id}",
+    "analyticsPreview": "Les chiffres en direct s’affichent ici dès que vous enregistrez la disposition."
   },
   "palette": {
     "title": "Widgets",

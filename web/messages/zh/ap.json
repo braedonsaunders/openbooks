@@ -236,8 +236,8 @@
     "config": {
       "weeklyCapLabel": "每周应付付款上限 ({currency})",
       "weeklyCapHelp": "0 = 无限制。设置上限后，每周按到期先后选择应付款项直至该金额，其余顺延。",
-      "restrictLabel": "限制在安全余量内 (0/1)",
-      "restrictHelp": "1 = 绝不建议支付超过当周可用现金的金额（预计流入 − 流出）。超出部分顺延。",
+      "restrictLabel": "限制在安全余量内",
+      "restrictHelp": "开启时，绝不建议支付超过当周可用现金的金额（预计流入 − 流出）。超出部分顺延。",
       "scheduleTitle": "账单排期方式",
       "orderLabel": "选择顺序",
       "orderValue": "到期最早优先",

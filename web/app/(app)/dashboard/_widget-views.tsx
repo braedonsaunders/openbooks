@@ -1,13 +1,11 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState } from 'react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
   Activity,
-  ArrowUpRight,
   AlertTriangle,
   BookOpen,
   CalendarCheck,
@@ -30,8 +28,27 @@ import {
   Users,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
-import { metricTilePack, packsEqual } from './_metric-tile-density'
+import { CardShell, EmptyRow, MetricTile, type WidgetCardProps } from './_widget-tiles'
 import type { DashboardMetrics } from './_metrics'
+import { WIDGETS } from './_widget-registry'
+import { FinancialWidgetCard } from './_widget-views-financial'
+import { CashWidgetCard } from './_widget-views-cash'
+import { CustomerWidgetCard } from './_widget-views-customers'
+import { VendorWidgetCard } from './_widget-views-vendors'
+import { ProjectWidgetCard } from './_widget-views-projects'
+import { RiskWidgetCard } from './_widget-views-risk'
+
+/** Widgets extracted from an Analytics dashboard render in that dashboard's widget module. */
+const ANALYTICS_WIDGET_CARDS: Record<string, (props: WidgetCardProps) => React.ReactNode> = {
+  'financial-health': FinancialWidgetCard,
+  cashflow: CashWidgetCard,
+  'customer-intelligence': CustomerWidgetCard,
+  'vendor-performance': VendorWidgetCard,
+  'spend-velocity': VendorWidgetCard,
+  'true-cost': ProjectWidgetCard,
+  utilization: ProjectWidgetCard,
+  sentinel: RiskWidgetCard,
+}
 
 export function WidgetCard({
   widgetId,
@@ -60,6 +77,10 @@ export function WidgetCard({
   // Runway weeks read whole past ten, one decimal below — the precise
   // figure lives behind the tile's link on the banking page.
   const displayWeeks = (weeks: number) => (weeks >= 10 ? Math.round(weeks) : Math.round(weeks * 10) / 10)
+
+  const source = WIDGETS[widgetId]?.analyticsSource
+  const AnalyticsWidget = source ? ANALYTICS_WIDGET_CARDS[source] : undefined
+  if (AnalyticsWidget) return <AnalyticsWidget widgetId={widgetId} data={data} />
 
   switch (widgetId) {
     case 'kpi-journal-lines':
@@ -263,36 +284,6 @@ export function WidgetCard({
   }
 }
 
-function CardShell({
-  title,
-  icon,
-  href,
-  children,
-}: {
-  title: string
-  icon?: React.ReactNode
-  href?: string
-  children: React.ReactNode
-}) {
-  const header = (
-    <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-      {icon ? (
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 ring-inset dark:bg-teal-950/50 dark:text-teal-300">
-          {icon}
-        </span>
-      ) : null}
-      <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-    </div>
-  )
-  return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      {href ? <Link href={href}>{header}</Link> : header}
-      {/* Let scrolling continue to the page when the card is empty or at its edge. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-    </div>
-  )
-}
-
 /**
  * HR-15 persona render helpers. Every tile links where its rows live — a
  * tile with no rows renders the honest empty card, never a zero as a fact.
@@ -403,129 +394,6 @@ function PersonaTaskList({
         ))}
       </ul>
     </CardShell>
-  )
-}
-
-type MetricTone = 'teal' | 'sky' | 'emerald' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
-const METRIC_TONES: Record<MetricTone, { icon: string; accent: string; wash: string; hover: string; dot: string }> = {
-  teal: { icon: 'bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300', accent: 'from-teal-500 to-cyan-400', wash: 'from-teal-500/[0.07]', hover: 'hover:border-teal-300/80 dark:hover:border-teal-700/70', dot: 'bg-teal-500' },
-  sky: { icon: 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/10 dark:text-sky-300', accent: 'from-sky-500 to-indigo-400', wash: 'from-sky-500/[0.07]', hover: 'hover:border-sky-300/80 dark:hover:border-sky-700/70', dot: 'bg-sky-500' },
-  emerald: { icon: 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300', accent: 'from-emerald-500 to-teal-400', wash: 'from-emerald-500/[0.07]', hover: 'hover:border-emerald-300/80 dark:hover:border-emerald-700/70', dot: 'bg-emerald-500' },
-  amber: { icon: 'bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300', accent: 'from-amber-500 to-yellow-400', wash: 'from-amber-500/[0.08]', hover: 'hover:border-amber-300/80 dark:hover:border-amber-700/70', dot: 'bg-amber-500' },
-  orange: { icon: 'bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300', accent: 'from-orange-500 to-amber-400', wash: 'from-orange-500/[0.08]', hover: 'hover:border-orange-300/80 dark:hover:border-orange-700/70', dot: 'bg-orange-500' },
-  rose: { icon: 'bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300', accent: 'from-rose-500 to-pink-400', wash: 'from-rose-500/[0.07]', hover: 'hover:border-rose-300/80 dark:hover:border-rose-700/70', dot: 'bg-rose-500' },
-  violet: { icon: 'bg-violet-500/10 text-violet-700 dark:bg-violet-400/10 dark:text-violet-300', accent: 'from-violet-500 to-fuchsia-400', wash: 'from-violet-500/[0.07]', hover: 'hover:border-violet-300/80 dark:hover:border-violet-700/70', dot: 'bg-violet-500' },
-  slate: { icon: 'bg-slate-500/10 text-slate-700 dark:bg-slate-400/10 dark:text-slate-300', accent: 'from-slate-500 to-slate-300', wash: 'from-slate-500/[0.06]', hover: 'hover:border-slate-300 dark:hover:border-slate-600', dot: 'bg-slate-400' },
-}
-
-function useMetricTilePack() {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [pack, setPack] = useState(() => metricTilePack(0, 0))
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const read = () => {
-      const next = metricTilePack(el.clientWidth, el.clientHeight)
-      setPack((prev) => (packsEqual(prev, next) ? prev : next))
-    }
-    read()
-    const ro = new ResizeObserver(read)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-  return { ref, pack }
-}
-
-/**
- * KPI card. The tone lives INSIDE the rounded shape: a soft corner wash
- * behind the number, a tinted icon, and a short gradient accent stroke under
- * the value. No edge rails — a rail drawn on an absolutely positioned strip
- * cannot follow a rounded corner and reads as a print artifact.
- */
-function MetricTile({
-  icon,
-  label,
-  value,
-  href,
-  hint,
-  tone,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  href?: string
-  hint?: string
-  tone: MetricTone
-}) {
-  const colors = METRIC_TONES[tone]
-  const { ref, pack } = useMetricTilePack()
-  const inner = (
-    <div
-      ref={ref}
-      className="relative flex h-full min-h-[7rem] flex-col overflow-hidden rounded-2xl"
-      style={{ padding: `${pack.padTop}px ${pack.padX}px ${pack.padBottom}px` }}
-    >
-      <span
-        aria-hidden
-        className={`pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent ${colors.wash}`}
-      />
-      <div className="relative flex items-center gap-2.5">
-        <span
-          className={`inline-flex shrink-0 items-center justify-center rounded-xl ${colors.icon}`}
-          style={{ width: pack.icon, height: pack.icon }}
-        >
-          {icon}
-        </span>
-        <span className="min-w-0 truncate text-[12.5px] font-medium tracking-tight text-slate-600 dark:text-slate-300">
-          {label}
-        </span>
-        {href ? (
-          <span className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-300 opacity-0 transition-all duration-200 group-hover:opacity-100 dark:text-slate-600">
-            <ArrowUpRight size={14} />
-          </span>
-        ) : null}
-      </div>
-      <div className="min-h-0 flex-1" aria-hidden />
-      <div className="relative min-w-0">
-        <div
-          className="truncate leading-none font-semibold tracking-tight text-slate-950 tabular-nums dark:text-white"
-          style={{ fontSize: pack.figure }}
-        >
-          {value}
-        </div>
-        <div className="flex items-center gap-2" style={{ marginTop: pack.hintGap }}>
-          {pack.narrow ? null : (
-            <span aria-hidden className={`h-[3px] w-8 shrink-0 rounded-full bg-gradient-to-r ${colors.accent}`} />
-          )}
-          {hint ? (
-            <span
-              className={`min-w-0 text-[11px] font-medium text-slate-400 dark:text-slate-500 ${
-                pack.hintLines > 1 ? 'line-clamp-2 leading-snug' : 'truncate leading-none'
-              }`}
-            >
-              {hint}
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
-  const shell = `group block h-full rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 dark:border-slate-800 dark:bg-slate-900`
-  if (href) {
-    return (
-      <Link href={href} className={`${shell} hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] ${colors.hover}`}>
-        {inner}
-      </Link>
-    )
-  }
-  return <div className={shell}>{inner}</div>
-}
-
-function EmptyRow() {
-  return (
-    <div className="flex h-full items-center justify-center py-6 text-sm text-slate-400 dark:text-slate-500">
-      —
-    </div>
   )
 }
 
@@ -829,6 +697,23 @@ function InProgressList({
           </li>
         ))}
       </ul>
+    </CardShell>
+  )
+}
+
+/**
+ * The editor's stand-in for an analytics widget not yet on the layout: its
+ * name and a plain statement of when the figures appear. Its dashboard's
+ * loaders run once the layout is saved.
+ */
+export function AnalyticsWidgetPreview({ widgetId }: { widgetId: string }) {
+  const t = useTranslations('dashboard')
+  const meta = WIDGETS[widgetId]
+  return (
+    <CardShell title={meta ? t(meta.labelKey) : widgetId}>
+      <div className="flex h-full items-center justify-center px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+        {t('grid.analyticsPreview')}
+      </div>
     </CardShell>
   )
 }

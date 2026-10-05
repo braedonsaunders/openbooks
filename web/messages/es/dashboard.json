@@ -91,7 +91,10 @@
     "ap": "Cuentas por pagar",
     "ar": "Cuentas por cobrar",
     "personal": "Personal",
-    "admin": "Administración"
+    "admin": "Administración",
+    "ratios": "Ratios financieros",
+    "cash": "Tesorería",
+    "analytics": "Analítica"
   },
   "catalog": {
     "operatingExpenses": "Gastos operativos del mes hasta hoy, sin el costo de ventas, del estado de resultados.",
@@ -153,7 +156,8 @@
     "closePalette": "Cerrar",
     "remove": "Quitar widget",
     "cardMissing": "Tarjeta no disponible",
-    "unknownWidget": "Widget desconocido: {id}"
+    "unknownWidget": "Widget desconocido: {id}",
+    "analyticsPreview": "Las cifras en vivo aparecen aquí cuando guarde el diseño."
   },
   "palette": {
     "title": "Widgets",

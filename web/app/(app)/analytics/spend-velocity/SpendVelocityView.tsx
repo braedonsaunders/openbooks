@@ -715,21 +715,7 @@ function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolea
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
-        <ConfigEditor
-          dashboard="spendVelocity"
-          canEdit={canEdit}
-          fields={[
-            { key: 'velocityHighThreshold', label: t('config.fields.highVelocity.label'), help: t('config.fields.highVelocity.help'), min: 1, max: 100, step: 1 },
-            { key: 'velocityMediumThreshold', label: t('config.fields.mediumVelocity.label'), help: t('config.fields.mediumVelocity.help'), min: 0, max: 50, step: 1 },
-            { key: 'anomalyStdDevThreshold', label: t('config.fields.anomalySigma.label'), help: t('config.fields.anomalySigma.help'), min: 1, max: 6, step: 0.1 },
-            { key: 'boilingFrogMonths', label: t('config.fields.boilingFrogMonths.label'), help: t('config.fields.boilingFrogMonths.help'), min: 3, max: 24, step: 1 },
-            { key: 'zombieMinMonths', label: t('config.fields.zombieMonths.label'), help: t('config.fields.zombieMonths.help'), min: 3, max: 24, step: 1 },
-            { key: 'fragmentationMinTxns', label: t('config.fields.fragmentationTxns.label'), help: t('config.fields.fragmentationTxns.help'), min: 5, max: 500, step: 5 },
-            { key: 'fragmentationMaxAvgSize', label: t('config.fields.fragmentationAvgSize.label'), help: t('config.fields.fragmentationAvgSize.help'), min: 50, max: 10_000, step: 50 },
-          ]}
-          values={c as unknown as Record<string, number>}
-          defaults={{ velocityHighThreshold: 15, velocityMediumThreshold: 5, anomalyStdDevThreshold: 2.5, boilingFrogMonths: 6, zombieMinMonths: 6, fragmentationMinTxns: 20, fragmentationMaxAvgSize: 500 }}
-        />
+        <ConfigEditor dashboard="spendVelocity" canEdit={canEdit} />
         <Panel title={t('panels.modelThresholds')} icon={SlidersHorizontal} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
