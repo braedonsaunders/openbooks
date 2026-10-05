@@ -217,6 +217,8 @@ function setupImportRefusal(entity: SetupEntity): string {
       return 'dunning-policies cannot be imported row by row; maintain collection policies in Collections (Policies view), which validates the complete record.'
     case 'quote-to-cash-policy':
       return 'quote-to-cash-policy cannot be imported; edit the quote-to-cash policy in Setup, which validates the complete record.'
+    case 'bom-components':
+      return 'bom-components cannot be imported row by row; edit the bill of materials on the assembly in Inventory, which replaces the complete recipe with its version, reason and audit.'
     case 'customer-portal':
       return 'customer-portal cannot be imported; edit the customer portal settings in Setup, which validates the complete record.'
     default:
