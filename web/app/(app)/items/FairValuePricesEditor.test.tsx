@@ -63,7 +63,7 @@ test('editing replaces the price list until cancel or an exact save refreshes th
   assert.ok(document.querySelector('table') === null, 'other price rows cannot replace an open draft')
   assert.equal((document.querySelectorAll('input')[1] as HTMLInputElement).value, price.unit_price)
   await act(async () => button('actions.cancel').click())
-  assert.deepEqual(writes, [])
+  assert.equal(writes.length, 0)
   assert.ok(document.querySelector('table'))
   await act(async () => button('actions.edit').click())
   const amount = document.querySelectorAll('input')[1] as HTMLInputElement
