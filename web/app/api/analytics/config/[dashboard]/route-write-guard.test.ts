@@ -131,6 +131,8 @@ const VALID = {
   duplicateMinAmount: "100.0000",
   sequentialMinCount: 3,
   sequentialMinDays: 7,
+  summaryFlaggedMedium: 20,
+  summaryFlaggedHigh: 50,
   moderateRiskAmount: "1000.0000",
   highRiskAmount: "10000.0000",
   criticalRiskAmount: "25000.0000",
