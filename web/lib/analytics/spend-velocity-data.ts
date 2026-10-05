@@ -5,7 +5,8 @@ import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import type { FiscalPeriod } from "@openbooks/reports";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { analyticsConfig, ANALYTICS_CONFIG, type ConfigValuesOf } from "./config";
 import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalPeriodsPerYear, priorYearWindow } from "./fiscal-buckets";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
@@ -500,7 +501,7 @@ export async function spendVelocityData(
     // array_agg unions so multi-line documents still count once. Buckets are
     // the org's fiscal periods when it runs a non-monthly calendar, else
     // calendar months; the calendar month number rides along for seasonality.
-    db.execute<AccountSpendRow>(sql`
+    analyticsQuery<AccountSpendRow>(sql`
       select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
         ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
         ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
@@ -517,7 +518,7 @@ export async function spendVelocityData(
       group by 1, 2, 3, 4, 5, 6, 7, sub.base_currency
     `),
     // 2. Monthly vendor/party spend (drill-down).
-    db.execute<VendorSpendRow>(sql`
+    analyticsQuery<VendorSpendRow>(sql`
       select d.party_id as vendor_id, coalesce(p.display_name, 'Unknown') as vendor_name,
         ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
         ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
@@ -544,17 +545,17 @@ export async function spendVelocityData(
     `),
     // 3. Prior-YEAR buckets for YoY, keyed by the full bucket identity so a
     // window longer than twelve months can never collide two Januarys.
-    db.execute<PriorYearRow>(sql`
+    (analyticsSection('spend-velocity', ['overview','trends']) ? analyticsQuery<PriorYearRow>(sql`
       select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket, sum(l.amount) as total_amount,
         array_agg(distinct d.id) as doc_ids, sub.base_currency as func,
         max(l.posting_date)::text as late
       ${spendBaseWithSubs(pyFrom, pyTo)}
       group by 1, sub.base_currency
-    `),
+    `) : Promise.resolve({ rows: [] as PriorYearRow[] })),
     // 4. PO vs SO monthly (commitment cliff). Unposted document totals are
     // transaction currency: translate txn→presentation directly at each
     // bucket's latest document date (same basis as the open-PO tile).
-    db.execute<CommitmentRow>(sql`
+    (analyticsSection('spend-velocity', ["overview","velocity","detectors","accounts","trends","config"]) ? analyticsQuery<CommitmentRow>(sql`
       select kind, ${fiscalBucketKey(sql`document_date`, buckets.useFiscal)} as bucket, sum(total) as amount,
         currency as func, max(document_date)::text as late
       from documents
@@ -563,7 +564,7 @@ export async function spendVelocityData(
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
         and document_date >= ${from} and document_date <= ${to}
       group by 1, 2, 4
-    `),
+    `) : Promise.resolve({ rows: [] as CommitmentRow[] })),
     // 5. P&L operating expenses + revenue for the OpEx ratio — the shared
     // operating-expenses reader, so this page reports the same "Operating
     // expenses … of revenue" figure as Financial Health. The
@@ -573,7 +574,7 @@ export async function spendVelocityData(
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
     // 7. Top spenders use the same primary-book base-currency actuals as
     // the expense summary; draft headers and transaction totals are not GL spend.
-    db.execute<SpenderRow>(sql`
+    (analyticsSection('spend-velocity', []) ? analyticsQuery<SpenderRow>(sql`
       select d.party_id as employee_id,
         coalesce((select p.display_name from parties p where p.id = d.party_id and p.org_id = d.org_id), 'Unknown') as employee_name,
         sub.base_currency as func,
@@ -586,9 +587,9 @@ export async function spendVelocityData(
       ${spendBaseWithSubs(priorFrom, to)}
         and d.kind = 'expense_report'
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({ rows: [] as SpenderRow[] })),
     // 8. Expense categories (accounts on expense reports + bills), current vs prior.
-    db.execute<ExpenseCategoryRow>(sql`
+    (analyticsSection('spend-velocity', []) ? analyticsQuery<ExpenseCategoryRow>(sql`
       select l.account_id as category_id, a.name as category_name,
         sub.base_currency as func,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
@@ -608,9 +609,9 @@ export async function spendVelocityData(
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({ rows: [] as ExpenseCategoryRow[] })),
     // 9. Period comparison: current vs prior vs two-back per account.
-    db.execute<ComparisonRow>(sql`
+    (analyticsSection('spend-velocity', ["accounts"]) ? analyticsQuery<ComparisonRow>(sql`
       select l.account_id, a.name as account_name, sub.base_currency as func,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date >= ${priorFrom} and e.posting_date < ${from}) as prior_amount,
@@ -620,7 +621,7 @@ export async function spendVelocityData(
         max(e.posting_date) filter (where e.posting_date >= ${twoBackFrom} and e.posting_date < ${priorFrom})::text as late_two
       ${spendBaseWithSubs(twoBackFrom, to)}
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({ rows: [] as ComparisonRow[] })),
   ]);
 
   // ---- presentation translation ---------------------------------------------
