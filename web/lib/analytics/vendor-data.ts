@@ -371,7 +371,11 @@ export async function vendorData(
     .filter((r) => cmp(r.spend, zero) > 0 || cmp(r.priorSpend, zero) > 0)
     .sort((a, b) => cmp(b.spend, a.spend));
 
-  const totalSpend = [...spendByParty.values()].reduce((a, s) => add(a, s.spend), zero);
+  // Shares must add up over the vendors actually shown: vendors filtered
+  // out of the rows above (net spend at or below zero) contribute nothing
+  // here, or HHI and top-N shares would sum past one against a total that
+  // still carries vendors nobody sees.
+  const totalSpend = base.reduce((a, r) => add(a, r.spend), zero);
   const spendPositive = cmp(totalSpend, zero) > 0;
   const sortedSpends = base.map((r) => r.spend).sort(cmp);
   // High-spend threshold at the configured percentile of the vendor spend
@@ -444,7 +448,9 @@ export async function vendorData(
   const onTimeTotal = rows.reduce((a, r) => a + ((r.paidBills - r.undatedBills) * (r.onTimePct ?? 0)), 0);
   const daysWeighted = rows.reduce((a, r) => a + (r.avgDaysToPay !== null ? r.avgDaysToPay * r.paidBills : 0), 0);
   const lateSpend = rows.reduce((a, r) => add(a, r.lateSpend), zero);
-  const undatedBills = [...paidByParty.values()].reduce((a, p) => a + p.undated, 0);
+  // Undated bills count only vendors actually shown: summing the payment
+  // map would include vendors filtered out of the rows above.
+  const undatedBills = rows.reduce((a, r) => a + r.undatedBills, 0);
 
   const tiers: SpendTier[] = ["strategic", "core", "tactical", "tail"];
   const grades: Grade[] = ["A", "B", "C", "D", "F"];

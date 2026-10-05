@@ -133,6 +133,7 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     const termsVendor = randomUUID();
     const bareVendor = randomUUID();
     const quietVendor = randomUUID();
+    const refundVendor = randomUUID();
     const seedBill = async (
       docNum: string, party: string, billDate: string, payDate: string, docDue: string | null,
     ): Promise<void> => {
@@ -176,7 +177,8 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
         insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${termsVendor}, ${org.orgId}, 'vendor', 'Terms Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
                (${bareVendor}, ${org.orgId}, 'vendor', 'Bare Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
-               (${quietVendor}, ${org.orgId}, 'vendor', 'Quiet Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+               (${quietVendor}, ${org.orgId}, 'vendor', 'Quiet Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
+               (${refundVendor}, ${org.orgId}, 'vendor', 'Refund Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`
         insert into payment_terms (id, org_id, name, net_days) values (${termsId}, ${org.orgId}, 'Net 30', 30)`);
       await db.execute(sql`
@@ -188,6 +190,9 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       await db.execute(sql`
         insert into vendor_roles (id, org_id, party_id)
         values (${randomUUID()}, ${org.orgId}, ${quietVendor})`);
+      await db.execute(sql`
+        insert into vendor_roles (id, org_id, party_id)
+        values (${randomUUID()}, ${org.orgId}, ${refundVendor})`);
       // Terms Vendor: no document due date, Net 30 from July 1 → due July 31, paid July 15: on time.
       await seedBill("BILL-TERMS", termsVendor, "2026-07-01", "2026-07-15", null);
       // Bare Vendor: no document due date and no payment terms → excluded from on-time, counted.
@@ -204,6 +209,20 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
                (${randomUUID()}, ${org.orgId}, ${spendEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${quietVendor}, false, '-250', 'CAD', '-250', 1)`);
       await db.execute(sql`
         update journal_entries set status = 'posted', posted_at = now() where id = ${spendEntry}`);
+      // Refund Vendor: a settled but undated bill (+100 spend) outweighed by
+      // a credit (-250) → net spend below zero, so the vendor is filtered out
+      // of the rows while its undated bill still sits in the payment map.
+      await seedBill("BILL-REFUND", refundVendor, "2026-07-03", "2026-07-17", null);
+      const creditEntry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${creditEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'CREDIT-REFUND', '2026-07-11', ${org.periodId}, 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${randomUUID()}, ${org.orgId}, ${creditEntry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${refundVendor}, false, '-250', 'CAD', '-250', 1),
+               (${randomUUID()}, ${org.orgId}, ${creditEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${refundVendor}, false, '250', 'CAD', '250', 1)`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now() where id = ${creditEntry}`);
     });
     const data = await withOrgContext(org.orgId, () => vendorData(
       { from: "2026-07-01", to: "2026-07-31", label: "July 2026" },
@@ -229,7 +248,17 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     assert.equal(quietRow.paidBills, 0);
     assert.equal(quietRow.quadrant, "unrated");
     assert.equal(quietRow.unratedReason, "no-payments", "no settled bills names the settling remedy, not dating");
-    assert.equal(data.totals.undatedBills, 1);
+    assert.equal(
+      data.rows.find((candidate) => candidate.id === refundVendor),
+      undefined,
+      "a vendor with net spend at or below zero is filtered out of the rows",
+    );
+    const shareSum = data.rows.reduce((sum, row) => sum + row.sharePct, 0);
+    assert.ok(
+      Math.abs(shareSum - 1) < 1e-9,
+      `spend shares must add up over the vendors shown, got ${shareSum}`,
+    );
+    assert.equal(data.totals.undatedBills, 1, "undated bills count only vendors actually shown");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
