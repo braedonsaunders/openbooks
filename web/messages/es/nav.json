@@ -50,6 +50,7 @@
     "automations": "Automatizaciones",
     "cash-sales": "Ventas en efectivo",
     "collections": "Cobros",
+    "stored-value": "Tarjetas regalo y crédito",
     "compliance": "Resumen",
     "compliance-vendors": "Subcontratistas",
     "continuous-close": "Agentes",
@@ -153,7 +154,8 @@
   "modulesShort": {
     "ap": "Por pagar",
     "ar": "Por cobrar",
-    "provisions": "Provisiones y contingencias"
+    "provisions": "Provisiones y contingencias",
+    "stored-value": "Tarjetas regalo y crédito"
   },
   "groups": {
     "workforce": "Plantilla",

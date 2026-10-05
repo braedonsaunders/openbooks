@@ -50,6 +50,7 @@
     "automations": "自动化",
     "cash-sales": "现金销售",
     "collections": "应收催收",
+    "stored-value": "储值",
     "compliance": "概览",
     "compliance-vendors": "分包商",
     "continuous-close": "结账监控",
@@ -207,7 +208,8 @@
   "modulesShort": {
     "ap": "应付账款",
     "ar": "应收账款",
-    "provisions": "预计负债及或有事项"
+    "provisions": "预计负债及或有事项",
+    "stored-value": "储值"
   },
   "localWorkspaces": {
     "hrm-people": "员工",

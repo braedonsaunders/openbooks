@@ -50,6 +50,7 @@
     "automations": "Automatisations",
     "cash-sales": "Ventes au comptant",
     "collections": "Recouvrement",
+    "stored-value": "Cartes cadeaux et avoirs",
     "compliance": "Vue d'ensemble",
     "compliance-vendors": "Sous-traitants",
     "continuous-close": "Agents",
@@ -153,7 +154,8 @@
   "modulesShort": {
     "ap": "Fournisseurs",
     "ar": "Créances",
-    "provisions": "Provisions et éventualités"
+    "provisions": "Provisions et éventualités",
+    "stored-value": "Cartes cadeaux et avoirs"
   },
   "groups": {
     "workforce": "Effectifs",

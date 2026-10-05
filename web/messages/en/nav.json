@@ -50,6 +50,7 @@
     "automations": "Automations",
     "cash-sales": "Cash Sales",
     "collections": "Collections",
+    "stored-value": "Stored value",
     "compliance": "Overview",
     "compliance-vendors": "Subcontractors",
     "continuous-close": "Agents",
@@ -153,7 +154,8 @@
   "modulesShort": {
     "ap": "Payables",
     "ar": "Receivables",
-    "provisions": "Provisions and contingencies"
+    "provisions": "Provisions and contingencies",
+    "stored-value": "Stored value"
   },
   "groups": {
     "workforce": "Workforce",
