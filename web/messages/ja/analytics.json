@@ -835,8 +835,8 @@
         "forecastSeasonality": {
           "auto": "自動検出",
           "none": "なし",
-          "monthly": "月次",
-          "quarterly": "四半期"
+          "monthly": "年周期",
+          "quarterly": "四半期周期"
         },
         "forecastAdjustment": {
           "neg10": "不況（−10％）",

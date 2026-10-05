@@ -835,8 +835,8 @@
         "forecastSeasonality": {
           "auto": "Auto-detect",
           "none": "None",
-          "monthly": "Monthly",
-          "quarterly": "Quarterly"
+          "monthly": "Annual cycle",
+          "quarterly": "Quarterly cycle"
         },
         "forecastAdjustment": {
           "neg10": "Recession (−10%)",
