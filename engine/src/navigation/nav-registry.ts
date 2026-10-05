@@ -525,6 +525,16 @@ export const NAV_MODULES: NavModule[] = [
     featureKey: 'banking',
   },
   {
+    key: 'banking-payouts',
+    href: '/banking/payouts',
+    label: 'Payouts',
+    iconKey: 'receipt',
+    group: 'banking',
+    subgroup: 'processing',
+    requiredPermission: 'banking.read',
+    featureKey: 'banking',
+  },
+  {
     key: 'banking-match',
     href: '/banking/match',
     label: 'Match',

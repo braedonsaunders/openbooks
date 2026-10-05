@@ -80,6 +80,11 @@ export {
   pushItemToShopify,
   similarCatalogEntries,
 } from "./shopify/catalog.ts";
+export {
+  matchPayoutLines,
+  type PayoutLineMatch,
+  type PayoutMatchResult,
+} from "./payout-reconciliation.ts";
 export { SHOPIFY_WEBHOOK_TOPICS } from "./shopify/subscriptions.ts";
 export { loadShopifyChannel, type ShopifyChannelAccess } from "./shopify/channel-access.ts";
 export { importShopifyLocations } from "./shopify/locations.ts";
