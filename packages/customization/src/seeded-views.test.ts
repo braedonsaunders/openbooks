@@ -7,6 +7,7 @@ import {
   markSeededDefaultView,
   stripSeededDefaultMark,
   defaultListView,
+  columnVisibleByDefault,
 } from './index.ts'
 import { RECORD_TYPES, getRecordType } from './registry.ts'
 
@@ -151,3 +152,12 @@ test('the direction of every registry-declared defaultSort is honoured', () => {
     )
   }
 })
+
+test("a legal-entity column is hidden by default only while Multi-subsidiary is off", () => {
+  const employer = { key: "employer", labelKey: "x", kind: "text" as const, legalEntity: true };
+  assert.equal(columnVisibleByDefault(employer, { multiSubsidiary: false }), false);
+  assert.equal(columnVisibleByDefault(employer, { multiSubsidiary: true }), true);
+  assert.equal(columnVisibleByDefault(employer), true, "an unknown state keeps the static default");
+  const seeded = { filters: [], columns: [{ key: "employer", visible: true, width: null, labelOverride: null }] };
+  assert.equal(configMatchesSeedShape(seeded, { listColumns: [employer] }), true, "a seeded snapshot that showed the column is still untouched");
+});

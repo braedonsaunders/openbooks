@@ -229,8 +229,26 @@ export interface ListColumnMeta {
   locked?: boolean
   /** Hidden in the seeded default view (still available to add in the designer). */
   defaultHidden?: boolean
+  /**
+   * The column shows the record's legal entity. An organization that runs a
+   * single entity has nothing to read in it, so the default view hides it
+   * while Multi-subsidiary is off; it stays available in the view designer.
+   */
+  legalEntity?: boolean
   /** Default column width (px) when the view doesn't specify one. */
   defaultWidth?: number
+}
+
+/** Organization facts a default list view depends on. */
+export interface ListViewContext {
+  /** Whether Multi-subsidiary is on; unknown keeps every column's static default. */
+  multiSubsidiary?: boolean
+}
+
+/** Whether a column is visible in the default view for this organization. */
+export function columnVisibleByDefault(column: Pick<ListColumnMeta, 'defaultHidden' | 'legalEntity'>, context: ListViewContext = {}): boolean {
+  if (column.defaultHidden) return false
+  return !(column.legalEntity && context.multiSubsidiary === false)
 }
 
 export type ListFilterKind =

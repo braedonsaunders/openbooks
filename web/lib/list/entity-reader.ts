@@ -16,7 +16,7 @@ import {
 } from "@openbooks/customization";
 import { can, resolveAuthzByUserId, type Authz } from "../authz-core";
 import { loadFieldDefs } from "../custom-fields.ts";
-import { isFeatureEnabled } from "../features.ts";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../features.ts";
 import { clamp } from "../list-params.ts";
 import { columnDescriptors } from "../customization/list-query.ts";
 import {
@@ -207,7 +207,7 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
   };
   let view: ListViewConfig;
   try {
-    const defaults = defaultListView(query.recordType);
+    const defaults = defaultListView(query.recordType, { multiSubsidiary: await subsidiaryFeatureEnabled(query.orgId) });
     view = { ...defaults, filters: [...defaults.filters, ...(query.filters ?? [])] };
   } catch {
     return refuse(

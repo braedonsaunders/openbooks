@@ -12,10 +12,13 @@ import {
   type FormLayoutConfig,
   type LineColumnPlacement,
   type ListViewConfig,
+  type ListViewContext,
   type RecordTypeKey,
+  columnVisibleByDefault,
   isCustomFieldKey,
   customFieldDefKey,
 } from "@openbooks/customization";
+import { subsidiaryFeatureEnabled } from "../features";
 import type { CustomFieldDef } from "../custom-fields";
 import { essentialsWorkspace } from "../workspace-presentation";
 import { essentialsFormLayout } from "./essentials-form";
@@ -265,6 +268,7 @@ export const resolveFormLayout = cache(
 function mergeCustomFieldsIntoView(
   view: ListViewConfig,
   showInListDefs: CustomFieldDef[],
+  context: ListViewContext,
 ): ListViewConfig {
   const placed = new Set(view.columns.map((c) => c.key));
   const meta = getRecordType(view.recordType);
@@ -272,7 +276,7 @@ function mergeCustomFieldsIntoView(
     if (!placed.has(column.key)) {
       view.columns.push({
         key: column.key,
-        visible: !column.defaultHidden,
+        visible: columnVisibleByDefault(column, context),
         width: column.defaultWidth ?? null,
         labelOverride: null,
       });
@@ -309,6 +313,7 @@ export const resolveListView = cache(
     showInListDefs: CustomFieldDef[];
   }): Promise<ResolvedListView> => {
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
+    const context: ListViewContext = { multiSubsidiary: await subsidiaryFeatureEnabled(orgId) };
 
     const rows = (await db.execute<(ListViewRow & { config: unknown })>(sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",
@@ -369,7 +374,7 @@ export const resolveListView = cache(
 
     if (!chosen) {
       return {
-        view: mergeCustomFieldsIntoView(defaultListView(recordType), showInListDefs),
+        view: mergeCustomFieldsIntoView(defaultListView(recordType, context), showInListDefs, context),
         source: "system",
         row: null,
         available,
@@ -391,8 +396,9 @@ export const resolveListView = cache(
     ) {
       return {
         view: mergeCustomFieldsIntoView(
-          stripSeededDefaultMark(defaultListView(recordType)),
+          stripSeededDefaultMark(defaultListView(recordType, context)),
           showInListDefs,
+          context,
         ),
         source,
         row: { ...chosen, config: undefined } as unknown as ListViewRow,
@@ -401,10 +407,10 @@ export const resolveListView = cache(
     }
 
     const config = stripSeededDefaultMark(
-      (chosen.config ?? defaultListView(recordType)) as ListViewConfig,
+      (chosen.config ?? defaultListView(recordType, context)) as ListViewConfig,
     );
     return {
-      view: mergeCustomFieldsIntoView(config, showInListDefs),
+      view: mergeCustomFieldsIntoView(config, showInListDefs, context),
       source,
       row: { ...chosen, config: undefined } as unknown as ListViewRow,
       available,
