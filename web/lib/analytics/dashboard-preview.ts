@@ -21,9 +21,9 @@ export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDef
       chart = trend(t('financialHealth.kpi.revenue'), data.monthly.map((month) => toChartNumber(month.revenue)), data.monthly.map((month) => month.label))
       const margin = data.ratios.profitability.find((ratio) => ratio.id === 'gross_margin')
       // Ratio values are already computed by the owning dashboard. Intl percent
-      // formatting changes presentation only; it does not recompute the ratio.
-      const grossMargin = margin?.value == null ? '—' : new Intl.NumberFormat(fmt.locale, { style: 'percent', maximumFractionDigits: 1 }).format(margin.value)
-      return result(periodLabel, [metric('financialHealth.kpi.revenue', fmt.money(data.figures.revenue)), metric('financialHealth.kpi.grossMargin', grossMargin), metric('financialHealth.kpi.operatingIncome', fmt.money(data.figures.operatingIncome)), metric('financialHealth.score.title', `${number(data.overallScore)}/100`)])
+      // formatting of the exact decimal string changes presentation only.
+      const grossMargin = margin?.value == null ? '—' : new Intl.NumberFormat(fmt.locale, { style: 'percent', maximumFractionDigits: 1 }).format(margin.value as unknown as number)
+      return result(periodLabel, [metric('financialHealth.kpi.revenue', fmt.money(data.figures.revenue)), metric('financialHealth.kpi.grossMargin', grossMargin), metric('financialHealth.kpi.operatingIncome', fmt.money(data.figures.operatingIncome)), metric('financialHealth.score.title', data.overallScore === null ? '—' : `${number(data.overallScore)}/100`)])
     }
     case 'cashflow': {
       const { data, periodLabel, horizon } = await (await import('../../app/(app)/analytics/cashflow/view')).loadCashflow(sp)

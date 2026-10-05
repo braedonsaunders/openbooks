@@ -3,6 +3,7 @@
 'use client'
 
 import { useCallback } from 'react'
+import { useLocale } from 'next-intl'
 import { useMoney } from '@/components/money-provider'
 import { formatMoney as formatExactMoney, mulDecimal, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
@@ -69,6 +70,31 @@ export function fmtNum(n: number, suffix = 'x'): string {
 }
 
 export type ValueFormat = 'pct' | 'money' | 'num' | 'raw'
+
+/**
+ * Locale-aware display of an exact ratio value (a decimal string from the
+ * Financial Health engine): fractions as percentages, multiples with a ×,
+ * points as plain numbers, money in the organization's currency. Intl
+ * formats the decimal string itself, so no Number hop decides the digits.
+ */
+export function useRatioFormat(): (value: string | null, format: 'pct' | 'times' | 'points' | 'money', compact?: boolean) => string | null {
+  const fmtMoney = useAnalyticsMoney()
+  const locale = useLocale()
+  return useCallback((value, format, compact = true) => {
+    if (value === null) return null
+    const exact = value as unknown as number
+    switch (format) {
+      case 'pct':
+        return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(exact)
+      case 'times':
+        return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(exact)}×`
+      case 'points':
+        return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(exact)
+      case 'money':
+        return fmtMoney(value, { compact })
+    }
+  }, [fmtMoney, locale])
+}
 
 export function useAnalyticsValue(): (value: number | null, format: ValueFormat, compact?: boolean) => string {
   const fmtMoney = useAnalyticsMoney()
