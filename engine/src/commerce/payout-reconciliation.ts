@@ -113,23 +113,6 @@ async function postedDocument(
 }
 
 /**
- * A native document's status and subsidiary with no scope or entity filter.
- * Used only to choose between two remedies — never returned, named, or
- * counted — so a hidden posted receipt reads unavailable instead of
- * misdirecting the operator to post something already posted.
- */
-async function rawSettlementDocument(
-  orgId: string,
-  documentId: string,
-): Promise<{ status: string; subsidiaryId: string | null } | null> {
-  const row = (await db.execute<{ status: string; subsidiaryId: string | null }>(sql`
-    select status, subsidiary_id as "subsidiaryId" from documents
-     where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
-  return row ?? null;
-}
-
-/**
  * Document ids the provider references claim directly through
  * `external_links`, distinct. Shared by the automatic matcher and the
  * assistance queue: both read the same identity, the matcher deciding
@@ -339,11 +322,18 @@ async function resolveLineDocument(
   if (provider === "shopify_payments" && typeof meta.sourceOrderId === "string" && meta.sourceOrderId.trim() !== "") {
     const orders = await findLineSourceOrders(orgId, meta.sourceOrderId, allowedSubsidiaryIds, batchSubsidiaryId);
     if (orders.length === 0) {
-      // Unknown and ineligible read differently: a reference no visible
-      // storefront order claims waits for ingestion, while a visible order
-      // the caller may not use in this payout's entity never asks for
-      // re-ingest. Orders outside the caller's scope read as missing here,
-      // exactly as they do in the order lookup above.
+      // Restricted scopes never distinguish: hidden rows answer exactly
+      // like missing ones, so zero eligible orders always read unavailable
+      // without running any existence read. Only an explicitly
+      // unrestricted caller — who hides nothing — keeps the unknown
+      // reference's ingest remedy.
+      if (allowedSubsidiaryIds !== null) {
+        return {
+          status: "unmatched",
+          reason: "order_unavailable",
+          remedy: "No eligible order in this payout's legal entity claims this reference; ask an authorized operator to review access to the order, or link the visible receipt manually.",
+        };
+      }
       if (await sourceOrderClaimedInScope(orgId, meta.sourceOrderId, allowedSubsidiaryIds)) {
         return {
           status: "unmatched",
@@ -438,21 +428,12 @@ async function resolveLineDocument(
           remedy: `The channel order's document ${doc.documentNumber ?? doc.id} is ${doc.status}; post the order, then match the payout again.`,
         };
       }
-      // Null here is missing, or a posted receipt the caller may not use: a
-      // hidden posted receipt reads unavailable instead of asking for
-      // posting work that is already done.
-      const raw = saleDocumentId ? await rawSettlementDocument(orgId, saleDocumentId) : null;
-      if (raw && raw.status === "posted") {
-        return {
-          status: "unmatched",
-          reason: "document_unavailable",
-          remedy: "The channel order's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
-        };
-      }
+      // A null here is missing, hidden or foreign: all three read
+      // unavailable, never inferring posting state from denied visibility.
       return {
         status: "unmatched",
-        reason: "order_unposted",
-        remedy: "The channel order's document is not posted; post the order, then match the payout again.",
+        reason: "document_unavailable",
+        remedy: "The channel order's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     if (saleDocumentId) {
@@ -473,14 +454,11 @@ async function resolveLineDocument(
           remedy: `The daily summary's document ${doc.documentNumber ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
         };
       }
-      const raw = await rawSettlementDocument(orgId, saleDocumentId);
-      if (raw && raw.status === "posted") {
-        return {
-          status: "unmatched",
-          reason: "document_unavailable",
-          remedy: "The daily summary's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
-        };
-      }
+      return {
+        status: "unmatched",
+        reason: "document_unavailable",
+        remedy: "The daily summary's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+      };
     }
     return {
       status: "unmatched",
