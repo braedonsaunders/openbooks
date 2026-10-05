@@ -3807,7 +3807,10 @@
       "annualDaysFloor": "Mínimo individual de dias anuais",
       "waitingPeriodMonths": "Carência (meses civis)",
       "approvalMode": "Política de aprovação",
-      "legalEmployer": "Empregador legal"
+      "legalEmployer": "Empregador legal",
+      "clearingAccountId": "Conta de compensação",
+      "collectionMode": "Modo de recolhimento",
+      "states": "Estados"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
@@ -3844,8 +3847,6 @@
       "entitlementDirection": "Provisionar: o empregador deve ao funcionário. Dever: o funcionário deve ao empregador — o saldo fica negativo e é pago com salários futuros até chegar a exatamente zero.",
       "entitlementAccrualValue": "Um percentual para planos de percentual de ganhos (4 = 4%), senão um valor por hora ou por período de pagamento.",
       "entitlementPayoutComponent": "O provento que paga o banco. Para um plano de 'dever', é o desconto que o recupera.",
-      "entitlementDepositComponent": "O provento cujas linhas de horas negativas depositam tempo em vez de pagá-lo. Linhas positivas pagam o tempo depositado.",
-      "entitlementAllowNegativeBalance": "Quando ativado, saques podem deixar o banco negativo. Quando não, um pagamento acima do saldo é recusado.",
       "entitlementDepositComponent": "O provento cujas linhas de horas negativas alimentam um banco de horas a partir de uma folha. Deixe vazio salvo quando o tempo trabalhado for guardado em vez de pago.",
       "entitlementAllowNegativeBalance": "Permite que os pagamentos deixem o banco negativo. Caso contrário, um pagamento maior que o saldo disponível é recusado.",
       "entitlementLiabilityAccount": "Onde o banco fica no balanço. Vazio para manter o plano só em relatório.",

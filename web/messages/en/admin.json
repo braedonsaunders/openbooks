@@ -3807,7 +3807,10 @@
       "annualDaysFloor": "Personal minimum annual days",
       "waitingPeriodMonths": "Waiting period (calendar months)",
       "approvalMode": "Approval policy",
-      "legalEmployer": "Legal employer"
+      "legalEmployer": "Legal employer",
+      "clearingAccountId": "Clearing account",
+      "collectionMode": "Collection mode",
+      "states": "States"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -3844,8 +3847,6 @@
       "entitlementDirection": "Accrue: the employer owes the employee. Owe: the employee owes the employer — the balance runs negative and is repaid from future pay until it reaches exactly zero.",
       "entitlementAccrualValue": "A percentage for percent-of-earnings plans (4 = 4%), otherwise an amount per hour or per pay period.",
       "entitlementPayoutComponent": "The earning that pays the bank out. For an 'owe' plan this is the deduction that recoups it.",
-      "entitlementDepositComponent": "The earning whose negative-hours lines bank time instead of paying it. Positive lines on it pay banked time out.",
-      "entitlementAllowNegativeBalance": "When on, withdrawals may drive the bank below zero. When off, a payout beyond the balance is refused.",
       "entitlementDepositComponent": "The earning whose negative-hours lines fund an hours bank from a run. Leave empty unless worked time is banked instead of paid.",
       "entitlementAllowNegativeBalance": "Allow payouts to drive the bank below zero. Otherwise a payout larger than the available balance refuses.",
       "entitlementLiabilityAccount": "Where the bank sits on the balance sheet. Leave empty to keep the plan report-only.",
