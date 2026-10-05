@@ -540,6 +540,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'subcontracts-workspace',
   'submitted-document-cell',
   'subsidiary-switcher',
+  'billing-history-console',
   'sync-console',
   'tab-nav',
   'tax-depreciation-header',

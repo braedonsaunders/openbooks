@@ -27,6 +27,7 @@ import { DashboardGridSlot } from './dashboard-grid-slot'
 import { DashboardEditSlot } from './dashboard-edit-slot'
 import { CustomizeDashboardHeader } from '../../app/(app)/dashboard/customize/sections'
 import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
+import { BillingHistoryClient } from '../../app/(app)/sync/billing-history/BillingHistoryClient'
 import { AppNotice, AppRuntimeChrome } from '../../app/(app)/apps/[key]/sections'
 import { DashboardBuilder } from '../../app/(app)/insights/dashboards/[id]/DashboardBuilder'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
@@ -185,6 +186,10 @@ export const HOME_WIDGETS = {
    *  while a run is in flight, run/test/toggle-mirror/schedule/delete with
    *  busy flags, `window.open` for OAuth and the QWC download. */
   'sync-console': () => <PlatformClient />,
+  /** No props. The billing-history wizard holds every fetch and mutation —
+   *  connect, preflight review, accept-and-run, and the reconciliation
+   *  differences — behind one drawer shell. */
+  'billing-history-console': () => <BillingHistoryClient />,
 
   /* --- installed-app runtime -------------------------------------------------------- */
   /** ONE entry for BOTH notice branches (not-found and disabled): the markup
