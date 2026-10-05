@@ -2177,7 +2177,16 @@
       "comparisonGroupsRequired": "比較属性には、少なくとも二つの異なるグループに属する従業員の値が必要です。スナップショットを生成する前に、従業員レコードにそれらの値を追加してください。",
       "employeeRecords": "従業員レコード",
       "guidelinePercentage": "給与改定の目安 (%)",
-      "guidelineHelp": "このサイクルで推奨する割合です。目安から外れる提案には理由が必要で、サイクルの承認手続きに従います。"
+      "guidelineHelp": "このサイクルで推奨する割合です。目安から外れる提案には理由が必要で、サイクルの承認手続きに従います。",
+      "bandStatus": {
+        "label": "適用状況",
+        "active": "有効",
+        "upcoming": "適用予定",
+        "past": "過去"
+      },
+      "bandHistory": "履歴",
+      "bandVersions": "{count} 件の履歴を表示",
+      "bandsEmptyFiltered": "このフィルターに一致する給与帯はありません。"
     }
   },
   "equity": {

@@ -45,7 +45,7 @@ export function normalizeHrmCompensationInput(
   return { ...rest, equalValueCriteria: criteria }
 }
 
-export const JOB_FAMILIES_ENTITY: SetupEntity = {
+const JOB_FAMILIES_BASE: SetupEntity = {
   key: 'hrm-job-families',
   singularTitleKey: 'entities.hrm-job-families.singularTitle',
   table: 'hrm_job_families',
@@ -71,7 +71,7 @@ export const JOB_FAMILIES_ENTITY: SetupEntity = {
   ],
 }
 
-export const JOB_LEVELS_ENTITY: SetupEntity = {
+const JOB_LEVELS_BASE: SetupEntity = {
   key: 'hrm-job-levels',
   singularTitleKey: 'entities.hrm-job-levels.singularTitle',
   table: 'hrm_job_levels',
@@ -120,12 +120,18 @@ export const PAY_BANDS_ENTITY: SetupEntity = {
   hasActive: false,
   columns: [
     { key: 'levelId', kind: 'ref', ref: 'hrm-job-levels' },
+    { key: 'employerSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+    { key: 'locationId', kind: 'ref', ref: 'locations' },
     { key: 'currency', kind: 'code' },
-    { key: 'basis', kind: 'badge' },
+    { key: 'basis', kind: 'badge', options: [
+      { value: 'annual', labelKey: 'options.payBandBasis.annual' },
+      { value: 'hourly', labelKey: 'options.payBandBasis.hourly' },
+    ] },
     { key: 'min', kind: 'number' },
     { key: 'target', kind: 'number' },
     { key: 'max', kind: 'number' },
     { key: 'effectiveFrom', kind: 'date' },
+    { key: 'effectiveTo', kind: 'date' },
   ],
   fields: [
     { key: 'familyId', kind: 'ref', ref: 'hrm-job-families' },
@@ -147,4 +153,25 @@ export const PAY_BANDS_ENTITY: SetupEntity = {
     { key: 'max', kind: 'decimal', required: true },
     { key: 'effectiveFrom', kind: 'date', required: true },
   ],
+}
+
+/** Child bindings belong to record tabs; each top-level register stays independent. */
+export const JOB_LEVELS_ENTITY: SetupEntity = {
+  ...JOB_LEVELS_BASE,
+  recordChildren: [{
+    ...PAY_BANDS_ENTITY,
+    columns: [
+      ...PAY_BANDS_ENTITY.columns.filter((column) => column.key === 'effectiveFrom' || column.key === 'effectiveTo'),
+      ...PAY_BANDS_ENTITY.columns.filter((column) => column.key !== 'effectiveFrom' && column.key !== 'effectiveTo'),
+    ],
+    parentRecords: [{ entityKey: 'hrm-job-levels', fieldKey: 'levelId' }],
+  }],
+}
+
+export const JOB_FAMILIES_ENTITY: SetupEntity = {
+  ...JOB_FAMILIES_BASE,
+  recordChildren: [{
+    ...JOB_LEVELS_ENTITY,
+    parentRecords: [{ entityKey: 'hrm-job-families', fieldKey: 'familyId' }],
+  }],
 }

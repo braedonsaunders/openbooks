@@ -2177,7 +2177,16 @@
       "comparisonGroupsRequired": "O atributo de comparação precisa estar preenchido para funcionários de pelo menos dois grupos distintos. Adicione esses valores aos registros de funcionários antes de gerar um retrato.",
       "employeeRecords": "Registros de funcionários",
       "guidelinePercentage": "Variação salarial orientativa (%)",
-      "guidelineHelp": "O percentual sugerido para este ciclo. Propostas fora da diretriz exigem uma justificativa e seguem o processo de aprovação do ciclo."
+      "guidelineHelp": "O percentual sugerido para este ciclo. Propostas fora da diretriz exigem uma justificativa e seguem o processo de aprovação do ciclo.",
+      "bandStatus": {
+        "label": "Situação de vigência",
+        "active": "Ativo",
+        "upcoming": "Futuro",
+        "past": "Passado"
+      },
+      "bandHistory": "Histórico",
+      "bandVersions": "{count, plural, one {Ver # versão} other {Ver # versões}}",
+      "bandsEmptyFiltered": "Nenhuma faixa salarial corresponde a este filtro."
     }
   },
   "equity": {

@@ -24,6 +24,7 @@ export function PreparedPagedTable({
   toolbarAfter,
   searchable = true,
   contained = false,
+  resetPageKey,
 }: {
   source: PreparedListSourceKey
   rows: PreparedTableRow[]
@@ -34,10 +35,12 @@ export function PreparedPagedTable({
   toolbarAfter?: ReactNode
   searchable?: boolean
   contained?: boolean
+  resetPageKey?: string
 }) {
   return (
     <PagedTable<PreparedTableRow>
       source={source}
+      resetPageKey={resetPageKey}
       contained={contained}
       rows={rows}
       rowKey={(row) => row.id}

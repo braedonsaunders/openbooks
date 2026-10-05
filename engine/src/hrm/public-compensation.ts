@@ -1,2 +1,3 @@
 /** Authorized access to compensation architecture. */
-export { requireBandsReadScope } from './compensation/bands.ts'
+export { requireBandsReadScope, listPayBandVersions, type PayBandDTO } from './compensation/bands.ts'
+export { listJobLevels } from './compensation/architecture.ts'

@@ -2177,7 +2177,16 @@
       "comparisonGroupsRequired": "The comparison attribute needs values on employees in at least two distinct groups. Add those values to the employee records before generating a snapshot.",
       "employeeRecords": "Employee records",
       "guidelinePercentage": "Guideline pay change (%)",
-      "guidelineHelp": "The suggested percentage for this cycle. Proposals outside the guideline require a reason and follow the cycle's approval process."
+      "guidelineHelp": "The suggested percentage for this cycle. Proposals outside the guideline require a reason and follow the cycle's approval process.",
+      "bandStatus": {
+        "label": "Effective status",
+        "active": "Active",
+        "upcoming": "Upcoming",
+        "past": "Past"
+      },
+      "bandHistory": "History",
+      "bandVersions": "{count, plural, one {View # version} other {View # versions}}",
+      "bandsEmptyFiltered": "No pay bands match this filter."
     }
   },
   "equity": {

@@ -54,6 +54,7 @@ export function PagedTable<T>({
   rowRole,
   rowSelected,
   contained = false,
+  resetPageKey,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -86,6 +87,8 @@ export function PagedTable<T>({
   rowRole?: 'link' | 'button'
   rowSelected?: (row: T) => boolean
   contained?: boolean
+  /** Sorting changes restart paging without discarding the search query. */
+  resetPageKey?: string
 }) {
   const external = source ? preparedListSource(source).mode !== 'loaded' : false
   searchable = searchable && !external
@@ -93,6 +96,7 @@ export function PagedTable<T>({
   const tp = useTranslations('ui.pagination')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
+  useEffect(() => { setPage(0) }, [resetPageKey])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

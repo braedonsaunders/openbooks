@@ -1030,6 +1030,7 @@ export async function loadHeadcountPlanDetail(
 }
 
 export interface EquityData {
+  currentParams: Record<string, string | string[] | undefined>
   reportHref: string | null
   reportLabel: string
   snapshotLabel: string
@@ -1041,7 +1042,7 @@ export interface EquityData {
   tiles: CompStatTile[]
   categoriesTitle: string
   categoriesColumns: { category: string; counts: string; mean: string; median: string; unexplained: string; flag: string }
-  categories: { id: string; level: string; counts: string; mean: string; median: string; unexplained: string; flag: string; flagTone: 'default' | 'warning' }[]
+  categories: { id: string; level: string; countA: number; meanValue: number | null; medianValue: number | null; unexplainedValue: number | null; counts: string; mean: string; median: string; unexplained: string; flag: string; flagTone: 'default' | 'warning' }[]
   categoriesEmpty: string
   canManage: boolean
   generateHref: string
@@ -1176,6 +1177,7 @@ export async function loadEquity(
     }
   }
   return {
+    currentParams: sp,
     reportHref: reportId ? `/reports/custom/run/${reportId}` : null,
     reportLabel: t('compensation.workspace.snapshotReport'),
     snapshotLabel: t('compensation.workspace.latestSnapshot'),
@@ -1197,6 +1199,7 @@ export async function loadEquity(
     categories: (snapshot?.categories ?? []).map((c) => ({
       id: c.levelId,
       level: c.levelCode,
+      countA: c.countA, meanValue: c.meanGapPct, medianValue: c.medianGapPct, unexplainedValue: c.unexplainedGapPct,
       counts: `${c.countA} / ${c.countB}`,
       mean: fmtPct(c.meanGapPct),
       median: fmtPct(c.medianGapPct),

@@ -237,6 +237,28 @@ export async function listPayBands(query: {
     .map(toBandDTO);
 }
 
+/** All effective-dated versions, under the same employer visibility as current bands. */
+export async function listPayBandVersions(query: {
+  orgId: string;
+  actorId: string;
+  levelId?: string | null;
+}): Promise<readonly PayBandDTO[]> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const allowed = await requireBandsReadScope(orgId, actorId);
+  const rows = (await db.execute<BandRow>(sql`
+    select id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
+           min::text as min, target::text as target, max::text as max,
+           effective_from::text as effective_from, effective_to::text as effective_to
+      from hrm_pay_bands
+     where org_id = ${orgId}
+       and (${query.levelId ?? null}::uuid is null or level_id = ${query.levelId ?? null}::uuid)
+       and (${allowed === null} or employer_subsidiary_id is null
+         or employer_subsidiary_id = any(${`{${[...(allowed ?? [])].join(',')}}`}::uuid[]))
+     order by level_id, effective_from desc, id`)).rows;
+  return rows.map(toBandDTO);
+}
+
 /**
  * The narrowest live band covering a scope at a date: an exact level +
  * subsidiary + location row beats a level-only row, which beats wider.

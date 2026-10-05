@@ -23,9 +23,15 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  setup_configuration_records: {
+    route: '/admin/setup', rowsField: 'rows', rowKeyField: 'id', mode: 'server',
+    clientSearch: false, showPerPage: false,
+    paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' },
+  },
   hrm_employee_benefits: { route: '/hrm/benefits', rowsField: 'assignments', rowKeyField: 'id', mode: 'loaded' },
-  hrm_benefit_program_participants_page: { route: '/hrm/benefits', rowsField: 'participants', rowKeyField: 'id', mode: 'server' },
-  hrm_benefit_program_activity_page: { route: '/hrm/benefits', rowsField: 'activity', rowKeyField: 'id', mode: 'server' },
+  // Program workspaces own has-more pagination without a total count.
+  hrm_benefit_program_participants_page: { route: '/hrm/benefits', rowsField: 'participants', rowKeyField: 'id', mode: 'external', clientSearch: false, showPerPage: false },
+  hrm_benefit_program_activity_page: { route: '/hrm/benefits', rowsField: 'activity', rowKeyField: 'id', mode: 'external', clientSearch: false, showPerPage: false },
   hrm_benefit_program_participants: { route: '/hrm/benefits', rowsField: 'participants', rowKeyField: 'id', mode: 'loaded' },
   hrm_benefit_program_activity: { route: '/hrm/benefits', rowsField: 'activity', rowKeyField: 'id', mode: 'loaded' },
   employee_benefit_enrollments: { route: '/entities/employees', rowsField: 'enrollments', rowKeyField: 'id', mode: 'loaded' },
