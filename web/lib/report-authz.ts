@@ -47,6 +47,7 @@ export function reportEntityFeatureKey(query: unknown): string | null {
 
 /** Statement kinds that disappear when their Features switch is off. */
 export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
+  'payroll-support': 'payroll',
   'project-profitability': 'projects',
   'true-cost': 'projects',
   budget: 'budgets',
@@ -59,6 +60,7 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
 }
 
 const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
+  'payroll-support': 'payroll.read',
   'resourcing-utilization': 'resourcing.read',
   'resourcing-bench': 'resourcing.read',
   'resourcing-capacity-demand': 'resourcing.read',

@@ -330,6 +330,47 @@ export type PayrollFilingAmendment =
     privateFacts?(orgId: string, taxYear: number, rowId: string): Promise<Record<string, string>>;
   };
 
+/** Native agency transport binds its response to the exact approved artifact. */
+export interface PayrollFilingDeliveryContext {
+  orgId: string;
+  subsidiaryId: string;
+  filingAccountId: string;
+  artifactId: string;
+  artifactDigest: string;
+  taxYear: number;
+  revision: PayrollFilingRevision;
+  actorId: string;
+}
+
+export interface PayrollFilingDelivery {
+  submit?(context: PayrollFilingDeliveryContext): Promise<{
+    reference: string;
+    submittedAt: string;
+    evidence: Readonly<Record<string, unknown>>;
+  }>;
+  verifyReceipt?(context: PayrollFilingDeliveryContext, reference: string, receipt: string): Promise<{
+    status: 'accepted' | 'rejected' | 'pending';
+    reference: string;
+    artifactDigest: string;
+    receivedAt: string;
+    evidence: Readonly<Record<string, unknown>>;
+  }>;
+  submissionRefusal?: string;
+  acceptanceRefusal?: string;
+}
+
+/** Artifact builders never establish agency transport or receipt verification. */
+export function payrollFilingDeliveryScope(filing: PayrollYearEndFiling) {
+  return {
+    submission: typeof filing.delivery?.submit === 'function',
+    submissionRefusal: typeof filing.delivery?.submit === 'function' ? null : filing.delivery?.submissionRefusal
+      ?? `${filing.label} has no agency submission adapter — use the agency's filing channel; generating an artifact does not submit it.`,
+    acceptance: typeof filing.delivery?.verifyReceipt === 'function',
+    acceptanceRefusal: typeof filing.delivery?.verifyReceipt === 'function' ? null : filing.delivery?.acceptanceRefusal
+      ?? `${filing.label} has no agency receipt verifier — retain the agency's acknowledgement; artifact generation never establishes acceptance.`,
+  };
+}
+
 /**
  * A filing row id resolved to the subsidiary-scoped entities that own it.
  * Employees are checked against their legal entity (current profile for
@@ -408,6 +449,8 @@ export interface PayrollYearEndFiling {
    * silently inherit another agency's correction rules.
    */
   amendment: PayrollFilingAmendment;
+  /** Optional native transport and agency receipt verifier, independent of artifact generation. */
+  delivery?: PayrollFilingDelivery;
 }
 
 /** How separation payments map onto the pack's seeded components. */

@@ -132,7 +132,11 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const resolved = nextResolve(specifier, context)
+    // Feature reads use the engine's native database import. Resolve its
+    // identity so the test fences the database, not the feature validator.
+    if (resolved.url === dbUrl && context.parentURL !== mockUrl('db')) return { url: mockUrl('db'), shortCircuit: true }
+    return resolved
   },
   load(url, context, nextLoad) {
     const parsed = new URL(url)
@@ -220,4 +224,13 @@ test('statement exports thread the selected book into every journal-backed detai
   agingState.bookThreading = []
   await resolveReport('general-ledger', new URLSearchParams(), ctx)
   assert.deepEqual(agingState.bookThreading, [{ kind: 'general-ledger', bookId: undefined }])
+})
+
+test('payroll capability exports refuse a disabled feature and a reader without payroll permission', async () => {
+  agingState.featuresOn = []
+  await assert.rejects(resolveReport('payroll-support', new URLSearchParams(), ctx), /payroll feature is disabled/)
+  agingState.featuresOn = ['payroll']
+  try {
+    await assert.rejects(resolveReport('payroll-support', new URLSearchParams(), ctx), /requires payroll.read.*administrator/)
+  } finally { agingState.featuresOn = [] }
 })

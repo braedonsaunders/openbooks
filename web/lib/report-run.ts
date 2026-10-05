@@ -1,5 +1,7 @@
 import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
 import 'server-only'
+import { payrollSupportReportData } from './payroll-support-report'
+import { PayrollSupportReportRefusal } from './payroll-support-report-contract'
 import { trueCostExportData } from './analytics/true-cost-report'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -80,6 +82,7 @@ import { getTranslations } from 'next-intl/server'
  * BOTH engines already emit for PDF/XLSX/CSV.
  */
 export const REPORT_KINDS = [
+  'payroll-support',
   'pnl',
   'balance-sheet',
   'trial-balance',
@@ -122,6 +125,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
   const kind = statement?.kind
   const p = statement?.params ?? {}
   switch (kind) {
+    case 'payroll-support':
+      return '/reports/payroll-support'
     case 'pnl':
       return '/reports/pnl'
     case 'balance-sheet':
@@ -213,6 +218,14 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
   const authz = await requireReportAuthz(orgId)
+  if (kind === 'payroll-support') {
+    if (!can(authz, 'payroll.read')) throw new ReportResolutionError('This report requires payroll.read — ask an administrator for payroll read access.');
+    try { return { render: 'data', data: await payrollSupportReportData(period, p), requiredPermissions: ['payroll.read'] }; }
+    catch (error) {
+      if (error instanceof PayrollSupportReportRefusal) throw new ReportResolutionError(error.message);
+      throw error;
+    }
+  }
   // Availability and replenishment read one legal entity's stock and have no
   // consolidated view; they take the same read permission as their pages, and
   // an engine refusal (an order line in a unit its item cannot convert) keeps

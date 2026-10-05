@@ -22,6 +22,12 @@ export type StandardStatementDefinition = {
 
 export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
   {
+    slug: 'payroll-support',
+    name: 'Payroll country capabilities',
+    description: 'Declared calculation editions, regional coverage, original and correction artifacts, remittance schedules, submission transport and agency receipt verification.',
+    statementKind: 'payroll-support',
+  },
+  {
     slug: 'profit-and-loss',
     name: 'Profit & Loss',
     description: 'Income statement — revenue, COGS, gross profit, expenses and net income, with comparatives and dimension breakouts.',
