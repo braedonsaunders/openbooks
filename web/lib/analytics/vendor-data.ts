@@ -402,11 +402,11 @@ export async function vendorData(
     // Relationship-value scorecard (0–100): how strategic/healthy the vendor
     // relationship is. Payment reliability is deliberately NOT in the grade
     // (it measures OUR behaviour, not the vendor's) — it lives on its own tab
-    // and feeds the leverage-matrix risk axis instead.
-    //  · significance by spend tier (0–40)  · engagement/regularity (0–30)  · spend stability (0–30)
+    // and feeds the leverage-matrix risk axis instead. Sub-score ceilings
+    // come from the organization's own vendorPerformance config.
     const tierSignificance = significance[tier];
-    const engagement = 30 * clamp(Math.min(r.bills, config.engagementCapBills) / config.engagementCapBills, 0, 1);
-    const stability = r.yoyPct === null ? config.neutralStabilityScore : 30 * clamp(1 - Math.min(Math.abs(r.yoyPct), 1), 0, 1);
+    const engagement = config.engagementMaxPoints * clamp(Math.min(r.bills, config.engagementCapBills) / config.engagementCapBills, 0, 1);
+    const stability = r.yoyPct === null ? config.neutralStabilityScore : config.stabilityMaxPoints * clamp(1 - Math.min(Math.abs(r.yoyPct), 1), 0, 1);
     const score = clamp(tierSignificance + engagement + stability);
 
     // Leverage matrix: spend (financial impact) × performance, where our only

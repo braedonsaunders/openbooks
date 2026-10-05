@@ -1944,6 +1944,14 @@
           "label": "Tope de actividad (facturas)",
           "help": "Número de facturas para la puntuación plena de actividad"
         },
+        "engagementMaxPoints": {
+          "label": "Puntos de actividad",
+          "help": "Puntos por actividad plena en la puntuación de la relación"
+        },
+        "stabilityMaxPoints": {
+          "label": "Puntos de estabilidad",
+          "help": "Puntos por gasto perfectamente estable en la puntuación de la relación"
+        },
         "gradeA": {
           "label": "Corte de A",
           "help": "La puntuación desde este valor obtiene la calificación A"

@@ -1944,6 +1944,14 @@
           "label": "Plafond d’activité (factures)",
           "help": "Nombre de factures pour le score d’activité maximal"
         },
+        "engagementMaxPoints": {
+          "label": "Points d'activité",
+          "help": "Points pour une activité pleine dans le score de relation"
+        },
+        "stabilityMaxPoints": {
+          "label": "Points de stabilité",
+          "help": "Points pour des dépenses parfaitement stables dans le score de relation"
+        },
         "gradeA": {
           "label": "Seuil du A",
           "help": "Un score à partir de ce seuil obtient la note A"
