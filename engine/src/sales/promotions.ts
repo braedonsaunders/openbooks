@@ -278,6 +278,20 @@ async function insertPromotion(runner: SqlExecutor, orgId: string, actorId: stri
 }
 
 /**
+ * Pure lifecycle rule shared by the engine transition and the setup form, so
+ * the drawer refuses the same moves with the same words. Null means allowed.
+ */
+export function promotionStatusTransition(from: PromotionStatus, to: PromotionStatus): string | null {
+  if (to !== "active" && to !== "archived") return "Activate a draft or archive a promotion that is done";
+  if (from === "draft" && (to === "active" || to === "archived")) return null;
+  if (from === "active" && to === "archived") return null;
+  // Archived promotions keep their history and can never return: reopening
+  // would reinterpret the redemptions counted under the old window.
+  if (from === "archived") return "Create a new promotion for the next campaign";
+  return "Archive the promotion when the campaign is done";
+}
+
+/**
  * Move a promotion through draft → active → archived. Archived promotions
  * keep their history and can never return: reopening would reinterpret the
  * redemptions counted under the old window.
@@ -296,13 +310,13 @@ export async function setPromotionStatus(
   const current = (await runner.execute<{ status: string; code: string }>(sql`
     select status, code from promotions where org_id = ${orgId} and id = ${id} for update`)).rows[0];
   if (!current) throw refusal("Promotion not found", "not_found", 404);
-  const allowed = (current.status === "draft" && (status === "active" || status === "archived")) || (current.status === "active" && status === "archived");
-  if (!allowed) {
+  const remedy = promotionStatusTransition(current.status as PromotionStatus, status);
+  if (remedy !== null) {
     throw refusal(
       `Promotion ${current.code} is ${current.status} and cannot become ${status}`,
       "wrong_status",
       409,
-      current.status === "archived" ? "Create a new promotion for the next campaign" : "Archive the promotion when the campaign is done",
+      remedy,
     );
   }
   const updated = await runner.execute(sql`

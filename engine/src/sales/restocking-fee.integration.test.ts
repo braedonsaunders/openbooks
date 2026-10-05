@@ -146,6 +146,7 @@ test('waive requires the grant and a reason, and is audited', { skip: !DB }, asy
       returnDate: '2026-06-01', currency: 'CAD', lines: [line], waived: true, waiveReason: 'Damaged in transit', canWaive: true,
     }))
     assert.equal(waived.totalMinor, '0')
+    assert.equal(waived.unwaivedTotalMinor, '1000')
     assert.equal(restockingFeeCreditLines(waived).length, 0)
     const rmaId = randomUUID()
     await withOrg(org.orgId, () => recordRestockingFeeWaiver(db, org.orgId, actorId, rmaId, {
