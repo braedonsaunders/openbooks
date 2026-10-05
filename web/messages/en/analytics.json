@@ -2587,14 +2587,16 @@
       "accountSub": "Account {number}"
     },
     "categories": {
-      "notInComposite": "Not in the composite"
+      "notInComposite": "Not in the composite",
+      "unratedNote": "Excludes {hours, number} unrated hours — cost rates are missing for that time."
     }
   },
   "utilization": {
     "title": "Utilization",
     "alerts": {
       "belowTarget": "Billable % below {target}% target",
-      "costSpike": "Non-billable cost spiked by {amount}"
+      "costSpike": "Non-billable cost spiked by {amount}",
+      "unratedHours": "Non-billable cost excludes {hours, number} unrated hours — record cost rates for that time."
     },
     "labels": {
       "noTitle": "No Title",

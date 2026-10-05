@@ -2587,7 +2587,8 @@
       "accountSub": "Konto {number}"
     },
     "categories": {
-      "notInComposite": "Nicht im Gesamtsatz enthalten"
+      "notInComposite": "Nicht im Gesamtsatz enthalten",
+      "unratedNote": "Ohne {hours, number} Stunden ohne Kostensatz — für diese Zeit fehlen Kostensätze."
     }
   },
   "utilization": {
@@ -2595,7 +2596,8 @@
     "backToHub": "Analytik",
     "alerts": {
       "belowTarget": "Abrechenbarer Anteil unter dem Ziel von {target} %",
-      "costSpike": "Nicht abrechenbare Kosten sind um {amount} gestiegen"
+      "costSpike": "Nicht abrechenbare Kosten sind um {amount} gestiegen",
+      "unratedHours": "Die nicht abrechenbaren Kosten enthalten {hours, number} Stunden ohne Kostensatz nicht — erfassen Sie Kostensätze für diese Zeit."
     },
     "labels": {
       "noTitle": "Ohne Titel",

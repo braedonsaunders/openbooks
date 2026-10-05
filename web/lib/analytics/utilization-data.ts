@@ -40,6 +40,8 @@ export interface UStat {
   nonBillableHours: number;
   percentBilled: number; // 0-100
   nonBillableCost: string;
+  /** Non-billable hours with no cost rate: unknown cost, never $0. */
+  unratedHours: string;
 }
 
 export interface UGroupRow {
@@ -104,6 +106,7 @@ interface StatRow {
   total_hours: string;
   billable_hours: string;
   non_billable_cost: string;
+  unrated_hours: string;
 }
 
 interface RawStatRow extends Record<string, unknown> {
@@ -118,6 +121,7 @@ interface RawStatRow extends Record<string, unknown> {
   total_hours: string | number;
   billable_hours: string | number;
   non_billable_cost: string | number;
+  unrated_hours: string | number;
 }
 
 /** One grouped scan per range.
@@ -141,7 +145,10 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
       max(t.worked_on)::text as late,
       sum(t.hours) as total_hours,
       coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
-      coalesce(sum(coalesce(t.cost_rate, 0) * t.hours) filter (where not t.is_billable), 0) as non_billable_cost
+      coalesce(sum(coalesce(t.cost_rate, 0) * t.hours) filter (where not t.is_billable), 0) as non_billable_cost,
+      -- Approved non-billable time with no cost rate is NOT zero cost: its
+      -- hours travel separately and surface by name, never folded in as $0.
+      coalesce(sum(t.hours) filter (where not t.is_billable and t.cost_rate is null), 0) as unrated_hours
     from ${source.from}
     left join departments d on d.id = t.department_id and d.org_id = t.org_id
     left join items i on i.id = t.item_id and i.org_id = t.org_id
@@ -166,6 +173,7 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
       total_hours: "0",
       billable_hours: "0",
       non_billable_cost: "0",
+      unrated_hours: "0",
     };
     const leg = String(r.non_billable_cost ?? 0);
     const translated = cmp(leg, "0") === 0
@@ -174,6 +182,7 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
     prev.total_hours = add(prev.total_hours, String(r.total_hours ?? 0));
     prev.billable_hours = add(prev.billable_hours, String(r.billable_hours ?? 0));
     prev.non_billable_cost = add(prev.non_billable_cost, translated);
+    prev.unrated_hours = add(prev.unrated_hours, String(r.unrated_hours ?? 0));
     merged.set(key, prev);
   }
   return [...merged.values()];
@@ -183,7 +192,7 @@ const ymd = (d: Date) =>
   // Year zero-padded so the YYYY-MM-DD contract holds below year 1000 too.
   `${String(d.getUTCFullYear()).padStart(4, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 
-function calcStat(hours: string, billable: string, cost: string): UStat {
+function calcStat(hours: string, billable: string, cost: string, unrated: string): UStat {
   // The single float hop, at the rendering boundary: ratios render as
   // doubles, but every total summed or compared upstream stays exact.
   const h = Number(hours);
@@ -194,10 +203,11 @@ function calcStat(hours: string, billable: string, cost: string): UStat {
     nonBillableHours: h - b,
     percentBilled: h > 0 ? (b / h) * 100 : 0,
     nonBillableCost: cost,
+    unratedHours: unrated,
   };
 }
 
-const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBilled: 0, nonBillableCost: "0.0000" };
+const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBilled: 0, nonBillableCost: "0.0000", unratedHours: "0.0000" };
 
 type Key = "department" | "item" | "employee";
 
@@ -209,19 +219,20 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
   const groupBy = (rows: StatRow[]) => {
     const groups = new Map<
       string,
-      { name: string; deptHours: Map<string, string>; department: string | null; hours: string; billable: string; cost: string }
+      { name: string; deptHours: Map<string, string>; department: string | null; hours: string; billable: string; cost: string; unrated: string }
     >();
     for (const r of rows) {
       const id = (key === "department" ? r.department : key === "item" ? r.item : r.employee) ?? "0";
       let g = groups.get(id);
       if (!g) {
         const name = key === "department" ? r.department_name : key === "item" ? r.item_name : r.employee_name;
-        g = { name: strings.displayGroupName(name), deptHours: new Map(), department: r.department, hours: "0", billable: "0", cost: "0" };
+        g = { name: strings.displayGroupName(name), deptHours: new Map(), department: r.department, hours: "0", billable: "0", cost: "0", unrated: "0" };
         groups.set(id, g);
       }
       g.hours = add(g.hours, r.total_hours);
       g.billable = add(g.billable, r.billable_hours);
       g.cost = add(g.cost, r.non_billable_cost);
+      g.unrated = add(g.unrated, r.unrated_hours);
       if (key !== "department" && r.department) g.deptHours.set(r.department, add(g.deptHours.get(r.department) ?? "0", r.total_hours));
     }
     // Primary department = most hours (the departmentHours logic).
@@ -239,8 +250,8 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
   const rows: { row: UGroupRow; cost: string }[] = [];
   for (const [id, c] of cGroups) {
     const p = pGroups.get(id);
-    const range = calcStat(c.hours, c.billable, c.cost);
-    const pr = p ? calcStat(p.hours, p.billable, p.cost) : ZERO;
+    const range = calcStat(c.hours, c.billable, c.cost, c.unrated);
+    const pr = p ? calcStat(p.hours, p.billable, p.cost, p.unrated) : ZERO;
     const row: UGroupRow = {
       id,
       name: c.name,
@@ -340,14 +351,15 @@ export async function utilizationData(
 
   // Company rollup — billable-expected departments only ().
   const companySum = (rows: StatRow[]) => {
-    let hours = "0", billable = "0", cost = "0";
+    let hours = "0", billable = "0", cost = "0", unrated = "0";
     for (const r of rows) {
       if (r.department && noBillDepts.has(r.department)) continue;
       hours = add(hours, r.total_hours);
       billable = add(billable, r.billable_hours);
       cost = add(cost, r.non_billable_cost);
+      unrated = add(unrated, r.unrated_hours);
     }
-    const s = calcStat(hours, billable, cost);
+    const s = calcStat(hours, billable, cost, unrated);
     const nonBillableHours = add(hours, neg(billable));
     return {
       ...s,
@@ -375,6 +387,10 @@ export async function utilizationData(
     alerts.push(strings.alertBelowTarget(targetBillablePct));
   if (cmp(costDeltaExact, String(costSpikeThreshold)) > 0)
     alerts.push(strings.alertCostSpike(money(costDeltaExact, { maximumFractionDigits: 0 })));
+  // Unrated time prices at nothing, so every non-billable cost figure above
+  // understates while these hours exist — flagged by name, never silent.
+  if (cmp(cCompany.unratedHours, "0") > 0)
+    alerts.push(strings.alertUnratedHours(Number(cCompany.unratedHours)));
 
   // Rolling history: company % (excl. noBill depts) + per-dept % (all depts).
   const periods: UHistoryPeriod[] = histPlans.map((plan, i) => {

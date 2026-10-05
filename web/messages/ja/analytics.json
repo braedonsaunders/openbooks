@@ -2587,7 +2587,8 @@
       "accountSub": "勘定科目 {number}"
     },
     "categories": {
-      "notInComposite": "合成レートに含まれません"
+      "notInComposite": "合成レートに含まれません",
+      "unratedNote": "コストレート未設定の {hours, number} 時間を除く — その時間のコストレートがありません。"
     }
   },
   "utilization": {
@@ -2595,7 +2596,8 @@
     "backToHub": "アナリティクス",
     "alerts": {
       "belowTarget": "請求可能率が目標 {target}% を下回っています",
-      "costSpike": "非請求可能コストが {amount} 急増しました"
+      "costSpike": "非請求可能コストが {amount} 急増しました",
+      "unratedHours": "非請求可能コストにはコストレート未設定の {hours, number} 時間が含まれていません — その時間のコストレートを登録してください。"
     },
     "labels": {
       "noTitle": "タイトルなし",
