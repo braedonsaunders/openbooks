@@ -85,10 +85,8 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 /* --------------------------------------------------------------- constants */
 // The scoring model lives in ANALYTICS_CONFIG.customerIntelligence: every
 // weight, band and cut-off below is read from the effective org config at
-// load time, so the Configuration tab edits the live model. The one value
-// that stays a constant is the calendar year used to annualize tenure — a
-// unit conversion, not an organization policy.
-const DAYS_PER_YEAR = 365;
+// load time, so the Configuration tab edits the live model. Tenure
+// annualizes through whole civil months below — no fixed 365-day year.
 
 /**
  * The formal P&L universe (and its cost side) as SQL `IN` fragments — the
@@ -291,7 +289,12 @@ export interface CustomerData {
   intelligence: { score: number; label: string; grade: string } | { score: null; reason: string };
   kpis: {
     totalCustomers: number;
-    /** Period recognized revenue across all customers (ties to P&L revenue). */
+    /**
+     * Period recognized revenue across all customers. Single-functional reads
+     * tie to P&L revenue leg-for-leg; multi-functional orgs translate each
+     * posting at its document-date spot while the consolidated P&L matrix
+     * uses per-period averages, so the two can differ by rate timing there.
+     */
     totalRevenue: string;
     /** Period invoiced revenue across all customers (reconciling total). */
     totalInvoiced: string;
@@ -349,7 +352,8 @@ export interface CustomerData {
 
 /* ------------------------------------------------------------ Profitability */
 // Project-financials profitability (faithful; kept from the first port), plus
-// the fake-champion flag (revenue > $100k ∧ margin < 15%).
+// the profit-leak flag: revenue share of the period total at or above the
+// configured share, with margin below the configured target.
 
 export type ProfitTier = "high" | "medium" | "low" | "marginal" | "loss";
 
@@ -825,6 +829,21 @@ export function compositeScoreOf(terms: { value: number; weight: number }[]): nu
 
 function priorYearIso(iso: string): string {
   return addMonthsClamped(iso, -12);
+}
+
+/**
+ * Whole months between two ISO dates on the civil calendar: steps month
+ * boundaries forward until passing the end date. Annualizes tenure without a
+ * fixed 365-day year (leap days and uneven months fall out of the calendar
+ * arithmetic, not a divisor).
+ */
+function wholeMonthsBetween(fromIso: string, toIso: string): number {
+  const from = fromIso.slice(0, 10);
+  const to = toIso.slice(0, 10);
+  if (to < from) return 0;
+  let months = 0;
+  while (addMonthsClamped(from, months + 1).slice(0, 10) <= to) months++;
+  return months;
 }
 
 function customerDocumentMovements(
@@ -1499,9 +1518,11 @@ async function readCustomerData(
   const clvOf = (c: Base) => {
     // Annualized from invoiced revenue directly (average value × frequency
     // per year reduces to invoiced ÷ years): the money never crosses into a
-    // float. The retention curve is statistical by nature; it rounds once to
-    // the integer retention factor, and the projection multiplies exact legs.
-    const yearsActive = Math.max(clvMinYears, c.tenure / DAYS_PER_YEAR);
+    // float. Tenure counts whole civil months, so leap days never need a
+    // divisor. The retention curve is statistical by nature; it rounds once
+    // to the integer retention factor, and the projection multiplies exact legs.
+    const activeMonths = c.first && c.last ? wholeMonthsBetween(c.first, c.last) : 0;
+    const yearsActive = Math.max(clvMinYears, activeMonths / 12);
     const annualValue = div(c.invoicedRevenue, yearsActive.toFixed(10));
     const recency = c.recency ?? Number.MAX_SAFE_INTEGER;
     const retention = Math.max(clvMin, Math.min(clvMax, clvBase * Math.exp(-recency / clvDecay)));
