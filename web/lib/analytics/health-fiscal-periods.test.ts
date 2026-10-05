@@ -78,6 +78,21 @@ test("a monthly calendar keeps calendar months", async () => {
   assert.ok((result.monthly[11]?.label ?? "").includes("26"));
 });
 
+test("declared future period names start after the selected end", async () => {
+  // Mid-Q1 sees only Q2 ahead; at the end of the declared calendar nothing
+  // is ahead; a monthly calendar leaves naming to the client (null).
+  const org = "00000000-0000-4000-8000-000000000001";
+  state.cadence = "quarterly";
+  const mid = await healthData({ from: "2026-01-01", to: "2026-03-15", label: "Q1" }, org, null);
+  assert.deepEqual(mid.forecast.futurePeriodNames, ["Q2 FY2026"]);
+  const end = await healthData({ from: "2026-04-01", to: "2026-06-30", label: "Q2" }, org, null);
+  assert.deepEqual(end.forecast.futurePeriodNames, []);
+  state.cadence = "monthly";
+  const monthly = await healthData({ from: "2026-04-01", to: "2026-06-30", label: "Q2" }, org, null);
+  assert.equal(monthly.forecast.futurePeriodNames, null);
+  state.cadence = "quarterly";
+});
+
 test("a mid-period end closes the last bucket at the selected end", async () => {
   // Q2 runs to 2026-06-30 but the operator selected 2026-05-15: every date
   // bound the series sends must sit at or before the selected end, so
