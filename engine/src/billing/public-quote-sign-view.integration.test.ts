@@ -20,14 +20,15 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * The hosted signing page's view carries the quoted terms and the open
- * signature request: the customer signs exactly what the sender priced.
- * The typed name is durably observable: signing and declining record the
- * typed name, the tendered consent and the hashed terms in the audit trail
- * while the invited identity stays untouched on the request row — proven
- * below with typed names that differ from the invited name. Tenant work
- * runs inside the org context with a real actor; only fixture
- * create/drop use the privileged path.
+ * The hosted signing page's view carries the quoted terms and the exact
+ * request the token addresses: the customer signs exactly what the sender
+ * priced. The typed name is durably observable: signing records the typed
+ * name, the tendered consent and the hashed terms in the audit trail, and
+ * declining records the typed decliner name — while the invited identity
+ * stays untouched on the request row, proven below with typed names that
+ * differ from the invited name. Every tenant read and write runs inside
+ * the org context with a real actor; only fixture create/drop use the
+ * privileged path.
  */
 test("public signing view renders terms and records typed names", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -114,8 +115,11 @@ test("public signing view renders terms and records typed names", { skip: !DB },
     assert.ok(signedAudit.signedName === "Ada C. Signer");
     assert.ok((signedAudit.consentText ?? "").length > 32);
     assert.ok((signedAudit.documentHash ?? "").length > 16);
-    const signedRow = (await db.execute<{ status: string; signer_name: string }>(sql`
-      select status, signer_name from signature_requests where id = ${signed.requestId}`)).rows[0];
+    const signedRow = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ status: string; signer_name: string }>(sql`
+        select status, signer_name from signature_requests
+         where org_id = ${org.orgId} and id = ${signed.requestId}`)).rows[0],
+    );
     assert.equal(signedRow?.status, "signed");
     assert.equal(signedRow?.signer_name, "Ada Customer");
 
@@ -126,8 +130,11 @@ test("public signing view renders terms and records typed names", { skip: !DB },
     const declinedAudit = await withOrgContext(org.orgId, async () => auditAfter(declined.requestId));
     assert.ok(declinedAudit.status === "declined");
     assert.ok(declinedAudit.declinedName === "Bob D. Decliner");
-    const declinedRow = (await db.execute<{ status: string; signer_name: string }>(sql`
-      select status, signer_name from signature_requests where id = ${declined.requestId}`)).rows[0];
+    const declinedRow = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ status: string; signer_name: string }>(sql`
+        select status, signer_name from signature_requests
+         where org_id = ${org.orgId} and id = ${declined.requestId}`)).rows[0],
+    );
     assert.equal(declinedRow?.status, "declined");
     assert.equal(declinedRow?.signer_name, "Ada Customer");
 
@@ -163,6 +170,16 @@ test("public signing view renders terms and records typed names", { skip: !DB },
     assert.equal(newView.signature?.signerName, "Zed Resend");
     assert.equal(newView.signature?.signerEmail, "zed@example.com");
     assert.notEqual(newView.signature?.expiresAt, oldView.signature?.expiresAt);
+
+    // A request without stored consent refuses rather than borrowing
+    // current text: the tendered paragraph is authoritative evidence.
+    const legacy = await seedQuote("Q-SIGN-4");
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`
+        update signature_requests set consent_text = null, updated_at = now()
+         where org_id = ${org.orgId} and subject_id = ${legacy.quoteId}`);
+    });
+    await assert.rejects(publicQuoteSignView(legacy.token), /predates the recorded consent/);
     await assert.rejects(publicQuoteSignView("not-a-token"), /invalid or expired/);
   } finally {
     await dropScratchOrg(org.orgId);

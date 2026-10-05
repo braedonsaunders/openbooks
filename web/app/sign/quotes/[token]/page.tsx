@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server'
 import { QuoteSignForm } from './QuoteSignForm'
 
 export const dynamic = 'force-dynamic'
@@ -9,14 +10,15 @@ export const dynamic = 'force-dynamic'
  */
 export default async function QuoteSignPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+  const t = await getTranslations('estimates')
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-4 px-4 py-10">
       <header className="text-center">
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Review and sign</p>
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('quoteSign.pageTitle')}</p>
       </header>
       <QuoteSignForm token={token} />
       <p className="text-center text-xs text-slate-500">
-        Signing records your name, the time, and the exact quoted terms.
+        {t('quoteSign.pageNote')}
       </p>
     </div>
   )

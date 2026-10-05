@@ -98,6 +98,8 @@
     "expiryNote": "O link expira em {date} e funciona uma vez.",
     "sign": "Assinar este orçamento",
     "signing": "Assinando…",
-    "decline": "Recusar"
+    "decline": "Recusar",
+    "pageTitle": "Revise e assine",
+    "pageNote": "A assinatura registra seu nome, o horário e as condições exatas orçadas."
   }
 }

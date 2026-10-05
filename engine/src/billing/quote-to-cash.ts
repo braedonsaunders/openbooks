@@ -1363,38 +1363,49 @@ export async function publicQuoteSignView(token: string): Promise<PublicQuoteSig
   if (!claims) {
     throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
   }
-  const view = await viewQuoteSignature(token);
-  const preview = await quoteCashPreview(claims.orgId, view.quoteId);
-  if (!view.consentText) {
-    throw new QuoteToCashError("This request predates the recorded consent — ask the sender to re-send it");
-  }
-  return {
-    quoteNumber: preview.quote.documentNumber,
-    status: preview.quote.status,
-    currency: preview.quote.currency,
-    total: preview.quote.total,
-    documentDate: preview.quote.documentDate,
-    terms: preview.terms.map((valuation) => ({
-      planName: valuation.term.planName,
-      termMonths: valuation.term.termMonths,
-      startRule: valuation.term.startRule,
-      billingTiming: valuation.term.billingTiming,
-      periods: valuation.schedule.periods.map((period) => ({
-        unitPrice: period.unitPrice,
-        quantity: period.quantity,
-        periodAmount: period.periodAmount,
-      })),
-      tcv: valuation.schedule.tcv,
-    })),
-    tcv: preview.tcv,
-    signature: {
-      status: view.status,
-      signerName: view.signerName,
-      signerEmail: view.signerEmail,
-      expiresAt: view.expiresAt.toISOString(),
-      consentText: view.consentText,
+  // One repeatable-read snapshot for the request and the terms: nested
+  // helpers join the ambient transaction through the shared runner, so the
+  // identity, consent and expiry below always belong to the same read as
+  // the priced terms. Writes stay allowed (loadQuote locks the quote row),
+  // so this is not read-only.
+  return withOrgTransaction(
+    claims.orgId,
+    async () => {
+      const view = await viewQuoteSignature(token);
+      const preview = await quoteCashPreview(claims.orgId, view.quoteId);
+      if (!view.consentText) {
+        throw new QuoteToCashError("This request predates the recorded consent — ask the sender to re-send it");
+      }
+      return {
+        quoteNumber: preview.quote.documentNumber,
+        status: preview.quote.status,
+        currency: preview.quote.currency,
+        total: preview.quote.total,
+        documentDate: preview.quote.documentDate,
+        terms: preview.terms.map((valuation) => ({
+          planName: valuation.term.planName,
+          termMonths: valuation.term.termMonths,
+          startRule: valuation.term.startRule,
+          billingTiming: valuation.term.billingTiming,
+          periods: valuation.schedule.periods.map((period) => ({
+            unitPrice: period.unitPrice,
+            quantity: period.quantity,
+            periodAmount: period.periodAmount,
+          })),
+          tcv: valuation.schedule.tcv,
+        })),
+        tcv: preview.tcv,
+        signature: {
+          status: view.status,
+          signerName: view.signerName,
+          signerEmail: view.signerEmail,
+          expiresAt: view.expiresAt.toISOString(),
+          consentText: view.consentText,
+        },
+      };
     },
-  };
+    { isolationLevel: "REPEATABLE READ" },
+  );
 }
 
 /**

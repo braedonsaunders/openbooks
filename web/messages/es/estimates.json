@@ -98,6 +98,8 @@
     "expiryNote": "El enlace vence el {date} y funciona una vez.",
     "sign": "Firmar esta cotización",
     "signing": "Firmando…",
-    "decline": "Rechazar"
+    "decline": "Rechazar",
+    "pageTitle": "Revise y firme",
+    "pageNote": "Al firmar se registran su nombre, la hora y las condiciones exactas cotizadas."
   }
 }
