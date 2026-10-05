@@ -177,6 +177,8 @@ test('a plan save refusal retains its exact decimal draft and names the remedy',
 
 test('editing reminders preserves their identities and numbers additions after the stored sequence', async (t) => {
   await mount(t, () => Response.json({ error: 'Policy changed. Reload before saving.' }, { status: 409 }), false, 'policies', 'pol-1')
+  // The record opens read-only; reminders edit after entering edit mode.
+  await click(findButton('Edit')!)
   const dialog = document.querySelector('[role="dialog"]')!
   await click(findButton('Add reminder')!)
   assert.deepEqual([...dialog.querySelectorAll('input[aria-label="Sequence"]')].map((input) => (input as HTMLInputElement).value), ['4', '5'])
