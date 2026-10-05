@@ -311,7 +311,9 @@ export async function RecordListView({
       case 'status':
         return (
           <TableCell key={c.key}>
-            <Badge variant={STATUS_VARIANT[String(v)] ?? 'secondary'}>{statusLabel(String(v))}</Badge>
+            {v == null || v === ''
+              ? <span className="text-slate-400">—</span>
+              : <Badge variant={STATUS_VARIANT[String(v)] ?? 'secondary'}>{statusLabel(String(v))}</Badge>}
           </TableCell>
         )
       case 'custom': {

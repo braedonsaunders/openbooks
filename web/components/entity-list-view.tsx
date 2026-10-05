@@ -463,7 +463,9 @@ export async function EntityListView({
       case 'status':
         return (
           <TableCell key={c.key}>
-            <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{source.statusDisplayName ? source.statusDisplayName(String(v), label) : optionLabel(c.key, String(v))}</Badge>
+            {v == null || v === ''
+              ? <span className="text-slate-400">—</span>
+              : <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{source.statusDisplayName ? source.statusDisplayName(String(v), label) : optionLabel(c.key, String(v))}</Badge>}
           </TableCell>
         )
       case 'date':
