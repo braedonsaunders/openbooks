@@ -20,3 +20,17 @@ export function conflictsForLocation<T extends { stockLocationId: string }>(
   if (!stockLocationId) return []
   return conflicts.filter((conflict) => conflict.stockLocationId === stockLocationId)
 }
+
+/**
+ * The conflicts read joins one row per mapping, so a stock location mapped
+ * twice returns the same conflict twice. Reachability and counts key on the
+ * conflict identity: duplicates collapse, real records never drop.
+ */
+export function dedupeConflicts<T extends { id: string }>(conflicts: readonly T[]): T[] {
+  const seen = new Set<string>()
+  return conflicts.filter((conflict) => {
+    if (seen.has(conflict.id)) return false
+    seen.add(conflict.id)
+    return true
+  })
+}
