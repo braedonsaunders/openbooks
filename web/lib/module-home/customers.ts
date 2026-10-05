@@ -112,45 +112,18 @@ function customerPaymentMovements(orgId: string, from: string, through: string, 
  */
 async function pipelineInOrgCurrency(
   orgId: string,
-  orgCurrency: string,
   asOf: string,
   rows: readonly ForecastRow[],
 ): Promise<{ total: string; weighted: string; closed: string }> {
-  const rates = new Map<string, string>()
+  // One shared rate context instead of a hand-rolled per-currency lookup:
+  // the same latest-dated-spot rule (inverse quotes included), with a
+  // missing rate failing closed naming the pair and date.
+  const fx = await flowRates(orgId, rows.map((row) => ({ func: String(row.currency).trim().toUpperCase() || null, date: asOf })))
   let total = '0.0000'
   let weighted = '0.0000'
   let closed = '0.0000'
   for (const row of rows) {
-    const sourceCurrency = String(row.currency).trim().toUpperCase()
-    if (!sourceCurrency || sourceCurrency === orgCurrency) {
-      total = add(total, row.pipeline_amount ?? '0')
-      weighted = add(weighted, row.weighted_amount ?? '0')
-      closed = add(closed, row.closed_amount ?? '0')
-      continue
-    }
-    let rate = rates.get(sourceCurrency)
-    if (!rate) {
-      const candidates = await db.execute<{ rate: string }>(sql`
-        select rate::text from (
-          select rate, as_of, 0 as priority
-            from fx_rates
-           where org_id = ${orgId} and from_currency = ${sourceCurrency}
-             and to_currency = ${orgCurrency} and rate_type = 'spot'
-             and as_of <= ${asOf}
-          union all
-          select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority
-            from fx_rates
-           where org_id = ${orgId} and from_currency = ${orgCurrency}
-             and to_currency = ${sourceCurrency} and rate_type = 'spot'
-             and as_of <= ${asOf}
-        ) candidates
-        order by as_of desc, priority asc
-        limit 1
-      `)
-      rate = candidates.rows[0]?.rate
-      if (!rate) throw new Error(`no spot rate for customer pipeline ${sourceCurrency}→${orgCurrency} on or before ${asOf}`)
-      rates.set(sourceCurrency, rate)
-    }
+    const rate = fx.rateAt(String(row.currency).trim().toUpperCase() || null, asOf)
     total = add(total, mulDecimal(row.pipeline_amount ?? '0', rate))
     weighted = add(weighted, mulDecimal(row.weighted_amount ?? '0', rate))
     closed = add(closed, mulDecimal(row.closed_amount ?? '0', rate))
@@ -344,7 +317,7 @@ export async function customersHome(
   const badge = badgeRes.rows[0] ?? {}
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (!orgCurrency) throw new Error('organization currency is not configured')
-  const pipeline = await pipelineInOrgCurrency(orgId, orgCurrency, today, forecast)
+  const pipeline = await pipelineInOrgCurrency(orgId, today, forecast)
 
   return {
     arOutstanding,
