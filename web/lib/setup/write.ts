@@ -1991,7 +1991,11 @@ function overlapConflict(entityKey: string): { status: 409; body: { error: strin
     ? 'An active rate already covers this jurisdiction for this period.'
     : entityKey === 'leave-policies'
       ? 'Another policy already covers this leave type and scope for these dates — close its window or deactivate it before saving.'
-      : 'This period overlaps an existing record.'
+      : entityKey === 'business-calendars'
+        ? 'A calendar already covers this organization or subsidiary for these dates — close its window (set its effective-to) or deactivate it before saving.'
+        : entityKey === 'aging-bucket-policies'
+          ? 'An aging policy already covers these dates — close its window (set its effective-to) or deactivate it before saving.'
+          : 'This period overlaps an existing record.'
   return { status: 409, body: { error, code: 'overlap' } }
 }
 
