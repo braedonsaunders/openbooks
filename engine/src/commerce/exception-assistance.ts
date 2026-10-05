@@ -864,7 +864,7 @@ async function suggestPayoutLineFixInner(
     claim(id, `Provider reference "${line.externalRef ?? sourceOrderId}" claims this document directly.`);
   }
   const orders = line.provider === "shopify_payments" && sourceOrderId && sourceOrderId.trim() !== ""
-    ? await findLineSourceOrders(orgId, sourceOrderId, allowedSubsidiaryIds)
+    ? await findLineSourceOrders(orgId, sourceOrderId, allowedSubsidiaryIds, line.batchSubsidiaryId)
     : [];
   const isRefundLine = line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal";
   for (const order of orders) {
