@@ -1,10 +1,8 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
-import { BUILT_IN_REPORT_DEFINITION_MAP, REPORT_ENTITY_MAP, entityColumn } from '@openbooks/reports'
 import { getMoneyFormatter } from '../money-server'
 import { toChartNumber } from '../chart-number'
 import { formatDecimal } from '../money-format'
-import { loadAnalyticsReportPreview } from './report-preview'
 import type { AnalyticsDashboardDefinition, AnalyticsPreview, AnalyticsPreviewChart } from './dashboard-catalog'
 
 /** Reuse the dashboard loaders: previews never maintain their own financial calculations. */
@@ -65,40 +63,5 @@ export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDef
       return result(periodLabel, [metric('sentinel.kpi.flagged', number(data.summary.flaggedCount)), metric('sentinel.kpi.duplicatePairs', number(data.summary.duplicateCount)), metric('sentinel.kpi.valueAtRisk', fmt.money(data.summary.totalAtRisk, { currency: data.meta.presentationCurrency })), metric('hub.riskScore', `${number(data.summary.overallRiskScore)}/100`)])
     }
   }
-  if (dashboard.slug === 'resource-capacity') {
-    const data = await (await import('../../app/(app)/reports/resourcing/capacity-demand/view')).loadCapacityDemandReport(sp)
-    return result(data.periodPhrase, data.result.summary.slice(1, 5).map((item) => ({ label: item.label, value: String(item.value) })))
-  }
-  const source = dashboard.reportSlug && BUILT_IN_REPORT_DEFINITION_MAP[dashboard.reportSlug]
-  if (!source) throw new Error('Analytics report definition is unavailable')
-  const data = await loadAnalyticsReportPreview(source, sp)
-  const entity = REPORT_ENTITY_MAP[data.query.entity]
-  const denominationColumns = new Set([entity?.baseCurrencyColumn, entity?.currencyColumn].filter(Boolean))
-  const currencyIndices = data.query.breakouts?.flatMap((breakout, index) => denominationColumns.has(breakout.column) ? [index] : []) ?? []
-  // A plan can carry both functional and transaction amounts. A common card
-  // denomination is safe only when every displayed basis has the same code.
-  const currencies = new Set(data.result.groups.flatMap((group) => group.rows.flatMap((row) => currencyIndices.map((index) => row[index]))).filter((value): value is string => typeof value === 'string' && /^[A-Z]{3}$/.test(value)))
-  const currency = currencies.size === 1 ? [...currencies][0] : undefined
-  const summaries = data.result.summary.slice(1)
-  // Never assign the company's currency to a source amount whose own
-  // denomination is absent. The native report remains the place to inspect it.
-  const metrics = summaries.slice(0, 4).map((item) => ({ label: item.label, value: item.money ? currency ? fmt.money(item.value, { currency }) : t('hub.openForCurrency') : String(item.value) }))
-  if (metrics.length < 3) metrics.push({ label: data.result.summary[0]?.label ?? t('hub.reportRows'), value: String(data.result.summary[0]?.value ?? data.result.rowCount) })
-  const expectedMoney = data.query.measures?.filter((measure) => !measure.hidden && (measure.format === 'money' || (entity && measure.column && entityColumn(entity, measure.column)?.kind === 'money'))).length ?? 0
-  const notice = expectedMoney > 0 && (!currency || summaries.filter((item) => item.money).length < expectedMoney) ? t('hub.currencyNotice') : undefined
-  if (source.slug.startsWith('analytics-') && data.query.measures?.every((measure) => measure.fn === 'count')) {
-    // Only mutually exclusive equality-filtered states belong in a composition
-    // chart. An unfiltered total is not a second slice of the same population.
-    const states = data.query.measures.flatMap((measure, index) => {
-      const filter = measure.filter
-      const rule = filter?.rules.length === 1 ? filter.rules[0] : undefined
-      return rule && !filter?.not && 'field' in rule && rule.op === 'eq' && typeof rule.value === 'string'
-        ? [{ field: rule.field, state: rule.value, summary: summaries[index] }]
-        : []
-    })
-    const disjoint = states.length > 1 && states.every((state) => state.field === states[0]!.field) && new Set(states.map((state) => state.state)).size === states.length
-    const slices = states.flatMap(({ summary }) => summary ? [{ name: summary.label, value: toChartNumber(String(summary.value)) }] : [])
-    if (disjoint && slices.some((slice) => slice.value > 0)) chart = { kind: 'donut', label: t('hub.statesShown'), slices }
-  }
-  return result(data.periodLabel ?? t('hub.snapshot'), metrics, notice)
+  throw new Error('Analytics dashboard preview is unavailable')
 }

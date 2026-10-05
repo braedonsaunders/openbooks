@@ -17,7 +17,7 @@ test('every viewer-override temporal op is a real filter operator', () => {
   assert.ok(!TEMPORAL_OPS.has('between'), "'between' compiles nowhere and must stay out of the override set")
 })
 
-test('current-state analytics stay complete while explicit and legacy date reports retain their period', () => {
+test('current-state reports stay complete while explicit and legacy date reports retain their period', () => {
   const snapshot = { entity: 'projects', columns: [], periodField: null }
   assert.equal(reportPeriodField(snapshot), null, 'current project counts must not become a start-date cohort')
   assert.equal(reportPeriodField({ ...snapshot, periodField: 'starts_on' }), 'starts_on')

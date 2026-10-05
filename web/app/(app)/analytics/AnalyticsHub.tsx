@@ -94,12 +94,9 @@ export function AnalyticsHub({ title, groups, initialLayout = {} }: { title: str
     <RecordTabs label={t('browseGroups')} tabs={tabs} active={activeGroup} onChange={setActiveGroup}>
       <div className="space-y-4 pt-3">
         {Object.values(previews).some((preview) => preview.error) ? <Button variant="ghost" size="sm" onClick={() => setRefresh((value) => value + 1)}>{t('retryMetrics')}</Button> : null}
-        {shown.length ? shown.map((group) => <section key={group.key} className="space-y-2" aria-label={group.label}>
-          <h2 className="text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">{group.label}</h2>
-          <div className="grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {group.cards.map((card) => <LiveAnalyticsCard key={card.slug} card={{ ...card, href: `${card.href}${qs ? `?${qs}` : ''}` }} preview={previews[card.slug]?.data} error={previews[card.slug]?.error} onReady={onReady} />)}
-          </div>
-        </section>) : <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800"><p className="text-sm text-slate-500">{query ? t('noMatches') : t('noneVisible')}</p><Button variant="outline" className="mt-4" onClick={() => setLibraryOpen(true)}>{t('addAnalytics')}</Button></div>}
+        {shown.length ? <div className="grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {shown.flatMap((group) => group.cards).map((card) => <LiveAnalyticsCard key={card.slug} card={{ ...card, href: `${card.href}${qs ? `?${qs}` : ''}` }} preview={previews[card.slug]?.data} error={previews[card.slug]?.error} onReady={onReady} />)}
+        </div> : <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800"><p className="text-sm text-slate-500">{query ? t('noMatches') : t('noneVisible')}</p><Button variant="outline" className="mt-4" onClick={() => setLibraryOpen(true)}>{t('addAnalytics')}</Button></div>}
       </div>
     </RecordTabs>
     <Drawer open={libraryOpen} onClose={() => setLibraryOpen(false)} size="md" title={t('libraryTitle')} description={t('libraryDescription')} bodyClassName="overflow-y-auto p-5">

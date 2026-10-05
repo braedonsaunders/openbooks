@@ -16,5 +16,3 @@ export * from './built-ins'
 export * from './standard-statements'
 
 export * from "./custom-record-entities"
-
-export * from './metric-query'

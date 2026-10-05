@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { ANALYTICS_SUMMARY_REPORTS } from './analytics-summaries'
-import { ANALYTICS_REPORT_ENTITIES } from './analytics-entities'
+import { PORTFOLIO_SUMMARY_REPORTS } from './portfolio-summaries'
+import { OPERATIONAL_REPORT_ENTITIES } from './operational-entities'
 import { BUILT_IN_REPORT_DEFINITION_MAP } from './built-ins'
 import { REPORT_ENTITY_MAP } from './entities'
 import { compileCustomQuery } from './custom-query'
@@ -10,9 +10,9 @@ import { validateCustomQuery } from './validate'
 const orgId = '00000000-0000-4000-8000-000000000001'
 const subsidiaryId = '00000000-0000-4000-8000-000000000002'
 
-test('every live summary is a runnable native report with three or four measures', () => {
-  assert.ok(ANALYTICS_SUMMARY_REPORTS.length >= 8)
-  for (const report of ANALYTICS_SUMMARY_REPORTS) {
+test('every portfolio summary is registered as a runnable native report', () => {
+  assert.ok(PORTFOLIO_SUMMARY_REPORTS.length >= 8)
+  for (const report of PORTFOLIO_SUMMARY_REPORTS) {
     assert.equal(BUILT_IN_REPORT_DEFINITION_MAP[report.slug], report)
     const query = validateCustomQuery(report.query)
     assert.ok(query.measures!.length >= 3 && query.measures!.length <= 4, report.slug)
@@ -22,10 +22,10 @@ test('every live summary is a runnable native report with three or four measures
 
 test('new operational sources require their native permission and bind org and subsidiary scope', () => {
   const expectedPermissions = { manufacturing_work_orders: 'manufacturing.read', managed_property_portfolio: 'ar.read' }
-  for (const entity of ANALYTICS_REPORT_ENTITIES) {
+  for (const entity of OPERATIONAL_REPORT_ENTITIES) {
     assert.equal(entity.requiredPermission, expectedPermissions[entity.key as keyof typeof expectedPermissions])
     assert.ok(entity.featureKey)
-    const report = ANALYTICS_SUMMARY_REPORTS.find((definition) => definition.query.entity === entity.key)!
+    const report = PORTFOLIO_SUMMARY_REPORTS.find((definition) => definition.query.entity === entity.key)!
     const compiled = compileCustomQuery(entity, validateCustomQuery(report.query), orgId, { allowedSubsidiaryIds: [subsidiaryId] })
     assert.ok(compiled.text.includes(entity.orgColumn), entity.key)
     assert.ok(compiled.text.includes(entity.subsidiaryScope!.column), entity.key)
@@ -37,7 +37,7 @@ test('new operational sources require their native permission and bind org and s
 })
 
 test('snapshot opt-out is preserved and invalid period fields name the remedy', () => {
-  const base = ANALYTICS_SUMMARY_REPORTS.find((report) => report.query.entity === 'projects')!.query
+  const base = PORTFOLIO_SUMMARY_REPORTS.find((report) => report.query.entity === 'projects')!.query
   assert.equal(validateCustomQuery(base).periodField, null)
   assert.equal(validateCustomQuery({ ...base, periodField: 'starts_on' }).periodField, 'starts_on')
   assert.throws(() => validateCustomQuery({ ...base, periodField: 'status' }), /date column.*null for a current-state report/)
