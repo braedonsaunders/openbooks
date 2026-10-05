@@ -8,6 +8,10 @@ import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createProgram, issueStoredValue, redeemStoredValue } from "./accounts.ts";
 import { runStoredValueBreakage } from "./breakage.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -464,5 +468,85 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
   } finally {
     await withBypass(() => dropScratchOrg(first.org.orgId));
     await withBypass(() => dropScratchOrg(second.org.orgId));
+  }
+});
+
+test("voids reverse card effects: a receipt returns its tender, a sale takes back an unspent card", { skip: !DB }, async () => {
+  const fx = await seedStoredValueOrg();
+  const { org, actorId } = fx;
+  const control = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+  const postInvoice = async (number: string, amount: string, giftCard: boolean) => {
+    const invoiceId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency, fx_rate,
+           status, subtotal, tax_total, total, created_by, updated_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', ${number}, ${org.customerId}, ${org.subsidiaryId},
+          ${org.date}, 'CAD', '1', 'draft', ${amount}, '0', ${amount}, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount,
+           tax_input_amount, tax_amount, custom, created_by, updated_by)
+        values (${org.orgId}, ${invoiceId}, 1, ${giftCard ? fx.giftItem : null}, ${org.accounts.revenue}, '1', ${amount},
+          ${amount}, ${amount}, '0', ${JSON.stringify(giftCard ? { storedValueProgramId: fx.giftProgram } : {})}::jsonb,
+          ${actorId}, ${actorId})`);
+      await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
+    });
+    await withBypass(() => postDocument(invoiceId, control));
+    return invoiceId;
+  };
+  const voidDocument = (documentId: string, reason: string) => withBypass(() => requestDocumentVoid({
+    documentId, orgId: org.orgId, actorId, reason, reversalDate: org.date, source: "api",
+  }));
+  try {
+    const saleId = await postInvoice("INV-SV-VOID-1", "50", true);
+    const cardId = (await withBypass(() => db.execute<{ id: string }>(sql`
+      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${saleId}`))).rows[0]!.id;
+    const invoiceId = await postInvoice("INV-SV-VOID-2", "30", false);
+    const invoiceLine = (await withBypass(() => db.execute<{ id: string }>(sql`
+      select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`))).rows[0]!.id;
+    const receiptId = await withBypass(async () => {
+      const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
+        orgId: org.orgId, kind: "customer_payment", createdBy: actorId, partyId: org.customerId,
+        bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: "CAD", fxRate: "1",
+      });
+      await updateDraftPayment(receipt.id, {
+        partyId: org.customerId, bankAccountId: org.accounts.bank,
+        allocations: [sameCurrencyAllocation(invoiceLine, "30")],
+        storedValueTenders: [{ accountId: cardId, amount: "20" }],
+      }, actorId, org.orgId);
+      await db.execute(sql`update documents set status = 'approved' where id = ${receipt.id} and org_id = ${org.orgId}`);
+      await postPaymentWithApplications(receipt.id, undefined, actorId);
+      return receipt.id;
+    });
+    assert.equal((await accountState(org.orgId, cardId)).balance, "300000");
+
+    // The card's value is partly spent, so the sale cannot take it back.
+    await assert.rejects(voidDocument(saleId, "Gift card sold in error"), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "stored_value_void_value_spent");
+      assert.match((error as Error).message, /holds 30\.0000, less than the 50\.0000 INV-SV-VOID-1 put on it/);
+      return true;
+    });
+    assert.equal((await accountState(org.orgId, cardId)).balance, "300000");
+
+    // Voiding the receipt returns the tender to the card with a reversal entry.
+    await voidDocument(receiptId, "Receipt keyed against the wrong invoice");
+    const restored = await accountState(org.orgId, cardId);
+    assert.deepEqual([restored.balance, restored.status], ["500000", "active"]);
+    // Now unspent, the sale voids and takes the card back out of circulation.
+    await voidDocument(saleId, "Gift card sold in error");
+    const ended = await accountState(org.orgId, cardId);
+    assert.deepEqual([ended.balance, ended.issued, ended.status], ["0", "0", "closed"]);
+    const reversals = (await withBypass(() => db.execute<{ amount: string; document_id: string }>(sql`
+      select amount_minor::text as amount, document_id from stored_value_entries
+       where org_id = ${org.orgId} and account_id = ${cardId} and kind = 'reversal' order by created_at, id`))).rows;
+    assert.deepEqual(reversals, [
+      { amount: "200000", document_id: receiptId },
+      { amount: "-500000", document_id: saleId },
+    ]);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
   }
 });

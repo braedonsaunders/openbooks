@@ -10,6 +10,10 @@ import {
   unapplyCreditSettlement as unapplyCreditSettlementScoped,
 } from "./credit-settlement.ts";
 import { paymentBookId } from "./payment-accounts.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { CreditApplicationConflictError, PaymentError } from "../payments-core/payment-errors.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
@@ -712,6 +716,68 @@ test("concurrent identical submits share one settlement through the key fence", 
     );
     assert.equal(Number(rows!.n), 1, "both concurrent submits resolve to one settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("voiding a payment releases the credits it applied, and only then may they be released", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Carried credit voider", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CARRIED-1", "300");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-CARRIED-1", "100");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+    const paymentId = await withBypass(async () => {
+      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+        orgId: org.orgId, kind: "customer_payment", createdBy: userId, partyId: org.customerId,
+        bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date,
+        currency: "CAD", fxRate: "1",
+      });
+      await updateDraftPayment(payment.id, {
+        partyId: org.customerId, bankAccountId: org.accounts.bank,
+        allocations: [sameCurrencyAllocation(invoiceLine, "200")],
+        creditAllocations: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
+      }, userId, org.orgId);
+      await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
+      await postPaymentWithApplications(payment.id, undefined, userId);
+      return payment.id;
+    });
+    const carried = await withBypass(async () => (await db.execute<{ id: string }>(sql`
+      select id from applications
+       where org_id = ${org.orgId} and from_line_id = ${creditLine} and to_line_id = ${invoiceLine} and unapplied_at is null
+    `)).rows);
+    assert.equal(carried.length, 1);
+    assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
+    // While the payment stands, its credit is released only by voiding it.
+    const payment = await withBypass(async () => (await db.execute<{ document_number: string }>(sql`
+      select document_number from documents where id = ${paymentId} and org_id = ${org.orgId}`)).rows[0]!);
+    await assert.rejects(
+      () => withBypass(() => unapplyCreditSettlement(org.orgId, userId, carried[0]!.id)),
+      (error: unknown) => error instanceof PaymentError
+        && error.message === `this credit was applied by payment ${payment.document_number}; void that payment to release it`,
+    );
+
+    const voided = await withBypass(() => requestDocumentVoid({
+      documentId: paymentId, orgId: org.orgId, actorId: userId,
+      reason: "Receipt recorded against the wrong deposit", reversalDate: org.date, source: "api",
+    }));
+    assert.equal(voided.status, "voided");
+    assert.equal(await openBalance(org.orgId, invoiceLine), "300.0000");
+    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "100.0000");
+    const evidence = await withBypass(async () => (await db.execute<{ changes: { mode: string; released: Array<{ applicationId: string; amount: string }>; notLive: unknown[] } }>(sql`
+      select changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${paymentId}
+         and changes ->> 'mode' = 'void_release_carried_credits'`)).rows);
+    assert.deepEqual(evidence.map((row) => row.changes.released.map((r) => [r.applicationId, r.amount])), [[[carried[0]!.id, "100"]]]);
+    assert.deepEqual(evidence[0]!.changes.notLive, []);
+    // The voided payment no longer claims the credit, which can be applied again.
+    await withBypass(() => applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: org.date,
+      credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
+    }));
+    assert.equal(await openBalance(org.orgId, invoiceLine), "200.0000");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

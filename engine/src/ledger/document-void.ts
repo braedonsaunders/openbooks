@@ -24,6 +24,7 @@ import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
+import { reverseStoredValueForVoidedDocument } from "../stored-value/void-reversal.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 
@@ -112,6 +113,92 @@ function isLockNotAvailable(error: unknown): boolean {
  * than silently ignored. Runs at request time (fail fast) and again at
  * completion (authoritative: the period may have changed while gates waited).
  */
+const PAYMENT_KINDS: ReadonlySet<string> = new Set(["customer_payment", "vendor_payment"]);
+
+type CarriedCreditAllocation = { fromLineId: string; toLineId: string; amount: string };
+
+/** The credit allocations a payment carried, as stored on its approved document. */
+function carriedCreditAllocations(custom: unknown): CarriedCreditAllocation[] {
+  const raw = (custom as { creditAllocations?: unknown } | null)?.creditAllocations;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const allocation = entry as Partial<CarriedCreditAllocation> | null;
+    return allocation && isUuid(allocation.fromLineId) && isUuid(allocation.toLineId) && typeof allocation.amount === "string"
+      ? [{ fromLineId: allocation.fromLineId, toLineId: allocation.toLineId, amount: allocation.amount }]
+      : [];
+  });
+}
+
+/**
+ * Voiding a payment releases the credits it applied, in the void's own
+ * transaction. Posting wrote each carried credit allocation as a credit →
+ * target application dated on the payment's posting date; without this the
+ * void reversed the cash but left the credit consumed and the bill reduced by
+ * a payment that no longer exists. Each release is recorded in the audit log
+ * against the payment, naming the application, its endpoints and amount.
+ */
+async function releaseCarriedCreditAllocations(
+  tx: SqlExecutor,
+  input: {
+    orgId: string;
+    paymentDocumentId: string;
+    entryId: string;
+    allocations: CarriedCreditAllocation[];
+    actorId: string;
+    reason: string;
+  },
+): Promise<void> {
+  if (input.allocations.length === 0) return;
+  const released: Array<CarriedCreditAllocation & { applicationId: string }> = [];
+  const notLive: CarriedCreditAllocation[] = [];
+  for (const allocation of input.allocations) {
+    const application = (await tx.execute<{ id: string }>(sql`
+      select a.id
+        from applications a
+       where a.org_id = ${input.orgId} and a.unapplied_at is null
+         and a.from_line_id = ${allocation.fromLineId} and a.to_line_id = ${allocation.toLineId}
+         and a.amount = ${allocation.amount}::numeric
+         and a.settlement_rate_reference = 'same transaction currency'
+         and a.applied_on = (
+           select entry.posting_date from journal_entries entry
+            where entry.id = ${input.entryId} and entry.org_id = ${input.orgId})
+         ${released.length > 0 ? sql`and a.id not in ${released.map((row) => row.applicationId)}` : sql``}
+       order by a.created_at, a.id
+       limit 1
+       for update
+    `)).rows[0];
+    if (!application) {
+      notLive.push(allocation);
+      continue;
+    }
+    const unapplied = (await tx.execute<{ id: string }>(sql`
+      update applications
+         set unapplied_at = now(), updated_at = now(), updated_by = ${input.actorId}
+       where id = ${application.id} and org_id = ${input.orgId} and unapplied_at is null
+       returning id
+    `)).rows[0];
+    if (!unapplied) {
+      throw new DocumentVoidError("a credit this payment applied changed while the void was being completed — retry", 409);
+    }
+    released.push({ ...allocation, applicationId: application.id });
+  }
+  await tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${input.orgId}, 'documents', ${input.paymentDocumentId}, 'update',
+      ${JSON.stringify({
+        mode: "void_release_carried_credits",
+        reason: input.reason,
+        released,
+        // Allocations with no live application had already been released;
+        // recorded so the evidence accounts for every carried allocation.
+        notLive,
+      })}::jsonb,
+      ${input.actorId}, 'controlled_void'
+    )
+  `);
+}
+
 async function resolveVoidReversalPeriod(
   executor: { execute: typeof db.execute },
   orgId: string,
@@ -723,12 +810,17 @@ export async function completeRequestedDocumentVoid(
       // before taking locks. lockApplicationEvidence then acquires the shared
       // document → entry → line protocol used by application writers. The
       // transaction remains open through all refusal checks and the reversal.
-      const discovered = (await tx.execute<{ posted_entry_id: string | null }>(sql`
-        select posted_entry_id
+      const discovered = (await tx.execute<{ posted_entry_id: string | null; kind: string; custom: unknown }>(sql`
+        select posted_entry_id, kind, custom
           from documents
          where id = ${documentId} and org_id = ${orgId}
       `)).rows[0];
       const discoveredEntryId = discovered?.posted_entry_id ?? null;
+      // A payment's carried credit allocations are released with it below, so
+      // their credit and target lines join the same evidence lock.
+      const carriedCreditEndpoints = discovered && PAYMENT_KINDS.has(discovered.kind)
+        ? carriedCreditAllocations(discovered.custom).flatMap((allocation) => [allocation.fromLineId, allocation.toLineId])
+        : [];
       const endpointIds = discoveredEntryId
         ? (await tx.execute<{ id: string }>(sql`
             with source_lines as (
@@ -748,7 +840,7 @@ export async function completeRequestedDocumentVoid(
             select id from source_lines
             union
             select id from related_lines
-          `)).rows.map((row) => row.id)
+          `)).rows.map((row) => row.id).concat(carriedCreditEndpoints)
         : [];
       let lockedEvidence: Awaited<ReturnType<typeof lockApplicationEvidence>>;
       try {
@@ -1101,6 +1193,16 @@ export async function completeRequestedDocumentVoid(
                select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
         `);
+        if (PAYMENT_KINDS.has(String(doc.kind))) {
+          await releaseCarriedCreditAllocations(tx, {
+            orgId,
+            paymentDocumentId: documentId,
+            entryId,
+            allocations: carriedCreditAllocations(doc.custom),
+            actorId: String(doc.void_requested_by),
+            reason: String(doc.void_reason),
+          });
+        }
 
         const reverseEntry = async (
           sourceEntryId: string,
@@ -1213,6 +1315,30 @@ export async function completeRequestedDocumentVoid(
           }
           await reverseEntry(linked.id, "VOID");
         }
+        // A gift-card redemption priced at a different rate than the card's
+        // carrying rate posted realized FX in its own entry on this document.
+        const storedValueFx = (await tx.execute<{ id: string }>(sql`
+          select id
+            from journal_entries
+           where org_id = ${orgId} and source_document_id = ${documentId}
+             -- Live entries only: one already reversed is not reversed again.
+             and origin = 'stored_value' and status = 'posted'
+           order by id
+           for update
+        `));
+        for (const fx of storedValueFx.rows) {
+          await reverseEntry(fx.id, "VOID");
+        }
+        // The journal reversal above moved the stored-value liability; the
+        // card subledger moves with it in this same transaction.
+        await reverseStoredValueForVoidedDocument({
+          orgId,
+          documentId,
+          documentNumber: String(doc.document_number),
+          reversalEntryId,
+          actorId: String(doc.void_requested_by),
+          reason: String(doc.void_reason),
+        });
       }
 
       if (String(doc.kind) === "customer_invoice" || String(doc.kind) === "customer_credit") {
