@@ -16,7 +16,7 @@ test('all guided package patterns cross the native structured form and strict AP
     for (const input of definition.inputs) if (input.type.kind !== 'boolean') input.maximum = '100000'
     definition.rules[0]!.componentId = componentId
     const form = setupDomainPayload(entity, { packageId: pack.id, effectiveFrom: '2026-01-01', effectiveTo: '', definition, reason: 'Employer-approved pattern bounds' })
-    assert.ok(form.ok, form.ok ? undefined : form.error)
+    assert.ok(form.ok, form.ok ? 'The native package form must accept its declared policy' : form.error)
     const request = setupAggregatePayload(entity, form.body, null)
     assert.ok(request.ok)
     assert.deepEqual(Object.keys(request.body).sort(), ['definition', 'effectiveFrom', 'effectiveTo', 'reason'])
