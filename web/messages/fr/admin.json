@@ -3319,6 +3319,11 @@
         "title": "Politiques",
         "description": "Recouvrez les créances et gérez la facturation dans un espace de travail unique."
       },
+      "consolidation-groups": {
+        "title": "Groupes de consolidation",
+        "singular": "Groupe de consolidation",
+        "description": "Une facture par payeur et par période pour une hiérarchie de clients : le payeur porte la créance tandis que chaque ligne conserve son client desservi."
+      },
       "promotions": {
         "title": "Promotions",
         "singular": "Promotion",
@@ -4638,6 +4643,15 @@
         "suspend": "Suspendre l’abonnement",
         "cancel": "Résilier l’abonnement"
       },
+      "consolidationCadence": {
+        "weekly": "Hebdomadaire",
+        "monthly": "Mensuelle"
+      },
+      "consolidationGrouping": {
+        "byChild": "Par client",
+        "bySubscription": "Par abonnement",
+        "byProduct": "Par produit"
+      },
       "contractCostBasis": {
         "contractTerm": "Durée du contrat",
         "customerLife": "Durée de vie client attendue"
@@ -5868,6 +5882,15 @@
       "breakageRate": "Taux de breakage attendu",
       "expiryMonths": "Expiration (mois)",
       "inactivityMonths": "Période d’inactivité (mois)"
+    },
+    "consolidationGroupFields": {
+      "payer": "Payeur",
+      "billingSubsidiary": "Entité de facturation",
+      "cadence": "Périodicité",
+      "cutoffDay": "Jour de clôture",
+      "grouping": "Regroupement des lignes",
+      "template": "Modèle de facture",
+      "templateHelp": "Enregistré sur les factures consolidées de ce groupe."
     },
     "no": "Non",
     "payComponentChooser": {

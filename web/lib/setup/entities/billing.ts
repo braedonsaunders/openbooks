@@ -3,6 +3,49 @@ import type { SetupEntity } from '../types'
 
 export const BILLING_ENTITIES: SetupEntity[] = [
   {
+    // One monthly (or weekly) invoice per payer for a customer hierarchy:
+    // the payer owns the AR, the billing subsidiary issues the invoice,
+    // and each line keeps its service party so cross-entity charges post
+    // intercompany legs. Relationships point at these groups; the
+    // consolidation scan and the run route do the collecting.
+    key: 'consolidation-groups',
+    table: 'consolidation_groups',
+    groupKey: 'billing',
+    featureKey: 'consolidatedBilling',
+    iconKey: 'receipt',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    hasActive: true,
+    writePermission: 'documents.manage',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'payerPartyId', labelKey: 'consolidationGroupFields.payer', kind: 'ref', ref: 'customers' },
+      { key: 'cadence', labelKey: 'consolidationGroupFields.cadence', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true, fullWidth: true },
+      { key: 'payerPartyId', labelKey: 'consolidationGroupFields.payer', kind: 'ref', ref: 'customers', required: true },
+      { key: 'billingSubsidiaryId', labelKey: 'consolidationGroupFields.billingSubsidiary', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'cadence', labelKey: 'consolidationGroupFields.cadence', kind: 'select', required: true, defaultValue: 'monthly', options: [
+        { value: 'weekly', labelKey: 'options.consolidationCadence.weekly' },
+        { value: 'monthly', labelKey: 'options.consolidationCadence.monthly' },
+      ] },
+      { key: 'cutoffDay', labelKey: 'consolidationGroupFields.cutoffDay', kind: 'integer', required: true, min: 1, max: 28, defaultValue: 1 },
+      { key: 'grouping', labelKey: 'consolidationGroupFields.grouping', kind: 'select', required: true, defaultValue: 'by_child', options: [
+        { value: 'by_child', labelKey: 'options.consolidationGrouping.byChild' },
+        { value: 'by_subscription', labelKey: 'options.consolidationGrouping.bySubscription' },
+        { value: 'by_product', labelKey: 'options.consolidationGrouping.byProduct' },
+      ] },
+      { key: 'template', labelKey: 'consolidationGroupFields.template', kind: 'text', fullWidth: true,
+        helpTextKey: 'consolidationGroupFields.templateHelp' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true, booleanStyle: 'switch', fullWidth: true },
+    ],
+  },
+  {
     key: 'dunning-policies', table: 'dunning_policies', groupKey: 'billing',
     iconKey: 'mail', orgScoped: true, rehomed: true, hasActive: true,
     orderBy: 'name', singularTitleKey: 'collectionPolicy', writePermission: 'documents.manage', mutationPath: '/api/dunning',

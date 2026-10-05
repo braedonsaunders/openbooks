@@ -3439,6 +3439,11 @@
         "title": "ポリシー",
         "description": "一つのワークスペースで債権回収と請求を管理します。"
       },
+      "consolidation-groups": {
+        "title": "統合請求グループ",
+        "singular": "統合請求グループ",
+        "description": "顧客階層ごとに支払者単位・期間単位で1件の請求書を作成します。売掛金は支払者に帰属し、各明細はサービス提供先の顧客を保持します。"
+      },
       "promotions": {
         "title": "プロモーション",
         "singular": "プロモーション",
@@ -4758,6 +4763,15 @@
         "suspend": "サブスクリプションを利用停止",
         "cancel": "サブスクリプションを解約"
       },
+      "consolidationCadence": {
+        "weekly": "毎週",
+        "monthly": "毎月"
+      },
+      "consolidationGrouping": {
+        "byChild": "顧客別",
+        "bySubscription": "サブスクリプション別",
+        "byProduct": "製品別"
+      },
       "contractCostBasis": {
         "contractTerm": "契約期間",
         "customerLife": "見込み顧客ライフ"
@@ -5868,6 +5882,15 @@
       "breakageRate": "予想ブレーク率",
       "expiryMonths": "有効期限（か月）",
       "inactivityMonths": "非アクティブ期間（か月）"
+    },
+    "consolidationGroupFields": {
+      "payer": "支払者",
+      "billingSubsidiary": "請求エンティティ",
+      "cadence": "請求周期",
+      "cutoffDay": "締め日",
+      "grouping": "明細のグループ化",
+      "template": "請求書テンプレート",
+      "templateHelp": "このグループの統合請求書に記録されます。"
     },
     "no": "いいえ",
     "payComponentChooser": {

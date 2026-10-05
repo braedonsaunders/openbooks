@@ -1222,6 +1222,38 @@ export async function validateEntityIntegrity(
     }
     if (overlap.rows.length) return 'This scope already has an active rate book for part of that date range'
   }
+  // Consolidation groups: the payer must be a party of this organization
+  // and the billing subsidiary an active entity of it — a group pointing
+  // elsewhere would consolidate every period into a refusal at run time.
+  // Range and enum domains are storage CHECKs; the messages below name the
+  // field before the database has to.
+  if (entity.key === 'consolidation-groups') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select payer_party_id as "payerPartyId", billing_subsidiary_id as "billingSubsidiaryId",
+               cadence, cutoff_day as "cutoffDay", grouping
+          from consolidation_groups where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Consolidation group not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (!['weekly', 'monthly'].includes(String(values.cadence ?? 'monthly'))) return 'Choose a weekly or monthly cadence'
+    if (!['by_child', 'by_subscription', 'by_product'].includes(String(values.grouping ?? 'by_child'))) {
+      return 'Choose how the consolidated invoice groups its lines'
+    }
+    const cutoff = Number(values.cutoffDay)
+    if (!Number.isInteger(cutoff) || cutoff < 1 || cutoff > 28) return 'Choose a cut-off day between 1 and 28'
+    const refs = await executor.execute(sql`
+      select
+        exists(select 1 from parties where id = ${String(values.payerPartyId ?? '')} and org_id = ${orgId}) as payer_ok,
+        ${values.billingSubsidiaryId
+          ? sql`exists(select 1 from subsidiaries where id = ${String(values.billingSubsidiaryId)} and org_id = ${orgId} and is_active)`
+          : sql`true`} as subsidiary_ok
+    `)
+    if (!refs.rows[0]?.payer_ok) return 'Choose the payer from this organization'
+    if (!refs.rows[0]?.subsidiary_ok) return 'Choose an active billing entity from this organization'
+  }
   // HRM process templates (0193): prove the applies_to filter targets are
   // visible in this org — a template that can never apply is refused by
   // field name instead of saved as applicable. The body arrives normalized

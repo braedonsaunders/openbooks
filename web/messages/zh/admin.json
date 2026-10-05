@@ -3364,6 +3364,11 @@
         "title": "政策",
         "description": "在同一工作区管理应收催收与计费。"
       },
+      "consolidation-groups": {
+        "title": "合并结算组",
+        "singular": "合并结算组",
+        "description": "按客户层级、按付款方、按期间开具一张发票：应收账款归属于付款方，每一行保留其服务客户。"
+      },
       "promotions": {
         "title": "促销",
         "singular": "促销",
@@ -4683,6 +4688,15 @@
         "suspend": "暂停订阅",
         "cancel": "取消订阅"
       },
+      "consolidationCadence": {
+        "weekly": "每周",
+        "monthly": "每月"
+      },
+      "consolidationGrouping": {
+        "byChild": "按客户",
+        "bySubscription": "按订阅",
+        "byProduct": "按产品"
+      },
       "contractCostBasis": {
         "contractTerm": "合同期",
         "customerLife": "预计客户生命周期"
@@ -5868,6 +5882,15 @@
       "breakageRate": "预计断点率",
       "expiryMonths": "有效期（月）",
       "inactivityMonths": "不活跃期（月）"
+    },
+    "consolidationGroupFields": {
+      "payer": "付款方",
+      "billingSubsidiary": "开票实体",
+      "cadence": "开票周期",
+      "cutoffDay": "截止日",
+      "grouping": "行分组",
+      "template": "发票模板",
+      "templateHelp": "记录在该组的合并发票上。"
     },
     "no": "否",
     "payComponentChooser": {

@@ -3364,6 +3364,11 @@
         "title": "Políticas",
         "description": "Receba valores pendentes e gerencie o faturamento em um único espaço de trabalho."
       },
+      "consolidation-groups": {
+        "title": "Grupos de consolidação",
+        "singular": "Grupo de consolidação",
+        "description": "Uma fatura por pagador e período para uma hierarquia de clientes: o pagador detém o contas a receber enquanto cada linha mantém seu cliente de serviço."
+      },
       "promotions": {
         "title": "Promoções",
         "singular": "Promoção",
@@ -4683,6 +4688,15 @@
         "suspend": "Suspender a assinatura",
         "cancel": "Cancelar a assinatura"
       },
+      "consolidationCadence": {
+        "weekly": "Semanal",
+        "monthly": "Mensal"
+      },
+      "consolidationGrouping": {
+        "byChild": "Por cliente",
+        "bySubscription": "Por assinatura",
+        "byProduct": "Por produto"
+      },
       "contractCostBasis": {
         "contractTerm": "Prazo do contrato",
         "customerLife": "Vida esperada do cliente"
@@ -5868,6 +5882,15 @@
       "breakageRate": "Taxa de breakage esperada",
       "expiryMonths": "Expiração (meses)",
       "inactivityMonths": "Janela de inatividade (meses)"
+    },
+    "consolidationGroupFields": {
+      "payer": "Pagador",
+      "billingSubsidiary": "Entidade faturadora",
+      "cadence": "Periodicidade",
+      "cutoffDay": "Dia de corte",
+      "grouping": "Agrupamento de linhas",
+      "template": "Modelo de fatura",
+      "templateHelp": "Registrado nas faturas consolidadas deste grupo."
     },
     "no": "Não",
     "payComponentChooser": {
