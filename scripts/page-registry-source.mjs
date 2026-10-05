@@ -64,7 +64,10 @@ function segmentsOf(route) {
  * TYPE; anything else stops the build.
  */
 export function describeView(file, source) {
-  const route = /^\s*route: '([^']+)'/m.exec(source)?.[1]
+  // The field may open the page() call on one line (`page({ route: ...`) or
+  // stand on its own line; either way it is an object field, so the match
+  // requires an opener or a line start before it — never a comment slash.
+  const route = /(?:^|[{,(])\s*route: '([^']+)'/m.exec(source)?.[1]
   if (!route) throw new Error(`${file}: no literal \`route:\` field — a page without one cannot be customized`)
 
   const loader = /^export (?:async )?function (load[A-Za-z0-9_]*)\s*\(([\s\S]*?)\)\s*(?::|\{)/m.exec(source)
