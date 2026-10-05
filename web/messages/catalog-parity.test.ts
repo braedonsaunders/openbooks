@@ -3475,6 +3475,12 @@ const COGNATES = new Set<string>([
   'zh:channels.locations.columnShopify|Shopify',
   'de:channels.products.codeLabel|Code',
   'fr:channels.products.codeLabel|Code',
+  // Portuguese channel identicals: "Item" is spelled the same in Portuguese
+  // (the ordered line item and the reported sale item), and "Gateway" is the
+  // established Brazilian payments loanword for the order's payment gateway.
+  'pt-BR:channels.drawer.gateway|Gateway',
+  'pt-BR:channels.drawer.item|Item',
+  'pt-BR:reports.catalog.columns.channel_sales.item|Item',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
