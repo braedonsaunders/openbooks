@@ -151,7 +151,6 @@
         "adjustment": "调整"
       },
       "horizonMonths": "{count}个期间",
-      "confidencePct": "{count}%",
       "diagnostics": "模型诊断",
       "diag": {
         "trend": "趋势",
@@ -241,6 +240,7 @@
       "bridge": "同比利润桥",
       "bridgeHint": "销量差＝Δ收入×上期毛利率・利率差＝收入×Δ毛利率（{from} → {to}）",
       "bridgeNoPrior": "分解销量差与利率差需要当期和上期收入。",
+      "bridgeNoCurrent": "需要当期收入才能拆分数量效应和费率效应。",
       "bridgeSteps": {
         "prior": "上期毛利",
         "volume": "销量差",
@@ -332,7 +332,7 @@
       "onWatch": "{count} 项关注",
       "coverage": "覆盖率",
       "coverageSub": "有预算行的科目",
-      "toleranceNote": "正常：有利或在预算±{onTrack}%以内·关注：在±{watch}%以内·超支（支出）／未达（收入）：超过±{watch}%",
+      "toleranceNote": "正常：有利或在预算±{onTrack}以内·关注：在±{watch}以内·超支（支出）／未达（收入）：超过±{watch}",
       "tableTitle": "预算与实际对比（{count}）",
       "search": "搜索科目…",
       "csv": "CSV",
@@ -826,12 +826,6 @@
           "12": "12个期间",
           "24": "24个期间"
         },
-        "forecastConfidence": {
-          "80": "80%",
-          "90": "90%",
-          "95": "95%",
-          "99": "99%"
-        },
         "forecastSeasonality": {
           "auto": "自动检测",
           "none": "无",
@@ -911,7 +905,6 @@
       "trendMargin": "利润趋势",
       "trendOpinc": "营业利润趋势",
       "trendOpMargin": "营业利润率",
-      "perfTrend": "业绩趋势",
       "table": {
         "item": "项目",
         "current": "当期",
@@ -930,7 +923,8 @@
         "warn": "关注",
         "anomaly": "异常",
         "info": "信息"
-      }
+      },
+      "pnlSummary": "损益摘要"
     },
     "segments": {
       "kpi": {
@@ -973,10 +967,13 @@
     "drivers": {
       "kpi": {
         "topRevenue": "最大收入动因",
-        "topCost": "最大成本动因"
+        "topCost": "最大成本动因",
+        "revNet": "收入变动",
+        "costNet": "成本变动"
       },
       "kpiSub": {
-        "vsPrior": "同比上期"
+        "vsPrior": "同比上期",
+        "net": "年度净变动"
       },
       "movers": "变动最大（绝对值）",
       "revenueTitle": "收入动因",
@@ -994,7 +991,9 @@
     "items": {
       "kpi": {
         "topGainer": "最大增长",
-        "topDecliner": "最大下降"
+        "lines": "收入明细",
+        "total": "总收入",
+        "net": "净变动"
       },
       "movers": "变动最大（绝对值）",
       "detail": "科目明细",
@@ -1003,9 +1002,18 @@
         "current": "当期",
         "change": "变动",
         "changePct": "变动率",
-        "share": "Δ占比"
+        "share": "Δ占比",
+        "prior": "上期"
       },
-      "empty": "暂无明细项目。"
+      "empty": "暂无明细项目。",
+      "kpiSub": {
+        "lines": "收入科目",
+        "total": "当期",
+        "net": "同比"
+      },
+      "gainers": "涨幅最大",
+      "decliners": "跌幅最大",
+      "none": "无。"
     }
   },
   "customer": {

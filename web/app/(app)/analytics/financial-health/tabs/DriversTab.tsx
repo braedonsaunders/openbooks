@@ -6,7 +6,7 @@ import { TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { cn, EmptyState } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
-import { abs, cmp } from '@openbooks/engine/money'
+import { abs, cmp, sum } from '@openbooks/engine/money'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
@@ -34,10 +34,18 @@ export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: 
   // favourability: revenue up is good, cost up is bad, flat is neutral.
   const bestTone = !best || cmp(best.change, '0') === 0 ? 'neutral' : cmp(best.change, '0') > 0 ? 'positive' : 'negative'
   const worstTone = !worst || cmp(worst.change, '0') === 0 ? 'neutral' : cmp(worst.change, '0') > 0 ? 'negative' : 'positive'
+  // Net movement across each side, summed exactly: revenue up is good, cost
+  // down is good.
+  const revNet = sum(data.drivers.revenue.map((d) => d.change))
+  const costNet = sum(data.drivers.cost.map((d) => d.change))
+  const revNetTone = cmp(revNet, '0') === 0 ? 'neutral' : cmp(revNet, '0') > 0 ? 'positive' : 'negative'
+  const costNetTone = cmp(costNet, '0') === 0 ? 'neutral' : cmp(costNet, '0') > 0 ? 'negative' : 'positive'
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard icon={TrendingUp} accent={revNetTone === 'negative' ? 'red' : 'emerald'} label={t('kpi.revNet')} value={fmtMoney(revNet)} sub={t('kpiSub.net')} tone={revNetTone} />
+        <KpiCard icon={TrendingDown} accent={costNetTone === 'negative' ? 'red' : 'emerald'} label={t('kpi.costNet')} value={fmtMoney(costNet)} sub={t('kpiSub.net')} tone={costNetTone} />
         <KpiCard icon={TrendingUp} accent="emerald" label={t('kpi.topRevenue')} value={best ? fmtMoney(best.change) : '—'} sub={best ? `${best.name} · ${t('kpiSub.vsPrior')}` : '—'} tone={bestTone} />
         <KpiCard icon={TrendingDown} accent="red" label={t('kpi.topCost')} value={worst ? fmtMoney(worst.change) : '—'} sub={worst ? `${worst.name} · ${t('kpiSub.vsPrior')}` : '—'} tone={worstTone} />
         <div className="col-span-2">
@@ -84,8 +92,8 @@ function DriverTable({ title, icon: Icon, rows, empty, fmtMoney, pctN, t, onDril
             {rows.map((d) => (
               <InteractiveTableRow key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                 <SharedTableCell className="max-w-44 truncate py-1.5 pr-2 text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
-                <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</SharedTableCell>
-                <SharedTableCell className={cn('py-1.5 text-right font-medium tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current)}</SharedTableCell>
+                <SharedTableCell className={cn('py-1.5 text-right font-medium tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change)}</SharedTableCell>
                 <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : pctN(d.changePct)}</SharedTableCell>
                 <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{pctN(d.contribution)}</SharedTableCell>
               </InteractiveTableRow>

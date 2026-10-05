@@ -67,7 +67,7 @@ export function OverviewTab({ data }: { data: HealthData }) {
         </div>
       </div>
 
-      <Panel title={t('perfTrend')} icon={TrendingUp}>
+      <Panel title={t('pnlSummary')} icon={TrendingUp}>
         <SharedTable className="w-full text-sm">
           <SharedTableHeader>
             <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
@@ -89,10 +89,10 @@ export function OverviewTab({ data }: { data: HealthData }) {
               return (
               <SharedTableRow key={l.key} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                 <SharedTableCell className={cn('px-4 py-2', l.strong ? 'font-semibold text-slate-800 dark:text-slate-200' : 'text-slate-600 dark:text-slate-300')}>{l.label}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{fmtMoney(l.current, { compact: true })}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior, { compact: true })}</SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', changeCls)}>{fmtMoney(l.change, { compact: true })}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{fmtMoney(l.current)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior)}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', changeCls)}>{fmtMoney(l.change)}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>
                   {fmtRatio(l.changePct, 'pct') ?? '—'}
                 </SharedTableCell>
               </SharedTableRow>
