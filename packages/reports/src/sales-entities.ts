@@ -11,6 +11,12 @@ const promotionShared = {
   requiredPermission: "reports.read",
   currencyColumn: "currency",
 };
+const cashShared = {
+  category: "orders" as const,
+  featureKey: "cashSales",
+  requiredPermission: "sales.cash.read",
+  currencyColumn: "currency",
+};
 export const SALES_REPORT_ENTITIES: ReportEntity[] = [
   {
     ...shared,
@@ -234,6 +240,61 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
         expr: "doc.gross+doc.discounts",
         txnCurrency: true,
       },
+    ],
+  },
+  {
+    ...cashShared,
+    key: "cash_tenders",
+    label: "Cash tenders",
+    description:
+      "How paid-at-sale totals settled — one row per tender with its method, settlement account or stored-value card, and amount — by period, method, and account.",
+    // One row per tender. Amounts leave in document currency through the
+    // currency's own minor units; every join stays inside the base
+    // organization so a restricted subsidiary scope cannot leak rows.
+    from: `document_tenders t join documents d on d.org_id=t.org_id and d.id=t.document_id left join parties c on c.org_id=t.org_id and c.id=d.party_id left join accounts a on a.org_id=t.org_id and a.id=t.account_id left join stored_value_accounts sva on sva.org_id=t.org_id and sva.id=t.stored_value_account_id left join currencies cur on cur.code=t.currency`,
+    orgColumn: "t.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    timeKey: "document_date",
+    defaultSort: { column: "document_date", direction: "desc" },
+    columns: [
+      { key: "document_date", label: "Document date", kind: "date", expr: "d.document_date" },
+      { key: "document_number", label: "Document", kind: "text", expr: "d.document_number" },
+      {
+        key: "document_kind",
+        label: "Document kind",
+        kind: "enum",
+        expr: "d.kind",
+        options: ["cash_sale", "cash_refund"],
+      },
+      {
+        key: "document_status",
+        label: "Document status",
+        kind: "enum",
+        expr: "d.status",
+        options: ["draft", "pending_approval", "approved", "posted", "voided"],
+      },
+      { key: "customer", label: "Customer", kind: "text", expr: "coalesce(c.display_name,'Walk-in')" },
+      {
+        key: "method",
+        label: "Method",
+        kind: "enum",
+        expr: "t.kind",
+        options: ["cash", "card", "bank_transfer", "wallet", "gateway", "stored_value", "other"],
+      },
+      { key: "method_label", label: "Method label", kind: "text", expr: "t.method_label" },
+      { key: "account", label: "Account", kind: "text", expr: "a.name" },
+      { key: "account_number", label: "Account number", kind: "text", expr: "a.number" },
+      { key: "stored_value_last4", label: "Card …", kind: "text", expr: "sva.code_last4" },
+      { key: "currency", label: "Currency", kind: "text", expr: "t.currency" },
+      {
+        key: "amount",
+        label: "Amount",
+        kind: "money",
+        expr: "t.amount_minor::numeric / (10 ^ cur.minor_units)",
+        txnCurrency: true,
+      },
+      { key: "reference", label: "Reference", kind: "text", expr: "t.reference" },
+      { key: "external_ref", label: "Provider ref", kind: "text", expr: "t.external_ref" },
     ],
   },
 ];
