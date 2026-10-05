@@ -132,9 +132,10 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
     // Bill of materials — components consumed to build an assembly item.
     // Generic single-row mutations are refused in web/lib/setup/write.ts
     // (bomCommandOnly): every change goes through PUT /api/inventory/bom with
-    // a complete recipe, expected version, reason, and audit. Bulk migration
-    // imports keep their own path in web/lib/data-io/setup-resources.ts.
+    // a complete recipe, expected version, reason, and audit. A row stream
+    // cannot express a complete recipe, so import is refused by name.
     key: 'bom-components',
+    importVia: 'none',
     table: 'bom_components',
     rehomed: true, // lives as a tab on the Inventory module
     actorCols: true,
