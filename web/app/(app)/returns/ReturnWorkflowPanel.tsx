@@ -6,11 +6,12 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Button, DisclosureSection, FieldLabel, Input, Select } from '@openbooks/ui'
-import { Switch } from '../../../components/switch'
+import { Switch } from '@/components/switch'
 import { promptDialog } from '../../../lib/prompt'
 import { useAppAction } from '../../../lib/use-app-action'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { minorToMajorText } from '@/lib/money-format'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
 import type { ReturnAuthorization } from '@openbooks/engine/src/sales/returns.ts'
 
@@ -40,14 +41,6 @@ type FeePreview = {
   currency: string
 }
 
-/** Minor units (cents) to an exact major-unit decimal string. */
-function minorToMajor(minor: string): string {
-  const units = BigInt(minor)
-  const sign = units < 0n ? '-' : ''
-  const abs = units < 0n ? -units : units
-  return `${sign}${(abs / 100n).toString()}.${(abs % 100n).toString().padStart(2, '0')}`
-}
-
 export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canWaiveFee, currency, stockLocations, vendors }: Props) {
   const t = useTranslations('returns')
   const tc = useTranslations('common')
@@ -65,7 +58,7 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
   const activeLines = useMemo(() => authorization.lines, [authorization.lines])
   const base = `/api/returns/${authorization.id}`
   const { money } = useMoney(currency)
-  const feeTotal = feePreview ? money(minorToMajor(feePreview.totalMinor), { currency: feePreview.currency }) : ''
+  const feeTotal = feePreview ? money(minorToMajorText(feePreview.totalMinor), { currency: feePreview.currency }) : ''
 
   async function receive() {
     await execute(() => fulfillmentRequest(`${base}/receive`, { method: 'POST', body: { lines: activeLines.map((line) => ({ lineId: line.lineId, received: received[line.lineId] ?? '0' })) } }, t('workflow.receiveFailed')), {
@@ -192,7 +185,7 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
               {feePreview.lines.map((line) => (
                 <li key={line.key} className="flex items-center justify-between gap-2">
                   <span>{line.policyName ?? t('fee.noPolicy')}{line.capped ? ` · ${t('fee.capped')}` : ''}</span>
-                  <span>{money(minorToMajor(line.feeMinor), { currency: feePreview.currency })}</span>
+                  <span>{money(minorToMajorText(line.feeMinor), { currency: feePreview.currency })}</span>
                 </li>
               ))}
             </ul>
