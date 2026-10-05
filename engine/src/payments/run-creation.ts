@@ -252,6 +252,9 @@ async function createPaymentRunWithinTransaction(
             and selected.source_open_line_id = jl.id
             and selected.status = 'selected'
        )
+     -- Oldest first: credits are allocated in this order, so the same
+     -- selection always composes the same payments.
+     order by d.document_date, d.document_number, jl.id
   `));
 
   const found = new Set(bills.rows.map((b) => b.document_id));
@@ -490,6 +493,11 @@ async function createPaymentRunWithinTransaction(
     const creditRemaining = new Map(credits.map((c) => [c.open_line_id, toUnits(c.open_base)]));
     const creditAllocations: CreditAllocationInput[] = [];
     const billComposition: Array<{ bill: (typeof vendorBills)[number]; allocation: AllocationInput; creditAmount: string; discountAmount: string; paymentAmount: string }> = [];
+    // Bills the run settles entirely with credits move no cash but are still
+    // part of the run: they are reserved like every other bill, or a second
+    // run could pay them in cash while this run's credit application waits to
+    // post after its file has already gone to the bank.
+    const creditSettledBills: Array<(typeof vendorBills)[number]> = [];
     let discountTotal = 0n;
 
     for (const bill of vendorBills) {
@@ -511,7 +519,10 @@ async function createPaymentRunWithinTransaction(
         // explicit source/target transaction amount equals the applied amount.
         remainingTransaction -= applied;
       }
-      if (remainingBase <= 0n) continue;
+      if (remainingBase <= 0n) {
+        creditSettledBills.push(bill);
+        continue;
+      }
       const remainingTxn = fromUnits(remainingTransaction);
       let discountTxn = "0";
       if (captureDiscounts && bill.discount_days != null && bill.discount_percent && cmp(bill.discount_percent, "0") > 0) {
@@ -597,7 +608,11 @@ async function createPaymentRunWithinTransaction(
       createdBy: opts.createdBy,
     }).returning({ id: schema.paymentInstructions.id }))[0]!;
 
-    await db.insert(schema.paymentRunItems).values(billComposition.map(({ bill, creditAmount, discountAmount, paymentAmount }) => ({
+    const billItems = [
+      ...billComposition,
+      ...creditSettledBills.map((bill) => ({ bill, creditAmount: bill.open, discountAmount: "0", paymentAmount: "0" })),
+    ];
+    await db.insert(schema.paymentRunItems).values(billItems.map(({ bill, creditAmount, discountAmount, paymentAmount }) => ({
       orgId: opts.orgId,
       paymentRunId: run.id,
       paymentInstructionId: instruction.id,
