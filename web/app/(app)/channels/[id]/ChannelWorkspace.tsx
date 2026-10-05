@@ -13,6 +13,12 @@ import { DetailPageLayout } from "../../../../components/page-layout";
 import { Badge } from "@openbooks/ui";
 import { DetailHeader } from "@openbooks/ui";
 import { SettingsSubTabs, WorkspaceTabs } from "./WorkspaceTabs";
+import {
+  resolveSettingsSection,
+  settingsSectionHref,
+  SETTINGS_ENTITY_SECTIONS,
+  type SettingsSectionKey,
+} from "./settings-sections";
 import { ChannelActions } from "./ChannelActions";
 import { ChannelActivity } from "./ChannelActivity";
 import { ProductsTab } from "./ProductsTab";
@@ -204,45 +210,50 @@ async function WorkspaceSettings({
   const authz = await getAuthz();
   if (!authz) notFound();
   const t = await getTranslations("channels");
-  const tRoot = await getTranslations();
-  const sections = [
-    { key: "posting", entityKey: "channel-account-maps", rowParam: "mapRow", paramPrefix: "map" },
-    { key: "locations", entityKey: "channel-locations", rowParam: "locationRow", paramPrefix: "location" },
-    { key: "adspend", entityKey: "channel-ad-spend", rowParam: "spendRow", paramPrefix: "spend" },
-  ] as const;
-  const rawSection = typeof sp.section === "string" ? sp.section : "";
-  const requested = rawSection === "posting" || rawSection === "locations" || rawSection === "adspend" ? rawSection : "posting";
-  const activeSection = requested;
-  const active = sections.find((section) => section.key === activeSection)!;
-  const entity = SETUP_ENTITY_BY_KEY.get(active.entityKey);
-  if (!entity) notFound();
-  const sectionLabel = (entityKey: string): string => {
-    const labelKey = `admin.setup.entities.${entityKey}.title`;
-    return tRoot.has(labelKey) ? tRoot(labelKey) : labelKey;
-  };
+  const tSetup = await getTranslations("admin.setup");
+  const activeSection = resolveSettingsSection(sp);
+  const sections: { key: SettingsSectionKey; label: string; href: string }[] = [
+    { key: "connection", label: t("settings.title"), href: settingsSectionHref(channelId, sp, "connection") },
+    ...SETTINGS_ENTITY_SECTIONS.map((section) => {
+      const entity = SETUP_ENTITY_BY_KEY.get(section.entityKey);
+      if (!entity) notFound();
+      return {
+        key: section.key,
+        // The identical lookup the entity section renders, so the subtab
+        // and its body can never disagree and a missing key throws here.
+        label: tSetup(entity.titleKey ?? `entities.${section.entityKey}.title`),
+        href: settingsSectionHref(channelId, sp, section.key),
+      };
+    }),
+  ];
+  const activeEntity = SETTINGS_ENTITY_SECTIONS.find((section) => section.key === activeSection);
+  const entity = activeEntity ? SETUP_ENTITY_BY_KEY.get(activeEntity.entityKey) : undefined;
+  if (activeEntity && !entity) notFound();
   return (
     <div className="space-y-5">
       <p className="text-sm text-slate-500">{t("workspace.settingsHint")}</p>
       <SettingsSubTabs
-        channelId={channelId}
         activeSection={activeSection}
-        sections={sections.map((section) => ({ key: section.key, label: sectionLabel(section.entityKey) }))}
+        sections={sections}
         ariaLabel={t("workspace.tabs.settings")}
       />
-      <SetupEntitySection
-        entity={entity}
-        orgId={authz.user.orgId}
-        actorId={authz.user.id}
-        searchParams={sp}
-        basePath={`/channels/${channelId}`}
-        canManage={canManage}
-        allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-        rowParam={active.rowParam}
-        paramPrefix={active.paramPrefix}
-        fixedFilter={{ fieldKey: "channelId", value: channelId }}
-        hideHeader={false}
-      />
-      <SettingsTab channelId={channelId} />
+      {activeEntity && entity ? (
+        <SetupEntitySection
+          entity={entity}
+          orgId={authz.user.orgId}
+          actorId={authz.user.id}
+          searchParams={sp}
+          basePath={`/channels/${channelId}`}
+          canManage={canManage}
+          allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+          rowParam={activeEntity.rowParam}
+          paramPrefix={activeEntity.paramPrefix}
+          fixedFilter={{ fieldKey: "channelId", value: channelId }}
+          hideHeader={false}
+        />
+      ) : (
+        <SettingsTab channelId={channelId} />
+      )}
     </div>
   );
 }
