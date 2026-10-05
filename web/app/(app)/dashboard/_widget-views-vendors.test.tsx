@@ -28,6 +28,7 @@ function vendorData(): DashboardMetrics {
     concentrationTop5Share: { available: true, value: 0.42 },
     concentrationBand: 'moderate',
     vendorOnTimeRate: { available: true, value: 0.95 },
+    vendorOnTimeGoodRate: 60,
     vendorAvgDaysToPay: { available: true, value: 21 },
     vendorLateSpend: { available: true, value: '100.0000' },
     vendorUnratedCount: { available: true, value: 0 },
@@ -61,6 +62,31 @@ test('vendor payment tile reads the shared on-time rate with its context', async
     assert.ok(host.textContent?.includes('21'), `average days must ride the hint, got:\n${host.textContent}`)
   } finally {
     await unmount()
+  }
+})
+
+test('the payment tile tones from the configured on-time good mark', async () => {
+  const good = await mountDashboard(
+    <WidgetCard widgetId="kpi-vendor-payment-performance" data={vendorData()} />,
+    messages('en'),
+  )
+  try {
+    // 95% against a 60% good mark reads healthy.
+    assert.ok(good.host.innerHTML.includes('bg-emerald-500'), `a good book must tone emerald, got:\n${good.host.innerHTML}`)
+  } finally {
+    await good.unmount()
+  }
+  const poor = vendorData()
+  poor.vendorOnTimeRate = { available: true, value: 0.4 }
+  const bad = await mountDashboard(
+    <WidgetCard widgetId="kpi-vendor-payment-performance" data={poor} />,
+    messages('en'),
+  )
+  try {
+    // 40% against the same mark reads poor, never green.
+    assert.ok(bad.host.innerHTML.includes('bg-rose-500'), `a poor book must tone rose, got:\n${bad.host.innerHTML}`)
+  } finally {
+    await bad.unmount()
   }
 })
 

@@ -24,6 +24,8 @@ export type VendorWidgetMetrics = {
   concentrationTop5Share: WidgetValue<number>
   concentrationBand: ConcentrationBand | null
   vendorOnTimeRate: WidgetValue<number>
+  /** The organization's own on-time good mark (percentage points). */
+  vendorOnTimeGoodRate: number
   vendorAvgDaysToPay: WidgetValue<number>
   vendorLateSpend: WidgetValue<string>
   vendorUnratedCount: WidgetValue<number>
@@ -37,6 +39,7 @@ export const EMPTY_VENDOR_WIDGET_METRICS: VendorWidgetMetrics = {
   concentrationTop5Share: { available: false, reason: '' },
   concentrationBand: null,
   vendorOnTimeRate: { available: false, reason: '' },
+  vendorOnTimeGoodRate: 0,
   vendorAvgDaysToPay: { available: false, reason: '' },
   vendorLateSpend: { available: false, reason: '' },
   vendorUnratedCount: { available: false, reason: '' },
@@ -71,6 +74,7 @@ export async function loadVendorWidgetMetrics(
     'concentrationTop5Share',
     'concentrationBand',
     'vendorOnTimeRate',
+    'vendorOnTimeGoodRate',
     'vendorAvgDaysToPay',
     'vendorLateSpend',
     'vendorUnratedCount',
@@ -102,9 +106,10 @@ export async function loadVendorWidgetMetrics(
         data.config.hhiCritical,
       )
     }
-    if (need('vendorOnTimeRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount')) {
+    if (need('vendorOnTimeRate', 'vendorOnTimeGoodRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount')) {
       const t = await analyticsReason()
       const noHistory = t('vendor.payment.noHistory')
+      out.vendorOnTimeGoodRate = data.config.onTimeGoodRate
       out.vendorOnTimeRate =
         data.totals.onTimePct === null ? unavailable(noHistory) : { available: true, value: data.totals.onTimePct }
       out.vendorAvgDaysToPay =
