@@ -3375,6 +3375,7 @@
     "date": "Fecha",
     "payRun": "Ciclo de nómina",
     "recovery": "Recuperación de primas",
+    "recoveryBanks": "Bancos de recuperación",
     "recoveryHint": "Estos bancos registran primas pendientes y su recuperación posterior según las reglas de aportación del programa.",
     "ready": "Listo para liberar",
     "units": {

@@ -3375,6 +3375,7 @@
     "date": "日期",
     "payRun": "薪资批次",
     "recovery": "保费追偿",
+    "recoveryBanks": "保费追收账户",
     "recoveryHint": "这些余额按计划缴款规则记录未缴保费及后续薪资追偿。",
     "ready": "待执行",
     "units": {
