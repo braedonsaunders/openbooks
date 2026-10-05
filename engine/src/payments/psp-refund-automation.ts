@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { cmp, fromUnits, neg, toUnits } from "../money/money.ts";
+import { cmp, fromUnits, mulRate, neg, toUnits } from "../money/money.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
@@ -1390,6 +1390,37 @@ async function runDisputeLost(
     modules: ["banking"],
   });
   const fee = eventFee(event);
+  // A dispute in a currency other than the subsidiary's functional currency
+  // clears its hold at the rate the hold receipt posted at (the posting
+  // kernel stamps that rate on the hold document). Converting at that one
+  // rate clears the disputed-funds balance to exactly zero in both
+  // currencies, and the rate and its source travel on the entry as evidence.
+  const holdBasis = (await db.execute<{ currency: string; fx_rate: string; functional: string }>(sql`
+    select d.currency, d.fx_rate::text as fx_rate, s.base_currency as functional
+      from documents d
+      join subsidiaries s on s.id = ${ctx.link.subsidiary_id} and s.org_id = d.org_id
+     where d.id = ${holdId} and d.org_id = ${orgId}
+  `)).rows[0];
+  if (!holdBasis) throw new PspAutomationError("dispute hold receipt is not in this organization");
+  if (holdBasis.currency.toUpperCase() !== row.currency.toUpperCase()) {
+    throw new PspAutomationError(
+      `dispute ${event.dispute.id} is in ${row.currency} but its hold receipt is in ${holdBasis.currency}; review the hold before recording the loss`,
+    );
+  }
+  const foreign = row.currency.toUpperCase() !== holdBasis.functional.toUpperCase();
+  const holdRate = holdBasis.fx_rate;
+  const leg = (accountId: string, txn: string, credit: boolean, memo: string) => {
+    if (!foreign) return { accountId, amount: credit ? neg(txn) : txn, currency: row.currency, memo };
+    const functionalAmount = mulRate(txn, holdRate);
+    return {
+      accountId,
+      amount: credit ? neg(functionalAmount) : functionalAmount,
+      currency: row.currency,
+      txnAmount: credit ? neg(txn) : txn,
+      fxRate: holdRate,
+      memo,
+    };
+  };
   const entryId = randomUUID();
   const entryNumber = `PSP-DISPUTE-${event.dispute.id.slice(0, 12).toUpperCase()}-LOSS`;
   const posted = await postEntry(db, {
@@ -1404,13 +1435,14 @@ async function runDisputeLost(
     origin: "document",
     actorId: PSP_AUTOMATION_SYSTEM_ACTOR_ID,
     idempotencyKey: `psp-dispute-loss:${orgId}:${disputeId}`,
+    ...(foreign
+      ? { custom: { fxEvidence: { rate: holdRate, source: "dispute_hold_receipt", sourceDocumentId: holdId, currency: row.currency, functionalCurrency: holdBasis.functional } } }
+      : {}),
     lines: [
-      { accountId: lossAccount, amount: applied, currency: row.currency, memo: "Chargeback loss" },
-      ...(cmp(fee, "0") > 0
-        ? [{ accountId: ctx.disputeAccounts.disputeFeeAccountId!, amount: fee, currency: row.currency, memo: "Provider dispute fee" }]
-        : []),
-      { accountId: ctx.disputeAccounts.disputedFundsAccountId!, amount: neg(applied), currency: row.currency, memo: "Clear dispute hold" },
-      ...(cmp(fee, "0") > 0 ? [{ accountId: ctx.bankAccountId, amount: neg(fee), currency: row.currency, memo: "Dispute fee taken" }] : []),
+      leg(lossAccount, applied, false, "Chargeback loss"),
+      ...(cmp(fee, "0") > 0 ? [leg(ctx.disputeAccounts.disputeFeeAccountId!, fee, false, "Provider dispute fee")] : []),
+      leg(ctx.disputeAccounts.disputedFundsAccountId!, applied, true, "Clear dispute hold"),
+      ...(cmp(fee, "0") > 0 ? [leg(ctx.bankAccountId, fee, true, "Dispute fee taken")] : []),
     ],
   });
   await transitionDisputeRow(
