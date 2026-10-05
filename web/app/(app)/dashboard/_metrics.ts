@@ -32,7 +32,6 @@ import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopePredicate } from '@/lib/age
 import {
   addDays,
   bankBalances,
-  buildWeekGrid,
   cashflowModel,
   compareMoney,
   forecastModelParams,
@@ -43,7 +42,7 @@ import {
   subtractMoney,
   summariseSide,
   sumMoney,
-  toISO,
+  weekStart,
   ZERO_MONEY,
   type ForecastModelParams,
   type OpenItem,
@@ -750,19 +749,20 @@ export async function loadDashboardMetrics(
   const apTile = sideTile(apItems)
   // Forward 30-day prediction off the same open items the stock tiles just
   // summarised: scheduleForecast with the same stats the cockpits use, cut
-  // at the same +30d the cockpits' expectedNext30/dueNext30 use (a 5-week
-  // grid covers the cut-off either way — the grid only bounds the
-  // prediction, the cut-off selects it). The organization's forecast-model
-  // knobs ride along, so a tuned push ladder moves the tile and the cockpit
-  // together.
+  // at the same +30d the cockpits' expectedNext30/dueNext30 use. The
+  // schedule is bounded by the cut-off itself — a fixed week grid sized
+  // from the week start can end short of it (a Saturday as-of loses days
+  // 29–30) and silently drop predictions the cut-off would keep. The
+  // organization's forecast-model knobs ride along, so a tuned push ladder
+  // moves the tile and the cockpit together.
   const wantExpected = need('expectedReceipts30d') || need('expectedPayments30d')
   const expectedModel: ForecastModelParams = wantExpected ? await cashflowModel(orgId) : forecastModelParams({})
   const forecast30d = (items: OpenItem[], stats: PaymentStats | null): string | null => {
     if (!stats) return null
-    const grid = buildWeekGrid(today, 5)
-    const forecast = scheduleForecast(items, stats, grid.asOf, grid.start, grid.end, expectedModel)
-    const cutoff = toISO(addDays(grid.asOf, 30))
-    return sumMoney(forecast.entries.filter((e) => e.predictedDate <= cutoff).map((e) => e.amount))
+    const asOf = parseISO(today)
+    const cutoff = addDays(asOf, 30)
+    const forecast = scheduleForecast(items, stats, asOf, weekStart(asOf), cutoff, expectedModel)
+    return sumMoney(forecast.entries.map((e) => e.amount))
   }
   const expectedReceipts = need('expectedReceipts30d') ? forecast30d(arItems, arStats) : null
   const expectedPayments = need('expectedPayments30d') ? forecast30d(apItems, apStats) : null
