@@ -50,6 +50,7 @@ import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform
 import { isUuid } from './list-params'
 import { CASH_TENDER_KINDS } from '@openbooks/engine/sales/cash-tenders'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
+import { PROVIDER_COMMIT_KINDS } from '@openbooks/engine/tax'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 
 import {
@@ -868,6 +869,7 @@ async function planDocumentEntryAllocations(args: {
     description: l.description ?? null,
     taxCodeId: l.taxCodeId ?? null,
     taxGroupId: l.taxGroupId ?? null,
+    marketplaceFacilitator: l.marketplaceFacilitator ?? null,
     partyId: l.partyId ?? null,
     departmentId: l.departmentId ?? null,
     projectId: l.projectId ?? null,
@@ -1204,7 +1206,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1402,8 +1404,27 @@ export async function applyDocumentEdit(
       totals = { subtotal: amt, taxTotal: '0.0000', total: amt }
     }
     preparedLines = []
+    // Marketplace collection is a sales-document concept: posting routes a
+    // flagged line's tax to the facilitator's clearing account instead of the
+    // merchant's liability. The provider-commit kind map is the one source of
+    // truth for that sales set, so cash kinds join both surfaces with one entry.
+    const marketplaceAdmitted = PROVIDER_COMMIT_KINDS[current.kind] !== undefined
+    let activeFacilitators: Set<string> | null = null
     for (let i = 0; i < computed.lines.length; i++) {
       const l = computed.lines[i]! as (typeof computed.lines)[number] & DocumentLineInput
+      const facilitatorName = typeof l.marketplaceFacilitator === 'string' ? l.marketplaceFacilitator.trim() : ''
+      if (facilitatorName !== '') {
+        if (!marketplaceAdmitted) {
+          throw new DocumentEditError(422, `Line ${i + 1}: marketplace tax applies to sales documents only — a ${current.kind} line cannot name a marketplace facilitator`)
+        }
+        if (activeFacilitators === null) {
+          activeFacilitators = new Set((await runner.execute<{ name: string }>(sql`
+            select name from marketplace_facilitators where org_id = ${orgId} and is_active`)).rows.map((row) => row.name))
+        }
+        if (!activeFacilitators.has(facilitatorName)) {
+          throw new DocumentEditError(422, `Line ${i + 1}: marketplace facilitator "${facilitatorName}" is not configured — add it in Setup → Taxes → Marketplace facilitators`)
+        }
+      }
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
       // A tenant definition colliding with a native key cannot smuggle a
@@ -1454,6 +1475,7 @@ export async function applyDocumentEdit(
         taxComponents: l.taxComponents,
         providerQuote: l.providerQuote,
         nativeGoodsTax: l.nativeGoodsTax,
+        marketplaceFacilitator: facilitatorName !== '' ? facilitatorName : null,
         partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
@@ -1917,7 +1939,7 @@ export async function applyDocumentEdit(
           const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
-                                        tax_amount, tax_overridden,
+                                        tax_amount, tax_overridden, marketplace_facilitator,
                                         party_id, department_id, project_id, location_id, class_id,
                                         stock_location_id, extra_dims, custom,
                                         distribution_group_id, distribution_rule_id, distribution_version_id,
@@ -1926,7 +1948,7 @@ export async function applyDocumentEdit(
                                         equipment_unit_id, rate_version_id, bill_rate, bill_amount)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
-                    ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden},
+                    ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden}, ${l.marketplaceFacilitator},
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
                     ${l.stockLocationId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)},
                     ${l.distributionGroupId}, ${l.distributionRuleId}, ${l.distributionVersionId},

@@ -75,7 +75,10 @@
     "formPreferredCleared": "已清除首选表单",
     "formPreferredFailed": "无法保存首选表单",
     "returnsShipment": "退回的发货",
-    "returnsNone": "不退回库存"
+    "returnsNone": "不退回库存",
+    "marketplaceCollectedBy": "税款收取方",
+    "marketplaceCollectedByHelp": "市场平台部分的税款将记入其结算账户，而非您的税务负债。",
+    "marketplaceMerchant": "商家"
   },
   "toasts": {
     "actionFailed": "操作失败",

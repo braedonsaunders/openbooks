@@ -75,7 +75,10 @@
     "formPreferredCleared": "Formulaire préféré effacé",
     "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
     "returnsShipment": "Retourne l'expédition",
-    "returnsNone": "Aucun stock retourné"
+    "returnsNone": "Aucun stock retourné",
+    "marketplaceCollectedBy": "Collecteur de la taxe",
+    "marketplaceCollectedByHelp": "La part de la place de marché est comptabilisée sur son compte de compensation, jamais sur votre dette fiscale.",
+    "marketplaceMerchant": "Commerçant"
   },
   "toasts": {
     "actionFailed": "Échec de l’action",

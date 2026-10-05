@@ -8,6 +8,7 @@ const documentLineSchema = z.object({
   amount: z.string(), description: z.string().nullable().optional(),
   taxCodeId: z.string().uuid().nullable().optional(), taxGroupId: z.string().uuid().nullable().optional(),
   taxOverridden: z.boolean().optional(), taxAmount: z.string().nullable().optional(),
+  marketplaceFacilitator: z.string().nullable().optional(),
   itemId: z.string().uuid().nullable().optional(), quantity: z.string().nullable().optional(),
   unit: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(),
   partyId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(),

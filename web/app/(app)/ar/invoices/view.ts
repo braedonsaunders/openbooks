@@ -84,6 +84,9 @@ export interface ArInvoicesDrawer {
   /** Provider commit rows for a posted sales document; null while the
    *  document is a draft or has nothing to commit to. */
   taxProvider: { documentNumber: string; provider: string; rows: TaxProviderChipRow[]; canRetry: boolean } | null
+  /** Active marketplace facilitators for the per-line "tax collected by"
+   *  column. Empty hides the column. */
+  marketplaceFacilitators: { name: string }[]
 }
 
 export interface ArInvoicesData {
@@ -262,6 +265,15 @@ export async function loadArInvoices(
   const providerRows = drawerOpen && openDoc && !isCreate && String(openDoc.doc.status) === 'posted'
     ? await readProviderTransactionsForDocument(authz.user.orgId, String(openDoc.doc.id))
     : []
+  // Facilitator names for the line-level collector choice. Drafts need them
+  // as much as posted documents (the choice is made before posting), so this
+  // loads for every open drawer on this page's sales kinds.
+  const facilitatorRows = drawerOpen
+    ? (await db.execute<{ name: string }>(sql`
+        select name from marketplace_facilitators
+         where org_id = ${authz.user.orgId} and is_active
+         order by name`)).rows
+    : []
   const taxProvider = providerRows.length > 0 && openDoc
     ? {
         documentNumber: String(openDoc.doc.document_number),
@@ -282,6 +294,7 @@ export async function loadArInvoices(
           payload: drawerPayload,
           createMode: isCreate,
           taxProvider,
+          marketplaceFacilitators: facilitatorRows,
           allocationsEntryEnabled: featureEnabled(featureState, 'allocationsAtEntry'),
           appliedPayments: appliedRows.length > 0 && openDoc
             ? { payments: appliedRows as AppliedPayment[], currency: String(openDoc.doc.currency) }
