@@ -13,6 +13,9 @@ import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statem
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
 import { apOpenAccountScope, arOpenAccountScope, arResidualAccountScope } from "../ledger-scope";
+// Age basis precedence (due, else posting, else document date) is the shared
+// rule in ../aging-basis; the SQL below applies it as a coalesce.
+import { agingBucketIndex } from "../aging-basis";
 
 // ---------------------------------------------------------------------------
 // AR / AP Aging
@@ -568,12 +571,10 @@ export interface AgingDetailResult {
   reportingCurrency: string
 }
 
+const AGING_BUCKET_KEYS = ["current", "b1", "b2", "b3", "b4"] as const satisfies readonly AgingBucket[]
+
 export function bucketOf(age: number): AgingBucket {
-  if (age <= 0) return "current"
-  if (age <= 30) return "b1"
-  if (age <= 60) return "b2"
-  if (age < 90) return "b3"
-  return "b4"
+  return AGING_BUCKET_KEYS[agingBucketIndex(age)]
 }
 
 /** SQL predicate that matches `bucketOf` exactly — including `b3` as age < 90. */
