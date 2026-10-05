@@ -95,7 +95,12 @@
     "customerLabel": "客户（仅商店信用）",
     "expiresLabel": "到期日（可选）",
     "submit": "发行",
-    "cancel": "取消"
+    "cancel": "取消",
+    "alreadyIssued": "已发行",
+    "replayDescription": "此请求已发行账户。代码仅在首次发行时返回，无法再次显示。进行其他操作前请检查账户。",
+    "copyCode": "复制代码",
+    "copyFailed": "无法复制代码。关闭前请选中显示的代码并手动复制。",
+    "reviewAccount": "检查账户"
   },
   "programs": {
     "title": "储值计划",
@@ -123,5 +128,6 @@
     "rollforwardDescription": "按计划和期间列示的期初、发行、兑换、余值收益、过期、调整和期末余额。",
     "unclaimedTitle": "无人认领的储值",
     "unclaimedDescription": "按客户和账龄列示的休眠余额，用于无人认领财产审查。"
-  }
+  },
+  "receiptUnconfirmed": "无法确认储值操作的回执。请不要修改请求内容，直接重试；相同的请求密钥可防止重复操作。"
 }

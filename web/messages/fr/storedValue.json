@@ -95,7 +95,12 @@
     "customerLabel": "Client (avoirs uniquement)",
     "expiresLabel": "Expire le (facultatif)",
     "submit": "Émettre",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "alreadyIssued": "Déjà émis",
+    "replayDescription": "Cette demande a déjà émis un compte. Son code est renvoyé uniquement lors de la première émission et ne peut plus être affiché. Vérifiez le compte avant toute autre action.",
+    "copyCode": "Copier le code",
+    "copyFailed": "Le code n’a pas pu être copié. Sélectionnez et copiez manuellement le code visible avant de fermer.",
+    "reviewAccount": "Vérifier le compte"
   },
   "programs": {
     "title": "Programmes de valeur stockée",
@@ -123,5 +128,6 @@
     "rollforwardDescription": "Soldes d'ouverture, émissions, utilisations, breakage, expirations, ajustements et clôtures par programme et période.",
     "unclaimedTitle": "Valeurs non réclamées",
     "unclaimedDescription": "Soldes dormants par client et ancienneté pour la revue des biens non réclamés."
-  }
+  },
+  "receiptUnconfirmed": "Impossible de confirmer le reçu de valeur stockée. Réessayez sans modifier la demande ; la même clé empêche une seconde opération."
 }
