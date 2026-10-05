@@ -36,7 +36,7 @@ export async function loadReviewTemplateBuilder(id: string): Promise<ReviewTempl
 
 export function reviewTemplateBuilderSpec(data: ReviewTemplateBuilderData): PageSpec {
   return page({
-    route: `${data.basePath ?? '/admin/setup/review-templates'}/[id]`,
+    route: '/admin/setup/review-templates/[id]',
     // One client island: the outline, the inspector drafts, drag state and
     // the live preview all share state a spec cannot name.
     layout: 'bare',

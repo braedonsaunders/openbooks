@@ -307,7 +307,7 @@ const f = ref<ContractCostsData>();
 
 export function contractCostsSpec(data: ContractCostsData): PageSpec {
   return page({
-    route: "/revenue/contract-costs",
+    route: '/revenue/contract-costs',
     layout: "list",
     header: [
       pageHeader({

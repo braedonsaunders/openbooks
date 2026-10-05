@@ -38,20 +38,22 @@ test('the source walk actually found the pages', () => {
 })
 
 test('every page is in the registry, and nothing else is', () => {
-  const expected = fromSource.map((view: { route: string }) => view.route).sort()
+  const expected = fromSource.flatMap((view: { routes: Array<{ route: string }> }) =>
+    view.routes.map((mount) => mount.route),
+  ).sort()
   assert.deepEqual([...PAGE_ROUTES], expected)
 })
 
 test('each entry records the loader inputs its page actually takes', () => {
   for (const view of fromSource as Array<{
-    route: string
-    segments: string[]
-    searchParams: boolean
+    routes: Array<{ route: string; segments: string[]; searchParams: boolean }>
   }>) {
-    const entry = PAGE_REGISTRY[view.route]
-    assert.ok(entry, `missing registry entry for ${view.route}`)
-    assert.deepEqual([...entry.segments], view.segments, `segments for ${view.route}`)
-    assert.equal(entry.searchParams, view.searchParams, `searchParams for ${view.route}`)
+    for (const mount of view.routes) {
+      const entry = PAGE_REGISTRY[mount.route]
+      assert.ok(entry, `missing registry entry for ${mount.route}`)
+      assert.deepEqual([...entry.segments], mount.segments, `segments for ${mount.route}`)
+      assert.equal(entry.searchParams, mount.searchParams, `searchParams for ${mount.route}`)
+    }
   }
 })
 
