@@ -62,6 +62,9 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
     }
     case 'customer-intelligence': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/customer-intelligence/view')).loadCustomerIntelligencePreview(sp)
+      // A broken weight sum refuses in the loader payload: surface it as the
+      // hub notice instead of rendering empty figures as a healthy preview.
+      if (data.weightsError) return result(periodLabel, [], data.weightsError)
       // Monthly revenue arrives as floats from its loader (its dashboard's
       // scope, not this preview's); the chart boundary below is the only
       // crossing, through boundChartNumber until that loader returns exact

@@ -215,6 +215,9 @@ const customerIntelligenceTool: AssistantToolDef = {
         projectsOn ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds, strings) : Promise.resolve(null),
       ]),
     );
+    // A broken weight sum refuses in the loader payload: fail the tool with
+    // the named remedy instead of answering from empty figures.
+    if (r.weightsError) return { ok: false, error: r.weightsError };
     return {
       ok: true,
       data: {
