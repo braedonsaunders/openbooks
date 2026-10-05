@@ -212,6 +212,11 @@ export function FamilyVariantsGrid({
     [optionNames, canManage, busy, familyRate, locale, saveCell, t, tCommon],
   )
 
+  /** Variants in the selection carrying their own base price, previewed before clearing. */
+  const overridingSelected = variants.filter(
+    (variant) => selected.has(variant.id) && variant.price !== null && variant.price !== '',
+  )
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -261,12 +266,6 @@ export function FamilyVariantsGrid({
     if (value === null) return
     await bulk({ price: value === '' ? null : value })
   }
-
-  /** Variants in the selection carrying their own base price, previewed before clearing. */
-  const overridingSelected = useMemo(
-    () => variants.filter((variant) => selected.has(variant.id) && variant.price !== null && variant.price !== ''),
-    [variants, selected],
-  )
 
   /**
    * Return the chosen variants to family pricing: clearing the override

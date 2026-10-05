@@ -107,7 +107,7 @@
     "back": "Alterar o modelo de preços"
   },
   "structure": {
-    "title": "Item único ou família?",
+    "title": "{kind}: item único ou família?",
     "description": "Venda como um item único ou como uma família de variantes — tamanhos, cores, materiais — com preço único herdado por cada variante.",
     "singleTitle": "Item único",
     "singleDescription": "Um item com seu próprio preço.",

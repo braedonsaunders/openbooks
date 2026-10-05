@@ -107,7 +107,7 @@
     "back": "Changer de modèle tarifaire"
   },
   "structure": {
-    "title": "Article unique ou famille ?",
+    "title": "{kind} : article unique ou famille ?",
     "description": "Vendez-le comme un article unique, ou comme une famille de variantes — tailles, couleurs, matières — tarifée une fois et héritée par chaque variante.",
     "singleTitle": "Article unique",
     "singleDescription": "Un article avec son propre prix.",

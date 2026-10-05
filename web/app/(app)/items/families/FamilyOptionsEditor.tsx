@@ -31,6 +31,7 @@ export function FamilyOptionsEditor({
   disabled = false,
   onSave,
   onOptionsChange,
+  hideSave = false,
 }: {
   initial: EditableOption[]
   /** option name → value → variants carrying it, for rename confirmations. */

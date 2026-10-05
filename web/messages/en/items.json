@@ -120,7 +120,7 @@
     "back": "Change pricing style"
   },
   "structure": {
-    "title": "How should this {kind} sell?",
+    "title": "{kind}: single item or variants?",
     "description": "Sell it as one item, or as a family of variants — sizes, colours, materials — priced once and inherited by every variant.",
     "singleTitle": "Single item",
     "singleDescription": "One item with its own price.",

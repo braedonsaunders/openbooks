@@ -78,21 +78,13 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   // to the planner, not to setup administration.
   const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'items.manage'), props, sp)
   const planningTab = await itemPlanningTab(authz, props, sp)
-  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(planningTab ? [planningTab] : [])]
+  const variantsTab = await itemVariantsTab(props, sp)
+  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : [])]
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
     return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} />
   }
   const features = await resolvedFeatureState(authz.user.orgId)
-  const [t, tFamilies] = await Promise.all([getTranslations('admin.setup'), getTranslations('items.families')])
-  const variantsTab = !props.createMode && props.variantsEnabled && props.family
-    ? [{
-        key: 'variants',
-        label: tFamilies('itemTab.title'),
-        content: pickString(sp.itemSetup) === 'variants' ? (
-          <ItemVariantsTab familyId={props.family.id} itemId={String(props.payload.item.id)} />
-        ) : null,
-      }]
-    : []
+  const t = await getTranslations('admin.setup')
   // External identities resolve through the owning engine service: the
   // generic parent predicate cannot filter on the native table, so the tab
   // reads exactly this item's links and unlinks through the audited channel
@@ -111,7 +103,6 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   const canUnlinkExternal = showExternalLinks && can(authz, 'channels.manage')
   const recordTabs = [
     ...operationalTabs,
-    ...variantsTab,
     ...setupChildEntities('items')
       .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
       .map((entity) => ({
@@ -141,6 +132,27 @@ export async function ItemDrawerSlot({ drawer, sp }: {
       })),
   ]
   return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
+}
+
+/**
+ * A variant's siblings live beside the item, not under setup: operators
+ * without the setup grant pick and sell variants, so the tab rides both
+ * drawer paths like the kit and planning tabs. Readers without the variants
+ * gate never see it; the gate lives on the drawer props.
+ */
+async function itemVariantsTab(
+  props: ComponentProps<typeof ItemDrawer>,
+  sp: Record<string, string | string[] | undefined>,
+) {
+  if (props.createMode || !props.variantsEnabled || !props.family) return null
+  const tFamilies = await getTranslations('items.families')
+  return {
+    key: 'variants',
+    label: tFamilies('itemTab.title'),
+    content: pickString(sp.itemSetup) === 'variants' ? (
+      <ItemVariantsTab familyId={props.family.id} itemId={String(props.payload.item.id)} />
+    ) : null,
+  }
 }
 
 /**
