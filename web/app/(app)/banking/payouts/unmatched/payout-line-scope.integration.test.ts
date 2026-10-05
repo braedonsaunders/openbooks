@@ -52,6 +52,7 @@ const { allowedSubsidiaryIds } = await import(root + 'web/lib/subsidiaries.ts') 
 const { loadPspUnmatched } = await import(root + 'web/app/(app)/banking/payouts/unmatched/view.ts') as typeof import('./view.ts')
 const { GET: suggestionGet } = await import(root + 'web/app/api/psp/settlement-lines/[id]/suggestion/route.ts') as typeof import('../../../../../../web/app/api/psp/settlement-lines/[id]/suggestion/route.ts')
 const { POST: approvePost } = await import(root + 'web/app/api/psp/settlement-lines/[id]/approve/route.ts') as typeof import('../../../../../../web/app/api/psp/settlement-lines/[id]/approve/route.ts')
+const { POST: settlementsPost } = await import(root + 'web/app/api/psp/settlements/route.ts') as typeof import('../../../../../../web/app/api/psp/settlements/route.ts')
 const { importSettlementBatch } = await import(root + 'engine/src/payments/psp-settlement.ts') as typeof import('../../../../../../engine/src/payments/psp-settlement.ts')
 
 /**
@@ -61,7 +62,7 @@ const { importSettlementBatch } = await import(root + 'engine/src/payments/psp-s
  * the home entity meets the other entity's rows as missing everywhere, and
  * every amount renders in the record's own currency — never a fallback.
  */
-async function seed(): Promise<{ org: ScratchOrg; restricted: string; lines: Record<string, string> }> {
+async function seed(): Promise<{ org: ScratchOrg; restricted: string; lines: Record<string, string>; batchB: string }> {
   const org: ScratchOrg = await withBypassContext(() => createScratchOrg() as Promise<ScratchOrg>)
   const admin: string = await withBypassContext(() => createScratchUser(org.orgId, 'Payout owner', 'admin'))
   const restricted: string = await withBypassContext(() => createScratchUser(org.orgId, 'Payout viewer', 'payout-viewer'))
@@ -100,7 +101,7 @@ async function seed(): Promise<{ org: ScratchOrg; restricted: string; lines: Rec
   }
   state.user = { id: restricted, orgId: org.orgId, isSuperAdmin: false, name: 'Payout viewer', email: 'viewer@scratch.test',
     roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: restricted }
-  return { org, restricted, lines }
+  return { org, restricted, lines, batchB }
 }
 
 async function scopedSet(orgId: string, actor: string): Promise<Set<string>> {
@@ -176,6 +177,25 @@ test('suggestion and approval meet the other entity as missing', { skip: !proces
       { params: Promise.resolve({ id: lines.hidden }) },
     )
     assert.equal(denied.status, 404, "approving another entity's line is missing")
+  } finally {
+    state.user = null
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+test('matching another entity payout over HTTP is missing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, batchB } = await seed()
+  try {
+    const matched = await settlementsPost(
+      new Request('http://openbooks.test/api/psp/settlements', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'match', batchId: batchB }),
+      }),
+    )
+    assert.equal(matched.status, 404, 'a hidden batch never matches over HTTP')
+    const text = await matched.text()
+    assert.ok(!text.includes('web-hidden-1'), `the refusal names no hidden reference: ${text.slice(0, 200)}`)
+    assert.ok(!text.includes('40.00'), `the refusal names no hidden amount: ${text.slice(0, 200)}`)
   } finally {
     state.user = null
     await dropScratchOrgReporting(org.orgId)
