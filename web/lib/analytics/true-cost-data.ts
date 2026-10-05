@@ -1164,17 +1164,35 @@ export async function trueCostData(
   }
 
   // ---- custom categories (manual / derived / formula) --------------------------
-  // categoryTotals lets derived/formula reference other categories by id.
-  const categoryTotals: Record<string, { expenseOverall: number }> = {};
-  for (const c of expenseCategories) categoryTotals[c.id] = { expenseOverall: c.totalAmount };
-  for (const c of timeCategories) categoryTotals[c.id] = { expenseOverall: c.totalAmount };
+  // categoryTotals carries exact decimal strings (never the display twins), so
+  // derived and formula categories compute from the same exact totals the
+  // ledger produced. The float bundle still feeds display only.
+  const categoryTotals: Record<string, { expenseOverall: string }> = {};
+  for (const g of burdenGroups.groups) {
+    if (expenseCategories.some((e) => e.id === g.id)) categoryTotals[g.id] = { expenseOverall: cats.get(g.id)!.total };
+  }
+  if (timeCategories.length > 0) categoryTotals[TIME_ID] = { expenseOverall: timeTotalExact };
+  // Exact per-department base maps for the shares custom categories divide by.
+  const basesExact = {
+    billed_hours: baseExactFor("billed_hours"),
+    total_hours: baseExactFor("total_hours"),
+    labor_dollars: baseExactFor("labor_dollars"),
+    headcount: baseExactFor("headcount"),
+    revenue: baseExactFor("revenue"),
+    direct_cost: baseExactFor("direct_cost"),
+    square_feet: baseExactFor("square_feet"),
+    units: baseExactFor("units"),
+    custom: baseExactFor("custom"),
+  };
   const customCategories: BurdenCategory[] = [];
   for (const cc of profile.customCategories) {
     let calc: { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number };
-    if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases);
-    else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases);
-    else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, strings);
-    categoryTotals[cc.id] = { expenseOverall: calc.totalExpense };
+    if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases, basesExact);
+    else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, basesExact);
+    else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, strings, basesExact);
+    let customOverall = "0.0000";
+    for (const d of departmentsBase) customOverall = add(customOverall, calc.expenseExact?.[d.id] ?? "0.0000");
+    categoryTotals[cc.id] = { expenseOverall: customOverall };
     // Custom category settings live on the category record itself.
     profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
     // Synthetic expenses cross from float-land through exact shortest-repr
