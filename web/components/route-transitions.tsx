@@ -14,9 +14,11 @@ import { ViewTransition } from './view-transition'
  *
  * Two layers:
  * - `RouteTransition` wraps the page pane. When the PATHNAME changes the old
- *   page eases out and the new one settles in. Search and filter updates
- *   keep their pathname and stay still, so typing in a list search never
- *   animates the page.
+ *   page lifts away and the new one (or its placeholder) rises in; when a
+ *   placeholder then gives way, the real page rises into its place. Search
+ *   and filter updates keep their pathname and stay still, so typing in a
+ *   list search never animates the page. Nothing animates in a background
+ *   tab, where the browser would abort the transition anyway.
  * - A report sheet on the reports hub and the report paper it opens share a
  *   transition name, so the card the reader clicked grows into the report
  *   and shrinks back into its place on the way back.
@@ -36,43 +38,108 @@ export const REPORT_OPEN_TRANSITION = 'report-open'
 // during the render of a navigation it still names the page being left —
 // which is how a render tells a navigation from a same-page update.
 let settledPathname: string | null = null
-const settledListeners = new Set<() => void>()
-const subscribeSettled = (listener: () => void) => {
-  settledListeners.add(listener)
+// Page placeholders currently mounted. While one is showing, the next update
+// of the pane is the real page arriving in its place.
+let mountedSkeletons = 0
+const motionListeners = new Set<() => void>()
+const subscribeMotion = (listener: () => void) => {
+  motionListeners.add(listener)
   return () => {
-    settledListeners.delete(listener)
+    motionListeners.delete(listener)
   }
 }
+const notifyMotion = () => {
+  for (const listener of motionListeners) listener()
+}
 const readSettled = () => settledPathname
-const readSettledOnServer = () => null
+const readSkeletonShowing = () => mountedSkeletons > 0
+const readNothingOnServer = () => null
+const readFalseOnServer = () => false
+
+const subscribeVisibility = (listener: () => void) => {
+  document.addEventListener('visibilitychange', listener)
+  return () => document.removeEventListener('visibilitychange', listener)
+}
+const readHidden = () => document.visibilityState === 'hidden'
+
+/**
+ * True while the tab is in the background. The browser refuses to run a view
+ * transition for a hidden document, so every boundary here stands down
+ * rather than start one that will be aborted — a slow page that arrives
+ * while the reader is in another tab simply appears.
+ */
+function useDocumentHidden(): boolean {
+  return useSyncExternalStore(subscribeVisibility, readHidden, readFalseOnServer)
+}
 
 /**
  * True while rendering the page a navigation is moving to. A component that
  * mounts during a navigation leaves its entrance to the route transition
  * instead of running a second one of its own.
  */
-export function useRouteNavigating(): boolean {
+function useRouteNavigating(): boolean {
   const pathname = usePathname()
-  const settled = useSyncExternalStore(subscribeSettled, readSettled, readSettledOnServer)
+  const settled = useSyncExternalStore(subscribeMotion, readSettled, readNothingOnServer)
   return settled !== null && settled !== pathname
+}
+
+/**
+ * True while the route transition owns the page's entrance: during the
+ * render of a navigation, and while a placeholder is showing (the page that
+ * replaces it rises in with the transition). A component that would animate
+ * its own mount stands down then, or the arriving page would start
+ * transparent inside the transition's snapshot.
+ */
+export function useRouteEntranceAnimated(): boolean {
+  const navigating = useRouteNavigating()
+  const revealing = useSyncExternalStore(subscribeMotion, readSkeletonShowing, readFalseOnServer)
+  return navigating || revealing
 }
 
 export function RouteTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const navigating = useRouteNavigating()
+  const revealing = useSyncExternalStore(subscribeMotion, readSkeletonShowing, readFalseOnServer)
+  const hidden = useDocumentHidden()
   useEffect(() => {
     if (settledPathname === pathname) return
     settledPathname = pathname
-    for (const listener of settledListeners) listener()
+    notifyMotion()
   }, [pathname])
+  // A navigation moves the old page out and the new one (or its
+  // placeholder) in; once a placeholder is showing, the page that replaces
+  // it rises into place. Any other update of the pane stays still.
+  const update = hidden
+    ? 'none'
+    : navigating
+      ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
+      : revealing ? 'route-reveal' : 'none'
   return (
-    <ViewTransition
-      default="none"
-      update={navigating ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' } : 'none'}
-    >
+    <ViewTransition default="none" update={update}>
       {/* One box for the pane, so the page is captured as a single layer;
           it keeps the main column's flex sizing for the page inside. */}
       <div data-route-pane className="flex min-h-0 flex-1 flex-col">{children}</div>
+    </ViewTransition>
+  )
+}
+
+/**
+ * Wraps the page placeholder. It steps aside quickly when the page arrives,
+ * and while it is mounted the pane knows the next update is that arrival.
+ */
+export function SkeletonTransition({ children }: { children: ReactNode }) {
+  const hidden = useDocumentHidden()
+  useEffect(() => {
+    mountedSkeletons++
+    notifyMotion()
+    return () => {
+      mountedSkeletons--
+      notifyMotion()
+    }
+  }, [])
+  return (
+    <ViewTransition exit={hidden ? 'none' : 'skeleton-out'} default="none">
+      {children}
     </ViewTransition>
   )
 }
@@ -99,8 +166,9 @@ export function openReportSheet(href: string, name: string) {
 
 /** The shared element of the sheet-to-paper morph, on either side. */
 export function ReportSheetTransition({ name, children }: { name: string; children: ReactNode }) {
+  const hidden = useDocumentHidden()
   return (
-    <ViewTransition name={name} share="report-sheet" default="none">
+    <ViewTransition name={name} share={hidden ? 'none' : 'report-sheet'} default="none">
       {children}
     </ViewTransition>
   )
@@ -123,14 +191,14 @@ function paneSettled(pathname: string, limit: number) {
   return new Promise<void>((resolve) => {
     const done = () => {
       clearTimeout(timer)
-      settledListeners.delete(check)
+      motionListeners.delete(check)
       resolve()
     }
     const check = () => {
       if (settledPathname === pathname) done()
     }
     const timer = setTimeout(done, limit)
-    settledListeners.add(check)
+    motionListeners.add(check)
     check()
   })
 }
@@ -160,7 +228,7 @@ function onHistoryTraversal(event: PopStateEvent) {
   if (replayingTraversal || event.hasUAVisualTransition) return
   const state: unknown = event.state
   if (!state || typeof state !== 'object' || !('__NA' in state)) return
-  if (!document.querySelector('[data-route-pane]')) return
+  if (!document.querySelector('[data-route-pane]') || document.visibilityState === 'hidden') return
   if (settledPathname === null || settledPathname === location.pathname) return
   event.stopImmediatePropagation()
 
