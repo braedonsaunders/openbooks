@@ -21,6 +21,7 @@ import {
   type OverheadRefusalCode,
 } from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
+import { analyticsConfig } from "./config";
 import { resolveAccountGroups } from "../account-groups";
 import {
   overheadApplicationSettings,
@@ -232,6 +233,9 @@ export interface TrueCostData {
     /** Overall composite; null when the Overall scope refuses (the refusal
      * then holds the Overall slot of `compositeRefusal`). */
     compositeRate: number | null;
+    /** The composite family's single rate format (a blend only succeeds when
+     * every included category shares it); null when the composite refuses. */
+    compositeFormat: RateFormat | null;
     compositeRateChangePct: number | null; // vs immediately-preceding equal window
     totalOverhead: number;
     overheadAccounts: number;
@@ -250,7 +254,7 @@ export interface TrueCostData {
   unassigned: BurdenAccount[];
   /** Per-department and Overall composites; null wherever that scope refuses. */
   totals: { byDept: Record<string, number | null>; overall: number | null };
-  labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number; unratedHours: string };
+  labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number; unratedHours: string; premiumPresets: { id: string; name: string; classification: "overtime" | "double_time"; multiplier: string }[] };
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
   hasBurdenGL: boolean; // the configured application account carries applied postings
@@ -279,6 +283,8 @@ export interface TrueCostData {
     categorySettings: Record<string, CategorySettings>;
     profiles: { id: string; name: string; color?: string | null }[];
     customCategories: CustomCategory[];
+    /** Matrix under/over-performance band in percentage points (dashboard configuration, never a client constant). */
+    matrixBandPp: number;
   };
 }
 
@@ -414,11 +420,12 @@ export async function trueCostData(
   // Classification owners resolve before any scan: the direct-labour
   // account set (rule plus pin) and the configured overhead application
   // account feed the SQL below, so no English name pattern remains.
-  const [cfg, burdenGroups, poolGroups, appliedSettings] = await Promise.all([
+  const [cfg, burdenGroups, poolGroups, appliedSettings, dashboardConfig] = await Promise.all([
     loadTrueCostConfig(orgId),
     resolveAccountGroups("burden", orgId),
     resolveAccountGroups("cost_pool", orgId),
     overheadApplicationSettings(orgId),
+    analyticsConfig(orgId, "trueCost"),
   ]);
   const directLaborIds = new Set(
     [...poolGroups.byAccount.entries()].filter(([, g]) => g.key === "direct_labor").map(([id]) => id),
@@ -434,7 +441,7 @@ export async function trueCostData(
   // unavailable message names the remedy.
   const appliedAccountId = appliedSettings.accountId;
   const appliedFilter = sql`e.origin = 'overhead_applied' and l.project_id is not null`;
-  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows] = await Promise.all([
+  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows, premiumRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
     // translate to presentation before the burden math ever sees them.
@@ -646,6 +653,15 @@ export async function trueCostData(
        where t.org_id = ${orgId} ${timeScope} and t.department_id is not null
          and t.worked_on >= ${from} and t.worked_on <= ${to}
        group by t.department_id
+    `),
+    // Premium-rate presets for the selling planner: the org's own overtime /
+    // double-time cost multipliers (time_types owners), never assumed ×1.5/×2.
+    db.execute(sql`
+      select id, name, classification, cost_multiplier
+        from time_types
+       where org_id = ${orgId} and is_active
+         and classification in ('overtime', 'double_time')
+       order by classification, name
     `),
   ]);
   const profile = cfg.profile;
@@ -1499,6 +1515,7 @@ export async function trueCostData(
     return null;
   };
   let compositeRate: number | null = null;
+  let compositeFormat: RateFormat | null = null;
   let overallBlendRefusal: TrueCostRefusal | null = null;
   if (blockedOverall) {
     overallBlendRefusal = overallRefusals.get(blockedOverall.id)
@@ -1512,6 +1529,10 @@ export async function trueCostData(
         categories: compositeInputOf((id) => exactRatesByCat.get(id)?.overall ?? null, overallExpenseOf),
       });
       compositeRate = Number(compositeRateExact);
+      // The blend only succeeds when every included category shares one rate
+      // format (mixedUnits refuses otherwise), so the first included format
+      // is the composite family's display format.
+      compositeFormat = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.overall ?? null) !== null)?.rateFormat ?? null;
     } catch (error) {
       if (error instanceof OverheadCalculationError && error.code) {
         const refusal = blendRefusal(error);
@@ -1663,8 +1684,17 @@ export async function trueCostData(
       rate: toChartNumber(String(r.rate ?? 0)), hours: Number(r.hours ?? 0),
     }))
     .filter((e) => e.rate > 0);
-  const laborHoursSum = employees.reduce((s, e) => s + e.hours, 0);
-  const weighted = laborHoursSum > 0 ? employees.reduce((s, e) => s + e.rate * e.hours, 0) / laborHoursSum : 0;
+  // Hours-weighted average over the rated-employee pool, in exact decimals:
+  // employees with no readable rate carry no rate information, so the pool
+  // (whose size `count` reports) is rated employees only. This is the
+  // planner's pool average, not the costed-time Overall rate above.
+  const laborHoursExact = employees.reduce((s, e) => add(s, String(e.hours)), "0.0000");
+  const weighted = cmp(laborHoursExact, "0") > 0
+    ? toChartNumber(div(employees.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), "0.0000"), laborHoursExact))
+    : 0;
+  const premiumPresets = (premiumRows.rows as unknown as { id: string; name: string; classification: string; cost_multiplier: string }[])
+    .filter((r) => r.classification === "overtime" || r.classification === "double_time")
+    .map((r) => ({ id: r.id, name: r.name, classification: r.classification as "overtime" | "double_time", multiplier: normalizeMoney(r.cost_multiplier) }));
 
   return {
     period,
@@ -1672,6 +1702,7 @@ export async function trueCostData(
     compositeRefusal,
     kpis: {
       compositeRate,
+      compositeFormat,
       compositeRateChangePct,
       totalOverhead,
       overheadAccounts: categories.reduce((s, c) => s + c.accounts.length, 0),
@@ -1694,6 +1725,7 @@ export async function trueCostData(
       max: employees.length ? Math.max(...employees.map((e) => e.rate)) : 0,
       weighted,
       unratedHours: unratedHoursExact,
+      premiumPresets,
     },
     monthly,
     forecast,
@@ -1715,6 +1747,7 @@ export async function trueCostData(
       categorySettings: profile.categorySettings,
       profiles: cfg.profiles.map((p) => ({ id: p.id, name: strings.displayProfileName(p.name), color: p.color })),
       customCategories: profile.customCategories,
+      matrixBandPp: dashboardConfig.matrixUnderperformPct!,
     },
   };
 }

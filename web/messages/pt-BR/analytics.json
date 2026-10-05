@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "{margin} de markup sobre o custo",
       "overtime": "Hora extra",
       "doubleTime": "Hora em dobro",
+      "presetHint": "Predefinições dos seus tipos de tempo",
+      "presetTitle": "Usar {name} ×{multiplier}",
       "explorerTarget": "Meta: {mode}",
       "markupPctLabel": "% de markup",
       "per1kLabel": "Por 1.000 horas"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "Tarifa laboral base por hora",
       "baseLaborRateHelp": "Tarifa horária alternativa quando o período não tem mão de obra custeada. Deixe vazio para recusar em vez de supor uma tarifa.",
       "baseLaborRatePlaceholder": "ex.: 45,00",
-      "baseLaborRateSave": "Salvar tarifa"
+      "baseLaborRateSave": "Salvar tarifa",
+      "groups": {
+        "performance": "Faixas de desempenho"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "Faixa de baixo desempenho da matriz (pp)",
+          "help": "Departamentos fora desta faixa em torno da média são destacados"
+        }
+      }
     },
     "custom": {
       "remove": "Remover",
@@ -2633,7 +2644,7 @@
       "fields": {
         "costSpike": {
           "help": "Alertar quando o custo não faturável subir mais que isso vs o intervalo anterior",
-          "label": "Alerta de pico de custo ($)"
+          "label": "Alerta de alta de custos ({currency})"
         },
         "minHours": {
           "help": "Funcionários abaixo disso ficam fora da análise de anomalias / pares",
@@ -2642,12 +2653,62 @@
         "targetBillable": {
           "help": "Referência de utilização para toda a empresa",
           "label": "Meta de % faturável"
+        },
+        "reallocWarn": {
+          "label": "Alertar abaixo da meta (pp)",
+          "help": "Departamentos abaixo da meta cedem pessoal nos cenários"
+        },
+        "reallocAction": {
+          "label": "Agir abaixo da meta (pp)",
+          "help": "Sugere-se mover o pessoal abaixo desta linha"
+        },
+        "watchBand": {
+          "label": "Observar abaixo da meta (p.p.)",
+          "help": "Faixa âmbar: tão abaixo da meta lê-se como observação"
+        },
+        "warnBand": {
+          "label": "Em risco abaixo da meta (p.p.)",
+          "help": "Além disso lê-se como em risco"
+        },
+        "anomalyDrop": {
+          "label": "Limite de queda brusca (p.p.)",
+          "help": "Uma queda maior é sinalizada como brusca"
+        },
+        "overtimeGap": {
+          "label": "Diferença de hora extra sem valor (p.p.)",
+          "help": "Horas extras programadas contam quando o faturável fica tão abaixo da meta"
+        },
+        "titleDrift": {
+          "label": "Limite de desvio de função (p.p.)",
+          "help": "Uma função desvia quando a queda média o supera e todos pioram"
+        },
+        "peerSigma": {
+          "label": "Sensibilidade a discrepantes (σ)",
+          "help": "Além destes desvios da média é discrepante"
+        },
+        "peerSpreadWarn": {
+          "label": "Dispersão em observação (p.p.)",
+          "help": "Uma dispersão maior lê-se como observação"
+        },
+        "peerSpreadAction": {
+          "label": "Dispersão para agir (p.p.)",
+          "help": "Uma dispersão maior lê-se como ação"
+        },
+        "peerMin": {
+          "label": "Mínimo para comparar",
+          "help": "Funções com menos funcionários são ignoradas nas análises"
         }
       },
       "historyNote": "Períodos móveis de {months} meses alimentando tendência e previsão",
       "historyPeriods": "Períodos de histórico",
       "priorRange": "Intervalo anterior",
-      "priorRangeNote": "Mesma duração imediatamente antes do período selecionado"
+      "priorRangeNote": "Mesma duração imediatamente antes do período selecionado",
+      "groups": {
+        "targets": "Meta",
+        "floors": "Limites e mínimos",
+        "scenarioBands": "Faixas de cenário",
+        "anomalyBands": "Faixas de anomalias"
+      }
     },
     "empCount": "{count} func.",
     "empty": {
@@ -2717,7 +2778,7 @@
       "belowTarget": "Abaixo da meta",
       "bestTitle": "Melhor cargo",
       "billableHours": "Horas faturáveis",
-      "costPerDay": "Custo por dia",
+      "costPerDay": "Custo por dia corrido",
       "employees": "Funcionários",
       "highestCost": "Maior custo",
       "jobTitles": "Cargos",
@@ -2742,7 +2803,7 @@
     "lowHoursCount": "{count} funcionários com <{minHours} horas",
     "metric": {
       "billableHours": "Horas faturáveis",
-      "costPerDay": "Custo por dia",
+      "costPerDay": "Custo por dia corrido",
       "nonBillableCost": "Custo não faturável",
       "nonBillableHours": "Horas não faturáveis",
       "percentBilled": "Percentual faturável",
@@ -2766,12 +2827,13 @@
       "improvementOpportunities": "Oportunidades de melhoria",
       "modelAssumptions": "Modelo e premissas",
       "noBillableExpectation": "Sem expectativa de faturamento",
-      "overtimeHint": "20%+ mais horas que a média, faturável 20 p.p. abaixo da meta",
+      "overtimeHint": "Acima das horas programadas, faturável {gap} p.p. abaixo da meta",
+      "overtimeUnscheduled": "{count} funcionários não têm escala aplicável; as horas extras são desconhecidas para eles",
       "peerComparison": "Comparação por pares por cargo",
       "peerHint": "Compare funcionários em trabalhos similares",
       "reallocationIdeas": "Ideias de realocação",
       "suddenDrop": "Queda brusca",
-      "suddenDropHint": "% faturável caiu >15 p.p. vs anterior",
+      "suddenDropHint": "Faturável % caiu {pp} p.p. ou mais ante o anterior",
       "titleDriftHint": "Cargos em que TODOS os funcionários caem",
       "topDepartments": "Principais departamentos",
       "topDepartmentsHint": "Por custo não faturável",
@@ -2796,7 +2858,7 @@
       "jobTitleBold": "Cargo",
       "jobTitleItem": " (o item de serviço em que lança mais horas, ex. “MECH:Foreman”).",
       "jobTitleMid": " — funcionários não têm campo de cargo, então o cargo de uma pessoa é seu ",
-      "noBillItem": " — departamentos com zero horas faturáveis (atual + anterior) são sinalizados automaticamente e excluídos do % da empresa, ex. áreas indiretas.",
+      "noBillItem": " — sinalize um departamento sem expectativa de faturamento no cadastro do departamento para excluí-lo do % da empresa, ex. áreas indiretas.",
       "nonBillCostBold": "Custo não faturável",
       "nonBillCostItem": " — Σ horas × a taxa de custo do próprio apontamento no tempo não faturável.",
       "timeEntries": "apontamentos"
@@ -2806,9 +2868,9 @@
       "acrossItems": "entre itens",
       "belowTargetCount": "{count} abaixo da meta",
       "billableThreshold": "limiar faturável",
-      "daysInRange": "{days} dias no intervalo",
+      "daysInRange": "{days} dias corridos no intervalo",
       "detectedAnomalies": "anomalias detectadas",
-      "drop15pp": "funcionários com queda >15 p.p.",
+      "dropNpp": "funcionários com queda >{pp} p.p.",
       "employeesPerTitle": "funcionários por cargo",
       "highHoursLowBillable": "muitas horas, pouco faturável",
       "hoursWeighted": "ponderado por horas",
@@ -2826,7 +2888,7 @@
       "trajectory": "trajetória {arrow} de {amount}",
       "trendArrow": "tendência {arrow} de {trend} p.p.",
       "uniqueRoles": "cargos únicos (classe de mão de obra)",
-      "with2Plus": "com 2+ funcionários",
+      "withNPlus": "com {count}+ funcionários",
       "withActivity": "com atividade"
     },
     "subTabs": {

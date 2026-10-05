@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "成本加价率 {margin}",
       "overtime": "加班",
       "doubleTime": "双倍工资工时",
+      "presetHint": "来自工时类型的预设",
+      "presetTitle": "使用{name} ×{multiplier}",
       "explorerTarget": "目标{mode}",
       "markupPctLabel": "加价率（%）",
       "per1kLabel": "每 1,000 小时"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "基准劳务费率（每小时）",
       "baseLaborRateHelp": "本期无已计成本劳务时间时的备选小时费率。留空则拒绝，而非假设费率。",
       "baseLaborRatePlaceholder": "例如：45.00",
-      "baseLaborRateSave": "保存费率"
+      "baseLaborRateSave": "保存费率",
+      "groups": {
+        "performance": "绩效区间"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "矩阵低迷区间 (pp)",
+          "help": "突出显示平均值该区间之外的部门"
+        }
+      }
     },
     "custom": {
       "remove": "移除",
@@ -2633,7 +2644,7 @@
       "fields": {
         "costSpike": {
           "help": "不可计费成本较上一区间上涨超过该金额时预警",
-          "label": "成本激增预警（$）"
+          "label": "成本飙升提醒 ({currency})"
         },
         "minHours": {
           "help": "低于该工时的员工不纳入异常/同级分析",
@@ -2642,12 +2653,62 @@
         "targetBillable": {
           "help": "全公司利用率基准",
           "label": "目标可计费率"
+        },
+        "reallocWarn": {
+          "label": "低于目标时警告 (pp)",
+          "help": "低于目标的部门在情景中提供人员"
+        },
+        "reallocAction": {
+          "label": "低于目标时行动 (pp)",
+          "help": "建议调动此线以下的人员"
+        },
+        "watchBand": {
+          "label": "低于目标进入观察 (百分点)",
+          "help": "低于目标此数值则显示为观察"
+        },
+        "warnBand": {
+          "label": "低于目标进入风险 (百分点)",
+          "help": "低于此数值则显示为风险"
+        },
+        "anomalyDrop": {
+          "label": "骤降阈值 (百分点)",
+          "help": "超过此降幅则标记为骤降"
+        },
+        "overtimeGap": {
+          "label": "加班低计费差距 (百分点)",
+          "help": "可计费率低于目标此数值时计入加班"
+        },
+        "titleDrift": {
+          "label": "角色漂移阈值 (百分点)",
+          "help": "平均降幅超过此值且全员下滑的角色视为漂移"
+        },
+        "peerSigma": {
+          "label": "同行异常灵敏度 (σ)",
+          "help": "超过平均值此标准差数则为异常"
+        },
+        "peerSpreadWarn": {
+          "label": "分布观察 (百分点)",
+          "help": "超过此分布则显示为观察"
+        },
+        "peerSpreadAction": {
+          "label": "分布行动 (百分点)",
+          "help": "超过此分布则显示为行动"
+        },
+        "peerMin": {
+          "label": "比较最少人数",
+          "help": "人数更少的角色跳过比较分析"
         }
       },
       "historyNote": "过去{months}个月的滚动区间，用于趋势与预测",
       "historyPeriods": "历史区间",
       "priorRange": "上一区间",
-      "priorRangeNote": "所选区间紧邻的前一段同等时长区间"
+      "priorRangeNote": "所选区间紧邻的前一段同等时长区间",
+      "groups": {
+        "targets": "目标",
+        "floors": "下限与最小值",
+        "scenarioBands": "情景区间",
+        "anomalyBands": "异常区间"
+      }
     },
     "empCount": "{count}人",
     "empty": {
@@ -2717,7 +2778,7 @@
       "belowTarget": "未达目标",
       "bestTitle": "最佳职位",
       "billableHours": "可计费工时",
-      "costPerDay": "日均成本",
+      "costPerDay": "按日历日均成本",
       "employees": "员工",
       "highestCost": "最高成本",
       "jobTitles": "职位",
@@ -2742,7 +2803,7 @@
     "lowHoursCount": "{count}名员工不足{minHours}小时",
     "metric": {
       "billableHours": "可计费工时",
-      "costPerDay": "日均成本",
+      "costPerDay": "按日历日均成本",
       "nonBillableCost": "不可计费成本",
       "nonBillableHours": "不可计费工时",
       "percentBilled": "可计费率",
@@ -2766,12 +2827,13 @@
       "improvementOpportunities": "改进机会",
       "modelAssumptions": "模型与假设",
       "noBillableExpectation": "无计费预期",
-      "overtimeHint": "工时超均值20%以上，可计费率低于目标20个百分点",
+      "overtimeHint": "超时长且可计费率低于目标{gap}个百分点",
+      "overtimeUnscheduled": "{count}名员工没有适用排班，其加班情况未知",
       "peerComparison": "按职位同级比较",
       "peerHint": "比较从事类似工作的员工",
       "reallocationIdeas": "重新分配建议",
       "suddenDrop": "骤降",
-      "suddenDropHint": "可计费率较上一区间下降超15个百分点",
+      "suddenDropHint": "可计费率较上期下降{pp}个百分点或更多",
       "titleDriftHint": "所有员工都呈下滑趋势的角色",
       "topDepartments": "头部部门",
       "topDepartmentsHint": "按不可计费成本",
@@ -2796,7 +2858,7 @@
       "jobTitleBold": "职位",
       "jobTitleItem": " （其记录工时最多的服务项目，例如“MECH:Foreman”）。",
       "jobTitleMid": " ——员工没有职位字段，因此个人的职位即其 ",
-      "noBillItem": " ——零可计费工时的部门（当期+上一区间）会被自动标记并不计入全公司比率，例如间接部门。",
+      "noBillItem": " ——请在部门档案中标记无计费预期的部门，将其排除在全公司比率之外，例如间接部门。",
       "nonBillCostBold": "不可计费成本",
       "nonBillCostItem": " ——Σ 工时 × 该条记录自身的成本费率（不可计费部分）。",
       "timeEntries": "工时记录"
@@ -2806,9 +2868,9 @@
       "acrossItems": "跨项目",
       "belowTargetCount": "{count}个未达标",
       "billableThreshold": "可计费阈值",
-      "daysInRange": "区间内{days}天",
+      "daysInRange": "区间内{days}个日历日",
       "detectedAnomalies": "已检出的异常",
-      "drop15pp": "下降超15个百分点的员工",
+      "dropNpp": "下降超{pp}个百分点的员工",
       "employeesPerTitle": "单职位员工数",
       "highHoursLowBillable": "工时长、可计费低",
       "hoursWeighted": "按工时加权",
@@ -2826,7 +2888,7 @@
       "trajectory": "{arrow} {amount}走势",
       "trendArrow": "{arrow} {trend}个百分点趋势",
       "uniqueRoles": "不同角色（工种）",
-      "with2Plus": "2人以上",
+      "withNPlus": "{count}人以上",
       "withActivity": "有活动"
     },
     "subTabs": {
