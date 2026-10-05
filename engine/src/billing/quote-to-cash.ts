@@ -857,10 +857,13 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
     if (updated.length !== 1) {
       throw new QuoteToCashError("This link already recorded a signature — a signature is recorded once and never replayed");
     }
+    // The invited identity stays on signer_name/signer_email; the typed name,
+    // the tendered consent and the hashed terms land in the audit trail, so
+    // the recorded signature stays attributable without rewriting the invite.
     await runner.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${request.orgId}, 'signature_requests', ${request.id}, 'update',
-              ${JSON.stringify({ before: { status: request.status }, after: { status: "signed", signedAt: signedAt.toISOString(), signerIp: input.ip ?? null, documentHash: request.documentHash } })}::jsonb,
+              ${JSON.stringify({ before: { status: request.status }, after: { status: "signed", signedAt: signedAt.toISOString(), signedName: name, signerIp: input.ip ?? null, consentText: request.consentText, documentHash: request.documentHash } })}::jsonb,
               null)`);
     const settings = await getQuoteToCashSettings(request.orgId, runner);
     let subscriptionIds: string[] = [];
@@ -898,6 +901,14 @@ export async function declineQuoteSignature(input: { token: string; name: string
         returning id`)
     ).rows;
     if (updated.length !== 1) throw new QuoteToCashError("The signature request changed while declining");
+    // The decline records who declined and when: the typed name lands in the
+    // audit trail while the invited identity stays on the row. No sender
+    // notice is enqueued here — the sender sees the declined state.
+    await runner.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${request.orgId}, 'signature_requests', ${request.id}, 'update',
+              ${JSON.stringify({ before: { status: request.status }, after: { status: "declined", declinedAt: new Date().toISOString(), declinedName: name } })}::jsonb,
+              null)`);
     return { requestId: request.id };
   });
 }
@@ -1300,6 +1311,82 @@ export interface QuoteCashPreview {
   settings: QuoteToCashSettings;
   advancedSubscriptions: boolean;
   revenueContracts: boolean;
+}
+
+/** One ramp-priced term as the hosted signing page renders it. */
+export interface PublicQuoteSignTerm {
+  planName: string;
+  termMonths: number;
+  startRule: QuoteStartRule;
+  billingTiming: QuoteBillingTiming;
+  periods: Array<{ unitPrice: string; quantity: string; periodAmount: string }>;
+  tcv: string;
+}
+
+/** Everything the hosted signing page renders. Null signature means no open
+ * signing request remains — the page refuses with a re-send remedy instead
+ * of rendering a form that cannot sign. */
+export interface PublicQuoteSignView {
+  quoteNumber: string;
+  status: string;
+  currency: string;
+  total: string;
+  documentDate: string;
+  terms: PublicQuoteSignTerm[];
+  tcv: string;
+  signature: {
+    status: string;
+    signerName: string;
+    signerEmail: string;
+    expiresAt: string;
+    consentText: string;
+  } | null;
+}
+
+/**
+ * The anonymous signing page's view: the possession token both authenticates
+ * and scopes (no session, no org parameter). Re-validates by name first —
+ * voided, expired and consumed links refuse through viewQuoteSignature —
+ * then values the quoted terms off the same preview the drawer shows, so the
+ * customer signs exactly what the sender priced.
+ */
+export async function publicQuoteSignView(token: string): Promise<PublicQuoteSignView> {
+  const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, token);
+  if (!claims) {
+    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+  }
+  const view = await viewQuoteSignature(token);
+  const preview = await quoteCashPreview(claims.orgId, view.quoteId);
+  const signature = preview.signature;
+  return {
+    quoteNumber: preview.quote.documentNumber,
+    status: preview.quote.status,
+    currency: preview.quote.currency,
+    total: preview.quote.total,
+    documentDate: preview.quote.documentDate,
+    terms: preview.terms.map((valuation) => ({
+      planName: valuation.term.planName,
+      termMonths: valuation.term.termMonths,
+      startRule: valuation.term.startRule,
+      billingTiming: valuation.term.billingTiming,
+      periods: valuation.schedule.periods.map((period) => ({
+        unitPrice: period.unitPrice,
+        quantity: period.quantity,
+        periodAmount: period.periodAmount,
+      })),
+      tcv: valuation.schedule.tcv,
+    })),
+    tcv: preview.tcv,
+    signature: signature
+      ? {
+          status: signature.status,
+          signerName: signature.signerName,
+          signerEmail: signature.signerEmail,
+          expiresAt: signature.expiresAt.toISOString(),
+          consentText: signature.consentText ?? QUOTE_SIGNATURE_CONSENT,
+        }
+      : null,
+  };
 }
 
 /**
