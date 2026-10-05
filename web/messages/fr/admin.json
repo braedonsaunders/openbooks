@@ -1030,6 +1030,7 @@
     "manufacturing_manage": "Gérer les référentiels et les ordres de fabrication",
     "orders_fulfill": "Préparer, emballer et expédier les commandes",
     "returns_waive_fee": "Exonérer les frais de restockage sur les retours",
+    "shipping_manage": "Tarifer, acheter et annuler les étiquettes d’expédition",
     "projects_read": "Consulter les projets et le coût de revient",
     "projects_manage": "Créer et modifier des projets",
     "resourcing_read": "Consulter les affectations et demandes de ressources",
@@ -5785,6 +5786,10 @@
     "fulfillment": {
       "title": "Exécution des commandes",
       "description": "Préparez, emballez et expédiez les commandes clients depuis le stock de l’entrepôt."
+    },
+    "shippingHub": {
+      "title": "Pôle expéditions",
+      "description": "Tarifs transporteurs en direct, étiquettes, suivi et coûts sur les expéditions."
     },
     "dropShipping": {
       "title": "Expédition directe",

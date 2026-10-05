@@ -123,6 +123,10 @@ export const PERMISSION_CATALOGUE = [
   // Waiving a restocking fee forgives money the return policy says is owed,
   // so it is its own grant — inspecting a return must never imply it.
   "returns.waive_fee",
+  // Carrier hub: rate shopping, label purchase and voiding, and carrier
+  // account setup. Buying a label spends money and posts carrier cost, so it
+  // rides with fulfillment rather than catalog maintenance.
+  "shipping.manage",
   // Projects & job costing
   "projects.read",
   "projects.manage",
@@ -529,6 +533,7 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "orders.fulfill", labelKey: permissionLabelKey("orders.fulfill") },
       { key: "returns.waive_fee", labelKey: permissionLabelKey("returns.waive_fee") },
+      { key: "shipping.manage", labelKey: permissionLabelKey("shipping.manage") },
     ],
   },
   {
@@ -876,6 +881,7 @@ export const BUILT_IN_ROLES: Record<
       "manufacturing.manage",
       "orders.fulfill",
       "returns.waive_fee",
+      "shipping.manage",
       "projects.read",
       "projects.manage",
       "resourcing.read",
@@ -981,6 +987,7 @@ export const BUILT_IN_ROLES: Record<
       "items.warehouses",
       "orders.fulfill",
       "returns.waive_fee",
+      "shipping.manage",
       "projects.read",
       "projects.manage",
       "resourcing.read",

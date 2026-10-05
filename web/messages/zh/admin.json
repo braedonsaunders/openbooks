@@ -1041,6 +1041,7 @@
     "manufacturing_manage": "管理制造主数据和工单",
     "orders_fulfill": "订单拣货、包装和发运",
     "returns_waive_fee": "免除退货的重新入库费用",
+    "shipping_manage": "查询、购买和作废承运面单",
     "projects_read": "查看项目和作业成本核算",
     "projects_manage": "创建并编辑项目",
     "resourcing_read": "查看资源分配和请求",
@@ -5793,6 +5794,10 @@
     "fulfillment": {
       "title": "订单履行",
       "description": "从仓库库存中拣货、包装并发运销售订单。"
+    },
+    "shippingHub": {
+      "title": "承运中心",
+      "description": "获取实时运费、购买面单、跟踪包裹，并在发货单上归集承运成本。"
     },
     "dropShipping": {
       "title": "供应商直发",

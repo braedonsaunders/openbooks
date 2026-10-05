@@ -1030,6 +1030,7 @@
     "manufacturing_manage": "Fertigungsstammdaten und Fertigungsaufträge verwalten",
     "orders_fulfill": "Aufträge kommissionieren, verpacken und versenden",
     "returns_waive_fee": "Wiedereinlagerungsgebühren bei Retouren erlassen",
+    "shipping_manage": "Frachtetiketten abfragen, kaufen und stornieren",
     "projects_read": "Projekte und Auftragskalkulation anzeigen",
     "projects_manage": "Projekte erstellen und bearbeiten",
     "resourcing_read": "Ressourcenzuweisungen und -anfragen anzeigen",
@@ -5929,6 +5930,10 @@
     "fulfillment": {
       "title": "Auftragsabwicklung",
       "description": "Kundenaufträge aus dem Lagerbestand kommissionieren, verpacken und versenden."
+    },
+    "shippingHub": {
+      "title": "Versandzentrale",
+      "description": "Live-Frachtraten, Versandetiketten, Sendungsverfolgung und Frachtkosten für Lieferungen."
     },
     "dropShipping": {
       "title": "Direktversand",

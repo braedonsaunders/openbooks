@@ -262,6 +262,13 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "fulfillment_documents", columnName: "ship_to_address", transform: "null_out" },
   { tableName: "drop_ship_orders", columnName: "ship_to_address", transform: "null_out" },
   { tableName: "fulfillment_documents", columnName: "tracking_number", transform: "redact" },
+  // A carrier label's tracking number locates a person's delivery, its signed
+  // label URL grants downloads to whoever holds it, and provider tracking
+  // events may quote address fragments: all three are removed from masked
+  // sandboxes.
+  { tableName: "shipment_labels", columnName: "tracking_number", transform: "redact" },
+  { tableName: "shipment_labels", columnName: "label_url", transform: "redact" },
+  { tableName: "shipment_labels", columnName: "events", transform: "null_out" },
   // D2b: contacts are people at a customer/vendor company, faked exactly
   // like party and user identity. Title/role stay: a job function ("Billing")
   // paired with a faked name identifies nobody.

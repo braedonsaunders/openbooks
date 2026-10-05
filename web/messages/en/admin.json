@@ -1030,6 +1030,7 @@
     "manufacturing_manage": "Manage manufacturing masters and work orders",
     "orders_fulfill": "Pick, pack, and ship orders",
     "returns_waive_fee": "Waive restocking fees on returns",
+    "shipping_manage": "Rate, buy, and void carrier shipping labels",
     "projects_read": "View projects and job costing",
     "projects_manage": "Create and edit projects",
     "resourcing_read": "View resource assignments and requests",
@@ -5793,6 +5794,10 @@
     "fulfillment": {
       "title": "Fulfillment",
       "description": "Pick, pack, and ship sales orders from warehouse stock."
+    },
+    "shippingHub": {
+      "title": "Shipping hub",
+      "description": "Live carrier rates, labels, tracking, and carrier cost on shipments."
     },
     "dropShipping": {
       "title": "Drop shipping",
