@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { runContractCostAmortization } from '@openbooks/engine/revenue'
-import { defineRoute } from '../../../../lib/api/route'
-import { parseJsonBody, uuidId } from '../../../../lib/api/json'
-import { contractCostErrorResponse } from '../../../../lib/contract-costs'
+import { defineRoute } from '@/lib/api/route'
+import { parseJsonBody, uuidId } from '@/lib/api/json'
+import { contractCostErrorResponse } from '@/lib/contract-costs'
 
 export const runtime = 'nodejs'
 
