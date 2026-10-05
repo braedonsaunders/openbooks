@@ -134,9 +134,9 @@ test("segments read configured HHI bands and translate every band", async () => 
 });
 
 test("drivers render both tables in the reader's language", async () => {
-  const row = (name: string) => ({ name, current: "100000.0000", change: "10000.0000", changePct: 0.1, contribution: 0.5 });
+  const row = (name: string) => ({ id: `a-${name}`, name, current: "100000.0000", change: "10000.0000", changePct: 0.1, contribution: 0.5 });
   const text = await mount(
-    <DriversTab data={{
+    <DriversTab onDrill={() => {}} data={{
       figures, ratios, bands,
       monthly: [], pnlSummary: [], marginFlow: [],
       segments: { department: [], class: [], location: [] },
@@ -154,7 +154,7 @@ test("drivers render both tables in the reader's language", async () => {
 test("items render the detail table in the reader's language", async () => {
   const row = (id: string) => ({ id, name: id, current: "50000.0000", change: "5000.0000", changePct: 0.1, contribution: 0.25 });
   const text = await mount(
-    <ItemsTab data={{
+    <ItemsTab onDrill={() => {}} data={{
       figures, ratios, bands,
       monthly: [], pnlSummary: [], marginFlow: [],
       segments: { department: [], class: [], location: [] },
@@ -166,4 +166,50 @@ test("items render the detail table in the reader's language", async () => {
   );
   assert.match(text, /Account Detail/);
   assert.match(text, /Largest Gainer/);
+});
+
+test("clicking a driver row drills into its account", async () => {
+  // The drill prop the dashboard shell passes must reach the ledger account:
+  // a row click carries the row's account id and name, never a bare label.
+  globalThis.__smRouter = { push() {}, refresh() {} };
+  const seen: Array<{ id: string; name: string }> = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <MoneyProvider currency="USD">
+            <DriversTab onDrill={(id, name) => seen.push({ id, name })} data={{
+              figures, ratios, bands,
+              monthly: [], pnlSummary: [], marginFlow: [],
+              segments: { department: [], class: [], location: [] },
+              drivers: {
+                revenue: [{ id: "a-services", name: "Services", current: "100000.0000", change: "10000.0000", changePct: 0.1, contribution: 0.5 }],
+                cost: [],
+              },
+              items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
+              insights: [],
+              budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
+            } as never} />
+          </MoneyProvider>
+        </NextIntlClientProvider>,
+      );
+      await tick();
+    });
+    await tick();
+    const row = [...host.querySelectorAll("tbody tr")].find((tr) => tr.textContent?.includes("Services"));
+    assert.ok(row, "the driver row renders");
+    await act(async () => {
+      row.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
+    assert.deepEqual(seen, [{ id: "a-services", name: "Services" }]);
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
 });
