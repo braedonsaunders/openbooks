@@ -153,7 +153,10 @@ export function KitComponentsTab({
     return t('kit.recipeSummary', { count: bom.components.length, parts: parts.join(' + ') })
   }, [bom, loading, loadError, t])
 
-  const columns = useMemo<LineGridColumn<{ componentItemId: string; label: string; quantityPer: string; isActive: boolean | null; identityMissing: boolean }>[]>(
+  // Rows key on the unique BOM line id, never the component: adjacent
+  // effectivity windows repeat the same component, so component keys
+  // duplicate and reconciliation clobbers one window with the other.
+  const columns = useMemo<LineGridColumn<{ id: string; componentItemId: string; label: string; quantityPer: string; isActive: boolean | null; identityMissing: boolean }>[]>(
     () => [
       {
         key: 'label',
@@ -254,6 +257,7 @@ export function KitComponentsTab({
           <LineGrid
             columns={columns}
             rows={bom.components.map((line) => ({
+              id: line.id,
               componentItemId: line.componentItemId,
               label: line.label,
               quantityPer: line.quantityPer,
@@ -261,8 +265,8 @@ export function KitComponentsTab({
               identityMissing: line.identityMissing,
             }))}
             onRowsChange={() => undefined}
-            emptyRow={() => ({ componentItemId: '', label: '', quantityPer: '', isActive: null, identityMissing: false })}
-            getRowKey={(row) => row.componentItemId}
+            emptyRow={() => ({ id: '', componentItemId: '', label: '', quantityPer: '', isActive: null, identityMissing: false })}
+            getRowKey={(row) => row.id}
             readOnly
           />
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('kit.consequence')}</p>
