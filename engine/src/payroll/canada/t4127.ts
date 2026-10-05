@@ -435,30 +435,39 @@ export function calculateT4127(input: T4127Input): T4127Result {
   trace("A_step2", aWithoutBonus);
 
   // ---- Claims --------------------------------------------------------------
-  const netIncomeForBpa = aWithBonus + HD;
-  let TC: bigint;
-  if (input.federalClaim !== undefined) TC = U(input.federalClaim);
-  else if (input.federalClaimCode !== undefined) {
-    TC = U(claimCodeAmount(rates.federal.claimCodes, input.federalClaimCode));
-  } else TC = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
+  // A default claim (BPAF, BPAMB, an income-phased provincial amount) phases
+  // out on the net income of the step being priced, NI = A + HD. The bonus
+  // method prices two steps — with and without the bonus — and each takes
+  // its own claim, so the step without the bonus (which also sets the
+  // periodic tax) is never reduced by a bonus it does not include.
+  const claimsFor = (A: bigint): { TC: bigint; TCP: bigint } => {
+    const netIncomeForBpa = A + HD;
+    let TC: bigint;
+    if (input.federalClaim !== undefined) TC = U(input.federalClaim);
+    else if (input.federalClaimCode !== undefined) {
+      TC = U(claimCodeAmount(rates.federal.claimCodes, input.federalClaimCode));
+    } else TC = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
 
-  let TCP = ZERO;
-  if (prov) {
-    if (input.provincialClaim !== undefined) TCP = U(input.provincialClaim);
-    else if (input.provincialClaimCode !== undefined) {
-      TCP = U(claimCodeAmount(prov.claimCodes, input.provincialClaimCode));
-    } else if (prov.tcpDefault === "BPAF") TCP = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
-    else if (prov.tcpDefault === "BPAMB") TCP = prov.bpamb ? bpaPhaseOut(netIncomeForBpa, prov.bpamb) : bpamb(netIncomeForBpa);
-    else if (prov.tcpIncomePhaseOut) {
-      const phase = prov.tcpIncomePhaseOut;
-      const phaseStart = U(phase.phaseStart);
-      const phaseEnd = U(phase.phaseEnd);
-      if (aWithBonus <= phaseStart) TCP = U(phase.max);
-      else if (aWithBonus >= phaseEnd) TCP = U(phase.min);
-      else TCP = bmax(U(phase.min), U(phase.max) - mulRateCents(aWithBonus - phaseStart, phase.rate));
+    let TCP = ZERO;
+    if (prov) {
+      if (input.provincialClaim !== undefined) TCP = U(input.provincialClaim);
+      else if (input.provincialClaimCode !== undefined) {
+        TCP = U(claimCodeAmount(prov.claimCodes, input.provincialClaimCode));
+      } else if (prov.tcpDefault === "BPAF") TCP = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
+      else if (prov.tcpDefault === "BPAMB") TCP = prov.bpamb ? bpaPhaseOut(netIncomeForBpa, prov.bpamb) : bpamb(netIncomeForBpa);
+      else if (prov.tcpIncomePhaseOut) {
+        const phase = prov.tcpIncomePhaseOut;
+        const phaseStart = U(phase.phaseStart);
+        const phaseEnd = U(phase.phaseEnd);
+        if (A <= phaseStart) TCP = U(phase.max);
+        else if (A >= phaseEnd) TCP = U(phase.min);
+        else TCP = bmax(U(phase.min), U(phase.max) - mulRateCents(A - phaseStart, phase.rate));
+      }
+      else TCP = U(prov.tcpDefault);
     }
-    else TCP = U(prov.tcpDefault);
-  }
+    return { TC, TCP };
+  };
+  const { TC, TCP } = claimsFor(aWithBonus);
   trace("TC", TC); trace("TCP", TCP);
 
   // ---- K2 credits (base CPP + EI [+ QPIP], at the lowest rate) -------------
@@ -517,6 +526,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
   // only the per-period legs round to the cent.
   const annualTax = (A: bigint): { t1: bigint; t2: bigint; parts: Record<string, bigint> } => {
     const parts: Record<string, bigint> = {};
+    const { TC, TCP } = claimsFor(A);
     // Federal
     const fed = bracketFor(rates.federal.brackets, A);
     const K1 = mulRateCents(TC, rates.federal.lowestRate);
