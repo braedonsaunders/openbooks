@@ -1081,6 +1081,7 @@
       "manufacturing": "製造",
       "items": "品目とサービス",
       "orders": "受注と出荷",
+      "channels": "販売チャネル",
       "projects": "プロジェクトと原価計算",
       "resourcing": "リソース管理",
       "time": "工数とタイムシート",
@@ -1151,6 +1152,8 @@
     "orders_fulfill": "受注のピッキング・梱包・出荷",
     "returns_waive_fee": "返品の再入庫手数料を免除する",
     "shipping_manage": "配送ラベルの見積・購入・無効化",
+    "channels_read": "ストアフロントのチャネル、リンク、アクティビティを表示",
+    "channels_manage": "チャネル接続、アカウント割当、イベント再処理",
     "projects_read": "プロジェクトと原価計算を表示",
     "projects_manage": "プロジェクトを作成および編集",
     "resourcing_read": "リソース割り当てと依頼を表示",
@@ -5955,6 +5958,10 @@
     "crossBorderTax": {
       "title": "クロスボーダー税務",
       "description": "収集した証拠に基づく供給地判定、事業者VAT IDの検証とリバースチャージ、EU域内通信販売しきい値の監視、ワンストップショップ申告。"
+    },
+    "salesChannels": {
+      "title": "販売チャネル",
+      "description": "ストアフロント接続（Shopify）、外部IDマッピング、注文受信ボックス。"
     },
     "advancedClose": {
       "title": "高度な決算管理",

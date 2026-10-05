@@ -1071,6 +1071,7 @@
       "manufacturing": "Manufacturing",
       "items": "Items & services",
       "orders": "Orders & fulfillment",
+      "channels": "Sales channels",
       "projects": "Projects & job costing",
       "resourcing": "Resourcing",
       "time": "Time & timesheets",
@@ -1151,6 +1152,8 @@
     "orders_fulfill": "Pick, pack, and ship orders",
     "returns_waive_fee": "Waive restocking fees on returns",
     "shipping_manage": "Rate, buy, and void carrier shipping labels",
+    "channels_read": "View storefront channels, links, and activity",
+    "channels_manage": "Connect channels, map accounts, and replay events",
     "projects_read": "View projects and job costing",
     "projects_manage": "Create and edit projects",
     "resourcing_read": "View resource assignments and requests",
@@ -6135,6 +6138,10 @@
     "crossBorderTax": {
       "title": "Cross-border tax",
       "description": "Place of supply from collected evidence, business VAT ID validation with reverse charge, EU distance-sales threshold monitoring, and One-Stop-Shop returns."
+    },
+    "salesChannels": {
+      "title": "Sales channels",
+      "description": "Storefront connections (Shopify), the external-identity map, and the inbound order inbox."
     },
     "subcontractorCompliance": {
       "title": "Subcontractor compliance",

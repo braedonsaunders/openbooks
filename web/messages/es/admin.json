@@ -1081,6 +1081,7 @@
       "manufacturing": "Fabricación",
       "items": "Artículos y servicios",
       "orders": "Pedidos y preparación",
+      "channels": "Canales de venta",
       "projects": "Proyectos y costeo de trabajos",
       "resourcing": "Planificación de recursos",
       "time": "Tiempo y hojas de horas",
@@ -1151,6 +1152,8 @@
     "orders_fulfill": "Preparar, empaquetar y enviar pedidos",
     "returns_waive_fee": "Eximir cargos por reposición en devoluciones",
     "shipping_manage": "Cotizar, comprar y anular etiquetas de envío",
+    "channels_read": "Ver canales de tienda, vínculos y actividad",
+    "channels_manage": "Conectar canales, asignar cuentas y reprocesar eventos",
     "projects_read": "Ver proyectos y costeo de trabajos",
     "projects_manage": "Crear y editar proyectos",
     "resourcing_read": "Ver asignaciones y solicitudes de recursos",
@@ -6063,6 +6066,10 @@
     "crossBorderTax": {
       "title": "Fiscalidad transfronteriza",
       "description": "Lugar de suministro a partir de pruebas recogidas, validación de NIF-IVA intracomunitarios con inversión del sujeto pasivo, control del umbral de ventas a distancia de la UE y declaraciones de ventanilla única."
+    },
+    "salesChannels": {
+      "title": "Canales de venta",
+      "description": "Conexiones de tienda (Shopify), el mapa de identidades externas y la bandeja de pedidos."
     },
     "subcontractorCompliance": {
       "title": "Cumplimiento de subcontratistas",

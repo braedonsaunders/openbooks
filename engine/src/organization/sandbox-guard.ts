@@ -119,5 +119,14 @@ export async function neuterSandbox(sandboxOrgId: string): Promise<void> {
        set status = 'disabled', secrets = null, webhook_secret = null,
            last_error = null, updated_at = now()
      where org_id = ${sandboxOrgId}`);
+  // Storefront channels are the same shape: sealed connector secrets plus a
+  // verification secret, and sync work is real network egress. Keep the
+  // channel configuration for testing, but pause syncing and drop both
+  // secrets so the sandbox can never act as the production storefront.
+  await db.execute(sql`
+    update sales_channels
+       set status = 'paused', secrets = null, webhook_secret = null,
+           last_sync_at = null, updated_at = now()
+     where org_id = ${sandboxOrgId}`);
   envCache.delete(sandboxOrgId);
 }

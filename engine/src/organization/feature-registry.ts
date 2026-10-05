@@ -76,6 +76,10 @@ export const FEATURES: FeatureDef[] = [
   // issuance, redemption, breakage and expiry. Off by default — selling a
   // gift card changes what a sale posts, so adoption is deliberate.
   { key: 'storedValue', defaultEnabled: false, category: 'sales', navModules: ['stored-value'] },
+  // Storefront channel connections (channel records, the external-identity
+  // map, the inbound webhook inbox, channel orders). Off by default: posting
+  // needs orders and inventory beneath it, and connecting is adoption.
+  { key: 'salesChannels', defaultEnabled: false, category: 'sales', requiresAll: ['orders', 'inventory'], navModules: ['channels'] },
   // Operations
   // Projects is a parent gate on the centralized Features page.
   // Schedule-of-values billing remains a project-type procedure, not a gate.

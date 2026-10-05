@@ -1081,6 +1081,7 @@
       "manufacturing": "Fertigung",
       "items": "Artikel & Dienstleistungen",
       "orders": "Aufträge und Versand",
+      "channels": "Verkaufskanäle",
       "projects": "Projekte & Auftragskalkulation",
       "resourcing": "Ressourcenplanung",
       "time": "Zeit & Zeiterfassung",
@@ -1151,6 +1152,8 @@
     "orders_fulfill": "Aufträge kommissionieren, verpacken und versenden",
     "returns_waive_fee": "Wiedereinlagerungsgebühren bei Retouren erlassen",
     "shipping_manage": "Frachtetiketten abfragen, kaufen und stornieren",
+    "channels_read": "Storefront-Kanäle, Verknüpfungen und Aktivitäten ansehen",
+    "channels_manage": "Kanäle anbinden, Konten zuordnen und Ereignisse erneut verarbeiten",
     "projects_read": "Projekte und Auftragskalkulation anzeigen",
     "projects_manage": "Projekte erstellen und bearbeiten",
     "resourcing_read": "Ressourcenzuweisungen und -anfragen anzeigen",
@@ -5955,6 +5958,10 @@
     "crossBorderTax": {
       "title": "Grenzüberschreitende Besteuerung",
       "description": "Leistungsort aus erfassten Nachweisen, Prüfung geschäftlicher USt-IDs mit Reverse-Charge, EU-Schwellenüberwachung und One-Stop-Shop-Meldungen."
+    },
+    "salesChannels": {
+      "title": "Verkaufskanäle",
+      "description": "Storefront-Anbindungen (Shopify), die externe Identitätszuordnung und der Eingang für Bestellungen."
     },
     "advancedClose": {
       "title": "Erweiterte Abschlusssteuerung",

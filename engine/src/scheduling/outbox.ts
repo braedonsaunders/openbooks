@@ -88,6 +88,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "webhook_delivery",
   "usage_rating",
   "tax_provider_commit",
+  "commerce_inbound",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -667,6 +668,11 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       problems,
       unattributed: [],
     });
+    return;
+  }
+  if (row.kind === "commerce_inbound") {
+    const { runCommerceInboundScan } = await import("../commerce/inbound.ts");
+    await runCommerceInboundScan();
     return;
   }
   if (row.kind === ALLOCATION_RUN_OUTBOX_KIND) {
