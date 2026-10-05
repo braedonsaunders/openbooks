@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "Recuperação de cobranças",
         "description": "Uma linha por fatura cobrada pelo motor de cobrança automática — tentativas, primeira classe de recusa, se uma posição posterior a recuperou e por qual caminho, e dias até a recuperação. Agrupe por classe de recusa e provedor para ver as taxas de recuperação."
+      },
+      "payout_reconciliation": {
+        "label": "Conciliação de repasses",
+        "description": "Cada repasse do provedor detalhado em linhas de liquidação com seu documento vinculado, seu depósito bancário e sua provisão em trânsito — uma linha por lançamento com a situação e a diferença do repasse."
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "Data de recuperação",
         "days_to_recover": "Dias até recuperar",
         "first_attempt_day": "Data da primeira tentativa"
+      },
+      "payout_reconciliation": {
+        "provider": "Provedor",
+        "payout_ref": "Repasse",
+        "settlement_day": "Dia da liquidação",
+        "batch_status": "Situação do lote",
+        "currency": "Moeda",
+        "line_number": "Linha",
+        "line_kind": "Tipo",
+        "line_amount": "Valor",
+        "match_status": "Vínculo",
+        "document_number": "Documento",
+        "deposit_status": "Depósito",
+        "deposit_total": "Total do depósito",
+        "gap": "Diferença",
+        "accrued_amount": "Provisionado"
       }
     },
     "enumValues": {

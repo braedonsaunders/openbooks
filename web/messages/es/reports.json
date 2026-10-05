@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "Recuperación de cobros",
         "description": "Una fila por factura que el cobro automático ha cargado: intentos, primera clase de rechazo, si una posición posterior la recuperó y por qué vía, y días hasta la recuperación. Agrupe por clase de rechazo y proveedor para ver las tasas de recuperación."
+      },
+      "payout_reconciliation": {
+        "label": "Conciliación de pagos",
+        "description": "Cada pago del proveedor desglosado en líneas de liquidación con su documento vinculado, su depósito bancario y su provisión en tránsito — una fila por línea con el estado y la diferencia del pago."
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "Fecha de recuperación",
         "days_to_recover": "Días hasta recuperar",
         "first_attempt_day": "Fecha del primer intento"
+      },
+      "payout_reconciliation": {
+        "provider": "Proveedor",
+        "payout_ref": "Pago",
+        "settlement_day": "Día de liquidación",
+        "batch_status": "Estado del lote",
+        "currency": "Moneda",
+        "line_number": "Línea",
+        "line_kind": "Tipo",
+        "line_amount": "Importe",
+        "match_status": "Vínculo",
+        "document_number": "Documento",
+        "deposit_status": "Depósito",
+        "deposit_total": "Total del depósito",
+        "gap": "Diferencia",
+        "accrued_amount": "Provisionado"
       }
     },
     "enumValues": {

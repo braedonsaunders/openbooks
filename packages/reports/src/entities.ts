@@ -22,7 +22,9 @@ import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
 import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
 import { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
 import { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
+import { BANKING_REPORT_ENTITIES } from './banking-entities'
 
+export { BANKING_REPORT_ENTITIES } from './banking-entities'
 export { HRM_REPORT_ENTITIES } from './hrm-entities'
 export { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 export { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
@@ -1610,6 +1612,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   ...SHIPPING_REPORT_ENTITIES,
   ...STORED_VALUE_REPORT_ENTITIES,
   ...RECOVERY_REPORT_ENTITIES,
+  ...BANKING_REPORT_ENTITIES,
   ...DEMAND_REPORT_ENTITIES,
   // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS
   // (inside/outside/unavailable) — raw coordinates are worker location

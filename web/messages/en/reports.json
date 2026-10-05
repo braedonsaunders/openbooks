@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "Collection recovery",
         "description": "One row per invoice the automatic-collection engine has charged — attempts, the first decline class, whether a later position recovered it and by which path, and days to recover. Group by decline class and provider for recovery rates."
+      },
+      "payout_reconciliation": {
+        "label": "Payout reconciliation",
+        "description": "Every provider payout broken into settlement lines with the matched native document, the bank-deposit tie-out and any in-transit accrual — one row per line with the payout's status and gap."
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "Recovered day",
         "days_to_recover": "Days to recover",
         "first_attempt_day": "First attempt day"
+      },
+      "payout_reconciliation": {
+        "provider": "Provider",
+        "payout_ref": "Payout",
+        "settlement_day": "Settlement day",
+        "batch_status": "Payout status",
+        "currency": "Currency",
+        "line_number": "Line",
+        "line_kind": "Line kind",
+        "line_amount": "Line amount",
+        "match_status": "Match status",
+        "document_number": "Document",
+        "deposit_status": "Deposit status",
+        "deposit_total": "Deposit total",
+        "gap": "Gap",
+        "accrued_amount": "In-transit accrued"
       }
     },
     "enumValues": {
