@@ -129,7 +129,7 @@ export function BillingHistoryClient() {
         toast.error(error instanceof Error ? error.message : String(error));
         setLoading(false);
       });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refresh();
