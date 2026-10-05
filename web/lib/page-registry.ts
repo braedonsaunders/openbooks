@@ -688,6 +688,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/webhooks': {
+    route: '/admin/webhooks',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/webhooks/view')
+      return {
+        load: (input) => m.loadWebhooks(input.searchParams ?? {}),
+        spec: (data) => m.webhooksSpec(data as never),
+      }
+    },
+  },
   '/agents': {
     route: '/agents',
     segments: [],

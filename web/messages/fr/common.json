@@ -185,6 +185,7 @@
     "reversed": "Contrepassé",
     "cancelled": "Abandonné",
     "active": "Actif",
+    "disabled": "Désactivé",
     "inactive": "Inactif",
     "error": "Erreur",
     "ok": "OK",
