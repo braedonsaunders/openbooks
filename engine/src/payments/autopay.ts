@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withBypass, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, orgContext, pool, withBypass, withBypassContext, withOrg, withOrgContext } from "../platform/db.ts";
 import { paymentLinkTokenHash } from "./payment-link-seal.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
@@ -28,8 +28,10 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
  *
  * A customer (or one subscription) enrolls with a default stored method. The
  * `autopay_collection` scheduler scan charges due invoices off-session: one
- * collection attempt per (invoice, retry position), so a retried tick reuses
- * the attempt instead of charging twice. Success posts a customer_payment
+ * collection attempt per (invoice, retry position), committed before the
+ * provider is called and charged under an idempotency key derived from that
+ * position, so a retried tick reuses the attempt and its key instead of
+ * charging twice. Success posts a customer_payment
  * receipt through the same draft → apply → post path hosted payment links
  * use, so application to the invoice is identical. Soft declines retry on the
  * dunning policy's offsets; hard declines stop; exhausting the schedule runs
@@ -55,10 +57,7 @@ async function adapterCharge(
   provider: AcceptanceProvider,
   req: OffSessionChargeRequest,
 ): Promise<OffSessionChargeOutcome> {
-  const config = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, provider);
-  if (!config || !config.is_enabled || !config.acceptance_enabled) {
-    throw new AutopayError(`${provider} is not enabled for automatic collection; enable it in provider settings first`);
-  }
+  const config = await requireCollectingProvider(orgId, provider);
   const adapter = ACCEPTANCE_ADAPTERS[provider];
   return adapter.chargeOffSession(configSecrets(config, orgId), {
     providerCustomerId: req.providerCustomerId,
@@ -986,17 +985,7 @@ export async function runAutopayCollection(asOf?: string): Promise<AutopayRunRes
       console.error(`[autopay] org ${orgId} collection failed: ${message}`);
       return { ...emptyRunResult(), orgErrors: [{ orgId, error: message.slice(0, 1000) }] };
     });
-    result.scanned += one.scanned;
-    result.charged += one.charged;
-    result.succeeded += one.succeeded;
-    result.failed += one.failed;
-    result.retried += one.retried;
-    result.suspended += one.suspended;
-    result.canceled += one.canceled;
-    result.reactivated += one.reactivated;
-    result.skipped += one.skipped;
-    result.notices.push(...one.notices);
-    result.orgErrors.push(...one.orgErrors);
+    mergeRunResult(result, one);
   }
   return result;
 }
@@ -1006,18 +995,26 @@ export async function runAutopayCollectionForOrg(
   opts?: { asOf?: string; charge?: ChargeFn },
 ): Promise<AutopayRunResult> {
   if (!orgId.trim()) throw new AutopayError("orgId is required for an org-scoped collection run");
+  refuseInsideTransaction();
   const result = emptyRunResult();
-  return withOrg(orgId, async () => {
+  // Deliberately NOT one transaction: every attempt commits on its own, so
+  // one invoice's failure can never roll back another invoice's charge
+  // evidence. The scans below are plain tenant-scoped reads.
+  return withOrgContext(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "autopay"))) return result;
     const today = opts?.asOf ?? (await businessToday(orgId));
     const charge = opts?.charge ?? ((provider, req) => adapterCharge(orgId, provider, req));
 
-    await reconcileProcessingAttempts(orgId, result);
+    await committed(orgId, result, (local) => reconcileProcessingAttempts(orgId, local));
     const policy = await resolveAutopayPolicy(orgId).catch((error: unknown) => {
-      result.orgErrors.push({ orgId, error: error instanceof Error ? error.message : String(error) });
+      result.orgErrors.push({ orgId, error: errorMessage(error) });
       return null;
     });
     if (!policy) return result;
+
+    // Attempts a previous run committed but never finished come first: they
+    // resolve under the idempotency key they were sent with, never a new one.
+    await resumeInterruptedAttempts(orgId, today, policy, charge, result);
 
     // Initial charges: due invoices (or issued ones for charge-on-issue
     // enrollments) with a live enrollment and method, and no attempt yet.
@@ -1051,15 +1048,8 @@ export async function runAutopayCollectionForOrg(
     `)).rows;
     for (const candidate of initials) {
       result.scanned += 1;
-      await collectCandidate(orgId, candidate, 0, today, policy, charge, result).catch((error: unknown) => {
-        result.failed += 1;
-        result.notices.push({
-          invoiceId: candidate.invoiceId,
-          attemptId: null,
-          status: "failed",
-          detail: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-        });
-      });
+      await collectCandidate(orgId, candidate, 0, today, policy, charge, result)
+        .catch(candidateFailed(result, candidate.invoiceId));
     }
 
     // Consolidated invoices: the header names the payer, so a payer-level
@@ -1112,15 +1102,8 @@ export async function runAutopayCollectionForOrg(
     `)).rows;
     for (const candidate of consolidated) {
       result.scanned += 1;
-      await collectCandidate(orgId, candidate, 0, today, policy, charge, result).catch((error: unknown) => {
-        result.failed += 1;
-        result.notices.push({
-          invoiceId: candidate.invoiceId,
-          attemptId: null,
-          status: "failed",
-          detail: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-        });
-      });
+      await collectCandidate(orgId, candidate, 0, today, policy, charge, result)
+        .catch(candidateFailed(result, candidate.invoiceId));
     }
 
     // Enrolled consolidated invoices with no usable payer method stay
@@ -1187,15 +1170,8 @@ export async function runAutopayCollectionForOrg(
     for (const candidate of retries) {
       result.scanned += 1;
       const position = (candidate.failedPosition ?? 0) + 1;
-      await collectCandidate(orgId, candidate, position, today, policy, charge, result).catch((error: unknown) => {
-        result.failed += 1;
-        result.notices.push({
-          invoiceId: candidate.invoiceId,
-          attemptId: null,
-          status: "failed",
-          detail: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-        });
-      });
+      await collectCandidate(orgId, candidate, position, today, policy, charge, result)
+        .catch(candidateFailed(result, candidate.invoiceId));
     }
     return result;
   });
@@ -1227,9 +1203,164 @@ function collectionLockKey(orgId: string, invoiceId: string): string {
 }
 
 /**
- * Charge one invoice at one schedule position. The invoice is re-read under
- * the row lock: anything paid, voided, disputed or credited since selection
- * refuses the charge instead of taking money no longer owed.
+ * The provider idempotency key for one (invoice, schedule position). It is
+ * derived, never random: the attempt row commits before the provider is
+ * called, so a run that dies between the call and recording its outcome
+ * leaves a row a later run replays under this same key, and the provider
+ * returns the first result instead of taking the money twice. Document ids
+ * are unique across organizations, so the invoice id already names the
+ * organization, and the key stays inside every provider's reference limit
+ * (Adyen caps merchant references at 80 characters).
+ */
+function collectionIdempotencyKey(invoiceId: string, retryPosition: number): string {
+  return `autopay:${invoiceId}:${retryPosition}`;
+}
+
+/**
+ * How long an interrupted attempt may be replayed. Providers keep an
+ * idempotency key for a limited time — Stripe for 24 hours, the shortest of
+ * the supported providers — and replaying after the provider forgot the key
+ * could charge a second time. Older interrupted attempts are closed for
+ * operator review instead.
+ */
+const REPLAY_WINDOW_HOURS = 23;
+
+function errorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  // A failed query carries the database's own reason as its cause; the
+  // statement text and parameters around it mean nothing to an operator.
+  return error.message.startsWith("Failed query") && error.cause instanceof Error ? error.cause.message : error.message;
+}
+
+function mergeRunResult(into: AutopayRunResult, one: AutopayRunResult): void {
+  into.scanned += one.scanned;
+  into.charged += one.charged;
+  into.succeeded += one.succeeded;
+  into.failed += one.failed;
+  into.retried += one.retried;
+  into.suspended += one.suspended;
+  into.canceled += one.canceled;
+  into.reactivated += one.reactivated;
+  into.skipped += one.skipped;
+  into.notices.push(...one.notices);
+  into.orgErrors.push(...one.orgErrors);
+}
+
+/**
+ * Run one step in its own committed transaction. Counters and notices the
+ * step records reach `result` only after the commit, so a step that rolls
+ * back never reports work that did not happen.
+ */
+async function committed<T>(
+  orgId: string,
+  result: AutopayRunResult,
+  fn: (local: AutopayRunResult) => Promise<T>,
+): Promise<T> {
+  const local = emptyRunResult();
+  const value = await withOrg(orgId, () => fn(local));
+  mergeRunResult(result, local);
+  return value;
+}
+
+function candidateFailed(result: AutopayRunResult, invoiceId: string): (error: unknown) => void {
+  return (error) => {
+    result.failed += 1;
+    result.notices.push({ invoiceId, attemptId: null, status: "failed", detail: errorMessage(error).slice(0, 500) });
+  };
+}
+
+/**
+ * A charge is never sent from inside a database transaction: the attempt that
+ * names it must already be committed, or a later rollback would erase the
+ * only record that the customer was charged.
+ */
+function refuseInsideTransaction(): void {
+  if (orgContext.getStore()?.txDb) {
+    throw new AutopayError(
+      "automatic collection must not run inside a database transaction; call it outside one so each attempt commits before its charge is sent",
+    );
+  }
+}
+
+/**
+ * Hold one invoice's collection claim across its whole charge: claiming the
+ * attempt, the provider call, and recording the outcome. It is a session
+ * advisory lock on a dedicated connection, so it spans those separate
+ * transactions, and it is released when its holder ends — including when the
+ * process dies, because the lock dies with the connection. An 'initiated'
+ * attempt seen while holding the claim therefore belongs to a run that is
+ * gone, never to one still waiting on the provider. Null when another run
+ * holds the claim.
+ */
+async function withCollectionClaim<T>(
+  orgId: string,
+  invoiceId: string,
+  body: () => Promise<T>,
+): Promise<{ value: T } | null> {
+  const key = collectionLockKey(orgId, invoiceId);
+  const client = await pool.connect();
+  let held = false;
+  let discard: Error | undefined;
+  try {
+    const claimed = await client.query<{ locked: boolean }>(
+      "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
+      [key],
+    );
+    if (claimed.rows[0]?.locked !== true) return null;
+    held = true;
+    return { value: await body() };
+  } finally {
+    if (held) {
+      try {
+        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [key]);
+      } catch (error) {
+        // Destroy a broken session rather than return it to the pool still
+        // holding the claim.
+        discard = error as Error;
+      }
+    }
+    client.release(discard);
+  }
+}
+
+/** Refuse by name when the attempt's provider cannot collect. */
+async function requireCollectingProvider(orgId: string, provider: AcceptanceProvider): Promise<ProviderConfigRow> {
+  const config = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, provider);
+  if (!config || !config.is_enabled || !config.acceptance_enabled) {
+    throw new AutopayError(`${provider} is not enabled for automatic collection; enable it in provider settings first`);
+  }
+  return config;
+}
+
+type ChainLink = {
+  methodId: string;
+  provider: AcceptanceProvider;
+  providerCustomerId: string | null;
+  providerMethodId: string | null;
+  fallbackOf: string | null;
+};
+
+/** A committed attempt whose charge is about to be, or was, sent. */
+interface OpenAttempt {
+  id: string;
+  invoiceId: string;
+  position: number;
+  amount: string;
+  currency: string;
+  provider: AcceptanceProvider;
+  documentNumber: string;
+  fallbackOf: string | null;
+}
+
+/**
+ * Charge one invoice at one schedule position. Each step commits on its own:
+ * the attempt row commits BEFORE the provider is called (it is the record
+ * that a charge was sent), the provider call runs outside any transaction,
+ * and the outcome and the receipt each commit separately — so a later
+ * failure never erases earlier evidence, and no other invoice's failure can
+ * roll this one back. The invoice is re-read under its row lock as each
+ * attempt is claimed: anything paid, voided, disputed or credited since
+ * selection refuses the charge instead of taking money no longer owed.
  */
 async function collectCandidate(
   orgId: string,
@@ -1241,33 +1372,79 @@ async function collectCandidate(
   result: AutopayRunResult,
   actorId: string | null = null,
 ): Promise<void> {
-  await db.execute(sql`
-    select pg_advisory_xact_lock(hashtextextended(${collectionLockKey(orgId, candidate.invoiceId)}, 0))
-  `);
-  const invoice = (await db.execute<{
-    status: string;
-    open_balance: string;
-    currency: string;
-    document_number: string;
-    subsidiary_id: string | null;
-  }>(sql`
-    select status, open_balance, currency, document_number as "document_number", subsidiary_id
-      from documents where id = ${candidate.invoiceId} and org_id = ${orgId}
-     for update
+  const claimed = await withCollectionClaim(orgId, candidate.invoiceId, async () => {
+    const chain = await collectionChain(orgId, candidate, result);
+    if (!chain) return;
+    let fallbackPosition = position;
+    for (const [index, link] of chain.entries()) {
+      if (!link.providerMethodId) {
+        result.skipped += 1;
+        result.notices.push({
+          invoiceId: candidate.invoiceId,
+          attemptId: null,
+          status: "skipped",
+          detail: "a backup method has no provider token yet; finish its setup first",
+        });
+        continue;
+      }
+      const claim = await withOrg(orgId, () => claimAttempt(orgId, candidate, link, fallbackPosition, actorId));
+      if ("skip" in claim) {
+        result.skipped += 1;
+        result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: claim.skip });
+        return;
+      }
+      result.charged += 1;
+      const outcome = await sendCharge(charge, claim.attempt, {
+        providerCustomerId: link.providerCustomerId,
+        providerMethodId: link.providerMethodId,
+      });
+      const next = await recordChargeOutcome(
+        orgId, candidate, claim.attempt, outcome, today, policy, result, index < chain.length - 1,
+      );
+      if (next === "done") return;
+      fallbackPosition += 1;
+    }
+  });
+  if (claimed === null) {
+    result.skipped += 1;
+    result.notices.push({
+      invoiceId: candidate.invoiceId,
+      attemptId: null,
+      status: "skipped",
+      detail: "another collection run is charging this invoice right now",
+    });
+  }
+}
+
+/**
+ * The methods to try, in order: the enrollment method, then backups — the
+ * default first, then the customer's other active methods by fallback
+ * priority. At most three backups charge per tick — a customer with more
+ * simply keeps the rest for the next retry, so one invoice can never fan out
+ * into a charge storm. Null (with the reason recorded) when the invoice or
+ * enrollment is no longer collectible.
+ */
+async function collectionChain(
+  orgId: string,
+  candidate: CollectionCandidate,
+  result: AutopayRunResult,
+): Promise<ChainLink[] | null> {
+  const invoice = (await db.execute<{ status: string; open_balance: string }>(sql`
+    select status, open_balance from documents where id = ${candidate.invoiceId} and org_id = ${orgId}
   `)).rows[0];
   if (!invoice) {
     result.skipped += 1;
     result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: "invoice is gone; nothing to collect" });
-    return;
+    return null;
   }
   const skipReason = await uncollectibleReason(orgId, candidate.invoiceId, invoice.status, invoice.open_balance);
   if (skipReason) {
     result.skipped += 1;
     result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: skipReason });
-    return;
+    return null;
   }
-  // The enrollment and method were live at selection; recheck under the lock
-  // — a removed method or paused enrollment must refuse with its remedy.
+  // The enrollment and method were live at selection; recheck — a removed
+  // method or paused enrollment must refuse with its remedy.
   const live = (await db.execute<{ enrollmentId: string; methodId: string }>(sql`
     select e.id as "enrollmentId", m.id as "methodId"
       from autopay_enrollments e
@@ -1286,14 +1463,8 @@ async function collectCandidate(
       status: "skipped",
       detail: "enrollment paused or no active method; link a payment method or resume autopay first",
     });
-    return;
+    return null;
   }
-  const amount = invoice.open_balance;
-  // Backup methods, ordered after the enrollment method: the default first,
-  // then the customer's other active methods by fallback priority. At most
-  // three backups charge per tick — a customer with more simply keeps the
-  // rest for the next retry, so one invoice can never fan out into a charge
-  // storm.
   const backups = (await db.execute<{
     methodId: string;
     provider: AcceptanceProvider;
@@ -1309,114 +1480,385 @@ async function collectCandidate(
      order by fallback_priority asc, created_at asc
      limit 3
   `)).rows;
-  const chain = [{
+  return [{
     methodId: candidate.methodId,
     provider: candidate.provider,
     providerCustomerId: candidate.providerCustomerId,
     providerMethodId: candidate.providerMethodId,
-    fallbackOf: null as string | null,
-  }, ...backups.map((backup) => ({ ...backup, fallbackOf: candidate.methodId as string | null }))];
-  let fallbackPosition = position;
-  for (const link of chain) {
-    if (!link.providerMethodId) {
-      result.skipped += 1;
-      result.notices.push({
-        invoiceId: candidate.invoiceId,
-        attemptId: null,
-        status: "skipped",
-        detail: "a backup method has no provider token yet; finish its setup first",
-      });
-      continue;
-    }
-    // Idempotent per (invoice, schedule position): a concurrent tick that
-    // won the race owns the charge, so this tick stands down. The conflict
-    // is expected under concurrency and benign — exactly one attempt
-    // charges. Fallback rows consume later positions, so the retry ladder
-    // keeps bounding total attempts.
-    const attemptId = await insertCollectionAttempt(
-      orgId, candidate, link.methodId, link.provider, link.fallbackOf,
-      amount, invoice.currency, fallbackPosition, actorId,
-    );
-    if (!attemptId) {
-      result.skipped += 1;
-      result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: "another tick is already collecting this position" });
-      return;
-    }
-    result.charged += 1;
-    const outcome = await charge(link.provider, {
-      providerCustomerId: link.providerCustomerId,
-      providerMethodId: link.providerMethodId,
-      amount,
+    fallbackOf: null,
+  }, ...backups.map((backup) => ({ ...backup, fallbackOf: candidate.methodId }))];
+}
+
+/**
+ * Claim one schedule position: lock the invoice, recheck that it is still
+ * owed, and insert the 'initiated' attempt. Runs in its own transaction, so
+ * the attempt is committed before any charge is sent.
+ */
+async function claimAttempt(
+  orgId: string,
+  candidate: CollectionCandidate,
+  link: ChainLink,
+  position: number,
+  actorId: string | null,
+): Promise<{ attempt: OpenAttempt } | { skip: string }> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, "autopay"))) {
+    return { skip: "autopay was turned off in Company Settings → Features; nothing is charged while it is off" };
+  }
+  const invoice = (await db.execute<{
+    status: string;
+    open_balance: string;
+    currency: string;
+    document_number: string;
+  }>(sql`
+    select status, open_balance, currency, document_number
+      from documents where id = ${candidate.invoiceId} and org_id = ${orgId}
+     for update
+  `)).rows[0];
+  if (!invoice) return { skip: "invoice is gone; nothing to collect" };
+  const skipReason = await uncollectibleReason(orgId, candidate.invoiceId, invoice.status, invoice.open_balance);
+  if (skipReason) return { skip: skipReason };
+  await requireCollectingProvider(orgId, link.provider);
+  const attemptId = await insertCollectionAttempt(
+    orgId, candidate, link.methodId, link.provider, link.fallbackOf,
+    invoice.open_balance, invoice.currency, position, actorId,
+  );
+  if (!attemptId) return { skip: "another tick is already collecting this position" };
+  return {
+    attempt: {
+      id: attemptId,
+      invoiceId: candidate.invoiceId,
+      position,
+      amount: invoice.open_balance,
       currency: invoice.currency,
-      description: `Autopay — invoice ${invoice.document_number}`,
-      idempotencyKey: attemptId,
+      provider: link.provider,
+      documentNumber: invoice.document_number,
+      fallbackOf: link.fallbackOf,
+    },
+  };
+}
+
+/**
+ * Send the charge for a committed attempt, outside any transaction, under
+ * the position's deterministic idempotency key. A provider call that throws
+ * leaves the outcome unknown, so the attempt stays open for the next run to
+ * resolve under the same key.
+ */
+async function sendCharge(
+  charge: ChargeFn,
+  attempt: OpenAttempt,
+  method: { providerCustomerId: string | null; providerMethodId: string },
+): Promise<OffSessionChargeOutcome> {
+  try {
+    return await charge(attempt.provider, {
+      providerCustomerId: method.providerCustomerId,
+      providerMethodId: method.providerMethodId,
+      amount: attempt.amount,
+      currency: attempt.currency,
+      description: `Autopay — invoice ${attempt.documentNumber}`,
+      idempotencyKey: collectionIdempotencyKey(attempt.invoiceId, attempt.position),
     });
-    if (outcome.status === "succeeded") {
-      await db.execute(sql`
-        update collection_attempts set provider_ref = ${outcome.providerRef}, updated_at = now()
-         where id = ${attemptId} and org_id = ${orgId}
-      `);
-      await postCollectionReceipt(orgId, attemptId);
-      result.succeeded += 1;
-      result.reactivated += await reactivateScopeSubscriptions(orgId, candidate, null);
-      result.notices.push({
-        invoiceId: candidate.invoiceId,
-        attemptId,
-        status: "succeeded",
-        detail: link.fallbackOf
-          ? `collected ${amount} ${invoice.currency} on the backup method after the primary declined`
-          : `collected ${amount} ${invoice.currency}`,
-      });
-      return;
-    }
-    if (outcome.status === "processing") {
-      await db.execute(sql`
-        update collection_attempts
-           set status = 'processing', provider_ref = ${outcome.providerRef}, updated_at = now()
-         where id = ${attemptId} and org_id = ${orgId}
-      `);
-      result.notices.push({ invoiceId: candidate.invoiceId, attemptId, status: "processing", detail: "provider is still collecting; the webhook settles this attempt" });
-      return;
-    }
-    if (outcome.status === "requires_action") {
-      await recordDecline(orgId, candidate, attemptId, fallbackPosition, today, policy,
-        outcome.declineCode ?? "authentication_required", result, { authUrl: outcome.authUrl });
-      return;
-    }
-    const kind = classifyDecline(outcome.declineCode) ?? "soft";
-    const lastLink = link === chain[chain.length - 1];
-    if (kind === "hard" && !lastLink) {
-      // The primary is dead but a backup is on file: park this row as a
-      // hard failure without running the final action, and charge the next
-      // method immediately. The final action runs only when every method on
-      // file has declined hard.
-      const parked = (await db.execute<{ id: string }>(sql`
-        update collection_attempts
-           set status = 'failed', decline_code = ${outcome.declineCode}, decline_kind = 'hard',
-               next_retry_on = null, updated_at = now()
-         where id = ${attemptId} and org_id = ${orgId} and status = 'initiated'
-         returning id
-      `));
-      if (!parked.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
-      result.failed += 1;
-      result.notices.push({
-        invoiceId: candidate.invoiceId,
-        attemptId,
-        status: "failed",
-        detail: `primary method declined (${outcome.declineCode ?? "unknown reason"}); trying the backup method`,
-      });
-      fallbackPosition += 1;
-      continue;
-    }
-    await recordDecline(orgId, candidate, attemptId, fallbackPosition, today, policy, outcome.declineCode ?? null, result);
-    return;
+  } catch (error) {
+    throw new AutopayError(
+      `${attempt.provider} did not confirm the charge for invoice ${attempt.documentNumber} (${errorMessage(error)}); the attempt stays open and the next run resolves it under the same idempotency key, so the customer cannot be charged twice`,
+    );
   }
 }
 
 /**
- * Insert one collection attempt row, returning its id — or null when a
- * concurrent tick already owns this (invoice, position). The conflict is
- * expected under concurrency and benign.
+ * Record what the provider answered, each write in its own transaction.
+ * "next" means the primary declined hard and a backup method follows. When
+ * the write itself fails the attempt stays 'initiated' with no provider
+ * reference, so the next run replays it under the same idempotency key and
+ * the provider returns this same answer; the failure is reported by name.
+ */
+async function recordChargeOutcome(
+  orgId: string,
+  candidate: CollectionCandidate,
+  attempt: OpenAttempt,
+  outcome: OffSessionChargeOutcome,
+  today: string,
+  policy: AutopayPolicy,
+  result: AutopayRunResult,
+  backupFollows: boolean,
+): Promise<"done" | "next"> {
+  let collectedRef: string | null = null;
+  try {
+    if (outcome.status === "succeeded") {
+      // The provider reference commits first and alone: if the receipt
+      // below fails, the next run finds the reference and posts the receipt
+      // without charging again.
+      await withOrg(orgId, async () => {
+        const kept = await db.execute<{ id: string }>(sql`
+          update collection_attempts set provider_ref = ${outcome.providerRef}, updated_at = now()
+           where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
+           returning id
+        `);
+        if (!kept.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+      });
+      collectedRef = outcome.providerRef;
+    } else if (outcome.status === "processing") {
+      await withOrg(orgId, async () => {
+        const kept = await db.execute<{ id: string }>(sql`
+          update collection_attempts
+             set status = 'processing', provider_ref = ${outcome.providerRef}, updated_at = now()
+           where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
+           returning id
+        `);
+        if (!kept.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+      });
+      result.notices.push({ invoiceId: candidate.invoiceId, attemptId: attempt.id, status: "processing", detail: "provider is still collecting; the webhook settles this attempt" });
+      return "done";
+    } else if (outcome.status === "requires_action") {
+      await committed(orgId, result, (local) => recordDecline(orgId, candidate, attempt.id, attempt.position, today, policy,
+        outcome.declineCode ?? "authentication_required", local, { authUrl: outcome.authUrl }));
+      return "done";
+    } else {
+      const kind = classifyDecline(outcome.declineCode) ?? "soft";
+      if (kind === "hard" && backupFollows) {
+        // The primary is dead but a backup is on file: park this row as a
+        // hard failure without running the final action, and charge the
+        // next method immediately. The final action runs only when every
+        // method on file has declined hard.
+        await withOrg(orgId, async () => {
+          const parked = await db.execute<{ id: string }>(sql`
+            update collection_attempts
+               set status = 'failed', decline_code = ${outcome.declineCode}, decline_kind = 'hard',
+                   next_retry_on = null, updated_at = now()
+             where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
+             returning id
+          `);
+          if (!parked.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+        });
+        result.failed += 1;
+        result.notices.push({
+          invoiceId: candidate.invoiceId,
+          attemptId: attempt.id,
+          status: "failed",
+          detail: `primary method declined (${outcome.declineCode ?? "unknown reason"}); trying the backup method`,
+        });
+        return "next";
+      }
+      await committed(orgId, result, (local) => recordDecline(orgId, candidate, attempt.id, attempt.position, today, policy,
+        outcome.declineCode ?? null, local));
+      return "done";
+    }
+  } catch (error) {
+    const message = `${attempt.provider} answered "${outcome.status}" for invoice ${attempt.documentNumber}, but the outcome could not be recorded (${errorMessage(error)}); the attempt stays open and the next run resolves it under the same idempotency key, so the customer cannot be charged twice`;
+    result.orgErrors.push({ orgId, error: message.slice(0, 1000) });
+    throw new AutopayError(message);
+  }
+  await postCollectedReceipt(orgId, candidate, attempt, collectedRef, result);
+  return "done";
+}
+
+/**
+ * Post the receipt for a charge the provider confirmed, in its own
+ * transaction. The attempt already carries the provider reference, so when
+ * this fails the collection stays on record and the next run posts the
+ * receipt without charging again; the failure is reported by name.
+ */
+async function postCollectedReceipt(
+  orgId: string,
+  candidate: CollectionCandidate,
+  attempt: OpenAttempt,
+  providerRef: string,
+  result: AutopayRunResult,
+): Promise<void> {
+  try {
+    const reactivated = await withOrg(orgId, async () => {
+      await postCollectionReceipt(orgId, attempt.id);
+      return reactivateScopeSubscriptions(orgId, candidate, null);
+    });
+    result.succeeded += 1;
+    result.reactivated += reactivated;
+    result.notices.push({
+      invoiceId: candidate.invoiceId,
+      attemptId: attempt.id,
+      status: "succeeded",
+      detail: attempt.fallbackOf
+        ? `collected ${attempt.amount} ${attempt.currency} on the backup method after the primary declined`
+        : `collected ${attempt.amount} ${attempt.currency}`,
+    });
+  } catch (error) {
+    const detail = `collected ${attempt.amount} ${attempt.currency} on invoice ${attempt.documentNumber} (provider reference ${providerRef}) but the receipt could not post: ${errorMessage(error)}; the collection stays on record and the next run posts the receipt without charging again`;
+    result.notices.push({ invoiceId: candidate.invoiceId, attemptId: attempt.id, status: "receipt_pending", detail: detail.slice(0, 500) });
+    result.orgErrors.push({ orgId, error: detail.slice(0, 1000) });
+  }
+}
+
+/**
+ * Finish attempts an earlier run committed but never resolved — it died, or
+ * its provider call or outcome write failed. Each is handled under its
+ * invoice's claim, so an attempt still in flight in another run is left
+ * alone. An attempt carrying a provider reference was collected, so only its
+ * receipt posts; one without is replayed with the request and idempotency key
+ * it was first sent with, so the provider returns the original result
+ * instead of charging again. An attempt that cannot be replayed safely is
+ * closed for operator review — never re-sent under a new key.
+ */
+async function resumeInterruptedAttempts(
+  orgId: string,
+  today: string,
+  policy: AutopayPolicy,
+  charge: ChargeFn,
+  result: AutopayRunResult,
+): Promise<void> {
+  const open = (await db.execute<{ id: string; invoice_id: string }>(sql`
+    select id, invoice_id from collection_attempts
+     where org_id = ${orgId} and status = 'initiated'
+     order by created_at, id
+  `)).rows;
+  for (const row of open) {
+    const claimed = await withCollectionClaim(orgId, row.invoice_id, () =>
+      resumeAttempt(orgId, row.id, today, policy, charge, result),
+    ).catch((error: unknown) => {
+      candidateFailed(result, row.invoice_id)(error);
+      return { value: undefined };
+    });
+    if (claimed === null) {
+      result.skipped += 1;
+      result.notices.push({
+        invoiceId: row.invoice_id,
+        attemptId: row.id,
+        status: "skipped",
+        detail: "another collection run is charging this invoice right now",
+      });
+    }
+  }
+}
+
+async function resumeAttempt(
+  orgId: string,
+  attemptId: string,
+  today: string,
+  policy: AutopayPolicy,
+  charge: ChargeFn,
+  result: AutopayRunResult,
+): Promise<void> {
+  const row = (await db.execute<{
+    invoiceId: string;
+    position: number;
+    amount: string;
+    currency: string;
+    provider: AcceptanceProvider;
+    providerRef: string | null;
+    fallbackOf: string | null;
+    enrollmentId: string | null;
+    methodId: string | null;
+    replayable: boolean;
+    documentNumber: string | null;
+    invoiceStatus: string | null;
+    openBalance: string | null;
+    partyId: string | null;
+    subsidiaryId: string | null;
+    subscriptionId: string | null;
+    methodLive: boolean;
+    providerCustomerId: string | null;
+    providerMethodId: string | null;
+  }>(sql`
+    select a.invoice_id as "invoiceId", a.retry_position as "position", a.amount, a.currency,
+           a.provider, a.provider_ref as "providerRef", a.fallback_method_id as "fallbackOf",
+           a.enrollment_id as "enrollmentId", a.payment_method_id as "methodId",
+           a.created_at > now() - make_interval(hours => ${REPLAY_WINDOW_HOURS}) as "replayable",
+           d.document_number as "documentNumber", d.status as "invoiceStatus",
+           d.open_balance as "openBalance", d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
+           e.subscription_id as "subscriptionId",
+           coalesce(e.status = 'active' and m.status = 'active' and m.provider_method_id is not null, false) as "methodLive",
+           m.provider_customer_id as "providerCustomerId", m.provider_method_id as "providerMethodId"
+      from collection_attempts a
+      left join documents d on d.id = a.invoice_id and d.org_id = a.org_id
+      left join autopay_enrollments e on e.id = a.enrollment_id and e.org_id = a.org_id
+      left join customer_payment_methods m on m.id = a.payment_method_id and m.org_id = a.org_id
+     where a.id = ${attemptId} and a.org_id = ${orgId} and a.status = 'initiated'
+  `)).rows[0];
+  // Settled since it was listed: a provider webhook or another run got there first.
+  if (!row) return;
+  const attempt: OpenAttempt = {
+    id: attemptId,
+    invoiceId: row.invoiceId,
+    position: row.position,
+    amount: row.amount,
+    currency: row.currency,
+    provider: row.provider,
+    documentNumber: row.documentNumber ?? row.invoiceId,
+    fallbackOf: row.fallbackOf,
+  };
+  const candidate: CollectionCandidate = {
+    invoiceId: row.invoiceId,
+    documentNumber: attempt.documentNumber,
+    openBalance: row.openBalance ?? "0",
+    currency: row.currency,
+    partyId: row.partyId ?? "",
+    subsidiaryId: row.subsidiaryId,
+    documentDate: null,
+    dueDate: null,
+    enrollmentId: row.enrollmentId ?? "",
+    subscriptionId: row.subscriptionId,
+    methodId: row.methodId ?? "",
+    provider: row.provider,
+    providerCustomerId: row.providerCustomerId,
+    providerMethodId: row.providerMethodId,
+  };
+  if (row.providerRef) {
+    await postCollectedReceipt(orgId, candidate, attempt, row.providerRef, result);
+    return;
+  }
+  const blocker = row.invoiceStatus === null || row.openBalance === null
+    ? "the invoice is gone"
+    : !row.replayable
+      ? `it is older than ${REPLAY_WINDOW_HOURS} hours, past the time providers keep idempotency keys`
+      : (await uncollectibleReason(orgId, row.invoiceId, row.invoiceStatus, row.openBalance))
+        ?? (row.methodLive && row.providerMethodId ? null : "its enrollment or payment method is no longer active");
+  if (blocker || !row.providerMethodId) {
+    await closeInterruptedAttempt(orgId, attempt, blocker ?? "its payment method has no provider token", result);
+    return;
+  }
+  result.charged += 1;
+  const outcome = await sendCharge(charge, attempt, {
+    providerCustomerId: row.providerCustomerId,
+    providerMethodId: row.providerMethodId,
+  });
+  await recordChargeOutcome(orgId, candidate, attempt, outcome, today, policy, result, false);
+}
+
+/**
+ * Close an interrupted attempt that cannot be replayed safely. Whether the
+ * provider took the money is unknown, so the attempt is kept as evidence,
+ * autopay stops charging the invoice, and the operator is told exactly what
+ * to look up.
+ */
+async function closeInterruptedAttempt(
+  orgId: string,
+  attempt: OpenAttempt,
+  blocker: string,
+  result: AutopayRunResult,
+): Promise<void> {
+  const key = collectionIdempotencyKey(attempt.invoiceId, attempt.position);
+  const detail = `collection on invoice ${attempt.documentNumber} was interrupted before ${attempt.provider} confirmed it and is not replayed because ${blocker}; check ${attempt.provider} for a payment with idempotency key ${key}: if it was taken, record it as a customer payment on the invoice or refund it, otherwise nothing was charged. Autopay no longer charges this invoice; collect any balance still owed another way`;
+  await withOrg(orgId, async () => {
+    const closed = await db.execute<{ id: string }>(sql`
+      update collection_attempts
+         set status = 'canceled', decline_code = 'outcome_unknown', next_retry_on = null, updated_at = now()
+       where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated' and provider_ref is null
+       returning id
+    `);
+    if (!closed.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+    await auditAutopay(orgId, "collection_attempts", attempt.id, {
+      event: "interrupted_attempt_closed",
+      before: { status: "initiated" },
+      after: { status: "canceled", declineCode: "outcome_unknown" },
+      idempotencyKey: key,
+      reason: detail,
+    }, null);
+  });
+  result.failed += 1;
+  result.notices.push({ invoiceId: attempt.invoiceId, attemptId: attempt.id, status: "canceled", detail: detail.slice(0, 500) });
+  result.orgErrors.push({ orgId, error: detail.slice(0, 1000) });
+}
+
+/**
+ * Insert one collection attempt row, returning its id — or null when another
+ * run already owns this (invoice, position).
  */
 async function insertCollectionAttempt(
   orgId: string,
@@ -1429,6 +1871,11 @@ async function insertCollectionAttempt(
   retryPosition: number,
   actorId: string | null,
 ): Promise<string | null> {
+  // The unique (org, invoice, position) row is the claim on that position.
+  // A conflict means a run that selected the same invoice committed this
+  // position first — it owns the charge and resolves it, so standing down
+  // is correct and exactly one attempt charges. Fallback rows consume later
+  // positions, so the retry ladder keeps bounding total attempts.
   const attempt = (await db.execute<{ id: string }>(sql`
     insert into collection_attempts
       (org_id, invoice_id, enrollment_id, payment_method_id, fallback_method_id, amount, currency,
@@ -1445,7 +1892,9 @@ async function insertCollectionAttempt(
  * Operator "retry now": an immediate charge outside the schedule for a
  * soft-declined attempt (the customer just updated the method, the operator
  * does not wait for tomorrow). Hard declines refuse — they never clear on
- * retry. A success reactivates exactly like a scheduled one.
+ * retry. A success reactivates exactly like a scheduled one. The request is
+ * validated and audited in one transaction; the charge then follows the
+ * same commit-before-charge path as a scheduled collection.
  */
 export async function retryAttemptNow(
   orgId: string,
@@ -1453,51 +1902,55 @@ export async function retryAttemptNow(
   actorId: string | null = null,
   chargeFn?: ChargeFn,
 ): Promise<AutopayRunResult> {
+  refuseInsideTransaction();
   const result = emptyRunResult();
-  await withOrg(orgId, async () => {
-    await requireAutopayFeature(orgId);
-    const attempt = (await db.execute<{
-      invoice_id: string;
-      enrollment_id: string;
-      method_id: string;
-      retry_position: number;
-      decline_kind: string | null;
-    }>(sql`
-      select a.invoice_id, a.enrollment_id, a.payment_method_id as "method_id",
-             a.retry_position, a.decline_kind
-        from collection_attempts a
-       where a.id = ${attemptId} and a.org_id = ${orgId} and a.status = 'failed'
-       limit 1
-    `)).rows[0];
-    if (!attempt) throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
-    if (attempt.decline_kind === "hard") {
-      throw new AutopayError("this decline will not clear on retry; ask the customer to update the payment method instead");
-    }
-    const candidate = (await db.execute<CollectionCandidate>(sql`
-      select d.id as "invoiceId", d.document_number as "documentNumber",
-             d.open_balance as "openBalance", d.currency,
-             d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
-             d.document_date::text as "documentDate", d.due_date::text as "dueDate",
-             e.id as "enrollmentId", e.subscription_id as "subscriptionId",
-             m.id as "methodId", m.provider, m.provider_customer_id as "providerCustomerId",
-             m.provider_method_id as "providerMethodId"
-        from documents d
-        join autopay_enrollments e on e.id = ${attempt.enrollment_id} and e.org_id = ${orgId} and e.status = 'active'
-        join customer_payment_methods m on m.id = ${attempt.method_id} and m.org_id = ${orgId} and m.status = 'active'
-       where d.id = ${attempt.invoice_id} and d.org_id = ${orgId}
-    `)).rows[0];
-    if (!candidate) {
-      throw new AutopayError("the enrollment or method is no longer active; link a payment method first");
-    }
-    const today = await businessToday(orgId);
-    const policy = await resolveAutopayPolicy(orgId);
+  await withOrgContext(orgId, async () => {
+    const prepared = await withOrg(orgId, async () => {
+      await requireAutopayFeature(orgId);
+      const attempt = (await db.execute<{
+        invoice_id: string;
+        enrollment_id: string;
+        method_id: string;
+        retry_position: number;
+        decline_kind: string | null;
+      }>(sql`
+        select a.invoice_id, a.enrollment_id, a.payment_method_id as "method_id",
+               a.retry_position, a.decline_kind
+          from collection_attempts a
+         where a.id = ${attemptId} and a.org_id = ${orgId} and a.status = 'failed'
+         limit 1
+      `)).rows[0];
+      if (!attempt) throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
+      if (attempt.decline_kind === "hard") {
+        throw new AutopayError("this decline will not clear on retry; ask the customer to update the payment method instead");
+      }
+      const candidate = (await db.execute<CollectionCandidate>(sql`
+        select d.id as "invoiceId", d.document_number as "documentNumber",
+               d.open_balance as "openBalance", d.currency,
+               d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
+               d.document_date::text as "documentDate", d.due_date::text as "dueDate",
+               e.id as "enrollmentId", e.subscription_id as "subscriptionId",
+               m.id as "methodId", m.provider, m.provider_customer_id as "providerCustomerId",
+               m.provider_method_id as "providerMethodId"
+          from documents d
+          join autopay_enrollments e on e.id = ${attempt.enrollment_id} and e.org_id = ${orgId} and e.status = 'active'
+          join customer_payment_methods m on m.id = ${attempt.method_id} and m.org_id = ${orgId} and m.status = 'active'
+         where d.id = ${attempt.invoice_id} and d.org_id = ${orgId}
+      `)).rows[0];
+      if (!candidate) {
+        throw new AutopayError("the enrollment or method is no longer active; link a payment method first");
+      }
+      const today = await businessToday(orgId);
+      const policy = await resolveAutopayPolicy(orgId);
+      await auditAutopay(orgId, "collection_attempts", attemptId, {
+        event: "retry_now",
+        reason: "Operator retried the collection immediately instead of waiting for the schedule.",
+      }, actorId);
+      return { candidate, position: attempt.retry_position + 1, today, policy };
+    });
     const charge = chargeFn ?? ((provider, req) => adapterCharge(orgId, provider, req));
     result.scanned += 1;
-    await collectCandidate(orgId, candidate, attempt.retry_position + 1, today, policy, charge, result, actorId);
-    await auditAutopay(orgId, "collection_attempts", attemptId, {
-      event: "retry_now",
-      reason: "Operator retried the collection immediately instead of waiting for the schedule.",
-    }, actorId);
+    await collectCandidate(orgId, prepared.candidate, prepared.position, prepared.today, prepared.policy, charge, result, actorId);
   });
   return result;
 }

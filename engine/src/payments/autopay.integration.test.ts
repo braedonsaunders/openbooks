@@ -217,6 +217,121 @@ test("a due invoice is charged once; success posts the receipt and closes the in
   }
 });
 
+type ChargeAttemptRow = { id: string; status: string; provider_ref: string | null; receipt_document_id: string | null; decline_code: string | null };
+
+async function attemptFor(orgId: string, invoiceId: string): Promise<ChargeAttemptRow> {
+  return (await db.execute<ChargeAttemptRow>(sql`
+    select id, status, provider_ref, receipt_document_id, decline_code from collection_attempts
+     where org_id = ${orgId} and invoice_id = ${invoiceId} and retry_position = 0
+  `)).rows[0]!;
+}
+
+test("one invoice's failed outcome write cannot erase another's charge; the next tick replays it under the same key", { skip: !DB }, async () => {
+  const fixture = await seedAutopayOrg();
+  const { org, userId } = fixture;
+  try {
+    await seedPolicy(org.orgId, userId, [1, 3], "none");
+    await seedMethod(fixture);
+    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+    const keptId = await seedInvoice(fixture, "INV-AUTO-KEPT", "100", org.date);
+    const brokenId = await seedInvoice(fixture, "INV-AUTO-BROKEN", "200", org.date);
+
+    // The provider takes both charges, but the first answer for the 200
+    // invoice carries a reference the database refuses (a NUL byte), so
+    // recording that outcome fails with a SQL error mid-tick.
+    const calls: { amount: string; key: string }[] = [];
+    const charge: ChargeFn = async (_provider, req) => {
+      calls.push({ amount: req.amount, key: req.idempotencyKey });
+      const poisoned = req.amount.startsWith("200") && calls.filter((c) => c.amount === req.amount).length === 1;
+      return { status: "succeeded", providerRef: poisoned ? "ch_bad\u0000ref" : `ch_${req.amount}` };
+    };
+    const first = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge });
+    assert.equal(calls.length, 2);
+
+    const kept = await attemptFor(org.orgId, keptId);
+    assert.equal(kept.status, "succeeded");
+    assert.equal(kept.provider_ref, "ch_100.0000");
+    assert.ok(kept.receipt_document_id);
+    assert.equal(await openBalance(org.orgId, keptId), "0.0000");
+
+    const broken = await attemptFor(org.orgId, brokenId);
+    assert.equal(broken.status, "initiated");
+    assert.equal(broken.provider_ref, null);
+    const brokenNotice = first.notices.find((n) => n.invoiceId === brokenId);
+    assert.match(brokenNotice?.detail ?? "", /INV-AUTO-BROKEN, but the outcome could not be recorded \(invalid byte sequence.*same idempotency key/);
+    assert.ok(first.orgErrors.some((e) => e.error.includes("INV-AUTO-BROKEN")));
+
+    const brokenKey = calls.find((c) => c.amount === "200.0000")!.key;
+    assert.notEqual(brokenKey, broken.id, "the provider key is derived from the position, not the random row id");
+    assert.notEqual(brokenKey, calls.find((c) => c.amount === "100.0000")!.key);
+
+    // Next tick: the collected invoice is never charged again; the open
+    // attempt replays under the key it was first sent with and settles.
+    const second = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge });
+    assert.deepEqual(calls.slice(2), [{ amount: "200.0000", key: brokenKey }]);
+    assert.equal(second.succeeded, 1);
+    const settled = await attemptFor(org.orgId, brokenId);
+    assert.equal(settled.id, broken.id);
+    assert.equal(settled.status, "succeeded");
+    assert.equal(settled.provider_ref, "ch_200.0000");
+    assert.equal(await openBalance(org.orgId, brokenId), "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a failed receipt or an unanswered charge keeps its attempt; the next tick finishes it without a second charge", { skip: !DB }, async () => {
+  const fixture = await seedAutopayOrg();
+  const { org, userId } = fixture;
+  try {
+    await seedPolicy(org.orgId, userId, [1, 3], "none");
+    await seedMethod(fixture);
+    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+    const collectedId = await seedInvoice(fixture, "INV-AUTO-RCPT", "100", org.date);
+    const lostId = await seedInvoice(fixture, "INV-AUTO-LOST", "300", org.date);
+    // No receipt can post while the provider has no bank account.
+    await db.execute(sql`update psp_provider_configs set default_bank_account_id = null where org_id = ${org.orgId}`);
+
+    const calls: { amount: string; key: string }[] = [];
+    const charge: ChargeFn = async (_provider, req) => {
+      calls.push({ amount: req.amount, key: req.idempotencyKey });
+      if (req.amount.startsWith("300")) throw new Error("socket hang up");
+      return { status: "succeeded", providerRef: "ch_collected" };
+    };
+    const first = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge });
+    assert.equal(calls.length, 2);
+    const collected = await attemptFor(org.orgId, collectedId);
+    assert.equal(collected.provider_ref, "ch_collected", "the provider evidence survives the failed receipt");
+    assert.equal(collected.receipt_document_id, null);
+    assert.match(first.notices.find((n) => n.invoiceId === collectedId)?.detail ?? "", /ch_collected.*no default bank account/);
+    const lost = await attemptFor(org.orgId, lostId);
+    assert.equal(lost.status, "initiated");
+    assert.match(first.notices.find((n) => n.invoiceId === lostId)?.detail ?? "", /did not confirm the charge.*socket hang up/);
+
+    // The unanswered attempt is now older than providers keep its key, so it
+    // must be closed for review rather than sent again.
+    await db.execute(sql`
+      update collection_attempts set created_at = created_at - interval '2 days'
+       where org_id = ${org.orgId} and invoice_id = ${lostId}
+    `);
+    await db.execute(sql`update psp_provider_configs set default_bank_account_id = ${org.accounts.bank} where org_id = ${org.orgId}`);
+    const second = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge });
+    assert.equal(calls.length, 2, "nothing is charged again");
+    const receipted = await attemptFor(org.orgId, collectedId);
+    assert.equal(receipted.status, "succeeded");
+    assert.ok(receipted.receipt_document_id);
+    assert.equal(await openBalance(org.orgId, collectedId), "0.0000");
+    const closed = await attemptFor(org.orgId, lostId);
+    assert.equal(closed.status, "canceled");
+    assert.equal(closed.decline_code, "outcome_unknown");
+    const lostKey = calls.find((c) => c.amount === "300.0000")!.key;
+    assert.ok(second.orgErrors.some((e) => e.error.includes(lostKey) && e.error.includes("INV-AUTO-LOST")));
+    assert.equal(await openBalance(org.orgId, lostId), "300.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a soft decline retries on schedule; a hard decline stops without retry", { skip: !DB }, async () => {
   const fixture = await seedAutopayOrg();
   const { org, userId } = fixture;
