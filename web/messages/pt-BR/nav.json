@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "Gerenciar avaliações",
+    "hrm-performance-goals": "Metas",
+    "hrm-performance-conversations": "Conversas individuais",
+    "hrm-recruiting-openings": "Vagas",
     "warehouses": "Armazém",
     "picks": "Listas de Separação",
     "shipments": "Remessas",
@@ -206,12 +210,17 @@
     "hrm-compensation": "Remuneração"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "Gerenciar avaliações",
+    "hrm-performance-goals": "Metas",
+    "hrm-performance-conversations": "Conversas individuais",
+    "hrm-recruiting-openings": "Vagas",
     "ap": "Contas a pagar",
     "ar": "Contas a receber",
     "provisions": "Provisões e contingências",
     "stored-value": "Vales e créditos"
   },
   "localWorkspaces": {
+    "collections-views": "Cobranças",
     "hrm-people": "Funcionários",
     "hrm-hiring": "Recrutamento",
     "hrm-timeOff": "Ausências",

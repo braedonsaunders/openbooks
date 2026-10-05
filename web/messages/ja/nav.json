@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "評価を管理",
+    "hrm-performance-goals": "目標",
+    "hrm-performance-conversations": "1対1の対話",
+    "hrm-recruiting-openings": "求人",
     "warehouses": "倉庫",
     "picks": "ピッキングリスト",
     "shipments": "出荷",
@@ -206,12 +210,17 @@
     "hrm-compensation": "報酬"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "評価を管理",
+    "hrm-performance-goals": "目標",
+    "hrm-performance-conversations": "1対1の対話",
+    "hrm-recruiting-openings": "求人",
     "ap": "買掛金",
     "ar": "売掛金",
     "provisions": "引当金および偶発事項",
     "stored-value": "ストアドバリュー"
   },
   "localWorkspaces": {
+    "collections-views": "債権回収",
     "hrm-people": "従業員",
     "hrm-hiring": "採用",
     "hrm-timeOff": "休暇",

@@ -1,5 +1,9 @@
 {
   "modules": {
+    "hrm-performance-cycles": "管理评估",
+    "hrm-performance-goals": "目标",
+    "hrm-performance-conversations": "一对一谈话",
+    "hrm-recruiting-openings": "需求",
     "warehouses": "仓库",
     "picks": "拣货单",
     "shipments": "发货单",
@@ -206,12 +210,17 @@
     "hrm-compensation": "薪酬"
   },
   "modulesShort": {
+    "hrm-performance-cycles": "管理评估",
+    "hrm-performance-goals": "目标",
+    "hrm-performance-conversations": "一对一谈话",
+    "hrm-recruiting-openings": "需求",
     "ap": "应付账款",
     "ar": "应收账款",
     "provisions": "预计负债及或有事项",
     "stored-value": "储值"
   },
   "localWorkspaces": {
+    "collections-views": "应收催收",
     "hrm-people": "员工",
     "hrm-hiring": "招聘",
     "hrm-timeOff": "休假",
