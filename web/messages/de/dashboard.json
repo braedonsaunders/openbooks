@@ -82,7 +82,7 @@
     "kpiVendorConcentration": "Lieferantenkonzentration",
     "kpiVendorPayment": "Lieferantenzahlungsverhalten",
     "kpiSpendVelocity": "Ausgabendynamik",
-    "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
+    "kpiVendorConcentrationHint": "Top-5: {share} · {period}",
     "kpiVendorPaymentHint": "Ø {days} Tage bis zur Zahlung · {late} verspätet · {period}",
     "kpiSpendVelocityHint": "{savings} Sparpotenzial · {period}"
   },
