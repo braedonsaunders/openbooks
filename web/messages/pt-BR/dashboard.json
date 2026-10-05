@@ -95,6 +95,7 @@
     "agentClear": "Tudo certo",
     "monthToDate": "Mês até a data",
     "noData": "Sem dados",
+    "noBaseCurrency": "Sem moeda base configurada",
     "next30Days": "Próximos 30 dias",
     "dso": "DSO {days}",
     "dpo": "DPO {days}",

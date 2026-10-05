@@ -95,6 +95,7 @@
     "asOf": "As of {date}",
     "monthToDate": "Month to date",
     "noData": "No data",
+    "noBaseCurrency": "No base currency configured",
     "next30Days": "Next 30 days",
     "dso": "DSO {days}",
     "dpo": "DPO {days}",
