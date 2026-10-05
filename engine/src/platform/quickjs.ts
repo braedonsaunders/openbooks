@@ -25,3 +25,35 @@ export async function newAsyncContext() {
   const module = await newQuickJSAsyncWASMModuleFromVariant(variant);
   return module.newContext();
 }
+
+/** Most `ob.log` lines one guest run keeps. */
+export const GUEST_LOG_MAX_ENTRIES = 200;
+/** Most UTF-8 bytes of `ob.log` output one guest run keeps. */
+export const GUEST_LOG_MAX_BYTES = 64 * 1024;
+
+/**
+ * Host-side `ob.log` sink shared by every sandbox. Guest code controls what it
+ * logs and how often, so the host bounds both the entry count and the total
+ * bytes it retains; once either bound is reached the sink records one
+ * truncation line and stops rendering guest values at all, so further calls
+ * cost the host nothing. `render` is only invoked while the sink is open.
+ */
+export function createGuestLogSink(lines: string[]): { append(render: () => string): void } {
+  let bytes = 0;
+  let closed = false;
+  const close = (): void => {
+    lines.push(`ob.log truncated after ${GUEST_LOG_MAX_ENTRIES} entries / ${GUEST_LOG_MAX_BYTES} bytes`);
+    closed = true;
+  };
+  return {
+    append(render) {
+      if (closed) return;
+      if (lines.length >= GUEST_LOG_MAX_ENTRIES || bytes >= GUEST_LOG_MAX_BYTES) return close();
+      const line = render();
+      const next = bytes + Buffer.byteLength(line, "utf8");
+      if (lines.length + 1 > GUEST_LOG_MAX_ENTRIES || next > GUEST_LOG_MAX_BYTES) return close();
+      lines.push(line);
+      bytes = next;
+    },
+  };
+}

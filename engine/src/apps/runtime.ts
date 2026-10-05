@@ -1,4 +1,4 @@
-import { newAsyncContext } from "../platform/quickjs.ts";
+import { createGuestLogSink, newAsyncContext } from "../platform/quickjs.ts";
 
 /**
  * App backend runtime — the server-side half of an App. Endpoint scripts run in
@@ -196,7 +196,10 @@ export async function runAppEndpoint(opts: {
     error: vm.newError(`${TIMEOUT}execution timed out`),
   });
 
+  // Bounded host-side exactly like scripts: a guest that logs in a loop
+  // must not grow the shared web process's memory by one entry per unit.
   const logs: string[] = [];
+  const logSink = createGuestLogSink(logs);
   let units = 0;
   const started = Date.now();
 
@@ -258,7 +261,7 @@ export async function runAppEndpoint(opts: {
       if (closed) return closed;
       const over = charge(COST.log);
       if (over) return over;
-      logs.push(args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
+      logSink.append(() => args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
     });
 
     const storageGet = vm.newAsyncifiedFunction(

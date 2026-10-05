@@ -228,6 +228,27 @@ test("ob.log is stopped when it exceeds the governance budget", async () => {
   assert.ok(r.units > 2);
 });
 
+test("ob.log retention is bounded host-side by entry count and total bytes", async () => {
+  const many = await runAppEndpoint({
+    source: `function handler() { for (var i = 0; i < 5000; i++) ob.log(i); return "done" }`,
+    request: req(),
+    adapters: fakeAdapters(),
+    unitBudget: 1_000_000,
+  });
+  assert.equal(many.status, "ok");
+  assert.equal(many.logs.length, 201);
+  assert.match(many.logs.at(-1)!, /ob\.log truncated after 200 entries \/ 65536 bytes/);
+  const large = await runAppEndpoint({
+    source: `function handler() { var s = new Array(40001).join("x"); for (var i = 0; i < 50; i++) ob.log(s); return "done" }`,
+    request: req(),
+    adapters: fakeAdapters(),
+    unitBudget: 1_000_000,
+  });
+  assert.equal(large.status, "ok");
+  assert.ok(large.logs.slice(0, -1).reduce((n, l) => n + Buffer.byteLength(l), 0) <= 65536);
+  assert.match(large.logs.at(-1)!, /truncated/);
+});
+
 test("journal.create is forbidden without the journal adapter", async () => {
   const r = await runAppEndpoint({
     source: `function handler() { return ob.journal.create({ lines: [] }) }`,
