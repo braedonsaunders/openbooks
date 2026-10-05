@@ -1658,6 +1658,70 @@
       "label": "Horizon",
       "aria": "Forecast horizon",
       "weeks": "{count, plural, one {# Week} other {# Weeks}}"
+    },
+    "config": {
+      "fields": {
+        "defaultHorizonWeeks": {
+          "label": "Default horizon (weeks)",
+          "help": "Weeks the Cash Flow dashboard, Banking cash page and home tiles forecast when no horizon is chosen"
+        },
+        "runwayCautionWeeks": {
+          "label": "Runway caution (weeks)",
+          "help": "A runway below this many weeks reads as caution instead of healthy"
+        },
+        "paymentHistoryMonths": {
+          "label": "Payment history (months)",
+          "help": "Trailing months of settled payments behind the collection and payment forecasts"
+        },
+        "settleBufferSigma": {
+          "label": "Settlement buffer (σ)",
+          "help": "Standard deviations added to a party's average days to settle"
+        },
+        "overduePushShortDays": {
+          "label": "Overdue push, short (days)",
+          "help": "Forward push for items overdue up to the mid threshold"
+        },
+        "overduePushMidDays": {
+          "label": "Overdue push, mid (days)",
+          "help": "Forward push for items overdue between the mid and long thresholds"
+        },
+        "overduePushLongDays": {
+          "label": "Overdue push, long (days)",
+          "help": "Forward push for items overdue beyond the long threshold"
+        },
+        "overdueMidThresholdDays": {
+          "label": "Overdue mid threshold (days)",
+          "help": "Overdue beyond this many days takes the mid push"
+        },
+        "overdueLongThresholdDays": {
+          "label": "Overdue long threshold (days)",
+          "help": "Overdue beyond this many days takes the long push"
+        },
+        "cardTrajectoryTolerance": {
+          "label": "Card trajectory tolerance",
+          "help": "Relative variance from the median payment within which the card trajectory rules"
+        },
+        "cardMedianBlendWeight": {
+          "label": "Card median blend weight",
+          "help": "Weight of the median payment when blending with the card trajectory (the trajectory takes the rest)"
+        },
+        "vendorOutlierSigma": {
+          "label": "Vendor outlier filter (σ)",
+          "help": "Payments further than this many deviations from the mean are excluded from the auto average"
+        },
+        "cardStatementCloseDays": {
+          "label": "Card statement close (days)",
+          "help": "Projected growth accrues to this many days after the last card payment"
+        },
+        "cardDefaultPayDay": {
+          "label": "Card payment day",
+          "help": "Day of month a card is assumed to pay when no history names one"
+        },
+        "cardStalePaymentDays": {
+          "label": "Card stale payment (days)",
+          "help": "Days since last payment reported when no significant card payment is seen"
+        }
+      }
     }
   },
   "trueCost": {

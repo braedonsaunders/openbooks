@@ -1658,6 +1658,70 @@
       "label": "Horizont",
       "aria": "Prognosehorizont",
       "weeks": "{count, plural, one {# Woche} other {# Wochen}}"
+    },
+    "config": {
+      "fields": {
+        "defaultHorizonWeeks": {
+          "label": "Standardhorizont (Wochen)",
+          "help": "Wochen, die Cashflow-Dashboard, Banking-Cash-Seite und Home-Kacheln ohne gewählten Horizont prognostizieren"
+        },
+        "runwayCautionWeeks": {
+          "label": "Runway-Warnung (Wochen)",
+          "help": "Ein Runway unter dieser Wochenzahl gilt als Warnung statt gesund"
+        },
+        "paymentHistoryMonths": {
+          "label": "Zahlungshistorie (Monate)",
+          "help": "Zurückliegende Monate beglichener Zahlungen hinter den Einzugs- und Zahlungsprognosen"
+        },
+        "settleBufferSigma": {
+          "label": "Begleichungspuffer (σ)",
+          "help": "Standardabweichungen, die zu den durchschnittlichen Begleichungstagen einer Partei addiert werden"
+        },
+        "overduePushShortDays": {
+          "label": "Überfällig-Verschiebung, kurz (Tage)",
+          "help": "Vorwärtsschub für Posten bis zur mittleren Schwelle überfällig"
+        },
+        "overduePushMidDays": {
+          "label": "Überfällig-Verschiebung, mittel (Tage)",
+          "help": "Vorwärtsschub für Posten zwischen mittlerer und langer Schwelle überfällig"
+        },
+        "overduePushLongDays": {
+          "label": "Überfällig-Verschiebung, lang (Tage)",
+          "help": "Vorwärtsschub für Posten über der langen Schwelle überfällig"
+        },
+        "overdueMidThresholdDays": {
+          "label": "Mittlere Überfälligkeitsschwelle (Tage)",
+          "help": "Überfälligkeit jenseits dieser Tage erhält die mittlere Verschiebung"
+        },
+        "overdueLongThresholdDays": {
+          "label": "Lange Überfälligkeitsschwelle (Tage)",
+          "help": "Überfälligkeit jenseits dieser Tage erhält die lange Verschiebung"
+        },
+        "cardTrajectoryTolerance": {
+          "label": "Karten-Trajektorientoleranz",
+          "help": "Relative Abweichung von der Medianzahlung, innerhalb derer die Kartentrajektorie gilt"
+        },
+        "cardMedianBlendWeight": {
+          "label": "Karten-Median-Gewicht",
+          "help": "Gewicht der Medianzahlung bei Mischung mit der Kartentrajektorie (der Rest entfällt auf die Trajektorie)"
+        },
+        "vendorOutlierSigma": {
+          "label": "Lieferanten-Ausreißerfilter (σ)",
+          "help": "Zahlungen jenseits dieser Abweichungszahl vom Mittelwert zählen nicht zum automatischen Durchschnitt"
+        },
+        "cardStatementCloseDays": {
+          "label": "Kartenabrechnungsschluss (Tage)",
+          "help": "Projiziertes Wachstum läuft bis so viele Tage nach der letzten Kartenzahlung auf"
+        },
+        "cardDefaultPayDay": {
+          "label": "Kartenzahlungstag",
+          "help": "Monatstag, an dem eine Karte ohne Historie annahmegemäß zahlt"
+        },
+        "cardStalePaymentDays": {
+          "label": "Veraltete Kartenzahlung (Tage)",
+          "help": "Gemeldete Tage seit letzter Zahlung, wenn keine wesentliche Kartenzahlung vorliegt"
+        }
+      }
     }
   },
   "trueCost": {
