@@ -21,6 +21,7 @@ import { resolveAsOf } from '../../../lib/cash/core'
 import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { toChartNumber } from '../../../lib/chart-number'
 import { trendWeekLabel } from '../../../lib/format'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -305,7 +306,8 @@ export async function loadPurchasing(
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),
     trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
-    trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => w.spend), color: '#ef4444' }],
+    // The chart boundary is the only place trend strings become numbers.
+    trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => toChartNumber(w.spend)), color: '#ef4444' }],
     directoryTitle: t('home.directory.title'),
     directory,
     attentionTitle: t('home.attention.title'),
