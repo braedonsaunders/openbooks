@@ -84,6 +84,13 @@ export interface DocumentEditInput {
   documentDate?: string
   dueDate?: string | null
   referenceNumber?: string | null
+  /**
+   * The originating external system's own identity for the document and
+   * which system minted it (dedupe key for storefront and integrator
+   * writes). Both or neither; storage refuses a half-filled or blank pair.
+   */
+  externalRef?: string | null
+  externalSource?: string | null
   memo?: string | null
   postingDate?: string | null
   departmentId?: string | null
