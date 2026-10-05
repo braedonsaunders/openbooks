@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, DisclosureSection, SearchSelect } from '@openbooks/ui'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { useMoney } from '@/components/money-provider'
 import { confirmDialog } from '../../../lib/confirm'
@@ -11,9 +12,12 @@ import { confirmDialog } from '../../../lib/confirm'
 /**
  * The Subscription tab on a quote drawer (quote-to-cash). Everyday: the
  * ramp-priced total, signature state, and the single next action. Configure:
- * terms with ramp steps on the tab itself. Advanced: start rules and billing
- * timing inside a collapsed DisclosureSection. The section hides itself when
- * the feature is off (the terms endpoint 404s behind the gate).
+ * terms with ramp steps on the tab itself — one focused term at a time
+ * behind the shared strip, so sibling schedules never stack; the editing
+ * draft lives outside the selection and survives switching. Advanced:
+ * start rules and billing timing inside a collapsed DisclosureSection.
+ * The section hides itself when the feature is off (the terms endpoint
+ * 404s behind the gate).
  */
 
 interface RampRow extends Record<string, unknown> {
@@ -117,6 +121,10 @@ export function QuoteCashSection(props: {
   const [signerName, setSignerName] = useState('')
   const [signerEmail, setSignerEmail] = useState('')
   const [activated, setActivated] = useState<string[] | null>(null)
+  // Multi-term quotes focus one term at a time behind the shared strip, so
+  // sibling schedules never stack. The editing draft lives outside the
+  // selection and survives switching.
+  const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/terms`)
@@ -298,6 +306,47 @@ export function QuoteCashSection(props: {
     }
   }
 
+  const focusedTerm =
+    preview.terms.find((term) => term.term.id === selectedTermId) ??
+    preview.terms[0] ??
+    null
+
+  function termCard(term: PreviewTerm) {
+    return (
+      <li key={term.term.id} className="rounded-lg border p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{term.term.planName}</span>
+          <span className="text-slate-500 dark:text-slate-400">
+            {t('quoteCash.termMonths', { count: term.term.termMonths })}
+          </span>
+          <strong className="tabular-nums">{money(term.schedule.tcv, { currency: preview.quote.currency })}</strong>
+          <span className="flex-1" />
+          {canEdit ? (
+            <>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => startEditing(term)}>
+                {t('quoteCash.editTerm')}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => void deleteTerm(term.term.id)}>
+                {t('quoteCash.deleteTerm')}
+              </Button>
+            </>
+          ) : null}
+        </div>
+        <div className="mt-2 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+          {term.schedule.periods.map((p) => (
+            <span key={p.periodIndex} className="mr-3">
+              {t('quoteCash.periodLine', {
+                price: money(p.unitPrice, { currency: preview.quote.currency }),
+                qty: p.quantity,
+                amount: money(p.periodAmount, { currency: preview.quote.currency }),
+              })}
+            </span>
+          ))}
+        </div>
+      </li>
+    )
+  }
+
   function startEditing(term?: PreviewTerm) {
     setActivated(null)
     setEditing({
@@ -345,42 +394,26 @@ export function QuoteCashSection(props: {
             </Button>
           ) : null}
         </div>
-      ) : (
+      ) : preview.terms.length === 1 ? (
         <ul className="space-y-2">
-          {preview.terms.map((term) => (
-            <li key={term.term.id} className="rounded-lg border p-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{term.term.planName}</span>
-                <span className="text-slate-500 dark:text-slate-400">
-                  {t('quoteCash.termMonths', { count: term.term.termMonths })}
-                </span>
-                <strong className="tabular-nums">{money(term.schedule.tcv, { currency: preview.quote.currency })}</strong>
-                <span className="flex-1" />
-                {canEdit ? (
-                  <>
-                    <Button variant="outline" size="sm" disabled={busy} onClick={() => startEditing(term)}>
-                      {t('quoteCash.editTerm')}
-                    </Button>
-                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => void deleteTerm(term.term.id)}>
-                      {t('quoteCash.deleteTerm')}
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-              <div className="mt-2 text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {term.schedule.periods.map((p) => (
-                  <span key={p.periodIndex} className="mr-3">
-                    {t('quoteCash.periodLine', {
-                      price: money(p.unitPrice, { currency: preview.quote.currency }),
-                      qty: p.quantity,
-                      amount: money(p.periodAmount, { currency: preview.quote.currency }),
-                    })}
-                  </span>
-                ))}
-              </div>
-            </li>
-          ))}
+          {preview.terms.map((term) => termCard(term))}
         </ul>
+      ) : (
+        <>
+          <DrawerTabStrip
+            tabs={preview.terms.map((term) => ({
+              key: term.term.id,
+              label: term.term.planName,
+              count: term.schedule.periods.length,
+            }))}
+            activeKey={focusedTerm?.term.id ?? ''}
+            onSelect={(key) => setSelectedTermId(key)}
+            ariaLabel={t('quoteCash.termsLabel')}
+          />
+          <ul className="space-y-2">
+            {focusedTerm ? termCard(focusedTerm) : null}
+          </ul>
+        </>
       )}
 
       {editing ? (

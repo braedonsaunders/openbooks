@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "サブスクリプション",
+    "termsLabel": "サブスクリプション明細",
     "loading": "サブスクリプション条件を読み込み中…",
     "totalContractValue": "契約総額",
     "discount": "値引き {pct}%",

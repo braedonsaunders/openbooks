@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "Abonnement",
+    "termsLabel": "Abonnementzeilen",
     "loading": "Abonnementkonditionen werden geladen…",
     "totalContractValue": "Gesamtvertragswert",
     "discount": "Rabatt {pct} %",

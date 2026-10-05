@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "Subscription",
+    "termsLabel": "Subscription lines",
     "loading": "Loading subscription terms…",
     "totalContractValue": "Total contract value",
     "discount": "Discount {pct}%",

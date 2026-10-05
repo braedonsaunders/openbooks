@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "Abonnement",
+    "termsLabel": "Lignes d'abonnement",
     "loading": "Chargement des conditions d’abonnement…",
     "totalContractValue": "Valeur totale du contrat",
     "discount": "Remise de {pct} %",
