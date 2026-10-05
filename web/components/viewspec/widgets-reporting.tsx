@@ -215,7 +215,10 @@ export const REPORTING_WIDGETS = {
     />
   ),
   'vendor-view': (props) => (
-    <VendorView data={props.data as ComponentProps<typeof VendorView>['data']} />
+    <VendorView
+      data={props.data as ComponentProps<typeof VendorView>['data']}
+      canConfigure={props.canConfigure === true}
+    />
   ),
   'customer-view': (props) => (
     <CustomerView

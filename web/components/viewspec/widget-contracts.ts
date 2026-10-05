@@ -570,7 +570,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'user-roles-cell': { props: ['roles'] },
   'utilization-view': { props: ['canConfigure', 'data'] },
   'vendor-compliance-drawer': { props: ['drawer'] },
-  'vendor-view': { props: ['data'] },
+  'vendor-view': { props: ['canConfigure', 'data'] },
   'view-actions-cell': { props: ['canEdit', 'editHref', 'editLabel', 'runHref', 'runLabel'] },
   'view-name-cell': { props: ['description', 'href', 'name'] },
   'view-scope-cell': { props: ['defaultLabel', 'scopeLabel', 'scopeVariant', 'showDefault'] },
