@@ -3354,6 +3354,11 @@
         "singular": "Promotion",
         "description": "Discount codes and campaigns applied to sales document lines."
       },
+      "stored-value-programs": {
+        "title": "Programs",
+        "singular": "Program",
+        "description": "Gift card and store credit programs: their liability home, breakage policy, and expiry."
+      },
       "restocking-fee-policies": {
         "title": "Restocking fees",
         "singular": "Restocking fee",
@@ -3896,6 +3901,12 @@
       "customsDefaults": "Customs defaults"
     },
     "fieldHelp": {
+      "storedValueLiabilityAccount": "The balance-sheet account credited when value is issued and debited on redemption.",
+      "storedValueBreakageIncomeAccount": "The income account credited when breakage or expiry is recognized.",
+      "storedValueBreakagePolicy": "None never recognizes breakage; proportional recognizes it as redemptions occur; remote recognizes dormant balances after the inactivity window.",
+      "storedValueBreakageRate": "The share of issued value expected never to be redeemed, as a decimal between 0 and 1 (for example 0.10).",
+      "storedValueExpiryMonths": "Whole months after issue before unredeemed value expires, where lawful. Leave empty for no expiry.",
+      "storedValueInactivityMonths": "Months without activity before a remote-policy balance is recognized as breakage.",
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
       "putawayItem": "Leave blank to apply the rule to every item.",
       "putawayCapacity": "The most the target may hold of the item. Required for a bulk zone; leave blank on a fixed bin for no limit.",
@@ -4027,6 +4038,15 @@
       "shippingCustomsDefaults": "Default contents description for shipments that leave the country."
     },
     "options": {
+      "storedValueKind": {
+        "giftCard": "Gift card",
+        "storeCredit": "Store credit"
+      },
+      "breakagePolicy": {
+        "none": "None",
+        "proportional": "Proportional",
+        "remote": "Remote"
+      },
       "usageAggregation": {
         "sum": "Sum",
         "count": "Count",
@@ -5800,6 +5820,18 @@
       "retryOffsetsHelp": "Days after each failed charge to try again. When the list runs out, the final action below applies.",
       "finalAction": "When retries run out",
       "finalActionHelp": "Suspend stops billing but keeps the contract; a later successful payment resumes it. Cancel ends the subscription."
+    },
+    "storedValueProgramFields": {
+      "description": "Configure where unredeemed balances sit and when they expire or become breakage revenue.",
+      "details": "Program details",
+      "liability": "Liability accounts",
+      "breakage": "Breakage and expiry",
+      "liabilityAccount": "Liability account",
+      "breakageIncomeAccount": "Breakage income account",
+      "breakagePolicy": "Breakage policy",
+      "breakageRate": "Expected breakage rate",
+      "expiryMonths": "Expiry (months)",
+      "inactivityMonths": "Inactivity window (months)"
     },
     "no": "No",
     "payComponentChooser": {

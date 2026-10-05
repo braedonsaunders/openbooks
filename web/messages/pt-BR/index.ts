@@ -66,6 +66,7 @@ import returns from './returns.json'
 import revenue from './revenue.json'
 import salesOrders from './salesOrders.json'
 import shell from './shell.json'
+import storedValue from './storedValue.json'
 import subcontracts from './subcontracts.json'
 import sync from './sync.json'
 import tax from './tax.json'
@@ -138,6 +139,7 @@ export default {
   revenue,
   salesOrders,
   shell,
+  storedValue,
   subcontracts,
   sync,
   tax,

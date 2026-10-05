@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "储值",
+    "description": "礼品卡和商店信用，在客户兑换前记为负债。",
+    "emptyTitle": "暂无储值",
+    "emptyDescription": "销售礼品卡或以商店信用退款后，每个代码及其余额会显示在这里。",
+    "emptyAction": "销售礼品卡"
+  },
+  "labels": {
+    "code": "代码",
+    "kind": "类型",
+    "customer": "客户",
+    "program": "计划",
+    "balance": "余额",
+    "issued": "已发行",
+    "expires": "到期日",
+    "status": "状态",
+    "lastActivity": "最近活动",
+    "amount": "金额",
+    "entryKind": "明细",
+    "reason": "原因",
+    "journal": "分录",
+    "document": "单据",
+    "breakageRecognized": "已确认余值收益",
+    "liabilityAccount": "负债科目",
+    "breakageIncomeAccount": "余值收益科目",
+    "breakagePolicy": "余值政策",
+    "breakageRate": "预计余值率",
+    "expiryMonths": "有效期（月）",
+    "inactivityMonths": "休眠期限（月）",
+    "currency": "币种",
+    "isActive": "启用",
+    "name": "计划名称",
+    "debitAccount": "收款科目",
+    "offsetAccount": "对方科目",
+    "postingDate": "过账日期",
+    "newBalance": "新余额"
+  },
+  "status": {
+    "active": "有效",
+    "frozen": "已冻结",
+    "closed": "已关闭",
+    "expired": "已过期"
+  },
+  "kind": {
+    "gift_card": "礼品卡",
+    "store_credit": "商店信用"
+  },
+  "entryKind": {
+    "issue": "发行",
+    "redeem": "兑换",
+    "adjust": "调整",
+    "expire": "过期",
+    "breakage": "余值收益",
+    "reversal": "冲销"
+  },
+  "breakagePolicy": {
+    "none": "无",
+    "proportional": "按比例",
+    "remote": "远程"
+  },
+  "kpi": {
+    "outstanding": "未清负债",
+    "issuedThisPeriod": "本期发行",
+    "redeemedThisPeriod": "本期兑换",
+    "breakageRecognized": "已确认余值收益"
+  },
+  "drawer": {
+    "ledgerTitle": "明细",
+    "ledgerDescription": "该余额的每一笔变动，按时间倒序。明细不可更改；更正通过冲销完成。",
+    "adjust": "调整余额",
+    "adjustDescription": "在单据之外更正余额。原因必填，并作为审计证据保留。",
+    "adjustAmount": "更正金额（含符号）",
+    "adjustReason": "更正原因",
+    "freeze": "冻结",
+    "unfreeze": "解冻",
+    "close": "关闭",
+    "closeConfirm": "关闭此账户？其余额为零。",
+    "programSection": "计划",
+    "accountSection": "账户",
+    "noExpiry": "永不过期",
+    "sourceDocument": "来源单据"
+  },
+  "issue": {
+    "title": "发行储值",
+    "description": "创建带有初始余额的代码。代码仅显示一次——请立即复制或发送。",
+    "codeShownOnce": "该代码仅显示这一次。请立即复制。",
+    "codeCopied": "代码已复制",
+    "programLabel": "计划",
+    "amountLabel": "金额",
+    "customerLabel": "客户（仅商店信用）",
+    "expiresLabel": "到期日（可选）",
+    "submit": "发行",
+    "cancel": "取消"
+  },
+  "programs": {
+    "title": "储值计划",
+    "description": "礼品卡和商店信用计划：负债科目、余值政策和有效期。",
+    "emptyAction": "新建计划"
+  },
+  "payment": {
+    "tenderLabel": "储值",
+    "tenderPlaceholder": "输入礼品卡代码",
+    "apply": "应用",
+    "appliedBalance": "可用",
+    "unknownCode": "未找到代码；请检查后重试",
+    "overTender": "储值金额超过收款总额",
+    "remove": "移除",
+    "tenderedOf": "已用 {tendered}，共 {total}"
+  },
+  "customer": {
+    "tabLabel": "商店信用",
+    "emptyDescription": "该客户暂无商店信用。",
+    "balanceLabel": "可用",
+    "viewAll": "在储值登记簿中查看"
+  },
+  "reports": {
+    "rollforwardTitle": "储值负债变动表",
+    "rollforwardDescription": "按计划和期间列示的期初、发行、兑换、余值收益、过期、调整和期末余额。",
+    "unclaimedTitle": "无人认领的储值",
+    "unclaimedDescription": "按客户和账龄列示的休眠余额，用于无人认领财产审查。"
+  }
+}

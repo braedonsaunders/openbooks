@@ -36,6 +36,7 @@
     "budget_scenario": "Budget",
     "revenue_contract": "Contrat de revenus",
     "contract_cost_asset": "Actif de coûts de contrat",
+    "stored_value_account": "Compte de valeur stockée",
     "equipment_unit": "Unité d’équipement",
     "resourcing_assignment": "Affectation de ressources",
     "resourcing_request": "Demande de ressources",

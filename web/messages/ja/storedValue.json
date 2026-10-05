@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "ストアドバリュー",
+    "description": "ギフトカードとストアクレジットを利用まで負債として管理。",
+    "emptyTitle": "ストアドバリューはまだありません",
+    "emptyDescription": "ギフトカードを販売するかストアクレジットで返金すると、各コードが残高と共にここに表示されます。",
+    "emptyAction": "ギフトカードを販売"
+  },
+  "labels": {
+    "code": "コード",
+    "kind": "種類",
+    "customer": "顧客",
+    "program": "プログラム",
+    "balance": "残高",
+    "issued": "発行額",
+    "expires": "有効期限",
+    "status": "ステータス",
+    "lastActivity": "最終利用",
+    "amount": "金額",
+    "entryKind": "明細",
+    "reason": "理由",
+    "journal": "仕訳",
+    "document": "伝票",
+    "breakageRecognized": "失効益計上額",
+    "liabilityAccount": "負債勘定",
+    "breakageIncomeAccount": "失効益勘定",
+    "breakagePolicy": "失効益方針",
+    "breakageRate": "予想失効率",
+    "expiryMonths": "有効期限（か月）",
+    "inactivityMonths": "未利用期間（か月）",
+    "currency": "通貨",
+    "isActive": "有効",
+    "name": "プログラム名",
+    "debitAccount": "受取勘定",
+    "offsetAccount": "相手勘定",
+    "postingDate": "計上日",
+    "newBalance": "新残高"
+  },
+  "status": {
+    "active": "有効",
+    "frozen": "凍結中",
+    "closed": "終了",
+    "expired": "期限切れ"
+  },
+  "kind": {
+    "gift_card": "ギフトカード",
+    "store_credit": "ストアクレジット"
+  },
+  "entryKind": {
+    "issue": "発行",
+    "redeem": "利用",
+    "adjust": "調整",
+    "expire": "期限切れ",
+    "breakage": "失効益",
+    "reversal": "取消"
+  },
+  "breakagePolicy": {
+    "none": "なし",
+    "proportional": "比例",
+    "remote": "リモート"
+  },
+  "kpi": {
+    "outstanding": "未利用負債",
+    "issuedThisPeriod": "当期発行額",
+    "redeemedThisPeriod": "当期利用額",
+    "breakageRecognized": "失効益計上額"
+  },
+  "drawer": {
+    "ledgerTitle": "明細",
+    "ledgerDescription": "この残高のすべての動きを新しい順に表示。明細は不変で、修正は取消で行います。",
+    "adjust": "残高を調整",
+    "adjustDescription": "伝票外で残高を修正します。理由は必須で、監査証跡として保存されます。",
+    "adjustAmount": "修正額（符号付き）",
+    "adjustReason": "修正理由",
+    "freeze": "凍結",
+    "unfreeze": "凍結解除",
+    "close": "終了",
+    "closeConfirm": "この口座を終了しますか？残高はありません。",
+    "programSection": "プログラム",
+    "accountSection": "口座",
+    "noExpiry": "期限なし",
+    "sourceDocument": "発行元伝票"
+  },
+  "issue": {
+    "title": "ストアドバリューを発行",
+    "description": "開始残高付きのコードを発行します。コードは一度だけ表示されます。今すぐコピーまたは送信してください。",
+    "codeShownOnce": "このコードが表示されるのは今回だけです。今すぐコピーしてください。",
+    "codeCopied": "コードをコピーしました",
+    "programLabel": "プログラム",
+    "amountLabel": "金額",
+    "customerLabel": "顧客（ストアクレジットのみ）",
+    "expiresLabel": "有効期限（任意）",
+    "submit": "発行",
+    "cancel": "キャンセル"
+  },
+  "programs": {
+    "title": "ストアドバリュープログラム",
+    "description": "ギフトカードとストアクレジットのプログラム：負債勘定、失効益方針、有効期限。",
+    "emptyAction": "新規プログラム"
+  },
+  "payment": {
+    "tenderLabel": "ストアドバリュー",
+    "tenderPlaceholder": "ギフトカードのコードを入力",
+    "apply": "適用",
+    "appliedBalance": "利用可能額",
+    "unknownCode": "コードが見つかりません。確認して再試行してください",
+    "overTender": "適用額が受領合計を超えています",
+    "remove": "削除",
+    "tenderedOf": "{total} のうち {tendered} を利用"
+  },
+  "customer": {
+    "tabLabel": "ストアクレジット",
+    "emptyDescription": "この顧客のストアクレジットはまだありません。",
+    "balanceLabel": "利用可能額",
+    "viewAll": "ストアドバリューの台帳を見る"
+  },
+  "reports": {
+    "rollforwardTitle": "ストアドバリュー負債の増減",
+    "rollforwardDescription": "プログラム別・期間別の期首、発行、利用、失効益、期限切れ、調整、期末残高。",
+    "unclaimedTitle": "未利用のストアドバリュー",
+    "unclaimedDescription": "顧客別・経過期間別の休眠残高（未請求財産の確認用）。"
+  }
+}

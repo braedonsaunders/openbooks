@@ -301,6 +301,14 @@ const COGNATES = new Set<string>([
   'fr:ar.supplyEvidence.signal|Signal',
   'fr:ar.supplyEvidence.source|Source',
   'fr:tax.oss.correction|Correction {quarter}',
+  // Stored value: “Code” is the standard German and French word for an
+  // alphanumeric voucher code, “Document” the identical French noun, and
+  // “Status” the established German and Brazilian Portuguese loanword.
+  'de:storedValue.labels.code|Code',
+  'de:storedValue.labels.status|Status',
+  'fr:storedValue.labels.code|Code',
+  'fr:storedValue.labels.document|Document',
+  'pt-BR:storedValue.labels.status|Status',
   // Per-area reviewed identical terms (the local identicalByFact sets across the area backfills).
   'de:agents.drawer.assignment.roles.administrator|Administrator',
   'de:agents.drawer.assignment.roles.controller|Controller',

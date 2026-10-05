@@ -3309,6 +3309,11 @@
         "singular": "Promoción",
         "description": "Códigos de descuento y campañas para las líneas de venta."
       },
+      "stored-value-programs": {
+        "title": "Programas",
+        "singular": "Programa",
+        "description": "Programas de tarjetas regalo y crédito: cuenta de pasivo, política de breakage y vencimiento."
+      },
       "restocking-fee-policies": {
         "title": "Cargos por reposición",
         "singular": "Cargo por reposición",
@@ -3851,6 +3856,12 @@
       "customsDefaults": "Valores de aduana"
     },
     "fieldHelp": {
+      "storedValueLiabilityAccount": "La cuenta del balance que se acredita al emitir valor y se debita al canjear.",
+      "storedValueBreakageIncomeAccount": "La cuenta de ingresos que se acredita cuando se reconoce breakage o vencimiento.",
+      "storedValueBreakagePolicy": "Ninguna nunca reconoce breakage; proporcional lo reconoce con los canjes; por inactividad reconoce los saldos inactivos tras la ventana de inactividad.",
+      "storedValueBreakageRate": "La parte del valor emitido que se espera que nunca se canjee, como decimal entre 0 y 1 (por ejemplo 0,10).",
+      "storedValueExpiryMonths": "Meses completos tras la emisión antes de que venza el valor no canjeado, donde sea legal. Vacío para sin vencimiento.",
+      "storedValueInactivityMonths": "Meses sin actividad antes de reconocer como breakage un saldo de la política por inactividad.",
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
       "putawayItem": "Déjelo en blanco para aplicar la regla a todos los artículos.",
       "putawayCapacity": "Lo máximo que el destino puede contener del artículo. Obligatorio en una zona a granel; déjelo en blanco en un hueco fijo para no poner límite.",
@@ -3982,6 +3993,15 @@
       "shippingCustomsDefaults": "Descripción de contenido predeterminada para envíos al extranjero."
     },
     "options": {
+      "storedValueKind": {
+        "giftCard": "Tarjeta regalo",
+        "storeCredit": "Crédito en tienda"
+      },
+      "breakagePolicy": {
+        "none": "Ninguna",
+        "proportional": "Proporcional",
+        "remote": "Por inactividad"
+      },
       "usageAggregation": {
         "sum": "Suma",
         "count": "Recuento",
@@ -5800,6 +5820,18 @@
       "retryOffsetsHelp": "Días después de cada cobro fallido para volver a intentarlo. Al agotar la lista se aplica la acción final.",
       "finalAction": "Cuando se agotan los reintentos",
       "finalActionHelp": "Suspender detiene la facturación pero mantiene el contrato; un pago posterior lo reanuda. Cancelar finaliza la suscripción."
+    },
+    "storedValueProgramFields": {
+      "description": "Configure dónde se registran los saldos no canjeados y cuándo vencen o se reconocen como ingreso por breakage.",
+      "details": "Detalles del programa",
+      "liability": "Cuentas de pasivo",
+      "breakage": "Breakage y vencimiento",
+      "liabilityAccount": "Cuenta de pasivo",
+      "breakageIncomeAccount": "Cuenta de ingresos por breakage",
+      "breakagePolicy": "Política de breakage",
+      "breakageRate": "Tasa de breakage esperada",
+      "expiryMonths": "Vencimiento (meses)",
+      "inactivityMonths": "Período de inactividad (meses)"
     },
     "no": "No",
     "payComponentChooser": {

@@ -33,6 +33,7 @@
     "budget_scenario": "予算",
     "revenue_contract": "収益契約",
     "contract_cost_asset": "契約コスト資産",
+    "stored_value_account": "ストアドバリュー口座",
     "equipment_unit": "設備ユニット",
     "resourcing_assignment": "リソース割り当て",
     "resourcing_request": "リソース依頼",

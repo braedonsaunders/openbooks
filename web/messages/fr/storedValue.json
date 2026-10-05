@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Cartes cadeaux et avoirs",
+    "description": "Cartes cadeaux et avoirs comptabilisés au passif jusqu'à leur utilisation.",
+    "emptyTitle": "Aucune valeur stockée",
+    "emptyDescription": "Vendez une carte cadeau ou remboursez en avoir : chaque code apparaît ici avec son solde.",
+    "emptyAction": "Vendre une carte cadeau"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Type",
+    "customer": "Client",
+    "program": "Programme",
+    "balance": "Solde",
+    "issued": "Émis",
+    "expires": "Expire le",
+    "status": "Statut",
+    "lastActivity": "Dernière activité",
+    "amount": "Montant",
+    "entryKind": "Mouvement",
+    "reason": "Motif",
+    "journal": "Écriture",
+    "document": "Document",
+    "breakageRecognized": "Breakage constaté",
+    "liabilityAccount": "Compte de passif",
+    "breakageIncomeAccount": "Compte de produits de breakage",
+    "breakagePolicy": "Politique de breakage",
+    "breakageRate": "Taux de breakage attendu",
+    "expiryMonths": "Expiration (mois)",
+    "inactivityMonths": "Fenêtre d'inactivité (mois)",
+    "currency": "Devise",
+    "isActive": "Actif",
+    "name": "Nom du programme",
+    "debitAccount": "Compte destinataire",
+    "offsetAccount": "Contrepartie",
+    "postingDate": "Date comptable",
+    "newBalance": "Nouveau solde"
+  },
+  "status": {
+    "active": "Actif",
+    "frozen": "Gelé",
+    "closed": "Clôturé",
+    "expired": "Expiré"
+  },
+  "kind": {
+    "gift_card": "Carte cadeau",
+    "store_credit": "Avoir"
+  },
+  "entryKind": {
+    "issue": "Émis",
+    "redeem": "Utilisé",
+    "adjust": "Ajusté",
+    "expire": "Expiré",
+    "breakage": "Non-utilisé",
+    "reversal": "Contre-passé"
+  },
+  "breakagePolicy": {
+    "none": "Aucune",
+    "proportional": "Proportionnel",
+    "remote": "Lointain"
+  },
+  "kpi": {
+    "outstanding": "Passif en cours",
+    "issuedThisPeriod": "Émis sur la période",
+    "redeemedThisPeriod": "Utilisé sur la période",
+    "breakageRecognized": "Breakage constaté"
+  },
+  "drawer": {
+    "ledgerTitle": "Mouvements",
+    "ledgerDescription": "Chaque mouvement du solde, du plus récent au plus ancien. Les mouvements sont immuables ; les corrections sont des contre-passations.",
+    "adjust": "Ajuster le solde",
+    "adjustDescription": "Corrige le solde hors de tout document. Le motif est obligatoire et conservé comme preuve.",
+    "adjustAmount": "Montant de correction (signé)",
+    "adjustReason": "Motif de la correction",
+    "freeze": "Geler",
+    "unfreeze": "Dégeler",
+    "close": "Clôturer",
+    "closeConfirm": "Clôturer ce compte ? Il ne porte aucun solde.",
+    "programSection": "Programme",
+    "accountSection": "Compte",
+    "noExpiry": "N'expire pas",
+    "sourceDocument": "Document d'origine"
+  },
+  "issue": {
+    "title": "Émettre de la valeur",
+    "description": "Crée un code avec un solde initial. Le code n'est affiché qu'une fois — copiez-le ou envoyez-le maintenant.",
+    "codeShownOnce": "C'est la seule fois où ce code est affiché. Copiez-le maintenant.",
+    "codeCopied": "Code copié",
+    "programLabel": "Programme",
+    "amountLabel": "Montant",
+    "customerLabel": "Client (avoirs uniquement)",
+    "expiresLabel": "Expire le (facultatif)",
+    "submit": "Émettre",
+    "cancel": "Annuler"
+  },
+  "programs": {
+    "title": "Programmes de valeur stockée",
+    "description": "Programmes de cartes cadeaux et d'avoirs : compte de passif, politique de breakage et expiration.",
+    "emptyAction": "Nouveau programme"
+  },
+  "payment": {
+    "tenderLabel": "Valeur stockée",
+    "tenderPlaceholder": "Saisir le code de la carte",
+    "apply": "Appliquer",
+    "appliedBalance": "Disponible",
+    "unknownCode": "Code introuvable ; vérifiez-le et réessayez",
+    "overTender": "Les montants dépassent le total du reçu",
+    "remove": "Retirer",
+    "tenderedOf": "Utilisé {tendered} sur {total}"
+  },
+  "customer": {
+    "tabLabel": "Avoirs",
+    "emptyDescription": "Aucun avoir pour ce client pour l'instant.",
+    "balanceLabel": "Disponible",
+    "viewAll": "Voir le registre de valeur"
+  },
+  "reports": {
+    "rollforwardTitle": "Variation du passif de valeur stockée",
+    "rollforwardDescription": "Soldes d'ouverture, émissions, utilisations, breakage, expirations, ajustements et clôtures par programme et période.",
+    "unclaimedTitle": "Valeurs non réclamées",
+    "unclaimedDescription": "Soldes dormants par client et ancienneté pour la revue des biens non réclamés."
+  }
+}

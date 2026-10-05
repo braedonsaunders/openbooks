@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Stored value",
+    "description": "Gift cards and store credit, carried as a liability until customers redeem them.",
+    "emptyTitle": "No stored value yet",
+    "emptyDescription": "Sell a gift card or refund to store credit, and each code appears here with its balance.",
+    "emptyAction": "Sell a gift card"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Kind",
+    "customer": "Customer",
+    "program": "Program",
+    "balance": "Balance",
+    "issued": "Issued",
+    "expires": "Expires",
+    "status": "Status",
+    "lastActivity": "Last activity",
+    "amount": "Amount",
+    "entryKind": "Entry",
+    "reason": "Reason",
+    "journal": "Journal entry",
+    "document": "Document",
+    "breakageRecognized": "Breakage recognized",
+    "liabilityAccount": "Liability account",
+    "breakageIncomeAccount": "Breakage income account",
+    "breakagePolicy": "Breakage policy",
+    "breakageRate": "Expected breakage rate",
+    "expiryMonths": "Expiry (months)",
+    "inactivityMonths": "Inactivity window (months)",
+    "currency": "Currency",
+    "isActive": "Active",
+    "name": "Program name",
+    "debitAccount": "Receiving account",
+    "offsetAccount": "Offset account",
+    "postingDate": "Posting date",
+    "newBalance": "New balance"
+  },
+  "status": {
+    "active": "Active",
+    "frozen": "Frozen",
+    "closed": "Closed",
+    "expired": "Expired"
+  },
+  "kind": {
+    "gift_card": "Gift card",
+    "store_credit": "Store credit"
+  },
+  "entryKind": {
+    "issue": "Issued",
+    "redeem": "Redeemed",
+    "adjust": "Adjusted",
+    "expire": "Expired",
+    "breakage": "Breakage",
+    "reversal": "Reversed"
+  },
+  "breakagePolicy": {
+    "none": "None",
+    "proportional": "Proportional",
+    "remote": "Remote"
+  },
+  "kpi": {
+    "outstanding": "Outstanding liability",
+    "issuedThisPeriod": "Issued this period",
+    "redeemedThisPeriod": "Redeemed this period",
+    "breakageRecognized": "Breakage recognized"
+  },
+  "drawer": {
+    "ledgerTitle": "Ledger",
+    "ledgerDescription": "Every movement of this balance, newest first. Entries are immutable; corrections are reversals.",
+    "adjust": "Adjust balance",
+    "adjustDescription": "Correct the balance outside any document. A reason is required and is kept as audit evidence.",
+    "adjustAmount": "Correction amount (signed)",
+    "adjustReason": "Reason for the correction",
+    "freeze": "Freeze",
+    "unfreeze": "Unfreeze",
+    "close": "Close",
+    "closeConfirm": "Close this account? It holds no balance.",
+    "programSection": "Program",
+    "accountSection": "Account",
+    "noExpiry": "Does not expire",
+    "sourceDocument": "Source document"
+  },
+  "issue": {
+    "title": "Issue stored value",
+    "description": "Mint a code with a starting balance. The code is shown once — write it down or send it now.",
+    "codeShownOnce": "This is the only time this code is shown. Copy it now.",
+    "codeCopied": "Code copied",
+    "programLabel": "Program",
+    "amountLabel": "Amount",
+    "customerLabel": "Customer (store credit only)",
+    "expiresLabel": "Expires on (optional)",
+    "submit": "Issue",
+    "cancel": "Cancel"
+  },
+  "programs": {
+    "title": "Stored value programs",
+    "description": "Gift card and store credit programs: their liability home, breakage policy, and expiry.",
+    "emptyAction": "New program"
+  },
+  "payment": {
+    "tenderLabel": "Stored value",
+    "tenderPlaceholder": "Enter gift card code",
+    "apply": "Apply",
+    "appliedBalance": "Available",
+    "unknownCode": "Code not found; check the code and retry",
+    "overTender": "Tenders exceed the receipt total",
+    "remove": "Remove",
+    "tenderedOf": "Tendered {tendered} of {total}"
+  },
+  "customer": {
+    "tabLabel": "Store credit",
+    "emptyDescription": "No store credit for this customer yet.",
+    "balanceLabel": "Available",
+    "viewAll": "View in Stored value"
+  },
+  "reports": {
+    "rollforwardTitle": "Stored value liability roll-forward",
+    "rollforwardDescription": "Opening, issued, redeemed, breakage, expired, adjusted, and closing balances by program and period.",
+    "unclaimedTitle": "Unclaimed stored value",
+    "unclaimedDescription": "Dormant balances by customer and age for unclaimed-property review."
+  }
+}

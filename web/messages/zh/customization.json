@@ -33,6 +33,7 @@
     "budget_scenario": "预算",
     "revenue_contract": "收入合同",
     "contract_cost_asset": "合同成本资产",
+    "stored_value_account": "储值账户",
     "equipment_unit": "设备单元",
     "resourcing_assignment": "资源分配",
     "resourcing_request": "资源请求",

@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Guthaben",
+    "description": "Geschenkkarten und Ladenguthaben als Verbindlichkeit, bis Kunden sie einlösen.",
+    "emptyTitle": "Noch kein Guthaben",
+    "emptyDescription": "Verkaufen Sie eine Geschenkkarte oder erstatten Sie als Guthaben; jeder Code erscheint hier mit seinem Saldo.",
+    "emptyAction": "Geschenkkarte verkaufen"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Art",
+    "customer": "Kunde",
+    "program": "Programm",
+    "balance": "Saldo",
+    "issued": "Ausgegeben",
+    "expires": "Läuft ab",
+    "status": "Status",
+    "lastActivity": "Letzte Aktivität",
+    "amount": "Betrag",
+    "entryKind": "Buchung",
+    "reason": "Grund",
+    "journal": "Journalbuchung",
+    "document": "Beleg",
+    "breakageRecognized": "Erfasste Verfälle",
+    "liabilityAccount": "Verbindlichkeitskonto",
+    "breakageIncomeAccount": "Verfallertragskonto",
+    "breakagePolicy": "Verfallsregel",
+    "breakageRate": "Erwartete Verfallsquote",
+    "expiryMonths": "Ablauf (Monate)",
+    "inactivityMonths": "Inaktivitätsfenster (Monate)",
+    "currency": "Währung",
+    "isActive": "Aktiv",
+    "name": "Programmname",
+    "debitAccount": "Empfangskonto",
+    "offsetAccount": "Gegenkonto",
+    "postingDate": "Buchungsdatum",
+    "newBalance": "Neuer Saldo"
+  },
+  "status": {
+    "active": "Aktiv",
+    "frozen": "Gesperrt",
+    "closed": "Geschlossen",
+    "expired": "Abgelaufen"
+  },
+  "kind": {
+    "gift_card": "Geschenkkarte",
+    "store_credit": "Ladenguthaben"
+  },
+  "entryKind": {
+    "issue": "Ausgegeben",
+    "redeem": "Eingelöst",
+    "adjust": "Angepasst",
+    "expire": "Abgelaufen",
+    "breakage": "Nichteinlösung",
+    "reversal": "Storniert"
+  },
+  "breakagePolicy": {
+    "none": "Keine",
+    "proportional": "Anteilig",
+    "remote": "Unwahrscheinlich"
+  },
+  "kpi": {
+    "outstanding": "Offene Verbindlichkeit",
+    "issuedThisPeriod": "Ausgegeben im Zeitraum",
+    "redeemedThisPeriod": "Eingelöst im Zeitraum",
+    "breakageRecognized": "Erfasste Verfälle"
+  },
+  "drawer": {
+    "ledgerTitle": "Kontobewegungen",
+    "ledgerDescription": "Jede Bewegung dieses Saldos, neueste zuerst. Buchungen sind unveränderlich; Korrekturen sind Stornos.",
+    "adjust": "Saldo anpassen",
+    "adjustDescription": "Saldo außerhalb eines Belegs korrigieren. Ein Grund ist Pflicht und bleibt als Nachweis erhalten.",
+    "adjustAmount": "Korrekturbetrag (mit Vorzeichen)",
+    "adjustReason": "Grund der Korrektur",
+    "freeze": "Sperren",
+    "unfreeze": "Entsperren",
+    "close": "Schließen",
+    "closeConfirm": "Dieses Konto schließen? Es hat keinen Saldo.",
+    "programSection": "Programm",
+    "accountSection": "Konto",
+    "noExpiry": "Läuft nicht ab",
+    "sourceDocument": "Herkunftsbeleg"
+  },
+  "issue": {
+    "title": "Guthaben ausgeben",
+    "description": "Einen Code mit Startguthaben erzeugen. Der Code wird nur einmal gezeigt — jetzt notieren oder versenden.",
+    "codeShownOnce": "Dieser Code wird nur einmal gezeigt. Jetzt kopieren.",
+    "codeCopied": "Code kopiert",
+    "programLabel": "Programm",
+    "amountLabel": "Betrag",
+    "customerLabel": "Kunde (nur Ladenguthaben)",
+    "expiresLabel": "Läuft ab am (optional)",
+    "submit": "Ausgeben",
+    "cancel": "Abbrechen"
+  },
+  "programs": {
+    "title": "Guthabenprogramme",
+    "description": "Geschenkkarten- und Guthabenprogramme: Verbindlichkeitskonto, Verfallsregel und Ablauf.",
+    "emptyAction": "Neues Programm"
+  },
+  "payment": {
+    "tenderLabel": "Guthaben",
+    "tenderPlaceholder": "Geschenkkartencode eingeben",
+    "apply": "Anwenden",
+    "appliedBalance": "Verfügbar",
+    "unknownCode": "Code nicht gefunden; prüfen und erneut versuchen",
+    "overTender": "Guthaben übersteigen die Belegsumme",
+    "remove": "Entfernen",
+    "tenderedOf": "Eingelöst {tendered} von {total}"
+  },
+  "customer": {
+    "tabLabel": "Ladenguthaben",
+    "emptyDescription": "Noch kein Ladenguthaben für diesen Kunden.",
+    "balanceLabel": "Verfügbar",
+    "viewAll": "Guthabenregister ansehen"
+  },
+  "reports": {
+    "rollforwardTitle": "Guthaben-Verbindlichkeitsnachweis",
+    "rollforwardDescription": "Anfangs-, Ausgabe-, Einlöse-, Verfall-, Ablauf-, Korrektur- und Endsalden je Programm und Zeitraum.",
+    "unclaimedTitle": "Nicht abgeholte Guthaben",
+    "unclaimedDescription": "Ruhende Salden je Kunde und Alter für die Prüfung nicht abgeholter Vermögenswerte."
+  }
+}
