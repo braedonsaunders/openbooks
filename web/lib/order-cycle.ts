@@ -14,7 +14,8 @@ import {
   CONVERSION_TARGETS,
 } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { add, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/src/inventory/kits.ts'
 import { lineRequiresReceipt } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import {
   billableRemainderQuantityUnits,
@@ -361,6 +362,16 @@ interface ConvertResult {
   replayed?: boolean
 }
 
+export interface KitComponentFulfillmentInput {
+  componentItemId: string
+  lotId?: string | null
+  serialId?: string | null
+  /** Bin the component issues from: the kit line's own location or one inside
+   *  its warehouse. Omitted, the component issues from the kit line's own
+   *  location. */
+  stockLocationId?: string | null
+}
+
 export interface SalesFulfillmentLineInput {
   sourceLineId: string
   quantity: string
@@ -369,6 +380,11 @@ export interface SalesFulfillmentLineInput {
   /** Bin to issue from: the order line's own location or one inside its
    *  warehouse. Omitted, the line issues from its own location. */
   stockLocationId?: string | null
+  /**
+   * A kit order line ships its components: one entry per component with the
+   * lot/serial/bin the shipment chose for it. Refused on any other line.
+   */
+  kitComponents?: KitComponentFulfillmentInput[]
 }
 
 export interface SalesFulfillmentInput {
@@ -386,6 +402,7 @@ interface CanonicalFulfillmentLine {
   lotId: string | null
   serialId: string | null
   stockLocationId?: string
+  kitComponents?: { componentItemId: string; lotId: string | null; serialId: string | null; stockLocationId?: string }[]
 }
 
 type SalesFulfillmentSourceRow = Record<string, unknown> & {
@@ -442,7 +459,17 @@ function canonicalFulfillmentLines(lines: SalesFulfillmentLineInput[]): Canonica
     const stockLocationId = line.stockLocationId?.trim() || null
     const lotId = line.lotId?.trim() || null
     const serialId = line.serialId?.trim() || null
-    const key = [sourceLineId, stockLocationId ?? '', lotId ?? '', serialId ?? ''].join(':')
+    const kitComponents = (line.kitComponents ?? []).map((component, componentIndex) => {
+      const componentItemId = component.componentItemId.trim()
+      if (!componentItemId) throw new ConversionError(`Kit component ${componentIndex + 1} on fulfillment line ${sourceLineId} is required`)
+      return {
+        componentItemId,
+        lotId: component.lotId?.trim() || null,
+        serialId: component.serialId?.trim() || null,
+        ...(component.stockLocationId?.trim() ? { stockLocationId: component.stockLocationId.trim() } : {}),
+      }
+    })
+    const key = [sourceLineId, stockLocationId ?? '', lotId ?? '', serialId ?? '', JSON.stringify(kitComponents)].join(':')
     if (seen.has(key)) throw new ConversionError(`Fulfillment line ${sourceLineId} was selected more than once for the same bin, lot and serial`)
     seen.add(key)
     let quantity: string
@@ -461,6 +488,7 @@ function canonicalFulfillmentLines(lines: SalesFulfillmentLineInput[]): Canonica
       lotId,
       serialId,
       ...(stockLocationId ? { stockLocationId } : {}),
+      ...(kitComponents.length > 0 ? { kitComponents } : {}),
     }
   })
   const sortKey = (line: CanonicalFulfillmentLine) =>
@@ -647,17 +675,21 @@ export async function fulfillSalesOrderInTx(
   }
 
   // A named bin must be the line's own location or lie inside the
-  // warehouse that location belongs to.
-  const binIds = [...new Set(selected.flatMap(({ request }) => request.stockLocationId ? [request.stockLocationId] : []))]
+  // warehouse that location belongs to. Kit component bins ride the same
+  // rule against the kit line's warehouse.
+  const binIds = [...new Set(selected.flatMap(({ request }) => [
+    ...(request.stockLocationId ? [request.stockLocationId] : []),
+    ...((request.kitComponents ?? []).flatMap((pick) => pick.stockLocationId ? [pick.stockLocationId] : [])),
+  ]))]
   if (binIds.length > 0) {
     const bins = new Map((await tx.execute<{ id: string; code: string; warehouse_id: string | null }>(sql`
       select id, code, stock_location_warehouse(org_id, id) as warehouse_id
         from stock_locations
        where org_id = ${orgId} and id = any(${`{${binIds.join(',')}}`}::uuid[])
     `)).rows.map((bin) => [bin.id, bin]))
-    for (const { request, line } of selected) {
-      if (!request.stockLocationId || request.stockLocationId === line.stock_location_id) continue
-      const bin = bins.get(request.stockLocationId)
+    const assertBinInsideLineWarehouse = (binId: string, line: { line_number: number; warehouse_id: string | null; stock_location_id: string | null }) => {
+      if (binId === line.stock_location_id) return
+      const bin = bins.get(binId)
       if (!line.warehouse_id) {
         throw new ConversionError(
           `Sales-order line ${line.line_number} ships from no warehouse, so it cannot issue from a bin — assign a warehouse to the line, then fulfill again`,
@@ -673,6 +705,12 @@ export async function fulfillSalesOrderInTx(
           FULFILLMENT_BIN_OUTSIDE_WAREHOUSE,
           { lineNumber: line.line_number },
         )
+      }
+    }
+    for (const { request, line } of selected) {
+      if (request.stockLocationId) assertBinInsideLineWarehouse(request.stockLocationId, line)
+      for (const pick of request.kitComponents ?? []) {
+        if (pick.stockLocationId) assertBinInsideLineWarehouse(pick.stockLocationId, line)
       }
     }
   }
@@ -692,6 +730,69 @@ export async function fulfillSalesOrderInTx(
     throw new ConversionError(
       `Sales-order line ${uncostedInventoryLine.line.line_number} is an inventory item without a costing profile`,
     )
+  }
+
+  // Kit order lines ship their components, never themselves: the request
+  // names the per-component lot/serial/bin picks, which are validated here —
+  // before anything is written — against the recipe effective on the ship
+  // date. The issue drain re-checks the same contract under its locks.
+  for (const { request, line } of selected) {
+    const picks = request.kitComponents ?? []
+    if (line.item_kind !== 'kit') {
+      if (picks.length > 0) {
+        throw new ConversionError(
+          `Sales-order line ${line.line_number} is not a kit; only kit lines ship by component`,
+        )
+      }
+      continue
+    }
+    if (request.lotId || request.serialId) {
+      throw new ConversionError(
+        `Sales-order line ${line.line_number} is a kit; choose lots and serials per component, not on the kit line`,
+      )
+    }
+    const components = await loadKitComponents(tx, orgId, line.item_id!, input.fulfillmentDate)
+    const seenComponents = new Set<string>()
+    for (const pick of picks) {
+      if (!isUuid(pick.componentItemId)) {
+        throw new ConversionError(`Sales-order line ${line.line_number} names an invalid kit component`)
+      }
+      if (seenComponents.has(pick.componentItemId)) {
+        throw new ConversionError(`Sales-order line ${line.line_number} names the same kit component twice; list each component once`)
+      }
+      seenComponents.add(pick.componentItemId)
+      if (!components.some((component) => component.componentItemId === pick.componentItemId)) {
+        throw new ConversionError(
+          `Sales-order line ${line.line_number} names a component outside the kit's recipe on ${input.fulfillmentDate}`,
+        )
+      }
+    }
+    const profiles = await tx.execute<{ item_id: string; tracking: string }>(sql`
+      select item_id, tracking from item_inventory_profiles
+       where org_id = ${orgId}
+         and item_id in (${sql.join(components.map((component) => sql`${component.componentItemId}`), sql`, `)})`)
+    const trackingByComponent = new Map(profiles.rows.map((profile) => [profile.item_id, profile.tracking]))
+    const quantities = kitComponentQuantities(`line ${line.line_number}`, request.quantity, components)
+    for (const component of components) {
+      const tracking = trackingByComponent.get(component.componentItemId) ?? 'none'
+      const pick = picks.find((candidate) => candidate.componentItemId === component.componentItemId)
+      if (tracking !== 'none' && !pick) {
+        throw new ConversionError(
+          `Sales-order line ${line.line_number} needs the ${tracking} for its ${tracking}-tracked component; name it per component`,
+        )
+      }
+      if (pick && ((tracking === 'lot' && !pick.lotId) || (tracking === 'serial' && !pick.serialId))) {
+        throw new ConversionError(
+          `Sales-order line ${line.line_number} names no ${tracking} for its ${tracking}-tracked component; choose the ${tracking} per component`,
+        )
+      }
+      const componentQuantity = quantities.find((entry) => entry.componentItemId === component.componentItemId)!.quantity
+      if (tracking === 'serial' && cmp(componentQuantity, '1') !== 0) {
+        throw new ConversionError(
+          `Sales-order line ${line.line_number} ships ${componentQuantity} units of a serial-tracked component, but one line names one serial; split the fulfillment so each line ships one`,
+        )
+      }
+    }
   }
 
   // Orders approved before line warehouses existed carry NULL warehouses
@@ -775,6 +876,16 @@ export async function fulfillSalesOrderInTx(
         sourceLineId: line.id,
         lotId: request.lotId,
         serialId: request.serialId,
+        ...(request.kitComponents && request.kitComponents.length > 0
+          ? {
+              kitComponents: request.kitComponents.map((pick) => ({
+                componentItemId: pick.componentItemId,
+                lotId: pick.lotId,
+                serialId: pick.serialId,
+                ...(pick.stockLocationId ? { stockLocationId: pick.stockLocationId } : {}),
+              })),
+            }
+          : {}),
       },
     }
     await tx.execute(sql`
@@ -1048,6 +1159,12 @@ export async function receivePurchaseOrderInTx(
       }
       if (!line.has_inventory_profile) {
         throw new ConversionError(`Purchase-order line ${line.line_number} is an inventory item without a costing profile`)
+      }
+      if (line.item_kind === 'kit') {
+        const itemLabel = line.item_name ? ` (${line.item_name})` : ''
+        throw new ConversionError(
+          `Purchase-order line ${line.line_number}${itemLabel} is a kit: kits hold no stock; receive the components — receive each component on its own purchase-order line instead`,
+        )
       }
       if (!line.received_not_billed_account_id) {
         const itemLabel = line.item_name ? ` (${line.item_name})` : ''
