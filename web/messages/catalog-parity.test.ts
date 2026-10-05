@@ -1939,6 +1939,12 @@ const COGNATES = new Set<string>([
   'fr:analytics.customer.segment.champions|Champions',
   // Customer score bands read the configured ladder now ("note ≥ {cutoff}");
   // excellent/stable keep their identical French spellings as cognates.
+  // The CLV retention formula head is locale-independent math notation
+  // (" = {base}·e"), identical in every Latin-script locale by nature.
+  'de:analytics.customer.clvHow.retentionHead| = {base}·e',
+  'es:analytics.customer.clvHow.retentionHead| = {base}·e',
+  'fr:analytics.customer.clvHow.retentionHead| = {base}·e',
+  'pt-BR:analytics.customer.clvHow.retentionHead| = {base}·e',
   'fr:analytics.customer.rating.excellent|excellent',
   'fr:analytics.customer.trend.stable|stable',
   'fr:analytics.customer.table.f|F',

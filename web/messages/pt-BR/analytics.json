@@ -726,14 +726,14 @@
     },
     "clvHow": {
       "annualBold": "Valor anual",
-      "annualTail": " = fatura média × (faturas ÷ anos ativos, piso de 3 meses). ",
+      "annualTail": " = fatura média × (faturas ÷ anos ativos, piso de {floorMonths} meses). ",
       "clvBold": "CLV projetado",
-      "clvTail": " = valor anual × 3 anos × retenção.\n",
+      "clvTail": " = valor anual × {years} anos × retenção.\n",
       "retentionBold": "Fator de retenção",
-      "retentionHead": " = 0,95·e",
-      "retentionSup": "−dias desde a última ÷ 120",
-      "retentionTail": ", limitado a 10–95%. ",
-      "tiersNote": "As faixas classificam por CLV projetado: top 10% Platina, próximos 20% Ouro, próximos 30% Prata, 40% inferiores Bronze."
+      "retentionHead": " = {base}·e",
+      "retentionSup": "−dias desde a última ÷ {decay}",
+      "retentionTail": ", limitado a {min}–{max}%. ",
+      "tiersNote": "As faixas classificam por CLV projetado: top {platinum}% Platina, próximos {gold}% Ouro, próximos {silver}% Prata, {bronze}% inferiores Bronze."
     },
     "config": {
       "fields": {
@@ -1169,7 +1169,7 @@
       "monthlyGrowth": "Crescimento mensal",
       "paymentRate": "Taxa de pagamento",
       "retention": "Retenção",
-      "top10Share": "Participação top 10%"
+      "top10Share": "Participação top {pct}%"
     },
     "metricsSub": {
       "avgMoM": "MoM médio (meses maduros)",
@@ -1193,9 +1193,9 @@
     },
     "panels": {
       "atRiskCustomers": "Clientes em risco ({count})",
-      "atRiskHint": "Escore de churn: recentidade 0–40 (>120d/>60d/>30d) + queda de ritmo 0–30 (2×/1,5× da própria média) + baixo engajamento 0–30 (≤1/≤3 pedidos)",
+      "atRiskHint": "Escore de churn: recentidade 0–{recMax} (>{highDays}d/>{medDays}d/>{lowDays}d) + queda de ritmo 0–{cadMax} ({highX}×/{lowX}× da própria média) + baixo engajamento 0–{engMax} (≤{singleTxns}/≤{fewTxns} pedidos)",
       "clvRanking": "Ranking de valor do ciclo de vida",
-      "cohortHint": "Por ano do primeiro pedido · ativo = pediu nos últimos 6 meses",
+      "cohortHint": "Por ano do primeiro pedido · ativo = pediu nos últimos {months} meses",
       "cohortRetention": "Retenção de coortes",
       "customerHealth": "Saúde de clientes ({count})",
       "customerHealthHint": "Ponderado {recency} % recência · {frequency} % frequência · {monetary} % valor · {payment} % pagamentos, menos atrito",
@@ -1264,7 +1264,7 @@
       },
       "clvTiers": {
         "label": "Faixas de CLV",
-        "value": "Top {platinum}% Platina · top {gold}% Ouro · top {silver}% Prata · resto Bronze"
+        "value": "Top {platinum}% Platina · próximos {gold}% Ouro · próximos {silver}% Prata · {bronze}% inferiores Bronze"
       },
       "frictionPenalty": {
         "label": "Penalidade de atrito",
@@ -1317,7 +1317,7 @@
       "frictionBold": "Atrito:",
       "frictionTail": " apenas notas de crédito — este razão não tem documentos de autorização de devolução, então o componente de devolução é sempre 0.",
       "intelligenceBold": "Escore de inteligência:",
-      "intelligenceTail": " 30% participação de campeões (20% dos clientes = máximo) + 30% probabilidade média de retenção + 20% saúde da concentração + 20% taxa de pagamento — escore {score} ({grade}).",
+      "intelligenceTail": " {champions}% participação de campeões ({saturation}% dos clientes = máximo) + {retention}% probabilidade média de retenção + {concentration}% saúde da concentração + {payment}% taxa de pagamento — escore {score} ({grade}).",
       "newCustomersBold": "Novos clientes:",
       "newCustomersTail": " sem fatura ou pedido de venda anterior, vitalício, antes do mês da primeira atividade.",
       "paymentBold": "Comportamento de pagamento:",
@@ -1330,7 +1330,7 @@
       "revenueTail": " receita reconhecida — lançamentos líquidos de receita, o mesmo universo contábil da DRE. Faturado é o faturamento bruto; o detalhe do cliente concilia os dois."
     },
     "sub": {
-      "activeLast6mo": "ativo nos últimos 6 meses",
+      "activeLastMonths": "ativo nos últimos {months} meses",
       "avgPerCustomer": "méd. {amount} / cliente",
       "clvBase": "base histórica de CLV",
       "creditHeavy": "contas com muito crédito",

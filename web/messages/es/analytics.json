@@ -726,14 +726,14 @@
     },
     "clvHow": {
       "annualBold": "Valor anual",
-      "annualTail": " = factura media × (facturas ÷ años activo, mínimo 3 meses). ",
+      "annualTail": " = factura media × (facturas ÷ años activo, mínimo {floorMonths} meses). ",
       "clvBold": "CLV proyectado",
-      "clvTail": " = valor anual × 3 años × retención.\n",
+      "clvTail": " = valor anual × {years} años × retención.\n",
       "retentionBold": "Factor de retención",
-      "retentionHead": " = 0,95·e",
-      "retentionSup": "−días desde la última ÷ 120",
-      "retentionTail": " , limitado entre 10 y 95 %. ",
-      "tiersNote": "Los niveles se ordenan por CLV proyectado: 10 % superior Platino, siguiente 20 % Oro, siguiente 30 % Plata, 40 % restante Bronce."
+      "retentionHead": " = {base}·e",
+      "retentionSup": "−días desde la última ÷ {decay}",
+      "retentionTail": " , limitado entre {min} y {max} %. ",
+      "tiersNote": "Los niveles se ordenan por CLV proyectado: {platinum} % superior Platino, siguiente {gold} % Oro, siguiente {silver} % Plata, {bronze} % restante Bronce."
     },
     "config": {
       "fields": {
@@ -1169,7 +1169,7 @@
       "monthlyGrowth": "Crecimiento mensual",
       "paymentRate": "Tasa de pago",
       "retention": "Retención",
-      "top10Share": "Parte del 10 % superior"
+      "top10Share": "Parte del {pct} % superior"
     },
     "metricsSub": {
       "avgMoM": "MoM medio (meses maduros)",
@@ -1193,9 +1193,9 @@
     },
     "panels": {
       "atRiskCustomers": "Clientes en riesgo ({count})",
-      "atRiskHint": "Puntuación de fuga: antigüedad 0–40 (>120 d/>60 d/>30 d) + caída de cadencia 0–30 (2×/1,5× su media) + bajo compromiso 0–30 (≤1/≤3 pedidos)",
+      "atRiskHint": "Puntuación de fuga: antigüedad 0–{recMax} (>{highDays} d/>{medDays} d/>{lowDays} d) + caída de cadencia 0–{cadMax} ({highX}×/{lowX}× su media) + bajo compromiso 0–{engMax} (≤{singleTxns}/≤{fewTxns} pedidos)",
       "clvRanking": "Clasificación por valor de vida",
-      "cohortHint": "Por año del primer pedido · activo = pidió en los últimos 6 meses",
+      "cohortHint": "Por año del primer pedido · activo = pidió en los últimos {months} meses",
       "cohortRetention": "Retención por cohorte",
       "customerHealth": "Salud del cliente ({count})",
       "customerHealthHint": "Ponderado {recency} % recencia · {frequency} % frecuencia · {monetary} % valor · {payment} % pagos, menos fricción",
@@ -1264,7 +1264,7 @@
       },
       "clvTiers": {
         "label": "Niveles de CLV",
-        "value": "{platinum} % superior Platino · {gold} % superior Oro · {silver} % superior Plata · resto Bronce"
+        "value": "{platinum} % superior Platino · siguiente {gold} % Oro · siguiente {silver} % Plata · {bronze} % restante Bronce"
       },
       "frictionPenalty": {
         "label": "Penalización por fricción",
@@ -1317,7 +1317,7 @@
       "frictionBold": "Fricción:",
       "frictionTail": " solo notas de crédito — este libro mayor no tiene documentos de autorización de devolución, así que el componente de devoluciones siempre es 0.",
       "intelligenceBold": "Puntuación de inteligencia:",
-      "intelligenceTail": " 30 % parte de campeones (20 % de clientes = máx.) + 30 % probabilidad de retención media + 20 % salud de concentración + 20 % tasa de pago — puntuación {score} ({grade}).",
+      "intelligenceTail": " {champions} % parte de campeones ({saturation} % de clientes = máx.) + {retention} % probabilidad de retención media + {concentration} % salud de concentración + {payment} % tasa de pago — puntuación {score} ({grade}).",
       "newCustomersBold": "Clientes nuevos:",
       "newCustomersTail": " sin factura ni pedido de venta anterior, de por vida, antes del mes de primera actividad.",
       "paymentBold": "Comportamiento de pago:",
@@ -1330,7 +1330,7 @@
       "revenueTail": " ingresos reconocidos — asientos netos de ingresos, el mismo universo contable que la cuenta de resultados. Facturado es facturación bruta; el detalle del cliente concilia ambos."
     },
     "sub": {
-      "activeLast6mo": "activos en los últimos 6 meses",
+      "activeLastMonths": "activos en los últimos {months} meses",
       "avgPerCustomer": "prom. {amount} / cliente",
       "clvBase": "base CLV histórica",
       "creditHeavy": "cuentas con mucho crédito",

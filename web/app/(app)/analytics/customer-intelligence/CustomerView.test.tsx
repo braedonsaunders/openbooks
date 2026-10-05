@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ReactElement } from 'react'
-import type { CustomerData, CustomerRow } from '../../../../lib/analytics/customer-data'
+import type { CustomerData, CustomerRow, Profitability } from '../../../../lib/analytics/customer-data'
+import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
 
 // Customer health CSVs keep full revenue/CLV precision, and the customer
 // drill carries the waterfall-signed invoiced→recognized bridge.
@@ -94,7 +95,27 @@ function row(overrides: Partial<CustomerRow> = {}): CustomerRow {
     scoredWithoutPayment: false,
     scoreBreakdown: { recency: 20, frequency: 20, monetary: 20, payment: 20, frictionPenalty: 0 },
     ...overrides,
+    // Widening cast only: the literal above carries every CustomerRow field
+    // (verified against the interface), but bare literals infer `string`
+    // where the row wants a union.
   } as CustomerRow
+}
+
+function emptyProfitability(): Profitability {
+  return {
+    customers: [],
+    summary: {
+      totalRevenue: '0',
+      totalCost: '0',
+      totalGrossProfit: '0',
+      avgMarginPct: null,
+      customerCount: 0,
+      totalJobs: 0,
+      fakeChampions: 0,
+      tierBreakdown: { high: 0, medium: 0, low: 0, marginal: 0, loss: 0 },
+    },
+    weightsError: null,
+  }
 }
 
 function dataWith(rows: CustomerRow[]): CustomerData {
@@ -102,7 +123,9 @@ function dataWith(rows: CustomerRow[]): CustomerData {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
     rows,
     intelligence: { score: 80, label: 'Strong', grade: 'A' },
-    config: { profitLeakRevenueSharePct: 10, profitLeakMarginTarget: 15, clvYears: 3 },
+    // The live scoring model, not a partial fixture: every band and hint the
+    // view renders reads this config, so the test exercises the same path.
+    config: { ...ANALYTICS_CONFIG.customerIntelligence.defaults },
     kpis: {
       totalCustomers: rows.length,
       totalRevenue: '845',
@@ -119,6 +142,7 @@ function dataWith(rows: CustomerRow[]): CustomerData {
       top10PctShare: 42,
       hhiScaled: 2000,
       hhiLevel: 'moderate',
+      customersFor80Pct: 1,
       topCustomerShare: 42,
       monthlyGrowth: 1.2,
       yoyGrowth: 5.6,
@@ -133,9 +157,20 @@ function dataWith(rows: CustomerRow[]): CustomerData {
       { segment: 'champions', count: 1, percentage: 100, totalRevenue: '845', avgRevenue: '845', totalInvoiced: '900' },
     ],
     tierBreakdown: [{ tier: 'gold', count: 1, revenue: '845', invoiced: '900', threshold: '0' }],
-    growth: [],
+    growth: {
+      monthly: [
+        { month: '2026-07', label: 'Jul', revenue: '845', invoiced: '900', uniqueCustomers: 1, transactionCount: 3, newCustomers: 0, growthRate: null, isMature: false },
+      ],
+      yoyGrowth: null,
+      avgMonthlyGrowth: 0,
+      medianMonthlyRevenue: '845',
+      totalNewCustomers: 0,
+      trend: 'stable',
+    },
+    cohorts: { list: [], overallRetention: 0 },
     insights: [],
-  } as unknown as CustomerData
+    weightsError: null,
+  }
 }
 
 function providers(ui: ReactElement) {
@@ -205,7 +240,7 @@ test('customer health CSV exports retain revenue and CLV decimals', async () => 
   const root = createRoot(host)
   try {
     await act(async () => {
-      root.render(providers(<CustomerView data={data} profitability={{} as never} />))
+      root.render(providers(<CustomerView data={data} profitability={emptyProfitability()} />))
       await tick()
     })
     await tick()
@@ -263,7 +298,7 @@ test('the customer drill carries the waterfall-signed recon bridge', async () =>
   const root = createRoot(host)
   try {
     await act(async () => {
-      root.render(providers(<CustomerView data={data} profitability={{} as never} />))
+      root.render(providers(<CustomerView data={data} profitability={emptyProfitability()} />))
       await tick()
     })
     await tick()
@@ -289,5 +324,48 @@ test('the customer drill carries the waterfall-signed recon bridge', async () =>
     })
     host.remove()
     globalThis.fetch = priorFetch
+  }
+})
+
+function kpiValue(host: HTMLElement, label: string): string | null {
+  const labelEl = [...host.querySelectorAll('p')].find((p) => p.textContent === label)
+  const card = labelEl?.closest('div.flex')
+  return card?.querySelector('p.text-2xl')?.textContent ?? null
+}
+
+test('health bands and cut-offs follow the configured grade ladder', async () => {
+  globalThis.__cvRouter = { push() {}, refresh() {} }
+  // Defaults grade at A 80 / D 50 with the warning band below C 60: 85 reads
+  // excellent, 55 warning, 30 critical.
+  const data = dataWith([
+    row({ id: 'c-rita', name: 'Rita Acme', healthScore: 85, healthGrade: 'A' }),
+    row({ id: 'c-omar', name: 'Omar Beta', healthScore: 55, healthGrade: 'D', segment: 'regular', churnLevel: 'medium' }),
+    row({ id: 'c-nina', name: 'Nina Gamma', healthScore: 30, healthGrade: 'F', segment: 'at-risk', churnLevel: 'high' }),
+  ])
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    await act(async () => {
+      root.render(providers(<CustomerView data={data} profitability={emptyProfitability()} />))
+      await tick()
+    })
+    await tick()
+    const healthTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Health Scores')
+    assert.ok(healthTab, 'the health tab must exist')
+    await click(healthTab)
+    assert.equal(kpiValue(host, 'Avg Health'), '57')
+    assert.equal(kpiValue(host, 'Excellent'), '1')
+    assert.equal(kpiValue(host, 'Warning'), '1')
+    assert.equal(kpiValue(host, 'Critical'), '1')
+    const text = host.textContent ?? ''
+    assert.ok(text.includes('score ≥ 80'), `the excellent cut-off must read the A grade, got:\n${text}`)
+    assert.ok(text.includes('score 50–59'), `the warning band must read the D grade, got:\n${text}`)
+    assert.ok(text.includes('score < 50'), `the critical cut-off must read the D grade, got:\n${text}`)
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
   }
 })

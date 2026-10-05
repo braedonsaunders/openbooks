@@ -726,14 +726,14 @@
     },
     "clvHow": {
       "annualBold": "年价值",
-      "annualTail": " ＝ 平均发票 ×（发票数 ÷ 活跃年数，下限3个月）。 ",
+      "annualTail": " ＝ 平均发票 ×（发票数 ÷ 活跃年数，下限{floorMonths}个月）。 ",
       "clvBold": "预测CLV",
-      "clvTail": " ＝ 年价值 × 3年 × 留存率。\n",
+      "clvTail": " ＝ 年价值 × {years}年 × 留存率。\n",
       "retentionBold": "留存系数",
-      "retentionHead": " ＝ 0.95·e",
-      "retentionSup": "−距上次交易天数 ÷ 120",
-      "retentionTail": "，限制在10–95%。 ",
-      "tiersNote": "层级按预测CLV排名：前10%为铂金，接着20%为黄金，再接着30%为白银，后40%为青铜。"
+      "retentionHead": " ＝ {base}·e",
+      "retentionSup": "−距上次交易天数 ÷ {decay}",
+      "retentionTail": "，限制在{min}–{max}%。 ",
+      "tiersNote": "层级按预测CLV排名：前{platinum}%为铂金，接着{gold}%为黄金，再接着{silver}%为白银，后{bronze}%为青铜。"
     },
     "config": {
       "fields": {
@@ -1169,7 +1169,7 @@
       "monthlyGrowth": "月增长率",
       "paymentRate": "回款率",
       "retention": "留存率",
-      "top10Share": "前10%占比"
+      "top10Share": "前{pct}%占比"
     },
     "metricsSub": {
       "avgMoM": "平均环比（成熟月份）",
@@ -1193,9 +1193,9 @@
     },
     "panels": {
       "atRiskCustomers": "高风险客户（{count}）",
-      "atRiskHint": "流失评分：近期性0–40（超120天/超60天/超30天）+频率下滑0–30（自身均值的2倍/1.5倍）+低互动0–30（≤1/≤3单）",
+      "atRiskHint": "流失评分：近期性0–{recMax}（超{highDays}天/超{medDays}天/超{lowDays}天）+频率下滑0–{cadMax}（自身均值的{highX}倍/{lowX}倍）+低互动0–{engMax}（≤{singleTxns}/≤{fewTxns}单）",
       "clvRanking": "生命周期价值排名",
-      "cohortHint": "按首次下单年份 · 活跃=近6个月内下过单",
+      "cohortHint": "按首次下单年份 · 活跃=近{months}个月内下过单",
       "cohortRetention": "同期群留存",
       "customerHealth": "客户健康度（{count}）",
       "customerHealthHint": "加权：近度{recency}％・频度{frequency}％・金额{monetary}％・回款{payment}％并扣除摩擦分",
@@ -1264,7 +1264,7 @@
       },
       "clvTiers": {
         "label": "CLV层级",
-        "value": "前{platinum}% 铂金 · 前{gold}% 黄金 · 前{silver}% 白银 · 其余 青铜"
+        "value": "前{platinum}%为铂金 · 接着{gold}%为黄金 · 再接着{silver}%为白银 · 后{bronze}%为青铜"
       },
       "frictionPenalty": {
         "label": "摩擦罚分",
@@ -1317,7 +1317,7 @@
       "frictionBold": "摩擦：",
       "frictionTail": " 仅贷项——本账簿没有退货授权单据，因此退货项恒为0。",
       "intelligenceBold": "智能评分：",
-      "intelligenceTail": " 冠军占比30%（客户的20%即满分）+平均留存概率30%+集中健康度20%+回款率20%——得分{score}（{grade}）。",
+      "intelligenceTail": " 冠军占比{champions}%（客户的{saturation}%即满分）+平均留存概率{retention}%+集中健康度{concentration}%+回款率{payment}%——得分{score}（{grade}）。",
       "newCustomersBold": "新客户：",
       "newCustomersTail": " 首次交易当月之前终身无发票和销售订单。",
       "paymentBold": "回款行为：",
@@ -1330,7 +1330,7 @@
       "revenueTail": " 已确认营收——净收入科目记账，与损益表口径一致。已开票为开票总额；客户钻取会调节两者。"
     },
     "sub": {
-      "activeLast6mo": "近6个月活跃",
+      "activeLastMonths": "近{months}个月活跃",
       "avgPerCustomer": "平均{amount}/客户",
       "clvBase": "历史CLV基准",
       "creditHeavy": "贷项较多的账户",

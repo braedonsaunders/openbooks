@@ -726,14 +726,14 @@
     },
     "clvHow": {
       "annualBold": "Jahreswert",
-      "annualTail": " = Ø-Rechnung × (Rechnungen ÷ aktive Jahre, mindestens 3 Monate). ",
+      "annualTail": " = Ø-Rechnung × (Rechnungen ÷ aktive Jahre, mindestens {floorMonths} Monate). ",
       "clvBold": "Prognostizierter CLV",
-      "clvTail": " = Jahreswert × 3 Jahre × Bindung.\n",
+      "clvTail": " = Jahreswert × {years} Jahre × Bindung.\n",
       "retentionBold": "Bindungsfaktor",
-      "retentionHead": " = 0,95·e",
-      "retentionSup": "−Tage seit zuletzt ÷ 120",
-      "retentionTail": " , begrenzt auf 10–95 %. ",
-      "tiersNote": "Stufen nach prognostiziertem CLV: Top 10 % Platin, nächste 20 % Gold, nächste 30 % Silber, Rest 40 % Bronze."
+      "retentionHead": " = {base}·e",
+      "retentionSup": "−Tage seit zuletzt ÷ {decay}",
+      "retentionTail": " , begrenzt auf {min}–{max} %. ",
+      "tiersNote": "Stufen nach prognostiziertem CLV: Top {platinum} % Platin, nächste {gold} % Gold, nächste {silver} % Silber, letzte {bronze} % Bronze."
     },
     "config": {
       "fields": {
@@ -1169,7 +1169,7 @@
       "monthlyGrowth": "Monatswachstum",
       "paymentRate": "Zahlungsquote",
       "retention": "Bindung",
-      "top10Share": "Top-10-%-Anteil"
+      "top10Share": "Top-{pct}-%-Anteil"
     },
     "metricsSub": {
       "avgMoM": "Ø MoM (reife Monate)",
@@ -1193,9 +1193,9 @@
     },
     "panels": {
       "atRiskCustomers": "Gefährdete Kunden ({count})",
-      "atRiskHint": "Abwanderungswert: Aktualität 0–40 (>120 T/>60 T/>30 T) + Frequenzrückgang 0–30 (2×/1,5× eigener Schnitt) + geringe Bindung 0–30 (≤1/≤3 Aufträge)",
+      "atRiskHint": "Abwanderungswert: Aktualität 0–{recMax} (>{highDays} T/>{medDays} T/>{lowDays} T) + Frequenzrückgang 0–{cadMax} ({highX}×/{lowX}× eigener Schnitt) + geringe Bindung 0–{engMax} (≤{singleTxns}/≤{fewTxns} Aufträge)",
       "clvRanking": "Lebenszeitwert-Ranking",
-      "cohortHint": "Nach Jahr des Erstauftrags · aktiv = Bestellung in den letzten 6 Monaten",
+      "cohortHint": "Nach Jahr des Erstauftrags · aktiv = Bestellung in den letzten {months} Monaten",
       "cohortRetention": "Kohortenbindung",
       "customerHealth": "Kundengesundheit ({count})",
       "customerHealthHint": "Gewichtet {recency} % Aktualität · {frequency} % Häufigkeit · {monetary} % Umsatz · {payment} % Zahlungsverhalten, abzüglich Reibung",
@@ -1264,7 +1264,7 @@
       },
       "clvTiers": {
         "label": "CLV-Stufen",
-        "value": "Top {platinum} % Platin · Top {gold} % Gold · Top {silver} % Silber · Rest Bronze"
+        "value": "Top {platinum} % Platin · nächste {gold} % Gold · nächste {silver} % Silber · letzte {bronze} % Bronze"
       },
       "frictionPenalty": {
         "label": "Friktionsabschlag",
@@ -1317,7 +1317,7 @@
       "frictionBold": "Friktion:",
       "frictionTail": " nur Gutschriften — dieses Hauptbuch kennt keine Retourengenehmigungen, die Retourenkomponente ist daher immer 0.",
       "intelligenceBold": "Intelligenzwert:",
-      "intelligenceTail": " 30 % Top-Kunden-Anteil (20 % der Kunden = max.) + 30 % Ø Bindungswahrscheinlichkeit + 20 % Konzentrationsgesundheit + 20 % Zahlungsquote — Wert {score} ({grade}).",
+      "intelligenceTail": " {champions} % Top-Kunden-Anteil ({saturation} % der Kunden = max.) + {retention} % Ø Bindungswahrscheinlichkeit + {concentration} % Konzentrationsgesundheit + {payment} % Zahlungsquote — Wert {score} ({grade}).",
       "newCustomersBold": "Neukunden:",
       "newCustomersTail": " keine frühere Rechnung und kein Kundenauftrag, lebenslang, vor dem Monat der Erstaktivität.",
       "paymentBold": "Zahlungsverhalten:",
@@ -1330,7 +1330,7 @@
       "revenueTail": " realisierte Umsätze — Netto-Einkommensbuchungen, dieselbe Hauptbuch-Grundgesamtheit wie die GuV. Fakturiert sind Bruttorechnungen; der Kundendrill stimmt beide ab."
     },
     "sub": {
-      "activeLast6mo": "aktiv in den letzten 6 Monaten",
+      "activeLastMonths": "aktiv in den letzten {months} Monaten",
       "avgPerCustomer": "Ø {amount} / Kunde",
       "clvBase": "Historische CLV-Basis",
       "creditHeavy": "kreditlastige Konten",
