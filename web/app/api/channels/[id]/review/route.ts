@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
-import { acceptShopifyReview, shopifyReview } from "@openbooks/engine/src/commerce/shopify/connect.ts";
-import { CHANNEL_ACCOUNT_ROLES } from "@openbooks/engine/src/commerce/contracts.ts";
+import {
+  acceptShopifyReview,
+  CHANNEL_ACCOUNT_ROLES,
+  CommerceError,
+  shopifyReview,
+} from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

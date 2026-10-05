@@ -3,16 +3,16 @@ import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  channelAdapter,
+  CommerceError,
   disconnectChannel,
+  disconnectShopify,
+  ensureShopifyAdapterRegistered,
   getChannel,
   pauseChannel,
   resumeChannel,
   retryChannel,
-} from "@openbooks/engine/src/commerce/channels.ts";
-import { channelAdapter } from "@openbooks/engine/src/commerce/adapters.ts";
-import { ensureShopifyAdapterRegistered } from "@openbooks/engine/src/commerce/shopify/adapter.ts";
-import { disconnectShopify } from "@openbooks/engine/src/commerce/shopify/connect.ts";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
+} from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

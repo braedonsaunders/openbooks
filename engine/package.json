@@ -96,6 +96,9 @@
     "./sales/fulfillment": "./src/sales/public-fulfillment.ts",
     "./billing/quote-to-cash": "./src/billing/public-quote-to-cash.ts",
     "./delivery/email-config": "./src/delivery/public-email-config.ts",
-    "./billing": "./src/billing/public.ts"
+    "./billing": "./src/billing/public.ts",
+    "./commerce": "./src/commerce/public.ts",
+    "./commerce/contracts": "./src/commerce/public-contracts.ts",
+    "./flows": "./src/flows/public.ts"
   }
 }

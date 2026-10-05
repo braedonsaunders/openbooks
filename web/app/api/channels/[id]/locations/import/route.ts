@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
-import { importShopifyLocations } from "@openbooks/engine/src/commerce/shopify/locations.ts";
+import { CommerceError, importShopifyLocations } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

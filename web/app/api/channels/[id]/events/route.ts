@@ -2,7 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { listInboundEvents } from "@openbooks/engine/src/commerce/inbound.ts";
+import { listInboundEvents } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

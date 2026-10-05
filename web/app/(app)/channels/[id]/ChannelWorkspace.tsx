@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { can, getAuthz } from "../../../../lib/authz";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
-import { getChannel } from "@openbooks/engine/src/commerce/channels.ts";
-import { listInboundEvents } from "@openbooks/engine/src/commerce/inbound.ts";
-import { workspaceTabsFor } from "@openbooks/engine/src/commerce/adapters.ts";
+import {
+  CommerceError,
+  getChannel,
+  listInboundEvents,
+  workspaceTabsFor,
+} from "@openbooks/engine/commerce";
 import { SETUP_ENTITY_BY_KEY } from "../../../../lib/setup/registry";
 import { DetailPageLayout } from "../../../../components/page-layout";
 import { Badge } from "@openbooks/ui";

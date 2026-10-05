@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
-import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
-import { CommerceError } from '@openbooks/engine/src/commerce/errors.ts'
+import { appBaseUrl } from '@openbooks/engine/flows'
 import {
+  CommerceError,
   completeShopifyOAuth,
   SHOPIFY_OAUTH_COOKIE,
-} from '@openbooks/engine/src/commerce/shopify/connect.ts'
+} from '@openbooks/engine/commerce'
 
 export const maxDuration = 300
 

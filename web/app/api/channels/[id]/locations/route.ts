@@ -3,11 +3,11 @@ import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  CommerceError,
   listChannelLocations,
   unlinkChannelLocation,
   upsertChannelLocation,
-} from "@openbooks/engine/src/commerce/locations.ts";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
+} from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";
