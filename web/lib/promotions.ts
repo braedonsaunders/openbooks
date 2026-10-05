@@ -1,12 +1,12 @@
 /** Promotion application from document drawers: list active codes, apply one. */
 import 'server-only'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
 import {
   applyPromotion,
   listPromotions,
   type ApplyPromotionResult,
   type Promotion,
-} from '@openbooks/engine/src/sales/promotions.ts'
+} from '@openbooks/engine/sales/promotions'
 
 export async function listActivePromotions(orgId: string): Promise<Promotion[]> {
   return listPromotions(db, orgId, true)

@@ -11,13 +11,13 @@ import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting-dispatch.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { toCents } from '@openbooks/engine/src/money/money.ts'
+import { toCents } from '@openbooks/engine/money'
 import {
   recordRestockingFeeWaiver,
   resolveRestockingFee,
   restockingFeeCreditLines,
   type ResolveRestockingFeeResult,
-} from '@openbooks/engine/src/sales/restocking-fees.ts'
+} from '@openbooks/engine/sales/restocking-fees'
 import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import {

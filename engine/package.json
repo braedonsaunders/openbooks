@@ -73,6 +73,8 @@
     "./hrm/org-chart": "./src/hrm/public-org-chart.ts",
     "./sales/returns/contracts": "./src/sales/public-return-contracts.ts",
     "./sales/orders": "./src/sales/public-orders.ts",
+    "./sales/promotions": "./src/sales/public-promotions.ts",
+    "./sales/restocking-fees": "./src/sales/public-restocking-fees.ts",
     "./crm/sales": "./src/crm/public-sales.ts",
     "./crm/sales/contracts": "./src/crm/public-sales-contracts.ts",
     "./reports/definitions": "./src/reports/public-definitions.ts",
