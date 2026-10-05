@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { CommerceError } from '@openbooks/engine/commerce'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 import { registerChannelAdapter } from '@openbooks/engine/src/commerce/adapters.ts'
@@ -78,6 +79,22 @@ test('channel ad-spend imports daily figures through the margin restatement', { 
     const exported = await withOrgContext(org.orgId, () => resource.read())
     const exportedRow = exported.rows.find((item) => item.channel === 'Test Shop')
     assert.equal(exportedRow?.amount, '100.00')
+
+    // Legacy imports could store an unsupported currency. Export must expose
+    // that refusal instead of assigning a decimal precision to the amount.
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update channel_ad_spend set currency = 'ZZZ'
+       where org_id = ${org.orgId} and channel_id = ${channelId}`))
+    await assert.rejects(() => withOrgContext(org.orgId, () => resource.read()), (error: unknown) => {
+      assert.ok(error instanceof CommerceError)
+      assert.equal(error.code, 'ad_spend_currency_unsupported')
+      assert.match(error.message, /Test Shop.*ZZZ/)
+      assert.match(error.remedy, /Channels.*Settings.*ad spend/)
+      return true
+    })
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update channel_ad_spend set currency = 'USD'
+       where org_id = ${org.orgId} and channel_id = ${channelId}`))
 
     const unknownChannel = await withOrgContext(org.orgId, () =>
       resource.write([{ ...row, channel: 'No Such Shop' }], 'insert', { ...ctx, dryRun: false }))

@@ -106,7 +106,15 @@ export function channelAdSpendResource(orgId: string): DataResource {
       const fields = channelAdSpendFields()
       const rows: Record<string, CellValue>[] = []
       for (const source of result.rows) {
-        const minorUnits = await minorUnitsForCurrency(source.currency).catch(() => 2)
+        const minorUnits = await minorUnitsForCurrency(source.currency).catch((error: unknown) => {
+          if (!(error instanceof CommerceError) || error.code !== 'currency_unsupported') throw error
+          throw new CommerceError(
+            'ad_spend_currency_unsupported',
+            `Ad spend for channel "${source.channel}" on ${source.spend_date} cannot be exported in ${source.currency}: its currency precision is unsupported.`,
+            "Open the channel under Channels → Settings and correct the ad spend currency and amount, then export again.",
+            { field: 'currency' },
+          )
+        })
         const divisor = 10n ** BigInt(minorUnits)
         const minor = BigInt(source.amount_minor)
         const major = `${minor / divisor}.${(minor % divisor).toString().padStart(minorUnits, '0')}`

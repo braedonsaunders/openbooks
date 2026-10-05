@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CommerceError } from "../errors.ts";
 import { normalizeShopifyOrder, normalizeShopifyRefund, rateToPercent, shopMinorUnits } from "./orders.ts";
 
 /**
@@ -157,6 +158,7 @@ test("shopify refund normalizes against its order", () => {
       transactions: [{ gateway: "shopify_payments", amount: "27.16" }],
     },
     "450789469",
+    "USD",
   );
   assert.equal(refund.externalId, "9001");
   assert.equal(refund.orderExternalId, "450789469");
@@ -171,4 +173,31 @@ test("shopify refund normalizes against its order", () => {
   assert.equal(refund.lines[0]!.restock, true);
   assert.equal(refund.shippingMinor, 0n);
   assert.equal(refund.tenders[0]!.gateway, "shopify_payments");
+});
+
+test("Shopify orders refuse missing currency before pricing their amounts", () => {
+  const payload = { ...shopifyOrderFixture(), currency: undefined };
+  assert.throws(() => normalizeShopifyOrder(payload), (error: unknown) => {
+    assert.ok(error instanceof CommerceError);
+    assert.match(error.message, /order.*450789469.*currency/i);
+    assert.match(error.remedy, /re-sync.*replay/i);
+    return true;
+  });
+});
+
+test("Shopify refunds preserve the verified order currency and refuse missing or conflicting evidence", () => {
+  const payload = { id: 9002, transactions: [{ gateway: "shopify_payments", amount: "1.23" }] };
+  assert.equal(normalizeShopifyRefund(payload, "450789469", "BHD").totalMinor, 1230n);
+  assert.throws(() => normalizeShopifyRefund(payload, "450789469"), (error: unknown) => {
+    assert.ok(error instanceof CommerceError);
+    assert.match(error.message, /refund.*9002.*currency/i);
+    assert.match(error.remedy, /order.*replay/i);
+    return true;
+  });
+  assert.throws(() => normalizeShopifyRefund({ ...payload, currency: "USD" }, "450789469", "BHD"), (error: unknown) => {
+    assert.ok(error instanceof CommerceError);
+    assert.match(error.message, /USD.*BHD/);
+    assert.match(error.remedy, /order.*replay/i);
+    return true;
+  });
 });

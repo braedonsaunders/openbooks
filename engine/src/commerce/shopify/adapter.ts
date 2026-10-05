@@ -63,8 +63,8 @@ function orderText(value: unknown): string | null {
 }
 
 /** The storefront order id for an event payload, refusing by name without it. */
-function eventOrderId(body: Record<string, unknown>): string {
-  const id = orderText(body.id ?? body.order_id ?? body.orderId);
+function eventOrderId(body: Record<string, unknown>, field: "id" | "order_id"): string {
+  const id = orderText(field === "id" ? body.id : body.order_id ?? body.orderId);
   if (!id) {
     refuse(
       "shopify_order_unreadable",
@@ -344,7 +344,7 @@ const shopifyAdapter: SalesChannelAdapter = {
         };
       }
       if (topic === "orders/cancelled" || topic === "orders/delete") {
-        const orderExternalId = eventOrderId(body);
+        const orderExternalId = eventOrderId(body, "id");
         const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
           kind: "cancellation",
           externalId: `cancel:${orderExternalId}`,
@@ -359,13 +359,21 @@ const shopifyAdapter: SalesChannelAdapter = {
         };
       }
       if (topic === "refunds/create") {
-        const orderExternalId = eventOrderId(body);
-        const orderCurrency = (
+        const orderExternalId = eventOrderId(body, "order_id");
+        const order = (
           await db.execute<{ shop_currency: string }>(sql`
             select shop_currency from channel_orders
              where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`)
-        ).rows[0]?.shop_currency;
-        const refund = normalizeShopifyRefund(body, orderExternalId, orderCurrency);
+        ).rows[0];
+        if (!order) {
+          refuse(
+            "channel_order_unknown",
+            `Order "${orderExternalId}" is not in this channel's subledger yet.`,
+            "Ingest the order first (replay the orders/create delivery), then replay this refund.",
+            "orderExternalId",
+          );
+        }
+        const refund = normalizeShopifyRefund(body, orderExternalId, order.shop_currency);
         const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
           kind: "refund",
           externalId: refund.externalId,
@@ -381,7 +389,7 @@ const shopifyAdapter: SalesChannelAdapter = {
         };
       }
       if (topic.startsWith("fulfillments/")) {
-        const orderExternalId = eventOrderId(body);
+        const orderExternalId = eventOrderId(body, "order_id");
         const normalized = normalizeShopifyFulfilment(body, orderExternalId);
         // A delete or an explicit cancellation ends the fulfilment's life the
         // same way: the reversal names the posted fulfilment it reverses.
