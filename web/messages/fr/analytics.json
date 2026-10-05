@@ -1893,7 +1893,7 @@
       },
       "unrated": {
         "label": "Non évalué",
-        "desc": "Pas encore d’historique de paiement — réglez des factures pour évaluer"
+        "desc": "Pas encore d’historique de paiement, ou les factures réglées n’ont pas d’échéance"
       }
     },
     "sub": {
@@ -2023,7 +2023,8 @@
       "noHistory": "Pas encore d’historique de paiement"
     },
     "matrix": {
-      "unratedNote": "{count} fournisseurs n’ont pas encore d’historique de paiement et ne sont pas tracés"
+      "unratedNoPaymentsNote": "{count, plural, one {# fournisseur n’a pas encore d’historique de paiement et n’est pas tracé — réglez des factures pour évaluer} other {# fournisseurs n’ont pas encore d’historique de paiement et ne sont pas tracés — réglez des factures pour évaluer}}",
+      "unratedUndatedNote": "{count, plural, one {les factures réglées de # fournisseur n’ont pas d’échéance et ne sont pas tracées — ajoutez des échéances ou des conditions de paiement pour évaluer} other {les factures réglées de # fournisseurs n’ont pas d’échéance et ne sont pas tracées — ajoutez des échéances ou des conditions de paiement pour évaluer}}"
     }
   },
   "cashflow": {

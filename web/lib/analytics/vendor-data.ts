@@ -67,6 +67,11 @@ export interface VendorRow {
   grade: Grade;
   performance: number | null; // 0–100 payment-relationship health (matrix Y axis), null when unrated
   quadrant: Quadrant;
+  // Why an unrated vendor is unrated: "no-payments" means no settled bills
+  // at all, "undated" means settled bills with no due date or payment terms.
+  // The remedies differ (settle bills vs date them), so the reason travels
+  // with the row; null whenever the vendor is rated.
+  unratedReason: "no-payments" | "undated" | null;
 }
 
 export interface MonthSpend {
@@ -400,15 +405,16 @@ export async function vendorData(
 
     // Leverage matrix: spend (financial impact) × performance, where our only
     // vendor-performance signal is payment-relationship health (on-time %).
-    // Vendors with no payment history are unrated — never a neutral 50.
+    // Vendors with no measurable timeliness are unrated — never a neutral 50.
     const performance = r.onTimePct === null ? null : r.onTimePct * 100;
     const highSpend = cmp(r.spend, highSpendThreshold) >= 0;
     const highPerf = (performance ?? -1) >= config.highPerformanceScore;
     const quadrant: Quadrant = performance === null ? "unrated"
       : highSpend ? highPerf ? "strategic" : "commodity"
       : highPerf ? "niche" : "transactional";
+    const unratedReason = performance === null ? (r.paidBills === 0 ? "no-payments" : "undated") : null;
 
-    return { ...r, sharePct, tier, score, grade: gradeOf(score, config), performance, quadrant };
+    return { ...r, sharePct, tier, score, grade: gradeOf(score, config), performance, quadrant, unratedReason };
   });
 
   const monthly: MonthSpend[] = buckets.useFiscal
