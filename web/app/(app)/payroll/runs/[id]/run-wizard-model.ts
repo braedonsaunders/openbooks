@@ -79,6 +79,8 @@ export type RunHeader = {
   document_id: string
   document_number: string
   document_status: string
+  /** The run document's optimistic-concurrency token, sent back on void. */
+  document_revision: string
   currency: string
   /** Legal entity the run books into; null on legacy entityless runs. */
   subsidiary_id: string | null

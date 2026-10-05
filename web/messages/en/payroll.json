@@ -313,7 +313,10 @@
       "partialRecovery": "To pay the employees left out: supply the missing input once its entry screen is available, then pay them on an off-cycle run. A posted run is never edited in place.",
       "attributeEntity": "Attribute entity",
       "entityAttributed": "Legal entity recorded. The run can now be remitted.",
-      "entityTarget": "Legal entity"
+      "entityTarget": "Legal entity",
+      "voidRun": "Void pay run",
+      "voidTitle": "Void pay run {number}?",
+      "voided": "{number} was voided and its posting reversed."
     },
     "adjust": {
       "title": "Adjustments",

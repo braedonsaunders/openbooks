@@ -159,6 +159,7 @@ export async function loadPayRunWizard(
   return withPayRunReadSnapshot(orgId, async () => {
     const runs = (await db.execute<RunHeader & { calculation_errors: unknown; refusal_acknowledgement: unknown }>(sql`
       select r.document_id, d.document_number, d.status as document_status, d.currency,
+             (d.revision_seq)::text as document_revision,
              d.subsidiary_id, d.posted_entry_id, s.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.tax_year, r.run_status, r.run_type, r.pay_schedule_id,

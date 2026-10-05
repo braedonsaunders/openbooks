@@ -313,7 +313,10 @@
       "partialRecovery": "Pour payer les employés exclus : fournissez les données manquantes dès que leur écran de saisie est disponible, puis payez-les dans une paie hors cycle. Une paie reportée n'est jamais modifiée après coup.",
       "attributeEntity": "Attribuer l'entité",
       "entityAttributed": "Entité juridique enregistrée. La paie peut désormais être reversée.",
-      "entityTarget": "Entité juridique"
+      "entityTarget": "Entité juridique",
+      "voidRun": "Annuler la paie",
+      "voidTitle": "Annuler la paie {number} ?",
+      "voided": "{number} a été annulée et son écriture contrepassée."
     },
     "adjust": {
       "title": "Ajustements",
