@@ -27,6 +27,8 @@ import { arPosition } from "../cash/ar-position";
 import { cashPosition } from "../cash/cash-position";
 import { normalizeMoneyValue } from "../cash/core";
 import type { CategoryWeekly, ForecastEntry, WeekRow } from "../cash/core";
+import { ANALYTICS_CONFIG } from "../analytics/config-spec";
+import { MAX_CASH_HORIZON_WEEKS } from "../cash/horizon";
 
 /**
  * Analytics-dashboard + cash-cockpit read tools for the agentic assistant.
@@ -100,10 +102,16 @@ function slimCategory(c: CategoryWeekly) {
 }
 
 /** The org's AP capacity-scheduling knobs, exactly as the AP/AR/Cash pages
- *  build them from the cashflow analytics config. */
-async function loadApSettings(orgId: string): Promise<{ weeklyCap: string; restrictToSafe: boolean }> {
+ *  build them from the cashflow analytics config — plus the configured
+ *  default horizon and runway caution the cash position status reads. */
+async function loadApSettings(orgId: string): Promise<{ weeklyCap: string; restrictToSafe: boolean; runwayCautionWeeks: number; horizonWeeks: number }> {
   const cfg = await analyticsConfig(orgId, "cashflow");
-  return { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 };
+  return {
+    weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+    restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+    runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+    horizonWeeks: cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -852,21 +860,21 @@ const cashPositionTool: AssistantToolDef = {
   name: "cash_position",
   tier: "core",
   description:
-    "Cash position (no subsidiary filter): bank balances over a 1–26 week forecast (default 8; 13 for a 13-week forecast) of predicted AR, scheduled AP, recurring flows — end cash, lowest week, burn, runway. Read-only.",
+    "Cash position (no subsidiary filter): bank balances over a 1–52 week forecast (default the org's configured cashflow horizon; 13 for a 13-week forecast) of predicted AR, scheduled AP, recurring flows — end cash, lowest week, burn, runway. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["banking.read"] },
   feature: "banking",
   inputSchema: z.object({
-    horizonWeeks: z.number().int().min(1).max(26).optional().describe("Forecast horizon in weeks, 1–26 (default 8; 13 = standard 13-week forecast)"),
+    horizonWeeks: z.number().int().min(1).max(MAX_CASH_HORIZON_WEEKS).optional().describe("Forecast horizon in weeks, 1–52 (default the org's configured cashflow horizon; 13 = standard 13-week forecast)"),
     asOfDate: dateInput.optional().describe("Forecast start date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { horizonWeeks?: number; asOfDate?: string };
-    const horizon = Math.min(26, Math.max(1, Math.trunc(a.horizonWeeks ?? 8)));
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
+      const horizon = Math.min(MAX_CASH_HORIZON_WEEKS, Math.max(1, Math.trunc(a.horizonWeeks ?? apSettings.horizonWeeks)));
       return cashPosition(orgId, horizon, apSettings, a.asOfDate, undefined, authz.allowedSubsidiaryIds);
     });
     return {
