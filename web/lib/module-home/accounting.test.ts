@@ -68,8 +68,8 @@ const mockSources = new Map<string, string>([
   // pinned — the explicit export shadows the re-exported one. The old
   // identity addCalendarDays stub is gone: it dated the 7-day window as today.
   ['mock:business-date', `export * from "@openbooks/engine/src/platform/business-date.ts"; export async function businessToday() { return '2026-08-28' }`],
-  // `can` exists only to link the close-application module the cockpit
-  // imports its organization-wide refusal from; no test here decides gates.
+  // `can` exists only to link modules the cockpit reaches that read gates;
+  // no test here decides gates.
   ['mock:authz', `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') } export function can() { return false }`],
 ])
 
@@ -113,7 +113,7 @@ test('unrestricted Accounting home remains tenant-wide', async () => {
   const home = await accountingHome('org-1', null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
   assert.equal(home.draftJournals, 2)
   assert.equal(home.badges.assets, 3)
-  assert.equal(home.closeUnavailable, null, 'unrestricted callers get the run, not a refusal')
+  assert.equal(home.closeUnavailable, false, 'unrestricted callers get the run, not a refusal')
   assert.ok(state.calls.every((query) => !query.includes('and false')))
   assert.ok(state.calls.some((query) => query.includes('from close_runs')))
 })
@@ -128,11 +128,23 @@ test('restricted Accounting home scopes legal-entity metrics and fails closed fo
   assert.match(all, /f\.subsidiary_id = any/)
   assert.ok(!/(?<![\w])a\.subsidiary_id is null/.test(state.calls.find((query) => query.includes('from ai_work_items')) ?? ''), 'shared accounts fail closed in restricted work-item counts')
   assert.ok(state.calls.find((query) => query.includes('from close_runs'))?.includes('and false'))
-  // Restricted callers refuse by name — like the dashboard — instead of
-  // reporting "no close run".
-  assert.ok(home.closeUnavailable?.includes('organization-wide'), `the refusal names its scope: ${home.closeUnavailable}`)
+  // Restricted callers who hold close access refuse — like the dashboard —
+  // instead of reporting "no close run". The view renders the refusal
+  // through the catalog off this flag.
+  assert.equal(home.closeUnavailable, true, 'restricted callers with close access get the refusal')
   assert.match(all, /from budget_scenarios[\s\S]*budget_lines[\s\S]*not exists/)
   assert.match(all, /from ai_work_items[\s\S]*subject_type[\s\S]*subsidiary_id/)
+})
+
+test('callers without close access get no close refusal to name', async () => {
+  // Without close access there is nothing to refuse: the cockpit hides the
+  // close section rather than naming a diagnostic the caller cannot hold —
+  // for restricted and unrestricted scopes alike.
+  reset()
+  const restricted = await accountingHome('org-1', new Set(['sub-a']), { gl: true, close: false, findings: true, accounts: true, budgets: true, assets: true })
+  assert.equal(restricted.closeUnavailable, false)
+  const open = await accountingHome('org-1', null, { gl: true, close: false, findings: true, accounts: true, budgets: true, assets: true })
+  assert.equal(open.closeUnavailable, false)
 })
 
 test('empty subsidiary scope returns no Accounting home metrics', async () => {

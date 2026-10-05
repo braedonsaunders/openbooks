@@ -3,7 +3,6 @@ import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getAuthz } from '../authz'
-import { CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL } from '../application/close'
 import { statementBookExpr } from '../gl-summary'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 
@@ -28,11 +27,13 @@ export interface AccountingHome {
     progressPct: number | null
   }
   /**
-   * Named refusal for restricted callers: close diagnostics are
-   * organization-wide — the same refusal the dashboard surfaces instead of
-   * "no close run". Null for unrestricted callers.
+   * Whether close diagnostics are refused for this caller: they are
+   * organization-wide, so restricted callers who hold close access get the
+   * refusal (rendered through the catalog by the view) instead of "no close
+   * run". False when the caller lacks close access (nothing to refuse) and
+   * for unrestricted callers (the query above already sees every run).
    */
-  closeUnavailable: string | null
+  closeUnavailable: boolean
   draftJournals: number
   postedJournals7d: number
   workItems: { critical: number; warning: number; info: number; total: number }
@@ -228,7 +229,7 @@ export async function accountingHome(
     // Without close access there is nothing to refuse: the cockpit hides
     // the close section rather than naming a diagnostic the caller cannot
     // hold.
-    closeUnavailable: access.close && scope !== null ? CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL : null,
+    closeUnavailable: access.close && scope !== null,
     draftJournals: Number(counts.draft_journals ?? 0),
     postedJournals7d: Number(counts.posted_7d ?? 0),
     workItems,
