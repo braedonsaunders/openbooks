@@ -135,8 +135,16 @@ export async function consumeLayers(
     availableUnits < requestedUnits ? availableUnits : requestedUnits;
   const shortfallQuantity = fromUnits(requestedUnits - coveredUnits);
   if (profile.costingMethod === "standard") {
-    cost = issueStandard(quantity, profile.standardCost ?? onHand.unitCost);
+    // The GL relief is the sum of what the layers give up, plus the uncovered
+    // shortfall at standard. Pricing the whole quantity at standard in one
+    // multiplication rounds differently from the per-layer draws, and each
+    // issue would then move the ledger and the layer subledger apart by a
+    // ten-thousandth.
     consumptions = planQuantityConsumption(layers, fromUnits(coveredUnits));
+    cost = add(
+      sum(consumptions.map((consumption) => consumption.cost)),
+      issueStandard(shortfallQuantity, profile.standardCost ?? onHand.unitCost),
+    );
   } else {
     const costingLayers = layers.map((l) => ({
         id: l.id,
