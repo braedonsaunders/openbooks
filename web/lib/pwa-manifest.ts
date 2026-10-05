@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next'
 
 /** Public installation metadata contains no organization or employee information. */
-export default function manifest(): MetadataRoute.Manifest {
+export function employeeManifest(): MetadataRoute.Manifest {
   return {
     id: '/me',
     name: 'OpenBooks',

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isPublicPath } from "./proxy-policy";
-import manifest from "../app/manifest";
+import { employeeManifest } from "./pwa-manifest";
+import { metadata as employeeMetadata } from "../app/(app)/me/layout";
+import { GET as installationManifest } from "../app/employee-app/manifest.webmanifest/route";
 
 test("public authentication and hosted-payment routes match complete segments", () => {
   for (const pathname of [
@@ -29,7 +31,7 @@ test("public authentication and hosted-payment routes match complete segments", 
     "/api/flows/email-action",
     "/mcp",
     "/socialmedia.png",
-    "/manifest.webmanifest",
+    "/employee-app/manifest.webmanifest",
     "/employee-app/icon-192.png",
     "/employee-app/icon-512.png",
     "/employee-app/apple-touch-icon.png",
@@ -65,12 +67,18 @@ test("near-prefix private routes never bypass the session gate", () => {
     "/api/hrm/self/profile",
     "/employee-app/private",
     "/employee-app/icon-192.png/extra",
-    "/manifest.webmanifest/extra",
+    "/employee-app/manifest.webmanifest/extra",
   ]) assert.equal(isPublicPath(pathname), false, pathname);
 });
 
-test("installation assets are public while the installed employee workspace still requires a session", () => {
-  const metadata = manifest();
+test("installation assets are public while the installed employee workspace still requires a session", async () => {
+  const metadata = employeeManifest();
+  const response = installationManifest();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/manifest+json");
+  assert.deepEqual(await response.json(), metadata);
+  assert.equal(employeeMetadata.manifest, "/employee-app/manifest.webmanifest");
+  assert.equal(isPublicPath(String(employeeMetadata.manifest)), true);
   assert.equal(metadata.start_url, "/me");
   assert.equal(isPublicPath(metadata.start_url), false, "installing OpenBooks does not expose the employee start page");
   for (const icon of metadata.icons ?? []) {

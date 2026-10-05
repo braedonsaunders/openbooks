@@ -13,7 +13,7 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/icon.svg",
   // Public branding and installation metadata only. Employee pages and APIs
   // retain their session, feature and permission gates.
-  "/manifest.webmanifest",
+  "/employee-app/manifest.webmanifest",
   "/employee-app/icon-192.png",
   "/employee-app/icon-512.png",
   "/employee-app/apple-touch-icon.png",
