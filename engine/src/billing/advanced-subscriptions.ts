@@ -10,6 +10,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
 import type { Money } from "../money/brands.ts";
 import { advanceAnchoredMonth } from "./cadence.ts";
+import { refreshEntitlementSnapshot } from "./entitlements.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 
@@ -828,6 +829,9 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
              updated_at = now(), updated_by = ${actorId}
        where id = ${input.subscriptionId} and org_id = ${orgId}
     `);
+    // Pinning the version changes the subscription's effective grant, so its
+    // cached snapshot resolves with the activation or rolls back with it.
+    await refreshEntitlementSnapshot(orgId, input.subscriptionId, actorId);
   });
 }
 

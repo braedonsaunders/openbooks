@@ -381,3 +381,32 @@ export async function emitAvailabilityChanged(
   });
 }
 
+/**
+ * Entitlement change — one event per stored entitlement row, announced when
+ * the row is written. The caller passes the row id as the dedupe key, so a
+ * retried write collapses onto the same event instead of announcing twice.
+ */
+export async function emitEntitlementChanged(
+  executor: SqlExecutor,
+  orgId: string,
+  input: { subscriptionId: string; featureKey: string; change: string; dedupeKey: string },
+): Promise<EmitDomainEventResult> {
+  if (!input.subscriptionId.trim() || !input.featureKey.trim() || !input.change.trim()) {
+    throw new WebhookEmitError("entitlement emission requires a subscription, a feature and a change description");
+  }
+  if (!input.dedupeKey.trim()) throw new WebhookEmitError("webhook emission requires a dedupe key");
+  return emitDomainEvent(executor, {
+    orgId,
+    type: "entitlement.changed",
+    entityKind: "subscription",
+    entityId: input.subscriptionId,
+    dedupeKey: `entitlement.changed:${input.dedupeKey}`,
+    payload: {
+      ...eventEnvelope(),
+      subscriptionId: input.subscriptionId,
+      featureKey: input.featureKey,
+      change: input.change,
+    },
+  });
+}
+

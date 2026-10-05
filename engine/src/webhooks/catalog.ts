@@ -93,6 +93,12 @@ export const channelOrderExceptionPayload = basePayload.extend({
   exceptionDetail: z.string().nullable(),
 });
 
+export const entitlementChangedPayload = basePayload.extend({
+  subscriptionId: z.string().uuid(),
+  featureKey: z.string().min(1),
+  change: z.string().min(1),
+});
+
 /** Automation point-to-point calls and operator test pings. Never fanned out to subscribers. */
 export const automationFiredPayload = basePayload.extend({
   automationId: z.string().uuid(),
@@ -116,6 +122,7 @@ const payloadByType = {
   "inventory.available_changed": inventoryAvailableChangedPayload,
   "subscription.changed": subscriptionChangedPayload,
   "channel_order.exception": channelOrderExceptionPayload,
+  "entitlement.changed": entitlementChangedPayload,
   "automation.fired": automationFiredPayload,
   "endpoint.tested": endpointTestedPayload,
 } as const;
@@ -133,6 +140,7 @@ export const FANOUT_EVENT_TYPES: ReadonlySet<string> = new Set([
   "inventory.available_changed",
   "subscription.changed",
   "channel_order.exception",
+  "entitlement.changed",
 ]);
 
 export const WEBHOOK_EVENT_TYPES = Object.keys(payloadByType) as WebhookEventType[];

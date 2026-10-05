@@ -76,7 +76,7 @@
       ]
     },
     "billing": {
-      "description": "Generated billing: recurring templates, subscription billing and advanced subscriptions.",
+      "description": "Generated billing: recurring templates, subscription billing, advanced subscriptions and SaaS plan entitlements.",
       "dependsOn": [
         "banking",
         "delivery",
@@ -92,7 +92,8 @@
         "records",
         "revenue",
         "scripting",
-        "tax"
+        "tax",
+        "webhooks"
       ]
     },
     "commerce": {
