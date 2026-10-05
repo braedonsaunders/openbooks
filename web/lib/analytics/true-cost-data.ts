@@ -380,7 +380,7 @@ export async function trueCostData(
   const appliedFilter = appliedAccountId
     ? sql`l.account_id = ${appliedAccountId}::uuid and e.origin = 'overhead_applied' and l.project_id is not null`
     : sql`1 = 0`;
-  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, deptRows, baseRows] = await Promise.all([
+  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, deptRows, baseRows, hcRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
     // translate to presentation before the burden math ever sees them.
@@ -517,24 +517,25 @@ export async function trueCostData(
          where l.org_id = ${orgId} ${ledgerScope} and l.department_id is not null
            and l.posting_date >= ${from} and l.posting_date <= ${to}
          group by l.department_id, sub.base_currency
-      ),
-      hc as (
-        select t.department_id, count(distinct t.employee_party_id) as headcount
-          from time_entries t
-         where t.org_id = ${orgId} ${timeScope} and t.department_id is not null
-           and t.worked_on >= ${from} and t.worked_on <= ${to}
-         group by t.department_id
       )
       select d.id as dept_id, gl.func as func, max(gl.late) as late,
              coalesce(max(gl.labor_dollars), 0) as labor_dollars,
-             coalesce(max(hc.headcount), 0) as headcount,
              coalesce(max(gl.revenue), 0) as revenue,
              coalesce(max(gl.direct_cost), 0) as direct_cost
         from departments d
         left join gl on gl.department_id = d.id
-        left join hc on hc.department_id = d.id
        where d.org_id = ${orgId}
        group by d.id, gl.func
+    `),
+    // Headcount aggregates once per department, outside any currency
+    // grouping: a department with GL activity in N currencies counts its
+    // people once, not once per currency.
+    db.execute(sql`
+      select t.department_id, count(distinct t.employee_party_id) as headcount
+        from time_entries t
+       where t.org_id = ${orgId} ${timeScope} and t.department_id is not null
+         and t.worked_on >= ${from} and t.worked_on <= ${to}
+       group by t.department_id
     `),
   ]);
   const profile = cfg.profile;
@@ -550,7 +551,8 @@ export async function trueCostData(
   const priorLegs = priorRows.rows as unknown as PriorBurdenSqlRow[];
   const priorTimeLegs = priorTimeRows.rows as unknown as { func: string | null; late: string | null; nonbill_cost: TrueCostSqlNumeric }[];
   const appliedLegs = appliedRows.rows as unknown as { func: string | null; late: string | null; applied: TrueCostSqlNumeric; lines: string | number }[];
-  const baseLegs = baseRows.rows as unknown as { dept_id: string; func: string | null; late: string | null; labor_dollars: TrueCostSqlNumeric; headcount: string | number; revenue: TrueCostSqlNumeric; direct_cost: TrueCostSqlNumeric }[];
+  const baseLegs = baseRows.rows as unknown as { dept_id: string; func: string | null; late: string | null; labor_dollars: TrueCostSqlNumeric; revenue: TrueCostSqlNumeric; direct_cost: TrueCostSqlNumeric }[];
+  const headcountRows = hcRows.rows as unknown as { department_id: string; headcount: string | number }[];
   const tcCtx = await flowRates(orgId, [
     ...acctLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
     ...hourLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
@@ -723,7 +725,8 @@ export async function trueCostData(
     appliedLines += Number(r.lines ?? 0);
     appliedTotal = add(appliedTotal, translateLeg(String(r.applied ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
   }
-  // Allocation bases merged per department; headcount re-added.
+  // Allocation bases merged per department; headcount joins once per
+  // department from its own currency-blind scan (never summed per leg).
   type BaseCell = { labor_dollars: string; headcount: number; revenue: string; direct_cost: string };
   const baseTranslated = new Map<string, BaseCell>();
   for (const r of baseLegs) {
@@ -732,8 +735,12 @@ export async function trueCostData(
     prev.labor_dollars = add(prev.labor_dollars, translateLeg(String(r.labor_dollars ?? 0), r.func ?? null, date, tcRateAt));
     prev.revenue = add(prev.revenue, translateLeg(String(r.revenue ?? 0), r.func ?? null, date, tcRateAt));
     prev.direct_cost = add(prev.direct_cost, translateLeg(String(r.direct_cost ?? 0), r.func ?? null, date, tcRateAt));
-    prev.headcount += Number(r.headcount ?? 0);
     baseTranslated.set(r.dept_id, prev);
+  }
+  for (const h of headcountRows) {
+    const prev = baseTranslated.get(h.department_id) ?? { labor_dollars: "0", headcount: 0, revenue: "0", direct_cost: "0" };
+    prev.headcount = Number(h.headcount ?? 0);
+    baseTranslated.set(h.department_id, prev);
   }
 
   // ---- hours by department --------------------------------------------------
