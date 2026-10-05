@@ -15,8 +15,10 @@ import { OrderDrawer } from '../app/(app)/_order/OrderDrawer'
 import { PickListDrawer } from '../app/(app)/picks/PickListDrawer'
 import { ShipmentDrawer } from '../app/(app)/shipments/ShipmentDrawer'
 import { PaymentDrawer } from '../app/(app)/payments/PaymentDrawer'
+import { SubscriptionDrawer } from '../app/(app)/collections/SubscriptionDrawer'
 import type { NativeListDrawerData } from '../lib/list/drawer-routes'
 import type { ReceiptDrawerPayload } from '../app/(app)/receipts/view'
+import type { SubscriptionDrawerData } from '../app/(app)/collections/subscription-drawer'
 
 const renderers = {
   'document-drawer': (props: { drawer: unknown }) => {
@@ -148,6 +150,11 @@ const renderers = {
         closeHref={payload.closeHref}
       />
     )
+  },
+  'subscription-drawer': (props: { drawer: unknown }) => {
+    const drawer = props.drawer as SubscriptionDrawerData | null
+    if (!drawer) return null
+    return <SubscriptionDrawer key={drawer.remountKey} drawer={drawer} closeHref={drawer.closeHref} />
   },
 }
 

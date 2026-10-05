@@ -10,6 +10,7 @@ import { Field } from "@/components/field";
 import { InspectorPanel } from "@/components/builder/builder-kit";
 import { SwitchField } from "@/components/switch";
 import { CollectionsQueue } from "./CollectionsQueue";
+import { ListDrawerHost } from "@/components/list-drawer-host";
 import { KpiStrip } from "@/components/kpi-strip";
 import { useMoney } from "@/components/money-provider";
 import { useCallback, useEffect, useState } from "react";
@@ -209,6 +210,7 @@ export function CollectionsClient({
         <AdvancedSubscriptionsPanel key={view} view={view} {...editor} />
       )}
       {view === "policies" && <DunningPanel />}
+      <ListDrawerHost source="subscription" />
     </ListPageLayout>
   );
 }
