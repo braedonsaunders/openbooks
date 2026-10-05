@@ -95,7 +95,12 @@
     "customerLabel": "Customer (store credit only)",
     "expiresLabel": "Expires on (optional)",
     "submit": "Issue",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "alreadyIssued": "Already issued",
+    "replayDescription": "This request already issued an account. Its code is returned only at first issue and cannot be shown again. Review the account before taking further action.",
+    "copyCode": "Copy code",
+    "copyFailed": "The code could not be copied. Select and copy the visible code manually before closing.",
+    "reviewAccount": "Review account"
   },
   "programs": {
     "title": "Stored value programs",
@@ -123,5 +128,6 @@
     "rollforwardDescription": "Opening, issued, redeemed, breakage, expired, adjusted, and closing balances by program and period.",
     "unclaimedTitle": "Unclaimed stored value",
     "unclaimedDescription": "Dormant balances by customer and age for unclaimed-property review."
-  }
+  },
+  "receiptUnconfirmed": "Could not confirm the stored-value receipt. Retry without changing the request; the same request key prevents a second operation."
 }

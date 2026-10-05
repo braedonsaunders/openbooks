@@ -95,7 +95,12 @@
     "customerLabel": "Kunde (nur Ladenguthaben)",
     "expiresLabel": "Läuft ab am (optional)",
     "submit": "Ausgeben",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "alreadyIssued": "Bereits ausgegeben",
+    "replayDescription": "Diese Anfrage hat bereits ein Konto ausgegeben. Der Code wird nur bei der ersten Ausgabe zurückgegeben und kann nicht erneut angezeigt werden. Prüfen Sie das Konto vor weiteren Aktionen.",
+    "copyCode": "Code kopieren",
+    "copyFailed": "Der Code konnte nicht kopiert werden. Markieren und kopieren Sie den sichtbaren Code vor dem Schließen manuell.",
+    "reviewAccount": "Konto prüfen"
   },
   "programs": {
     "title": "Guthabenprogramme",
@@ -123,5 +128,6 @@
     "rollforwardDescription": "Anfangs-, Ausgabe-, Einlöse-, Verfall-, Ablauf-, Korrektur- und Endsalden je Programm und Zeitraum.",
     "unclaimedTitle": "Nicht abgeholte Guthaben",
     "unclaimedDescription": "Ruhende Salden je Kunde und Alter für die Prüfung nicht abgeholter Vermögenswerte."
-  }
+  },
+  "receiptUnconfirmed": "Der Wertguthabenbeleg konnte nicht bestätigt werden. Wiederholen Sie die Anfrage unverändert; derselbe Anfrageschlüssel verhindert einen zweiten Vorgang."
 }

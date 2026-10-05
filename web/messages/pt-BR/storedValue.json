@@ -95,7 +95,12 @@
     "customerLabel": "Cliente (somente crédito em loja)",
     "expiresLabel": "Expira em (opcional)",
     "submit": "Emitir",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "alreadyIssued": "Já emitido",
+    "replayDescription": "Esta solicitação já emitiu uma conta. O código é retornado apenas na primeira emissão e não pode ser exibido novamente. Revise a conta antes de realizar outra ação.",
+    "copyCode": "Copiar código",
+    "copyFailed": "Não foi possível copiar o código. Selecione e copie manualmente o código visível antes de fechar.",
+    "reviewAccount": "Revisar conta"
   },
   "programs": {
     "title": "Programas de saldo",
@@ -123,5 +128,6 @@
     "rollforwardDescription": "Saldos de abertura, emissão, resgate, breakage, expiração, ajustes e encerramento por programa e período.",
     "unclaimedTitle": "Saldos não reclamados",
     "unclaimedDescription": "Saldos inativos por cliente e idade para revisão de bens não reclamados."
-  }
+  },
+  "receiptUnconfirmed": "Não foi possível confirmar o comprovante do saldo armazenado. Tente novamente sem alterar a solicitação; a mesma chave impede uma segunda operação."
 }

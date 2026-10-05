@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -12,6 +13,7 @@ import { PagedTable } from '../../../components/paged-table'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { isUuid } from '../../../lib/list-params'
 import type { StoredValueDrawerData, StoredValueIssueData } from './view'
 
 /**
@@ -84,7 +86,7 @@ export function StoredValueDrawer({ drawer }: { drawer: StoredValueDrawerData })
           <dd className="text-lg font-semibold tabular-nums">{account.issuedDisplay}</dd>
         </div>
         <div className="rounded-lg border border-border p-3">
-          <dt className="text-xs text-slate-500">{t('drawer.breakageRecognized')}</dt>
+          <dt className="text-xs text-slate-500">{t('labels.breakageRecognized')}</dt>
           <dd className="text-lg font-semibold tabular-nums">{account.breakageDisplay}</dd>
         </div>
       </dl>
@@ -186,6 +188,9 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
   const [offsetId, setOffsetId] = useState('')
+  // A lost response must replay the same financial intent, not apply a second adjustment.
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID())
+  const [pending, setPending] = useState(false)
   const [busy, setBusy] = useState(false)
   const offsetName = offsetAccounts.find((a) => a.id === offsetId)?.name ?? null
   const valid = amount.trim() !== '' && reason.trim().length >= 8 && offsetId !== ''
@@ -193,6 +198,7 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
   async function submit() {
     if (!valid || busy) return
     setBusy(true)
+    setPending(true)
     try {
       const res = await fetch(`/api/stored-value/accounts/${accountId}/adjust`, {
         method: 'POST',
@@ -201,10 +207,20 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
           delta: amount.trim(),
           reason: reason.trim(),
           offsetAccountId: offsetId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: requestKey,
         }),
       })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, common('actions.save')))
+      if (!res.ok) {
+        if (res.status < 500) setPending(false)
+        throw new Error(await readApiErrorMessage(res, common('actions.save')))
+      }
+      const receipt = await res.json()
+      if (!isUuid(receipt?.entryId) || !isUuid(receipt?.journalEntryId)) throw new Error(t('receiptUnconfirmed'))
+      setPending(false)
+      setRequestKey(crypto.randomUUID())
+      setAmount('')
+      setReason('')
+      setOffsetId('')
       toast.success(t('entryKind.adjust'))
       router.refresh()
     } catch (error) {
@@ -217,14 +233,16 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
   return (
     <section aria-label={t('drawer.adjust')} className="space-y-4">
       <p className="text-sm text-slate-500">{t('drawer.adjustDescription')}</p>
+      {pending && !busy && <p role="status" className="text-sm">{t('receiptUnconfirmed')}</p>}
       <div className="grid gap-3">
         <div>
           <Label htmlFor="sv-adjust-amount">{t('drawer.adjustAmount')} ({currency})</Label>
-          <Input id="sv-adjust-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00 / -10.00" />
+          <Input disabled={pending} id="sv-adjust-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00 / -10.00" />
         </div>
         <div>
           <Label htmlFor="sv-adjust-offset">{t('labels.offsetAccount')}</Label>
           <SearchSelect
+            disabled={pending}
             value={offsetId}
             onChange={setOffsetId}
             options={offsetAccounts.map((a) => ({ value: a.id, label: a.name }))}
@@ -234,7 +252,7 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
         </div>
         <div>
           <Label htmlFor="sv-adjust-reason">{t('drawer.adjustReason')}</Label>
-          <Input id="sv-adjust-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('drawer.adjustReason')} />
+          <Input disabled={pending} id="sv-adjust-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('drawer.adjustReason')} />
         </div>
       </div>
       {valid && (
@@ -261,7 +279,9 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
   const [customerId, setCustomerId] = useState('')
   const [debitId, setDebitId] = useState(issue.debitAccounts[0]?.id ?? '')
   const [busy, setBusy] = useState(false)
-  const [code, setCode] = useState<string | null>(null)
+  const [receipt, setReceipt] = useState<{ accountId: string; code: string | null } | null>(null)
+  const [requestKey] = useState(() => crypto.randomUUID())
+  const [pending, setPending] = useState(false)
   const program = issue.programs.find((p) => p.id === programId) ?? null
   const storeCredit = program?.kind === 'store_credit'
   const valid = programId !== '' && amount.trim() !== '' && debitId !== '' && (!storeCredit || customerId !== '')
@@ -269,6 +289,7 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
   async function submit() {
     if (!valid || busy) return
     setBusy(true)
+    setPending(true)
     try {
       const res = await fetch('/api/stored-value/issue', {
         method: 'POST',
@@ -279,12 +300,19 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
           currency: program?.currency,
           customerPartyId: storeCredit ? customerId : undefined,
           debitAccountId: debitId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: requestKey,
         }),
       })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, common('actions.save')))
+      if (!res.ok) {
+        if (res.status < 500) setPending(false)
+        throw new Error(await readApiErrorMessage(res, common('actions.save')))
+      }
       const body = await res.json()
-      setCode(String(body.code))
+      const code = typeof body?.code === 'string' && body.code.trim() !== '' ? body.code : null
+      if (!isUuid(body?.accountId) || (code === null && !(body?.replayed === true && body?.code === null))) {
+        throw new Error(t('receiptUnconfirmed'))
+      }
+      setReceipt({ accountId: body.accountId, code })
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -295,28 +323,37 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
 
   return (
     <UrlDrawer open closeHref={issue.closeHref} title={t('issue.title')} description={t('issue.description')}>
-      {code ? (
-        <section className="space-y-3" aria-label={t('issue.codeShownOnce')}>
+      {receipt ? (
+        <section className="space-y-3" aria-label={t(receipt.code ? 'issue.codeShownOnce' : 'issue.alreadyIssued')}>
           <EmptyState
-            title={t('issue.codeShownOnce')}
-            description={code}
-            action={(
+            title={t(receipt.code ? 'issue.codeShownOnce' : 'issue.alreadyIssued')}
+            description={receipt.code ?? t('issue.replayDescription')}
+            action={receipt.code ? (
               <Button
                 onClick={async () => {
-                  await navigator.clipboard.writeText(code).catch(() => null)
-                  toast.success(t('issue.codeCopied'))
+                  try {
+                    if (!receipt.code) return
+                    await navigator.clipboard.writeText(receipt.code)
+                    toast.success(t('issue.codeCopied'))
+                  } catch {
+                    toast.error(t('issue.copyFailed'))
+                  }
                 }}
               >
-                {t('issue.codeCopied')}
+                {t('issue.copyCode')}
               </Button>
+            ) : (
+              <Button asChild><Link href={`/stored-value?account=${receipt.accountId}` as never}>{t('issue.reviewAccount')}</Link></Button>
             )}
           />
         </section>
       ) : (
         <section className="space-y-4" aria-label={t('issue.title')}>
+          {pending && !busy && <p role="status" className="text-sm">{t('receiptUnconfirmed')}</p>}
           <div>
             <Label htmlFor="sv-issue-program">{t('issue.programLabel')}</Label>
             <SearchSelect
+              disabled={pending}
               value={programId}
               onChange={setProgramId}
               options={issue.programs.map((p) => ({ value: p.id, label: `${p.name} · ${p.kindLabel}` }))}
@@ -326,12 +363,13 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
           </div>
           <div>
             <Label htmlFor="sv-issue-amount">{t('issue.amountLabel')}{program ? ` (${program.currency})` : ''}</Label>
-            <Input id="sv-issue-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50.00" />
+            <Input disabled={pending} id="sv-issue-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50.00" />
           </div>
           {storeCredit && (
             <div>
               <Label htmlFor="sv-issue-customer">{t('issue.customerLabel')}</Label>
               <SearchSelect
+            disabled={pending}
                 value={customerId}
                 onChange={setCustomerId}
                 options={issue.customers.map((c) => ({ value: c.id, label: c.name }))}
@@ -343,6 +381,7 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
           <div>
             <Label htmlFor="sv-issue-debit">{t('labels.debitAccount')}</Label>
             <SearchSelect
+              disabled={pending}
               value={debitId}
               onChange={setDebitId}
               options={issue.debitAccounts.map((a) => ({ value: a.id, label: a.name }))}
