@@ -32,5 +32,6 @@ export async function loadPerformanceSetup() {
 export type PerformanceSetupData = Awaited<ReturnType<typeof loadPerformanceSetup>>
 
 export function performanceSetupSpec(data: PerformanceSetupData): PageSpec {
-  return page({ route: '/admin/setup/performance', layout: 'bare', header: [], body: [widgetBlock('hrm-performance-setup', { data })] })
+  return page({
+    route: '/admin/setup/performance', layout: 'bare', header: [], body: [widgetBlock('hrm-performance-setup', { data })] })
 }
