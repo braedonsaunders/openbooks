@@ -23,7 +23,7 @@
     "newCredit": "Neue Kundengutschrift",
     "submitForApproval": "Zur Genehmigung einreichen"
   },
-    "tenders": {
+  "tenders": {
     "title": "Zahlungsmittel",
     "tenderedOf": "{tendered} von {total} zugeordnet",
     "balanced": "Ausgeglichen",
@@ -35,15 +35,33 @@
     "amount": "Betrag",
     "reference": "Referenz",
     "referencePlaceholder": "Autorisierungs- oder Belegnr.",
+    "label": "Bezeichnung",
+    "code": "Geschenkkarte / Guthaben",
+    "codePlaceholder": "Code eingeben, dann Guthaben prüfen",
+    "checkBalance": "Prüfen",
+    "balance": "Guthaben {balance}",
+    "codeNotFound": "Keine aktive Geschenkkarte und kein Guthaben passt zu diesem Code.",
+    "unresolvedCard": "ungeprüfte Karte",
+    "externalRef": "Anbieter-Ref.",
+    "externalRefPlaceholder": "Anbieterreferenz",
     "remove": "Entfernen",
     "add": "Zahlungsmittel hinzufügen",
     "emptyHint": "Vor dem Buchen mindestens ein Zahlungsmittel erfassen.",
     "refundAction": "Erstatten",
     "postTitle": "Diesen Beleg buchen?",
     "postBody": "{number}: {total} einnehmen.\n{tenders}",
-    "kinds": { "cash": "Bar", "card": "Karte", "bank": "Bank" }
+    "kinds": {
+      "cash": "Bar",
+      "card": "Karte",
+      "bank": "Bank",
+      "bank_transfer": "Banküberweisung",
+      "wallet": "Wallet",
+      "gateway": "Zahlungsanbieter",
+      "stored_value": "Guthaben",
+      "other": "Sonstiges"
+    }
   },
-"drawer": {
+  "drawer": {
     "editingHint": "Bearbeitung — Speichern, um Änderungen zu übernehmen",
     "viewGlImpact": "GL-Auswirkung anzeigen",
     "dateLabel": "Rechnungsdatum",

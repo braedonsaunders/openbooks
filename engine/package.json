@@ -92,6 +92,7 @@
     "./payments/autopay": "./src/payments/public-autopay.ts",
     "./payments/refund-automation": "./src/payments/public-refund-automation.ts",
     "./sales/cash-tenders": "./src/sales/public-cash-tenders.ts",
+    "./sales/document-tenders": "./src/sales/document-tenders.ts",
     "./sales/fulfillment": "./src/sales/public-fulfillment.ts"
   }
 }

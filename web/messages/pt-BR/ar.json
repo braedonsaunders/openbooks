@@ -23,7 +23,7 @@
     "newCredit": "Novo crédito de cliente",
     "submitForApproval": "Enviar para aprovação"
   },
-    "tenders": {
+  "tenders": {
     "title": "Formas de pagamento",
     "tenderedOf": "{tendered} recebidos de {total}",
     "balanced": "Fechado",
@@ -35,15 +35,33 @@
     "amount": "Valor",
     "reference": "Referência",
     "referencePlaceholder": "Autorização ou comprovante",
+    "label": "Rótulo",
+    "code": "Vale-presente / crédito",
+    "codePlaceholder": "Digite o código e consulte o saldo",
+    "checkBalance": "Consultar",
+    "balance": "Saldo {balance}",
+    "codeNotFound": "Nenhum vale-presente ou crédito corresponde a esse código.",
+    "unresolvedCard": "cartão não verificado",
+    "externalRef": "Ref. operadora",
+    "externalRefPlaceholder": "Referência da adquirente",
     "remove": "Remover",
     "add": "Adicionar pagamento",
     "emptyHint": "Adicione ao menos uma forma de pagamento antes de lançar.",
     "refundAction": "Reembolsar",
     "postTitle": "Lançar este recibo?",
     "postBody": "{number}: receber {total}.\n{tenders}",
-    "kinds": { "cash": "Dinheiro", "card": "Cartão", "bank": "Banco" }
+    "kinds": {
+      "cash": "Dinheiro",
+      "card": "Cartão",
+      "bank": "Banco",
+      "bank_transfer": "Transferência",
+      "wallet": "Carteira",
+      "gateway": "Adquirente",
+      "stored_value": "Crédito",
+      "other": "Outro"
+    }
   },
-"drawer": {
+  "drawer": {
     "editingHint": "Editando — Salve para aplicar as alterações",
     "viewGlImpact": "Ver impacto no razão",
     "dateLabel": "Data da fatura",

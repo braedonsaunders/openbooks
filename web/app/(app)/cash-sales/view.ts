@@ -198,11 +198,27 @@ export async function loadCashSales(
   const refundFromId = isCreate && createKind === 'cash_refund' && typeof sp.refundFrom === 'string' && isUuid(sp.refundFrom)
     ? sp.refundFrom
     : null
+  // Refund tenders mirror the sale's table rows (never custom): a cash
+  // refund pays back through the same channels, so the operator starts from
+  // the settled methods and adjusts.
   const refundSource = refundFromId
-    ? (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; custom: unknown }>(sql`
-        select id, kind, status, party_id, custom from documents
-         where org_id = ${authz.user.orgId} and id = ${refundFromId} and kind = 'cash_sale' and status = 'posted'
-         ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
+    ? (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; custom: unknown; tenders: unknown }>(sql`
+        select d.id, d.kind, d.status, d.party_id, d.custom,
+               coalesce((
+                 select jsonb_agg(row_to_json(t) order by t.position)
+                   from (
+                     select t.position, t.kind, t.method_label as "methodLabel",
+                            t.account_id as "accountId",
+                            t.stored_value_account_id as "storedValueAccountId",
+                            ((t.amount_minor / 10000)::text || '.' || lpad((t.amount_minor % 10000)::text, 4, '0')) as amount,
+                            t.currency, t.reference, t.external_ref as "externalRef"
+                       from document_tenders t
+                      where t.org_id = d.org_id and t.document_id = d.id
+                   ) t
+               ), '[]'::jsonb) as tenders
+          from documents d
+         where d.org_id = ${authz.user.orgId} and d.id = ${refundFromId} and d.kind = 'cash_sale' and d.status = 'posted'
+         ${authz.allowedSubsidiaryIds ? sql`and d.subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
          limit 1`)).rows[0] ?? null
     : null
   const refundLines = refundSource ? await returnableSaleLines(authz.user.orgId, refundSource.id) : []
@@ -288,7 +304,7 @@ export async function loadCashSales(
     seed.party_id = refundSource.party_id;
     seed.custom = {
       ...((seed.custom ?? {}) as Record<string, unknown>),
-      tenders: (((refundSource.custom ?? {}) as Record<string, unknown>).tenders ?? []),
+      tenders: refundSource.tenders ?? [],
     };
     (createSeed as { lines: Record<string, unknown>[] }).lines = refundLines.map((line) => ({
       item_id: line.itemId,
@@ -382,6 +398,7 @@ export async function loadCashSales(
           defaultTenderAccountId,
           taxProvider,
           marketplaceFacilitators: facilitatorRows,
+          storedValueEnabled: featureEnabled(featureState, 'storedValue'),
         }
       : null
   return {
