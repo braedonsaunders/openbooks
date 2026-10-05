@@ -30,7 +30,7 @@ export function RecordKindCards<V extends string>({
           key={option.value}
           type="button"
           onClick={() => onChoose(option.value)}
-          className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600"
+          className="group flex h-full flex-col items-start justify-start rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600"
         >
           <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-teal-50 text-teal-700 transition-colors group-hover:bg-teal-100 dark:bg-teal-950/60 dark:text-teal-300 dark:group-hover:bg-teal-900/70">
             {option.icon}
