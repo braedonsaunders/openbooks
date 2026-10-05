@@ -73,7 +73,7 @@ test("Stripe billing imports draft price models and replays usage idempotently",
     assert.equal(second.counts.prices.draftsCreated, 0);
     assert.equal(second.counts.usage.recordsCreated, 0);
     assert.equal(second.counts.usage.recordsReplayed, 1);
-    const links = (await withOrgContext(org.orgId, async () => db.execute<{ stripe_id: string; openbooks_id: string }>(sql`select stripe_id,openbooks_id from stripe_billing_links where org_id=${org.orgId} and object_type='price'`))).rows;
+    const links = (await withOrgContext(org.orgId, async () => db.execute<{ stripe_id: string; openbooks_id: string }>(sql`select external_id as stripe_id,native_id as openbooks_id from external_links where org_id=${org.orgId} and provider='stripe' and object_type='price'`))).rows;
     assert.equal(links.length, 3);
     const plans = await withOrgContext(org.orgId, async () => db.execute<{ n: number }>(sql`select count(*)::int as n from usage_rating_plans where org_id=${org.orgId} and name='Stripe prod_cloud CAD'`));
     assert.equal(plans.rows[0]?.n, 1);
@@ -99,7 +99,7 @@ test("Stripe billing imports draft price models and replays usage idempotently",
     assert.ok(runs.rows[0]?.stats.invoices.includes("were not imported or posted"));
     assert.ok(runs.rows[0]?.stats.refusals.some((item) => item.code === "stripe_customer_unlinked" && item.remedy.includes("linkStripeCustomer")));
     assert.ok(runs.rows[0]?.stats.refusals.some((item) => item.code === "stripe_subscription_price_unpublished" && item.remedy.includes("publish")));
-    const meter = await withOrgContext(org.orgId, async () => db.execute<{ aggregation: string }>(sql`select m.aggregation from stripe_billing_links l join usage_meters m on m.org_id=l.org_id and m.id=l.openbooks_id where l.org_id=${org.orgId} and l.object_type='meter'`));
+    const meter = await withOrgContext(org.orgId, async () => db.execute<{ aggregation: string }>(sql`select m.aggregation from external_links l join usage_meters m on m.org_id=l.org_id and m.id=l.native_id where l.org_id=${org.orgId} and l.provider='stripe' and l.object_type='meter'`));
     assert.equal(meter.rows[0]?.aggregation, "sum");
   });
 });

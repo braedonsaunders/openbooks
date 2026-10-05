@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { STRIPE_BILLING_LINK_TYPES } from "@openbooks/schema";
+import { CommerceError } from "../commerce/errors.ts";
+import { findNative, linkExternal, listExternalLinks } from "../commerce/external-links.ts";
 import {
   createUsageMeter,
   ingestUsageRecords,
@@ -74,9 +76,17 @@ interface StripeConfigRow extends Record<string, unknown> {
 }
 
 interface StripeLinkRow extends Record<string, unknown> {
-  id: string;
   openbooks_id: string;
 }
+
+/** Native table behind each Stripe object kind in the single external-identity map. */
+const STRIPE_NATIVE_TABLES: Record<StripeLinkType, string> = {
+  meter: "usage_meters",
+  price: "usage_rating_plan_versions",
+  customer: "parties",
+  subscription: "subscriptions",
+  subscription_item: "subscription_usage_links",
+};
 
 const CONNECT_REMEDY = "Connect Stripe under Setup → Payment providers.";
 const INVOICE_NOTE = "Stripe invoices were not imported or posted; bill through an OpenBooks AR invoice or bring AR history through a migration connector.";
@@ -339,11 +349,14 @@ async function findStripeLink(
   objectType: StripeLinkType,
   stripeId: string,
 ): Promise<StripeLinkRow | null> {
-  const row = (await db.execute<StripeLinkRow>(sql`
-    select id, openbooks_id from stripe_billing_links
-     where org_id = ${orgId} and stripe_account = ${stripeAccountId}
-       and object_type = ${objectType} and stripe_id = ${stripeId}`)).rows[0];
-  return row ?? null;
+  // One identity map: Stripe links live in external_links with provider 'stripe' and no channel.
+  const found = await findNative(orgId, {
+    provider: "stripe",
+    externalAccount: stripeAccountId,
+    objectType,
+    externalId: stripeId,
+  });
+  return found ? { openbooks_id: found.nativeId } : null;
 }
 
 async function saveStripeLink(
@@ -355,61 +368,33 @@ async function saveStripeLink(
   openbooksId: string,
 ): Promise<void> {
   const objectType = linkType(objectTypeValue);
-  await withOrg(orgId, async () => {
-    await acquireOrgFeatureGateLock(db, orgId);
-    if (!(await lockAndCheckOrgFeature(db, orgId, "usageBilling"))) {
-      refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
+  try {
+    await linkExternal(
+      orgId,
+      actor,
+      {
+        provider: "stripe",
+        externalAccount: stripeAccountId,
+        objectType,
+        externalId: stripeId,
+        nativeTable: STRIPE_NATIVE_TABLES[objectType],
+        nativeId: openbooksId,
+      },
+      "usageBilling",
+    );
+  } catch (error) {
+    // The single map refuses with its own codes; this surface keeps the
+    // Stripe refusal vocabulary its operators and tests read.
+    if (error instanceof CommerceError && error.code === "external_link_conflict") {
+      refuse("stripe_link_conflict", error.message, "Review the existing link before changing the Stripe mapping.", objectType, 409);
     }
-    const existing = await findStripeLink(orgId, stripeAccountId, objectType, stripeId);
-    if (existing) {
-      if (existing.openbooks_id !== openbooksId) {
-        refuse("stripe_link_conflict", `Stripe ${objectType} ${stripeId} is already linked to a different OpenBooks record.`, "Review the existing link before changing the Stripe mapping.", objectType, 409);
-      }
-      await clearStripeSkip(orgId, stripeAccountId, objectType, stripeId);
-      return;
+    if (error instanceof CommerceError && error.code === "external_link_target_in_use") {
+      refuse("stripe_link_target_in_use", error.message, "Review the existing Stripe link and choose the correct OpenBooks record.", objectType, 409);
     }
-    let created: { id: string } | null = null;
-    try {
-      // A retry for the same external object is an expected unique-key collision; re-read below to verify its target.
-      const inserted = await db.execute<{ id: string }>(sql`
-        insert into stripe_billing_links
-          (org_id, object_type, stripe_id, openbooks_id, stripe_account, created_by, updated_by)
-        values (${orgId}, ${objectType}, ${stripeId}, ${openbooksId}, ${stripeAccountId}, ${actor}, ${actor})
-        on conflict (org_id, stripe_account, object_type, stripe_id) do nothing
-        returning id`);
-      if (inserted.rows.length !== 0 && inserted.rows.length !== 1) {
-        throw new Error("Stripe link insert returned an unexpected row count");
-      }
-      created = inserted.rows[0] ?? null;
-    } catch (error) {
-      if (error instanceof UsageBillingError) throw error;
-      const candidate = error as { code?: unknown; constraint?: unknown };
-      if (candidate.code !== "23505" || candidate.constraint !== "stripe_billing_links_native_unique") throw error;
-      refuse("stripe_link_target_in_use", `OpenBooks record ${openbooksId} is already linked to another Stripe ${objectType}.`, "Review the existing Stripe link and choose the correct OpenBooks record.", objectType, 409);
-    }
-    const raced = await findStripeLink(orgId, stripeAccountId, objectType, stripeId);
-    if (!raced || raced.openbooks_id !== openbooksId) {
-      refuse("stripe_link_conflict", `Stripe ${objectType} ${stripeId} was linked concurrently to a different OpenBooks record.`, "Review the existing link before retrying.", objectType, 409);
-    }
-    if (created) {
-      // Attributable evidence in the SAME transaction as the link: a forced
-      // audit failure rolls the mapping back with it. Only the call that
-      // created the row writes evidence; a replay that finds the same
-      // mapping changes nothing and records nothing.
-      await db.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'stripe_billing_links', ${created.id},
-                'insert',
-                ${JSON.stringify({
-                  reason: "operator linked a Stripe object to its OpenBooks record",
-                  before: null,
-                  after: { objectType, stripeId, openbooksId, stripeAccount: stripeAccountId },
-                })}::jsonb,
-                ${actor})
-      `);
-    }
-    await clearStripeSkip(orgId, stripeAccountId, objectType, stripeId);
-  });
+    throw error;
+  }
+  // Linking clears a skip: the explicit link supersedes the decision to stay unlinked.
+  await withOrg(orgId, () => clearStripeSkip(orgId, stripeAccountId, objectType, stripeId));
 }
 
 async function requireUsageFeature(orgId: string): Promise<void> {
@@ -872,14 +857,10 @@ async function importUsage(
   window: { since: string; until: string; start: number; end: number },
   report: StripeBillingImportReport,
 ): Promise<void> {
-  const meters = (await db.execute<{ stripeId: string; openbooksId: string }>(sql`
-    select stripe_id as "stripeId", openbooks_id as "openbooksId"
-      from stripe_billing_links where org_id = ${orgId} and stripe_account = ${stripeAccountId} and object_type = 'meter'
-      order by stripe_id`)).rows;
-  const customers = (await db.execute<{ stripeId: string; openbooksId: string }>(sql`
-    select stripe_id as "stripeId", openbooks_id as "openbooksId"
-      from stripe_billing_links where org_id = ${orgId} and stripe_account = ${stripeAccountId} and object_type = 'customer'
-      order by stripe_id`)).rows;
+  const meters = (await listExternalLinks(orgId, { provider: "stripe", externalAccount: stripeAccountId, objectType: "meter" }))
+    .map((link) => ({ stripeId: link.externalId, openbooksId: link.nativeId }));
+  const customers = (await listExternalLinks(orgId, { provider: "stripe", externalAccount: stripeAccountId, objectType: "customer" }))
+    .map((link) => ({ stripeId: link.externalId, openbooksId: link.nativeId }));
   for (const meter of meters) {
     const localMeter = (await db.execute<{ key: string }>(sql`
       select key from usage_meters where org_id = ${orgId} and id = ${meter.openbooksId}`)).rows[0];
