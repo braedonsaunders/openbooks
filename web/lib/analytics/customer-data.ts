@@ -1177,10 +1177,6 @@ async function readCustomerData(
     paymentMap.set(r.id, { score, rating, avgDays: avgDays === null ? null : Math.round(d), overdue, rate: invoices > 0 ? Math.round((paid / invoices) * 100) : 0 });
   }
   const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : 0;
-  // Per-customer rows keep their own days-to-pay (drill detail); the header
-  // KPI is the engine DSO so every surface quotes one number.
-  const avgDaysToPay = dsoStats?.globalAvg ?? null;
-
   const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
 
   /* ---- assemble per-customer, CLV tiers by rank ---- */
@@ -1441,6 +1437,12 @@ async function readCustomerData(
     },
     growth: { monthly },
   };
+  // The metric-only preview above deliberately skips payment statistics.
+  // The full dashboard uses the canonical engine DSO, while customer rows
+  // retain their own days-to-pay detail.
+  if (dsoStats === null) throw new Error("Customer payment statistics did not load. Reload this dashboard to retry.");
+  const avgDaysToPay = dsoStats.globalAvg;
+
   let yoyGrowth: number | null = null;
   if (monthly.length >= 15) {
     const recent3 = monthly.slice(-3).reduce((a, m) => a + m.revenue, 0);
