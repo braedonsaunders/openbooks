@@ -9,12 +9,12 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import {
-  AlertTriangle, ArrowDown, ArrowRightLeft, Box, Brain, Calculator,
+  AlertTriangle, ArrowDown, ArrowRightLeft, Box, Calculator,
   ChartArea, CheckCircle2, Clock, DollarSign, Info, Lightbulb, PieChart as PieIcon,
   Scale, Search, Table2, Target, TrendingDown, TrendingUp, Trophy,
-  UserPlus, UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
+  UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
 import { cn, Select, Drawer, Badge } from '@openbooks/ui'
-import { abs as absMoney, add, cmp as compareMoney, div, mulDecimal, mulPercent, neg } from '@openbooks/engine/src/money/money.ts'
+import { abs as absMoney, add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/src/money/money.ts'
 import { divideDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 import type { UtilizationData, UGroupRow } from '../../../../lib/analytics/utilization-data'
@@ -610,31 +610,28 @@ function useForecasts(data: UtilizationData) {
     const projectedBillable = Math.min(100, Math.max(0, f.projected))
 
     // Cost projection — inverse to billable %, including the ~100% edge case.
+    // With no cost basis (no non-billable hours and no per-hour cost) the
+    // projection is null and the tile says so by name instead of guessing
+    // from a fallback rate or an arbitrary cap.
     const currentCost = String(range.nonBillableCost)
     const currentNonBillPct = 100 - range.percentBilled
     const projectedNonBillPct = 100 - projectedBillable
-    let projectedCost = currentCost
+    let projectedCost: string | null = currentCost
     if (currentNonBillPct <= 0.01) {
       if (projectedNonBillPct > 0.01) {
+        const perHour = range.nonBillableCostPerHour
         const avgCostPerHour = range.nonBillableHours > 0 && compareMoney(currentCost, '0') > 0
           ? div(currentCost, String(range.nonBillableHours))
-          : String(range.nonBillableCostPerHour || '50')
+          : (perHour == null || perHour === '' ? null : String(perHour))
         const projectedHours = range.hours * (projectedNonBillPct / 100)
-        projectedCost = mulDecimal(avgCostPerHour, String(projectedHours))
+        projectedCost = avgCostPerHour == null ? null : mulDecimal(avgCostPerHour, String(projectedHours))
       } else projectedCost = '0.0000'
     } else {
       const exactProjectionRatio = divideDecimal(String(projectedNonBillPct), String(currentNonBillPct), 10)
       projectedCost = mulDecimal(currentCost, exactProjectionRatio)
     }
-    const cap = mulDecimal(currentCost, '2')
-    if (compareMoney(projectedCost, '0') < 0) projectedCost = '0.0000'
-    if (compareMoney(projectedCost, cap) > 0) projectedCost = cap
 
-    const mean = series.reduce((a, b) => a + b, 0) / series.length
-    const variance = Math.sqrt(series.map((v) => (v - mean) ** 2).reduce((a, b) => a + b, 0) / series.length)
-    const confidence = Math.round(Math.max(30, Math.min(95, 100 - variance)))
-
-    return { series, projectedBillable, billableTrend: f.trend, projectedCost, costTrend: add(projectedCost, neg(currentCost)), confidence, dataPoints: series.length }
+    return { series, projectedBillable, billableTrend: f.trend, projectedCost, costTrend: projectedCost == null ? null : add(projectedCost, neg(currentCost)) }
   }, [data])
 }
 
@@ -653,9 +650,8 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={ChartArea} accent="sky" label={t('kpi.projectedBillablePct')} value={pct1(f.projectedBillable)} sub={t('sub.trendArrow', { arrow: f.billableTrend >= 0 ? '↑' : '↓', trend: Math.abs(f.billableTrend).toFixed(1) })} tone={(tone)} />
-        <KpiCard icon={DollarSign} accent={compareMoney(f.costTrend, '0') <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={money(f.projectedCost)} sub={t('sub.trajectory', { arrow: compareMoney(f.costTrend, '0') <= 0 ? '↓' : '↑', amount: money(absMoney(f.costTrend)) })} tone={compareMoney(f.costTrend, '0') <= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={DollarSign} accent={f.costTrend == null ? 'slate' : compareMoney(f.costTrend, '0') <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={f.projectedCost == null ? '—' : money(f.projectedCost)} sub={f.costTrend == null ? t('forecast.noCostBasis') : t('sub.trajectory', { arrow: compareMoney(f.costTrend, '0') <= 0 ? '↓' : '↑', amount: money(absMoney(f.costTrend)) })} tone={f.costTrend == null ? 'neutral' : compareMoney(f.costTrend, '0') <= 0 ? 'positive' : 'negative'} />
         <KpiCard icon={Target} accent="violet" label={t('kpi.targetStatus')} value={f.projectedBillable >= target ? t('forecast.onTrack') : t('forecast.atRisk')} sub={t('sub.targetPct', { target })} tone={(tone)} />
-        <KpiCard icon={Brain} accent="slate" label={t('kpi.confidence')} value={`${f.confidence}%`} sub={t('sub.dataPoints', { count: f.dataPoints })} />
       </div>
       <Panel title={t('panels.forecastTrend')} icon={ChartArea}>
         <Chart
@@ -890,9 +886,9 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
       .map(([title, g]) => ({
         description: t('whatif.improve', { title }),
         detail: t('whatif.improveDetail', { count: g.employees.length, pct: g.avgPct.toFixed(0) }),
-        savings: mulPercent(g.totalCost, '5'),
+        totalCost: g.totalCost,
       }))
-      .sort((a, b) => compareMoney(b.savings, a.savings))
+      .sort((a, b) => compareMoney(b.totalCost, a.totalCost))
 
     const highDepts = depts.filter((d) => d.range.percentBilled >= target)
     const lowDepts = depts.filter((d) => d.range.percentBilled < target - 15)
@@ -922,27 +918,10 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
     const bestTitle = titlePerf[0]
     const worstTitle = titlePerf[titlePerf.length - 1]
 
-    const requiredBillable = Math.max(target, avgBillable + 5)
-    const capacityHeadroom = avgBillable >= target ? Math.floor((avgBillable - target) / 5) : 0
-    const exactCostPenaltyRatio = compareMoney(costPerEmployee, '5000') < 0
-      ? '0'
-      : divideDecimal(add(costPerEmployee, '-5000'), '200', 8)
-    const costPenaltyRatio = Number(exactCostPenaltyRatio)
-    const costPenaltyScore = compareMoney(costPerEmployee, '5000') < 0
-      ? 50
-      : 50 - costPenaltyRatio
-    const efficiencyScore = Math.min(100, Math.round((avgBillable / target) * 50 + Math.min(50, costPenaltyScore)))
-    const recommendation = requiredBillable > 85
-      ? t('whatif.recExceptional')
-      : requiredBillable > target
-        ? t('whatif.recFocus', { title: bestTitle ? bestTitle.title : t('whatif.highBillableRoles'), avgPct: bestTitle ? bestTitle.avgPct.toFixed(0) : t('whatif.na') })
-        : t('whatif.recSupports')
-    const hiringOutlook = avgBillable >= target + 5 ? 'favorable' : avgBillable >= target - 5 ? 'neutral' : 'challenging'
-
     return {
       improvements,
       reallocations: reallocations.slice(0, 4),
-      be: { costPerEmployee, requiredBillable, recommendation, avgBillable, avgHoursPerEmployee, costPerNonBillableHour, bestTitle, worstTitle, capacityHeadroom, efficiencyScore, hiringOutlook, totalEmployees: employeeCount },
+      be: { costPerEmployee, avgBillable, avgHoursPerEmployee, costPerNonBillableHour, bestTitle, worstTitle, totalEmployees: employeeCount },
     }
   }, [data, t])
 }
@@ -956,19 +935,10 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
   const target = data.config.target
   const w = useWhatIf(data, t)
   const be = w.be
-  const outlook = be.hiringOutlook === 'favorable'
-    ? <Badge variant="success">{t('outlook.favorable')}</Badge>
-    : be.hiringOutlook === 'neutral'
-      ? <Badge variant="warning">{t('outlook.neutral')}</Badge>
-      : <Badge variant="destructive">{t('outlook.challenging')}</Badge>
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={Lightbulb} accent="emerald" label={t('kpi.opportunities')} value={String(w.improvements.length)} sub={t('sub.improvementScenarios')} />
-        <KpiCard icon={DollarSign} accent="sky" label={t('kpi.potentialSavings')} value={money(w.improvements.reduce((s, i) => add(s, i.savings), '0.0000'))} sub={t('sub.ifAllImplemented')} tone="positive" />
-        <KpiCard icon={Target} accent="violet" label={t('kpi.efficiencyScore')} value={String(be.efficiencyScore)} sub={t('sub.outOf100')} tone={be.efficiencyScore >= 70 ? 'positive' : be.efficiencyScore >= 50 ? 'neutral' : 'negative'} />
-        <KpiCard icon={UserPlus} accent="slate" label={t('kpi.capacityHeadroom')} value={String(be.capacityHeadroom)} sub={t('sub.hiresAtEfficiency')} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
@@ -982,7 +952,7 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
                       <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{s.description}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{s.detail}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">{t('whatif.save', { amount: money(s.savings) })}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">{money(s.totalCost)}</span>
                   </li>
                 ))}
               </ul>
@@ -1009,13 +979,8 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
         </div>
 
         <div className="lg:col-span-5">
-          <Panel title={t('panels.hiringIntelligence')} actions={outlook}>
+          <Panel title={t('panels.hiringIntelligence')}>
             <div className="grid grid-cols-2 gap-3 text-center">
-              <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">{t('whatif.breakEvenRate')}</p>
-                <p className="text-2xl font-bold text-sky-600 tabular-nums dark:text-sky-400">{pct1(be.requiredBillable, 0)}</p>
-                <p className="text-[10px] text-slate-400">{t('whatif.billablePctLabel')}</p>
-              </div>
               <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
                 <p className="text-xs text-slate-400 dark:text-slate-500">{t('whatif.avgCostEmployee')}</p>
                 <p className="text-2xl font-bold text-slate-800 tabular-nums dark:text-slate-200">{money(be.costPerEmployee)}</p>
@@ -1051,10 +1016,6 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
                 ) : null}
               </div>
             ) : null}
-            <p className="mt-3 flex items-start gap-2 rounded-lg bg-slate-50 p-2.5 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/40 dark:text-slate-300">
-              <Lightbulb size={13} className="mt-0.5 shrink-0 text-amber-500" />
-              {be.recommendation}
-            </p>
           </Panel>
         </div>
       </div>

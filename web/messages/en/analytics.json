@@ -2712,7 +2712,6 @@
       "projectedBillablePct": "Projected Billable %",
       "projectedNonBillCost": "Projected Non-Bill Cost",
       "targetStatus": "Target Status",
-      "confidence": "Confidence",
       "totalIssues": "Total Issues",
       "suddenDrops": "Sudden Drops",
       "overtimeNoValue": "Overtime No Value",
@@ -2722,9 +2721,6 @@
       "avgSpread": "Avg Spread",
       "target": "Target",
       "opportunities": "Opportunities",
-      "potentialSavings": "Potential Savings",
-      "efficiencyScore": "Efficiency Score",
-      "capacityHeadroom": "Capacity Headroom",
       "serviceItems": "Service Items",
       "avgBillablePct": "Avg Billable %",
       "avgHoursItem": "Avg Hours/Item",
@@ -2747,7 +2743,6 @@
       "trendArrow": "{arrow} {trend}pp trend",
       "trajectory": "{arrow} {amount} trajectory",
       "targetPct": "target: {target}%",
-      "dataPoints": "{count} data points",
       "detectedAnomalies": "detected anomalies",
       "drop15pp": "employees with >15pp drop",
       "highHoursLowBillable": "high hours, low billable",
@@ -2757,9 +2752,6 @@
       "maxMinusMin": "max − min within title",
       "billableThreshold": "billable threshold",
       "improvementScenarios": "improvement scenarios",
-      "ifAllImplemented": "if all implemented",
-      "outOf100": "out of 100",
-      "hiresAtEfficiency": "hires at current efficiency",
       "withActivity": "with activity",
       "acrossItems": "across items",
       "perServiceItem": "per service item",
@@ -2823,7 +2815,8 @@
       "onTrack": "On Track",
       "atRisk": "At Risk",
       "methodologyBold": "Methodology:",
-      "methodology": " forecasts use linear regression on historical periods. Higher billable % naturally correlates with lower non-billable costs as the same hours shift from non-billable to billable work."
+      "methodology": " forecasts use linear regression on historical periods. Higher billable % naturally correlates with lower non-billable costs as the same hours shift from non-billable to billable work.",
+      "noCostBasis": "No cost basis for a projection"
     },
     "empty": {
       "allWithinTarget": "All metrics within target.",
@@ -2845,14 +2838,6 @@
     "whatif": {
       "improve": "Improve “{title}” by 5%",
       "improveDetail": "{count} employees currently at {pct}% avg",
-      "save": "Save {amount}",
-      "recExceptional": "New hires need exceptional billable rates to be cost-effective. Consider contractors for surge capacity.",
-      "highBillableRoles": "high-billable roles",
-      "na": "N/A",
-      "recFocus": "Focus hiring on {title}. Current top performers average {avgPct}%.",
-      "recSupports": "Current utilization supports new hires. Prioritize roles that complement existing team strengths.",
-      "breakEvenRate": "Break-Even Rate",
-      "billablePctLabel": "billable %",
       "avgCostEmployee": "Avg Cost/Employee",
       "nonBillableLabel": "non-billable",
       "teamAvgBillable": "Current Team Avg Billable",
@@ -2861,11 +2846,6 @@
       "totalEmployees": "Total Employees",
       "bestTitle": "Best Title",
       "needsFocus": "Needs Focus"
-    },
-    "outlook": {
-      "favorable": "Favorable",
-      "neutral": "Neutral",
-      "challenging": "Challenging"
     },
     "searchItems": "Search items…",
     "searchEmployees": "Search employees…",
