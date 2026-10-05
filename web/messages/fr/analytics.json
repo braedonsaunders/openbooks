@@ -3546,7 +3546,8 @@
       "nonConforming": "Non conforme",
       "firstDigit1D": "Premier chiffre (1D)",
       "firstTwoDigits2D": "Deux premiers chiffres (2D)",
-      "thresholdTrap": "Seuil piégé"
+      "thresholdTrap": "Seuil piégé",
+      "insufficient": "Données insuffisantes"
     },
     "forensics": {
       "unknownParty": "Inconnu",
@@ -3718,7 +3719,10 @@
       "rsfValue": "au moins {threshold}×",
       "zscoreValue": "|z| au moins {threshold}",
       "trapValue": "{band} % sous une limite Flows",
-      "sequentialValue": "{count} réf. · {days}+ jours"
+      "sequentialValue": "{count} réf. · {days}+ jours",
+      "duplicatesValue": "≤{days} jours · ≥{floor}",
+      "duplicatesValueUnset": "≤{days} jours · {unset}",
+      "unsetValue": "Non défini"
     },
     "coverage": {
       "benfordBold": "Benford",
@@ -3746,7 +3750,8 @@
       "firstTwoDigits": "Deux premiers chiffres",
       "leadingDigit": "Premier chiffre",
       "noDocuments": "Aucun document ne commence par {digit}.",
-      "top": "top {count}"
+      "top": "top {count}",
+      "documentsCount": "{count} pièces comptables"
     },
     "empty": {
       "noAuditEvents": "Aucun événement d’audit à haut risque sur cette période",
@@ -3767,8 +3772,11 @@
       "zscore": "Score Z"
     },
     "ghost": {
-      "note": " sont des sociétés bénéficiaires contrôlées par des employés. Rapprochement en deux phases sur tout le registre des tiers : noms d’employés contre noms de fournisseurs, et adresses postales normalisées (ligne 1 + code postal) partagées entre un fournisseur payé et un employé. Une correspondance de nom vaut 75, une adresse partagée 90, les deux 95.",
-      "title": "Fournisseurs fantômes"
+      "note": "Rapprochement en deux phases sur tout le registre des tiers : noms d’employés contre noms de fournisseurs (employés vérifiés par rôle uniquement) et adresses partagées entre un fournisseur payé et un employé (ligne 1 + code postal + pays, normalisation qui préserve l’écriture). Les points figurent dans Configuration → Modèle de notation.",
+      "title": "Fournisseurs fantômes",
+      "matchName": "Nom concordant",
+      "matchAddress": "Adresse concordante",
+      "matchBoth": "Nom + adresse"
     },
     "kpi": {
       "amountsAnalyzed": "Montants analysés",
@@ -3816,7 +3824,7 @@
       "digitDetail": "Détail par chiffre",
       "digitDetailHint": "Cliquez sur un chiffre pour voir les transactions correspondantes",
       "duplicatesHint": "Un constat par groupe correspondant — chaque membre s’ouvre dans son module natif",
-      "ghostMatches": "Correspondances fantômes ({count})",
+      "ghostMatches": "Correspondances fantômes ({top} sur {total})",
       "ghostVendors": "Fournisseurs fantômes",
       "highestRiskFlags": "Signaux à plus haut risque",
       "highestRiskHint": "Tous détecteurs · cliquez sur un document pour l’ouvrir",
@@ -3890,6 +3898,53 @@
     "yes": "Oui",
     "detection": {
       "allFlagged": "Tout signalé"
+    },
+    "scoring": {
+      "title": "Modèle de notation",
+      "note": "Modèle de gravité fixe : comment chaque signal se convertit en points de 0 à 100. Les seuils de détection ci-dessus restent configurables.",
+      "trap": "Pièges de seuil",
+      "duplicate": "Doublons",
+      "weekend": "Écritures du week-end",
+      "rsf": "Taille relative",
+      "zscore": "Z",
+      "sequential": "Séries",
+      "ghost": "Fournisseurs fantômes",
+      "vendor": "Synthèse fournisseur",
+      "summary": "Risque résumé",
+      "base": "Base : {points}",
+      "tierBump": "{tier} ou plus : +{points}",
+      "trapPattern": "Terminaisons {pattern} : +{points}",
+      "spanBump": "En moins de {days} jours : +{points}",
+      "sharedReference": "Référence partagée : +{points}",
+      "confShared": "Référence partagée : {pct}",
+      "confSpan": "En moins de {days} jours : {pct}",
+      "confOtherwise": "Sinon : {pct}",
+      "sunday": "Dimanche : +{points}",
+      "ratioBump": "Multiple ≥ {ratio} : +{points}",
+      "ratioOtherwise": "Multiple seuil : +{points}",
+      "zBump": "|z| dès {z} : +{points}",
+      "sequentialHighSpan": "Étendue à haut risque : +{points}",
+      "sequentialBaseSpan": "Étendue plus courte : +{points}",
+      "perInvoice": "+{points} par facture, plafonné à {cap}",
+      "tierOtherwise": "Sinon : +{points}",
+      "perFlag": "+{points} par signalement, plafonné à {cap}",
+      "perType": "+{points} par type de signalement",
+      "worstShare": "{pct} du pire signalement individuel",
+      "summaryVolume": "{count}+ signalements : +{points}",
+      "ghostAny": "Tout fournisseur fantôme : +{points}",
+      "sequentialAny": "Toute série : +{points}",
+      "benfordNonconforming": "Toute tranche non conforme : +{points}",
+      "ghostRow": "{match} : +{points} points"
+    },
+    "severity": {
+      "critical": "Critique",
+      "high": "Haute",
+      "medium": "Moyenne"
+    },
+    "auditAction": {
+      "delete": "Supprimer",
+      "update": "Modifier",
+      "insert": "Créer"
     }
   },
   "charts": {

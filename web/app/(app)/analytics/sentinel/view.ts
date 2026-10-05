@@ -50,7 +50,7 @@ export interface SentinelData {
 export async function loadSentinel(sp: Record<string, string | undefined>): Promise<SentinelData> {
   const t = await getTranslations('analytics.sentinel')
   const authz = await requirePermission('reports.read')
-  // The house refusal names the missing requirement (F1T-10) — the same
+  // The house refusal names the missing requirement — the same
   // name the API maps to its 403 — never a silent bounce home.
   const sentinelDenied = sentinelAccessDenied(authz)
   if (sentinelDenied !== null) redirect(accessDeniedHref({ permission: sentinelDenied }))

@@ -5,7 +5,7 @@ import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle, BarChart3, CalendarDays, CheckCircle2, Copy, FileWarning, Flag, Ghost,
@@ -22,8 +22,11 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
-import { escapeTooltipHtml, useAnalyticsMoney } from '../_ui/format'
-import { countLabel, dateLabel } from '@/lib/format'
+import { escapeTooltipHtml, toChartNumber } from '../_ui/format'
+import { useMoney } from '../../../../components/money-provider'
+import { createMoneyFormatter, type MoneyValue } from '../../../../lib/money-format'
+import { countLabel, dateLabel, decimalLabel } from '@/lib/format'
+import { throwApiErrorIfNotOk } from '../../../../lib/api-error'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
@@ -33,6 +36,73 @@ const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit'
 function useNum() {
   const locale = useLocale()
   return (n: number) => countLabel(n, locale)
+}
+
+/** Per-record money: a transaction amount always renders in ITS currency,
+ * never the org currency. Translated consolidations use the presentation
+ * formatter instead. Formatters are memoized per currency. */
+function useTxnMoney() {
+  const locale = useLocale()
+  const cache = useRef(new Map<string, ReturnType<typeof createMoneyFormatter>>())
+  return useCallback(
+    (value: MoneyValue, currency: string) => {
+      let fmt = cache.current.get(currency)
+      if (!fmt) {
+        fmt = createMoneyFormatter(locale, currency)
+        cache.current.set(currency, fmt)
+      }
+      return fmt.money(value)
+    },
+    [locale],
+  )
+}
+
+/** Locale-aware percent for ratios (0-1) — never toFixed + '%'. */
+function useRatioPct() {
+  const locale = useLocale()
+  return useCallback(
+    (ratio: number, digits = 1) =>
+      new Intl.NumberFormat(locale, { style: 'percent', minimumFractionDigits: digits, maximumFractionDigits: digits }).format(ratio),
+    [locale],
+  )
+}
+
+/** Locale-aware calendar-day label for an ISO date — never raw ISO. */
+function useDayLabel() {
+  const locale = useLocale()
+  return useCallback((isoDate: string) => dateLabel(new Date(`${isoDate}T00:00:00Z`), locale), [locale])
+}
+
+/** Severity, match and action codes always render translated, never raw. */
+function useCodeWords() {
+  const t = useTranslations('analytics.sentinel')
+  const severity = useCallback(
+    (code: string) =>
+      code === 'critical' ? t('severity.critical')
+      : code === 'high' ? t('severity.high')
+      : code === 'medium' ? t('severity.medium')
+      : code,
+    [t],
+  )
+  const matchType = useCallback(
+    (code: string) =>
+      code === 'name+address' ? t('ghost.matchBoth')
+      : code === 'address' ? t('ghost.matchAddress')
+      : code === 'name' ? t('ghost.matchName')
+      : code,
+    [t],
+  )
+  const auditAction = useCallback(
+    (code: string) => {
+      const action = code.toLowerCase()
+      return action === 'delete' ? t('auditAction.delete')
+        : action === 'update' ? t('auditAction.update')
+        : action === 'insert' ? t('auditAction.insert')
+        : code
+    },
+    [t],
+  )
+  return useMemo(() => ({ severity, matchType, auditAction }), [severity, matchType, auditAction])
 }
 
 interface BenfordDrillDocument {
@@ -105,8 +175,8 @@ const FLAGGED_TYPES = Object.keys(FLAG_BADGE_CLS)
 
 function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showReason?: boolean }) {
   const t = useTranslations('analytics.sentinel')
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const txnMoney = useTxnMoney()
+  const dayLabel = useDayLabel()
   return (
     <div className="max-h-128 overflow-y-auto">
       <SharedTable className="w-full text-sm">
@@ -125,11 +195,11 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
         <SharedTableBody>
           {items.length ? items.map((f, i) => (
             <SharedTableRow key={`${f.docId}-${f.flagType}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-              <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{f.date}</SharedTableCell>
+              <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{dayLabel(f.date)}</SharedTableCell>
               <SharedTableCell className="px-4 py-2"><DocCell f={f} /></SharedTableCell>
               <SharedTableCell className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={f.partyName}>{f.partyName || '—'}</SharedTableCell>
               <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{f.currency}</SharedTableCell>
-              <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(f.amount)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{txnMoney(f.amount, f.currency)}</SharedTableCell>
               <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', FLAG_BADGE_CLS[f.flagType])}>{t(`flag.${f.flagType}`)}</span></SharedTableCell>
               {showReason ? <SharedTableCell className="max-w-72 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={f.reason}>{f.reason}</SharedTableCell> : null}
               <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={f.riskScore} /></SharedTableCell>
@@ -167,6 +237,7 @@ function useConformLabel() {
     : v === 'acceptable' ? t('benford.acceptable')
     : v === 'marginal' ? t('benford.marginal')
     : v === 'nonConforming' ? t('benford.nonConforming')
+    : v === 'insufficient' ? t('benford.insufficient')
     : v
 }
 
@@ -175,8 +246,10 @@ function useConformLabel() {
 export function SentinelView({ data: initialData, canConfigure }: { data: SentinelData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  // Translated consolidations render in the presentation currency they were
+  // translated into; transaction evidence renders in its own currency below.
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const conformLabel = useConformLabel()
   const read = useAnalyticsTab('sentinel', { data: initialData }, TABS)
   const { tab, setTab } = read
@@ -230,6 +303,7 @@ function OverviewTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
   const conformLabel = useConformLabel()
+  const words = useCodeWords()
   const s = data.summary
   const b = data.benford1D
   return (
@@ -265,7 +339,7 @@ function OverviewTab({ data }: { data: SentinelData }) {
                   <li key={a.area} className="flex items-start gap-2.5 px-4 py-3">
                     <AlertTriangle size={15} className={cn('mt-0.5 shrink-0', a.severity === 'critical' ? 'text-rose-500' : a.severity === 'high' ? 'text-amber-500' : 'text-sky-500')} />
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">{a.area}<Badge variant={a.severity === 'critical' ? 'destructive' : a.severity === 'high' ? 'warning' : 'secondary'}>{a.severity}</Badge></div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">{a.area}<Badge variant={a.severity === 'critical' ? 'destructive' : a.severity === 'high' ? 'warning' : 'secondary'}>{words.severity(a.severity)}</Badge></div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{a.message}</p>
                     </div>
                   </li>
@@ -305,8 +379,13 @@ function OverviewTab({ data }: { data: SentinelData }) {
 function BenfordTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const txnMoney = useTxnMoney()
+  const ratioPct = useRatioPct()
+  // Digit amounts are transaction sums in the slice currency; trap totals
+  // are translated consolidations in the presentation currency.
+  const digitMoney = (n: MoneyValue, ccy: string) => txnMoney(n, ccy)
+  const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const conformLabel = useConformLabel()
   const [sub, setSub] = useState<'1d' | '2d' | 'trap'>('1d')
   const [drill, setDrill] = useState<{ digit: number; dim: '1d' | '2d' } | null>(null)
@@ -329,7 +408,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
       {sub !== 'trap' && slices.length > 0 ? (
         <SubPills value={activeCcy ?? ''} onChange={setCcy} options={slices.map((s) => ({ key: s.currency, label: s.currency, count: s.totalTransactions }))} />
       ) : null}
-      {drill ? <BenfordDrill digit={drill.digit} dim={drill.dim} currency={sub === 'trap' ? undefined : activeCcy} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} /> : null}
+      {drill ? <BenfordDrill digit={drill.digit} dim={drill.dim} currency={sub === 'trap' ? undefined : activeCcy} presCcy={data.meta.presentationCurrency} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} /> : null}
 
       {sub === '1d' ? (
         <div className="space-y-5">
@@ -337,7 +416,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
             <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b1.totalTransactions)} sub={t('sub.everyDocument')} />
             <KpiCard icon={Scale} accent={b1.conformity === 'nonConforming' ? 'red' : b1.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b1.conformity)} sub={`MAD ${b1.mad.toFixed(4)}`} />
             <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.deviatingDigits')} value={num(b1.digits.filter((d) => d.isAnomaly).length)} sub={t('sub.offExpected25')} />
-            <KpiCard icon={BarChart3} accent="violet" label={t('kpi.digit1Share')} value={`${((b1.digits[0]?.observed ?? 0) * 100).toFixed(1)}%`} sub={t('sub.expected301')} />
+            <KpiCard icon={BarChart3} accent="violet" label={t('kpi.digit1Share')} value={ratioPct(b1.digits[0]?.observed ?? 0)} sub={t('sub.expected301')} />
           </div>
           <Panel title={t('panels.observedVsExpected')} icon={BarChart3}>
             <Chart
@@ -345,9 +424,9 @@ function BenfordTab({ data }: { data: SentinelData }) {
               option={{
                 grid: { top: 24, bottom: 24, left: 45, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${(Number(v) * 100).toFixed(2)}%` },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => ratioPct(Number(v), 2) },
                 xAxis: { type: 'category', data: b1.digits.map((d) => String(d.digit)) },
-                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
+                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => ratioPct(v, 0) } },
                 series: [
                   { name: t('chart.observed'), type: 'bar', data: b1.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly ? '#ef4444' : '#14b8a6' } })) },
                   { name: t('chart.expected'), type: 'line', data: b1.digits.map((d) => d.expected), symbolSize: 6, lineStyle: { width: 2, type: 'dashed', color: '#64748b' }, itemStyle: { color: '#64748b' } },
@@ -372,10 +451,10 @@ function BenfordTab({ data }: { data: SentinelData }) {
                   <InteractiveTableRow key={d.digit} onClick={() => setDrill({ digit: d.digit, dim: '1d' })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                     <SharedTableCell className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</SharedTableCell>
                     <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{(d.observed * 100).toFixed(2)}%</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{(d.expected * 100).toFixed(2)}%</SharedTableCell>
-                    <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', d.isAnomaly ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(1)}%</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{digitMoney(d.amount, activeCcy ?? data.meta.presentationCurrency)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{ratioPct(d.observed, 2)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{ratioPct(d.expected, 2)}</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', d.isAnomaly ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400')}>{d.deviationPct > 0 ? '+' : ''}{ratioPct(Math.abs(d.deviationPct) / 100)}</SharedTableCell>
                   </InteractiveTableRow>
                 ))}
               </SharedTableBody>
@@ -398,9 +477,9 @@ function BenfordTab({ data }: { data: SentinelData }) {
               option={{
                 grid: { top: 24, bottom: 24, left: 45, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${(Number(v) * 100).toFixed(2)}%` },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => ratioPct(Number(v), 2) },
                 xAxis: { type: 'category', data: b2.digits.map((d) => String(d.digit)), axisLabel: { interval: 9 } },
-                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(1)}%` } },
+                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => ratioPct(v, 1) } },
                 series: [
                   { name: t('chart.observed'), type: 'bar', barCategoryGap: '10%', data: b2.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly && d.count >= 5 ? '#ef4444' : '#14b8a6' } })) },
                   { name: t('chart.expected'), type: 'line', data: b2.digits.map((d) => d.expected), symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: '#64748b' } },
@@ -424,8 +503,8 @@ function BenfordTab({ data }: { data: SentinelData }) {
                     <SharedTableRow key={d.digit} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <SharedTableCell className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</SharedTableCell>
-                      <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', 'text-rose-600 dark:text-rose-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(0)}%</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{digitMoney(d.amount, activeCcy ?? data.meta.presentationCurrency)}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', 'text-rose-600 dark:text-rose-400')}>{d.deviationPct > 0 ? '+' : ''}{ratioPct(Math.abs(d.deviationPct) / 100, 0)}</SharedTableCell>
                     </SharedTableRow>
                   ))}
                 </SharedTableBody>
@@ -448,6 +527,12 @@ function BenfordTab({ data }: { data: SentinelData }) {
             <Info size={14} className="mt-0.5 shrink-0" />
             <span>{t('trapNote')}</span>
           </p>
+          {trap.unavailable ? (
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{trap.unavailable}</span>
+            </p>
+          ) : null}
           <Panel title={t('panels.thresholdTrapDocs')} icon={FileWarning} bodyClassName="p-0">
             <FlaggedTable items={trap.items} showReason={false} />
           </Panel>
@@ -458,31 +543,36 @@ function BenfordTab({ data }: { data: SentinelData }) {
 }
 
 /** Benford digit → transactions drill (scoped to the active currency slice). */
-function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: number; dim: '1d' | '2d'; currency?: string; from: string; to: string; onClose: () => void }) {
+function BenfordDrill({ digit, dim, currency, presCcy, from, to, onClose }: { digit: number; dim: '1d' | '2d'; currency?: string; presCcy: string; from: string; to: string; onClose: () => void }) {
   const t = useTranslations('analytics.sentinel')
   const locale = useLocale()
   const num = useNum()
   const fmtDate = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string) => fmtMoney(n, { compact: true })
+  const txnMoney = useTxnMoney()
+  // Drill rows carry their own currency; the summed total is only shown for
+  // a single-currency drill, never for a mixed-currency one.
+  const money = (n: string, ccy: string) => txnMoney(n, ccy)
   const [data, setData] = useState<BenfordDrillData | null>(null)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let live = true
     const scope = currency ? `&currency=${encodeURIComponent(currency)}` : ''
     fetch(`/api/analytics/sentinel/benford?digit=${digit}&dim=${dim}&from=${from}&to=${to}${scope}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(async (r) => {
+        await throwApiErrorIfNotOk(r, 'Failed to load drilldown')
+        return r.json()
+      })
       .then((j) => { if (live) setData(j) })
-      .catch(() => { if (live) setError(true) })
+      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Failed to load drilldown') })
     return () => { live = false }
   }, [digit, dim, currency, from, to])
 
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={`${dim === '2d' ? t('drill.firstTwoDigits') : t('drill.leadingDigit')}: ${digit}`} description={data ? `${t('drill.documentsTotal', { count: num(data.count), total: money(data.total) })}${data.count > data.documents.length ? ` (${t('drill.top', { count: data.documents.length })})` : ''}` : t('loading')} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer open onClose={onClose} size="lg" title={`${dim === '2d' ? t('drill.firstTwoDigits') : t('drill.leadingDigit')}: ${digit}`} description={data ? `${currency ? t('drill.documentsTotal', { count: num(data.count), total: money(String(data.total), currency) }) : t('drill.documentsCount', { count: num(data.count) })}${data.count > data.documents.length ? ` (${t('drill.top', { count: data.documents.length })})` : ''}` : t('loading')} bodyClassName="overflow-hidden flex flex-col p-0">
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p className="p-6 text-center text-sm text-slate-400">{t('error.loadFailed')}</p>
+          <p className="p-6 text-center text-sm text-slate-400">{error}</p>
         ) : !data ? (
           <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
         ) : data.documents.length === 0 ? (
@@ -505,7 +595,7 @@ function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: numb
                   <SharedTableCell className="px-4 py-1.5"><TxnLink entryId={d.entryId ?? ''} docKind={d.docKind} docId={d.docId} className="font-medium text-slate-700 hover:text-teal-600 dark:text-slate-200 dark:hover:text-teal-400">{d.docNumber || d.docKind}</TxnLink></SharedTableCell>
                   <SharedTableCell className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName ?? undefined}>{d.partyName || '—'}</SharedTableCell>
                   <SharedTableCell className="px-4 py-1.5 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{d.currency ?? '—'}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount, d.currency ?? presCcy)}</SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -520,23 +610,27 @@ function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: numb
 
 function AnalysisTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const locale = useLocale()
   const num = useNum()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const txnMoney = useTxnMoney()
+  const dayLabel = useDayLabel()
   const [sub, setSub] = useState<'rsf' | 'zscore' | 'calendar'>('rsf')
 
   const calendarOption = useMemo(() => {
+    // Chart coordinates cross into numbers here via toChartNumber — the only
+    // sanctioned crossing. Calendar amounts are translated consolidations.
     const byYear = new Map<string, [string, number][]>()
     for (const c of data.calendar) {
       const y = c.date.slice(0, 4)
       if (!byYear.has(y)) byYear.set(y, [])
-      byYear.get(y)!.push([c.date, c.amount])
+      byYear.get(y)!.push([c.date, toChartNumber(c.amount)])
     }
     const years = [...byYear.keys()].sort().slice(-2) // show up to 2 most recent years
-    const max = Math.max(...data.calendar.map((c) => c.amount), 1)
+    const max = Math.max(...data.calendar.map((c) => toChartNumber(c.amount)), 1)
     return {
-      tooltip: { formatter: (p: { data: [string, number] }) => `${escapeTooltipHtml(p.data[0])}<br/>${fmtMoney(p.data[1])}` },
-      visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: number) => fmtMoney(v, { compact: true }) },
+      tooltip: { formatter: (p: { data: [string, number] }) => `${escapeTooltipHtml(p.data[0])}<br/>${presFmt.money(p.data[1])}` },
+      visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: number) => presFmt.moneyCompact(v) },
       calendar: years.map((y, i) => ({
         range: y, top: 60 + i * 150, left: 40, right: 10, cellSize: ['auto', 13] as [string, number],
         itemStyle: { borderColor: 'rgba(148,163,184,0.15)', borderWidth: 1 },
@@ -545,7 +639,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
       })),
       series: years.map((y, i) => ({ type: 'heatmap' as const, coordinateSystem: 'calendar' as const, calendarIndex: i, data: byYear.get(y) })),
     }
-  }, [data.calendar, fmtMoney])
+  }, [data.calendar, presFmt])
 
   return (
     <div className="space-y-4">
@@ -559,7 +653,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">{t('flag.rsf')}</span>{t('analysis.rsfNote')}</span>
+            <span><span className="font-semibold">{t('flag.rsf')}</span>{t('analysis.rsfNote', { months: data.config.baselineMonths, threshold: data.config.rsfThreshold })}</span>
           </p>
           <Panel title={t('panels.rsfAnomalies', { count: num(data.rsf.total) })} icon={Scale} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
@@ -579,13 +673,13 @@ function AnalysisTab({ data }: { data: SentinelData }) {
                 <SharedTableBody>
                   {data.rsf.items.map((r, i) => (
                     <SharedTableRow key={`${r.docId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{r.date}</SharedTableCell>
+                      <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{dayLabel(r.date)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2"><DocCell f={r} /></SharedTableCell>
                       <SharedTableCell className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={r.partyName}>{r.partyName}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{r.currency}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(r.amount)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(r.secondLargest)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-amber-600 dark:text-amber-400">{r.rsf.toFixed(1)}×</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{txnMoney(r.amount, r.currency)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{txnMoney(r.secondLargest, r.currency)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-amber-600 dark:text-amber-400">{decimalLabel(r.rsf, locale, 1, 1)}×</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={r.riskScore} /></SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -600,7 +694,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">{t('analysis.zscoreWord')}</span>{t('analysis.zscoreNote')}</span>
+            <span><span className="font-semibold">{t('analysis.zscoreWord')}</span>{t('analysis.zscoreNote', { months: data.config.baselineMonths, threshold: data.config.zscoreThreshold })}</span>
           </p>
           <Panel title={t('panels.zscoreAnomalies', { count: num(data.zscore.total) })} icon={Sigma} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
@@ -620,13 +714,13 @@ function AnalysisTab({ data }: { data: SentinelData }) {
                 <SharedTableBody>
                   {data.zscore.items.map((z, i) => (
                     <SharedTableRow key={`${z.docId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{z.date}</SharedTableCell>
+                      <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{dayLabel(z.date)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2"><DocCell f={z} /></SharedTableCell>
                       <SharedTableCell className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={z.partyName}>{z.partyName}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{z.currency}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(z.amount)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(z.vendorAvg)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-sky-600 dark:text-sky-400">{z.zScore.toFixed(1)}σ</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{txnMoney(z.amount, z.currency)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{txnMoney(z.vendorAvg, z.currency)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-sky-600 dark:text-sky-400">{decimalLabel(z.zScore, locale, 1, 1)}σ</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={z.riskScore} /></SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -652,9 +746,14 @@ function DetectionTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
   const today = useBusinessToday()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const txnMoney = useTxnMoney()
+  const dayLabel = useDayLabel()
+  const ratioPct = useRatioPct()
+  const words = useCodeWords()
+  // Consolidated duplicate value renders translated; pair and member
+  // amounts render in their own transaction currency.
+  const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const [sub, setSub] = useState<'flagged' | 'duplicates' | 'weekend' | 'sequential' | 'ghost'>('flagged')
   const s = data.summary
   const kindLabel = (k: string) => (KNOWN_KINDS as readonly string[]).includes(k) ? t(`kind.${k}`) : k
@@ -679,7 +778,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
               onClick={() => exportCsv('flagged-documents', [t('table.date'), t('table.document'), t('csv.kind'), t('table.party'), t('table.amount'), t('table.flag'), t('table.risk'), t('table.reason')], data.flagged.map((f) => [f.date, f.docNumber, f.kind, f.partyName, f.amount, f.flagType, f.riskScore, f.reason]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
-              <Download size={11} /> CSV
+              <Download size={11} /> {t('csv.label')}
             </button>
           }
         >
@@ -692,8 +791,14 @@ function DetectionTab({ data }: { data: SentinelData }) {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <KpiCard icon={Copy} accent="red" label={t('kpi.duplicatePairs')} value={num(data.duplicates.total)} sub={t('sub.allMatchingPairs')} tone="negative" />
             <KpiCard icon={Scale} accent="amber" label={t('kpi.valueAtRisk')} value={money(s.totalDuplicateAmount)} sub={t('sub.sumPairAmounts')} />
-            <KpiCard icon={Info} accent="slate" label={t('kpi.rule')} value={t('duplicates.ruleValue', { days: data.config.duplicateDays! })} sub={t('duplicates.ruleNote', { min: money(data.config.duplicateMinAmount!) })} />
+            <KpiCard icon={Info} accent="slate" label={t('kpi.rule')} value={t('duplicates.ruleValue', { days: data.config.duplicateDays! })} sub={data.duplicates.unavailable ?? t('duplicates.ruleNote', { min: money(data.config.duplicateMinAmount!) })} />
           </div>
+          {data.duplicates.unavailable ? (
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{data.duplicates.unavailable}</span>
+            </p>
+          ) : null}
           <Panel title={t('panels.potentialDuplicates')} icon={Copy} hint={t('panels.duplicatesHint')} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
               <SharedTable className="w-full text-sm">
@@ -717,7 +822,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
                           {g.members.slice(0, 8).map((m) => (
                             <TxnLink key={m.docId} entryId={m.docId} docKind={g.kind} docId={m.docId} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:text-slate-300 dark:hover:text-teal-400">
                               <span className="font-semibold">{m.docNumber || kindLabel(g.kind)}</span>
-                              {` · `}<span className="tabular-nums">{m.date}</span>
+                              {` · `}<span className="tabular-nums">{dayLabel(m.date)}</span>
                             </TxnLink>
                           ))}
                           {g.count > 8 ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.count - 8 })}</span> : null}
@@ -725,9 +830,9 @@ function DetectionTab({ data }: { data: SentinelData }) {
                         {g.sameReference && g.members[0]?.reference ? <span className="mt-1 block text-[10px] text-slate-400">{t('duplicates.sharedReference', { reference: g.members[0].reference })}</span> : null}
                       </SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{g.currency}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(g.amount)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{txnMoney(g.amount, g.currency)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('duplicates.spanDays', { days: num(g.dateSpanDays) })}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(g.confidence * 100)}%</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{ratioPct(g.confidence, 0)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -760,12 +865,12 @@ function DetectionTab({ data }: { data: SentinelData }) {
           </p>
           <div className="space-y-4">
             {data.sequential.length ? data.sequential.map((g, i) => (
-              <Panel key={`${g.partyId}-${g.currency}-${i}`} title={g.partyName} icon={ListOrdered} actions={<span className="flex items-center gap-1.5"><Badge variant="secondary">{g.currency}</Badge><Badge variant={g.riskLevel === 'high' ? 'destructive' : 'warning'}>{g.riskLevel} · {g.riskScore}</Badge></span>}>
-                <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{g.reason}{t('sequential.runTotal', { total: money0(g.totalAmount), first: g.firstDate, last: g.lastDate })}</p>
+              <Panel key={`${g.partyId}-${g.currency}-${i}`} title={g.partyName} icon={ListOrdered} actions={<span className="flex items-center gap-1.5"><Badge variant="secondary">{g.currency}</Badge><Badge variant={g.riskLevel === 'high' ? 'destructive' : 'warning'}>{words.severity(g.riskLevel)} · {g.riskScore}</Badge></span>}>
+                <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{g.reason}{t('sequential.runTotal', { total: presFmt.money(g.totalAmount), first: dayLabel(g.firstDate), last: dayLabel(g.lastDate) })}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {g.invoices.map((inv) => (
                     <TxnLink key={inv.docId} entryId={inv.docId} docKind="vendor_bill" docId={inv.docId} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:text-slate-300 dark:hover:text-teal-400">
-                      <span className="font-semibold">#{inv.reference}</span> · {money(inv.amount)} {inv.currency} · <span className="tabular-nums">{inv.date}</span>
+                      <span className="font-semibold">#{inv.reference}</span> · {txnMoney(inv.amount, inv.currency)} {inv.currency} · <span className="tabular-nums">{dayLabel(inv.date)}</span>
                     </TxnLink>
                   ))}
                   {g.count > g.invoices.length ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.count - g.invoices.length })}</span> : null}
@@ -785,7 +890,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
             <span><span className="font-semibold">{t('ghost.title')}</span>{t('ghost.note')}</span>
           </p>
           {data.ghosts.length ? (
-            <Panel title={t('panels.ghostMatches', { count: data.ghosts.length })} icon={Ghost} bodyClassName="p-0">
+            <Panel title={t('panels.ghostMatches', { top: num(Math.min(50, data.summary.ghostCount)), total: num(data.summary.ghostCount) })} icon={Ghost} bodyClassName="p-0">
               <SharedTable className="w-full text-sm">
                 <SharedTableHeader>
                   <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
@@ -800,7 +905,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
                     <SharedTableRow key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{g.vendorName}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-slate-600 dark:text-slate-300">{g.employeeName}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-center"><Badge variant={g.matchType === 'name' ? 'warning' : 'destructive'}>{g.matchType}</Badge></SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-center"><Badge variant={g.matchType === 'name' ? 'warning' : 'destructive'}>{words.matchType(g.matchType)}</Badge></SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -820,8 +925,9 @@ function DetectionTab({ data }: { data: SentinelData }) {
 
 function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillTarget) => void }) {
   const t = useTranslations('analytics.sentinel')
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  // The roll-up sums translated findings, so it renders presentation money.
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const money0 = (n: MoneyValue) => presFmt.money(n)
   const { sorted, SortTh } = useSort(data.vendorRisk, { key: 'compositeScore', dir: 'desc' })
   return (
     <Panel title={t('panels.vendorRiskRollup')} icon={ShieldAlert} hint={t('panels.vendorRiskHint')} bodyClassName="p-0">
@@ -868,6 +974,7 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
 function AuditTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
+  const words = useCodeWords()
   const a = data.auditTrail
   return (
     <div className="space-y-4">
@@ -894,9 +1001,9 @@ function AuditTab({ data }: { data: SentinelData }) {
             <SharedTableBody>
               {a.events.length ? a.events.map((e) => (
                 <SharedTableRow key={e.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{e.at.slice(0, 16).replace('T', ' ')}</SharedTableCell>
+                  <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{e.displayAt}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{e.tableName}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-center"><Badge variant={e.action.toLowerCase() === 'delete' ? 'destructive' : 'secondary'}>{e.action}</Badge></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><Badge variant={e.action.toLowerCase() === 'delete' ? 'destructive' : 'secondary'}>{words.auditAction(e.action)}</Badge></SharedTableCell>
                   <SharedTableCell className="max-w-96 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.summary}>{e.summary || '—'}</SharedTableCell>
                 </SharedTableRow>
               )) : (
@@ -912,19 +1019,80 @@ function AuditTab({ data }: { data: SentinelData }) {
 
 /* ----------------------------------------------------------- Configuration */
 
+/** Read-only rendering of the severity model, generated from the payload's
+ * scoring object — the same object the loader scores with. No prose here
+ * restates it; the numbers below ARE the model. */
+function ScoringPanel({ data }: { data: SentinelData }) {
+  // Full catalog paths, like ConfigEditor: the rubric stores absolute keys.
+  const root = useTranslations()
+  const t = useTranslations('analytics.sentinel')
+  const num = useNum()
+  const ccy = data.meta.presentationCurrency
+  const cfg = data.config as unknown as Record<string, string | number>
+  const rowLabel = (rule: {
+    labelKey: string
+    params: Record<string, string | number>
+    confidence?: number
+    share?: number
+  }): string => {
+    const p: Record<string, string | number> = { ...rule.params }
+    if (typeof p.tierKey === 'string') {
+      p.tier = root(p.tierKey, { currency: ccy })
+      delete p.tierKey
+    }
+    if (typeof p.matchKey === 'string') {
+      p.match = root(p.matchKey)
+      delete p.matchKey
+    }
+    if (typeof p.countKey === 'string') {
+      p.count = num(Number(cfg[p.countKey] ?? 0))
+      delete p.countKey
+    }
+    if (rule.confidence != null) p.pct = `${Math.round(rule.confidence * 100)}%`
+    if (rule.share != null) p.pct = `${Math.round(rule.share * 100)}%`
+    return root(rule.labelKey, p)
+  }
+  return (
+    <Panel title={t('scoring.title')} icon={Scale}>
+      <p className="mb-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('scoring.note')}</p>
+      <div className="space-y-4">
+        {Object.values(data.scoring).map((section) => (
+          <div key={section.titleKey}>
+            <p className="mb-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{root(section.titleKey)}</p>
+            <ul className="space-y-0.5">
+              {Object.values(section.rules).map((rule) => (
+                <li key={`${rule.labelKey}|${JSON.stringify(rule.params)}`} className="text-xs tabular-nums text-slate-600 dark:text-slate-300">
+                  {rowLabel(rule)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
 function ConfigTab({ data, canEdit }: { data: SentinelData; canEdit: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const c = data.config
+  const floor = c.duplicateMinAmount === '' ? null : (c.duplicateMinAmount as string)
   const items = [
-    { label: t('detectors.duplicates'), value: `≤${c.duplicateDays}d · ≥${money(c.duplicateMinAmount!)}`, note: t('config.duplicatesNote') },
-    { label: t('config.benfordConformity'), value: 'MAD (Nigrini)', note: t('config.benfordNote') },
-    { label: t('flag.rsf'), value: '≥10×', note: t('config.rsfNote', { floor: money(100) }) },
-    { label: t('analysis.zscoreWord'), value: '|z| ≥ 3', note: t('config.zscoreNote', { sigma: money(10) }) },
-    { label: t('config.sequentialRuns'), value: `≥${c.sequentialMinCount} refs · ≥${c.sequentialMinDays} days`, note: t('config.sequentialNote') },
-    { label: t('benford.thresholdTrap'), value: '99 / 999 / 9999', note: t('config.trapNote') },
+    {
+      label: t('detectors.duplicates'),
+      value: floor
+        ? t('config.duplicatesValue', { days: num(c.duplicateDays), floor: money(floor) })
+        : t('config.duplicatesValueUnset', { days: num(c.duplicateDays), unset: t('config.unsetValue') }),
+      note: t('config.duplicatesNote'),
+    },
+    { label: t('config.benfordConformity'), value: t('config.benfordNote'), note: t('config.benfordNote') },
+    { label: t('flag.rsf'), value: t('config.rsfValue', { threshold: c.rsfThreshold }), note: t('config.rsfNote', { floor: money(c.rsfBaselineFloor as string), months: num(c.baselineMonths) }) },
+    { label: t('analysis.zscoreWord'), value: t('config.zscoreValue', { threshold: c.zscoreThreshold }), note: t('config.zscoreNote', { sigma: money(c.zscoreSigmaFloor as string), minTxns: num(c.zscoreMinBaseline) }) },
+    { label: t('config.sequentialRuns'), value: t('config.sequentialValue', { count: num(c.sequentialMinCount), days: num(c.sequentialMinDays) }), note: t('config.sequentialNote', { days: num(c.sequentialHighRiskDays) }) },
+    { label: t('benford.thresholdTrap'), value: t('config.trapValue', { band: c.trapBandPercent }), note: t('config.trapNote') },
     { label: t('flag.weekend'), value: 'Sat / Sun', note: t('config.weekendNote') },
   ]
   return (
@@ -944,6 +1112,7 @@ function ConfigTab({ data, canEdit }: { data: SentinelData; canEdit: boolean }) 
             ))}
           </ul>
         </Panel>
+        <ScoringPanel data={data} />
       </div>
       <Panel title={t('panels.completeCoverage')} icon={Database}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">

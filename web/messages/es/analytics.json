@@ -3546,7 +3546,8 @@
       "nonConforming": "No conforme",
       "firstDigit1D": "Primer dígito (1D)",
       "firstTwoDigits2D": "Dos primeros dígitos (2D)",
-      "thresholdTrap": "Trampa de umbral"
+      "thresholdTrap": "Trampa de umbral",
+      "insufficient": "Datos insuficientes"
     },
     "forensics": {
       "unknownParty": "Desconocido",
@@ -3718,7 +3719,10 @@
       "rsfValue": "al menos {threshold}×",
       "zscoreValue": "|z| al menos {threshold}",
       "trapValue": "{band} % bajo un límite de Flows",
-      "sequentialValue": "{count} refs. · {days}+ días"
+      "sequentialValue": "{count} refs. · {days}+ días",
+      "duplicatesValue": "≤{days} días · ≥{floor}",
+      "duplicatesValueUnset": "≤{days} días · {unset}",
+      "unsetValue": "Sin definir"
     },
     "coverage": {
       "benfordBold": "Benford",
@@ -3746,7 +3750,8 @@
       "firstTwoDigits": "Dos primeros dígitos",
       "leadingDigit": "Primer dígito",
       "noDocuments": "Ningún documento empieza con {digit}.",
-      "top": "top {count}"
+      "top": "top {count}",
+      "documentsCount": "{count} documentos"
     },
     "empty": {
       "noAuditEvents": "Sin eventos de auditoría de alto riesgo en este período",
@@ -3767,8 +3772,11 @@
       "zscore": "Punt. Z"
     },
     "ghost": {
-      "note": " son empresas beneficiarias controladas por empleados. Cruce en dos fases en todo el registro de contrapartes: nombres de empleados contra nombres de proveedores, y direcciones postales normalizadas (línea 1 + código postal) compartidas entre un proveedor pagado y un empleado. Coincidir en nombre vale 75, en dirección 90, en ambas 95.",
-      "title": "Proveedores fantasma"
+      "note": "Cruce en dos fases sobre todo el registro de terceros: nombres de empleado contra nombres de proveedor (solo empleados verificados por rol) y domicilios compartidos entre un proveedor pagado y un empleado (línea 1 + código postal + país, normalización que conserva la escritura). Los puntos figuran en Configuración → Modelo de puntuación.",
+      "title": "Proveedores fantasma",
+      "matchName": "Coincidencia de nombre",
+      "matchAddress": "Coincidencia de dirección",
+      "matchBoth": "Nombre + dirección"
     },
     "kpi": {
       "amountsAnalyzed": "Importes analizados",
@@ -3816,7 +3824,7 @@
       "digitDetail": "Detalle por dígito",
       "digitDetailHint": "Haz clic en un dígito para ver sus transacciones",
       "duplicatesHint": "Un hallazgo por grupo coincidente — cada miembro se abre en su módulo nativo",
-      "ghostMatches": "Coincidencias fantasma ({count})",
+      "ghostMatches": "Coincidencias fantasma (primeras {top} de {total})",
       "ghostVendors": "Proveedores fantasma",
       "highestRiskFlags": "Señales de mayor riesgo",
       "highestRiskHint": "Todos los detectores · haz clic en un documento para abrirlo",
@@ -3890,6 +3898,53 @@
     "yes": "Sí",
     "detection": {
       "allFlagged": "Todo lo marcado"
+    },
+    "scoring": {
+      "title": "Modelo de puntuación",
+      "note": "Modelo fijo de gravedad: cómo cada señal se convierte en puntos de 0–100. Los umbrales de detección anteriores siguen siendo configurables.",
+      "trap": "Trampas de umbral",
+      "duplicate": "Duplicados",
+      "weekend": "Asientos de fin de semana",
+      "rsf": "Tamaño relativo",
+      "zscore": "Z",
+      "sequential": "Series correlativas",
+      "ghost": "Proveedores fantasma",
+      "vendor": "Resumen por proveedor",
+      "summary": "Riesgo resumido",
+      "base": "Puntos base: {points}",
+      "tierBump": "{tier} o más: +{points}",
+      "trapPattern": "Terminaciones {pattern}: +{points}",
+      "spanBump": "Dentro de {days} días: +{points}",
+      "sharedReference": "Misma referencia: +{points}",
+      "confShared": "Misma referencia: {pct}",
+      "confSpan": "Dentro de {days} días: {pct}",
+      "confOtherwise": "Resto: {pct}",
+      "sunday": "Domingo: +{points}",
+      "ratioBump": "Múltiplo ≥ {ratio}: +{points}",
+      "ratioOtherwise": "Múltiplo umbral: +{points}",
+      "zBump": "|z| desde {z}: +{points}",
+      "sequentialHighSpan": "Alcance de alto riesgo: +{points}",
+      "sequentialBaseSpan": "Alcance menor: +{points}",
+      "perInvoice": "+{points} por factura, máximo {cap}",
+      "tierOtherwise": "Resto: +{points}",
+      "perFlag": "+{points} por marca, máximo {cap}",
+      "perType": "+{points} por tipo de marca",
+      "worstShare": "{pct} de la peor marca individual",
+      "summaryVolume": "A partir de {count} marcas: +{points}",
+      "ghostAny": "Cualquier proveedor fantasma: +{points}",
+      "sequentialAny": "Cualquier serie: +{points}",
+      "benfordNonconforming": "Cualquier divisa no conforme: +{points}",
+      "ghostRow": "{match}: +{points} puntos"
+    },
+    "severity": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "medium": "Media"
+    },
+    "auditAction": {
+      "delete": "Eliminar",
+      "update": "Actualizar",
+      "insert": "Crear"
     }
   },
   "charts": {
