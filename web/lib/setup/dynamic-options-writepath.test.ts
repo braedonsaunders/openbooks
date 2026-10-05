@@ -12,12 +12,20 @@ const { SETUP_ENTITY_BY_KEY } = (await import('./registry')) as {
   SETUP_ENTITY_BY_KEY: Map<string, unknown>
 }
 const { resolveDynamicSetupOptions } = (await import('./dynamic-options')) as {
-  resolveDynamicSetupOptions: (entity: unknown) => unknown
+  resolveDynamicSetupOptions: (entity: unknown, context?: { installedPayrollCountries: string[] }) => unknown
 }
+
 const { buildRow } = (await import('./coerce')) as {
   buildRow: (entity: unknown, body: Record<string, unknown>, opts: { forCreate: boolean })
-    => { cols: unknown[] } | { error: string }
+    => { cols: { column: string; value: unknown }[] } | { error: string }
 }
+
+test('after-tax configuration remains available before any payroll country pack is installed', () => {
+  const entity = resolveDynamicSetupOptions(SETUP_ENTITY_BY_KEY.get('pay-components'), { installedPayrollCountries: [] })
+  const built = buildRow(entity, { code: 'TRAVEL', name: 'Travel allowance', kind: 'earning' }, { forCreate: true })
+  assert.ok('cols' in built, JSON.stringify(built))
+  assert.equal(built.cols.find((column: { column: string }) => column.column === 'tax_treatment')?.value, 'none')
+})
 
 const GERMAN_ACCOUNT = {
   accountNumber: '913/1234/5678',
