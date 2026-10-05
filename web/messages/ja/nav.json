@@ -15,6 +15,7 @@
     "banking-match": "照合",
     "banking-transactions": "取引",
     "banking-psp-settlements": "PSP 決済照合",
+    "banking-payouts": "ペイアウト",
     "banking-recons": "消込",
     "banking-imports": "インポート履歴",
     "banking-rules": "ルール",

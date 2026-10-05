@@ -15,6 +15,7 @@
     "banking-match": "匹配",
     "banking-transactions": "交易",
     "banking-psp-settlements": "PSP 结算",
+    "banking-payouts": "付款",
     "banking-recons": "对账",
     "banking-imports": "导入历史",
     "banking-rules": "规则",

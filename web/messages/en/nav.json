@@ -15,6 +15,7 @@
     "banking-match": "Match",
     "banking-transactions": "Transactions",
     "banking-psp-settlements": "PSP settlements",
+    "banking-payouts": "Payouts",
     "banking-recons": "Reconciliations",
     "banking-imports": "Import History",
     "banking-rules": "Rules",

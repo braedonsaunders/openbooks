@@ -47,7 +47,7 @@ export const FEATURES: FeatureDef[] = [
   // revaluation, and realized/unrealized gain-loss. Data-dependent default (see
   // resolveMultiCurrency), NOT the static flag below.
   { key: 'multiCurrency', defaultEnabled: false, category: 'finance' },
-  { key: 'banking', defaultEnabled: true, category: 'finance', navModules: ['banking', 'banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
+  { key: 'banking', defaultEnabled: true, category: 'finance', navModules: ['banking', 'banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-payouts', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.
   { key: 'bankFeeds', defaultEnabled: false, category: 'finance' },
