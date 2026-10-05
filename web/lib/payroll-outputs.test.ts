@@ -173,6 +173,11 @@ const mockSources = new Map<string, string>([
         harness.state.templateResolveCalls += 1
         return harness.state.chequeTemplate
       }
+      // No designated template on the tested records: null selects the
+      // default template, mirroring the real store contract.
+      export async function loadRecordDesignatedTemplateName() {
+        return null
+      }
     `,
   ],
   [
