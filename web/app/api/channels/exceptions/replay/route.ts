@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { replayChannelExceptions } from "@openbooks/engine/src/commerce/exceptions.ts";
+import { replayChannelExceptions } from "@openbooks/engine/commerce";
 
 export const runtime = "nodejs";
 
