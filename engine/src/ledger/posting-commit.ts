@@ -16,6 +16,7 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../reco
 import { allocateEntryNumber, nextFreeEntryNumber } from "../records/entry-number.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
+import { enqueueProviderCommitTx, PROVIDER_COMMIT_KINDS } from "../tax/provider-commit.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
@@ -315,6 +316,20 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       throw new PostingError(
         `document ${doc.documentNumber} was already posted or voided`,
       );
+    }
+
+    // Provider commit tracking rides in the posting transaction: a post that
+    // enqueued nothing (no provider, manual rates, commits off) leaves no
+    // row, and a migration replay never enqueues — history must not spray
+    // the provider on re-import.
+    if (!deps.migration && PROVIDER_COMMIT_KINDS[doc.kind]) {
+      await enqueueProviderCommitTx(tx, {
+        orgId: doc.orgId,
+        documentId: doc.id,
+        kind: doc.kind,
+        documentNumber: effectiveDoc.documentNumber,
+        actorId: options.audit?.actorId ?? null,
+      });
     }
 
     // -- allocation lineage + secondary-book entries (same transaction) ----

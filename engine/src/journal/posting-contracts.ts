@@ -95,6 +95,12 @@ export interface PostingDeps {
   /** Exact per-line tax calculation snapshots, expanded from a code or group. */
   taxComponentsByLine?: Map<string, TaxPostingComponent[]>;
   /**
+   * Marketplace facilitator clearing accounts by facilitator name, resolved
+   * at the posting boundary for documents carrying marketplace-collected
+   * components. Absent when the document has none.
+   */
+  marketplaceClearingByName?: Map<string, { accountId: string; mode: "gross" | "net" }>;
+  /**
    * document_line id → deferred-revenue account, for customer_invoice lines
    * whose item carries a recognition rule (ASC 606). Such lines credit deferred
    * revenue instead of income; engine/src/revenue/recognition.ts later drains
@@ -134,6 +140,10 @@ export interface PostingDeps {
 export interface TaxPostingComponent {
   taxCodeId: string;
   sequence: number;
+  /** Who collects: merchant liability, or a marketplace facilitator (clearing). */
+  collectedBy: "merchant" | "marketplace";
+  /** Facilitator name when collectedBy is marketplace. */
+  facilitatorName: string | null;
   taxAmount: string;
   recoverableAmount: string;
   nonrecoverableAmount: string;

@@ -14,6 +14,7 @@ import { type PostingDeps, PostingError } from "../journal/posting-contracts.ts"
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
+import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
 import { glProjectionScopeUnchanged, buildProjection, glLineKey, glProjectionKey } from "./posting-projection.ts";
@@ -127,6 +128,7 @@ export async function regenerateGlImpactTx(
       taxComponentsByLine: await resolveTaxComponents(tx, doc.id, doc.orgId),
     };
   }
+  deps = await resolveMarketplaceClearingForDocument(tx, doc, deps);
   deps = { ...deps, agencyByLine: await resolveAgencyPosting(tx, doc.orgId, doc.id) };
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {

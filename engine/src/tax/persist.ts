@@ -157,17 +157,32 @@ export async function persistLineTaxComponents(
   actorId: string | null,
   runner: Runner = db,
 ): Promise<void> {
+  // The marketplace flag lives on the document line — recalculation rebuilds
+  // these rows, so reading it here keeps every writer consistent instead of
+  // trusting each caller to pass the flag through.
+  const line = (await runner.execute<{ marketplaceFacilitator: string | null }>(sql`
+    select marketplace_facilitator as "marketplaceFacilitator"
+      from document_lines where org_id = ${orgId} and id = ${documentLineId}
+  `)).rows[0];
+  if (!line) {
+    throw new TaxCalculationError(
+      "cannot persist tax evidence for an unknown document line — save the line before calculating its tax",
+    );
+  }
+  const collectedBy = line.marketplaceFacilitator ? "marketplace" : "merchant";
   for (const c of components) {
     await runner.execute(sql`
       insert into document_line_tax_components
         (org_id, document_line_id, tax_code_id, sequence, rate_percent,
          taxable_amount, tax_amount, recoverable_amount, nonrecoverable_amount,
          calculation_type, price_includes_tax, compound_on_previous, rounding_scale,
+         collected_by, facilitator_name,
          collected_account_id, paid_account_id, withholding_account_id, overridden,
          created_by, updated_by)
       values (${orgId}, ${documentLineId}, ${c.taxCodeId}, ${c.sequence}, ${c.ratePercent},
               ${c.taxableAmount}, ${c.taxAmount}, ${c.recoverableAmount}, ${c.nonrecoverableAmount},
               ${c.calculationType}, ${c.priceIncludesTax}, ${c.compoundOnPrevious}, ${c.roundingScale},
+              ${collectedBy}, ${line.marketplaceFacilitator},
               ${c.collectedAccountId}, ${c.paidAccountId}, ${c.withholdingAccountId}, ${c.overridden},
               ${actorId}, ${actorId})`);
   }

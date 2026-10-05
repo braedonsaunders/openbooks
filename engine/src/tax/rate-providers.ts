@@ -144,11 +144,24 @@ export async function readTaxRateProviderConfigView(orgId: string) {
   return { ...safe, hasSecret: Boolean(secrets) };
 }
 
+/**
+ * Whether the commit switch is on: posted sales documents are committed to
+ * the configured provider. On unless explicitly switched off — a configured
+ * provider whose transactions are never committed cannot feed returns or
+ * filing. A non-boolean stored value fails closed at the scan, never here,
+ * so a hand-edited setting cannot silently disable commits.
+ */
+export function providerCommitEnabled(settings: Record<string, unknown>): boolean {
+  return settings.commitTransactions !== false;
+}
+
 export interface SaveTaxRateProviderInput {
   provider: TaxRateProviderKey;
   displayName?: string;
   isEnabled: boolean;
   preferProvider?: boolean;
+  /** Commit posted transactions to the provider; default true when configured. */
+  commitTransactions?: boolean;
   settings?: Record<string, unknown>;
   /** undefined keeps, null clears, string replaces. */
   apiKey?: string | null;
@@ -527,6 +540,18 @@ export async function saveTaxRateProviderConfig(
         input.provider
       ];
     let settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
+    if (input.commitTransactions !== undefined) {
+      if (typeof input.commitTransactions !== "boolean") {
+        throw new TaxRateProviderError("commitTransactions must be a boolean — switch transaction commits on or off in the provider settings");
+      }
+      settings = { ...settings, commitTransactions: input.commitTransactions };
+    } else if (settings.commitTransactions === undefined) {
+      settings = { ...settings, commitTransactions: true };
+    } else if (typeof settings.commitTransactions !== "boolean") {
+      throw new TaxRateProviderError(
+        "settings.commitTransactions must be a boolean — switch transaction commits on or off in the provider settings",
+      );
+    }
     // The jurisdiction mapping is validated against this org's tax codes on
     // every save and normalized in place, so the audited after-state is
     // exactly what booking will read — no silent drift between setup and use.
@@ -625,7 +650,7 @@ export function sumComponentTax(components: TaxComponentQuote[]): string {
  * round-trip representation, so equality here proves the float carries the
  * exact four-decimal value. Anything else is refused rather than misstated.
  */
-function wireAmountOrThrow(amount: string): number {
+export function wireAmountOrThrow(amount: string): number {
   const canonical = normalizeMoney(amount);
   const wire = Number(canonical);
   if (!Number.isFinite(wire) || fromUnits(toUnits(String(wire))) !== canonical) {
@@ -643,7 +668,7 @@ function wireAmountOrThrow(amount: string): number {
  * quote $0.00 tax — indistinguishable from correctly-nil, and the exact
  * "unconfigured input that is always owed accrues zero" defect.
  */
-function providerMoney(value: unknown, field: string): string {
+export function providerMoney(value: unknown, field: string): string {
   if (value == null) {
     throw new TaxRateProviderError(
       `provider response is missing ${field} — refusing rather than quoting 0 tax`,
@@ -750,7 +775,7 @@ export const TAX_PROVIDER_MAX_RESPONSE_BYTES = 1_048_576;
  * missing-field refusals still name the field they were owed. An abort from
  * the request deadline surfaces here as the named provider timeout.
  */
-async function readTaxProviderJson(
+export async function readTaxProviderJson(
   res: Response,
   providerLabel: string,
   timeoutMs: number,
@@ -835,7 +860,7 @@ async function readTaxProviderJson(
  * the Location names. Every credential-bearing tax call goes through here so
  * a redirect fails closed instead of leaking.
  */
-async function taxProviderFetch(
+export async function taxProviderFetch(
   url: string | URL,
   init: RequestInit,
   options: TaxProviderOutboundOptions & { providerLabel: string },
