@@ -7,6 +7,8 @@ import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { receiveInventory } from '@openbooks/engine/src/inventory/movements.ts'
 import { getOnHand } from '@openbooks/engine/src/inventory/position.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { ReturnRefusal } from '@openbooks/engine/src/sales/returns.ts'
+import { convertOrder, fulfillSalesOrder } from './order-cycle.ts'
 import { createReturnAuthorization, inspectReturnAuthorization, receiveReturnAuthorization } from './returns.ts'
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -15,7 +17,7 @@ const postingDeps = (org: ScratchOrg) => ({ control: { ar: org.accounts.ar, ap: 
 async function enableReturns(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"warehousing":true,"fulfillment":true,"returnAuthorizations":true}'::jsonb) where id = ${orgId} returning id`))
+      || '{"orders":true,"warehousing":true,"fulfillment":true,"returnAuthorizations":true}'::jsonb) where id = ${orgId} returning id`))
   assert.equal(result.rows.length, 1)
 }
 
@@ -162,6 +164,93 @@ test('RMA inspection issues one original-cost credit, scraps quarantine stock, s
     assert.equal(replay.authorization.customerCreditId, inspected.authorization.customerCreditId)
     const credits = await db.execute(sql`select id from documents where org_id = ${org.orgId} and kind = 'customer_credit'`)
     assert.equal(credits.rows.length, 1)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('RMA against an order-governed shipment credits the posted invoice price and refuses before invoicing', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableReturns(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const restockBin = await addBin(org, 'RMA-RESTOCK')
+    const taxCodeId = randomUUID()
+    const orderId = randomUUID()
+    const orderLineId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into tax_codes (id, org_id, code, name, is_active, collected_account_id, paid_account_id)
+        values (${taxCodeId}, ${org.orgId}, 'RMA-13', 'Sales tax 13%', true, ${org.accounts.taxOutput}, ${org.accounts.taxInput})`)
+      await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from) values (${org.orgId}, ${taxCodeId}, '13', '2000-01-01')`)
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
+                               status, subtotal, tax_total, total, created_by, updated_by)
+        values (${orderId}, ${org.orgId}, 'sales_order', 'SO-RMA-1', ${org.customerId}, ${org.subsidiaryId}, ${org.date},
+                'CAD', 'draft', '1000', '130', '1130', ${actorId}, ${actorId})`)
+      await db.execute(sql`
+        insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+                                    unit_price, amount, tax_input_amount, tax_code_id, tax_amount, quantity_billed,
+                                    quantity_fulfilled, stock_location_id, created_by, updated_by)
+        values (${orderLineId}, ${org.orgId}, ${orderId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, 'Widget', '10', 'ea',
+                '100', '1000', '1000', ${taxCodeId}, '130', '0', '0', ${org.stockLocationId}, ${actorId}, ${actorId})`)
+      await db.execute(sql`
+        insert into document_line_tax_components (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+                                                  tax_amount, nonrecoverable_amount, calculation_type, collected_account_id, paid_account_id)
+        values (${org.orgId}, ${orderLineId}, ${taxCodeId}, 1, '13', '1000', '130', '130', 'standard', ${org.accounts.taxOutput}, ${org.accounts.taxInput})`)
+      const approved = await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId} returning id`)
+      assert.equal(approved.rows.length, 1)
+    })
+    await withOrg(org.orgId, () => receiveInventory(org.orgId, actorId, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '10', unitCost: '4',
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+    }))
+    const shipment = await withOrg(org.orgId, () => fulfillSalesOrder(org.orgId, actorId, orderId, {
+      fulfillmentDate: org.date, idempotencyKey: 'rma-order-ship', lines: [{ sourceLineId: orderLineId, quantity: '10' }],
+    }))
+    const issueId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select m.id from inventory_movements m join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+       where m.org_id = ${org.orgId} and l.document_id = ${shipment.id} and m.kind = 'issue' and m.status = 'posted'`))).rows
+    assert.equal(issueId.length, 1, 'the shipment issued the ten units once')
+    const body = {
+      partyId: org.customerId, subsidiaryId: org.subsidiaryId, documentDate: org.date,
+      lines: [{
+        accountId: org.accounts.revenue, itemId: org.items.fifo, description: 'Returned widget', quantity: '5', unit: 'ea',
+        unitPrice: '0', amount: '0', taxCodeId: null, taxGroupId: null, taxOverridden: false, taxAmount: '0',
+        stockLocationId: org.stockLocationId,
+      }],
+    }
+    const rma = await createReturnAuthorization({
+      orgId: org.orgId, actorId, key: randomUUID(), body, requestBody: { document: body, sourceSelections: [issueId[0]!.id] },
+      sourceSelections: [{ lineNumber: 1, sourceIssueMovementId: issueId[0]!.id }], allowedSubsidiaryIds: null,
+    })
+    await receiveReturnAuthorization({
+      orgId: org.orgId, actorId, documentId: rma.id, receivedLines: [{ lineId: rma.lines[0]!.lineId, received: '5' }], allowedSubsidiaryIds: null,
+    })
+    const inspectionLines = [{ lineId: rma.lines[0]!.lineId, accepted: '5', disposition: 'restock' as const, dispositionLocationId: restockBin }]
+    const inspect = () => inspectReturnAuthorization({ orgId: org.orgId, actorId, documentId: rma.id, inspectionLines, allowedSubsidiaryIds: null })
+    await assert.rejects(inspect(), (error: unknown) => {
+      assert.ok(error instanceof ReturnRefusal)
+      assert.equal(error.code, 'source_unavailable')
+      assert.match(error.message, new RegExp(`shipped on ${shipment.documentNumber} that no posted customer invoice has billed from SO-RMA-1`))
+      assert.equal(error.remedy, 'Invoice the shipped goods from SO-RMA-1 and post that invoice, then inspect the return again')
+      return true
+    }, 'an un-invoiced shipment has no price to credit, so inspection refuses instead of crediting zero')
+
+    const invoice = await convertOrder(org.orgId, actorId, orderId, 'customer_invoice')
+    await withBypassContext(async () => {
+      const approved = await db.execute(sql`update documents set status = 'approved' where id = ${invoice.id} and org_id = ${org.orgId} returning id`)
+      assert.equal(approved.rows.length, 1)
+      await postDocument(invoice.id, postingDeps(org))
+    })
+    const inspected = await inspect()
+    assert.equal(inspected.authorization.stage, 'done')
+    const credit = (await db.execute<Record<string, unknown>>(sql`
+      select quantity::text, amount::text, tax_amount::text, account_id, tax_code_id
+        from document_lines where org_id = ${org.orgId} and document_id = ${inspected.authorization.customerCreditId}`)).rows
+    assert.deepEqual(credit, [{
+      quantity: '5.00000000', amount: '500.0000', tax_amount: '65.0000', account_id: org.accounts.revenue, tax_code_id: taxCodeId,
+    }], 'half the invoiced units credit half the invoiced price and tax on the billed income account and tax code')
+    assert.equal((await getOnHand(org.orgId, org.items.fifo, restockBin)).quantity, '5.0000')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
