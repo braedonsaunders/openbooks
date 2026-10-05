@@ -82,6 +82,13 @@ export {
   WarehouseRefusal,
   type WarehouseRecord,
 } from './warehouses.ts'
+/** Kit recipes behind the sellable-kit promise: components effective on the movement date. */
+export {
+  kitComponentQuantities,
+  loadKitComponents,
+  type KitComponent,
+  type KitComponentQuantity,
+} from './kits.ts'
 /** Open order remainders behind the committed and incoming legs. */
 export {
   purchaseOrderLineRemainders,
