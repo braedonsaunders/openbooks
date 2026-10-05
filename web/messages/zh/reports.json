@@ -1022,6 +1022,10 @@
       "demand_forecast_accuracy": {
         "label": "预测准确率",
         "description": "按物料类别将历史需求预测与实际消耗对比评分: 已评分周数、平均绝对百分比误差与偏差。"
+      },
+      "channel_sales": {
+        "label": "渠道销售",
+        "description": "按渠道、日期、商品、库位和收款方式统计的网店订单 — 每个订单行一行，含过账状态和单据。"
       }
     },
     "columns": {
@@ -2526,6 +2530,23 @@
         "scored_weeks": "已评分周数",
         "mape": "MAPE",
         "bias": "偏差"
+      },
+      "channel_sales": {
+        "channel": "渠道",
+        "ordered_day": "下单日期",
+        "order_number": "订单",
+        "customer": "客户",
+        "currency": "货币",
+        "item": "商品",
+        "sku": "商品编码",
+        "quantity": "数量",
+        "unit_price": "单价",
+        "discount": "折扣",
+        "line_total": "行合计",
+        "tenders": "收款方式",
+        "location": "库位",
+        "posting_status": "过账状态",
+        "document_number": "单据"
       }
     },
     "enumValues": {
@@ -2620,7 +2641,11 @@
       "no_bill_rate": "未找到计费费率",
       "no_employee": "未分配人员",
       "no_cost_rate": "未找到人工成本费率",
-      "no_cost_fx": "未找到成本换算即期汇率"
+      "no_cost_fx": "未找到成本换算即期汇率",
+      "pending": "待处理",
+      "summarized": "已入日报",
+      "exception": "需处理",
+      "excluded": "已排除"
     }
   },
   "operators": {

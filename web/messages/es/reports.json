@@ -1022,6 +1022,10 @@
       "demand_forecast_accuracy": {
         "label": "Precisión del pronóstico",
         "description": "Pronósticos de demanda pasados evaluados contra consumos reales por clase de artículo: semanas evaluadas, error porcentual absoluto medio y sesgo."
+      },
+      "channel_sales": {
+        "label": "Ventas del canal",
+        "description": "Pedidos de la tienda por canal, día, artículo, ubicación y cobro — una fila por línea de pedido con su estado contable y documento."
       }
     },
     "columns": {
@@ -2526,6 +2530,23 @@
         "scored_weeks": "Semanas evaluadas",
         "mape": "MAPE",
         "bias": "Sesgo"
+      },
+      "channel_sales": {
+        "channel": "Canal",
+        "ordered_day": "Fecha del pedido",
+        "order_number": "Pedido",
+        "customer": "Cliente",
+        "currency": "Moneda",
+        "item": "Artículo",
+        "sku": "Código de artículo",
+        "quantity": "Cantidad",
+        "unit_price": "Precio unitario",
+        "discount": "Descuento",
+        "line_total": "Total de línea",
+        "tenders": "Cobros",
+        "location": "Ubicación",
+        "posting_status": "Estado contable",
+        "document_number": "Documento"
       }
     },
     "enumValues": {
@@ -2620,7 +2641,11 @@
       "no_bill_rate": "Sin tarifa de facturación",
       "no_employee": "Sin persona asignada",
       "no_cost_rate": "Sin tarifa de coste laboral",
-      "no_cost_fx": "Sin tipo de cambio para convertir el coste"
+      "no_cost_fx": "Sin tipo de cambio para convertir el coste",
+      "pending": "Pendiente",
+      "summarized": "En resumen diario",
+      "exception": "Requiere atención",
+      "excluded": "Excluido"
     }
   },
   "operators": {

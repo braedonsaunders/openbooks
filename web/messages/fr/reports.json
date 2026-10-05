@@ -1022,6 +1022,10 @@
       "demand_forecast_accuracy": {
         "label": "Précision des prévisions",
         "description": "Prévisions de demande passées comparées aux sorties réelles, par classe d'articles : semaines évaluées, erreur absolue moyenne en pourcentage et biais."
+      },
+      "channel_sales": {
+        "label": "Ventes du canal",
+        "description": "Commandes de la boutique par canal, jour, article, emplacement et encaissement — une ligne par ligne de commande avec son statut comptable et sa pièce."
       }
     },
     "columns": {
@@ -2526,6 +2530,23 @@
         "scored_weeks": "Semaines évaluées",
         "mape": "MAPE",
         "bias": "Biais"
+      },
+      "channel_sales": {
+        "channel": "Canal",
+        "ordered_day": "Date de commande",
+        "order_number": "Commande",
+        "customer": "Client",
+        "currency": "Devise",
+        "item": "Article",
+        "sku": "Code article",
+        "quantity": "Quantité",
+        "unit_price": "Prix unitaire",
+        "discount": "Remise",
+        "line_total": "Total de ligne",
+        "tenders": "Encaissements",
+        "location": "Emplacement",
+        "posting_status": "Statut comptable",
+        "document_number": "Document"
       }
     },
     "enumValues": {
@@ -2620,7 +2641,11 @@
       "no_bill_rate": "Aucun tarif de facturation trouvé",
       "no_employee": "Aucune personne affectée",
       "no_cost_rate": "Aucun taux de coût de main-d’œuvre trouvé",
-      "no_cost_fx": "Aucun cours pour convertir le coût"
+      "no_cost_fx": "Aucun cours pour convertir le coût",
+      "pending": "En attente",
+      "summarized": "En récapitulatif",
+      "exception": "À traiter",
+      "excluded": "Exclue"
     }
   },
   "operators": {

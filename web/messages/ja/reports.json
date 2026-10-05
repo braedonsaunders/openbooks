@@ -1022,6 +1022,10 @@
       "demand_forecast_accuracy": {
         "label": "予測精度",
         "description": "品目クラス別の実績に対する過去の需要予測の評価: 評価週数、MAPE、バイアス。"
+      },
+      "channel_sales": {
+        "label": "チャネル売上",
+        "description": "チャネル・日・品目・ロケーション・入金方法別のストアフロント注文 — 注文明細ごとに転記ステータスと伝票を表示する1行。"
       }
     },
     "columns": {
@@ -2526,6 +2530,23 @@
         "scored_weeks": "評価週数",
         "mape": "MAPE",
         "bias": "バイアス"
+      },
+      "channel_sales": {
+        "channel": "チャネル",
+        "ordered_day": "注文日",
+        "order_number": "注文",
+        "customer": "顧客",
+        "currency": "通貨",
+        "item": "品目",
+        "sku": "商品コード",
+        "quantity": "数量",
+        "unit_price": "単価",
+        "discount": "値引き",
+        "line_total": "行合計",
+        "tenders": "入金方法",
+        "location": "ロケーション",
+        "posting_status": "転記ステータス",
+        "document_number": "伝票"
       }
     },
     "enumValues": {
@@ -2620,7 +2641,11 @@
       "no_bill_rate": "請求単価なし",
       "no_employee": "担当者未割当",
       "no_cost_rate": "労務費単価なし",
-      "no_cost_fx": "労務費換算の為替レートなし"
+      "no_cost_fx": "労務費換算の為替レートなし",
+      "pending": "保留中",
+      "summarized": "日次サマリーに含む",
+      "exception": "要対応",
+      "excluded": "除外"
     }
   },
   "operators": {

@@ -283,6 +283,12 @@ const COGNATES = new Set<string>([
   'fr:salesOrders.promotion.chip|Promotion',
   'fr:reports.catalog.columns.promotion_performance.promotion_name|Promotion',
   'fr:reports.catalog.columns.promotion_performance.document_number|Document',
+  // French spells “Document”, “Cause” and “Exceptions” exactly like English.
+  'fr:reports.catalog.columns.channel_sales.document_number|Document',
+  'fr:channels.tabs.exceptions|Exceptions',
+  'fr:channels.columns.document|Document',
+  'fr:channels.columns.code|Cause',
+  'fr:channels.drawer.document|Document',
   'ja:admin.features.apiAccess.title|REST API',
   'pt-BR:admin.features.scripts.title|Scripts',
   'pt-BR:admin.sandboxes.changeSets.tables.user_scripts|Scripts',
