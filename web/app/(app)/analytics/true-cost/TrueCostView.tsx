@@ -448,7 +448,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
       {cat.categoryType === 'expense' ? (
         <>
           <p className="border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
-            {t('cellFlyout.expenseMath', { direct: money0(taggedSum), dept: dept.name, allocated: money0(allocatedSum), share: percent(Number(deptShare) * 100, 1), billed: Math.round(dept.billedHours) })}
+            {t('cellFlyout.expenseMath', { direct: money0(taggedSum), dept: dept.name, allocated: money0(allocatedSum), share: percent(toChartNumber(mulDecimal(deptShare, '100')), 1), billed: Math.round(dept.billedHours) })}
           </p>
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">

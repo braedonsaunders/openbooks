@@ -684,7 +684,7 @@ export async function trueCostData(
           select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
             from employee_roles er
             join parties p on p.id = er.party_id and p.org_id = er.org_id
-           where er.org_id = ${orgId} and er.party_id = any(${empIds}::uuid[])`),
+           where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`),
         loadWorkSchedules(db, orgId, allowedSubsidiaryIds),
       ]);
       const keysByEmp = new Map(roleRows.rows.map((r) => [r.party_id, r]));
