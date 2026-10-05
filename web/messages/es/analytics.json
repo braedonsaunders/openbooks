@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "Ingresos",
+      "grossProfit": "Margen bruto",
       "grossMargin": "Margen bruto",
       "operatingIncome": "Resultado operativo",
       "breakeven": "Punto de equilibrio"

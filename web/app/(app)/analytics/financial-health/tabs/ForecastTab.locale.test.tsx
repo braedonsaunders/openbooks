@@ -90,3 +90,12 @@ test('forecast future months render in the viewer locale', () => {
   assert.match(fr, /janv/i)
   assert.ok(!fr.includes('>Jan<'), 'no pinned English month may leak into the French table')
 })
+
+test('forecast metric toggle labels translate in every viewer locale', () => {
+  const en = markup('en-US')
+  const fr = markup('fr')
+  assert.ok(en.includes('Gross Profit'), 'toggle names the gross-profit metric in English')
+  assert.ok(fr.includes('Marge brute'), 'toggle names the gross-profit metric in French')
+  assert.ok(!en.includes('grossProfit'), 'no raw i18n key may leak into the toggle')
+  assert.ok(!fr.includes('grossProfit'), 'no raw i18n key may leak into the French toggle')
+})

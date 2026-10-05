@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "收入",
+      "grossProfit": "毛利",
       "grossMargin": "毛利率",
       "operatingIncome": "营业利润",
       "breakeven": "盈亏平衡"

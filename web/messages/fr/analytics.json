@@ -263,6 +263,7 @@
     },
     "kpi": {
       "revenue": "Chiffre d'affaires",
+      "grossProfit": "Marge brute",
       "grossMargin": "Marge brute",
       "operatingIncome": "Résultat d'exploitation",
       "breakeven": "Seuil de rentabilité"
