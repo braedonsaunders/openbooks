@@ -22,6 +22,14 @@ import {
 } from "@openbooks/engine/src/payments/psp-settlement.ts";
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import {
+  accruePayoutsInTransit,
+  batchDepositTieout,
+  clearSettlementLineDocument,
+  markSettlementLineAdjustment,
+  setSettlementLineDocument,
+} from "@openbooks/engine/payments/settlement";
+import { CommerceError, matchPayoutLines } from "@openbooks/engine/commerce";
+import {
   can,
   guardSubsidiaryScope,
   guardUnrestrictedScope,
@@ -253,6 +261,29 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     reversalDate: calendarDateShape,
     reason: z.string().trim().min(1).max(500),
   }),
+  // Payout-to-order reconciliation: match every line to its native document,
+  // link or unlink one line, reclassify a line as an adjustment, or run the
+  // month-end in-transit accrual. Ids stay strings at the boundary so a
+  // malformed id refuses as a tenant-opaque 404 in the handler, never as a
+  // uuid cast 500.
+  z.strictObject({ action: z.literal("match"), batchId: z.string() }),
+  z.strictObject({
+    action: z.literal("link"),
+    batchId: z.string(),
+    lineId: z.string(),
+    documentId: z.string(),
+  }),
+  z.strictObject({
+    action: z.literal("unlink"),
+    batchId: z.string(),
+    lineId: z.string(),
+  }),
+  z.strictObject({
+    action: z.literal("markAdjustment"),
+    batchId: z.string(),
+    lineId: z.string(),
+  }),
+  z.strictObject({ action: z.literal("accrue"), accrualDate: calendarDateShape }),
 ]);
 
 export const runtime = "nodejs";
@@ -294,6 +325,22 @@ export const GET = defineRoute({
     // evidence lines and the linked receipt numbers, under the same scope as
     // the list. A malformed id is a tenant-opaque 404, never a uuid cast 500.
     const batchId = new URL(req.url).searchParams.get("batchId");
+    // Document picker for manual line links: posted documents of this
+    // organization whose number contains the query, newest first.
+    const resolveDoc = new URL(req.url).searchParams.get("resolveDoc");
+    if (resolveDoc !== null && resolveDoc.trim() !== "") {
+      const query = `%${resolveDoc.trim().replace(/[%_\\]/g, "")}%`;
+      const docs = await db.execute(sql`
+        select d.id, d.kind, d.document_number as "documentNumber",
+               d.total::text as total, d.currency, d.document_date::text as "documentDate"
+          from documents d
+         where d.org_id = ${orgId} and d.status = 'posted'
+           and d.document_number ilike ${query}
+         order by d.document_date desc, d.document_number
+         limit 10
+      `);
+      return NextResponse.json({ documents: docs.rows });
+    }
     if (batchId !== null) {
       if (!isUuid(batchId)) return notFound("record");
       const scopedBatch = gate.allowedSubsidiaryIds
@@ -319,7 +366,7 @@ export const GET = defineRoute({
       const row = batch.rows[0] as Record<string, unknown> | undefined;
       if (!row) return notFound("record");
       const lines = await db.execute(sql`
-        select l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
+        select l.id, l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
                l.description, l.amount, l.currency, l.document_id as "documentId",
                d.kind as "documentKind", d.document_number as "documentNumber"
           from psp_settlement_lines l
@@ -327,7 +374,19 @@ export const GET = defineRoute({
          where l.org_id = ${orgId} and l.batch_id = ${batchId}
          order by l.line_number
       `);
-      return NextResponse.json({ batch: row, lines: lines.rows });
+      // The payout drawer reads the deposit tie-out and any in-transit
+      // accruals beside the lines: both derive from posted state, so the
+      // detail carries them instead of growing new endpoints.
+      const tieout = await batchDepositTieout(orgId, batchId, gate.allowedSubsidiaryIds);
+      const accruals = await db.execute(sql`
+        select id, accrual_date::text as "accrualDate", reversal_date::text as "reversalDate",
+               amount, currency, accrual_entry_id as "accrualEntryId",
+               reversal_entry_id as "reversalEntryId", status
+          from psp_payout_accruals
+         where org_id = ${orgId} and batch_id = ${batchId}
+         order by accrual_date
+      `);
+      return NextResponse.json({ batch: row, lines: lines.rows, tieout, accruals: accruals.rows });
     }
     const subsidiaryFilter = gate.allowedSubsidiaryIds
       ? gate.allowedSubsidiaryIds.size > 0
@@ -554,6 +613,59 @@ export const POST = defineRoute({
           );
           return NextResponse.json(reversed);
         }
+        case "match": {
+          if (!isUuid(body.batchId)) return notFound("record");
+          const matched = await matchPayoutLines(
+            orgId,
+            body.batchId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(matched);
+        }
+        case "link": {
+          if (!isUuid(body.batchId) || !isUuid(body.lineId)) return notFound("record");
+          const linked = await setSettlementLineDocument(
+            orgId,
+            body.batchId,
+            body.lineId,
+            body.documentId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(linked);
+        }
+        case "unlink": {
+          if (!isUuid(body.batchId) || !isUuid(body.lineId)) return notFound("record");
+          const unlinked = await clearSettlementLineDocument(
+            orgId,
+            body.batchId,
+            body.lineId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(unlinked);
+        }
+        case "markAdjustment": {
+          if (!isUuid(body.batchId) || !isUuid(body.lineId)) return notFound("record");
+          const marked = await markSettlementLineAdjustment(
+            orgId,
+            body.batchId,
+            body.lineId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(marked);
+        }
+        case "accrue": {
+          const accrued = await accruePayoutsInTransit(
+            orgId,
+            body.accrualDate,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(accrued);
+        }
         default:
           return NextResponse.json(
             { error: "unknown action" },
@@ -563,6 +675,15 @@ export const POST = defineRoute({
     } catch (e) {
       if (e instanceof ScopeNotFoundError) {
         return notFound("record");
+      }
+      // The matcher refuses with its remedy attached; the client reads the
+      // refusal before parsing, so the message always reaches the operator.
+      if (e instanceof CommerceError) {
+        if (e.code === "payout_batch_missing") return notFound("record");
+        return NextResponse.json(
+          { error: e.message, code: e.code, remedy: e.remedy },
+          { status: e.status },
+        );
       }
       if (e instanceof PspSettlementConflictError) {
         return apiErrorResponse(e, {
