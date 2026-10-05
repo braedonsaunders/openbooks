@@ -29,6 +29,9 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
   const percent = (value: number | null | undefined) => value == null
     ? '—'
     : new Intl.NumberFormat(fmt.locale, { style: 'percent', maximumFractionDigits: 1 }).format(value / 100)
+  // Vendor shares arrive as fractions (0.85), not percent-scale numbers:
+  // formatting the fraction as a percent reads 85%, not 0.9%.
+  const share = (value: number | null | undefined) => value == null ? '—' : new Intl.NumberFormat(fmt.locale, { style: 'percent', maximumFractionDigits: 1 }).format(value)
   const metric = (key: string, value: string) => ({ label: t(key), value })
   let chart: AnalyticsPreviewChart | undefined
   // Trend points arrive as exact decimal strings from the loaders that
@@ -73,7 +76,7 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
     case 'vendor-performance': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/vendor-performance/view')).loadVendorPerformance(sp)
       chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => month.spend), data.monthly.map((month) => month.label))
-      return result(periodLabel, [metric('vendor.kpi.activeVendors', number(data.totals.vendors)), metric('vendor.kpi.totalSpend', fmt.money(data.totals.spend)), metric('vendor.kpi.onTimeRate', percent(data.totals.onTimePct)), metric('vendor.kpi.top5Share', percent(data.totals.top5SharePct))])
+      return result(periodLabel, [metric('vendor.kpi.activeVendors', number(data.totals.vendors)), metric('vendor.kpi.totalSpend', fmt.money(data.totals.spend)), metric('vendor.kpi.onTimeRate', share(data.totals.onTimePct)), metric('vendor.kpi.top5Share', share(data.totals.top5SharePct))])
     }
     case 'spend-velocity': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/spend-velocity/view')).loadSpendVelocity(sp)
