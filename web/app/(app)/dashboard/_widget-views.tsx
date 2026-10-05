@@ -28,7 +28,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/money'
 import { CardShell, EmptyRow, MetricTile, type MetricTone, type WidgetCardProps } from './_widget-tiles'
 import type { DashboardMetrics } from './_metrics'
 import { WIDGETS } from './_widget-registry'
