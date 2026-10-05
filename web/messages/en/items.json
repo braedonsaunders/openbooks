@@ -381,6 +381,7 @@
   },
   "families": {
     "title": "Product families",
+    "code": "Code",
     "description": "One row per option matrix — sizes and colors that sell as individual items.",
     "empty": "No product families yet",
     "newFamily": "New family",

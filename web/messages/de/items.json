@@ -333,6 +333,7 @@
   },
   "families": {
     "title": "Produktfamilien",
+    "code": "Code",
     "description": "Eine Zeile pro Optionsmatrix – Größen und Farben, die als eigene Artikel verkaufen.",
     "empty": "Noch keine Produktfamilien",
     "newFamily": "Neue Familie",

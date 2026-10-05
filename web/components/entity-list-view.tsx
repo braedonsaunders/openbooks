@@ -15,6 +15,7 @@ import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
 import { buildListDrawerHref, hasActiveListFilters, parseListParams, pickString } from '../lib/list-params'
+import { statusDisplayInput, tagStaticStatusOption } from '../lib/list/status-display-input'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
@@ -258,10 +259,9 @@ export async function EntityListView({
   // so the reader never reloads them on this path.
   const loadedQuickOptions = await Promise.all(quickFilterDefs.map(async (quick) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
-    const statics = (filterMeta?.options ?? []).map((option) => ({
-      value: option.value,
-      label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
-    }))
+    const statics = (filterMeta?.options ?? []).map((option) =>
+      tagStaticStatusOption(option, option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' ')),
+    )
     if (!quick.loadOptions) return statics
     const seen = new Set(statics.map((option) => option.value))
     const loaded = await quick.loadOptions(orgId, allowedSubs)
@@ -392,13 +392,13 @@ export async function EntityListView({
   // DB-seeded status names (opportunity stages) reach the picker as English
   // labels; render them through the source's catalog hook when it names this
   // filter, so the picker button matches the translated table cells.
-  const translateStatusOption = (rawLabel: string): string =>
-    source.statusDisplayName ? source.statusDisplayName(rawLabel, label) : rawLabel
+  const translateStatusOption = (storedName: string): string =>
+    source.statusDisplayName ? source.statusDisplayName(storedName, label) : storedName
   const quickFilters = quickFilterDefs.map((quick, index) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
     const options = loadedQuickOptions[index] ?? []
     const named = source.statusFilterKey && quick.filterKey === source.statusFilterKey
-      ? options.map((option) => ({ ...option, label: translateStatusOption(String(option.label)) }))
+      ? options.map((option) => ({ ...option, label: translateStatusOption(statusDisplayInput(option)) }))
       : options
     return {
       ...quick,

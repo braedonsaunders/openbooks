@@ -3340,6 +3340,10 @@
         "title": "Políticas",
         "description": "Cobre cuentas pendientes y gestione la facturación en un único espacio de trabajo."
       },
+      "quote-to-cash-policy": {
+        "title": "Política de quote-to-cash",
+        "description": "Umbral de aprobación de descuentos, activación automática, condiciones predeterminadas y caducidad de enlaces para presupuestos SaaS."
+      },
       "consolidation-groups": {
         "title": "Grupos de consolidación",
         "singular": "Grupo de consolidación",

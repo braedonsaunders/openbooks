@@ -320,6 +320,7 @@
   },
   "families": {
     "title": "产品系列",
+    "code": "编码",
     "description": "每个选项矩阵一行 — 尺码和颜色作为独立物料销售。",
     "empty": "暂无产品系列",
     "newFamily": "新建系列",

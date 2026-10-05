@@ -3415,6 +3415,10 @@
         "title": "Policies",
         "description": "Collect receivables and manage billing in one workspace."
       },
+      "quote-to-cash-policy": {
+        "title": "Quote-to-cash policy",
+        "description": "Discount approval threshold, auto-activation, term defaults, and signing-link expiry for SaaS quotes."
+      },
       "consolidation-groups": {
         "title": "Consolidation groups",
         "singular": "Consolidation group",

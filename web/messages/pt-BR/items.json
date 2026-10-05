@@ -320,6 +320,7 @@
   },
   "families": {
     "title": "Famílias de produtos",
+    "code": "Código",
     "description": "Uma linha por matriz de opções — tamanhos e cores que vendem como itens individuais.",
     "empty": "Ainda não há famílias de produtos",
     "newFamily": "Nova família",
