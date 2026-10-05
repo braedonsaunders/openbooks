@@ -138,6 +138,12 @@ const TOKEN_SURFACES: TokenSurface[] = [
     refusalMarker: /notFound\(\)/,
   },
   {
+    dir: join(webApp, "api", "shipping", "webhooks"),
+    kind: "api",
+    tokenMarker: /receiveTrackerDelivery/,
+    refusalMarker: /invalid signature/,
+  },
+  {
     dir: join(webApp, "survey"),
     kind: "page",
     tokenMarker: /verifySurveyInvitationToken/,
@@ -180,6 +186,14 @@ test("sessionless HR/time surfaces are public, token-authenticated in-route, and
     "utf8",
   );
   assert.match(documents, /verifyDocumentSignerToken\(token\)/);
+  // The tracker-delivery service behind the shipping route verifies the
+  // relay signature itself and confirms every delivery by retrieval — the
+  // route marker above is not a pass-through claim.
+  const shipping = readFileSync(
+    join(repoRoot, "engine", "src", "sales", "shipping-labels.ts"),
+    "utf8",
+  );
+  assert.match(shipping, /verifyRelaySignature\(input\.rawBody, signature, account\.webhookSecret\)/);
 });
 
 test("no public API root covers a route without its surface's auth marker", () => {

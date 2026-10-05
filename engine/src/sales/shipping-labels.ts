@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { fetchWithConnectorRetry } from "../connectors/http-retry.ts";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
@@ -194,6 +194,208 @@ export async function loadShippingAccount(
 /** Seal an API key for storage; the unseal side above reads this shape back. */
 export function sealAccountSecrets(orgId: string, apiKey: string): string {
   return sealJson({ apiKey }, { orgId, purpose: SECRETS_PURPOSE });
+}
+
+// --- Carrier account management -------------------------------------------------
+
+export interface ShippingAccountView {
+  id: string;
+  name: string;
+  provider: string;
+  mode: string;
+  status: string;
+  isDefault: boolean;
+  hasKey: boolean;
+  lastError: string | null;
+  lastCheckedAt: string | null;
+}
+
+/** Every carrier account with its health, for Setup. Keys never leave sealed. */
+export async function listShippingAccounts(runner: SqlExecutor, orgId: string): Promise<ShippingAccountView[]> {
+  await assertShippingFeature(runner, orgId);
+  const rows = (await runner.execute<{
+    id: string; name: string; provider: string; mode: string; status: string;
+    is_default: boolean; secrets: string | null; last_error: string | null; last_checked_at: string | null;
+  }>(sql`
+    select id, name, provider, mode, status, is_default, secrets, last_error, last_checked_at
+      from shipping_accounts where org_id = ${orgId} order by name`)).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    provider: row.provider,
+    mode: row.mode,
+    status: row.status,
+    isDefault: row.is_default,
+    hasKey: row.secrets != null,
+    lastError: row.last_error,
+    lastCheckedAt: row.last_checked_at,
+  }));
+}
+
+async function writeAccountAudit(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  accountId: string,
+  action: "insert" | "update",
+  changes: Record<string, unknown>,
+): Promise<void> {
+  const written = await tx.execute<{ id: string }>(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'shipping_accounts', ${accountId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
+    returning id`);
+  if (written.rows.length === 0) throw new Error("shipping account change was not audited");
+}
+
+export interface ConnectAccountInput {
+  accountId?: string | null;
+  name: string;
+  provider: string;
+  mode: string;
+  apiKey?: string | null;
+  makeDefault?: boolean;
+}
+
+/**
+ * Connect (or reconnect) a carrier account: the API key is sealed on the
+ * way in and never stored — or read — in plaintext. Connecting clears a
+ * past error and reactivates the account.
+ */
+export async function connectShippingAccount(
+  tx: Tx,
+  orgId: string,
+  actorId: string,
+  input: ConnectAccountInput,
+): Promise<{ accountId: string }> {
+  await assertShippingFeature(tx, orgId);
+  const name = input.name.trim();
+  if (!name) throw new ShippingRefusal("Name the carrier account", "invalid_input", 422);
+  if (input.provider !== "easypost" && input.provider !== "shippo") {
+    throw new ShippingRefusal(`Unknown carrier provider ${input.provider}`, "invalid_input", 422);
+  }
+  if (input.mode !== "test" && input.mode !== "live") {
+    throw new ShippingRefusal("Account mode is test or live", "invalid_input", 422);
+  }
+  if (input.apiKey != null && input.apiKey.trim().length < 8) {
+    throw new ShippingRefusal("That API key is too short to be real", "invalid_input", 422);
+  }
+  if (input.makeDefault) {
+    await tx.execute(sql`
+      update shipping_accounts set is_default = false, updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and is_default`);
+  }
+  if (input.accountId) {
+    // A zero-row update is a failure: under RLS an unscoped id matches
+    // nothing and must not report success. The key travels only when it is
+    // replaced — a null parameter would leave its type unknown to the plan.
+    const base = sql`
+      update shipping_accounts
+         set name = ${name}, provider = ${input.provider}, mode = ${input.mode},
+             status = 'active', last_error = null,
+             is_default = ${input.makeDefault === true},
+             updated_at = now(), updated_by = ${actorId}`;
+    const keyed = input.apiKey
+      ? sql`${base}, secrets = ${sealAccountSecrets(orgId, input.apiKey.trim())}`
+      : base;
+    const updated = await tx.execute<{ id: string }>(sql`
+      ${keyed} where org_id = ${orgId} and id = ${input.accountId} returning id`);
+    if (updated.rows.length === 0) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
+    await writeAccountAudit(tx, orgId, actorId, input.accountId, "update", {
+      mode: "shipping_account_connect",
+      name,
+      provider: input.provider,
+      mode: input.mode,
+      keyReplaced: input.apiKey != null,
+    });
+    return { accountId: input.accountId };
+  }
+  if (!input.apiKey) {
+    throw new ShippingRefusal("An API key is required to connect an account", "secret_missing", 422);
+  }
+  const created = await tx.execute<{ id: string }>(sql`
+    insert into shipping_accounts
+      (org_id, name, provider, mode, status, is_default, secrets, created_by, updated_by)
+    values (${orgId}, ${name}, ${input.provider}, ${input.mode}, 'active',
+            ${input.makeDefault === true}, ${sealAccountSecrets(orgId, input.apiKey.trim())},
+            ${actorId}, ${actorId})
+    returning id`);
+  const accountId = created.rows[0]?.id;
+  if (!accountId) throw new Error("shipping account was not connected");
+  await writeAccountAudit(tx, orgId, actorId, accountId, "insert", {
+    mode: "shipping_account_connect",
+    name,
+    provider: input.provider,
+    mode: input.mode,
+  });
+  return { accountId };
+}
+
+/** Park an account without deleting its labels, quotes, or cost history. */
+export async function disconnectShippingAccount(
+  tx: Tx,
+  orgId: string,
+  actorId: string,
+  accountId: string,
+): Promise<void> {
+  await assertShippingFeature(tx, orgId);
+  const updated = await tx.execute<{ id: string }>(sql`
+    update shipping_accounts
+       set status = 'disabled', updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and id = ${accountId} and status <> 'disabled'
+    returning id`);
+  if (updated.rows.length === 0) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
+  await writeAccountAudit(tx, orgId, actorId, accountId, "update", { mode: "shipping_account_disconnect" });
+}
+
+/**
+ * Test the connection end to end: a real address validation over the
+ * sealed key. An invalid verdict still proves the key works — only an
+ * authentication or transport failure refuses.
+ */
+export async function testShippingConnection(
+  tx: Tx,
+  orgId: string,
+  actorId: string,
+  accountId: string,
+): Promise<{ ok: true; detail: string }> {
+  await assertShippingFeature(tx, orgId);
+  const account = await loadShippingAccount(tx, orgId, accountId);
+  const adapter = adapterFor(account.provider);
+  let answer;
+  try {
+    answer = await adapter.validateAddress({ apiKey: account.apiKey }, {
+      name: "OpenBooks",
+      street1: "228 Park Ave S",
+      street2: null,
+      city: "New York",
+      state: "NY",
+      zip: "10003",
+      country: "US",
+      phone: null,
+      email: null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Connection test failed";
+    await tx.execute(sql`
+      update shipping_accounts set status = 'error', last_error = ${message}, last_checked_at = now(),
+             updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${account.id}`);
+    throw new ShippingRefusal(`${account.name} connection test failed: ${message}`, "provider_failed", 422, message);
+  }
+  await tx.execute(sql`
+    update shipping_accounts set status = 'active', last_error = null, last_checked_at = now(),
+           updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and id = ${account.id}`);
+  await writeAccountAudit(tx, orgId, actorId, account.id, "update", {
+    mode: "shipping_account_test",
+    valid: answer.valid,
+  });
+  return {
+    ok: true,
+    detail: answer.valid
+      ? `${account.name} answered a live address check`
+      : `${account.name} is reachable; the probe address itself did not validate (${answer.messages[0] ?? "no detail"})`,
+  };
 }
 
 /**
@@ -1473,6 +1675,56 @@ export interface TrackerDeliveryInput {
   baseUrl?: string;
 }
 
+/** Provider deliveries are system provenance: a null actor, never a user. */
+export const TRACKER_SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Sessionless entry for inbound tracker deliveries: parse the delivery,
+ * resolve its owning org by the refs it names, then run the scoped
+ * delivery. The org lookup runs bypassed and returns org ids only — an
+ * inbound delivery names nothing but its own provider refs and there is
+ * no session to scope it by, the same model as provider payment webhooks.
+ * Signature verification still runs inside the org scope, before any
+ * state changes.
+ */
+export async function receiveTrackerDelivery(
+  provider: string,
+  headers: Record<string, string>,
+  rawBody: string,
+): Promise<TrackerDeliveryResult> {
+  const adapter = adapterFor(provider);
+  const parsed = adapter.parseInboundEvent(safeJsonParse(rawBody));
+  if (!parsed) return { status: "ignored" };
+  // bypass: connector-tracker — see the docblock above.
+  const orgId = await withBypassContext(() => resolveTrackerOrgId(provider, parsed.tracker));
+  if (!orgId) return { status: "ignored" };
+  return withOrgTransaction(orgId, (tx) =>
+    handleTrackerDelivery(tx, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody }),
+  );
+}
+
+/** Owning org of a tracker delivery, by provider shipment first, then tracking number. */
+async function resolveTrackerOrgId(
+  provider: string,
+  tracker: { providerShipmentId?: string; trackingNumber?: string },
+): Promise<string | null> {
+  if (tracker.providerShipmentId) {
+    const byShipment = (await db.execute<{ org_id: string }>(sql`
+      select org_id from shipment_labels
+       where provider = ${provider} and provider_shipment_id = ${tracker.providerShipmentId}
+       limit 1`)).rows[0];
+    if (byShipment) return byShipment.org_id;
+  }
+  if (tracker.trackingNumber) {
+    const byTracking = (await db.execute<{ org_id: string }>(sql`
+      select org_id from shipment_labels
+       where provider = ${provider} and tracking_number = ${tracker.trackingNumber}
+       limit 1`)).rows[0];
+    if (byTracking) return byTracking.org_id;
+  }
+  return null;
+}
+
 export type TrackerDeliveryResult =
   | { status: "ignored" }
   | { status: "ok"; labelId: string; trackingStatus: string; changed: boolean };
@@ -1851,4 +2103,144 @@ export async function listAdjustmentsByCarrier(
     amountMinor: row.amount_minor,
     currency: row.currency,
   }));
+}
+
+export interface BulkCandidate {
+  shipmentId: string;
+  documentNumber: string;
+  customerName: string | null;
+  promisedDate: string | null;
+  labelCount: number;
+}
+
+/** Draft, open shipments the bulk buyer can pick from. */
+export async function listBulkCandidates(
+  runner: SqlExecutor,
+  orgId: string,
+  scope: Scope,
+): Promise<BulkCandidate[]> {
+  await assertShippingFeature(runner, orgId);
+  type CandidateRow = {
+    shipment_id: string; document_number: string; customer_name: string | null;
+    promised_date: string | null; label_count: string;
+  };
+  const base = sql`
+    select d.id as shipment_id, d.document_number, p.display_name as customer_name,
+           fd.promised_date::text, count(l.id)::text as label_count
+      from documents d
+      join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join shipment_labels l on l.shipment_document_id = d.id and l.org_id = d.org_id
+        and l.status = 'purchased'
+     where d.org_id = ${orgId} and d.kind = 'shipment' and d.status = 'draft' and fd.stage = 'open'`;
+  const tail = sql`
+     group by d.id, d.document_number, p.display_name, fd.promised_date
+     order by d.document_number`;
+  const rows = scope
+    ? (await runner.execute<CandidateRow>(sql`${base} and d.subsidiary_id = any(${[...scope]}) ${tail}`)).rows
+    : (await runner.execute<CandidateRow>(sql`${base} ${tail}`)).rows;
+  return rows
+    .filter((row) => row.label_count === "0")
+    .map((row) => ({
+      shipmentId: row.shipment_id,
+      documentNumber: row.document_number,
+      customerName: row.customer_name,
+      promisedDate: row.promised_date,
+      labelCount: Number(row.label_count),
+    }));
+}
+
+// --- Drawer and download reads --------------------------------------------------
+
+export interface ShipmentLabelView {
+  id: string;
+  accountName: string;
+  provider: string;
+  carrier: string;
+  service: string;
+  trackingNumber: string | null;
+  trackingStatus: string;
+  status: string;
+  amountMinor: string;
+  currency: string;
+  labelUrl: string | null;
+  hasFile: boolean;
+  costEntryId: string | null;
+  purchasedAt: string;
+  voidedAt: string | null;
+  events: { id: string | null; status: string; detail: string | null; occurredAt: string | null }[];
+}
+
+/** Every label on a shipment, newest first, for the drawer timeline. */
+export async function getShipmentLabels(
+  runner: SqlExecutor,
+  orgId: string,
+  shipmentId: string,
+): Promise<ShipmentLabelView[]> {
+  await assertShippingFeature(runner, orgId);
+  const rows = (await runner.execute<{
+    id: string; account_name: string; provider: string; carrier: string; service: string;
+    tracking_number: string | null; tracking_status: string; status: string;
+    rate_minor: string; rate_currency: string; label_url: string | null; label_file_id: string | null;
+    cost_entry_id: string | null; purchased_at: string; voided_at: string | null;
+    events: ShipmentLabelView["events"];
+  }>(sql`
+    select l.id, a.name as account_name, l.provider, l.carrier, l.service,
+           l.tracking_number, l.tracking_status, l.status,
+           l.rate_minor::text, l.rate_currency, l.label_url,
+           l.label_file_id, l.cost_entry_id,
+           l.purchased_at::text, l.voided_at::text, l.events
+      from shipment_labels l
+      join shipping_accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${orgId} and l.shipment_document_id = ${shipmentId}
+     order by l.purchased_at desc`)).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    accountName: row.account_name,
+    provider: row.provider,
+    carrier: row.carrier,
+    service: row.service,
+    trackingNumber: row.tracking_number,
+    trackingStatus: row.tracking_status,
+    status: row.status,
+    amountMinor: row.rate_minor,
+    currency: row.rate_currency,
+    labelUrl: row.label_url,
+    hasFile: row.label_file_id != null,
+    costEntryId: row.cost_entry_id,
+    purchasedAt: row.purchased_at,
+    voidedAt: row.voided_at,
+    events: row.events ?? [],
+  }));
+}
+
+export interface LabelFile {
+  filename: string;
+  contentType: string;
+  bytes: Buffer;
+}
+
+/**
+ * The stored label PDF for download. Labels bought while the provider file
+ * was unreachable have no file — the caller falls back to the provider
+ * label URL instead of failing the download.
+ */
+export async function readLabelFile(
+  runner: SqlExecutor,
+  orgId: string,
+  labelId: string,
+): Promise<LabelFile> {
+  await assertShippingFeature(runner, orgId);
+  const row = (await runner.execute<{
+    filename: string; content_type: string; bytes: Buffer; document_number: string;
+  }>(sql`
+    select f.name as filename, v.content_type, b.bytes, d.document_number
+      from shipment_labels l
+      join files f on f.id = l.label_file_id and f.org_id = l.org_id
+      join file_versions v on v.id = f.current_version_id
+      join file_blobs b on b.version_id = v.id
+      join documents d on d.id = l.shipment_document_id and d.org_id = l.org_id
+     where l.org_id = ${orgId} and l.id = ${labelId}`)).rows[0];
+  if (!row) throw new ShippingRefusal("Shipping label file not found", "not_found", 404);
+  return { filename: row.filename, contentType: row.content_type, bytes: row.bytes };
 }

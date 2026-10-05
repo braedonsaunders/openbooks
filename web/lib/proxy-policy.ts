@@ -29,6 +29,10 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/pay",
   "/api/pay",
   "/api/payments/webhooks",
+  // Carrier tracker deliveries (/api/shipping/webhooks): the aggregators
+  // hold no session — every delivery is verified inside the route (relay
+  // signature when configured, plus tracker re-read over the sealed key).
+  "/api/shipping/webhooks",
   // External counterparty signing: /sign pages and /api/sign endpoints carry
   // their own per-request HMAC token, verified inside every route
   // (verifySigningToken + validateSigningRequest, fail-closed) — recipients
