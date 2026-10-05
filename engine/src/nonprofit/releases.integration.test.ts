@@ -142,6 +142,31 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
       (error) => error instanceof NonprofitError && error.code === "fund_release_over_available" &&
         error.message.includes("800.0000") && error.message.includes("900.0000"),
     );
+    const release = (releaseDate: string, amount: string) => createFundRelease({
+      orgId: org.orgId, fromFundId: restricted.id, toFundId: setup.defaultFundId, releaseAccountId: org.accounts.revenue,
+      releaseDate, amount, purpose: "Award expenses met", satisfactionRef: "Dated award", actorId: drafter,
+    }).then((draft) => submitFundRelease({ orgId: org.orgId, releaseId: draft.id, actorId: drafter }));
+    const later = await release("2026-07-20", "800.0000");
+    await assert.rejects(release("2026-07-16", "100.0000"), (error) =>
+      error instanceof NonprofitError && error.code === "fund_release_over_available" &&
+      error.message.includes(`release ${later.releaseNumber} leaves only 0.0000 on 2026-07-20`) &&
+      error.message.includes("has 800.0000 of net assets on 2026-07-16") &&
+      error.remedy.includes("dated on or before 2026-07-16"),
+      "a backdated release must not consume net assets a later-dated release already released");
+    await withOrgTransaction(org.orgId, () => postEntry(db, {
+      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+      entryNumber: `RELEASE-TOPUP-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
+      currency: "CAD", actorId: drafter, origin: "journal", memo: "Further restricted support",
+      lines: [
+        { accountId: org.accounts.bank, amount: "300.0000", extraDims: { fund: restricted.id } },
+        { accountId: org.accounts.revenue, amount: "-300.0000", extraDims: { fund: restricted.id } },
+      ],
+    }));
+    const raced = await Promise.allSettled([release("2026-07-25", "300.0000"), release("2026-07-18", "300.0000")]);
+    assert.deepEqual(raced.map((outcome) => outcome.status).sort(), ["fulfilled", "rejected"],
+      "concurrent releases at different dates must not jointly overdraw the fund");
+    const lost = raced.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult;
+    assert.ok(lost.reason instanceof NonprofitError && lost.reason.code === "fund_release_over_available", String(lost.reason));
     await assert.rejects(
       createFundRelease({
         orgId: org.orgId,
