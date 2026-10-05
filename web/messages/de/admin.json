@@ -5949,7 +5949,41 @@
       "title": "Versand",
       "description": "Frachtkonten, Paketgrößen und die Vorgaben für jede Sendung.",
       "tabs": {
-        "accounts": "Frachtkonten"
+        "accounts": "Frachtkonten",
+        "adjustments": "Abrechnungskorrekturen"
+      },
+      "adjustments": {
+        "loading": "Carrier-Konten werden geladen…",
+        "account": "Carrier-Konto",
+        "accountPlaceholder": "Konto wählen",
+        "paste": "Abrechnungsexport des Carriers",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "Vorschau",
+        "import": "{count, plural, one {# Korrektur importieren} other {# Korrekturen importieren}}",
+        "columns": {
+          "adjustment": "Korrektur",
+          "shipment": "Sendung",
+          "kind": "Art",
+          "amount": "Betrag",
+          "reason": "Grund"
+        },
+        "kinds": {
+          "weight_correction": "Gewichtskorrektur",
+          "dimension_correction": "Maßkorrektur",
+          "address_correction": "Adresskorrektur",
+          "fuel": "Treibstoffzuschlag",
+          "duplicate": "Doppelbelastung",
+          "other": "Sonstiges"
+        },
+        "result": "{imported} importiert, {skipped} bereits vorhandene übersprungen.",
+        "noAccounts": {
+          "title": "Kein aktives Carrier-Konto",
+          "description": "Verbinden Sie zuerst ein Carrier-Konto – Korrekturen werden gegen das Konto importiert, das sie abgerechnet hat.",
+          "action": "Konto verbinden"
+        },
+        "errors": {
+          "importFailed": "Der Import ist fehlgeschlagen. Prüfen Sie die Zeilen und versuchen Sie es erneut."
+        }
       },
       "accounts": {
         "title": "Frachtkonten",

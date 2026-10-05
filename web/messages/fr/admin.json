@@ -5949,7 +5949,41 @@
       "title": "Expédition",
       "description": "Comptes transporteurs, formats de colis et réglages de chaque envoi.",
       "tabs": {
-        "accounts": "Comptes transporteurs"
+        "accounts": "Comptes transporteurs",
+        "adjustments": "Ajustements de facturation"
+      },
+      "adjustments": {
+        "loading": "Chargement des comptes transporteur…",
+        "account": "Compte transporteur",
+        "accountPlaceholder": "Choisir un compte",
+        "paste": "Export de facturation du transporteur",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "Aperçu",
+        "import": "{count, plural, one {Importer # ajustement} other {Importer # ajustements}}",
+        "columns": {
+          "adjustment": "Ajustement",
+          "shipment": "Envoi",
+          "kind": "Type",
+          "amount": "Montant",
+          "reason": "Motif"
+        },
+        "kinds": {
+          "weight_correction": "Correction de poids",
+          "dimension_correction": "Correction de dimensions",
+          "address_correction": "Correction d'adresse",
+          "fuel": "Surcharge carburant",
+          "duplicate": "Facturation en double",
+          "other": "Autre"
+        },
+        "result": "{imported} importés ; {skipped} déjà connus ignorés.",
+        "noAccounts": {
+          "title": "Aucun compte transporteur actif",
+          "description": "Connectez d'abord un compte transporteur — les ajustements s'importent sur le compte qui les a facturés.",
+          "action": "Connecter un compte"
+        },
+        "errors": {
+          "importFailed": "L'import a échoué. Vérifiez les lignes et réessayez."
+        }
       },
       "accounts": {
         "title": "Comptes transporteurs",

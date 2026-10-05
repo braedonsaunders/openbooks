@@ -3,6 +3,7 @@ import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { loadShippingSetup, shippingSetupSpec } from './view'
 import { ShippingAccountsClient } from './ShippingAccountsClient'
+import { AdjustmentImportClient } from './AdjustmentImportClient'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
 import { can, getAuthz } from '../../../../../lib/authz'
@@ -36,6 +37,7 @@ export default async function ShippingSetup({
       <ModuleView spec={shippingSetupSpec(data)} data={data} searchParams={sp} trusted />
       <ModuleHomeTabs tabs={data.tabs} />
       {data.tab === 'accounts' ? <ShippingAccountsClient /> : null}
+      {data.tab === 'adjustments' ? <AdjustmentImportClient /> : null}
       {entity && authz ? (
         <SetupEntitySection
           entity={entity}

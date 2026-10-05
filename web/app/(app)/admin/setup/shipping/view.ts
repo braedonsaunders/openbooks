@@ -10,11 +10,12 @@ import { pickString } from '../../../../../lib/list-params'
 /**
  * Company Settings → Shipping, split into a loader and a spec.
  *
- * Three tabs share one page: carrier accounts (a client island that owns
+ * Four tabs share one page: carrier accounts (a client island that owns
  * the connect/test/disconnect forms against /api/shipping/accounts),
- * package presets, and the org's shipping settings row — the last two
- * rendered by the shared SetupEntitySection over rehomed registry
- * entities, never bespoke tables.
+ * carrier billing adjustments (paste, preview, then import against one
+ * account through POST /api/shipping/adjustments), package presets, and
+ * the org's shipping settings row — the last two rendered by the shared
+ * SetupEntitySection over rehomed registry entities, never bespoke tables.
  *
  * Both gates run here, so a spec render redirects exactly as the native
  * one does.
@@ -22,6 +23,7 @@ import { pickString } from '../../../../../lib/list-params'
 
 const ENTITY_TABS = [
   { key: 'accounts', entityKey: null, labelKey: 'setup.shipping.tabs.accounts' },
+  { key: 'adjustments', entityKey: null, labelKey: 'setup.shipping.tabs.adjustments' },
   { key: 'presets', entityKey: 'package-presets', labelKey: 'setup.entities.package-presets.title' },
   { key: 'settings', entityKey: 'shipping-settings', labelKey: 'setup.entities.shipping-settings.title' },
 ] as const

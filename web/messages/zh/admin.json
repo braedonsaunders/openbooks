@@ -5949,7 +5949,41 @@
       "title": "配送",
       "description": "承运商账号、包裹规格以及每批出货的默认值。",
       "tabs": {
-        "accounts": "承运商账号"
+        "accounts": "承运商账号",
+        "adjustments": "账单调整"
+      },
+      "adjustments": {
+        "loading": "正在加载承运商账户…",
+        "account": "承运商账户",
+        "accountPlaceholder": "选择账户",
+        "paste": "承运商账单导出",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "预览",
+        "import": "导入{count}条调整",
+        "columns": {
+          "adjustment": "调整",
+          "shipment": "货件",
+          "kind": "类型",
+          "amount": "金额",
+          "reason": "原因"
+        },
+        "kinds": {
+          "weight_correction": "重量更正",
+          "dimension_correction": "尺寸更正",
+          "address_correction": "地址更正",
+          "fuel": "燃油附加费",
+          "duplicate": "重复收费",
+          "other": "其他"
+        },
+        "result": "已导入{imported}条，跳过{skipped}条已存在的记录。",
+        "noAccounts": {
+          "title": "没有启用的承运商账户",
+          "description": "请先连接一个承运商账户——调整将导入到开具账单的账户。",
+          "action": "连接账户"
+        },
+        "errors": {
+          "importFailed": "导入失败。请检查行内容后重试。"
+        }
       },
       "accounts": {
         "title": "承运商账号",
