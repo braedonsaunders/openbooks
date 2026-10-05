@@ -664,6 +664,55 @@ function percentileExact(sorted: string[], p: number): string {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
 }
 
+export interface PaymentScoreBands {
+  highDays: number;
+  highPenalty: number;
+  mediumDays: number;
+  mediumPenalty: number;
+  lowDays: number;
+  lowPenalty: number;
+  perInvoice: number;
+  cap: number;
+}
+
+export interface PaymentRatingBands {
+  excellent: number;
+  good: number;
+  fair: number;
+}
+
+/**
+ * Payment timing score from days-to-pay and overdue evidence. Null days-to-pay
+ * means no paid invoice to measure timing against — the term is unknown, so no
+ * score is awarded. Scoring an unmeasured customer 100 would read as flawless
+ * payment behaviour for "never paid".
+ */
+export function scorePayment(
+  avgDays: number | null,
+  overdueCount: number,
+  bands: PaymentScoreBands,
+): number | null {
+  if (avgDays === null) return null;
+  let score = 100;
+  if (avgDays > bands.highDays) score -= bands.highPenalty;
+  else if (avgDays > bands.mediumDays) score -= bands.mediumPenalty;
+  else if (avgDays > bands.lowDays) score -= bands.lowPenalty;
+  if (overdueCount > 0) score -= Math.min(bands.cap, overdueCount * bands.perInvoice);
+  return Math.max(0, score);
+}
+
+/** Payment rating from a timing score; an unscored term rates unknown, never excellent. */
+export function ratePayment(
+  score: number | null,
+  bands: PaymentRatingBands,
+): CustomerRow["paymentRating"] {
+  if (score === null) return "unknown";
+  if (score < bands.fair) return "poor";
+  if (score < bands.good) return "fair";
+  if (score < bands.excellent) return "good";
+  return "excellent";
+}
+
 function priorYearIso(iso: string): string {
   return addMonthsClamped(iso, -12);
 }
@@ -1357,23 +1406,24 @@ async function readCustomerData(
     if (points > 0) frictionMap.set(id, { points, level, credits, creditValue: f.creditValue, returnRate: Math.round(returnRate * 10) / 10 });
   }
 
-  const paymentMap = new Map<string, { score: number; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number | null }>();
+  const paymentMap = new Map<string, { score: number | null; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number | null }>();
   let totInvoices = 0, totPaid = 0, totOverdue = 0;
+  const scoreBands: PaymentScoreBands = {
+    highDays: dsoHighDays, highPenalty: dsoHighPts,
+    mediumDays: dsoMediumDays, mediumPenalty: dsoMediumPts,
+    lowDays: dsoLowDays, lowPenalty: dsoLowPts,
+    perInvoice: overduePerInvoice, cap: overdueCap,
+  };
+  const ratingBands: PaymentRatingBands = { excellent: ratingExcellent, good: ratingGood, fair: ratingFair };
   for (const r of paymentRows.rows as unknown as CustomerPaymentSqlRow[]) {
     const invoices = Number(r.invoice_count ?? 0);
     const paid = Number(r.paid_count ?? 0);
     const overdue = Number(r.overdue_count ?? 0);
     const avgDays = r.avg_days_to_pay === null ? null : Number(r.avg_days_to_pay);
     totInvoices += invoices; totPaid += paid; totOverdue += overdue;
-    let score = 100;
-    const d = avgDays ?? 0;
-    if (d > dsoHighDays) score -= dsoHighPts;
-    else if (d > dsoMediumDays) score -= dsoMediumPts;
-    else if (d > dsoLowDays) score -= dsoLowPts;
-    if (overdue > 0) score -= Math.min(overdueCap, overdue * overduePerInvoice);
-    score = Math.max(0, score);
-    const rating: CustomerRow["paymentRating"] = score < ratingFair ? "poor" : score < ratingGood ? "fair" : score < ratingExcellent ? "good" : "excellent";
-    paymentMap.set(r.id, { score, rating, avgDays: avgDays === null ? null : Math.round(d), overdue, rate: invoices > 0 ? Math.round((paid / invoices) * 100) : null });
+    const score = scorePayment(avgDays, overdue, scoreBands);
+    const rating = ratePayment(score, ratingBands);
+    paymentMap.set(r.id, { score, rating, avgDays: avgDays === null ? null : Math.round(avgDays), overdue, rate: invoices > 0 ? Math.round((paid / invoices) * 100) : null });
   }
   // No invoices means no payment rate — never a 0% that reads as "paid nothing".
   const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : null;
@@ -1464,12 +1514,13 @@ async function readCustomerData(
     const frequencyScore = rfm.f * 20;
     const monetaryScore = rfm.m * 20;
     // A term with no data is dropped and the remaining weights
-    // re-normalised: with no payment history the customer earns no phantom
+    // re-normalised: with no payment history — or timing too thin to score,
+    // with no paid invoice to measure against — the customer earns no phantom
     // points, and the tile says so by name (scoredWithoutPayment).
-    const scoredWithoutPayment = payment === undefined;
+    const scoredWithoutPayment = payment === undefined || payment.score === null;
     const weightTotal = scoredWithoutPayment ? 100 - weightPayment : 100;
     const rawScore = recencyScore * weightRecency + frequencyScore * weightFrequency + monetaryScore * weightMonetary
-      + (payment ? payment.score * weightPayment : 0);
+      + (payment && payment.score !== null ? payment.score * weightPayment : 0);
     const frictionPenalty = friction?.level === "critical" ? frictionCriticalPts : friction?.level === "high" ? frictionHighPts : friction?.level === "medium" ? frictionMediumPts : 0;
 
     let healthScore = weightTotal > 0 ? Math.round(rawScore / weightTotal) : 0;
