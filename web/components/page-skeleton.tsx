@@ -1,5 +1,5 @@
 import { Skeleton } from '@openbooks/ui'
-import { ViewTransition } from './view-transition'
+import { SkeletonTransition } from './route-transitions'
 
 /**
  * In-shell content placeholder. The app shell (sidebar/header) stays mounted
@@ -11,12 +11,12 @@ import { ViewTransition } from './view-transition'
  * placeholder reads correctly under either while the real page loads.
  *
  * Decorative only: hidden from assistive technology, since the loaded page
- * announces itself when it arrives. When it does, the placeholder fades out
- * ahead of the page (the `skeleton-out` route transition).
+ * announces itself when it arrives. When it does, the placeholder steps aside
+ * and the page rises into its place (see `route-transitions`).
  */
 export function PageSkeleton() {
   return (
-    <ViewTransition exit="skeleton-out" default="none">
+    <SkeletonTransition>
       <div className="flex h-full min-h-0 flex-col" aria-hidden="true">
         <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
           <div className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
@@ -45,6 +45,6 @@ export function PageSkeleton() {
           </div>
         </div>
       </div>
-    </ViewTransition>
+    </SkeletonTransition>
   )
 }

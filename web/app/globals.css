@@ -509,17 +509,29 @@
   animation-duration: 200ms;
 }
 
-/* Every page-to-page navigation: the old page lifts away, the new one settles. */
+/* Every page-to-page navigation: the old page lifts away and dims, the new
+   one (or its placeholder) rises into focus behind it. */
 ::view-transition-group(.route-change),
-::view-transition-group(.route-recede) {
-  animation-duration: 300ms;
+::view-transition-group(.route-recede),
+::view-transition-group(.route-reveal) {
+  animation-duration: 420ms;
   animation-timing-function: var(--route-ease-out);
 }
 ::view-transition-old(.route-change) {
-  animation: 140ms var(--route-ease-in) both route-lift-out;
+  transform-origin: 50% 0;
+  animation: 200ms var(--route-ease-in) both route-lift-out;
 }
 ::view-transition-new(.route-change) {
-  animation: 300ms var(--route-ease-out) 60ms both route-settle-in;
+  animation: 420ms var(--route-ease-out) 80ms both route-settle-in;
+}
+
+/* The page arriving in place of its placeholder rises into focus while the
+   placeholder steps aside. */
+::view-transition-old(.route-reveal) {
+  animation: 120ms var(--route-ease-in) both route-fade-out;
+}
+::view-transition-new(.route-reveal) {
+  animation: 380ms var(--route-ease-out) 40ms both route-settle-in;
 }
 
 /* Opening a report from the hub: the library recedes behind the sheet that
@@ -535,7 +547,7 @@
 
 /* The page placeholder steps aside as soon as the real page streams in. */
 ::view-transition-old(.skeleton-out) {
-  animation: 150ms var(--route-ease-in) both route-fade-out;
+  animation: 160ms var(--route-ease-in) both route-skeleton-out;
 }
 
 /* A hub sheet and its report paper are one object: the group carries it
@@ -589,10 +601,13 @@
   from { opacity: 0; }
 }
 @keyframes route-lift-out {
-  to { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 0; transform: translateY(-10px) scale(0.985); filter: blur(2px); }
 }
 @keyframes route-settle-in {
-  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+  from { opacity: 0; transform: translateY(18px); filter: blur(5px); }
+}
+@keyframes route-skeleton-out {
+  to { opacity: 0; transform: scale(0.995); }
 }
 @keyframes route-recede-out {
   to { opacity: 0; transform: scale(0.975); filter: blur(3px); }

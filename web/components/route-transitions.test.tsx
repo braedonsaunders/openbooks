@@ -162,6 +162,24 @@ test('history within one page is left to the router and never animates', async (
   assert.equal(routerSaw, 1, 'the router receives the original event')
 })
 
+test('a traversal in a background tab is left to the router, which the browser would refuse to animate', async () => {
+  show('/reports/pnl')
+  transitions.length = 0
+  routerSaw = 0
+  const original = document.visibilityState
+  // An own property shadows the prototype getter until it is deleted.
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+  try {
+    await traverse('/reports')
+  } finally {
+    delete (document as { visibilityState?: unknown }).visibilityState
+  }
+
+  assert.equal(transitions.length, 0, 'no transition is opened for a hidden document')
+  assert.equal(routerSaw, 1, 'the router receives the original event')
+  assert.equal(document.visibilityState, original, 'the stand-in visibility is removed')
+})
+
 test('a guard that refuses the traversal skips the transition instead of holding the screen', async () => {
   show('/reports/pnl')
   transitions.length = 0
