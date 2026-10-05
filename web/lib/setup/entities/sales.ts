@@ -6,12 +6,12 @@ import {
   promotionStatusTransition,
   validatePromotionFields,
   type PromotionStatus,
-} from '@openbooks/engine/src/sales/promotions.ts'
+} from '@openbooks/engine/sales/promotions'
 import {
   checkRestockingPolicyOverlap,
   RestockingFeeRefusal,
   validateRestockingFeePolicy,
-} from '@openbooks/engine/src/sales/restocking-fees.ts'
+} from '@openbooks/engine/sales/restocking-fees'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 
 type CurrentPromotion = {
