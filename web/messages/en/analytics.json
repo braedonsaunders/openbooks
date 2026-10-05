@@ -2538,7 +2538,7 @@
         },
         "minBaseAmount": {
           "label": "Minimum base",
-          "help": "Series below this amount in {currency} are skipped by the velocity engine — empty means no minimum"
+          "help": "Series below this amount in {currency} are skipped by the velocity engine — empty means no minimum, and the commitment cliff reports as not configured"
         },
         "opexRatioAlert": {
           "label": "OpEx ratio alert (%)",
@@ -2714,7 +2714,8 @@
       "seasonalHigh": "Higher spending typically occurs in {months}",
       "seasonalLow": "Lower spending typically occurs in {months}",
       "shadowItReason": "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
-      "fragmentationUnconfigured": "Set the fragmentation size cap in Spend Velocity → Configuration"
+      "fragmentationUnconfigured": "Set the fragmentation size cap in Spend Velocity → Configuration",
+      "cliffUnconfigured": "Set the minimum base in Spend Velocity → Configuration"
     },
     "labels": {
       "unknownParty": "Unknown",

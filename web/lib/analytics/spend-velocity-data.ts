@@ -39,8 +39,9 @@ import { toChartNumber } from "../chart-number";
  * CAGR/z-score rate math and the charts). An unset optional money threshold
  * disables the detector that needs it by name instead of inventing a value:
  * with no fragmentation size cap the fragmentation detector reports itself
- * unconfigured; with no minimum base the velocity engine scores every series
- * from its first month and says so on the Configuration tab.
+ * unconfigured, and with no minimum base the commitment cliff's growth
+ * figures report as not configured (the velocity engine itself still scores
+ * every series from its first month and says so on the Configuration tab).
  *
  * HONEST GAP: the Shadow IT detector needs a line-level VENDOR on
  * expense-report lines (who the employee actually paid). openbooks expense
@@ -156,7 +157,7 @@ export interface SpendVelocityData {
   };
   shadowIT: { available: false; reason: string };
   commitmentCliff: {
-    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string };
+    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string; configured: boolean; reason: string };
     months: { month: string; poAmount: string; soAmount: string }[];
   };
   revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
@@ -932,8 +933,12 @@ export async function spendVelocityData(
   const cliffSeries = [...cliffMonths.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     .map(([bucket, v]) => ({ month: bucket, poAmount: v.po, soAmount: v.so }));
   // A short history suppresses growth estimates, not the observed commitments.
-  const poCagr = moneyCagr(cliffSeries.map((m) => m.poAmount), C.minBaseAmount);
-  const soCagr = moneyCagr(cliffSeries.map((m) => m.soAmount), C.minBaseAmount);
+  // An unset minimum base suppresses them too: without a floor the growth
+  // gap is not measurable, so the cliff reports itself unconfigured by name
+  // instead of scoring without one.
+  const cliffConfigured = C.minBaseAmount !== "";
+  const poCagr = cliffConfigured ? moneyCagr(cliffSeries.map((m) => m.poAmount), C.minBaseAmount) : null;
+  const soCagr = cliffConfigured ? moneyCagr(cliffSeries.map((m) => m.soAmount), C.minBaseAmount) : null;
   const poVelocity = poCagr === null ? null : Math.round(poCagr);
   const soVelocity = soCagr === null ? null : Math.round(soCagr);
   const velocityGap = poVelocity === null || soVelocity === null ? null : poVelocity - soVelocity;
@@ -951,7 +956,13 @@ export async function spendVelocityData(
     status = "warning";
     if (gap !== null && hasSales) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffWarningRatio);
   }
-  const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO }, months: cliffSeries };
+  const commitmentCliff: SpendVelocityData["commitmentCliff"] = {
+    summary: {
+      poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO,
+      configured: cliffConfigured, reason: cliffConfigured ? "" : strings.cliffUnconfigured,
+    },
+    months: cliffSeries,
+  };
 
   // ---- revenue normalisation ---------------------------------------------------------------------
   // The OpEx ratio reads the shared P&L operating-expenses reader (true OpEx

@@ -2133,7 +2133,8 @@
       "seasonalHigh": "支出が増加しやすい時期：{months}",
       "seasonalLow": "支出が減少しやすい時期：{months}",
       "shadowItReason": "経費精算の明細には店舗名や仕入先名が含まれず、費用勘定と自由記述のみのため、従業員間でのソフトウェアのバイラルな普及を追跡できません。",
-      "fragmentationUnconfigured": "支出速度 → 設定 で断片化のサイズ上限を設定してください"
+      "fragmentationUnconfigured": "支出速度 → 設定 で断片化のサイズ上限を設定してください",
+      "cliffUnconfigured": "支出速度 → 設定 で最小基準額を設定してください"
     },
     "banner": {
       "count": "アラート総数{total}件",
@@ -2387,7 +2388,7 @@
         },
         "minBaseAmount": {
           "label": "最小基準額",
-          "help": "{currency}建てでこの金額未満の系列は除外されます — 未設定は下限なし"
+          "help": "{currency}建てでこの金額未満の系列は除外されます — 未設定は下限なしで、コミットメントクリフは未設定として報告されます"
         },
         "opexRatioAlert": {
           "label": "販管費率アラート（%）",
