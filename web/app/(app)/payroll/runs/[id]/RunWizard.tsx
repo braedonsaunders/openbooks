@@ -20,6 +20,8 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useMoney } from '../../../../../components/money-provider'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { promptDialog } from '../../../../../lib/prompt'
+import { promptVoidReversalPeriod } from '../../../../../lib/void-reversal-period'
 import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
 
 /**
@@ -96,6 +98,7 @@ export function RunWizard(props: {
   canAttributeEntity: boolean
 }) {
   const t = useTranslations('payroll')
+  const tc = useTranslations('common')
   const router = useRouter()
   const { money } = useMoney()
   const run = props.run
@@ -495,6 +498,50 @@ export function RunWizard(props: {
     }
   }
 
+  /**
+   * A committed run is never edited: it is voided, which reverses its
+   * posting through the shared document void path (that path refuses, by
+   * name, a run already covered by a remittance bill or settled by a retro
+   * run), and the period is paid again on a new run.
+   */
+  async function voidRun() {
+    const reason = await promptDialog({
+      title: t('wizard.finish.voidTitle', { number: run.document_number }),
+      label: tc('amendment.reason'),
+      placeholder: tc('amendment.voidPlaceholder'),
+      confirmLabel: tc('actions.void'),
+    })
+    if (!reason) return
+    const reversal = await promptVoidReversalPeriod(run.document_id, {
+      title: tc('amendment.voidReversalPeriodTitle'),
+      label: tc('amendment.voidReversalPeriodLabel'),
+      regularOption: tc('amendment.voidReversalPeriodRegular'),
+      confirm: tc('actions.void'),
+      cancel: tc('confirm.cancel'),
+    })
+    if (reversal.cancelled) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/documents/${run.document_id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason,
+          expectedUpdatedAt: run.document_revision,
+          ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+        }),
+      })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      toast.success(t('wizard.finish.voided', { number: run.document_number }))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function attributeEntity(subsidiaryId: string) {
     setBusy(true)
     try {
@@ -755,6 +802,7 @@ export function RunWizard(props: {
           onEmailStubs={emailStubs}
           onRecordPayment={recordPayment}
           onAttributeEntity={attributeEntity}
+          onVoid={voidRun}
           registerReportId={props.registerReportId}
           bankAccounts={props.bankAccounts}
           entityOptions={props.entityOptions}

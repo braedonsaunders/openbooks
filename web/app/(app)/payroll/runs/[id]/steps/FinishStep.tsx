@@ -8,7 +8,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, BookOpenCheck, CheckCircle2, FileDown, Loader2, Send } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Ban, BookOpenCheck, CheckCircle2, FileDown, Loader2, Send } from 'lucide-react'
 import { Badge, Button, TableCell, TableRow, cn } from '@openbooks/ui'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import type { PayRunRefusalAcknowledgement } from '@openbooks/engine/src/payroll/run-calculation-evidence.ts'
@@ -91,6 +91,7 @@ export function FinishStep({
   onEmailStubs,
   onRecordPayment,
   onAttributeEntity,
+  onVoid,
   registerReportId,
   bankAccounts,
   entityOptions,
@@ -111,6 +112,8 @@ export function FinishStep({
   onEmailStubs: () => void
   onRecordPayment: (bankAccountId: string) => void
   onAttributeEntity: (subsidiaryId: string) => void
+  /** Void the committed run: reverses its posting by the document void path. */
+  onVoid: () => void
   registerReportId: string | null
   bankAccounts: { id: string; label: string }[]
   entityOptions: { id: string; label: string }[]
@@ -218,6 +221,12 @@ export function FinishStep({
                   busy={busy}
                   onAttribute={onAttributeEntity}
                 />
+              )}
+              {canRun && run.document_status !== 'voided' && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={onVoid} className="text-red-600 dark:text-red-400">
+                  <Ban size={14} aria-hidden />
+                  {t('wizard.finish.voidRun')}
+                </Button>
               )}
             </>
           )}

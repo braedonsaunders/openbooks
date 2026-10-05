@@ -313,7 +313,10 @@
       "partialRecovery": "Para pagar os funcionários excluídos: informe os dados faltantes assim que sua tela de entrada estiver disponível e pague-os em uma folha extra. Uma folha contabilizada nunca é alterada depois.",
       "attributeEntity": "Atribuir entidade",
       "entityAttributed": "Entidade legal registrada. A folha agora pode ser recolhida.",
-      "entityTarget": "Entidade legal"
+      "entityTarget": "Entidade legal",
+      "voidRun": "Cancelar folha",
+      "voidTitle": "Cancelar a folha {number}?",
+      "voided": "{number} foi cancelada e o lançamento estornado."
     },
     "adjust": {
       "title": "Ajustes",

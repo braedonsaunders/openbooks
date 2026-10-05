@@ -313,7 +313,10 @@
       "partialRecovery": "Um die ausgenommenen Mitarbeiter zu bezahlen: Liefern Sie die fehlenden Eingaben nach, sobald deren Erfassungsmaske verfügbar ist, und zahlen Sie sie dann in einem Sonderlauf. Ein gebuchter Lauf wird niemals nachträglich geändert.",
       "attributeEntity": "Entität zuordnen",
       "entityAttributed": "Rechtsträger erfasst. Der Lohnlauf kann nun abgeführt werden.",
-      "entityTarget": "Rechtsträger"
+      "entityTarget": "Rechtsträger",
+      "voidRun": "Lohnlauf stornieren",
+      "voidTitle": "Lohnlauf {number} stornieren?",
+      "voided": "{number} wurde storniert und die Buchung rückgängig gemacht."
     },
     "adjust": {
       "title": "Anpassungen",

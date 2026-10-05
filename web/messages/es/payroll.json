@@ -313,7 +313,10 @@
       "partialRecovery": "Para pagar a los empleados excluidos: aporte los datos faltantes cuando su pantalla de captura esté disponible y págueles en un ciclo fuera de nómina. Un ciclo contabilizado nunca se modifica después.",
       "attributeEntity": "Asignar entidad",
       "entityAttributed": "Entidad legal registrada. La nómina ya puede remitirse.",
-      "entityTarget": "Entidad legal"
+      "entityTarget": "Entidad legal",
+      "voidRun": "Anular nómina",
+      "voidTitle": "¿Anular la nómina {number}?",
+      "voided": "{number} se anuló y se revirtió su asiento."
     },
     "adjust": {
       "title": "Ajustes",
