@@ -54,7 +54,7 @@ test("the latest check-in never proves completeness; only the declared capture w
   assert.equal(observeAttendance(input).status, "present");
   assert.equal(observeAttendance({ ...input, events: [], completeThrough: null }).status, "waiting_for_sync");
   const absent = observeAttendance({ ...input, events: [] });
-  assert.equal(absent.status, "absent"); assert.equal(absent.presenceMilliseconds, 0);
+  assert.deepEqual([absent.status, absent.presenceMilliseconds, absent.breakMilliseconds, absent.late, absent.leftEarly], ["absent", 0, 0, false, false]);
 });
 
 test("attendance preserves actual milliseconds and recorded breaks without manufacturing approved paid time", () => {
