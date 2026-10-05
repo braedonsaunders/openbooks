@@ -537,6 +537,7 @@ test(
            'full_month', '{}'::jsonb, ${actorId}, ${actorId})
       `);
       await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
       await setPeriodLockState({
         orgId: org.orgId,
         periodId: org.periodId,
@@ -550,7 +551,7 @@ test(
         () =>
           disposeAsset(org.orgId, assetId, {
             proceeds: "0",
-            date: org.date,
+            date: "2026-07-31",
             actorId,
             writeOff: true,
           }),
