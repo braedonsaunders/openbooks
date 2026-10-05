@@ -50,10 +50,10 @@ async function seedClassificationTrap() {
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
     for (const [id, number, name] of [
-      [decoyApplied, '5200', 'Overhead Burden Clearing'],
-      [realApplied, '5210', 'Applied Overhead Account'],
-      [wageDecoy, '6100', 'Wages and Salaries'],
-      [crewReal, '6110', 'Field Crew Cost'],
+      [decoyApplied, '7810', 'Overhead Burden Clearing'],
+      [realApplied, '7820', 'Applied Overhead Account'],
+      [wageDecoy, '7830', 'Wages and Salaries'],
+      [crewReal, '7840', 'Field Crew Cost'],
     ] as const) {
       await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
         values (${id}, ${org.orgId}, ${number}, ${name}, 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
@@ -126,7 +126,7 @@ test('true cost refuses absorption by name with no applied postings', { skip: !e
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
       values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${emp}, ${org.orgId}, 'Refusal Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      values (${emp}, ${org.orgId}, 'employee', 'Refusal Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
   })
@@ -164,11 +164,11 @@ test('true cost cascading refuses by name with no costed labor and no base rate'
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
       values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${emp}, ${org.orgId}, 'Cascade Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      values (${emp}, ${org.orgId}, 'employee', 'Cascade Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${rentAccount}, ${org.orgId}, '7000', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
       values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
     const entry = randomUUID()
@@ -214,13 +214,13 @@ test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPEN
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
       values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${emp}, ${org.orgId}, 'FTE Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      values (${emp}, ${org.orgId}, 'employee', 'FTE Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
     await db.execute(sql`insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from)
       values (${org.orgId}, ${emp}, 'CAD', 40, 'hour', 2000, '2026-01-01')`)
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${rentAccount}, ${org.orgId}, '7000', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
       values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
     const entry = randomUUID()
@@ -263,11 +263,11 @@ test('true cost per-FTE refuses by name with no annual hours', { skip: !env.OPEN
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
       values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${emp}, ${org.orgId}, 'FTE Refusal Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      values (${emp}, ${org.orgId}, 'employee', 'FTE Refusal Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${rentAccount}, ${org.orgId}, '7000', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
       values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
     const entry = randomUUID()
@@ -314,7 +314,7 @@ test('true cost counts headcount once per department across currencies', { skip:
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
       values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${emp}, ${org.orgId}, 'Headcount Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      values (${emp}, ${org.orgId}, 'employee', 'Headcount Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
     await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
@@ -358,7 +358,7 @@ test('true cost counts unrated hours instead of pricing them at zero', { skip: !
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
       values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${emp}, ${org.orgId}, 'Unrated Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      values (${emp}, ${org.orgId}, 'employee', 'Unrated Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', false, ${dept}, null, null, null, '{}'::jsonb)`)
   })
@@ -402,7 +402,7 @@ test('true cost splits untagged expense by the category allocation base', { skip
         values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, ${hours}, 'approved', true, ${dept}, '50.0000', 'CAD', null, '{}'::jsonb)`)
     }
     await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${rentAccount}, ${org.orgId}, '7000', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
       values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
     const entry = randomUUID()

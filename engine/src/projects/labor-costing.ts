@@ -362,7 +362,7 @@ export async function resolveWage(
  * each employee's winning `labor_cost_rates.annual_hours` under the same
  * scope priority `resolveWage` uses (employee > job title > trade >
  * department > subsidiary > org; latest effective_from wins). Employees with
- * no covering row — or a zero annual-hours row — are absent from the map:
+ * no covering row — or no annual hours on it — are absent from the map:
  * the caller refuses by name when nothing resolves instead of assuming a
  * divisor.
  */

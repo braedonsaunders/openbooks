@@ -118,7 +118,7 @@ test('auto-publish runs the cascading composite over untagged expense exactly',{
   }finally{await dropScratchOrg(seeded.org.orgId);}
 });
 
-test('auto-publish refuses a non-hourly included format while preview still renders (finding 6.6)',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+test('preview and auto-publish refuse a mixed-unit composite by name (finding 6.6)',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const seeded=await seedOverheadOrg({
     expenses:[
       {number:'6601',name:'Office rent',amount:'100',dept:true},
@@ -127,14 +127,32 @@ test('auto-publish refuses a non-hourly included format while preview still rend
     hours:['4'],
   });
   try{
-    // Wages is its own burden category and also feeds the labor base (the base
-    // query matches the name); the rent category reports as % of labor —
-    // unpublishable to a $/hr card.
+    // The rent category reports as % of labor while wages stays money — a
+    // second unit in the sum composite, refused in preview and publish. The
+    // labor base comes from a separate direct-labor account: pinning wages
+    // itself would exclude it from burden, leaving nothing to blend.
+    const poolGroup=randomUUID();
+    const crewAccount=randomUUID();
+    await db.execute(sql`insert into accounts(id,org_id,number,name,type) values (${crewAccount},${seeded.org.orgId},'6603','Crew labor','expense')`);
+    await db.execute(sql`insert into account_groups(id,org_id,dimension,key,name,is_catch_all,is_active) values (${poolGroup},${seeded.org.orgId},'cost_pool','direct_labor','Direct labor',false,true)`);
+    await db.execute(sql`insert into account_group_members(id,org_id,group_id,account_id,dimension) values (${randomUUID()},${seeded.org.orgId},${poolGroup},${crewAccount},'cost_pool')`);
+    const crewEntry=randomUUID();
+    await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values (${crewEntry},${seeded.org.orgId},${seeded.org.bookId},${seeded.org.subsidiaryId},${crewEntry},${seeded.org.date},${seeded.org.periodId},'draft','manual')`);
+    await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,department_id,amount,currency,txn_amount,fx_rate) values
+      (${seeded.org.orgId},${crewEntry},1,${crewAccount},${seeded.org.subsidiaryId},${seeded.department},'50','CAD','50',1),
+      (${seeded.org.orgId},${crewEntry},2,${seeded.org.accounts.bank},${seeded.org.subsidiaryId},${seeded.department},-50::numeric,'CAD',-50::numeric,1)`);
+    await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${crewEntry}`);
     await setTrueCostProfile(seeded.org.orgId,{categorySettings:{[seeded.groups[0]!.group]:{allocationBase:'labor_dollars',rateFormat:'percent_labor',includeInComposite:true}}});
-    const data=await trueCostData(seeded.org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'July 2026'},null);
-    assert.equal(data.ratePublication.supported,false);
-    assert.equal(data.ratePublication.blockers.length,1);
-    assert.match(data.ratePublication.blockers[0]?.reason ?? '',/percent_labor/);
+    await assert.rejects(
+      trueCostData(seeded.org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'July 2026'},null),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message,/Cannot blend rate formats/);
+        assert.match(error.message,/Office rent/);
+        assert.match(error.message,/percent_labor/);
+        return true;
+      },
+    );
     await assert.rejects(computeLiveOverheadRates(seeded.org.orgId),/percent_labor/);
   }finally{await dropScratchOrg(seeded.org.orgId);}
 });
