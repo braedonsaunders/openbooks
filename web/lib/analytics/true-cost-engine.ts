@@ -152,7 +152,7 @@ export function calculateRate(
             quantizeOverheadMoney(amount),
           ]),
         );
-  return Number(
+  return toChartNumber(
     deriveOverheadOverallRate({
       id: category.id,
       allocationMethod: method ?? category.allocationMethod ?? "simple",
@@ -313,8 +313,24 @@ function exactConfigMoney(value: unknown): string {
   }
 }
 
-/** Exact department share of an allocation base (decimal string, 0 when empty). */
-function exactBaseShare(base: AllocationBase, bases: AllocationBaseBundle, deptId: string): string {
+/**
+ * Exact department share of an allocation base (decimal string, 0 when empty).
+ * When the caller passes exact per-department base maps, shares divide those
+ * directly; the float bundle is only a fallback for callers without one.
+ */
+function exactBaseShare(
+  base: AllocationBase,
+  bases: AllocationBaseBundle,
+  deptId: string,
+  exactBases?: Partial<Record<AllocationBase, Record<string, string>>>,
+): string {
+  const exactMap = exactBases?.[base];
+  if (exactMap) {
+    let total = "0.0000";
+    for (const key of Object.keys(exactMap)) total = add(total, exactMap[key] ?? "0.0000");
+    if (cmp(total, "0") <= 0) return "0";
+    return div(exactMap[deptId] ?? "0.0000", total);
+  }
   const totalBase = exactConfigMoney(getAllocationBaseValue(base, bases, "Overall"));
   if (cmp(totalBase, "0") <= 0) return "0";
   return div(exactConfigMoney(getAllocationBaseValue(base, bases, deptId)), totalBase);
@@ -326,6 +342,7 @@ export function calculateManualCategoryData(
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
+  exactBases?: Partial<Record<AllocationBase, Record<string, string>>>,
 ): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number } {
   const entryMode = manualConfig.entryMode || "fixed_total";
   const expense: Record<string, number> = {};
@@ -335,22 +352,25 @@ export function calculateManualCategoryData(
 
   if (entryMode === "fixed_total") {
     const fixedTotalUnits = toUnits(exactConfigMoney(manualConfig.fixedTotal ?? 0));
-    totalExpense = Number(fromUnits(fixedTotalUnits));
-    const weightUnits = (value: number): bigint => {
-      if (!Number.isFinite(value) || value < 0) throw new Error("fixed-total allocation requires finite, non-negative department bases.");
-      let raw = String(value);
-      const negative = raw.startsWith("-");
-      if (negative) raw = raw.slice(1);
+    totalExpense = toChartNumber(fromUnits(fixedTotalUnits));
+    const weightUnits = (value: number | string): bigint => {
+      if (typeof value === "number" && (!Number.isFinite(value) || value < 0))
+        throw new Error("fixed-total allocation requires finite, non-negative department bases.");
+      const raw = String(value);
+      if (raw.startsWith("-"))
+        throw new Error("fixed-total allocation requires finite, non-negative department bases.");
       const [coefficient, exponentText] = raw.toLowerCase().split("e");
       const exponent = Number(exponentText ?? 0);
       const [whole = "0", fraction = ""] = coefficient!.split(".");
       const digits = BigInt(`${whole}${fraction}` || "0");
       const decimalPlaces = fraction.length - exponent;
       if (decimalPlaces > 18) throw new Error("fixed-total allocation base exceeds supported decimal precision.");
-      const scaled = digits * 10n ** BigInt(18 - decimalPlaces);
-      return negative ? -scaled : scaled;
+      return digits * 10n ** BigInt(18 - decimalPlaces);
     };
-    const weights = deptIds.map((id) => ({ id, weight: weightUnits(getAllocationBaseValue(allocationBase, bases, id)) }));
+    // Department weights come from the exact base maps when the caller passes
+    // them, so a float bundle can never skew a fixed-total split.
+    const exactWeights = exactBases?.[allocationBase];
+    const weights = deptIds.map((id) => ({ id, weight: weightUnits(exactWeights?.[id] ?? getAllocationBaseValue(allocationBase, bases, id)) }));
     const weightTotal = weights.reduce((sum, item) => sum + item.weight, 0n);
     expenseExact = Object.fromEntries(deptIds.map((id) => [id, "0.0000"]));
     if (weightTotal > 0n) {
@@ -380,10 +400,10 @@ export function calculateManualCategoryData(
     for (const id of deptIds) {
       const amt = exactConfigMoney(byDept[id]);
       expenseExact[id] = amt;
-      expense[id] = Number(amt);
+      expense[id] = toChartNumber(amt);
       exactTotal = add(exactTotal, amt);
     }
-    totalExpense = Number(exactTotal);
+    totalExpense = toChartNumber(exactTotal);
   } else if (entryMode === "per_unit") {
     const unitType = manualConfig.unitType || "headcount";
     const perUnitRate = exactConfigMoney(manualConfig.perUnitRate);
@@ -394,15 +414,18 @@ export function calculateManualCategoryData(
     for (const id of deptIds) {
       let exp = "0.0000";
       try {
-        exp = mulDecimal(quantizeOverheadMoney(getAllocationBaseValue(unitType, bases, id)), rate);
+        // The exact per-department unit count when the caller passes one; the
+        // float bundle is only a fallback for callers without exact maps.
+        const units = exactBases?.[unitType]?.[id] ?? quantizeOverheadMoney(getAllocationBaseValue(unitType, bases, id));
+        exp = mulDecimal(units, rate);
       } catch {
         exp = "0.0000";
       }
       expenseExact[id] = exp;
-      expense[id] = Number(exp);
+      expense[id] = toChartNumber(exp);
       exactTotal = add(exactTotal, exp);
     }
-    totalExpense = Number(exactTotal);
+    totalExpense = toChartNumber(exactTotal);
   }
 
   expense["Overall"] = totalExpense;
@@ -412,10 +435,11 @@ export function calculateManualCategoryData(
 /** Calculate a category as a percentage of another category. */
 export function calculateDerivedCategoryData(
   derivedConfig: { sourceCategory?: string; percentage?: number | string; allocationBase?: AllocationBase | "same" },
-  categoryTotals: Record<string, { expenseOverall: number }>,
+  categoryTotals: Record<string, { expenseOverall: number | string }>,
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
+  exactBases?: Partial<Record<AllocationBase, Record<string, string>>>,
 ): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number } {
   const expense: Record<string, number> = { Overall: 0 };
   const expenseExact: Record<string, string> = { Overall: "0.0000" };
@@ -432,7 +456,7 @@ export function calculateDerivedCategoryData(
   const base = derivedConfig.allocationBase && derivedConfig.allocationBase !== "same" ? derivedConfig.allocationBase : allocationBase;
 
   for (const id of deptIds) {
-    const exact = mulDecimal(totalDerived, exactBaseShare(base, bases, id));
+    const exact = mulDecimal(totalDerived, exactBaseShare(base, bases, id, exactBases));
     expenseExact[id] = exact;
     expense[id] = toChartNumber(exact);
   }
@@ -450,11 +474,12 @@ export function calculateDerivedCategoryData(
  */
 export function calculateFormulaCategoryData(
   formulaConfig: { formula?: string },
-  categoryTotals: Record<string, { expenseOverall: number }>,
+  categoryTotals: Record<string, { expenseOverall: number | string }>,
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
   strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
+  exactBases?: Partial<Record<AllocationBase, Record<string, string>>>,
 ): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number; error?: string } {
   const expense: Record<string, number> = { Overall: 0 };
   const expenseExact: Record<string, string> = { Overall: "0.0000" };
@@ -475,13 +500,22 @@ export function calculateFormulaCategoryData(
       return "0.0000";
     }
   };
+  // Formula base references resolve against the exact per-department maps when
+  // the caller passes them, so a float bundle can never skew a formula total.
+  const exactOverall = (base: AllocationBase, fallback: number): string => {
+    const map = exactBases?.[base];
+    if (!map) return safeBase(fallback);
+    let total = "0.0000";
+    for (const key of Object.keys(map)) total = add(total, map[key] ?? "0.0000");
+    return total;
+  };
   const baseVals: Record<string, string> = {
-    billed_hours: safeBase(bases.hours.totalBilled),
-    total_hours: safeBase(bases.hours.total),
-    headcount: safeBase(bases.headcount.total),
-    revenue: safeBase(bases.revenue.total),
-    labor_dollars: safeBase(bases.laborDollars.total),
-    direct_cost: safeBase(bases.directCost.total),
+    billed_hours: exactOverall("billed_hours", bases.hours.totalBilled),
+    total_hours: exactOverall("total_hours", bases.hours.total),
+    headcount: exactOverall("headcount", bases.headcount.total),
+    revenue: exactOverall("revenue", bases.revenue.total),
+    labor_dollars: exactOverall("labor_dollars", bases.laborDollars.total),
+    direct_cost: exactOverall("direct_cost", bases.directCost.total),
   };
 
   let evalFormulaText = formula;
@@ -494,7 +528,7 @@ export function calculateFormulaCategoryData(
 
   const totalExpenseExact = cmp(calc, "0") < 0 ? "0.0000" : calc;
   for (const id of deptIds) {
-    const exact = mulDecimal(totalExpenseExact, exactBaseShare(allocationBase, bases, id));
+    const exact = mulDecimal(totalExpenseExact, exactBaseShare(allocationBase, bases, id, exactBases));
     expenseExact[id] = exact;
     expense[id] = toChartNumber(exact);
   }
