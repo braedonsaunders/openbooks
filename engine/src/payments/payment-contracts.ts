@@ -58,6 +58,11 @@ export interface OpenItem {
   transactionAmount: string;
   transactionApplied: string;
   transactionOpen: string;
+  /**
+   * The live payment run that has reserved this item, if any. A reserved
+   * item is paid by that run; settling it anywhere else is refused.
+   */
+  reservedByRun: { runId: string; runNumber: string; runStatus: string } | null;
 }
 
 export interface SuggestedApplication {

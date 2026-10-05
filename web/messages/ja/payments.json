@@ -56,6 +56,7 @@
     "openItems": "{side, select, ap {未払の仕入請求書} other {未回収の請求書}}",
     "amountReceived": "受領金額",
     "autoApply": "自動適用",
+    "reservedByRun": "支払実行 {runNumber} で予約済み",
     "autoApplyFailed": "適用案を提示できませんでした",
     "autoApplyNone": "この金額に一致する未消込項目はありません",
     "autoApplyDone": "{count, plural, one {# 件の項目} other {# 件の項目}}に適用しました（{strategy}）",

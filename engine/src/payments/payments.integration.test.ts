@@ -8,6 +8,7 @@ import { toUnits } from "../money/money.ts";
 import {
   generatePaymentFileArtifact,
   recordPaymentSettlement,
+  rollbackPaymentRun,
 } from "./operations.ts";
 import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
@@ -18,7 +19,8 @@ import { markAutomaticRemittanceEnqueueFailed, settleAutomaticRemittanceEnqueueE
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { createDocumentsFlowAdapter } from "../flows/documents-adapter.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
-import { suggestApplications } from "./payment-queries.ts";
+import { openItemsForParty, suggestApplications } from "./payment-queries.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
@@ -586,6 +588,94 @@ async function postVendorDocument(
   `)).rows[0]!.id;
   return { documentId, openLineId };
 }
+
+/** Every message on an error's cause chain (driver errors arrive wrapped). */
+function errorChainText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    parts.push(String((current as { message?: unknown }).message ?? ""));
+    current = (current as { cause?: unknown }).cause;
+  }
+  return parts.join(" | ");
+}
+
+test("a bill reserved by a delivered payment run cannot also be paid by hand", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+    await withOrgContext(org.orgId, async () => {
+      const billLineId = (await db.execute<{ id: string }>(sql`
+        select jl.id from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+         where je.source_document_id = ${options.billId} and je.status = 'posted' and jl.is_open_item
+      `)).rows[0]!.id;
+      const draftManualPayment = async () => {
+        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+          orgId: org.orgId, kind: "vendor_payment", createdBy: options.actorId, partyId: org.vendorId,
+          bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date,
+          currency: "CAD", fxRate: "1",
+        });
+        await updateDraftPayment(payment.id, {
+          partyId: org.vendorId, bankAccountId: org.accounts.bank,
+          allocations: [sameCurrencyAllocation(billLineId, "125")],
+        }, options.actorId, org.orgId);
+        return payment.id;
+      };
+      // A clerk drafts and approves a manual payment of the bill...
+      const manualId = await draftManualPayment();
+      await db.execute(sql`update documents set status = 'approved' where id = ${manualId} and org_id = ${org.orgId}`);
+      // ...while the same bill goes into a run whose file reaches the bank.
+      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
+        orgId: org.orgId, createdBy: options.actorId, paymentBankProfileId: options.profileId,
+        billDocumentIds: [options.billId], scheduledFor: org.date,
+      });
+      await db.execute(sql`update payment_runs set status = 'delivered' where id = ${run.id} and org_id = ${org.orgId}`);
+
+      const listed = (await openItemsForParty(org.vendorId, "ap", org.orgId)).find((item) => item.lineId === billLineId);
+      assert.deepEqual(listed?.reservedByRun, { runId: run.id, runNumber: run.runNumber, runStatus: "delivered" });
+      assert.deepEqual((await suggestApplications(org.vendorId, "125", "ap", { sourceCurrency: "CAD", orgId: org.orgId })).allocations, []);
+
+      const refusal = (error: unknown) => {
+        assert.ok(error instanceof PaymentError, errorChainText(error));
+        assert.equal(
+          error.message,
+          `BILL-RESERVE-1 is reserved by payment run ${run.runNumber} (delivered), which will pay it; ` +
+          `pay it through that run, or confirm with the bank that payment run ${run.runNumber}'s file was not processed and roll the run back before settling it here`,
+        );
+        return true;
+      };
+      await assert.rejects(postPaymentWithApplications(manualId, undefined, options.actorId), refusal);
+      await assert.rejects(draftManualPayment(), refusal);
+
+      // Writers that bypass the payment service meet the same line in PostgreSQL.
+      const credit = await postVendorDocument(org, options.actorId, "vendor_credit", "CREDIT-OUTSIDE-RUN", "10");
+      await assert.rejects(
+        db.execute(sql`
+          insert into applications
+            (org_id, from_line_id, to_line_id, amount, source_amount, source_transaction_amount,
+             source_transaction_currency, target_transaction_amount, target_transaction_currency,
+             settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on, created_by)
+          values (${org.orgId}, ${credit.openLineId}, ${billLineId}, '10', '10', '10', 'CAD', '10', 'CAD',
+                  '1', 'same_currency', 'direct write', ${org.date}, ${options.actorId})`),
+        (error: unknown) => {
+          assert.match(errorChainText(error), new RegExp(`BILL-RESERVE-1 is reserved by payment run ${run.runNumber} \\(delivered\\)`));
+          return true;
+        },
+      );
+
+      // The named remedy works: once the run is rolled back the manual payment posts.
+      await rollbackPaymentRun(run.id, org.orgId, options.actorId, "bank returned the file unprocessed");
+      await postPaymentWithApplications(manualId, undefined, options.actorId);
+      const bill = (await db.execute<{ settled: boolean }>(sql`
+        select open_balance = 0 as settled from documents where id = ${options.billId} and org_id = ${org.orgId}
+      `)).rows[0];
+      assert.deepEqual(bill, { settled: true });
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("a bill a run settles wholly with credit is reserved by that run and settles when it posts", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());

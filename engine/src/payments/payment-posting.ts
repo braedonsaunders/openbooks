@@ -13,7 +13,7 @@ import { PaymentError } from "../payments-core/payment-errors.ts";
 import { allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmountForSettlement, realizedFxControlAdjustment, validateAllocationInputs, validateSettlementEvidence, type AllocationInput, type SettlementRateSource } from "./settlement-policy.ts";
 import { PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
-import { openItemsForParty } from "./payment-queries.ts";
+import { assertNoForeignRunReservation, openItemsForParty } from "./payment-queries.ts";
 import { assertCreditSourcesExist, validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind } from "./payment-documents.ts";
 import { redeemStoredValue } from "../stored-value/accounts.ts";
@@ -225,6 +225,14 @@ export async function postPaymentWithApplications(
     if (options.runClaim) {
       await assertPaymentRunComposition(options.runClaim.runId, paymentDocId, allocs, creditAllocs, custom.discountAmount ?? "0", preflight.orgId);
     }
+    // An item a payment run has reserved is paid by that run — its file may
+    // already be at the bank — so settling it from any other payment pays it
+    // twice. The run's own payment is the only one that may settle it.
+    await assertNoForeignRunReservation(
+      preflight.orgId,
+      [...currentEndpoints, ...allocs.map((allocation) => allocation.openLineId)],
+      paymentDocId,
+    );
     // A payment is the CASH frame: its total is the bank line by contract, so
     // a payment settling only credits would be a 0.00 receipt sitting in the
     // payments list, the collected/paid tiles, remittance advice and bank

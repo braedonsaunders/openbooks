@@ -56,6 +56,7 @@
     "openItems": "{side, select, ap {Open bills} other {Open invoices}}",
     "amountReceived": "Amount received",
     "autoApply": "Auto-apply",
+    "reservedByRun": "Reserved by payment run {runNumber}",
     "autoApplyFailed": "Could not suggest an application",
     "autoApplyNone": "No open items match this amount",
     "autoApplyDone": "Applied to {count, plural, one {# item} other {# items}} ({strategy})",
