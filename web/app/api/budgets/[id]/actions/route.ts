@@ -3,6 +3,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { effectiveExtraDimsSql } from '@openbooks/engine/budgets/dimensions'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, subsidiariesInScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -242,10 +243,10 @@ export const POST = defineRoute({
             await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-                 amount, note, created_by, updated_by)
+                 extra_dims, amount, note, created_by, updated_by)
               select ${user.orgId}, ${newId}, bl.account_id, destination.id,
                      bl.subsidiary_id, bl.department_id, bl.project_id, bl.location_id, bl.class_id,
-                     bl.amount, bl.note, ${user.id}, ${user.id}
+                     bl.extra_dims, bl.amount, bl.note, ${user.id}, ${user.id}
                 from budget_lines bl
                 join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
                 join accounting_periods destination
@@ -330,9 +331,12 @@ export const POST = defineRoute({
             await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-                 amount, created_by, updated_by)
+                 extra_dims, amount, created_by, updated_by)
               select ${user.orgId}, ${id}, l.account_id, destination.id,
                      l.subsidiary_id, l.department_id, l.project_id, l.location_id, l.class_id,
+                     -- Custom segments (fund included) copy through like the other
+                     -- dimensions, under the default-fund reading control applies.
+                     ${effectiveExtraDimsSql(sql`l.extra_dims`, user.orgId)},
                      sum(l.amount), ${user.id}, ${user.id}
                 from journal_lines l
                 join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
@@ -348,7 +352,9 @@ export const POST = defineRoute({
                  and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
                  ${sourceDimFilters.length > 0 ? sql`and ${sql.join(sourceDimFilters, sql` and `)}` : sql``}
                  ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}
-               group by l.account_id, destination.id, l.subsidiary_id, l.department_id, l.project_id, l.location_id, l.class_id
+               -- Positional: the effective custom-segment expression binds its own
+               -- parameters, so it is grouped by its select-list position.
+               group by 3, 4, 5, 6, 7, 8, 9, 10
               having sum(l.amount) <> 0
             `)
             const nextRevision = expectedRevision + 1
@@ -397,10 +403,10 @@ export const POST = defineRoute({
             await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-                 amount, note, created_by, updated_by)
+                 extra_dims, amount, note, created_by, updated_by)
               select ${user.orgId}, ${id}, bl.account_id, destination.id,
                      bl.subsidiary_id, bl.department_id, bl.project_id, bl.location_id, bl.class_id,
-                     bl.amount, bl.note, ${user.id}, ${user.id}
+                     bl.extra_dims, bl.amount, bl.note, ${user.id}, ${user.id}
                 from budget_lines bl
                 join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
                 join accounting_periods destination

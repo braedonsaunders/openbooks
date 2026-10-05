@@ -52,6 +52,8 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const SCENARIO_ID = randomUUID();
 
+const OPERATING_FUND = "00000000-0000-4000-8000-0000000000f1";
+
 function workspace() {
   return {
     scenario: {
@@ -77,7 +79,11 @@ function workspace() {
     perPage: 50,
     sliceTotal: "0.0000",
     effectiveSubsidiaryId: "00000000-0000-4000-8000-000000000001",
-    dimensions: { subsidiaries: [], departments: [], projects: [], locations: [], classes: [] },
+    effectiveExtraDims: { fund: OPERATING_FUND },
+    dimensions: {
+      subsidiaries: [], departments: [], projects: [], locations: [], classes: [],
+      segments: [{ key: "fund", name: "Fund", defaultValueId: OPERATING_FUND, values: [{ id: OPERATING_FUND, code: "OPS", name: "Operating" }] }],
+    },
   };
 }
 
@@ -376,8 +382,9 @@ test("Save opens the created draft when saving its lines is refused", async (t) 
   assert.equal((draft.body as Record<string, unknown>).name, "FY26 services");
   const lines = mounted.calls.find((call) => call.url.includes("/lines"));
   assert.ok(lines, "Save must commit the entered lines");
-  const cells = (lines.body as { cells: { amount: string }[] }).cells;
+  const cells = (lines.body as { cells: { amount: string; extraDims?: Record<string, string> }[] }).cells;
   assert.equal(cells.length, 1, "only the entered non-zero cell is committed");
+  assert.deepEqual(cells[0]!.extraDims, { fund: OPERATING_FUND }, "the cell is saved under the worksheet's fund");
   // Income accounts display credit-normal: the typed 100.00 stores negative.
   assert.equal(cells[0]!.amount, "-100.0000");
   assert.equal(mounted.pushes.length, 1, "Save navigates to the created draft after line refusal");

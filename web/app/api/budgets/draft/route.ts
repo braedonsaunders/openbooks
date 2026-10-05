@@ -124,10 +124,10 @@ export const POST = defineRoute({
             await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-                 amount, note, created_by, updated_by)
+                 extra_dims, amount, note, created_by, updated_by)
               select ${user.orgId}, ${scenario.id}, bl.account_id, destination.id,
                      bl.subsidiary_id, bl.department_id, bl.project_id, bl.location_id, bl.class_id,
-                     bl.amount, bl.note, ${user.id}, ${user.id}
+                     bl.extra_dims, bl.amount, bl.note, ${user.id}, ${user.id}
                 from budget_lines bl
                 join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
                 join accounting_periods destination

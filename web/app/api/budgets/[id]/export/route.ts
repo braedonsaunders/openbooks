@@ -9,6 +9,7 @@ import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { csvResponse, xlsxResponse } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+import { effectiveExtraDimsSql, loadBudgetSegments } from '@openbooks/engine/budgets/dimensions'
 
 
 export const runtime = 'nodejs'
@@ -49,6 +50,7 @@ export const GET = defineRoute({
         class: string | null
         amount: string
         note: string | null
+        extra_dims: Record<string, string>
       }
     const lines = (await db.execute<BudgetExportRow>(sql`
         select a.number, a.name as account_name, p.name as period,
@@ -61,7 +63,8 @@ export const GET = defineRoute({
                coalesce(pr.code, pr.name) as project,
                coalesce(loc.code, loc.name) as location,
                coalesce(c.code, c.name) as class,
-               (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note
+               (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note,
+               ${effectiveExtraDimsSql(sql`bl.extra_dims`, gate.user.orgId)} as extra_dims
           from budget_lines bl
           join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
           join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
@@ -74,14 +77,24 @@ export const GET = defineRoute({
            ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by a.number nulls last, a.name, p.period_number, s.name, d.code, pr.code, loc.code, c.code
       `))
+    // Custom segments (fund included) export one column each, named for the
+    // segment and holding the value's code (name when it has none), which is
+    // what the import resolves — so a fund budget round-trips to its fund.
+    const segments = await loadBudgetSegments(db, gate.user.orgId)
+    const segmentLabel = (key: string, valueId: string | undefined) => {
+      const value = valueId ? segments.find((segment) => segment.key === key)?.values.find((option) => option.id === valueId) : undefined
+      return value ? (value.code ?? value.name) : (valueId ?? '')
+    }
     const result: ReportRunResult = {
         groups: [{
           kind: 'results',
           title: scenario.rows[0].name,
-          columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class', 'Amount', 'Note'],
+          columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class',
+            ...segments.map((segment) => segment.name), 'Amount', 'Note'],
           rows: lines.rows.map((row) => [
             row.number ?? '', row.account_name, row.period, row.subsidiary ?? '', row.department ?? '', row.project ?? '',
-            row.location ?? '', row.class ?? '', row.amount, row.note ?? '',
+            row.location ?? '', row.class ?? '', ...segments.map((segment) => segmentLabel(segment.key, row.extra_dims?.[segment.key])),
+            row.amount, row.note ?? '',
           ]),
           isEmpty: lines.rows.length === 0,
         }],
