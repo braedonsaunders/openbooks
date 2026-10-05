@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { componentLabel, effectiveWindowKind, isComponentIdentityMissing } from './kit-component-labels'
+import { componentLabel, effectiveWindowKind, isComponentIdentityMissing, strictIsCurrent } from './kit-component-labels'
 
 test('a component with code and name reads as code then name', () => {
   assert.equal(
@@ -40,4 +40,13 @@ test('effectivity windows name their shape: bounded, open, ended, evergreen', ()
   assert.equal(effectiveWindowKind({ from: '2026-07-01', to: null }), 'from')
   assert.equal(effectiveWindowKind({ from: null, to: '2026-07-01' }), 'ended')
   assert.equal(effectiveWindowKind({ from: null, to: null }), 'evergreen')
+})
+
+test('only a real boolean counts as current: missing metadata refuses', () => {
+  assert.equal(strictIsCurrent(true), true)
+  assert.equal(strictIsCurrent(false), false)
+  assert.equal(strictIsCurrent(undefined), null)
+  assert.equal(strictIsCurrent(null), null)
+  assert.equal(strictIsCurrent('yes'), null)
+  assert.equal(strictIsCurrent(1), null)
 })

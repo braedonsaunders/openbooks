@@ -256,9 +256,9 @@
     "committed": "已承诺",
     "available": "可售",
     "unknownComponent": "已不在目录中",
-    "effectiveRange": "{from} – {to}有效",
+    "effectiveRange": "{from}至{to}之前有效",
     "effectiveFrom": "自{from}起有效",
-    "effectiveEnded": "已于{to}结束",
+    "effectiveEnded": "已于{to}之前结束",
     "noCurrentRecipe": "今天没有生效的组件 — 以下行为历史记录。"
   },
   "costing": {

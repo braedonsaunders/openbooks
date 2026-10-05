@@ -7,7 +7,7 @@ import { Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { BomDrawer, type BomAssembly, type BomComponent } from '../inventory/BomWorkspace'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { componentLabel, effectiveWindowKind, isComponentIdentityMissing } from './kit-component-labels'
+import { componentLabel, effectiveWindowKind, isComponentIdentityMissing, strictIsCurrent } from './kit-component-labels'
 
 interface KitAvailabilityComponent {
   itemId: string
@@ -97,11 +97,19 @@ export function KitComponentsTab({
       }
       // Identity comes with the line, not from the editor's eligible
       // choices: a component the picker would no longer offer still names
-      // itself from its own catalog snapshot.
+      // itself from its own catalog snapshot. Current-ness is strict: a
+      // line without a real boolean flag makes the whole payload
+      // unreadable, and the reader refuses instead of guessing current.
+      const parsed = (bomBody.components ?? []).map((line) => ({ line, current: strictIsCurrent(line.isCurrent) }))
+      if (parsed.some((entry) => entry.current === null)) {
+        setLoadError(t('kit.loadFailed'))
+        setLoading(false)
+        return
+      }
       setBom({
         assemblyItemId: bomBody.assemblyItemId ?? itemId,
         version: bomBody.version ?? null,
-        components: (bomBody.components ?? []).map((line) => ({
+        components: parsed.map(({ line, current }) => ({
           ...line,
           code: line.code ?? null,
           name: line.name ?? null,
@@ -112,7 +120,7 @@ export function KitComponentsTab({
             name: line.name ?? null,
           }),
           identityMissing: isComponentIdentityMissing(line.joinedId ?? null),
-          isCurrent: line.isCurrent ?? true,
+          isCurrent: current === true,
         })),
       })
       setBomVersion(bomBody.version ?? null)

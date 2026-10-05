@@ -379,9 +379,9 @@
     "committed": "Committed",
     "available": "Available",
     "unknownComponent": "No longer in the catalog",
-    "effectiveRange": "Effective {from} – {to}",
+    "effectiveRange": "Effective {from} to before {to}",
     "effectiveFrom": "Effective from {from}",
-    "effectiveEnded": "Ended {to}",
+    "effectiveEnded": "Ended before {to}",
     "noCurrentRecipe": "No components are effective today — the lines below are history."
   },
   "families": {
