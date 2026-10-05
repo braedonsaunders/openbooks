@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Card, CardContent, EmptyState, Input, Label, Select, Switch } from "@openbooks/ui";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { Badge, Button, Card, CardContent, EmptyState, Input, Label, Select } from "@openbooks/ui";
+import { Switch } from "@/components/switch";
 import { readApiErrorMessage } from "../../../../../lib/api-error";
 import { confirmDialog } from "../../../../../lib/confirm";
 import { useAppAction } from "../../../../../lib/use-app-action";
@@ -54,7 +57,6 @@ export function ShippingAccountsClient() {
   const tc = useTranslations("common");
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -62,7 +64,7 @@ export function ShippingAccountsClient() {
   const [mode, setMode] = useState<"test" | "live">("test");
   const [apiKey, setApiKey] = useState("");
   const [makeDefault, setMakeDefault] = useState(false);
-  const { busy, execute } = useAppAction();
+  const { busy, refusal, execute } = useAppAction();
   const statusLabel = useStatusLabel();
 
   const load = useCallback(async () => {
@@ -89,7 +91,6 @@ export function ShippingAccountsClient() {
     setApiKey("");
     setMakeDefault((accounts ?? []).length === 0);
     setAdding(true);
-    setNotice(null);
   }
 
   function startEdit(account: Account) {
@@ -100,7 +101,6 @@ export function ShippingAccountsClient() {
     setMode(account.mode === "live" ? "live" : "test");
     setApiKey("");
     setMakeDefault(account.isDefault);
-    setNotice(null);
   }
 
   function cancelForm() {
@@ -110,10 +110,9 @@ export function ShippingAccountsClient() {
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setNotice(null);
     await execute(
-      async () => {
-        const res = await fetch("/api/shipping/accounts", {
+      () =>
+        fetchAction("/api/shipping/accounts", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -124,54 +123,41 @@ export function ShippingAccountsClient() {
             ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
             makeDefault,
           }),
-        });
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, t("accounts.errors.saveFailed")));
-      },
+        }),
       {
         fallbackMessage: t("accounts.errors.saveFailed"),
+        successMessage: t(editingId ? "accounts.updated" : "accounts.connected"),
         onOk: () => {
-          setNotice(t(editingId ? "accounts.updated" : "accounts.connected"));
           cancelForm();
           void load();
         },
-        onRefused: (failure) => setError(failure.displayMessage(t("accounts.errors.saveFailed"))),
       },
     );
   }
 
   async function testConnection(account: Account) {
-    setNotice(null);
     await execute(
-      async () => {
-        const res = await fetch(`/api/shipping/accounts/${account.id}/test`, { method: "POST" });
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, t("accounts.errors.testFailed")));
-      },
+      () => fetchAction(`/api/shipping/accounts/${encodeURIComponent(account.id)}/test`, { method: "POST" }),
       {
         fallbackMessage: t("accounts.errors.testFailed"),
+        successMessage: t("accounts.testOk", { name: account.name }),
         onOk: () => {
-          setNotice(t("accounts.testOk", { name: account.name }));
           void load();
         },
-        onRefused: (failure) => setError(failure.displayMessage(t("accounts.errors.testFailed"))),
       },
     );
   }
 
   async function disconnect(account: Account) {
     if (!(await confirmDialog(t("accounts.disconnectConfirm", { name: account.name })))) return;
-    setNotice(null);
     await execute(
-      async () => {
-        const res = await fetch(`/api/shipping/accounts/${account.id}/disconnect`, { method: "POST" });
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, t("accounts.errors.disconnectFailed")));
-      },
+      () => fetchAction(`/api/shipping/accounts/${encodeURIComponent(account.id)}/disconnect`, { method: "POST" }),
       {
         fallbackMessage: t("accounts.errors.disconnectFailed"),
+        successMessage: t("accounts.disconnected", { name: account.name }),
         onOk: () => {
-          setNotice(t("accounts.disconnected", { name: account.name }));
           void load();
         },
-        onRefused: (failure) => setError(failure.displayMessage(t("accounts.errors.disconnectFailed"))),
       },
     );
   }
@@ -191,11 +177,7 @@ export function ShippingAccountsClient() {
         )}
       </div>
 
-      {notice && (
-        <p role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-          {notice}
-        </p>
-      )}
+      <ActionAlert error={refusal} fallbackMessage={t("accounts.errors.saveFailed")} />
       {error && (
         <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
           {error}
@@ -245,7 +227,7 @@ export function ShippingAccountsClient() {
                 />
               </div>
               <div className="flex items-center gap-2 sm:col-span-2">
-                <Switch on={makeDefault} onToggle={() => setMakeDefault((current) => !current)} label={t("accounts.makeDefault")} />
+                <Switch on={makeDefault} disabled={busy} onToggle={() => setMakeDefault((current) => !current)} label={t("accounts.makeDefault")} />
               </div>
               <div className="flex gap-2 sm:col-span-2">
                 <Button type="submit" disabled={busy}>{editing ? tc("actions.save") : t("accounts.connect")}</Button>
