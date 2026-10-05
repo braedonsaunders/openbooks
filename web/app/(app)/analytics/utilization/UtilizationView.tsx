@@ -1574,17 +1574,7 @@ function ConfigTab({ data, canEdit }: { data: UtilizationData; canEdit: boolean 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
-        <ConfigEditor
-          dashboard="utilization"
-          canEdit={canEdit}
-          fields={[
-            { key: 'targetBillablePct', label: t('config.fields.targetBillable.label'), help: t('config.fields.targetBillable.help'), min: 10, max: 100, step: 1 },
-            { key: 'costSpikeThreshold', label: t('config.fields.costSpike.label'), help: t('config.fields.costSpike.help'), min: 0, max: 1_000_000, step: 100 },
-            { key: 'minHours', label: t('config.fields.minHours.label'), help: t('config.fields.minHours.help'), min: 0, max: 500, step: 1 },
-          ]}
-          values={{ targetBillablePct: data.config.target, costSpikeThreshold: data.config.costSpike, minHours: data.config.minHours }}
-          defaults={{ targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 }}
-        />
+        <ConfigEditor dashboard="utilization" canEdit={canEdit} />
         <Panel title={t('panels.modelAssumptions')} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (

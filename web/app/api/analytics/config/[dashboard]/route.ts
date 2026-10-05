@@ -4,49 +4,48 @@ import { NextResponse } from "next/server";
 import { z } from 'zod'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import type { Authz } from "@/lib/authz";
+import { presentationCurrency } from "@/lib/fx-presentation";
+import { ANALYTICS_DASHBOARD_MAP } from "@/lib/analytics/dashboard-catalog";
+import { analyticsDashboardAvailable } from "@/lib/analytics/dashboard-access";
 import {
   ANALYTICS_CONFIG,
+  InvalidConfigValue,
+  cleanConfigValues,
+  configCurrencyKey,
+  isAnalyticsDashboard,
   mergeConfig,
   type AnalyticsConfigValues,
   type AnalyticsDashboard,
-  type ConfigField,
-} from "../../../../../lib/analytics/config";
+} from "@/lib/analytics/config-spec";
 import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = "nodejs";
 
-/** Dashboards that disappear when their parent Features switch is off. */
-const DASHBOARD_FEATURE: Partial<Record<string, string>> = {
-  utilization: "timeTracking",
-};
-
 /**
  * Per-org analytics dashboard settings, stored under
- * orgs.settings.analytics.<dashboard> with a sibling <dashboard>Revision
- * optimistic-concurrency token (the cashflow-categories shape — the sibling
- * key keeps every existing reader of the overrides blob compatible). GET
- * returns the effective (merged) config plus the defaults, the field spec,
- * and the revision; PUT replaces the dashboard's overrides and requires the
- * exact revision from the last read. A stale token is a 409 carrying the
- * current values, so a later PUT can never silently restore another admin's
- * threshold to its stale value. Editing is gated on the same permission as
- * the Setup workspace.
+ * orgs.settings.analytics.<dashboard> with two sibling keys: a <dashboard>Revision
+ * optimistic-concurrency token and a <dashboard>Currency stamp naming the
+ * presentation currency the money thresholds were entered in. GET returns the
+ * effective (merged) config, the defaults, the field spec, the ordered
+ * ladders, the presentation currency and the revision; PUT replaces the
+ * dashboard's overrides and requires the exact revision from the last read. A
+ * stale token is a 409 carrying the current values, so a later PUT can never
+ * silently restore another admin's threshold to its stale value.
  *
- * WRITE validation rejects malformed bodies at the request boundary and
- * invalid dashboard values with a named 422, because the merge-and-clamp
- * reader exists to stay tolerant of legacy stored settings, not to silently
- * rewrite what an admin asked to save. READ stays tolerant: mergeConfig still
- * clamps legacy blobs.
+ * Both verbs answer only for a dashboard the caller can open: the same
+ * permission and Company Features gate as the dashboard itself (the analytics
+ * catalog entry named by the spec), so a switched-off feature's settings are
+ * neither read nor written. Editing additionally needs the Setup permission.
+ *
+ * WRITE validation (cleanConfigValues) rejects malformed bodies with a named
+ * 422; READ stays tolerant through mergeConfig for legacy stored settings.
  */
-async function dashboardFeatureRefusal(orgId: string, dashboard: string) {
-  const featureKey = DASHBOARD_FEATURE[dashboard];
-  if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
-    return notFound("record");
-  }
+async function dashboardRefusal(authz: Authz, dashboard: string) {
+  if (!isAnalyticsDashboard(dashboard)) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
+  const catalogEntry = ANALYTICS_DASHBOARD_MAP[ANALYTICS_CONFIG[dashboard].slug];
+  if (!catalogEntry || !(await analyticsDashboardAvailable(authz, catalogEntry))) return notFound("record");
   return null;
 }
 
@@ -81,143 +80,31 @@ function revisionConflict(dashboard: string): string {
   return `this ${dashboard} configuration changed after you opened it; the latest values are returned — reapply your change and save again`;
 }
 
-class InvalidDashboardValue extends Error {
-  constructor(
-    readonly field: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "InvalidDashboardValue";
-  }
-}
-
-function fieldName(field: ConfigField): string {
-  return `'${field.label}' (${field.key})`;
-}
-
-/**
- * Strict plain-number parsing with no coercion: null, "", booleans,
- * thousands separators, and scientific notation all refuse rather than
- * becoming 0 or a guess.
- */
-function strictNumber(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const text = value.trim();
-  if (!/^-?\d+(\.\d+)?$/.test(text)) return null;
-  const parsed = Number(text);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function cleanThresholdValue(
-  dashboard: string,
-  field: ConfigField,
-  value: unknown,
-): number | string {
-  if (dashboard === "cashflow" && field.key === "weeklyApCap") {
-    const exact = canonicalDecimal(value, 4);
-    if (exact === null) {
-      throw new InvalidDashboardValue(
-        field.key,
-        `threshold ${fieldName(field)} must be a non-negative dollar amount with at most 4 decimal places — enter a plain number like 5000 or 5000.25`,
-      );
-    }
-    if (compareDecimal(exact, "0") < 0 || compareDecimal(exact, "100000000") > 0) {
-      throw new InvalidDashboardValue(
-        field.key,
-        `threshold ${fieldName(field)} must be between 0 and 100000000`,
-      );
-    }
-    try {
-      return normalizeMoney(exact);
-    } catch {
-      throw new InvalidDashboardValue(
-        field.key,
-        `threshold ${fieldName(field)} must be a non-negative dollar amount with at most 4 decimal places — enter a plain number like 5000 or 5000.25`,
-      );
-    }
-  }
-  if (dashboard === "cashflow" && field.key === "restrictToSafe") {
-    if (value === 0 || value === 1 || value === "0" || value === "1") return Number(value);
-    throw new InvalidDashboardValue(
-      field.key,
-      `threshold ${fieldName(field)} must be 0 or 1`,
-    );
-  }
-  const parsed = strictNumber(value);
-  if (parsed === null) {
-    throw new InvalidDashboardValue(
-      field.key,
-      `threshold ${fieldName(field)} must be a number between ${field.min} and ${field.max}`,
-    );
-  }
-  if (parsed < field.min || parsed > field.max) {
-    throw new InvalidDashboardValue(
-      field.key,
-      `threshold ${fieldName(field)} must be between ${field.min} and ${field.max} (received ${String(value).slice(0, 60)})`,
-    );
-  }
-  return parsed;
-}
-
-/**
- * Strict per-dashboard write validator built from the single field spec the
- * form renders: every threshold required on each whole-object save, unknown
- * keys refused, each value type- and range-checked with a named 422. Never
- * the tolerant mergeConfig — that reader clamps legacy stored settings, and
- * using it at write would persist something other than what was requested.
- */
-function cleanDashboardOverrides(dashboard: AnalyticsDashboard, raw: unknown): AnalyticsConfigValues {
-  const spec = ANALYTICS_CONFIG[dashboard]!;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new InvalidDashboardValue(
-      "",
-      `threshold values for the ${dashboard} configuration must be an object of per-threshold values`,
-    );
-  }
-  const input = raw as Record<string, unknown>;
-  const known = new Set(spec.fields.map((field) => field.key));
-  for (const key of Object.keys(input)) {
-    if (!known.has(key)) {
-      throw new InvalidDashboardValue(
-        key,
-        `unknown threshold '${key}' for the ${dashboard} configuration — remove it and retry`,
-      );
-    }
-  }
-  const out: Record<string, number | string> = {};
-  for (const field of spec.fields) {
-    if (!(field.key in input)) {
-      throw new InvalidDashboardValue(
-        field.key,
-        `threshold ${fieldName(field)} is required — send every threshold on each save`,
-      );
-    }
-    out[field.key] = cleanThresholdValue(dashboard, field, input[field.key]);
-  }
-  return out;
-}
-
 export const GET = defineRoute({
   permission: 'reports.read',
   feature: { none: 'Dashboard access is governed by reports.read; utilization settings additionally require timeTracking.' },
   params: dashboardParams,
   handler: async ({ params, authz: gate }) => {
-  const { dashboard } = params;
-  const featureRefusal = await dashboardFeatureRefusal(gate.user.orgId, dashboard)
-  if (featureRefusal) return featureRefusal
-  const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
-  if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
+  const refusal = await dashboardRefusal(gate, params.dashboard)
+  if (refusal) return refusal
+  const dashboard = params.dashboard as AnalyticsDashboard;
+  const spec = ANALYTICS_CONFIG[dashboard];
 
-  const r = ((await db.execute<{ cfg: unknown; rev: number }>(sql`
-    select settings -> 'analytics' -> ${dashboard} as cfg,
-           coalesce((settings -> 'analytics' ->> ${revisionKey(dashboard)})::int, 0) as rev
-      from orgs where id = ${gate.user.orgId}
-  `)));
+  const [r, currency] = await Promise.all([
+    db.execute<{ cfg: unknown; rev: number; currency: string | null }>(sql`
+      select settings -> 'analytics' -> ${dashboard} as cfg,
+             coalesce((settings -> 'analytics' ->> ${revisionKey(dashboard)})::int, 0) as rev,
+             settings -> 'analytics' ->> ${configCurrencyKey(dashboard)} as currency
+        from orgs where id = ${gate.user.orgId}
+    `),
+    presentationCurrency(gate.user.orgId),
+  ]);
   return NextResponse.json({
-    values: mergeConfig(dashboard as AnalyticsDashboard, r.rows[0]?.cfg ?? null),
+    values: mergeConfig(dashboard, r.rows[0]?.cfg ?? null, { stored: r.rows[0]?.currency ?? null, presentation: currency }),
     defaults: spec.defaults,
     fields: spec.fields,
+    ordered: "ordered" in spec ? spec.ordered : [],
+    currency,
     revision: Number(r.rows[0]?.rev ?? 0),
   });
   },
@@ -230,11 +117,9 @@ export const PUT = defineRoute({
   params: dashboardParams,
   body: dashboardBody,
   handler: async ({ params, authz: gate, body }) => {
-  const { dashboard } = params;
-  const featureRefusal = await dashboardFeatureRefusal(gate.user.orgId, dashboard)
-  if (featureRefusal) return featureRefusal
-  const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
-  if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
+  const refusal = await dashboardRefusal(gate, params.dashboard)
+  if (refusal) return refusal
+  const dashboard = params.dashboard as AnalyticsDashboard;
 
   // Missing revisions need the dashboard-specific reload remedy below;
   // malformed supplied revisions are rejected by the body schema.
@@ -247,9 +132,9 @@ export const PUT = defineRoute({
   // types, and out-of-range values with a named 422 before any lock or write.
   let cleaned: AnalyticsConfigValues;
   try {
-    cleaned = cleanDashboardOverrides(dashboard as AnalyticsDashboard, body.values);
+    cleaned = cleanConfigValues(dashboard, body.values);
   } catch (error) {
-    if (error instanceof InvalidDashboardValue) {
+    if (error instanceof InvalidConfigValue) {
       return apiErrorResponse(error, { safeStatus: 422 });
     }
     throw error;
@@ -259,10 +144,12 @@ export const PUT = defineRoute({
   // with complete before/after audit evidence. Concurrent editors serialize
   // on the org row, but serialization alone would still let the second writer
   // silently discard the first — the 409 forces a re-read.
+  const currency = await presentationCurrency(gate.user.orgId);
   const outcome = await db.transaction(async (tx) => {
-    const existing = await tx.execute<{ cfg: unknown; rev: number }>(sql`
+    const existing = await tx.execute<{ cfg: unknown; rev: number; currency: string | null }>(sql`
       select settings -> 'analytics' -> ${dashboard} as cfg,
-             coalesce((settings -> 'analytics' ->> ${revisionKey(dashboard)})::int, 0) as rev
+             coalesce((settings -> 'analytics' ->> ${revisionKey(dashboard)})::int, 0) as rev,
+             settings -> 'analytics' ->> ${configCurrencyKey(dashboard)} as currency
         from orgs where id = ${gate.user.orgId} for update
     `);
     if (!existing.rows[0]) return { kind: "missing" as const };
@@ -271,9 +158,10 @@ export const PUT = defineRoute({
       return {
         kind: "conflict" as const,
         revision: currentRevision,
-        values: mergeConfig(dashboard as AnalyticsDashboard, existing.rows[0].cfg ?? null),
+        values: mergeConfig(dashboard, existing.rows[0].cfg ?? null, { stored: existing.rows[0].currency, presentation: currency }),
       };
     }
+    const beforeCurrency = existing.rows[0].currency;
     const rawBefore = existing.rows[0].cfg;
     const before = rawBefore && typeof rawBefore === "object" ? rawBefore : {};
     const nextRevision = currentRevision + 1;
@@ -281,9 +169,12 @@ export const PUT = defineRoute({
       update orgs
       set settings = jsonb_set(
         jsonb_set(
-          jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-          array['analytics', ${dashboard}], ${JSON.stringify(cleaned)}::jsonb, true),
-        array['analytics', ${revisionKey(dashboard)}], ${JSON.stringify(nextRevision)}::jsonb, true)
+          jsonb_set(
+            jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
+            array['analytics', ${dashboard}], ${JSON.stringify(cleaned)}::jsonb, true),
+          array['analytics', ${revisionKey(dashboard)}], ${JSON.stringify(nextRevision)}::jsonb, true),
+        -- The currency stamp makes every money threshold an amount IN a currency.
+        array['analytics', ${configCurrencyKey(dashboard)}], to_jsonb(${currency}::text), true)
       where id = ${gate.user.orgId}
     `);
     // A write that matches zero rows is a failure, not a save: under RLS an
@@ -294,8 +185,8 @@ export const PUT = defineRoute({
       values (
         ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
         ${JSON.stringify({
-          before: { analytics: { [dashboard]: before, [revisionKey(dashboard)]: currentRevision } },
-          after: { analytics: { [dashboard]: cleaned, [revisionKey(dashboard)]: nextRevision } },
+          before: { analytics: { [dashboard]: before, [revisionKey(dashboard)]: currentRevision, [configCurrencyKey(dashboard)]: beforeCurrency } },
+          after: { analytics: { [dashboard]: cleaned, [revisionKey(dashboard)]: nextRevision, [configCurrencyKey(dashboard)]: currency } },
         })}::jsonb,
         ${gate.user.id}
       )

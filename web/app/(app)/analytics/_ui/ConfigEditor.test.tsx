@@ -27,6 +27,8 @@ const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
+const { NextIntlClientProvider } = await import('next-intl')
+const messages = (await import('../../../../messages/en')).default
 const { ConfigEditor } = await import('./ConfigEditor')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -35,7 +37,13 @@ test('a rejected save request surfaces failure and releases the save button', as
   const priorFetch = globalThis.fetch
   globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'PUT') throw new Error('network unavailable')
-    return Response.json({ revision: 4 })
+    return Response.json({
+      fields: [{ key: 'duplicateDays', kind: 'number', labelKey: 'analytics.sentinel.config.fields.duplicateDays.label', helpKey: 'analytics.sentinel.config.fields.duplicateDays.help', min: 0, max: 20, step: 1 }],
+      values: { duplicateDays: 10 },
+      defaults: { duplicateDays: 5 },
+      currency: 'EUR',
+      revision: 4,
+    })
   }) as typeof fetch
   const host = document.createElement('div')
   document.body.appendChild(host)
@@ -48,13 +56,9 @@ test('a rejected save request surfaces failure and releases the save button', as
 
   await act(async () => {
     root.render(
-      <ConfigEditor
-        dashboard="sentinel"
-        fields={[{ key: 'weeklyApCap', label: 'Weekly cap', help: 'Limit', min: 0, max: 20, step: 1 }]}
-        values={{ weeklyApCap: 10 }}
-        defaults={{ weeklyApCap: 5 }}
-        canEdit
-      />,
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ConfigEditor dashboard="sentinel" canEdit />
+      </NextIntlClientProvider>,
     )
     await tick()
   })

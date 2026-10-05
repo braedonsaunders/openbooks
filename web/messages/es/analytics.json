@@ -334,6 +334,46 @@
       "noInterestExpense": "Sin gastos por intereses",
       "unavailable": "Datos no disponibles",
       "perEmployees": "{revenue} / {count, plural, one {# empleado} other {# empleados}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "Objetivo de margen bruto (%)",
+          "help": "Referencia para la calificación del margen bruto"
+        },
+        "operatingMarginTarget": {
+          "label": "Objetivo de margen operativo (%)",
+          "help": "Referencia para la calificación del margen operativo"
+        },
+        "ebitdaMarginTarget": {
+          "label": "Objetivo de margen EBITDA (%)",
+          "help": "Referencia para la calificación del margen EBITDA"
+        },
+        "netMarginTarget": {
+          "label": "Objetivo de margen neto (%)",
+          "help": "Referencia de rentabilidad final"
+        },
+        "roaTarget": {
+          "label": "Objetivo de rentabilidad sobre activos (%)",
+          "help": "Referencia para la calificación ROA (requiere datos del balance)"
+        },
+        "roeTarget": {
+          "label": "Objetivo de rentabilidad sobre el patrimonio (%)",
+          "help": "Referencia para la calificación ROE (requiere datos del balance)"
+        },
+        "roicTarget": {
+          "label": "Objetivo de rentabilidad sobre el capital invertido (%)",
+          "help": "Referencia para la calificación ROIC (requiere datos del balance)"
+        },
+        "revenuePerEmployee": {
+          "label": "Ingresos por empleado ({currency})",
+          "help": "Referencia de productividad de la plantilla"
+        },
+        "gpPerEmployee": {
+          "label": "Beneficio bruto por empleado ({currency})",
+          "help": "Referencia de productividad de la plantilla"
+        }
+      }
     }
   },
   "customer": {
@@ -2580,5 +2620,21 @@
       "4thWeek": "4.ª semana",
       "distributed": "Distribuido"
     }
+  },
+  "configEditor": {
+    "title": "Umbrales",
+    "hint": "Por organización: todas las pestañas se recalculan al guardar",
+    "default": "predeterminado {value}",
+    "notSet": "Sin definir",
+    "on": "Activado",
+    "off": "Desactivado",
+    "save": "Guardar configuración",
+    "reset": "Restablecer valores predeterminados",
+    "readOnly": "Solo lectura: para cambiarlos se necesita el permiso de Configuración con alcance de toda la empresa.",
+    "saved": "Guardado: recalculando…",
+    "conflict": "Esta configuración cambió después de abrirla: se muestran los valores más recientes; vuelva a aplicar su cambio y guarde de nuevo.",
+    "forbidden": "Para guardar se necesita el permiso de Configuración.",
+    "saveFailed": "No se pudo guardar",
+    "loadFailed": "No se pudieron cargar los umbrales."
   }
 }

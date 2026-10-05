@@ -236,8 +236,8 @@
     "config": {
       "weeklyCapLabel": "週次買掛金支払上限 ({currency})",
       "weeklyCapHelp": "0 = 無制限。上限ありの場合、買掛金は毎週この金額まで期日の古い順に選択され、残りは繰り延べられます。",
-      "restrictLabel": "安全余力に制限 (0/1)",
-      "restrictHelp": "1 = その週の利用可能な現金（予測流入 − 流出）を超える支払いを推奨しません。超過分は繰り延べられます。",
+      "restrictLabel": "安全余力に制限",
+      "restrictHelp": "オンの場合、その週の利用可能な現金（予測流入 − 流出）を超える支払いを推奨しません。超過分は繰り延べられます。",
       "scheduleTitle": "請求書のスケジュール方法",
       "orderLabel": "選択順",
       "orderValue": "期日の古い順",

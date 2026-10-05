@@ -236,8 +236,8 @@
     "config": {
       "weeklyCapLabel": "Teto semanal de pagamentos ({currency})",
       "weeklyCapHelp": "0 = ilimitado. Com teto, os pagáveis são escolhidos do vencimento mais antigo até este valor por semana e o restante é diferido.",
-      "restrictLabel": "Restringir à capacidade segura (0/1)",
-      "restrictHelp": "1 = nunca recomendar pagar além do caixa disponível na semana (entradas projetadas − saídas). O excedente é diferido.",
+      "restrictLabel": "Restringir à capacidade segura",
+      "restrictHelp": "Quando ativado, nunca recomendar pagar além do caixa disponível na semana (entradas projetadas − saídas). O excedente é diferido.",
       "scheduleTitle": "Como as faturas são programadas",
       "orderLabel": "Ordem de seleção",
       "orderValue": "Vencimento mais antigo primeiro",

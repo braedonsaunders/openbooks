@@ -409,6 +409,46 @@
       "noInterestExpense": "Aucune charge d'intérêts",
       "unavailable": "Données non disponibles",
       "perEmployees": "{revenue} / {count, plural, one {# salarié} other {# salariés}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "Objectif de marge brute (%)",
+          "help": "Référence pour la note de marge brute"
+        },
+        "operatingMarginTarget": {
+          "label": "Objectif de marge opérationnelle (%)",
+          "help": "Référence pour la note de marge opérationnelle"
+        },
+        "ebitdaMarginTarget": {
+          "label": "Objectif de marge d’EBITDA (%)",
+          "help": "Référence pour la note de marge d’EBITDA"
+        },
+        "netMarginTarget": {
+          "label": "Objectif de marge nette (%)",
+          "help": "Référence de rentabilité nette"
+        },
+        "roaTarget": {
+          "label": "Objectif de rendement des actifs (%)",
+          "help": "Référence pour la note ROA (nécessite des données de bilan)"
+        },
+        "roeTarget": {
+          "label": "Objectif de rendement des capitaux propres (%)",
+          "help": "Référence pour la note ROE (nécessite des données de bilan)"
+        },
+        "roicTarget": {
+          "label": "Objectif de rendement du capital investi (%)",
+          "help": "Référence pour la note ROIC (nécessite des données de bilan)"
+        },
+        "revenuePerEmployee": {
+          "label": "Chiffre d’affaires par employé ({currency})",
+          "help": "Référence de productivité des effectifs"
+        },
+        "gpPerEmployee": {
+          "label": "Marge brute par employé ({currency})",
+          "help": "Référence de productivité des effectifs"
+        }
+      }
     }
   },
   "customer": {
@@ -2655,5 +2695,21 @@
       "4thWeek": "4ᵉ semaine",
       "distributed": "Réparti"
     }
+  },
+  "configEditor": {
+    "title": "Seuils",
+    "hint": "Par organisation — chaque onglet est recalculé à l’enregistrement",
+    "default": "par défaut {value}",
+    "notSet": "Non défini",
+    "on": "Activé",
+    "off": "Désactivé",
+    "save": "Enregistrer la configuration",
+    "reset": "Rétablir les valeurs par défaut",
+    "readOnly": "Lecture seule — leur modification nécessite l’autorisation Configuration sur l’ensemble de l’entreprise.",
+    "saved": "Enregistré — recalcul en cours…",
+    "conflict": "Cette configuration a changé après son ouverture — les dernières valeurs sont affichées ; réappliquez votre modification et enregistrez à nouveau.",
+    "forbidden": "L’enregistrement nécessite l’autorisation Configuration.",
+    "saveFailed": "Échec de l’enregistrement",
+    "loadFailed": "Les seuils n’ont pas pu être chargés."
   }
 }

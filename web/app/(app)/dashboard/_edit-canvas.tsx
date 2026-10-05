@@ -8,7 +8,7 @@ import { insightVisibilitySql } from '@/lib/insight-access'
 import { getAuthz, can } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
 import { WIDGETS } from './_widget-registry'
-import { WidgetCard } from './_widget-views'
+import { AnalyticsWidgetPreview, WidgetCard } from './_widget-views'
 import type { AllowedWidgetIds } from './widget-features'
 import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
 import type { DashboardMetrics } from './_metrics'
@@ -152,7 +152,13 @@ export async function loadDashboardEditCanvas(
   const widgetAllowed = (id: string) => opts.allowedWidgetIds.has(id)
   const canUseInsights = can(authz, 'insights.read')
 
-  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id))
+  // Widgets extracted from Analytics dashboards run that dashboard's loaders.
+  // Placed ones preview live; the rest of the palette shows a named
+  // placeholder until the layout is saved, so opening the editor never runs
+  // every dashboard's computation just to fill the gallery.
+  const placed = new Set(layout.widgets.map((w) => w.id))
+  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && (!WIDGETS[id]!.analyticsSource || placed.has(id)))
+  const previewSet = new Set(previewIds)
   const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz, previewIds),
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
@@ -166,6 +172,10 @@ export async function loadDashboardEditCanvas(
   const nodes: Record<string, React.ReactNode> = {}
   for (const id of Object.keys(WIDGETS)) {
     if (!widgetAllowed(id)) continue
+    if (!previewSet.has(id)) {
+      nodes[id] = <AnalyticsWidgetPreview key={id} widgetId={id} />
+      continue
+    }
     nodes[id] = (
       <WidgetCard
         key={id}
