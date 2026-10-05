@@ -21,7 +21,8 @@ registerHooks({
     return s ? { format: "module", source: s, shortCircuit: true } : n(u, c);
   },
 });
-const { POST, commandRefusalResponse } = await import("./route.ts");
+const { POST, commandRefusalResponse, commandOperationName } = await import("./route.ts");
+const { SETUP_ENTITY_BY_KEY } = await import("@/lib/setup/registry");
 const { POST: genericPOST, PATCH: genericPATCH, DELETE: genericDELETE } = await import("../route.ts");
 const call = (entity: string, body: string) => POST(new Request(`http://localhost/api/admin/setup/${entity}/command`, { method: "POST", headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" }, body }), { params: Promise.resolve({ entity }) });
 test("permission and unknown-entity refusals precede body parsing", async () => {
@@ -45,6 +46,22 @@ test("feature-off commands 404 before body parsing", async () => {
   assert.equal((await call("fund-pairs", "{")).status, 404);
   routeState.features = { nonprofit: true, fundAccounting: true };
   assert.equal((await call("fund-pairs", "{")).status, 400);
+});
+test("every registry command maps to a ledger-valid operation name", () => {
+  // The idempotency ledger admits lowercase dotted names only; a camelCase
+  // operation throws before the command runs, so every setup command write
+  // would 500. The route bridges engine-style names to ledger names. The
+  // command set derives from the registry, so a newly declared command is
+  // covered without touching this test; the explicit examples pin the bridge
+  // shape for the newest command.
+  const ledgerName = /^[a-z][a-z0-9_.-]{2,99}$/;
+  const declared = [...SETUP_ENTITY_BY_KEY.values()]
+    .filter((entity) => entity.command)
+    .map((entity) => entity.command!.name);
+  assert.ok(declared.length > 0);
+  for (const name of declared) assert.match(commandOperationName(name), ledgerName);
+  assert.equal(commandOperationName("recordChannelAdSpend"), "setup.record_channel_ad_spend");
+  assert.equal(commandOperationName("setFramework"), "setup.set_framework");
 });
 test("generic writes refuse command-owned entities before parsing", async () => {
   routeState.manage = true; routeState.setup = true; routeState.features = { nonprofit: true, fundAccounting: true, functionalExpenses: true };
