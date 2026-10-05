@@ -92,6 +92,9 @@ const mockSources = new Map<string, string>([
             }
           }
           if (query.text.includes('from applications')) return { rows: [] }
+          // No declared fiscal calendar in the mock world: calendar months,
+          // the same answer a calendar-less organization resolves to.
+          if (query.text.includes('from fiscal_calendars')) return { rows: [] }
           throw new Error('unexpected vendor data query: ' + query.text)
         },
       }
