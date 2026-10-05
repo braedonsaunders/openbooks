@@ -22,9 +22,8 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   // A kit's Components tab is operational, not setup: operators without the
   // setup grant pick and sell kits, so it rides both drawer paths.
   const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'items.manage'), props, sp)
-  const recordTabs = kitTab ? [kitTab] : []
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
-    return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
+    return <ItemDrawer key={remountKey} {...props} recordTabs={kitTab ? [kitTab] : []} />
   }
   const features = await resolvedFeatureState(authz.user.orgId)
   const t = await getTranslations('admin.setup')
