@@ -171,28 +171,16 @@ export async function receiveInventory(
     } else if (input.unitCost !== undefined) {
       layerUnitCost = input.unitCost;
     } else if (profile.costingMethod === "standard" && profile.standardCost != null) {
-      // A standard-cost item carries every unit at its configured standard,
-      // so the standard is the explicit basis for an uncosted receipt.
+      // A standard-cost item carries every unit at its configured standard.
       layerUnitCost = profile.standardCost;
     } else {
-      const onHand = await getOnHandWith(
-        tx,
-        orgId,
-        input.itemId,
-        input.stockLocationId,
-        { subsidiaryId: input.subsidiaryId },
-      );
-      // With nothing valued on hand there is no average to carry: a receipt
-      // at zero would put found stock on the books for nothing and make its
-      // later sale cost nothing. Refuse and ask for the cost instead.
+      const onHand = await getOnHandWith(tx, orgId, input.itemId, input.stockLocationId, { subsidiaryId: input.subsidiaryId });
+      // With nothing valued on hand there is no average: a zero-cost receipt
+      // would book found stock for nothing and its later sale at zero COGS.
       if (isZero(onHand.unitCost)) {
-        const item = (await tx.execute<{ label: string }>(sql`
-          select coalesce(nullif(btrim(code), ''), name) as label from items
-           where org_id = ${orgId} and id = ${input.itemId}`)).rows[0];
-        throw new InventoryCostBasisError(
-          `item ${item?.label ?? input.itemId} has no cost basis at this stock location — nothing valued is on hand to average — so the ${input.quantity} received needs a unit cost; enter the unit cost of the received quantity`,
-          item?.label ?? input.itemId,
-        );
+        const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
+          from items where org_id = ${orgId} and id = ${input.itemId}`)).rows[0]?.label ?? input.itemId;
+        throw new InventoryCostBasisError(`item ${label} has no cost basis at this stock location — nothing valued is on hand to average — so the ${input.quantity} received needs a unit cost; enter the unit cost of the received quantity`, label);
       }
       layerUnitCost = onHand.unitCost;
     }
