@@ -13,9 +13,11 @@ import type { SetupCommandName } from "@/lib/setup/types";
 import { setFramework } from "@openbooks/engine/src/nonprofit/frameworks.ts";
 import { setFundPair } from "@openbooks/engine/src/nonprofit/funds.ts";
 import { setFunctionalMapping } from "@openbooks/engine/src/nonprofit/functional.ts";
-import { CHANNEL_ACCOUNT_ROLES } from "@openbooks/engine/src/commerce/contracts.ts";
-import { upsertAccountMap } from "@openbooks/engine/src/commerce/account-maps.ts";
-import { upsertChannelLocation } from "@openbooks/engine/src/commerce/locations.ts";
+import {
+  CHANNEL_ACCOUNT_ROLES,
+  upsertAccountMap,
+  upsertChannelLocation,
+} from "@openbooks/engine/commerce";
 
 export const runtime = "nodejs";
 

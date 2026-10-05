@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import { notFound } from "@/lib/api/responses";
-import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
+import { appBaseUrl } from "@openbooks/engine/flows";
 import {
+  CommerceError,
   SHOPIFY_OAUTH_COOKIE,
   shopifyReview,
   startShopifyConnect,
-} from "@openbooks/engine/src/commerce/shopify/connect.ts";
+} from "@openbooks/engine/commerce";
 
 export const runtime = "nodejs";
 

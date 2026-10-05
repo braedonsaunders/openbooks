@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import {
   bulkDecideCatalogMatches,
+  CommerceError,
   decideCatalogMatch,
-} from "@openbooks/engine/src/commerce/shopify/catalog.ts";
+} from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

@@ -2,10 +2,13 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
-import { getChannel, updateChannel } from "@openbooks/engine/src/commerce/channels.ts";
-import { catalogQueueCounts } from "@openbooks/engine/src/commerce/shopify/catalog.ts";
-import { SHOPIFY_WEBHOOK_TOPICS } from "@openbooks/engine/src/commerce/shopify/subscriptions.ts";
+import {
+  catalogQueueCounts,
+  CommerceError,
+  getChannel,
+  SHOPIFY_WEBHOOK_TOPICS,
+  updateChannel,
+} from "@openbooks/engine/commerce";
 import { can } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 

@@ -2,10 +2,13 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { CHANNEL_ACCOUNT_ROLES } from "@openbooks/engine/src/commerce/contracts.ts";
-import { listAccountMaps, upsertAccountMap } from "@openbooks/engine/src/commerce/account-maps.ts";
-import { proposeShopifyAccountMaps } from "@openbooks/engine/src/commerce/shopify/connect.ts";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
+import {
+  CHANNEL_ACCOUNT_ROLES,
+  CommerceError,
+  listAccountMaps,
+  proposeShopifyAccountMaps,
+  upsertAccountMap,
+} from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

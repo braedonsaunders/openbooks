@@ -1,6 +1,6 @@
 /** Setup-registry commerce entities: channel posting maps, channel locations, and the external-identity map. */
 import type { SetupEntity } from '../types'
-import { CHANNEL_ACCOUNT_ROLES } from '@openbooks/engine/src/commerce/contracts.ts'
+import { CHANNEL_ACCOUNT_ROLES } from '@openbooks/engine/commerce/contracts'
 
 const ACCOUNT_ROLE_OPTIONS = (CHANNEL_ACCOUNT_ROLES as readonly string[]).map((value) => ({
   value,

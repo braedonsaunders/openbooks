@@ -15,8 +15,8 @@ import { ItemDrawer } from './ItemDrawer'
 import { ItemVariantsTab } from './ItemVariantsTab'
 import { KitComponentsTab } from './KitComponentsTab'
 import { externalLinkUnlinkColumn } from '../channels/external-links-column'
-import { listLinksByNative } from '@openbooks/engine/src/commerce/external-links.ts'
-import { withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { listLinksByNative } from '@openbooks/engine/commerce'
+import { withOrgContext } from '@openbooks/engine/platform/database'
 import { PlanningTab } from '../inventory/planning/PlanningTab'
 
 /**

@@ -3,13 +3,13 @@ import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { EXTERNAL_LINK_OBJECT_TYPES } from "@openbooks/schema";
-import { getChannel } from "@openbooks/engine/src/commerce/channels.ts";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import {
+  CommerceError,
+  getChannel,
   linkExternal,
   listExternalLinks,
   unlinkExternal,
-} from "@openbooks/engine/src/commerce/external-links.ts";
+} from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

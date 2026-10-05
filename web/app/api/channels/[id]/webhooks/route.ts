@@ -1,7 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
-import { receiveInboundEvent } from "@openbooks/engine/src/commerce/inbound.ts";
+import { CommerceError, receiveInboundEvent } from "@openbooks/engine/commerce";
 import { readBoundedBodyBytes } from "../../../../../lib/bounded-body";
 
 export const runtime = "nodejs";

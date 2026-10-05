@@ -2,9 +2,12 @@ import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { registeredChannelKinds } from "@openbooks/engine/src/commerce/adapters.ts";
-import { createChannel, listChannels } from "@openbooks/engine/src/commerce/channels.ts";
-import { channelAttention } from "@openbooks/engine/src/commerce/inbound.ts";
+import {
+  channelAttention,
+  createChannel,
+  listChannels,
+  registeredChannelKinds,
+} from "@openbooks/engine/commerce";
 
 export const runtime = "nodejs";
 
