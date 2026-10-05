@@ -1,0 +1,8 @@
+Adds a nullable family_id to item_price_schedules with a subject CHECK
+(exactly one of item_id / family_id), a composite tenant foreign key to
+item_families, family-scoped overlap exclusion guards mirroring the existing
+item-scoped ones, and a family lookup index. No existing row is read,
+rewritten, or deleted and no backfill runs: the column is new so no row can
+match the family-keyed guards yet, every existing schedule is item-scoped so
+the subject CHECK holds for all of them, and the untouched item-scoped
+exclusions cannot collide with the new NULL item_id rows.
