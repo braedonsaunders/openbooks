@@ -906,6 +906,14 @@ async function deriveConsolidatedRatesIn(
   const pairs = await neededPairs(orgId, exec);
   let written = 0;
   for (const pair of pairs) {
+    const before = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
+      select id, current_rate::text as current_rate, average_rate::text as average_rate,
+             historical_rate::text as historical_rate, source
+        from consolidated_fx_rates
+       where org_id = ${orgId} and period_id = ${periodId}
+         and from_currency = ${pair.from} and to_currency = ${pair.to} for update`)).rows[0] ?? null;
+    // A controller's explicit period rate is authoritative even without a spot feed.
+    if (before?.source === "manual") continue;
     // Spot coverage is direct-or-inverse through the shared FX lookup: an
     // org storing only the inverse pair derives exactly like one storing the
     // direct pair (direct wins same-date ties). Uncovered pairs still refuse
@@ -960,12 +968,6 @@ async function deriveConsolidatedRatesIn(
     // choice, so it is recorded with the rate's audit evidence below.
     const historicalBasis = r?.historical ? "carried_forward" : "inception_closing_spot";
     const historical = persistDerivedFxRate(r?.historical ?? spotCurrent);
-    const before = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
-      select id, current_rate::text as current_rate, average_rate::text as average_rate,
-             historical_rate::text as historical_rate, source
-        from consolidated_fx_rates
-       where org_id = ${orgId} and period_id = ${periodId}
-         and from_currency = ${pair.from} and to_currency = ${pair.to}`)).rows[0] ?? null;
     const touched = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
       insert into consolidated_fx_rates
         (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
