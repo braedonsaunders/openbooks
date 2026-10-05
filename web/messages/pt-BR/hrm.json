@@ -1494,7 +1494,8 @@
       "compensation": "Remuneração",
       "oneOnOnes": "1:1",
       "documents": "Documentos",
-      "openSurveys": "Pesquisas abertas"
+      "openSurveys": "Pesquisas abertas",
+      "training": "Treinamento"
     },
     "refusedTitle": "O autoatendimento está indisponível",
     "readFailed": "Não foi possível carregar esta seção. Atualize a página para tentar novamente; se continuar indisponível, contate o administrador.",
@@ -1835,6 +1836,12 @@
       "browser": "Abra o menu do navegador e escolha Instalar OpenBooks ou Instalar aplicativo. Se a instalação não estiver disponível, use um navegador atualizado que ofereça suporte a aplicativos web instalados.",
       "online": "O OpenBooks requer conexão com a internet. Entre normalmente para acessar suas informações atuais.",
       "failed": "O navegador não conseguiu abrir a instalação. Siga as instruções do navegador para adicionar o OpenBooks ao seu dispositivo."
+    },
+    "training": {
+      "title": "Seus treinamentos",
+      "description": "Responda aos convites, consulte seus resultados e compartilhe sua avaliação dos cursos.",
+      "emptyTitle": "Nenhum convite para treinamento",
+      "emptyDescription": "Seus convites para os treinamentos agendados aparecerão aqui."
     }
   },
   "options": {

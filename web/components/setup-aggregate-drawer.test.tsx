@@ -61,3 +61,26 @@ test('a native aggregate drawer retains its dialog, refusal and revision through
   assert.equal(document.querySelector('[role="dialog"]'), dialog)
   assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
 })
+
+test('an in-flight nested decision blocks the native setup shell close and parent-tab navigation', async t => {
+  const { useDirtyUrlDrawer } = await import('./dirty-url-drawer')
+  const routes: string[] = []
+  Object.assign(globalThis, { __aggregateRouter: { push(url: string) { routes.push(url) }, replace(url: string) { routes.push(url) }, refresh() {}, prefetch() {} } })
+  window.history.replaceState(null, '', '/admin/setup/payroll?tab=compensation-packages&package='+id+'&setupTab=review')
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host)
+  function Decision({busy}:{busy:boolean}) { useDirtyUrlDrawer(false,busy);return <p>Pending decision</p> }
+  const render=(busy:boolean)=><NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}><MoneyProvider currency="CAD"><SetupDrawer entity={{...PAYROLL_COMPENSATION_PACKAGES_ENTITY,readOnly:true}} row={{id,code:'POLICY',name:'Employer policy',subsidiary_id:'10000000-0000-4000-8000-000000000004',country:'CA',currency:'CAD',revision:7}} members={[]} refOptions={{}} closeHref="/admin/setup/payroll?tab=compensation-packages" nestedTabs={[{key:'review',label:'Review',content:<Decision busy={busy}/>}]}/></MoneyProvider></NextIntlClientProvider>
+  t.after(async()=>{await act(()=>root.unmount());host.remove()})
+  await act(async()=>{root.render(render(true));await tick()})
+  const dialog=document.querySelector('[role=dialog]');assert.ok(dialog)
+  assert.match(dialog.textContent??'',/Pending decision/)
+  const details=[...dialog.querySelectorAll('button')].find(button=>button.textContent?.trim()==='Details');assert.ok(details)
+  const close=dialog.querySelector('button[aria-label="Close"]') as HTMLButtonElement;assert.ok(close)
+  await act(async()=>{details.click();close.click();await tick()})
+  assert.deepEqual(routes,[],'Neither tab navigation nor shell close may abandon an in-flight decision')
+  assert.equal(document.querySelector('[role=dialog]'),dialog)
+  await act(async()=>{root.render(render(false));await tick()})
+  await act(async()=>{details.click();await tick()})
+  assert.equal(routes.length,1)
+  assert.ok(!routes[0]!.includes('setupTab=review'))
+})

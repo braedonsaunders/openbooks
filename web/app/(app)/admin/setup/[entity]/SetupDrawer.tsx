@@ -38,6 +38,7 @@ import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
 import { timeZoneOptions } from '@/lib/zoned-date-time'
+import { DirtyDrawerFormScope, useDirtyDrawerState } from '@/components/dirty-url-drawer'
 import { ZonedDateTimeControl } from '@/components/zoned-date-time-control'
 
 type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
@@ -228,6 +229,7 @@ export function SetupDrawer({
   // The pristine form advances after a successful save; Cancel restores
   // this baseline and the close guard compares unsaved changes against it.
   const [initialForm, setInitialForm] = useState(form)
+  const childForms = useDirtyDrawerState()
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
   // One idempotency key per mounted create session (POST /api/accounts
@@ -284,7 +286,9 @@ export function SetupDrawer({
   const nestedTabActive = activeNestedTab !== undefined
   const activeRuleTab = !creating ? ruleTabs.find(tab => searchParams.get(tabParam) === tab.key) : undefined
 
-  function selectTab(key: 'details' | string) {
+  async function selectTab(key: 'details' | string) {
+    if (!await confirmDiscard()) return
+    setForm(initialForm); setMoneyLocked(initialMoneyLocked); setFieldError(null); setEditing(false)
     const next = setupTabParams(new URLSearchParams(searchParams.toString()), key, navigationPrefix)
     const query = next.toString()
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
@@ -529,8 +533,8 @@ export function SetupDrawer({
   // (Escape, backdrop, X) asks first. An in-flight save or official-PDF
   // upload cannot be dismissed, even with a discard confirmation.
   async function confirmDiscard() {
-    if (busy || officialBusy) return false
-    if (JSON.stringify(form) === JSON.stringify(initialForm)) return true
+    if (busy || officialBusy || childForms.busy) return false
+    if (!childForms.dirty && JSON.stringify(form) === JSON.stringify(initialForm)) return true
     return confirmDialog({
       message: tCommon('feedback.unsavedChanges'),
       confirmLabel: tCommon('confirm.discardChanges'),
@@ -543,7 +547,7 @@ export function SetupDrawer({
     setForm(initialForm); setMoneyLocked(initialMoneyLocked); setFieldError(null); setEditing(false)
   }
 
-  return (
+  const drawer = (
     <UrlDrawer
       open
       closeHref={closeHref}
@@ -707,6 +711,13 @@ export function SetupDrawer({
       </div></>}
       </>}
     </UrlDrawer>
+  )
+  return (
+    <DirtyDrawerFormScope register={childForms.register} close={async (href) => {
+      if (await confirmDiscard()) router.push((href ?? closeHref) as never)
+    }}>
+      {drawer}
+    </DirtyDrawerFormScope>
   )
 }
 
