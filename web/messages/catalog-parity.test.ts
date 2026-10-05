@@ -3488,11 +3488,23 @@ const COGNATES = new Set<string>([
   'de:channels.products.codeLabel|Code',
   'fr:channels.products.codeLabel|Code',
   // Portuguese channel identicals: "Item" is spelled the same in Portuguese
-  // (the ordered line item and the reported sale item), and "Gateway" is the
-  // established Brazilian payments loanword for the order's payment gateway.
+  // (the ordered line item, the reported sale item, and the location
+  // conflict/override rows), and "Gateway" is the established Brazilian
+  // payments loanword for the order's payment gateway.
   'pt-BR:channels.drawer.gateway|Gateway',
   'pt-BR:channels.drawer.item|Item',
+  'pt-BR:channels.locations.conflictItem|Item',
+  'pt-BR:channels.locations.overrideItem|Item',
   'pt-BR:reports.catalog.columns.channel_sales.item|Item',
+  // Spanish subscription and authority identicals: "Plan" is spelled the same
+  // in Spanish (el plan de suscripción), and the Australian ABN Lookup service
+  // keeps its official name with the country spelled the same in Spanish.
+  'es:ar.collections.subscriptions.advanced.entitlements.sourcePlan|Plan',
+  'es:admin.setup.taxSetup.authorities.abnTitle|ABN Lookup (Australia)',
+  // Japanese and Chinese authority labels keep the official ABN Lookup service
+  // name with the universal GUID acronym, as in the source copy.
+  'ja:admin.setup.taxSetup.authorities.guid|ABN Lookup GUID',
+  'zh:admin.setup.taxSetup.authorities.guid|ABN Lookup GUID',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
