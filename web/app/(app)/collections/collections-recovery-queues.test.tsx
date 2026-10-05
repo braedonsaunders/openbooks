@@ -5,7 +5,8 @@ import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ url: 'http://localhost:4800/collections', matchMediaMatches: false })
-Object.assign(globalThis, { __recoveryToasts: [] as [string, ...unknown[]][] })
+const recoveryToasts: [string, ...unknown[]][] = []
+Object.assign(globalThis, { __recoveryToasts: recoveryToasts })
 stubModules({
   navigation: { pathname: '/collections' },
   extra: {
@@ -230,13 +231,13 @@ test("a refused setup link surfaces the server refusal and remedy", async (t) =>
       button.textContent?.includes("Send update link"),
     );
     assert.ok(send, "the expiring queue offers its remedy");
-    (globalThis.__recoveryToasts as unknown[]).length = 0;
+    recoveryToasts.length = 0;
     await act(async () => {
       send.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
       await tick();
     });
-    const errors = (globalThis.__recoveryToasts as [string, ...unknown[]][]).filter(
+    const errors = recoveryToasts.filter(
       ([tone]) => tone === "error",
     );
     assert.ok(errors.length > 0, "the refusal toasts instead of failing silently");

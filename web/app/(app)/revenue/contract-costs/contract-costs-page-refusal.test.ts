@@ -7,7 +7,8 @@ import { stubModules } from '../../../../testing/stub-modules'
 stubModules({ intl: true })
 Object.assign(globalThis, { React })
 const { ContractCostError } = await import('@openbooks/engine/revenue')
-Object.assign(globalThis, { __costPageRefusal: null as unknown })
+const state = { refusal: null as InstanceType<typeof ContractCostError> | null }
+Object.assign(globalThis, { __costPageState: state })
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === './view' && context.parentURL?.endsWith('/revenue/contract-costs/page.tsx')) {
@@ -16,7 +17,7 @@ const hooks = registerHooks({
         url:
           'data:text/javascript,' +
           encodeURIComponent(
-            'export async function loadContractCosts(){ throw globalThis.__costPageRefusal }' +
+            'export async function loadContractCosts(){ throw globalThis.__costPageState.refusal }' +
               'export function contractCostsSpec(){ return null }',
           ),
       }
@@ -58,7 +59,7 @@ test.after(() => hooks.deregister())
  * strips server copy.
  */
 test('a named currency refusal renders its message and remedy in the page body', async () => {
-  globalThis.__costPageRefusal = new ContractCostError(
+  state.refusal = new ContractCostError(
     'Currency BHD has an unsupported precision 5.',
     {
       code: 'contract_cost_currency_exponent',

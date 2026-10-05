@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+const { db } = await import('@openbooks/engine/platform/database')
 const { currencyExponent, ContractCostError } = await import('@openbooks/engine/revenue')
 
 function runner(rows: { minor_units: unknown }[]) {
-  return { execute: async () => ({ rows }) }
+  return new Proxy(db, {
+    get(_target, property) {
+      assert.equal(property, 'execute', 'the currency read uses the SQL executor boundary')
+      return async () => ({ rows })
+    },
+  })
 }
 
 /**
