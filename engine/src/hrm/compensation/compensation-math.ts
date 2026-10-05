@@ -2,6 +2,7 @@ import { CompensationError } from "./errors.ts";
 import { compileExpression, ExpressionError, type CompiledExpression } from "../../money/expression.ts";
 import { canonicalDecimal, compareDecimal, divideDecimal, parseExactDecimal } from "../../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
+import { calendarDaysBetween } from "../../platform/civil-date.ts";
 
 /**
  * Compensation math (HR-12): compa-ratio, guideline resolution, the
@@ -193,6 +194,12 @@ export interface ExactFormulaInputs {
   readonly rating: string | null;
   readonly compaRatio: string;
   readonly tenureYears: string;
+}
+
+/** Guideline tenure uses the existing 365.25-day basis, resolved to 18 decimal places. */
+export function exactGuidelineTenure(startedOn: string, asOf: string): string {
+  const days = Math.max(0, calendarDaysBetween(startedOn, asOf));
+  return divideDecimal(String(days), "365.25", 18);
 }
 
 /** A shared review without a rating remains unrated, never a synthetic zero. */
