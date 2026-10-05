@@ -26,6 +26,11 @@ export function RecoveryDashboard({ data }: { data: RecoveryDashboardData | null
   if (!data) return null
   const { money } = createMoneyFormatter(locale, 'USD')
   const rate = data.metrics.recoveryRate
+  // Recovered revenue is shown per currency — a multi-currency book never
+  // presents a mixed-currency sum as one number.
+  const recoveredValue = data.metrics.recoveredByCurrency
+    .map((row) => money(row.amount, { currency: row.currency }))
+    .join(' · ')
   const attentionCount =
     data.awaitingAuth.length + data.expiring.length + data.hardStuck.length
 
@@ -81,7 +86,7 @@ export function RecoveryDashboard({ data }: { data: RecoveryDashboardData | null
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile
           label={t('recovered')}
-          value={money(data.metrics.recoveredAmount, {})}
+          value={recoveredValue === '' ? '—' : recoveredValue}
           sub={t('recoveredSub', { count: data.metrics.recoveredInvoices })}
           icon={Banknote}
           accent="emerald"

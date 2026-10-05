@@ -324,6 +324,7 @@ test("recovery metrics come from stored attempts", { skip: !DB }, async () => {
     assert.equal(metrics.invoicesWithFailures, 3);
     assert.equal(metrics.recoveredInvoices, 2);
     assert.equal(metrics.recoveredAmount, "150.0000");
+    assert.deepEqual(metrics.recoveredByCurrency, [{ currency: "CAD", amount: "150.0000" }]);
     assert.ok(Math.abs(metrics.recoveryRate! - 2 / 3) < 1e-12);
     const byClass = new Map(metrics.byDeclineClass.map((row) => [row.declineClass, row]));
     assert.equal(byClass.get("hard")!.failedAttempts, 1);

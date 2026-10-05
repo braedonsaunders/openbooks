@@ -1829,6 +1829,9 @@ export interface RecoveryMetrics {
   invoicesWithFailures: number;
   recoveredInvoices: number;
   recoveredAmount: string;
+  /** Recovered revenue split by invoice currency — the headline total is a
+   *  single-currency sum only when one currency is present. */
+  recoveredByCurrency: { currency: string; amount: string }[];
   recoveryRate: number | null;
   byDeclineClass: (RecoverySliceMetrics & { declineClass: string })[];
   byProvider: (RecoverySliceMetrics & { provider: string })[];
@@ -1946,6 +1949,26 @@ export async function getRecoveryMetrics(
        group by f.provider
        order by f.provider
     `)).rows;
+    const byCurrency = (await db.execute<{ currency: string; amount: string | null }>(sql`
+      with failed as (
+        select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position
+          from collection_attempts a
+         where a.org_id = ${orgId} and a.status = 'failed'
+           and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
+         order by a.invoice_id, a.retry_position
+      ),
+      recovered as (
+        select distinct on (a.invoice_id) a.invoice_id, a.amount, a.currency
+          from collection_attempts a
+          join failed f on f.invoice_id = a.invoice_id
+         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         order by a.invoice_id, a.retry_position
+      )
+      select r.currency, coalesce(sum(r.amount), 0)::text as amount
+        from recovered r
+       group by r.currency
+       order by r.currency
+    `)).rows;
     const churn = (await db.execute<{ n: number }>(sql`
       select count(*)::integer as n from audit_log
        where org_id = ${orgId} and table_name = 'subscriptions'
@@ -1962,6 +1985,7 @@ export async function getRecoveryMetrics(
       invoicesWithFailures: totals.invoices,
       recoveredInvoices: totals.recovered,
       recoveredAmount: totals.amount ?? "0",
+      recoveredByCurrency: byCurrency.map((row) => ({ currency: row.currency, amount: row.amount ?? "0" })),
       recoveryRate: recoveryRate(totals.recovered, totals.invoices),
       byDeclineClass: byClass.map((row) => ({
         declineClass: row.declineClass,
