@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { channelAdapter } from "./adapters.ts";
+import { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 import type { ChannelStatus } from "./contracts.ts";
 import { CommerceError, pgCause } from "./errors.ts";
 import {
@@ -169,6 +170,10 @@ export async function createChannel(
 ): Promise<{ channel: ChannelRow; webhookSecret: string | null }> {
   const kind = cleanText(input.kind)?.toLowerCase();
   if (!kind) refuse("channel_kind_missing", "A sales channel needs its storefront kind.", "Choose a registered storefront kind for the channel.", "kind");
+  // Connectors register on demand per process, never at import time: ensure
+  // them before the kind check, or a fresh process refuses a known kind with
+  // an install remedy for a connector that is already installed.
+  ensureShopifyAdapterRegistered();
   // Unknown kinds refuse by name through the adapter registry, naming every installed connector.
   channelAdapter(kind);
   const name = cleanText(input.name);
@@ -237,6 +242,9 @@ export async function updateChannel(
   return withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     await requireFeature(orgId);
+    // Same on-demand registration as create: settings validation resolves
+    // the kind's adapter, and a fresh process must not refuse it as unknown.
+    ensureShopifyAdapterRegistered();
     const before = toRow(await loadChannel(orgId, channelId));
     const patch: { name?: string; subsidiaryId?: string | null; currency?: string; settings?: Record<string, unknown> } = {};
     if (input.name !== undefined) {
