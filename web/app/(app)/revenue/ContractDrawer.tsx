@@ -76,10 +76,11 @@ function obligationNeedsAttention(
 
 /**
  * Revenue contract detail: the billed invoices on one sub-tab, performance
- * obligations with their primary-book recognition schedules on the other.
- * Billings and schedules are separate concepts, so they never share a body:
- * the shared drawer strip switches between them and both stay mounted
- * (hidden) so in-flight work survives the switch. Inside the obligations
+ * obligations with their primary-book recognition schedules on another,
+ * and accounting events on a third while the contract carries any.
+ * Separate concepts never share a body: the shared drawer strip switches
+ * between them and all stay mounted (hidden) so in-flight work survives
+ * the switch. Inside the obligations
  * body the parent-child workflow applies: the shared drawer strip names
  * every obligation once, and selecting one shows only its schedule in the
  * focused pane below — never one schedule table per obligation. Recognition is
@@ -103,9 +104,10 @@ export function ContractDrawer({
   const tCommon = useTranslations("common");
   const c = payload.contract;
   const totals = contractSummaryTotals(payload.obligations);
-  // Billings vs obligations+schedules: separate concepts, separate bodies.
-  // Client-local like the drawer rail: switching never navigates.
-  const [section, setSection] = useState<"overview" | "obligations">("overview");
+  // Billings, obligations+schedules, and accounting events are separate
+  // concepts with separate bodies. Client-local like the drawer rail:
+  // switching never navigates.
+  const [section, setSection] = useState<"overview" | "obligations" | "changes">("overview");
   // Obligations follow the parent-child workflow: the selector names each
   // obligation once, and only the selected obligation renders its schedule.
   // Attention-worthy obligations (no plan, unverified history, out-of-range
@@ -178,9 +180,14 @@ export function ContractDrawer({
           tabs={[
             { key: "overview", label: t("drawer.contractTabs.overview") },
             { key: "obligations", label: t("drawer.obligations") },
+            // Accounting events ride their own sibling tab only while the
+            // contract carries any — never stacked under the billings table.
+            ...(payload.changes?.length
+              ? [{ key: "changes" as const, label: t("drawer.eventsTitle") }]
+              : []),
           ]}
           activeKey={section}
-          onSelect={(key) => setSection(key as "overview" | "obligations")}
+          onSelect={(key) => setSection(key as "overview" | "obligations" | "changes")}
           ariaLabel={t("drawer.contractTabs.ariaLabel")}
         />
         <div hidden={section !== "overview"} className="space-y-6">
@@ -245,6 +252,10 @@ export function ContractDrawer({
           />
         ) : null}
         {canRun && payload.prepaidGrants?.length ? <PrepaidBreakageButton grants={payload.prepaidGrants} /> : null}
+        </div>
+        {/* -- sibling: accounting events on their own tab, with the same
+            deep links the overview used to carry inline. */}
+        <div hidden={section !== "changes"} className="space-y-2">
         {payload.changes?.length ? (
           <section className="space-y-2">
             <h3 className="font-semibold">{t("drawer.eventsTitle")}</h3>
