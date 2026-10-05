@@ -104,7 +104,12 @@ const dimensionColumns = {
 
 export const departments = pgTable(
   "departments",
-  dimensionColumns,
+  {
+    ...dimensionColumns,
+    /** Explicit operator flag: no billable expectation; excluded from the
+     * company utilization scope. Never inferred from hours. */
+    noBillableExpectation: boolean("no_billable_expectation").notNull().default(false),
+  },
   (t) => [uniqueIndex("departments_org_id_id_unique").on(t.orgId, t.id)],
 );
 export const locations = pgTable(

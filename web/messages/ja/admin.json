@@ -3681,6 +3681,7 @@
       "historicalRate": "歴史的レート",
       "subsidiaryId": "子会社",
       "subsidiaryIncludeChildren": "子会社を含める",
+      "noBillableExpectation": "請求可能見込みなし",
       "pluralName": "複数形の名称",
       "sourceKind": "ソース",
       "isHierarchical": "階層構造",

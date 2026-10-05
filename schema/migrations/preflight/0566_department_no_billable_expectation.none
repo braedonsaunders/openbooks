@@ -1,0 +1,1 @@
+Additive boolean flag defaulting to false. No tenant record is rewritten: previously inferred no-billable exclusions are not backfilled, so the first load after this migration includes those departments in the company scope until an operator flags them explicitly on the department record.

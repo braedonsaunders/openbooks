@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
+import { loadWorkSchedules, pickWorkSchedule, scheduledHoursBetween } from "@openbooks/engine/payroll/work-schedules";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
 import { utilizationStrings, type UtilizationStrings } from "./utilization-strings";
@@ -26,9 +27,9 @@ import { getMoneyFormatter } from '../money-server'
  *  - job title: employees have no title field — an employee's `title` is their
  *    DOMINANT LABOUR CLASS (the item they logged the most hours to, e.g.
  *    "MECH:Foreman"), which is what timebill items encode in this dataset;
- *  - noBillable departments are auto-flagged when they logged 0 billable hours
- *    in the current AND prior range
- *    (e.g. the "Overhead" department).
+ *  - noBillable departments carry the explicit `no_billable_expectation`
+ *    flag on the department record (e.g. the "Overhead" department) and are
+ *    excluded from the company scope; nothing is inferred from hours.
  *
  * The prior range is the same duration immediately preceding, and history is
  * 5 rolling prior periods of the same month-length — both stable.
@@ -57,6 +58,11 @@ export interface UGroupRow {
   deltas: { pctDelta: number; costDelta: string };
   meetsMinHours: boolean;
   noBillable?: boolean;
+  /** Employees: scheduled hours for the range (exact string) and whether
+   * actual hours exceed them. Null/unset when no schedule resolves: unknown,
+   * never overtime. */
+  scheduledHours?: string | null;
+  overtimeVsSchedule?: boolean;
 }
 
 export interface UAlert {
@@ -75,7 +81,12 @@ export interface UHistoryPeriod {
 export interface UtilizationData {
   period: { from: string; to: string; label: string; days: number };
   prior: { from: string; to: string };
-  config: { target: number; costSpike: number; minHours: number };
+  config: {
+    target: number; costSpike: string; minHours: number; reallocWarnPp: number; reallocActionPp: number;
+    watchBandPp: number; warnBandPp: number; anomalyDropPp: number; overtimeBillableGapPp: number;
+    titleDriftPp: number; peerOutlierSigma: number; peerSpreadWarnPp: number; peerSpreadActionPp: number;
+    peerMinCount: number;
+  };
   company: {
     range: UStat & { nonBillableCostPerDay: string; nonBillableCostPerHour: string };
     prior: UStat & { nonBillableCostPerDay: string; nonBillableCostPerHour: string };
@@ -86,6 +97,9 @@ export interface UtilizationData {
   items: UGroupRow[];
   employees: UGroupRow[];
   history: { periodMonths: number; periods: UHistoryPeriod[] };
+  /** Employees whose hours could not be compared to a schedule (none
+   * resolves, or the pattern varies): overtime is unknown for them. */
+  overtimeUnscheduled: number;
 }
 
 // Threshold defaults live in lib/analytics/config.ts; per-org overrides come
@@ -212,7 +226,7 @@ const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBi
 type Key = "department" | "item" | "employee";
 
 /** Build current/prior utilization groups for one reporting dimension. */
-function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number, strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en")): UGroupRow[] {
+function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number, strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en"), overtimeByEmp?: Map<string, { scheduledHours: string; overtime: boolean }>): UGroupRow[] {
   const deptName = new Map<string, string>();
   for (const r of curr) if (r.department && r.department_name) deptName.set(r.department, r.department_name);
 
@@ -264,6 +278,9 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       row.title = strings.displayEmployeeTitle(titleByEmp.get(id) ?? null);
       row.departmentId = c.department ?? undefined;
       row.departmentName = strings.displayDepartmentName((c.department && deptName.get(c.department)) || null);
+      const ot = overtimeByEmp?.get(id);
+      row.scheduledHours = ot?.scheduledHours ?? null;
+      row.overtimeVsSchedule = ot?.overtime ?? false;
     }
     if (key === "item") {
       row.departmentId = c.department ?? undefined;
@@ -288,8 +305,21 @@ export async function utilizationData(
   const cfg = await analyticsConfig(orgId, "utilization");
   // mergeConfig always materializes every default key for the dashboard.
   const targetBillablePct = cfg.targetBillablePct!;
-  const costSpikeThreshold = cfg.costSpikeThreshold!;
+  // Unset (or unreadable) spike threshold disables the alert: a missing
+  // money amount is never treated as zero, which would alert on every cent.
+  const costSpikeThreshold = typeof cfg.costSpikeThreshold === "string" && cfg.costSpikeThreshold !== "" ? cfg.costSpikeThreshold : null;
   const minHours = cfg.minHours!;
+  const reallocWarnPp = cfg.reallocWarnPp!;
+  const reallocActionPp = cfg.reallocActionPp!;
+  const watchBandPp = cfg.watchBandPp!;
+  const warnBandPp = cfg.warnBandPp!;
+  const anomalyDropPp = cfg.anomalyDropPp!;
+  const overtimeBillableGapPp = cfg.overtimeBillableGapPp!;
+  const titleDriftPp = cfg.titleDriftPp!;
+  const peerOutlierSigma = cfg.peerOutlierSigma!;
+  const peerSpreadWarnPp = cfg.peerSpreadWarnPp!;
+  const peerSpreadActionPp = cfg.peerSpreadActionPp!;
+  const peerMinCount = cfg.peerMinCount!;
   const rangeStart = new Date(period.from + "T00:00:00Z");
   const rangeEnd = new Date(period.to + "T00:00:00Z");
   const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000) + 1;
@@ -323,16 +353,52 @@ export async function utilizationData(
     fetchHistoryHours(orgId, histPlans, allowed),
   ]);
 
-  // noBillable departments: zero billable hours across current + prior.
-  const deptBillable = new Map<string, string>();
-  const deptTotal = new Map<string, string>();
-  for (const r of [...curr, ...prior]) {
-    if (!r.department) continue;
-    deptBillable.set(r.department, add(deptBillable.get(r.department) ?? "0", r.billable_hours));
-    deptTotal.set(r.department, add(deptTotal.get(r.department) ?? "0", r.total_hours));
+  // No-billable-expectation departments are an explicit operator attribute
+  // on the department record — never inferred from hours, so a quiet
+  // department cannot silently leave the company scope.
+  const noBillRows = (await db.execute<{ id: string }>(sql`
+    select id from departments
+     where org_id = ${orgId} and no_billable_expectation
+  `)).rows;
+  const noBillDepts = new Set(noBillRows.map((r) => r.id));
+
+  // Overtime is actual hours above the employee's own work schedule for the
+  // range (the work_schedules owner) — never a multiple of the peer mean.
+  // No resolving schedule (or a varying pattern) means unknown, never
+  // overtime; the dashboard names how many employees that covers.
+  const empIds = [...new Set(curr.map((r) => r.employee).filter((e): e is string => !!e))];
+  const actualByEmp = new Map<string, string>();
+  for (const r of curr) {
+    if (!r.employee) continue;
+    actualByEmp.set(r.employee, add(actualByEmp.get(r.employee) ?? "0", r.total_hours));
   }
-  const noBillDepts = new Set<string>();
-  for (const [id, tot] of deptTotal) if (cmp(tot, "0") > 0 && cmp(deptBillable.get(id) ?? "0", "0") === 0) noBillDepts.add(id);
+  const overtimeByEmp = new Map<string, { scheduledHours: string; overtime: boolean }>();
+  let unscheduledCount = 0;
+  if (empIds.length > 0) {
+    const [roleRows, schedules] = await Promise.all([
+      db.execute<{ party_id: string; job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null }>(sql`
+        select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
+          from employee_roles er
+          join parties p on p.id = er.party_id and p.org_id = er.org_id
+         where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`),
+      loadWorkSchedules(db, orgId, allowed),
+    ]);
+    const keysByEmp = new Map(roleRows.rows.map((r) => [r.party_id, r]));
+    for (const id of empIds) {
+      const keys = keysByEmp.get(id);
+      const schedule = pickWorkSchedule(schedules, {
+        employeePartyId: id,
+        jobTitle: keys?.job_title ?? null,
+        tradeId: keys?.trade_id ?? null,
+        departmentId: keys?.department_id ?? null,
+        subsidiaryId: keys?.subsidiary_id ?? null,
+      }, period.to);
+      const scheduled = schedule ? scheduledHoursBetween(schedule, period.from, period.to) : null;
+      if (scheduled === null || cmp(scheduled, "0") <= 0) { unscheduledCount += 1; continue; }
+      const actual = actualByEmp.get(id) ?? "0";
+      overtimeByEmp.set(id, { scheduledHours: scheduled, overtime: cmp(actual, scheduled) > 0 });
+    }
+  }
 
   // Employee "title" = dominant labour class (most hours in current range).
   const empItemHours = new Map<string, Map<string, string>>();
@@ -363,6 +429,8 @@ export async function utilizationData(
     const nonBillableHours = add(hours, neg(billable));
     return {
       ...s,
+      // Per CALENDAR day (inclusive range days, weekends included): the KPI
+      // names the calendar-day basis, since no business calendar applies yet.
       nonBillableCostPerDay: days > 0 ? div(cost, String(days)) : "0.0000",
       nonBillableCostPerHour: cmp(nonBillableHours, "0") > 0 ? div(cost, nonBillableHours) : "0.0000",
     };
@@ -385,7 +453,7 @@ export async function utilizationData(
   const alerts: UAlert[] = [];
   if (cCompany.percentBilled < targetBillablePct)
     alerts.push(strings.alertBelowTarget(targetBillablePct));
-  if (cmp(costDeltaExact, String(costSpikeThreshold)) > 0)
+  if (costSpikeThreshold !== null && cmp(costDeltaExact, costSpikeThreshold) > 0)
     alerts.push(strings.alertCostSpike(money(costDeltaExact, { maximumFractionDigits: 0 })));
   // Unrated time prices at nothing, so every non-billable cost figure above
   // understates while these hours exist — flagged by name, never silent.
@@ -417,7 +485,11 @@ export async function utilizationData(
   return {
     period: { ...period, days },
     prior: { from: priorFrom, to: priorTo },
-    config: { target: targetBillablePct, costSpike: costSpikeThreshold, minHours },
+    config: {
+      target: targetBillablePct, costSpike: costSpikeThreshold ?? "", minHours, reallocWarnPp, reallocActionPp,
+      watchBandPp, warnBandPp, anomalyDropPp, overtimeBillableGapPp, titleDriftPp, peerOutlierSigma,
+      peerSpreadWarnPp, peerSpreadActionPp, peerMinCount,
+    },
     company: {
       range: cCompany,
       prior: pCompany,
@@ -429,7 +501,8 @@ export async function utilizationData(
     },
     departments: analyticsSection('utilization', ['overview', 'intelligence', 'departments', 'titles', 'employees']) ? buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours, strings) : [],
     items: analyticsSection('utilization', ['overview', 'items']) ? buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours, strings) : [],
-    employees: analyticsSection('utilization', ['overview', 'intelligence', 'titles', 'employees']) ? buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours, strings) : [],
+    employees: analyticsSection('utilization', ['overview', 'intelligence', 'titles', 'employees']) ? buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours, strings, overtimeByEmp) : [],
     history: { periodMonths, periods },
+    overtimeUnscheduled: unscheduledCount,
   };
 }
