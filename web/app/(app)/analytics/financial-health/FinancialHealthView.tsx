@@ -10,7 +10,7 @@ import type { RatioDef } from '../_ui/RatioCard'
 import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
-import { useAnalyticsMoney, fmtPct } from '../_ui/format'
+import { useAnalyticsMoney, useRatioFormat } from '../_ui/format'
 import { OverviewTab } from './tabs/OverviewTab'
 import { MarginTab } from './tabs/MarginTab'
 import { ItemsTab } from './tabs/ItemsTab'
@@ -37,7 +37,9 @@ export function FinancialHealthView({
   canConfigure?: boolean
 }) {
   const fmtMoney = useAnalyticsMoney()
+  const fmtRatio = useRatioFormat()
   const t = useTranslations('analytics.financialHealth')
+  const grossMargin = Object.values(data.ratios).flat().find((r) => r.id === 'gross_margin')!
   const tabs = budgetsEnabled ? TABS : TABS.filter((k) => k !== 'budget')
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
@@ -49,22 +51,28 @@ export function FinancialHealthView({
       {/* Hero KPI row — shared across tabs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <Gauge value={data.overallScore} label={t(`score.${data.scoreLabel}`)} size={132} thickness={12} showTicks={false} />
+          <Gauge
+            value={data.overallScore ?? 0}
+            label={data.scoreLabel ? t(`score.${data.scoreLabel}`) : t('score.unscored')}
+            size={132}
+            thickness={12}
+            showTicks={false}
+          />
         </div>
         <KpiCard
           icon={DollarSign}
           accent="emerald"
           label={t('kpi.revenue')}
           value={fmtMoney(f.revenue, { compact: true })}
-          sub={t('kpiSub.growth', { pct: fmtPct(f.revenueGrowth) })}
-          tone={f.revenueGrowth >= 0 ? 'positive' : 'negative'}
+          sub={f.revenueGrowth === null ? t('kpiSub.noPriorYear') : t('kpiSub.growth', { pct: fmtRatio(f.revenueGrowth, 'pct') ?? '' })}
+          tone={f.revenueGrowth === null ? undefined : f.revenueGrowth.startsWith('-') ? 'negative' : 'positive'}
         />
         <KpiCard
           icon={TrendingUp}
           accent="teal"
           label={t('kpi.grossMargin')}
-          value={fmtPct(f.revenue > 0 ? f.grossProfit / f.revenue : 0)}
-          sub={t('kpiSub.grossProfit', { amount: fmtMoney(f.grossProfit, { compact: true }) })}
+          value={fmtRatio(grossMargin.value, 'pct') ?? '—'}
+          sub={grossMargin.value === null ? grossMargin.unavailable ?? '' : t('kpiSub.grossProfit', { amount: fmtMoney(f.grossProfit, { compact: true }) })}
         />
         <KpiCard
           icon={Scale}
@@ -77,8 +85,8 @@ export function FinancialHealthView({
           icon={Target}
           accent="amber"
           label={t('kpi.breakeven')}
-          value={f.breakevenMonthly === null ? '—' : fmtMoney(f.breakevenMonthly, { compact: true })}
-          sub={t('kpiSub.perMonth')}
+          value={f.breakevenRevenue === null ? '—' : fmtMoney(f.breakevenRevenue, { compact: true })}
+          sub={f.breakevenRevenue === null ? t('kpiSub.noBreakeven') : t('kpiSub.forPeriod')}
         />
       </div>
 
@@ -94,7 +102,7 @@ export function FinancialHealthView({
         {tab === 'budget' && budgetsEnabled ? <BudgetTab data={data} /> : null}
         {tab === 'drivers' ? <DriversTab data={data} onDrill={openAccount} /> : null}
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
-        {tab === 'configuration' ? <ConfigurationTab canEdit={canConfigure ?? false} /> : null}
+        {tab === 'configuration' ? <ConfigurationTab canEdit={canConfigure ?? false} benchmarks={data.benchmarks} /> : null}
       </div>
       </RecordTabs>
 

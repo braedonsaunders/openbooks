@@ -6,17 +6,26 @@ import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { Waterfall, TrendChart, Donut } from '../../_ui/charts'
-import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct, toChartNumber } from '../../_ui/format'
 
 export function MarginTab({ data }: { data: HealthData }) {
   const fmtMoney = useAnalyticsMoney()
-  const f = data.figures
+  const fig = data.figures
+  const f = {
+    revenue: toChartNumber(fig.revenue),
+    grossProfit: toChartNumber(fig.grossProfit),
+    operatingIncome: toChartNumber(fig.operatingIncome),
+    netIncome: toChartNumber(fig.netIncome),
+    cogs: toChartNumber(fig.cogs),
+    opex: toChartNumber(fig.opex),
+    otherExpense: toChartNumber(fig.otherExpense),
+  }
   const rev = f.revenue || 1
   const gmPct = f.grossProfit / rev
   const opPct = f.operatingIncome / rev
   const netPct = f.netIncome / rev
 
-  const pnl = Object.fromEntries(data.pnlSummary.map((l) => [l.key, l]))
+  const pnl = Object.fromEntries(data.pnlSummary.map((l) => [l.key, { prior: toChartNumber(l.prior), current: toChartNumber(l.current), change: toChartNumber(l.change) }]))
   // the GM volume/rate bridge: volume effect = ΔRevenue × prior GM%,
   // rate effect = current Revenue × ΔGM%. The two effects reconcile prior
   // gross margin to current exactly.
@@ -52,7 +61,7 @@ export function MarginTab({ data }: { data: HealthData }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Panel title="Margin Flow Analysis" icon={Waypoints} hint="Revenue → Net Income">
-            <Waterfall steps={data.marginFlow.map((s) => ({ label: s.label, amount: s.amount, kind: s.kind }))} height={260} />
+            <Waterfall steps={data.marginFlow.map((s) => ({ label: s.label, amount: toChartNumber(s.amount), kind: s.kind }))} height={260} />
           </Panel>
         </div>
         <Panel title="Margin Summary" icon={Percent} bodyClassName="p-0">
@@ -62,7 +71,7 @@ export function MarginTab({ data }: { data: HealthData }) {
                 <span className={cn('text-sm', s.kind === 'subtotal' || s.kind === 'total' || s.kind === 'start' ? 'font-semibold text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400')}>{s.label}</span>
                 <span className="flex items-baseline gap-2">
                   <span className="text-sm tabular-nums text-slate-700 dark:text-slate-300">{fmtMoney(s.amount, { compact: true })}</span>
-                  <span className="w-12 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(s.pctOfRevenue)}</span>
+                  <span className="w-12 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{s.pctOfRevenue === null ? '—' : fmtPct(Number(s.pctOfRevenue))}</span>
                 </span>
               </li>
             ))}
