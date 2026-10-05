@@ -451,6 +451,12 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "consolidation_control_losses.excluded_subsidiary_ids",
   "consolidation_control_losses.measurement",
   "consolidation_control_losses.retained_method",
+  "consolidation_groups.cadence",
+  "consolidation_groups.code",
+  "consolidation_groups.grouping",
+  "consolidation_groups.name",
+  "consolidation_groups.template",
+  "consolidation_runs.currency",
   "contacts.role",
   "contacts.title",
   // Capitalized contract costs: amortization basis and life source are

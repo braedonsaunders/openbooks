@@ -374,6 +374,14 @@ export const documentLines = pgTable(
      */
     partyId: uuid("party_id"),
 
+    /**
+     * The service-to party for this line: the child the line is for.
+     * Informational grouping only — the AR leg follows the header party,
+     * never this column. (Distinct from partyId above, the line-level
+     * subledger entity that carries AR/AP legs on journal-style lines.)
+     */
+    servicePartyId: uuid("service_party_id"),
+
     // Line dimensions (override header defaults).
     departmentId: uuid("department_id"),
     projectId: uuid("project_id"),
@@ -519,6 +527,11 @@ export const documentLines = pgTable(
       columns: [t.orgId, t.partyId],
       foreignColumns: [parties.orgId, parties.id],
       name: "document_lines_party_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.servicePartyId],
+      foreignColumns: [parties.orgId, parties.id],
+      name: "document_lines_service_party_org_fk",
     }),
     foreignKey({
       columns: [t.orgId, t.departmentId],
