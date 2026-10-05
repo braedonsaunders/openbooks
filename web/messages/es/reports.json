@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "Conciliación de importación de facturación",
         "description": "Conciliación por importación: MRR mensual origen frente a OpenBooks, cuentas por cobrar abiertas por cliente y las diferencias que bloquean el cambio."
+      },
+      "shipment_labels": {
+        "label": "Etiquetas de envío",
+        "description": "Etiquetas de transportista compradas con costo en vivo, estado de rastreo y su asiento de costo."
+      },
+      "shipping_adjustments": {
+        "label": "Ajustes del transportista",
+        "description": "Correcciones de facturación aplicadas después de la compra, con motivo y estado de registro."
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "Importe OpenBooks",
         "diff_major": "Diferencia",
         "explanation": "Explicación"
+      },
+      "shipment_labels": {
+        "id": "Etiqueta (id)",
+        "shipment_number": "Envío",
+        "order_number": "Pedido",
+        "shipment_id": "Envío (id)",
+        "account": "Cuenta de transportista",
+        "provider": "Proveedor",
+        "carrier": "Transportista",
+        "service": "Servicio",
+        "tracking_number": "Rastreo",
+        "tracking_status": "Estado de rastreo",
+        "status": "Estado de etiqueta",
+        "amount": "Costo de etiqueta",
+        "currency": "Moneda",
+        "purchased_at": "Comprada",
+        "purchased_date": "Fecha de compra",
+        "voided_at": "Anulada",
+        "cost_entry_id": "Asiento de costo (id)"
+      },
+      "shipping_adjustments": {
+        "id": "Ajuste (id)",
+        "shipment_number": "Envío",
+        "carrier": "Transportista",
+        "service": "Servicio",
+        "kind": "Motivo",
+        "amount": "Ajuste",
+        "currency": "Moneda",
+        "reason": "Detalle",
+        "status": "Estado de registro",
+        "occurred_at": "Ocurrido",
+        "entry_id": "Asiento de ajuste (id)"
       }
     },
     "enumValues": {

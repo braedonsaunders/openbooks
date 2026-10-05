@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "账单导入对账",
         "description": "按导入记录对账:月度 MRR 来源与 OpenBooks 对比、按客户的应收账款余额，以及阻止切换的差异。"
+      },
+      "shipment_labels": {
+        "label": "配送面单",
+        "description": "已购买的承运商面单，含实时成本、追踪状态及成本分录。"
+      },
+      "shipping_adjustments": {
+        "label": "承运商调账",
+        "description": "购买后适用的账单更正，含原因及入账状态。"
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "OpenBooks 金额",
         "diff_major": "差异",
         "explanation": "说明"
+      },
+      "shipment_labels": {
+        "id": "面单 (ID)",
+        "shipment_number": "出货单号",
+        "order_number": "订单号",
+        "shipment_id": "出货 (ID)",
+        "account": "承运商账号",
+        "provider": "服务商",
+        "carrier": "承运商",
+        "service": "服务",
+        "tracking_number": "追踪单号",
+        "tracking_status": "追踪状态",
+        "status": "面单状态",
+        "amount": "面单成本",
+        "currency": "币种",
+        "purchased_at": "购买时间",
+        "purchased_date": "购买日期",
+        "voided_at": "作废时间",
+        "cost_entry_id": "成本分录 (ID)"
+      },
+      "shipping_adjustments": {
+        "id": "调账 (ID)",
+        "shipment_number": "出货单号",
+        "carrier": "承运商",
+        "service": "服务",
+        "kind": "原因",
+        "amount": "调账金额",
+        "currency": "币种",
+        "reason": "明细",
+        "status": "入账状态",
+        "occurred_at": "发生时间",
+        "entry_id": "调账分录 (ID)"
       }
     },
     "enumValues": {

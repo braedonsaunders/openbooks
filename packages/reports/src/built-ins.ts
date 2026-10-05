@@ -15,6 +15,7 @@ import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { defaultRowsQuery } from './custom-query'
 import { utcCivilDate } from './fiscal-calendar'
 import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
+import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
 import { HRM_REPORT_ENTITIES, REPORT_ENTITY_MAP, entityColumn } from './entities'
 import type { ReportCustomQuery, ReportFilterOperator, ReportRule } from './types'
 
@@ -901,6 +902,33 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     description: entity.description,
     query: { ...defaultRowsQuery(entity), columns: entity.columns.map((column) => column.key) },
   })),
+  ...SHIPPING_REPORT_ENTITIES.map((entity) => ({
+    slug: entity.key.replaceAll('_', '-'),
+    name: entity.label,
+    description: entity.description,
+    query: { ...defaultRowsQuery(entity), columns: entity.columns.map((column) => column.key) },
+  })),
+  {
+    slug: 'shipping-cost-by-carrier',
+    name: 'Shipping cost by carrier',
+    description: 'Bought label cost by carrier and service per purchase month, with label counts.',
+    query: {
+      entity: 'shipment_labels',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'carrier' }, { column: 'service' }, { column: 'purchased_date', bin: 'month' }],
+      measures: [
+        { fn: 'sum', column: 'amount', label: 'Label cost' },
+        { fn: 'count', label: 'Labels' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'status', op: 'eq', value: 'purchased' }],
+      },
+      groupBy: null,
+      limit: 1000,
+    },
+  },
   {
     slug: 'headcount-statement',
     name: 'Headcount statement',

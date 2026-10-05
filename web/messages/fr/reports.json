@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "Rapprochement d'import de facturation",
         "description": "Rapprochement par import : MRR mensuel source face à OpenBooks, créances ouvertes par client et écarts bloquant la bascule."
+      },
+      "shipment_labels": {
+        "label": "Étiquettes d’expédition",
+        "description": "Étiquettes transporteur achetées avec coût en direct, état de suivi et écriture de coût."
+      },
+      "shipping_adjustments": {
+        "label": "Ajustements transporteur",
+        "description": "Corrections de facturation appliquées après l’achat, avec motif et état de comptabilisation."
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "Montant OpenBooks",
         "diff_major": "Écart",
         "explanation": "Explication"
+      },
+      "shipment_labels": {
+        "id": "Étiquette (id)",
+        "shipment_number": "Envoi",
+        "order_number": "Commande",
+        "shipment_id": "Envoi (id)",
+        "account": "Compte transporteur",
+        "provider": "Fournisseur",
+        "carrier": "Transporteur",
+        "service": "Service",
+        "tracking_number": "Suivi",
+        "tracking_status": "État de suivi",
+        "status": "État d’étiquette",
+        "amount": "Coût d’étiquette",
+        "currency": "Devise",
+        "purchased_at": "Achetée le",
+        "purchased_date": "Date d’achat",
+        "voided_at": "Annulée le",
+        "cost_entry_id": "Écriture de coût (id)"
+      },
+      "shipping_adjustments": {
+        "id": "Ajustement (id)",
+        "shipment_number": "Envoi",
+        "carrier": "Transporteur",
+        "service": "Service",
+        "kind": "Motif",
+        "amount": "Ajustement",
+        "currency": "Devise",
+        "reason": "Détail",
+        "status": "État de comptabilisation",
+        "occurred_at": "Survenu le",
+        "entry_id": "Écriture d’ajustement (id)"
       }
     },
     "enumValues": {

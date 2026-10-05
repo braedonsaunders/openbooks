@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "請求インポート照合",
         "description": "インポートごとの照合:月次MRRのソース対OpenBooks、顧客別売掛残高、切り替えを保留する差異。"
+      },
+      "shipment_labels": {
+        "label": "配送ラベル",
+        "description": "購入済み運送会社ラベル。リアルタイム原価、追跡状態、原価仕訳付き。"
+      },
+      "shipping_adjustments": {
+        "label": "運送会社調整",
+        "description": "購入後に適用された請求補正。理由と計上状態付き。"
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "OpenBooks金額",
         "diff_major": "差異",
         "explanation": "説明"
+      },
+      "shipment_labels": {
+        "id": "ラベル (ID)",
+        "shipment_number": "出荷番号",
+        "order_number": "注文番号",
+        "shipment_id": "出荷 (ID)",
+        "account": "運送会社アカウント",
+        "provider": "プロバイダー",
+        "carrier": "運送会社",
+        "service": "サービス",
+        "tracking_number": "追跡番号",
+        "tracking_status": "追跡状態",
+        "status": "ラベル状態",
+        "amount": "ラベル原価",
+        "currency": "通貨",
+        "purchased_at": "購入日時",
+        "purchased_date": "購入日",
+        "voided_at": "無効化日時",
+        "cost_entry_id": "原価仕訳 (ID)"
+      },
+      "shipping_adjustments": {
+        "id": "調整 (ID)",
+        "shipment_number": "出荷番号",
+        "carrier": "運送会社",
+        "service": "サービス",
+        "kind": "理由",
+        "amount": "調整額",
+        "currency": "通貨",
+        "reason": "詳細",
+        "status": "計上状態",
+        "occurred_at": "発生日時",
+        "entry_id": "調整仕訳 (ID)"
       }
     },
     "enumValues": {
