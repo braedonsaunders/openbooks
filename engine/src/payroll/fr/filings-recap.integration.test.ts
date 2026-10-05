@@ -104,6 +104,7 @@ async function frPayrollOrg(): Promise<Fixture> {
     const { employeeId: id } = await seedHiredEmployee(org.orgId, actorId, {
       scheduleId, subsidiaryId: org.subsidiaryId, name, country: "FR", province: "FR",
       payBasis: "salary", currency: "EUR", rate: annualSalary, rateBasis: "year",
+      hiredOn: "2020-01-01",
     });
     // Métropole domicile, no transmitted rate: the statutory default grille
     // prices PAS. Without the domicile the engine refuses by name.

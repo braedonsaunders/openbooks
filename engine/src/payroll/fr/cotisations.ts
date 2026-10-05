@@ -176,11 +176,22 @@ export interface FrCotisations2026Input {
    */
   ytdRemunerationBefore?: string;
   /**
-   * Elapsed ceiling periods through this versement, inclusive — monthly
-   * pay passes the pay month (gaps without pay still accrue ceiling).
-   * Defaults to 1 with ytdRemunerationBefore.
+   * Elapsed ceiling periods through this versement, inclusive, counted
+   * from the start of employment in the year (gaps without pay still
+   * accrue ceiling). Defaults to 1 with ytdRemunerationBefore. Monthly pay
+   * also passes `ceilingThirtieths`, which takes precedence.
    */
   ceilingPeriodsElapsed?: number;
+  /**
+   * Monthly pay only: the cumulative ceiling position in thirtieths of a
+   * month — before this versement and through it — counted over the months
+   * actually employed this year. A full month counts 30; the month of entry
+   * or exit counts its calendar days of employment (capped at 30), the
+   * Urssaf proration of the plafond for a part month. Supplied by the
+   * adapter from the hire and leaving dates; absent prices whole periods
+   * from `ceilingPeriodsElapsed`.
+   */
+  ceilingThirtieths?: { before: number; through: number };
   /**
    * Pack-declared annual employer effectif for the FNAL threshold, effective
    * for this legal employer. null = unknown → named refusal; a live roster is
@@ -340,20 +351,36 @@ export function calculateFrCotisations2026(
       `FR cotisations need a positive integer ceilingPeriodsElapsed, got ${input.ceilingPeriodsElapsed}`,
     );
   }
-  const elapsed = BigInt(elapsedInput);
-  const cumCeil = (capAnnual: bigint, periodsElapsed: bigint): bigint =>
-    roundDiv(capAnnual * periodsElapsed, BigInt(periods));
+  // Cumulative ceiling positions in thirtieths of a period: whole periods
+  // count 30 each, so the default reproduces the whole-period formula.
+  const thirtieths = input.ceilingThirtieths ?? {
+    before: (elapsedInput - 1) * 30,
+    through: elapsedInput * 30,
+  };
+  if (
+    !Number.isInteger(thirtieths.before) || !Number.isInteger(thirtieths.through)
+    || thirtieths.before < 0 || thirtieths.through < thirtieths.before
+  ) {
+    throw new PayrollPackError(
+      `FR cotisations need a non-decreasing, non-negative ceiling position, got ${thirtieths.before} → ${thirtieths.through}`,
+    );
+  }
+  if (input.ceilingThirtieths !== undefined && periods !== 12) {
+    throw new PayrollPackError("FR cotisations prorate the plafond by calendar days for monthly pay only");
+  }
+  const cumCeil = (capAnnual: bigint, positionThirtieths: number): bigint =>
+    roundDiv(capAnnual * BigInt(positionThirtieths), BigInt(periods) * 30n);
   const cumRem = ytdBefore + brut;
-  const cappedNow = cumRem < cumCeil(passAnnual, elapsed) ? cumRem : cumCeil(passAnnual, elapsed);
-  const cappedBefore = ytdBefore < cumCeil(passAnnual, elapsed - 1n)
-    ? ytdBefore
-    : cumCeil(passAnnual, elapsed - 1n);
-  const plafPer = cappedNow - cappedBefore;
-  const largeNow = cumRem < cumCeil(quatrePassAnnual, elapsed) ? cumRem : cumCeil(quatrePassAnnual, elapsed);
-  const largeBefore = ytdBefore < cumCeil(quatrePassAnnual, elapsed - 1n)
-    ? ytdBefore
-    : cumCeil(quatrePassAnnual, elapsed - 1n);
-  const largePer = largeNow - largeBefore;
+  const capNow = (cap: bigint): bigint => {
+    const ceiling = cumCeil(cap, thirtieths.through);
+    return cumRem < ceiling ? cumRem : ceiling;
+  };
+  const capBefore = (cap: bigint): bigint => {
+    const ceiling = cumCeil(cap, thirtieths.before);
+    return ytdBefore < ceiling ? ytdBefore : ceiling;
+  };
+  const plafPer = capNow(passAnnual) - capBefore(passAnnual);
+  const largePer = capNow(quatrePassAnnual) - capBefore(quatrePassAnnual);
 
   // Employee vieillesse: 6,90 % plafonnée + 0,40 % déplafonnée.
   const vieilSalPlaf = lineOf(plafPer, rate6(FR_VIEILLESSE_SAL_2026.plafonnee.rate));
@@ -450,16 +477,16 @@ export function calculateFrCotisations2026(
   // fits under the cumulative ceiling lands wholly in T1 with an empty T2.
   const t1Base = plafPer;
   const huitPassAnnual = passAnnual * 8n;
-  const t2cum = (remuneration: bigint, periodsElapsed: bigint): bigint => {
-    const capped = remuneration < cumCeil(passAnnual, periodsElapsed)
+  const t2cum = (remuneration: bigint, position: number): bigint => {
+    const capped = remuneration < cumCeil(passAnnual, position)
       ? remuneration
-      : cumCeil(passAnnual, periodsElapsed);
-    const wide = remuneration < cumCeil(huitPassAnnual, periodsElapsed)
+      : cumCeil(passAnnual, position);
+    const wide = remuneration < cumCeil(huitPassAnnual, position)
       ? remuneration
-      : cumCeil(huitPassAnnual, periodsElapsed);
+      : cumCeil(huitPassAnnual, position);
     return wide - capped;
   };
-  const t2Base = t2cum(cumRem, elapsed) - t2cum(ytdBefore, elapsed - 1n);
+  const t2Base = t2cum(cumRem, thirtieths.through) - t2cum(ytdBefore, thirtieths.before);
 
   const arrcoT1 = split6040(rate6(FR_ARRCO_TAUX_2026.t1.rate));
   const arrcoT2 = split6040(rate6(FR_ARRCO_TAUX_2026.t2.rate));
@@ -479,7 +506,7 @@ export function calculateFrCotisations2026(
   // CET strictly above the plafond, prélevée on the T1+T2 assiettes —
   // cumulative here too, so the December bonus under the annual ceiling
   // carries no CET.
-  const cetApplies = cumRem > cumCeil(passAnnual, elapsed);
+  const cetApplies = cumRem > cumCeil(passAnnual, thirtieths.through);
   const cetBase = cetApplies ? t1Base + t2Base : 0n;
   const cetSal = cetApplies ? lineOf(cetBase, cetSplit.sal) : 0n;
   const cetEr = cetApplies ? lineOf(cetBase, cetSplit.er) : 0n;

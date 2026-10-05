@@ -60,7 +60,7 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
     country: "FR",
     region: "FR",
     run: { pay_date: PAY, run_type: "regular" },
-    emp: {},
+    emp: { hired_on: "2020-01-01" },
     filingAccountId: "fr-siret-account",
     periodsPerYear: 12,
     income: brut,
