@@ -89,6 +89,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "usage_rating",
   "tax_provider_commit",
   "commerce_inbound",
+  "demand_forecast",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -648,6 +649,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "stored_value_breakage_scan_failed",
       href: "/stored-value",
       remedy: "Review stored-value programs and account configuration in Stored value; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "demand_forecast") {
+    const { runDueDemandForecasts } = await import("../inventory/demand-planning.ts");
+    const result = await runDueDemandForecasts();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "demand forecast",
+      noticeKind: "demand_forecast_scan_failed",
+      href: "/inventory",
+      remedy: "Review planning policies and stock history in Inventory; the scan retries automatically.",
       problems,
       unattributed: [],
     });
