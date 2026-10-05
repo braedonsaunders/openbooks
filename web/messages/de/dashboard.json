@@ -102,7 +102,9 @@
     "forensicRiskHint": "{flagged} markiert · {value} gefährdet · {period}",
     "forensicRiskExcluded": "Schließt Nichtkonfiguriertes aus: {detectors}",
     "duplicatePayments": "Doppelte Zahlungen",
-    "duplicatePaymentsHint": "{value} gefährdet · {period}"
+    "duplicatePaymentsHint": "{value} gefährdet · {period}",
+    "utilization": "Auslastung",
+    "overheadAbsorption": "Gemeinkostenabsorption"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -220,7 +222,9 @@
     "kpiVendorPayment": "Pünktlichkeitsquote und verspätet gezahlte Ausgaben aus der Lieferantenleistung.",
     "kpiSpendVelocity": "Offene Ausgabenalarme und Sparpotenzial aus der Ausgabendynamik.",
     "forensicRisk": "Sentinel-Risikowert mit Anzahl markierter Vorgänge und gefährdetem Betrag.",
-    "duplicatePayments": "Doppelte Zahlungsgruppen und ihr gefährdeter Betrag."
+    "duplicatePayments": "Doppelte Zahlungsgruppen und ihr gefährdeter Betrag.",
+    "utilization": "Abrechenbare Unternehmens-% aus Auslastung, mit Anomalienzahl.",
+    "overheadAbsorption": "Absorbierte Gemeinkosten vs. Gesamt aus True Cost, mit Lücke."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",
@@ -374,5 +378,11 @@
     "actual": "Ist",
     "variance": "Abweichung",
     "offTrack": "Abweichend"
+  },
+  "projectWidgets": {
+    "target": "Ziel {target} %",
+    "anomalies": "{count} Anomalien",
+    "unscheduled": "{count} ohne Arbeitszeiten",
+    "gap": "Lücke {amount}"
   }
 }

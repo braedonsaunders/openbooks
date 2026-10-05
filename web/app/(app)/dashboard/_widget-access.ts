@@ -113,6 +113,8 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-spend-velocity': ['reports.read'],
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
+  'kpi-utilization': ['reports.read'],
+  'kpi-overhead-absorption': ['reports.read'],
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
   'kpi-forensic-risk': ['reports.read'],

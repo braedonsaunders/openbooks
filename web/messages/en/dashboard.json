@@ -102,7 +102,9 @@
     "forensicRiskHint": "{flagged} flagged · {value} at risk · {period}",
     "forensicRiskExcluded": "Excludes unconfigured: {detectors}",
     "duplicatePayments": "Duplicate payments",
-    "duplicatePaymentsHint": "{value} at risk · {period}"
+    "duplicatePaymentsHint": "{value} at risk · {period}",
+    "utilization": "Utilization",
+    "overheadAbsorption": "Overhead absorption"
   },
   "metricContext": {
     "today": "Posted today",
@@ -220,7 +222,9 @@
     "kpiVendorPayment": "On-time payment rate and late-paid spend from Vendor Performance.",
     "kpiSpendVelocity": "Open spend alerts and savings potential from Spend Velocity.",
     "forensicRisk": "Overall Sentinel risk score, with the flagged count and value at risk.",
-    "duplicatePayments": "Duplicate payment groups and their value at risk."
+    "duplicatePayments": "Duplicate payment groups and their value at risk.",
+    "utilization": "Company billable % from Utilization, with its anomaly count.",
+    "overheadAbsorption": "Absorbed burden vs total burden from True Cost, with the gap."
   },
   "grid": {
     "customizing": "Customizing your dashboard",
@@ -374,5 +378,11 @@
     "actual": "Actual",
     "variance": "Variance",
     "offTrack": "Off track"
+  },
+  "projectWidgets": {
+    "target": "target {target}%",
+    "anomalies": "{count} anomalies",
+    "unscheduled": "{count} without schedules",
+    "gap": "gap {amount}"
   }
 }

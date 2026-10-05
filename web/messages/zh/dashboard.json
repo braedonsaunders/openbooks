@@ -102,7 +102,9 @@
     "forensicRiskHint": "{flagged} 条已标记 · {value} 风险敞口 · {period}",
     "forensicRiskExcluded": "不含未配置项:{detectors}",
     "duplicatePayments": "重复付款",
-    "duplicatePaymentsHint": "{value} 风险敞口 · {period}"
+    "duplicatePaymentsHint": "{value} 风险敞口 · {period}",
+    "utilization": "利用率",
+    "overheadAbsorption": "间接费用吸收"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -220,7 +222,9 @@
     "kpiVendorPayment": "来自供应商绩效的准时付款率与延迟付款支出。",
     "kpiSpendVelocity": "来自支出增速的未处理预警与节约潜力。",
     "forensicRisk": "Sentinel总体风险评分，含已标记数量和风险敞口。",
-    "duplicatePayments": "重复付款分组及其风险敞口。"
+    "duplicatePayments": "重复付款分组及其风险敞口。",
+    "utilization": "来自利用率的全公司可计费率及异常数。",
+    "overheadAbsorption": "来自真实成本的已吸收负担与总额及差额。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",
@@ -374,5 +378,11 @@
     "actual": "实际",
     "variance": "差异",
     "offTrack": "偏离"
+  },
+  "projectWidgets": {
+    "target": "目标{target}%",
+    "anomalies": "{count}个异常",
+    "unscheduled": "{count}人无排班",
+    "gap": "差额{amount}"
   }
 }
