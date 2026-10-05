@@ -27,6 +27,7 @@
       "employeesSub": "aktive Lohnprofile",
       "periodsRan": "Lohnperioden {year}",
       "periodsRanYears": "Lohnperioden {years}",
+      "periodsRanNoYear": "Lohnperioden",
       "periodsOf": "{ran} von {total}",
       "periodsRanSub": "in diesem Steuerjahr verbucht",
       "ytdGross": "Brutto laufendes Jahr",

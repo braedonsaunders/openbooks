@@ -27,6 +27,7 @@
       "employeesSub": "有効な給与プロファイル",
       "periodsRan": "給与期間 {year}",
       "periodsRanYears": "給与期間 {years}",
+      "periodsRanNoYear": "給与期間",
       "periodsOf": "{ran} / {total}",
       "periodsRanSub": "当年に確定した税年度",
       "ytdGross": "年累計総支給額",
