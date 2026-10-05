@@ -131,6 +131,59 @@
       "domainTableNote": "Los meses desde {month} proyectan bajo cero, fuera del rango de esta métrica.",
       "domainGrowthNote": "El crecimiento proyectado se calcula con valores fuera del rango de {metric}; consulta la advertencia anterior."
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "Ingresos",
+        "grossMargin": "Margen bruto",
+        "operatingIncome": "Resultado operativo",
+        "safetyMargin": "Margen de seguridad"
+      },
+      "baselineSub": "sin base para comparar",
+      "builder": "Constructor de escenarios",
+      "template": "Plantilla",
+      "custom": "Escenario personalizado",
+      "revenueGroup": "Ingresos",
+      "costsGroup": "Costes",
+      "fields": {
+        "growth": "Crecimiento %",
+        "price": "Precio Δ %",
+        "cogs": "COGS Δ %",
+        "opex": "OpEx Δ %"
+      },
+      "reset": "Restablecer a la base",
+      "impact": "Impacto proyectado",
+      "thresholds": "Umbrales clave",
+      "risk": "Nivel de riesgo",
+      "threshold": {
+        "breakeven": "Punto de equilibrio",
+        "safety": "Margen de seguridad",
+        "net": "Resultado neto"
+      },
+      "riskLevels": {
+        "low": "Bajo",
+        "moderate": "Moderado",
+        "high": "Alto",
+        "critical": "Crítico",
+        "unknown": "Desconocido"
+      },
+      "chart": {
+        "revenue": "Ingresos",
+        "grossProfit": "Margen bruto",
+        "opIncome": "Rtdo. operativo",
+        "netIncome": "Resultado neto",
+        "baseline": "Base",
+        "scenario": "Escenario"
+      },
+      "invalidInput": "{field} debe ser un número simple — el escenario se mantiene en la base hasta corregirlo.",
+      "templates": {
+        "recession": "Recesión",
+        "growth": "Impulso de crecimiento",
+        "cost_cut": "Recorte de costes",
+        "price_war": "Guerra de precios",
+        "expansion": "Expansión",
+        "stagflation": "Estanflación"
+      }
+    },
     "kpi": {
       "revenue": "Ingresos",
       "grossMargin": "Margen bruto",

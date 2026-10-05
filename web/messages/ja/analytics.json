@@ -131,6 +131,59 @@
       "domainTableNote": "{month}以降の月はゼロを下回り、この指標の範囲外です。",
       "domainGrowthNote": "予測成長率は{metric}の範囲外の値から計算されています。上記の注意を参照してください。"
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "収益",
+        "grossMargin": "粗利益率",
+        "operatingIncome": "営業利益",
+        "safetyMargin": "安全余裕"
+      },
+      "baselineSub": "比較できる基準値がありません",
+      "builder": "シナリオビルダー",
+      "template": "テンプレート",
+      "custom": "カスタムシナリオ",
+      "revenueGroup": "収益",
+      "costsGroup": "費用",
+      "fields": {
+        "growth": "成長率％",
+        "price": "価格Δ％",
+        "cogs": "COGSΔ％",
+        "opex": "販管費Δ％"
+      },
+      "reset": "基準値にリセット",
+      "impact": "予測される影響",
+      "thresholds": "主要なしきい値",
+      "risk": "リスク水準",
+      "threshold": {
+        "breakeven": "損益分岐点収益",
+        "safety": "安全余裕",
+        "net": "純利益"
+      },
+      "riskLevels": {
+        "low": "低",
+        "moderate": "中",
+        "high": "高",
+        "critical": "重大",
+        "unknown": "不明"
+      },
+      "chart": {
+        "revenue": "収益",
+        "grossProfit": "粗利益",
+        "opIncome": "営業利益",
+        "netIncome": "純利益",
+        "baseline": "基準",
+        "scenario": "シナリオ"
+      },
+      "invalidInput": "{field}は単純な数値で入力してください — 修正されるまでシナリオは基準値に保たれます。",
+      "templates": {
+        "recession": "不況",
+        "growth": "成長促進",
+        "cost_cut": "コスト削減",
+        "price_war": "価格競争",
+        "expansion": "拡大",
+        "stagflation": "スタグフレーション"
+      }
+    },
     "kpi": {
       "revenue": "売上高",
       "grossMargin": "売上総利益率",

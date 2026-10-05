@@ -131,6 +131,59 @@
       "domainTableNote": "Les mois à partir de {month} se projettent sous zéro, hors de la plage de cet indicateur.",
       "domainGrowthNote": "La croissance projetée est calculée à partir de valeurs hors de la plage de {metric} — voir l'avertissement ci-dessus."
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "Chiffre d’affaires",
+        "grossMargin": "Marge brute",
+        "operatingIncome": "Résultat opérationnel",
+        "safetyMargin": "Marge de sécurité"
+      },
+      "baselineSub": "aucune base de comparaison",
+      "builder": "Constructeur de scénarios",
+      "template": "Modèle",
+      "custom": "Scénario personnalisé",
+      "revenueGroup": "Chiffre d’affaires",
+      "costsGroup": "Coûts",
+      "fields": {
+        "growth": "Croissance %",
+        "price": "Prix Δ %",
+        "cogs": "COGS Δ %",
+        "opex": "OpEx Δ %"
+      },
+      "reset": "Revenir à la base",
+      "impact": "Impact projeté",
+      "thresholds": "Seuils clés",
+      "risk": "Niveau de risque",
+      "threshold": {
+        "breakeven": "Seuil de rentabilité",
+        "safety": "Marge de sécurité",
+        "net": "Résultat net"
+      },
+      "riskLevels": {
+        "low": "Faible",
+        "moderate": "Modéré",
+        "high": "Élevé",
+        "critical": "Critique",
+        "unknown": "Inconnu"
+      },
+      "chart": {
+        "revenue": "Chiffre d’affaires",
+        "grossProfit": "Marge brute",
+        "opIncome": "R. opérationnel",
+        "netIncome": "Résultat net",
+        "baseline": "Base",
+        "scenario": "Scénario"
+      },
+      "invalidInput": "{field} doit être un nombre simple — le scénario reste sur la base en attendant.",
+      "templates": {
+        "recession": "Récession",
+        "growth": "Poussée de croissance",
+        "cost_cut": "Réduction des coûts",
+        "price_war": "Guerre des prix",
+        "expansion": "Expansion",
+        "stagflation": "Stagflation"
+      }
+    },
     "kpi": {
       "revenue": "Chiffre d'affaires",
       "grossMargin": "Marge brute",

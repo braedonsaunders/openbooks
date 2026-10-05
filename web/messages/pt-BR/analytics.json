@@ -131,6 +131,59 @@
       "domainTableNote": "Os meses a partir de {month} projetam abaixo de zero, fora do intervalo desta métrica.",
       "domainGrowthNote": "O crescimento projetado é calculado com valores fora do intervalo de {metric} — veja o aviso acima."
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "Receita",
+        "grossMargin": "Margem bruta",
+        "operatingIncome": "Resultado operacional",
+        "safetyMargin": "Margem de segurança"
+      },
+      "baselineSub": "sem base para comparar",
+      "builder": "Construtor de cenários",
+      "template": "Modelo",
+      "custom": "Cenário personalizado",
+      "revenueGroup": "Receita",
+      "costsGroup": "Custos",
+      "fields": {
+        "growth": "Crescimento %",
+        "price": "Preço Δ %",
+        "cogs": "COGS Δ %",
+        "opex": "OpEx Δ %"
+      },
+      "reset": "Redefinir para a base",
+      "impact": "Impacto projetado",
+      "thresholds": "Limites principais",
+      "risk": "Nível de risco",
+      "threshold": {
+        "breakeven": "Receita de equilíbrio",
+        "safety": "Margem de segurança",
+        "net": "Resultado líquido"
+      },
+      "riskLevels": {
+        "low": "Baixo",
+        "moderate": "Moderado",
+        "high": "Alto",
+        "critical": "Crítico",
+        "unknown": "Desconhecido"
+      },
+      "chart": {
+        "revenue": "Receita",
+        "grossProfit": "Lucro bruto",
+        "opIncome": "R. operacional",
+        "netIncome": "Resultado líquido",
+        "baseline": "Base",
+        "scenario": "Cenário"
+      },
+      "invalidInput": "{field} deve ser um número simples — o cenário permanece na base até a correção.",
+      "templates": {
+        "recession": "Recessão",
+        "growth": "Impulso de crescimento",
+        "cost_cut": "Corte de custos",
+        "price_war": "Guerra de preços",
+        "expansion": "Expansão",
+        "stagflation": "Estagflação"
+      }
+    },
     "kpi": {
       "revenue": "Receita",
       "grossMargin": "Margem bruta",
