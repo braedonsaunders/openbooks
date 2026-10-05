@@ -12,6 +12,7 @@
   "or": "o",
   "sso": "Inicio de sesión único",
   "ssoFailed": "No se pudo completar el inicio de sesión único",
+  "signInUnavailable": "El inicio de sesión no está disponible. Actualiza la página e inténtalo de nuevo. Si el problema continúa, contacta con tu administrador.",
   "reset": {
     "requestFailed": "No se pudo solicitar el enlace de restablecimiento — compruebe su conexión e inténtelo de nuevo.",
     "requestTitle": "Restablezca su contraseña",

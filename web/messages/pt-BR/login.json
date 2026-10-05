@@ -12,6 +12,7 @@
   "or": "ou",
   "sso": "Login único",
   "ssoFailed": "Não foi possível concluir o login único",
+  "signInUnavailable": "O login está indisponível. Atualize a página e tente novamente. Se o problema persistir, entre em contato com o administrador.",
   "reset": {
     "requestFailed": "Não foi possível solicitar o link de redefinição — verifique sua conexão e tente novamente.",
     "requestTitle": "Redefina sua senha",

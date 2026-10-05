@@ -37,7 +37,7 @@ if (typeof window.requestAnimationFrame !== 'function') {
 const loginScript = {
   params: new URLSearchParams(),
   pushes: [] as string[],
-  loginResponses: [] as Response[],
+  loginResponses: [] as Array<Response | Error>,
   methodsResponse: {} as unknown,
 }
 Object.assign(globalThis, { __loginScript: loginScript })
@@ -92,7 +92,7 @@ test('safeNextPath fails closed for unsafe, malformed, empty, and oversized valu
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function mount(query: string, loginResponses: Response[], methodsResponse: unknown = {}): Promise<() => Promise<void>> {
+async function mount(query: string, loginResponses: Array<Response | Error>, methodsResponse: unknown = {}): Promise<() => Promise<void>> {
   loginScript.params = new URLSearchParams(query)
   loginScript.pushes = []
   loginScript.loginResponses = [...loginResponses]
@@ -104,6 +104,7 @@ async function mount(query: string, loginResponses: Response[], methodsResponse:
     if (url === '/api/login') {
       const next = loginScript.loginResponses.shift()
       assert.ok(next, 'the form posted more logins than scripted')
+      if (next instanceof Error) throw next
       return next
     }
     throw new Error(`unexpected fetch to ${url}`)
@@ -164,6 +165,26 @@ test('a password sign-in navigates to the validated destination', async () => {
     assert.equal(loginScript.pushes[0], safeNextPath(rawNext), 'navigation matches the shared validator')
   } finally {
     await cleanup()
+  }
+})
+
+test('sign-in distinguishes invalid credentials from server and connection failures', async () => {
+  for (const [response, expected] of [
+    [Response.json({ error: 'invalid credentials' }, { status: 401 }), messages.login.invalidCredentials],
+    [Response.json({ error: 'forbidden' }, { status: 403 }), messages.login.signInUnavailable],
+    [new Response('Service unavailable', { status: 503 }), messages.login.signInUnavailable],
+    [new TypeError('Failed to fetch'), messages.login.signInUnavailable],
+  ] as const) {
+    const cleanup = await mount('', [response])
+    try {
+      await typeEmailPassword('operator@example.com', 'correct horse battery staple')
+      await submit()
+      assert.equal(document.querySelector('[role="alert"]')?.textContent, expected)
+      assert.deepEqual(loginScript.pushes, [], 'a refused sign-in never navigates')
+      assert.equal((document.querySelector('button[type="submit"]') as HTMLButtonElement).disabled, false, 'the operator can retry')
+    } finally {
+      await cleanup()
+    }
   }
 })
 

@@ -15,6 +15,7 @@
   "forgotPassword": "Forgot password?",
   "tooManyAttempts": "Too many attempts — try again in {seconds} seconds",
   "busyTryAgain": "The sign-in service is busy — try again in a moment",
+  "signInUnavailable": "Sign-in is unavailable. Refresh the page and try again. If the problem continues, contact your administrator.",
   "reset": {
     "requestTitle": "Reset your password",
     "chooseTitle": "Choose a new password",

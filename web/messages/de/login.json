@@ -12,6 +12,7 @@
   "or": "oder",
   "sso": "Einmalanmeldung",
   "ssoFailed": "Die Einmalanmeldung konnte nicht abgeschlossen werden",
+  "signInUnavailable": "Die Anmeldung ist nicht verfügbar. Laden Sie die Seite neu und versuchen Sie es erneut. Wenn das Problem weiterhin besteht, wenden Sie sich an Ihren Administrator.",
   "reset": {
     "requestFailed": "Der Link zum Zurücksetzen konnte nicht angefordert werden — prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
     "requestTitle": "Passwort zurücksetzen",
