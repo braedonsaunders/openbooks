@@ -319,7 +319,30 @@ export async function ingestChannelOrder(
       // Posted history is immutable: a redelivered order that already
       // posted (or summarized, or was deliberately excluded) is observed,
       // never rewritten — an edit after posting is a new event instead.
+      // Fulfilment tracking is reportage, not history: the storefront keeps
+      // reporting fulfilment and cancellation after settlement, and freezing
+      // those two fields would leave every downstream consumer (close,
+      // fulfilment queues) working off the order's birth state. Money fields
+      // stay frozen; only the tracking moves, with no edit event — the
+      // fulfilment and cancellation events already carry that trail.
       if (existing.posting_status === "posted" || existing.posting_status === "summarized" || existing.posting_status === "excluded") {
+        const trackedFulfilment = existing.fulfilment_status ?? "";
+        const trackedCancelled = existing.cancelled_at ?? null;
+        if (trackedFulfilment !== order.fulfilmentStatus || trackedCancelled !== order.cancelledAt) {
+          const retracked = (await db.execute<OrderDbRow>(sql`
+            update channel_orders
+               set fulfilment_status = ${order.fulfilmentStatus},
+                   cancelled_at = ${order.cancelledAt},
+                   updated_by = ${actor}, updated_at = now()
+             where org_id = ${orgId} and id = ${existing.id}
+             returning ${ORDER_COLUMNS}`)).rows[0];
+          if (!retracked) {
+            throw new Error("Channel order tracking update matched no row; the order left while it was ingested");
+          }
+          await maybeCloseGoverningOrder(orgId, actor, existing.id);
+          return toOrderRow(retracked);
+        }
+        await maybeCloseGoverningOrder(orgId, actor, existing.id);
         return toOrderRow(existing);
       }
       const updated = await db.execute<OrderDbRow>(sql`
@@ -362,6 +385,10 @@ export async function ingestChannelOrder(
           'ignored', now(), ${actor}, ${actor})
         on conflict (org_id, order_id, external_id) do nothing`);
       await refreshOrderEconomics(orgId, actor, existing.id, "order updated");
+      // A fulfilment or cancellation arriving on the order payload can
+      // complete a storefront-fulfilled order: close its governing draft
+      // while the update is in hand.
+      await maybeCloseGoverningOrder(orgId, actor, existing.id);
       return toOrderRow(updated.rows[0]!);
     }
     // A redelivery racing the first store collides on the channel-external
@@ -396,6 +423,7 @@ export async function ingestChannelOrder(
       select ${ORDER_COLUMNS} from channel_orders where org_id = ${orgId} and id = ${id}`)).rows[0];
     if (!row) throw new Error("Channel order store returned no row; the order was lost");
     await refreshOrderEconomics(orgId, actor, id, "order ingested");
+    await maybeCloseGoverningOrder(orgId, actor, id);
     return toOrderRow(row);
   });
 }
@@ -810,6 +838,140 @@ export async function markChannelEventIgnored(orgId: string, eventId: string, ac
   if (updated.rowCount !== 1) {
     throw new Error("Channel event ignore mark matched no row; the event posted or left while it retired");
   }
+}
+
+/**
+ * External identity of the draft sales order governing a
+ * storefront-fulfilled sale: namespaced so it never collides with the
+ * sibling cash under the cross-kind (org, source, ref) unique key.
+ */
+export function governedSalesOrderRef(orderExternalId: string): string {
+  return `channel-sales-order:${orderExternalId}`;
+}
+
+export type GoverningCloseReason = "fulfilled_settled" | "cancelled";
+
+export type GoverningCloseOutcome =
+  | { closed: true; documentId: string; reason: GoverningCloseReason }
+  | { closed: false; documentId: string | null; skipped: "no_draft" | "not_complete" | "unattributed" };
+
+/**
+ * Close the draft sales order governing a storefront-fulfilled order.
+ *
+ * A paid order the storefront fulfils posts its cash at once and leaves a
+ * draft sales order behind as the fulfilment control: the kernel skips
+ * sale-time issue for governed cash, and fulfilment events relieve the
+ * shelf later. That draft is bookkeeping, not an open order — once the
+ * storefront order is fulfilled and its cash is settled (or the storefront
+ * cancelled the order, after which nothing will ever fulfil), the draft
+ * closes with its reason in the audit log instead of accumulating as a
+ * permanent draft. Cancellation is read off the order or its cancellation
+ * event, because the cancel webhook carries no order payload.
+ *
+ * Closing is a compare-and-set on (id, draft): concurrent triggers race
+ * safely, the loser observing the winner's void. It is attributed like any
+ * void — an unattended run names nobody, so it leaves the draft for the
+ * next attributed touch rather than voiding in nobody's name.
+ */
+export async function maybeCloseGoverningOrder(
+  orgId: string,
+  actor: string | null,
+  orderId: string,
+): Promise<GoverningCloseOutcome> {
+  // Cheap probe first: most orders never grew a governing draft, and ingest
+  // calls this on every webhook. Only a surviving draft pays for the full
+  // order read and reason evaluation below. The draft identity stays in one
+  // function (governedSalesOrderRef), never re-spelled in SQL.
+  const key = (await db.execute<{ channel_id: string; external_id: string }>(sql`
+    select channel_id, external_id from channel_orders
+     where org_id = ${orgId} and id = ${orderId}`)).rows[0];
+  if (!key) return { closed: false, documentId: null, skipped: "no_draft" };
+  const channel = (await db.execute<{ kind: string }>(sql`
+    select kind from sales_channels where org_id = ${orgId} and id = ${key.channel_id}`)).rows[0];
+  if (!channel) return { closed: false, documentId: null, skipped: "no_draft" };
+  const draft = (await db.execute<{ id: string }>(sql`
+    select id from documents
+     where org_id = ${orgId} and kind = 'sales_order'
+       and external_source = ${channel.kind}
+       and external_ref = ${governedSalesOrderRef(key.external_id)}
+       and status = 'draft'
+     order by created_at desc limit 1`)).rows[0];
+  if (!draft) return { closed: false, documentId: null, skipped: "no_draft" };
+  const order = await loadChannelOrder(orgId, orderId);
+  if (!order) return { closed: false, documentId: null, skipped: "no_draft" };
+  let reason: GoverningCloseReason | null = null;
+  if (order.cancelledAt) {
+    reason = "cancelled";
+  } else {
+    const cancelled = (await db.execute<{ id: string }>(sql`
+      select id from channel_order_events
+       where org_id = ${orgId} and order_id = ${order.id} and kind = 'cancellation'
+       limit 1`)).rows[0];
+    if (cancelled) reason = "cancelled";
+    else if (order.fulfilmentStatus === "fulfilled" && (await isOrderSettledForClose(orgId, order))) {
+      reason = "fulfilled_settled";
+    }
+  }
+  if (!reason) return { closed: false, documentId: draft.id, skipped: "not_complete" };
+  if (!actor) return { closed: false, documentId: draft.id, skipped: "unattributed" };
+  const voidReason = reason === "cancelled"
+    ? `Storefront order ${order.externalNumber} was cancelled; its governing sales order is closed.`
+    : `Storefront order ${order.externalNumber} is fulfilled and settled; its governing sales order is closed.`;
+  const closed = await db.execute(sql`
+    update documents
+       set status = 'voided',
+           void_reason = ${voidReason},
+           voided_at = now(),
+           voided_by = ${actor},
+           updated_by = ${actor},
+           updated_at = now()
+     where org_id = ${orgId} and id = ${draft.id}
+       and kind = 'sales_order' and status = 'draft'`);
+  if (closed.rowCount !== 1) {
+    // A zero-row write is a failure unless the draft already closed: a
+    // concurrent trigger won the race, and its void stands for both.
+    const live = (await db.execute<{ status: string }>(sql`
+      select status from documents where org_id = ${orgId} and id = ${draft.id}`)).rows[0];
+    if (live?.status === "voided") return { closed: true, documentId: draft.id, reason };
+    throw new Error("Governing sales order changed while it closed; the draft left while its order completed");
+  }
+  const audited = await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'documents', ${draft.id}, 'update',
+      ${JSON.stringify({
+        event: "governing_order_closed",
+        outcome: reason,
+        orderId: order.id,
+        externalNumber: order.externalNumber,
+        before: { status: "draft" },
+        after: { status: "voided" },
+        reason: voidReason,
+      })}::jsonb, ${actor})`);
+  if (audited.rowCount !== 1) {
+    throw new Error("Governing-order close audit matched no row; the decision was lost");
+  }
+  return { closed: true, documentId: draft.id, reason };
+}
+
+async function isOrderSettledForClose(
+  orgId: string,
+  order: { postingDocumentId: string | null; summaryId: string | null },
+): Promise<boolean> {
+  if (order.postingDocumentId) {
+    const doc = (await db.execute<{ status: string }>(sql`
+      select status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`)).rows[0];
+    return doc?.status === "posted";
+  }
+  if (order.summaryId) {
+    const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
+      select posting_document_id from channel_daily_summaries
+       where org_id = ${orgId} and id = ${order.summaryId}`)).rows[0];
+    if (!summary?.posting_document_id) return false;
+    const doc = (await db.execute<{ status: string }>(sql`
+      select status from documents where org_id = ${orgId} and id = ${summary.posting_document_id}`)).rows[0];
+    return doc?.status === "posted";
+  }
+  return false;
 }
 
 /** Link an order into its daily summary batch. */
