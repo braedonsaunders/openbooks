@@ -108,6 +108,13 @@ test('spend velocity translates every spend functional to presentation', { skip:
       // currency-blind default.
       assert.equal(data.fragmentation.summary.configured, false)
       assert.match(data.fragmentation.summary.reason, /Configuration/)
+      // No minimum base is configured out of the box either: the cliff's
+      // growth figures report as not configured by name instead of scoring
+      // without a floor.
+      assert.equal(data.commitmentCliff.summary.configured, false)
+      assert.match(data.commitmentCliff.summary.reason, /Configuration/)
+      assert.equal(data.commitmentCliff.summary.poVelocity, null)
+      assert.equal(data.commitmentCliff.summary.soVelocity, null)
       // Revenue arrives as an exact decimal string.
       assert.equal(data.revenue.totalRevenue, '470.0000')
       // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual

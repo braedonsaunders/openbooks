@@ -2133,7 +2133,8 @@
       "seasonalHigh": "Les dépenses élevées se concentrent généralement en {months}",
       "seasonalLow": "Les dépenses faibles se concentrent généralement en {months}",
       "shadowItReason": "Les lignes de notes de frais ne portent ni commerçant ni fournisseur — seul le compte de charges et une description libre — il est donc impossible de tracer l'adoption virale de logiciels par les employés.",
-      "fragmentationUnconfigured": "Renseignez le plafond de fragmentation dans Vélocité des dépenses → Configuration"
+      "fragmentationUnconfigured": "Renseignez le plafond de fragmentation dans Vélocité des dépenses → Configuration",
+      "cliffUnconfigured": "Renseignez la base minimale dans Vélocité des dépenses → Configuration"
     },
     "banner": {
       "count": "{total} alertes au total",
@@ -2387,7 +2388,7 @@
         },
         "minBaseAmount": {
           "label": "Base minimale",
-          "help": "Les séries sous ce montant en {currency} sont ignorées — vide signifie aucun minimum"
+          "help": "Les séries sous ce montant en {currency} sont ignorées — vide signifie aucun minimum, et la falaise d'engagements se déclare non configurée"
         },
         "opexRatioAlert": {
           "label": "Alerte ratio OpEx (%)",
