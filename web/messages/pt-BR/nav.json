@@ -153,7 +153,8 @@
     "hrm-performance-succession": "Planos de sucessão",
     "hrm-performance-templates": "Formulários de avaliação",
     "hrm-benefits-employees": "Benefícios",
-    "hrm-benefits-delivery": "Entrega"
+    "hrm-benefits-delivery": "Entrega",
+    "hrm-training": "Treinamento"
   },
   "groups": {
     "workforce": "Força de trabalho",
@@ -217,7 +218,8 @@
     "ap": "Contas a pagar",
     "ar": "Contas a receber",
     "provisions": "Provisões e contingências",
-    "stored-value": "Vales e créditos"
+    "stored-value": "Vales e créditos",
+    "hrm-training": "Treinamento"
   },
   "localWorkspaces": {
     "collections-views": "Cobranças",

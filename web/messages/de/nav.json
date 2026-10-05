@@ -153,7 +153,8 @@
     "hrm-performance-succession": "Nachfolgepläne",
     "hrm-performance-templates": "Beurteilungsformulare",
     "hrm-benefits-employees": "Leistungen",
-    "hrm-benefits-delivery": "Bereitstellung"
+    "hrm-benefits-delivery": "Bereitstellung",
+    "hrm-training": "Schulung"
   },
   "groups": {
     "workforce": "Belegschaft",
@@ -217,7 +218,8 @@
     "ap": "Kreditoren",
     "ar": "Debitoren",
     "provisions": "Rückstellungen und Eventualverpflichtungen",
-    "stored-value": "Guthaben"
+    "stored-value": "Guthaben",
+    "hrm-training": "Schulung"
   },
   "localWorkspaces": {
     "collections-views": "Forderungseinzug",

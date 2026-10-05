@@ -153,7 +153,8 @@
     "hrm-performance-succession": "Succession plans",
     "hrm-performance-templates": "Review forms",
     "hrm-benefits-employees": "Benefits",
-    "hrm-benefits-delivery": "Delivery"
+    "hrm-benefits-delivery": "Delivery",
+    "hrm-training": "Training"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",
@@ -163,7 +164,8 @@
     "ap": "Payables",
     "ar": "Receivables",
     "provisions": "Provisions and contingencies",
-    "stored-value": "Stored value"
+    "stored-value": "Stored value",
+    "hrm-training": "Training"
   },
   "groups": {
     "workforce": "Workforce",

@@ -140,6 +140,7 @@
     "./connectors": "./src/connectors/public.ts",
     "./stored-value": "./src/stored-value/public.ts",
     "./tax-returns": "./src/tax-returns/public.ts",
-    "./payroll/compensation-patterns": "./src/payroll/compensation-package-pattern.ts"
+    "./payroll/compensation-patterns": "./src/payroll/compensation-package-pattern.ts",
+    "./testing/hrm": "./src/testing/public-hrm.ts"
   }
 }

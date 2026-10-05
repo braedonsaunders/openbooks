@@ -3474,6 +3474,21 @@
       "payroll-compensation-assignments": {
         "title": "Atribuições aos funcionários",
         "description": "Versões aprovadas e valores individuais dentro dos limites autorizados."
+      },
+      "training-courses": {
+        "title": "Treinamento",
+        "singular": "Treinamento",
+        "description": "Aprove políticas de cursos, programe sessões e registre resultados."
+      },
+      "training-sessions": {
+        "title": "Sessões",
+        "singular": "Sessões",
+        "description": "Aprove políticas de cursos, programe sessões e registre resultados."
+      },
+      "training-participants": {
+        "title": "Participantes",
+        "singular": "Participantes",
+        "description": "Aprove políticas de cursos, programe sessões e registre resultados."
       }
     },
     "fields": {
@@ -6290,6 +6305,89 @@
       "serverUpgrade": "Os pacotes de remuneração não estão disponíveis neste servidor. Peça a um administrador que conclua a atualização do servidor antes de configurar pacotes.",
       "decisionUnconfirmed": "Não foi possível confirmar a decisão. Recarregue este registro e revise sua situação atual antes de tentar novamente.",
       "previewFailed": "Não foi possível carregar a prévia. Tente novamente."
+    },
+    "training": {
+      "title": "Treinamento",
+      "description": "Aprove políticas de cursos, programe sessões e registre resultados.",
+      "newCourse": "Nova versão do curso",
+      "version": "Versão",
+      "course": "Versão do curso",
+      "session": "Sessão",
+      "sessions": "Sessões",
+      "participants": "Participantes",
+      "employment": "Vínculo do funcionário",
+      "status": "Status",
+      "qualificationType": "Qualificação concedida",
+      "qualificationHint": "Opcional. A aprovação cria uma credencial pendente; a verificação é separada.",
+      "attendanceThreshold": "Presença mínima (%)",
+      "passingScore": "Nota mínima de aprovação",
+      "scoreHint": "Deixe em branco se não houver avaliação com nota.",
+      "courseIdentity": "Curso e datas de vigência",
+      "courseIdentityHint": "Use o mesmo código e uma nova versão para uma política sucessora.",
+      "completionPolicy": "Requisitos de conclusão",
+      "completionPolicyHint": "A aprovação fixa as regras de presença, avaliação e qualificação.",
+      "location": "Local",
+      "capacity": "Capacidade de participantes",
+      "timeZone": "Fuso horário",
+      "startsAt": "Início",
+      "endsAt": "Fim",
+      "startsOn": "Data de início",
+      "endsOn": "Data de término",
+      "reason": "Motivo",
+      "reasonHint": "Informe o motivo da alteração de política, sessão ou resultado.",
+      "review": "Revisão e ações",
+      "reviewHint": "As ações usam a revisão atual. O aprovador deve ser diferente do autor.",
+      "history": "Histórico",
+      "result": "Presença e avaliação",
+      "resultHint": "Registre presença e avaliação reais. A verificação é separada; anular preserva o resultado original.",
+      "attendanceMinutes": "Minutos de presença",
+      "attendanceSeconds": "Presença registrada (segundos)",
+      "score": "Nota da avaliação",
+      "notes": "Notas do resultado",
+      "evidence": "Certificado do arquivo",
+      "feedback": "Feedback",
+      "feedbackHint": "As correções adicionam uma entrada e preservam as anteriores.",
+      "rating": "Avaliação (1–5)",
+      "comments": "Comentários",
+      "noActions": "Nenhuma ação disponível neste estado.",
+      "unconfirmed": "A alteração não foi confirmada; recarregue o registro antes de tentar novamente.",
+      "recordedResult": "Presença: {seconds} segundos · Nota: {score}",
+      "feedbackEntry": "{rating}/5 · {at}",
+      "statuses": {
+        "draft": "Rascunho",
+        "approved": "Aprovado",
+        "retired": "Desativado",
+        "cancelled": "Cancelado",
+        "scheduled": "Agendado",
+        "in_progress": "Em andamento",
+        "completed": "Concluído",
+        "invited": "Convidado",
+        "accepted": "Aceito",
+        "declined": "Recusado",
+        "failed": "Não aprovado",
+        "voided": "Anulado"
+      },
+      "actions": {
+        "approve": "Aprovar curso",
+        "retire": "Desativar curso",
+        "cancel": "Cancelar",
+        "schedule": "Publicar sessão",
+        "start": "Iniciar sessão",
+        "complete": "Encerrar sessão",
+        "accept": "Aceitar convite",
+        "decline": "Recusar convite",
+        "result": "Registrar resultado",
+        "void": "Anular resultado",
+        "feedback": "Registrar feedback"
+      }
+    },
+    "zonedTime": {
+      "date": "Data",
+      "time": "Hora",
+      "chooseZone": "Escolha primeiro o fuso horário.",
+      "gap": "Este horário local não existe devido ao adiantamento do relógio; escolha outro.",
+      "occurrence": "Deslocamento UTC",
+      "repeated": "Esta hora ocorre duas vezes; escolha seu deslocamento UTC."
     }
   },
   "flows": {

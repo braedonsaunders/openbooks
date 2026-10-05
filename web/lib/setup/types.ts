@@ -12,6 +12,7 @@ export type SetupFieldKind =
   | 'objectArray'
   /** ISO timestamp with an explicit UTC offset; preserved as entered. */
   | 'zonedDateTime'
+  | 'timeZone'
   /** A jsonb array of free-text strings (e.g. job titles). Renders as the
    *  TagInput chip control — never as raw JSON — with type-ahead over the
    *  field's `ref` option source and free entry for values the list lacks. */
@@ -109,6 +110,8 @@ export type SetupDynamicOptionsSource =
   | 'payroll-statutory-reporting-categories'
 
 export interface SetupField {
+  /** A sibling IANA zone opts a zonedDateTime into the native local-time picker. */
+  timeZoneField?: string
   key: string
   /** Names declared by an approved policy are record data rather than catalog keys. */
   label?: string

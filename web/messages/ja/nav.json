@@ -153,7 +153,8 @@
     "hrm-performance-succession": "後継者計画",
     "hrm-performance-templates": "評価フォーム",
     "hrm-benefits-employees": "福利厚生",
-    "hrm-benefits-delivery": "給付処理"
+    "hrm-benefits-delivery": "給付処理",
+    "hrm-training": "研修"
   },
   "groups": {
     "workforce": "従業員体制",
@@ -217,7 +218,8 @@
     "ap": "買掛金",
     "ar": "売掛金",
     "provisions": "引当金および偶発事項",
-    "stored-value": "ストアドバリュー"
+    "stored-value": "ストアドバリュー",
+    "hrm-training": "研修"
   },
   "localWorkspaces": {
     "collections-views": "債権回収",

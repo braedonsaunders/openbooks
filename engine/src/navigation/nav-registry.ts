@@ -1189,7 +1189,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   ],
   hrm: [
     'hrm', 'employees', 'hrm-change-requests', 'hrm-processes', 'hrm-documents',
-    'hrm-qualifications', 'hrm-compliance', 'hrm-org-chart', 'hrm-processes-templates',
+    'hrm-qualifications', 'hrm-training', 'hrm-compliance', 'hrm-org-chart', 'hrm-processes-templates',
     'hrm-positions', 'hrm-recruiting', 'hrm-recruiting-interviews', 'hrm-recruiting-offers',
     'hrm-recruiting-postings', 'hrm-recruiting-pools', 'hrm-leave', 'hrm-leave-calendar',
     'hrm-performance', 'hrm-performance-templates', 'hrm-performance-calibration',

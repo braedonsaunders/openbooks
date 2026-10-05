@@ -105,3 +105,13 @@ test('redirect-only routes need no page shell, while a redirect import never exe
   assert.deepEqual(rules(path,entry+'export default function Page(){if(false)redirect("/hrm");return <p>Template editor</p>}'),['bespoke-page']);
   assert.deepEqual(rules(path,entry+'export default function Page(){return <>Editor</>}'),['bespoke-page']);
 });
+
+
+test('setup catalog pages compose the actual registered list and shared layout, including aliases', () => {
+  const path = 'web/app/(app)/hrm/training/page.tsx'
+  const native = 'import { SetupEntitySection as Catalog } from "@/app/(app)/admin/setup/[entity]/SetupEntitySection"; import { ListPageLayout as Layout } from "@/components/page-layout";'
+  assert.deepEqual(rules(path, native + 'export default function Page(){return <Layout><Catalog /></Layout>}'), [])
+  assert.deepEqual(rules(path, native + 'export default function Page(){return <Layout><p>Unregistered rows</p></Layout>}'), ['bespoke-page'])
+  assert.deepEqual(rules(path, native.replace('@/app/(app)/admin/setup/[entity]/SetupEntitySection', './SetupEntitySection') + 'export default function Page(){return <Layout><Catalog /></Layout>}'), ['bespoke-page'])
+  assert.deepEqual(rules(path, native.replace('@/components/page-layout', './page-layout') + 'export default function Page(){return <Layout><Catalog /></Layout>}'), ['bespoke-page'])
+})

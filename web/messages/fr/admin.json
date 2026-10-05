@@ -3399,6 +3399,21 @@
       "payroll-compensation-assignments": {
         "title": "Affectations aux salariés",
         "description": "Versions approuvées et valeurs individuelles dans les limites autorisées."
+      },
+      "training-courses": {
+        "title": "Formation",
+        "singular": "Formation",
+        "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats."
+      },
+      "training-sessions": {
+        "title": "Sessions",
+        "singular": "Sessions",
+        "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats."
+      },
+      "training-participants": {
+        "title": "Participants",
+        "singular": "Participants",
+        "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats."
       }
     },
     "fields": {
@@ -6290,6 +6305,89 @@
       "serverUpgrade": "Les programmes de rémunération sont indisponibles sur ce serveur. Demandez à un administrateur de terminer la mise à niveau du serveur avant de les configurer.",
       "decisionUnconfirmed": "La décision n’a pas pu être confirmée. Rechargez cet enregistrement et vérifiez son état actuel avant de réessayer.",
       "previewFailed": "L’aperçu n’a pas pu être chargé. Réessayez."
+    },
+    "training": {
+      "title": "Formation",
+      "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats.",
+      "newCourse": "Nouvelle version de formation",
+      "version": "Version",
+      "course": "Version de formation",
+      "session": "Session",
+      "sessions": "Sessions",
+      "participants": "Participants",
+      "employment": "Emploi du salarié",
+      "status": "État",
+      "qualificationType": "Qualification obtenue",
+      "qualificationHint": "Facultatif. Un résultat réussi crée une qualification à vérifier séparément.",
+      "attendanceThreshold": "Présence minimale (%)",
+      "passingScore": "Note minimale de réussite",
+      "scoreHint": "Laissez vide si la formation ne comporte pas d’évaluation notée.",
+      "courseIdentity": "Formation et dates d’effet",
+      "courseIdentityHint": "Conservez le code et créez une nouvelle version pour remplacer les règles.",
+      "completionPolicy": "Conditions de réussite",
+      "completionPolicyHint": "L’approbation fige les règles de présence, d’évaluation et de qualification.",
+      "location": "Lieu",
+      "capacity": "Nombre de places",
+      "timeZone": "Fuseau horaire",
+      "startsAt": "Début",
+      "endsAt": "Fin",
+      "startsOn": "Date de début",
+      "endsOn": "Date de fin",
+      "reason": "Motif",
+      "reasonHint": "Indiquez le motif de ce changement de règles, de session ou de résultat.",
+      "review": "Examen et actions",
+      "reviewHint": "Les actions utilisent la version actuelle. L’approbateur doit être différent de l’auteur.",
+      "history": "Historique",
+      "result": "Présence et évaluation",
+      "resultHint": "Consignez la présence et l’évaluation réelles. La vérification reste distincte ; l’annulation conserve le résultat.",
+      "attendanceMinutes": "Minutes de présence",
+      "attendanceSeconds": "Présence consignée (secondes)",
+      "score": "Note d’évaluation",
+      "notes": "Notes sur le résultat",
+      "evidence": "Certificat du classeur",
+      "feedback": "Avis",
+      "feedbackHint": "Les corrections ajoutent un avis et conservent les précédents.",
+      "rating": "Note (1–5)",
+      "comments": "Commentaires",
+      "noActions": "Aucune action disponible dans cet état.",
+      "unconfirmed": "Le changement n’est pas confirmé — rechargez le dossier avant de réessayer.",
+      "recordedResult": "Présence : {seconds} secondes · Note : {score}",
+      "feedbackEntry": "{rating}/5 · {at}",
+      "statuses": {
+        "draft": "Brouillon",
+        "approved": "Approuvé",
+        "retired": "Retiré",
+        "cancelled": "Annulé",
+        "scheduled": "Planifié",
+        "in_progress": "En cours",
+        "completed": "Terminé",
+        "invited": "Invité",
+        "accepted": "Accepté",
+        "declined": "Décliné",
+        "failed": "Échoué",
+        "voided": "Invalidé"
+      },
+      "actions": {
+        "approve": "Approuver la formation",
+        "retire": "Retirer la formation",
+        "cancel": "Annuler",
+        "schedule": "Publier la session",
+        "start": "Démarrer la session",
+        "complete": "Clore la session",
+        "accept": "Accepter l’invitation",
+        "decline": "Décliner l’invitation",
+        "result": "Consigner le résultat",
+        "void": "Invalider le résultat",
+        "feedback": "Consigner un avis"
+      }
+    },
+    "zonedTime": {
+      "date": "Date",
+      "time": "Heure",
+      "chooseZone": "Choisissez d’abord le fuseau horaire.",
+      "gap": "Cette heure locale n’existe pas lors du passage à l’heure d’été — choisissez une autre heure.",
+      "occurrence": "Décalage UTC",
+      "repeated": "Cette heure apparaît deux fois — choisissez son décalage UTC."
     }
   },
   "flows": {

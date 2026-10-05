@@ -39,7 +39,8 @@ export const GET = defineRoute({
     // admits every document-read permission here; the kind check below narrows
     // it, still as a uniform 404.
     const compensation = table === 'payroll_compensation_packages' || table === 'payroll_compensation_versions' || table === 'payroll_compensation_assignments'
-    const family = compensation ? ['payroll.read'] : table === 'parties'
+    const training = table === 'hrm_training_courses' || table === 'hrm_training_sessions' || table === 'hrm_training_participants'
+    const family = training ? ['hrm.certifications.read'] : compensation ? ['payroll.read'] : table === 'parties'
       ? ['parties.read']
       : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? ['hrm.benefits.read']
       : table === 'item_rate_versions'
@@ -54,6 +55,7 @@ export const GET = defineRoute({
 
     if ((table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') && !await isFeatureEnabled(authz.user.orgId, 'hrm')) return notFound('record')
 
+    if (training && (!await isFeatureEnabled(authz.user.orgId, 'hrm') || !await isFeatureEnabled(authz.user.orgId, 'hrmCertifications'))) return notFound('record')
     if (table === 'entitlement_plans' && !await isFeatureEnabled(authz.user.orgId, 'payroll')) return notFound('record')
     if (compensation && !await isFeatureEnabled(authz.user.orgId, 'payroll')) return notFound('record')
 
@@ -61,7 +63,11 @@ export const GET = defineRoute({
     // record's subsidiary alongside org scope and gate BEFORE anything is
     // returned. Documents follow the documents-list rule (null fails closed);
     // parties follow the party-list rule (null-subsidiary rows are org-wide).
-    const record = table === 'payroll_compensation_packages' || table === 'payroll_compensation_assignments'
+    const record = training
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id,${table}::text as kind,created_at,created_by,updated_at,updated_by,subsidiary_id as "subsidiaryId"
+          from ${sql.identifier(table)} where org_id=${authz.user.orgId} and id=${recordId}`))
+      : table === 'payroll_compensation_packages' || table === 'payroll_compensation_assignments'
       ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
           select org_id,${table}::text as kind,created_at,created_by,updated_at,updated_by,subsidiary_id as "subsidiaryId"
           from ${table === 'payroll_compensation_packages' ? sql`payroll_compensation_packages` : sql`payroll_compensation_assignments`} where org_id=${authz.user.orgId} and id=${recordId}`))
@@ -129,7 +135,7 @@ export const GET = defineRoute({
         table === 'parties' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans' ? { orgWideNull: true } : {})
       if (denied) return denied
     }
-    const permission = compensation ? 'payroll.read' : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
+    const permission = training ? 'hrm.certifications.read' : compensation ? 'payroll.read' : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
     // Wrong-kind callers learn nothing either: the kind-specific permission
     // fails closed with the same uniform 404, so an ar.read-only caller cannot
     // distinguish an existing AP bill from a missing id (and symmetrically).

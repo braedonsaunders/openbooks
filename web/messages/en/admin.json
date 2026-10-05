@@ -3474,6 +3474,21 @@
       "payroll-compensation-assignments": {
         "title": "Employee assignments",
         "description": "Approved policy versions and bounded employee-specific values."
+      },
+      "training-courses": {
+        "title": "Training",
+        "singular": "Training",
+        "description": "Approve course policies, schedule delivery and record employee outcomes."
+      },
+      "training-sessions": {
+        "title": "Sessions",
+        "singular": "Sessions",
+        "description": "Approve course policies, schedule delivery and record employee outcomes."
+      },
+      "training-participants": {
+        "title": "Participants",
+        "singular": "Participants",
+        "description": "Approve course policies, schedule delivery and record employee outcomes."
       }
     },
     "fields": {
@@ -6290,6 +6305,89 @@
       "serverUpgrade": "Compensation packages are unavailable on this server. Ask an administrator to complete the server upgrade before configuring packages.",
       "decisionUnconfirmed": "The decision could not be confirmed. Reload this record and review its current state before retrying.",
       "previewFailed": "The preview could not be loaded. Try again."
+    },
+    "training": {
+      "title": "Training",
+      "description": "Approve course policies, schedule delivery and record employee outcomes.",
+      "newCourse": "New course version",
+      "version": "Version",
+      "course": "Course version",
+      "session": "Session",
+      "sessions": "Sessions",
+      "participants": "Participants",
+      "employment": "Employee employment",
+      "status": "Status",
+      "qualificationType": "Qualification awarded",
+      "qualificationHint": "Optional. A passing result creates a pending credential; verification remains a separate step.",
+      "attendanceThreshold": "Minimum attendance (%)",
+      "passingScore": "Minimum passing score",
+      "scoreHint": "Leave empty when this course has no scored assessment.",
+      "courseIdentity": "Course and effective dates",
+      "courseIdentityHint": "Use the same course code and a new version for a successor policy.",
+      "completionPolicy": "Completion requirements",
+      "completionPolicyHint": "Approval freezes the attendance, assessment and qualification policy.",
+      "location": "Location",
+      "capacity": "Participant capacity",
+      "timeZone": "Time zone",
+      "startsAt": "Starts",
+      "endsAt": "Ends",
+      "startsOn": "Start date",
+      "endsOn": "End date",
+      "reason": "Reason",
+      "reasonHint": "Record the reason for this policy, delivery or outcome change.",
+      "review": "Review and actions",
+      "reviewHint": "Actions use the current record revision. Course approval requires someone other than the author.",
+      "history": "History",
+      "result": "Attendance and assessment",
+      "resultHint": "Record actual attendance and assessment. Qualification verification remains separate; voiding preserves the original result.",
+      "attendanceMinutes": "Attended minutes",
+      "attendanceSeconds": "Recorded attendance (seconds)",
+      "score": "Assessment score",
+      "notes": "Result notes",
+      "evidence": "Certificate from File Cabinet",
+      "feedback": "Feedback",
+      "feedbackHint": "Corrections append a new feedback entry and preserve earlier entries.",
+      "rating": "Rating (1–5)",
+      "comments": "Comments",
+      "noActions": "No actions are available in this state.",
+      "unconfirmed": "The change is unconfirmed — reload this record before retrying.",
+      "recordedResult": "Recorded attendance: {seconds} seconds · Score: {score}",
+      "feedbackEntry": "{rating}/5 · {at}",
+      "statuses": {
+        "draft": "Draft",
+        "approved": "Approved",
+        "retired": "Retired",
+        "cancelled": "Cancelled",
+        "scheduled": "Scheduled",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "invited": "Invited",
+        "accepted": "Accepted",
+        "declined": "Declined",
+        "failed": "Failed",
+        "voided": "Voided"
+      },
+      "actions": {
+        "approve": "Approve course",
+        "retire": "Retire course",
+        "cancel": "Cancel",
+        "schedule": "Publish session",
+        "start": "Start session",
+        "complete": "Close session",
+        "accept": "Accept invitation",
+        "decline": "Decline invitation",
+        "result": "Record result",
+        "void": "Void result",
+        "feedback": "Record feedback"
+      }
+    },
+    "zonedTime": {
+      "date": "Date",
+      "time": "Time",
+      "chooseZone": "Choose the time zone first.",
+      "gap": "This local time does not exist because the clocks move forward — choose another time.",
+      "occurrence": "UTC offset",
+      "repeated": "This hour occurs twice — choose its UTC offset."
     }
   },
   "flows": {

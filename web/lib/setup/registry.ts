@@ -38,6 +38,7 @@ import { ENTITLEMENT_ENTITIES } from './entities/entitlements'
 import { NONPROFIT_SETUP_ENTITIES } from './entities/nonprofit'
 import { COMMERCE_ENTITIES } from './entities/commerce'
 import { PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY } from './payroll-compensation-packages'
+import { TRAINING_COURSES_ENTITY, TRAINING_SESSIONS_ENTITY, TRAINING_PARTICIPANTS_ENTITY } from './hrm-training'
 
 export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupEntityGate, SetupGroup } from './types'
 export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState, resolveSetupEntityGate, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } from './types'
@@ -66,6 +67,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...NONPROFIT_SETUP_ENTITIES,
   ...COMMERCE_ENTITIES,
   PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
+  TRAINING_COURSES_ENTITY, TRAINING_SESSIONS_ENTITY, TRAINING_PARTICIPANTS_ENTITY,
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))
@@ -77,6 +79,7 @@ export function setupChildEntities(parentKey: string): SetupEntity[] {
 
 /** Collection links lead to the owning records, where the child tab is opened. */
 export function setupEntityHref(entity: SetupEntity): string {
+  if (entity.key.startsWith('training-')) return '/hrm/training'
   if (entity.key.startsWith('payroll-compensation-')) return '/admin/setup/payroll?tab=compensation-packages'
   if (entity.key === 'benefit-programs') return '/hrm/benefits?view=programs'
   if (entity.key === 'benefit-plans') return '/hrm/benefits?view=programs'

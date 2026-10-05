@@ -62,6 +62,7 @@ export function trainingSessionWindow(startsAt: unknown, endsAt: unknown, timeZo
   };
   const start = stamp(startsAt), end = stamp(endsAt);
   const zone = trainingText(timeZone, "Time zone", 128);
+  if (!/^[A-Za-z][A-Za-z0-9._+-]*(?:\/[A-Za-z0-9._+-]+)*$/.test(zone)) throw new TrainingError("Time zone is unknown — choose an IANA time zone such as America/Toronto.");
   let formatter: Intl.DateTimeFormat;
   try { formatter = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }); }
   catch { throw new TrainingError("Time zone is unknown — choose an IANA time zone such as America/Toronto."); }
