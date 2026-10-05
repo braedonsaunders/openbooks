@@ -230,7 +230,7 @@ export async function loadPersonaMetrics(
       for (const type of types.filter((candidate) => candidate.isActive).slice(0, 6)) {
         const balance = await timeBalanceAsOf(db, orgId, employmentId, type.id, today).catch(() => null)
         if (!balance) continue
-        if (balance.unlimited) balances.push({ code: type.code, hours: 'unlimited' })
+        if (balance.unlimited) balances.push({ code: type.code, hours: tp('unlimited') })
         else if (balance.balance !== null) balances.push({ code: type.code, hours: balance.balance })
       }
     }
@@ -269,7 +269,7 @@ export async function loadPersonaMetrics(
            and r.starts_on <= ${end}::date and r.ends_on >= ${start}::date
            and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify(scopeIds)}::jsonb)::uuid)
          order by r.starts_on, p.display_name limit 10`)).rows
-      out.whosOut = rows.map((row) => ({ name: row.name, range: `${row.starts_on} → ${row.ends_on}` }))
+      out.whosOut = rows.map((row) => ({ name: row.name, range: tp('reviewRange', { from: row.starts_on, to: row.ends_on }) }))
     } else {
       out.whosOut = []
     }

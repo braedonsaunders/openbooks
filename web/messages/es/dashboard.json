@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "Revisión pendiente",
+    "unlimited": "Ilimitado",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "Solicitudes de RR. HH. pendientes",
     "attentionPayrollSetup": "La nómina necesita cuentas de control",
     "attentionBankLines": "Líneas bancarias sin conciliar",

@@ -28,6 +28,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
+import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import { CardShell, EmptyRow, MetricTile, type MetricTone, type WidgetCardProps } from './_widget-tiles'
 import type { DashboardMetrics } from './_metrics'
 import { WIDGETS } from './_widget-registry'
@@ -448,6 +449,7 @@ function RecentEntriesList({
 }: {
   entries: DashboardMetrics['recentEntries']
 }) {
+  const { date } = useViewerFormat()
   const { money } = useMoney()
   const t = useTranslations('dashboard')
   // The loader only emits posted/reversed rows; anything else renders raw
@@ -488,7 +490,7 @@ function RecentEntriesList({
                   </Badge>
                 </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-                  {e.memo ?? '—'} · {e.postingDate}
+                  {e.memo ?? '—'} · {date(new Date(`${e.postingDate}T12:00:00Z`))}
                 </div>
               </div>
               <div className="shrink-0 text-right">
@@ -520,8 +522,10 @@ function PendingApprovalsList({
   const { money } = useMoney()
   const t = useTranslations('dashboard')
   const ta = useTranslations('approvals')
+  // Unknown kinds render as their code: replacing underscores guesses
+  // English for a kind the catalog never translated.
   const kindLabel = (kind: string) =>
-    ta.has(`kinds.${kind}` as never) ? ta(`kinds.${kind}` as never) : kind.replace(/_/g, ' ')
+    ta.has(`kinds.${kind}` as never) ? ta(`kinds.${kind}` as never) : kind
   if (approvals.length === 0) {
     return (
       <CardShell title={title ?? t('widgets.pendingApprovalsList')} icon={<ClipboardList size={14} />}>
@@ -602,7 +606,7 @@ function PartyBalanceList({
                   </span>
                   <Badge variant="outline">{t('widgets.openCount', { count: p.count })}</Badge>
                 </div>
-                {Number(p.overdue) > 0 ? (
+                {compareMoney(p.overdue, '0') > 0 ? (
                   <div className="truncate text-xs text-rose-600 dark:text-rose-400">
                     {money(p.overdue)} · {t('metricContext.pastDue')}
                   </div>
@@ -704,11 +708,14 @@ function InProgressList({
 }: {
   documents: DashboardMetrics['draftDocuments']
 }) {
+  const { date } = useViewerFormat()
   const { money } = useMoney()
   const t = useTranslations('dashboard')
   const ta = useTranslations('approvals')
+  // Unknown kinds render as their code: replacing underscores guesses
+  // English for a kind the catalog never translated.
   const kindLabel = (kind: string) =>
-    ta.has(`kinds.${kind}` as never) ? ta(`kinds.${kind}` as never) : kind.replace(/_/g, ' ')
+    ta.has(`kinds.${kind}` as never) ? ta(`kinds.${kind}` as never) : kind
   if (documents.length === 0) {
     return (
       <CardShell title={t('widgets.inProgress')} icon={<FileText size={14} />}>
@@ -733,7 +740,7 @@ function InProgressList({
                   <Badge variant="outline" className="capitalize">{kindLabel(d.kind)}</Badge>
                 </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-                  {d.documentDate}
+                  {d.documentDate ? date(new Date(`${d.documentDate}T12:00:00Z`)) : '—'}
                 </div>
               </div>
               <div className="shrink-0 text-right text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">

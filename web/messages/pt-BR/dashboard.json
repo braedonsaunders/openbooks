@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "Revisão pendente",
+    "unlimited": "Ilimitado",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "Itens de RH aguardando ação",
     "attentionPayrollSetup": "A folha precisa de contas de controle",
     "attentionBankLines": "Linhas bancárias sem conciliação",
