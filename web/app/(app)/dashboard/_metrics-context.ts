@@ -1,6 +1,7 @@
 import 'server-only'
 import type { Authz } from '@/lib/authz'
 import type { ResolvedPeriod } from '@/lib/periods'
+import type { CashPosition } from '@/lib/cash/cash-position'
 
 /**
  * What every dashboard widget reader receives. Readers for widgets extracted
@@ -22,6 +23,15 @@ export type DashboardWidgetContext = {
    * through the organization's fiscal calendar.
    */
   period: () => Promise<ResolvedPeriod>
+  /**
+   * The Cash Flow position for the org's configured horizon, scope and AP
+   * capacity settings — resolved once per request and shared by the runway
+   * tile and every cash widget, so one cashPosition call feeds them all.
+   * Throws MissingExchangeRateError for a missing rate (each reader maps
+   * exactly that to its own refusal); anything else still throws. Absent
+   * only for callers that read no cash field.
+   */
+  cashPosition?: () => Promise<CashPosition>
 }
 
 /**

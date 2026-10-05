@@ -603,6 +603,16 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   },
 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
+  'kpi-cash-lowest-point': {
+    id: 'kpi-cash-lowest-point',
+    category: 'cash',
+    labelKey: 'widgets.cashLowestPoint',
+    descriptionKey: 'catalog.cashLowestPoint',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    analyticsSource: 'cashflow',
+  },
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   'kpi-customer-concentration': {

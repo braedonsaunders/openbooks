@@ -505,6 +505,26 @@ export async function loadDashboardMetrics(
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
   const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
+  // One cashPosition call per request, shared by the runway slot below and
+  // the cash widget reader (which receives it on the widget context): the
+  // first caller runs the config read plus the position, later callers reuse
+  // the same promise. Callers map a missing exchange rate to their own
+  // refusal; anything else still throws.
+  let cashPositionRequest: ReturnType<DashboardMoneyReaders['cashPosition']> | null = null
+  const cashPositionOnce = (): ReturnType<DashboardMoneyReaders['cashPosition']> =>
+    (cashPositionRequest ??= readers
+      .cashflowConfig(orgId)
+      .then((settings) =>
+        readers.cashPosition(
+          orgId,
+          settings.horizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+          settings,
+          today,
+          subIds,
+          authz.allowedSubsidiaryIds,
+          subIds === undefined,
+        ),
+      ))
   // The staffing pulse reads the resourcing cockpit loader — the same vitals
   // the cockpit shows. Gated on the single widget-feature map: with the
   // feature off the reader never runs and the tile renders its empty state.
@@ -645,24 +665,14 @@ export async function loadDashboardMetrics(
     // default horizon, the same AP capacity settings, the same caution
     // threshold, the same subsidiary doorway (unrestricted callers also match
     // root-owned rows, exactly as the
-    // page's includeNullSubsidiary). A missing exchange rate refuses inside
+    // page's includeNullSubsidiary). The call below is memoized per request
+    // and shared with the cash widget reader, so the runway tile and every
+    // cash widget read one position. A missing exchange rate refuses inside
     // as MissingExchangeRateError — the tile maps exactly that to no-data
     // (the page answers the same condition with its rates banner);
     // anything else still throws.
     wantRunway
-      ? readers
-        .cashflowConfig(orgId)
-        .then((settings) =>
-          readers.cashPosition(
-            orgId,
-            settings.horizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
-            settings,
-            today,
-            subIds,
-            authz.allowedSubsidiaryIds,
-            subIds === undefined,
-          ),
-        )
+      ? cashPositionOnce()
         .then((p) => ({
           weeks: p.runwayWeeks,
           status: p.runwayStatus,
@@ -836,6 +846,7 @@ export async function loadDashboardMetrics(
     subsidiaryIds: subIds,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     period: () => (period ??= resolvePeriod(undefined, { orgId, today })),
+    cashPosition: cashPositionOnce,
   }
   const [persona, financial, cash, customers, vendors, projects, risk] = await Promise.all([
     loadPersonaMetrics(authz, personaNeeded),
@@ -995,6 +1006,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'budget-variance': ['budgetSummary'],
 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
+  'kpi-cash-lowest-point': ['baseCurrency', 'cashLowest', 'asOfDate'],
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   'kpi-customer-concentration': ['concentration'],
