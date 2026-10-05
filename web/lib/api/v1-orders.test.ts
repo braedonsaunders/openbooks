@@ -5,11 +5,14 @@ import test from "node:test";
 const stateKey = Symbol.for("openbooks.v1-orders-lib-test");
 interface RouteState {
   created: Array<Record<string, unknown>>;
+  full: Array<Record<string, unknown>>;
+  replaced: Array<Record<string, unknown>>;
+  issued: Array<Record<string, unknown>>;
   converted: Array<Record<string, unknown>>;
   listed: string[];
   got: Array<{ typeKey: string; id: string }>;
 }
-const routeState: RouteState = { created: [], converted: [], listed: [], got: [] };
+const routeState: RouteState = { created: [], full: [], replaced: [], issued: [], converted: [], listed: [], got: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
@@ -54,6 +57,18 @@ const mockSources = new Map<string, string>([
         state.created.push(input)
         return { replayed: false, result: { id: "order-1", documentNumber: "Q-1" } }
       }
+      export async function createFullApplicationOrder(_context, input) {
+        state.full.push(input)
+        return { replayed: false, result: { id: "order-full", documentNumber: "SO-9" } }
+      }
+      export async function replaceApplicationOrderLines(_context, input) {
+        state.replaced.push(input)
+        return { result: { id: input.documentId, documentNumber: "SO-9" } }
+      }
+      export async function issueApplicationOrder(_context, input) {
+        state.issued.push(input)
+        return { status: 200, result: { id: input.documentId, documentNumber: "SO-9", status: "approved" } }
+      }
       export async function convertApplicationOrder(_context, input) {
         state.converted.push(input)
         return { replayed: false, result: { id: "order-2", documentNumber: "SO-1", kind: input.targetKind } }
@@ -96,7 +111,7 @@ const hooks = registerHooks({
   },
 });
 
-const { v1CreateOrder, v1ConvertOrder, v1ListOrders, v1GetOrder } = await import("./v1-orders.ts");
+const { v1CreateOrder, v1ConvertOrder, v1ListOrders, v1GetOrder, v1ReplaceOrderLines, v1IssueOrder } = await import("./v1-orders.ts");
 hooks.deregister();
 
 test("v1CreateOrder maps the record key to the order-cycle kind", async () => {
@@ -196,6 +211,96 @@ test("v1ConvertOrder binds the route kind so a sibling-kind id cannot convert", 
   );
   assert.equal(routeState.converted[0]?.expectedKind, "purchase_order");
   assert.equal(routeState.converted[0]?.documentId, "po-1");
+});
+
+test("v1CreateOrder takes the full path when the body carries order content", async () => {
+  routeState.created = [];
+  routeState.full = [];
+  const response = await v1CreateOrder(
+    new Request("http://openbooks.test/api/v1/sales-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-full" },
+      body: JSON.stringify({
+        customer: { id: "11111111-1111-4111-8111-111111111111" },
+        lines: [{ itemCode: "WIDGET", quantity: "2", unitPrice: "19.99" }],
+        externalRef: "EXT-1",
+        externalSource: "shopify",
+      }),
+    }),
+    "sales-orders",
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { id: "order-full", documentNumber: "SO-9" });
+  assert.equal(routeState.created.length, 0);
+  assert.equal(routeState.full.length, 1);
+  assert.deepEqual(routeState.full[0], {
+    kind: "sales_order",
+    idempotencyKey: "key-full",
+    subsidiaryId: null,
+    customer: { id: "11111111-1111-4111-8111-111111111111" },
+    documentDate: undefined,
+    dueDate: undefined,
+    currency: undefined,
+    memo: undefined,
+    lines: [{ itemCode: "WIDGET", quantity: "2", unitPrice: "19.99" }],
+    shippingLines: undefined,
+    externalRef: "EXT-1",
+    externalSource: "shopify",
+  });
+});
+
+test("v1CreateOrder keeps the empty draft for a content-free sales-orders body", async () => {
+  routeState.created = [];
+  routeState.full = [];
+  await v1CreateOrder(
+    new Request("http://openbooks.test/api/v1/sales-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-empty" },
+      body: "{}",
+    }),
+    "sales-orders",
+  );
+  assert.equal(routeState.full.length, 0);
+  assert.equal(routeState.created.length, 1);
+});
+
+test("v1ReplaceOrderLines forwards the path id and revision token", async () => {
+  routeState.replaced = [];
+  const response = await v1ReplaceOrderLines(
+    new Request("http://openbooks.test/api/v1/sales-orders/so-1/lines", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "idempotency-key": "key-lines" },
+      body: JSON.stringify({ expectedUpdatedAt: "42", lines: [] }),
+    }),
+    "sales-orders",
+    "so-1",
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.replaced, [{
+    documentId: "so-1",
+    expectedUpdatedAt: "42",
+    lines: [],
+    shippingLines: undefined,
+  }]);
+});
+
+test("v1IssueOrder forwards the path id and revision token", async () => {
+  routeState.issued = [];
+  const response = await v1IssueOrder(
+    new Request("http://openbooks.test/api/v1/sales-orders/so-1/issue", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-issue" },
+      body: JSON.stringify({ expectedUpdatedAt: "43" }),
+    }),
+    "sales-orders",
+    "so-1",
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.issued, [{
+    documentId: "so-1",
+    expectedUpdatedAt: "43",
+    creditOverrideReason: undefined,
+  }]);
 });
 
 test("v1ListOrders and v1GetOrder bind the record type", async () => {
