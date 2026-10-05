@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
 import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
@@ -33,6 +33,32 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
 
 const DrawerDepthContext = React.createContext(0)
 
+// A covered sheet — one with a deeper drawer laid on it — steps back toward
+// the page. Literal classes per depth so the stylesheet generator sees them.
+const COVERED_CLASS: Record<number, string> = {
+  0: '[body:has(>[data-drawer-depth="1"])_&]:-translate-x-4',
+  1: '[body:has(>[data-drawer-depth="2"])_&]:-translate-x-4',
+  2: '[body:has(>[data-drawer-depth="3"])_&]:-translate-x-4',
+  3: '[body:has(>[data-drawer-depth="4"])_&]:-translate-x-4',
+}
+
+// The sheets under a right-side drawer, nearest first. Each rests a little
+// further down and out from the top sheet and is turned about its top edge,
+// so the visible edge widens toward the bottom like a hand-squared pile.
+const UNDER_SHEETS = [
+  { x: -4, y: 6, rotate: 0.2, className: 'bg-white dark:bg-slate-900' },
+  { x: -7, y: 13, rotate: 0.45, className: 'bg-slate-50 dark:bg-slate-900' },
+] as const
+
+const SHEET_SPRING = { type: 'spring', damping: 32, stiffness: 320, mass: 0.8 } as const
+
+// The sheet's leading top corner is turned down, like the hub sheets on
+// hover. It arrives lifted, settles as the sheet lands, and lifts again while
+// the pointer rests on the backdrop. Sizes are the fold's leg in pixels.
+const FOLD_REST = 18
+const FOLD_LIFTED = 28
+const foldClip = (leg: number) => `polygon(${leg}px 0, 100% 0, 100% 100%, 0 100%, 0 ${leg}px)`
+
 let openDrawerCount = 0
 let originalBodyOverflow: string | null = null
 
@@ -40,6 +66,15 @@ let originalBodyOverflow: string | null = null
  * Slide-in drawer for sub-entity create/edit forms and mobile flyouts.
  * Portals to body, spring slide-in, backdrop fade, Esc + click-out + scroll lock.
  * Slides from the right by default; pass `side="left"` for nav-style flyouts.
+ *
+ * A right-side drawer is a sheet of paper laid on a small stack, the same
+ * material as the reports-hub sheets and the report paper, with its leading
+ * top corner turned down. It slides in slightly askew and squares up as it
+ * lands, and the sheets beneath fan out along its leading edge. A nested
+ * drawer is laid on top of the stack: the covered sheet steps back so its
+ * edge stays visible behind the new one. Pointing at the backdrop eases the
+ * sheet toward its exit and lifts the corner, the cue that a click there sets
+ * it aside. Reduced-motion users get the still stack.
  *
  * `title` is required: the panel is a `role="dialog"` and screen readers
  * announce it by its heading, so a drawer cannot mount unnamed. Opening one
@@ -119,6 +154,11 @@ export function Drawer({
   if (!open && fullscreen !== initialFullscreen) setFullscreen(initialFullscreen)
 
   const panelRef = React.useRef<HTMLElement>(null)
+  const reduceMotion = useReducedMotion() ?? false
+  const paper = side === 'right'
+  // The pointer is over the backdrop: the sheet eases toward its exit.
+  const [settingAside, setSettingAside] = React.useState(false)
+  if (!open && settingAside) setSettingAside(false)
 
   React.useEffect(() => {
     if (!open) return
@@ -233,28 +273,104 @@ export function Drawer({
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
             onClick={onClose}
+            onPointerEnter={(e) => { if (e.pointerType === 'mouse') setSettingAside(true) }}
+            onPointerLeave={() => setSettingAside(false)}
             aria-hidden="true"
           />
+          <motion.div
+            data-drawer-sheaf
+            initial={{ x: side === 'left' ? '-100%' : '100%', rotate: paper && !reduceMotion ? 0.6 : 0 }}
+            animate={{ x: 0, rotate: 0 }}
+            exit={{ x: side === 'left' ? '-100%' : '100%', rotate: paper && !reduceMotion ? 0.4 : 0 }}
+            transition={SHEET_SPRING}
+            // Pivots on the leading top corner, so the sheet squares up
+            // beneath the app header rather than swinging into it.
+            style={{ originX: 0, originY: 0 }}
+            className={cn(
+              // Isolated so the sheets beneath stay above the backdrop once
+              // the slide settles and the transform is cleared.
+              'absolute inset-y-0 isolate transition-[max-width] duration-300 ease-in-out',
+              side === 'left' ? 'left-0' : 'right-0',
+              // Full replacement, not an additional class: two sm:max-w-*
+              // utilities on one element resolve by stylesheet order, not
+              // class order, so stacking them makes the toggle a no-op.
+              fullscreen ? 'w-full sm:max-w-[100vw]' : SIZE_CLASS[size],
+            )}
+          >
+          <div
+            className={cn(
+              'relative h-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+              paper && COVERED_CLASS[depth],
+            )}
+          >
+          {paper
+            ? UNDER_SHEETS.map(({ className, ...rest }, index) => (
+                <motion.span
+                  key={index}
+                  aria-hidden
+                  initial={reduceMotion ? rest : { x: 0, y: 0, rotate: 0 }}
+                  animate={rest}
+                  exit={reduceMotion ? rest : { x: 0, y: 0, rotate: 0, transition: { duration: 0.12 } }}
+                  transition={{ ...SHEET_SPRING, delay: reduceMotion ? 0 : 0.14 + index * 0.05 }}
+                  style={{ originX: 0.5, originY: 0, zIndex: -1 - index }}
+                  className={cn(
+                    'absolute inset-0 rounded-tl-[3px] border-t border-l border-slate-200 shadow-[-1px_0_3px_rgb(15_23_42/0.06)] dark:border-slate-700/80',
+                    className,
+                  )}
+                />
+              ))
+            : null}
+          {/* The top sheet. Its shadow is cast by a separate layer because
+              the turned corner clips the dialog, and a clip removes the
+              element's own shadow with it. */}
+          <div
+            data-setting-aside={settingAside || undefined}
+            className={cn(
+              'group/sheet relative h-full',
+              paper &&
+                'transition-[translate] delay-150 duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[setting-aside]:translate-x-1.5 motion-reduce:transition-none motion-reduce:data-[setting-aside]:translate-x-0',
+            )}
+          >
+          {paper ? (
+            <span
+              aria-hidden
+              className="absolute inset-0 shadow-2xl transition-shadow delay-150 duration-300 group-data-[setting-aside]/sheet:shadow-[0_25px_50px_-12px_rgb(0_0_0/0.25),-8px_0_24px_-12px_rgb(15_23_42/0.18)]"
+            />
+          ) : null}
           <motion.aside
             ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={headingId}
             tabIndex={-1}
-            initial={{ x: side === 'left' ? '-100%' : '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: side === 'left' ? '-100%' : '100%' }}
-            transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
+            initial={paper ? { clipPath: foldClip(reduceMotion ? FOLD_REST : FOLD_LIFTED) } : undefined}
+            animate={paper ? { clipPath: foldClip(settingAside ? FOLD_LIFTED : FOLD_REST) } : undefined}
+            transition={{ duration: reduceMotion ? 0 : 0.35, delay: reduceMotion ? 0 : 0.15, ease: [0.22, 1, 0.36, 1] }}
             className={cn(
-              'absolute inset-y-0 flex flex-col overflow-hidden border-t border-slate-200 bg-white shadow-2xl transition-[max-width] duration-300 ease-in-out dark:border-slate-800 dark:bg-slate-900',
-              side === 'left' ? 'left-0 border-r' : 'right-0 border-l',
-              // Full replacement, not an additional class: two sm:max-w-*
-              // utilities on one element resolve by stylesheet order, not
-              // class order, so stacking them makes the toggle a no-op.
-              fullscreen ? 'w-full sm:max-w-[100vw]' : SIZE_CLASS[size],
+              'relative flex h-full flex-col overflow-hidden border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+              side === 'left' ? 'border-r shadow-2xl' : 'border-l',
               panelClassName,
             )}
           >
+            {paper ? (
+              <>
+                {/* The paper's leading edge catches a little shade, so the
+                    sheet reads as a surface resting on the ones beneath. */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 left-0 z-10 w-2 bg-gradient-to-r from-slate-900/[0.035] to-transparent dark:from-black/20"
+                />
+                {/* The underside of the turned corner. */}
+                <motion.span
+                  aria-hidden
+                  initial={{ scale: reduceMotion ? FOLD_REST / FOLD_LIFTED : 1 }}
+                  animate={{ scale: settingAside ? 1 : FOLD_REST / FOLD_LIFTED }}
+                  transition={{ duration: reduceMotion ? 0 : 0.35, delay: reduceMotion ? 0 : 0.15, ease: [0.22, 1, 0.36, 1] }}
+                  style={{ width: FOLD_LIFTED, height: FOLD_LIFTED, originX: 0, originY: 0 }}
+                  className="pointer-events-none absolute top-0 left-0 z-20 rounded-br-[3px] bg-[linear-gradient(135deg,transparent_50%,var(--color-slate-200)_50%,var(--color-slate-100))] shadow-[1px_1px_2px_rgb(15_23_42/0.14)] dark:bg-[linear-gradient(135deg,transparent_50%,var(--color-slate-700)_50%,var(--color-slate-800))] dark:shadow-[1px_1px_2px_rgb(0_0_0/0.4)]"
+                />
+              </>
+            ) : null}
             {title || description || headerActions ? (
               <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
                 <div className="min-w-52 flex-1 space-y-0.5">
@@ -354,6 +470,9 @@ export function Drawer({
               </footer>
             ) : null}
           </motion.aside>
+          </div>
+          </div>
+          </motion.div>
         </div>
       ) : null}
     </AnimatePresence>
