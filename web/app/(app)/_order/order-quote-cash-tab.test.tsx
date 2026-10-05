@@ -236,9 +236,24 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
     /\$220\.00/,
     'switching still refocuses the schedule beside the draft',
   )
+  const hiddenSave = buttonsNamed('Save term')[0]?.closest('div[hidden]')
+  assert.ok(hiddenSave, 'the Alpha editor hides while Beta is selected')
   assert.equal(
     buttonsNamed('Send for signature').length,
     1,
     'the send action stays available beside terms and draft',
+  )
+
+  await click(termTab('Alpha plan'))
+  assert.equal(monthsInput().value, '24', 'returning restores the same draft values')
+  assert.equal(
+    buttonsNamed('Save term')[0]?.closest('div[hidden]') ?? null,
+    null,
+    'returning to Alpha restores its editor visibly',
+  )
+  assert.doesNotMatch(
+    document.body.textContent ?? '',
+    /\$110\.00/,
+    'the editing term shows its editor instead of its schedule',
   )
 })

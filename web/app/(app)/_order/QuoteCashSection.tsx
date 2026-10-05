@@ -13,8 +13,10 @@ import { confirmDialog } from '../../../lib/confirm'
  * The Subscription tab on a quote drawer (quote-to-cash). Everyday: the
  * ramp-priced total, signature state, and the single next action. Configure:
  * terms with ramp steps on the tab itself — one focused term at a time
- * behind the shared strip, so sibling schedules never stack; the editing
- * draft lives outside the selection and survives switching. Advanced:
+ * behind the shared strip, so sibling schedules never stack. The editor
+ * replaces its own term's schedule and stays mounted but hidden under any
+ * other selection; a new-term draft scopes to its own selector tab.
+ * Advanced:
  * start rules and billing timing inside a collapsed DisclosureSection.
  * The section hides itself when the feature is off (the terms endpoint
  * 404s behind the gate).
@@ -347,8 +349,26 @@ export function QuoteCashSection(props: {
     )
   }
 
+  // A new-term draft scopes to its own selector tab, never floating beside
+  // an unrelated focused term.
+  const NEW_TERM_SCOPE = 'new-term'
+  const showNewTab = editing !== null && editing.termId === null
+  const showStrip = preview.terms.length > 1 || showNewTab
+  const visibleScope =
+    showNewTab && selectedTermId === NEW_TERM_SCOPE
+      ? NEW_TERM_SCOPE
+      : (focusedTerm?.term.id ?? '')
+  // The editor replaces its own term's schedule card, and stays mounted but
+  // hidden while another scope is selected — the draft survives the switch
+  // and returns with its values when its term refocuses.
+  const editorScope = editing ? (editing.termId ?? NEW_TERM_SCOPE) : null
+  const editorVisible = editorScope !== null && editorScope === visibleScope
+  const cardFor = (term: PreviewTerm) =>
+    editorVisible && editing?.termId === term.term.id ? null : termCard(term, preview.quote.currency)
+
   function startEditing(term?: PreviewTerm) {
     setActivated(null)
+    setSelectedTermId(term?.term.id ?? NEW_TERM_SCOPE)
     setEditing({
       termId: term?.term.id ?? null,
       quoteLineId: term?.term.quoteLineId ?? props.lines[0]?.id ?? '',
@@ -384,7 +404,7 @@ export function QuoteCashSection(props: {
         ) : null}
       </div>
 
-      {preview.terms.length === 0 ? (
+      {preview.terms.length === 0 && !showNewTab ? (
         <div className="rounded-lg border border-dashed p-4 text-sm">
           <p className="font-medium">{t('quoteCash.emptyTitle')}</p>
           <p className="mt-1 text-slate-500 dark:text-slate-400">{t('quoteCash.emptyDescription')}</p>
@@ -394,30 +414,39 @@ export function QuoteCashSection(props: {
             </Button>
           ) : null}
         </div>
-      ) : preview.terms.length === 1 ? (
-        <ul className="space-y-2">
-          {preview.terms.map((term) => termCard(term, preview.quote.currency))}
-        </ul>
       ) : (
         <>
-          <DrawerTabStrip
-            tabs={preview.terms.map((term) => ({
-              key: term.term.id,
-              label: term.term.planName,
-              count: term.schedule.periods.length,
-            }))}
-            activeKey={focusedTerm?.term.id ?? ''}
-            onSelect={(key) => setSelectedTermId(key)}
-            ariaLabel={t('quoteCash.termsLabel')}
-          />
-          <ul className="space-y-2">
-            {focusedTerm ? termCard(focusedTerm, preview.quote.currency) : null}
-          </ul>
+          {showStrip ? (
+            <DrawerTabStrip
+              tabs={[
+                ...preview.terms.map((term) => ({
+                  key: term.term.id,
+                  label: term.term.planName,
+                  count: term.schedule.periods.length,
+                })),
+                ...(showNewTab
+                  ? [{ key: NEW_TERM_SCOPE, label: t('quoteCash.addTerm') }]
+                  : []),
+              ]}
+              activeKey={visibleScope}
+              onSelect={(key) => setSelectedTermId(key)}
+              ariaLabel={t('quoteCash.termsLabel')}
+            />
+          ) : null}
+          {visibleScope === NEW_TERM_SCOPE ? null : showStrip ? (
+            <ul className="space-y-2">
+              {focusedTerm ? cardFor(focusedTerm) : null}
+            </ul>
+          ) : (
+            <ul className="space-y-2">
+              {preview.terms.map((term) => cardFor(term))}
+            </ul>
+          )}
         </>
       )}
 
       {editing ? (
-        <div className="space-y-3 rounded-lg border p-3">
+        <div hidden={!editorVisible} className="space-y-3 rounded-lg border p-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               <span className="mb-1 block font-medium">{t('quoteCash.quoteLine')}</span>
