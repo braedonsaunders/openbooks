@@ -38,6 +38,7 @@ import {
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import { ItemFamilyCreateFlow } from './ItemFamilyCreateFlow'
 import { ItemRatesEditor } from './ItemRatesEditor'
 import { ItemPriceMatrixEditor } from './ItemPriceMatrixEditor'
 import { ItemCostingEditor } from './ItemCostingEditor'
@@ -292,7 +293,15 @@ export function ItemDrawer({
   // Persisted records open read-only. A true create drawer is an in-memory
   // form and therefore starts editable; closing it cannot leave a draft row.
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
-  const [createStep, setCreateStep] = useState<'kind' | 'form'>(createMode ? 'kind' : 'form')
+  const [createStep, setCreateStep] = useState<'kind' | 'structure' | 'form' | 'family'>(createMode ? 'kind' : 'form')
+  /**
+   * Kinds that can carry variants, mirroring VARIANT_KINDS in the families
+   * engine. Only these offer the single-vs-variants structure choice; every
+   * other kind keeps the unchanged kind-to-form flow.
+   */
+  const isStructurableKind = (value: string) =>
+    value === 'inventory' || value === 'non_inventory' || value === 'service' || value === 'kit' || value === 'assembly'
+  const offersStructure = variantsEnabled && isStructurableKind(kind)
   const [tab, setTab] = useState<string>('overview')
   const [pricingView, setPricingView] = useState<PricingView>(initialPricingView)
   const [actionsOpen, setActionsOpen] = useState(false)
@@ -597,6 +606,21 @@ export function ItemDrawer({
   const activeTab = tabs.find((candidate) => candidate.key === selectedTab) ?? tabs[0] ?? null
   const activeTabKey = activeTab?.key ?? tab
   const choosingKind = createMode && createStep === 'kind'
+  const choosingStructure = createMode && createStep === 'structure'
+  const creatingFamily = createMode && createStep === 'family'
+  const structuring = choosingStructure || creatingFamily
+
+  /** Second card choice after the kind cards: one item, or an item with variants. */
+  function chooseStructure(structure: 'single' | 'family') {
+    setTab('overview')
+    setCreateStep(structure === 'family' ? 'family' : 'form')
+  }
+
+  /** A family created from the flow opens in the families drawer. */
+  function openCreatedFamily(familyId: string) {
+    toast.success(t('familyCreate.created'))
+    router.replace(`/items/families?family=${familyId}`)
+  }
 
   function selectTab(key: string) {
     setTab(key)
@@ -703,26 +727,35 @@ export function ItemDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{choosingKind ? t('drawer.chooseKindTitle') : name.trim() || t('drawer.newItem')}</span>
-          {!choosingKind ? (
+          <span>{choosingKind ? t('drawer.chooseKindTitle') : choosingStructure ? t('structure.title', { kind: kindOptions.find((option) => option.value === kind)?.label ?? kind }) : creatingFamily ? t('structure.familyTitle') : name.trim() || t('drawer.newItem')}</span>
+          {!choosingKind && !structuring ? (
             <Badge variant={isActive ? 'success' : 'outline'}>
               {isActive ? tCommon('status.active') : tCommon('status.inactive')}
             </Badge>
           ) : null}
         </span>
       }
-      description={choosingKind ? t('drawer.chooseKindDescription') : mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
-      subtabs={choosingKind ? undefined : <DrawerTabStrip tabs={tabs} activeKey={activeTabKey} onSelect={selectTab} ariaLabel={tCommon('auditTrail.ariaLabel')} />}
+      description={choosingKind ? t('drawer.chooseKindDescription') : choosingStructure ? t('structure.description') : mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
+      subtabs={choosingKind || structuring ? undefined : <DrawerTabStrip tabs={tabs} activeKey={activeTabKey} onSelect={selectTab} ariaLabel={tCommon('auditTrail.ariaLabel')} />}
       headerActions={
         <>
           {choosingKind ? (
             <Button variant="outline" disabled={busy} onClick={cancel}>
               {tCommon('actions.cancel')}
             </Button>
+          ) : structuring ? (
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => setCreateStep(creatingFamily ? 'structure' : 'kind')}>
+                {tCommon('actions.back')}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                {tCommon('actions.cancel')}
+              </Button>
+            </>
           ) : mode === 'edit' ? (
             <>
               {createMode ? (
-                <Button variant="outline" disabled={busy} onClick={() => setCreateStep('kind')}>
+                <Button variant="outline" disabled={busy} onClick={() => setCreateStep(offersStructure ? 'structure' : 'kind')}>
                   {tCommon('actions.back')}
                 </Button>
               ) : null}
@@ -785,14 +818,42 @@ export function ItemDrawer({
               const Icon = KIND_ICONS[option.value as (typeof KIND_VALUES)[number]]
               return { value: option.value, label: option.label, description: t(`kindDescriptions.${option.value}`), icon: <Icon size={22} /> }
             })}
-            onChoose={(value) => { setKind(value); setTab('overview'); setCreateStep('form') }}
+            onChoose={(value) => {
+              setKind(value)
+              setTab('overview')
+              setCreateStep(value && variantsEnabled && isStructurableKind(value) ? 'structure' : 'form')
+            }}
           />
         ) : null}
+        {choosingStructure ? (
+          <RecordKindCards
+            heading={t('structure.title', { kind: kindOptions.find((option) => option.value === kind)?.label ?? kind })}
+            description={t('structure.description')}
+            options={[
+              { value: 'single', label: t('structure.singleTitle'), description: t('structure.singleDescription'), icon: <Package size={22} /> },
+              { value: 'family', label: t('structure.familyTitle'), description: t('structure.familyDescription'), icon: <Layers3 size={22} /> },
+            ]}
+            onChoose={chooseStructure}
+          />
+        ) : null}
+        {creatingFamily ? (
+          <ItemFamilyCreateFlow kind={kind} canManage={canManage} onBack={() => setCreateStep('structure')} onCreated={openCreatedFamily} />
+        ) : null}
 
-        {!choosingKind && recordTabs.find((recordTab) => recordTab.key === activeTabKey)?.content}
-        {!choosingKind && activeTabKey === 'overview' ? <HeaderFields layout={createOverviewLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && !structuring && recordTabs.find((recordTab) => recordTab.key === activeTabKey)?.content}
+        {!choosingKind && !structuring && activeTabKey === 'overview' ? <HeaderFields layout={createOverviewLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!createMode && variantsEnabled && !family && canManage && activeTabKey === 'overview' ? (
+          <section className="pt-1">
+            <RecordKindCards
+              heading={t('families.convert.cardTitle')}
+              description={t('families.convert.cardDescription')}
+              options={[{ value: 'convert', label: t('families.convert.action'), description: t('families.convert.cardHint'), icon: <Layers3 size={22} /> }]}
+              onChoose={() => void convertToFamily()}
+            />
+          </section>
+        ) : null}
 
-        {!choosingKind && activeTabKey === 'pricing' && pricingView === 'landing' ? (
+        {!choosingKind && !structuring && activeTabKey === 'pricing' && pricingView === 'landing' ? (
           <section className="space-y-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.title')}</h3>
@@ -859,19 +920,19 @@ export function ItemDrawer({
           </section>
         ) : null}
 
-        {!choosingKind && activeTabKey === 'pricing' && pricingView !== 'landing' ? (
+        {!choosingKind && !structuring && activeTabKey === 'pricing' && pricingView !== 'landing' ? (
           <Button type="button" variant="ghost" size="sm" onClick={() => setPricingView('landing')}>
             {t('pricingModes.back')}
           </Button>
         ) : null}
 
-        {!choosingKind && activeTabKey === 'pricing' && pricingView === 'simple' ? <HeaderFields layout={pricingLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && !structuring && activeTabKey === 'pricing' && pricingView === 'simple' ? <HeaderFields layout={pricingLayout} editable={editable} renderField={renderItemField} /> : null}
 
-        {!choosingKind && activeTabKey === 'pricing' && ['matrix', 'customer', 'cost', 'rules'].includes(pricingView) && !createMode ? (
+        {!choosingKind && !structuring && activeTabKey === 'pricing' && ['matrix', 'customer', 'cost', 'rules'].includes(pricingView) && !createMode ? (
           <ItemPriceMatrixEditor itemId={String(it.id)} canManage={editable} />
         ) : null}
 
-        {!choosingKind && activeTabKey === 'pricing' && pricingView === 'contract' && laborPricing && !createMode ? (
+        {!choosingKind && !structuring && activeTabKey === 'pricing' && pricingView === 'contract' && laborPricing && !createMode ? (
           <ItemRatesEditor
             itemId={String(it.id)}
             itemPrice={defaultRate}
@@ -882,14 +943,14 @@ export function ItemDrawer({
           />
         ) : null}
 
-        {!choosingKind && activeTabKey === 'costing' && inventoryCosting && !createMode ? (
+        {!choosingKind && !structuring && activeTabKey === 'costing' && inventoryCosting && !createMode ? (
           <ItemCostingEditor key={String(it.id)} itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
         ) : null}
 
-        {!choosingKind && activeTabKey === 'accounting' ? <HeaderFields layout={accountingLayout} editable={editable} renderField={renderItemField} /> : null}
-        {!choosingKind && activeTabKey === 'revenue' && fairValuePrices ? <HeaderFields layout={revenueLayout} editable={editable} renderField={renderItemField} /> : null}
-        {!choosingKind && activeTabKey === 'shipping' && shippingHub ? <HeaderFields layout={shippingLayout} editable={editable} renderField={renderItemField} /> : null}
-        {!choosingKind && activeTabKey === 'revenue' && fairValuePrices && !createMode ? (
+        {!choosingKind && !structuring && activeTabKey === 'accounting' ? <HeaderFields layout={accountingLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && !structuring && activeTabKey === 'revenue' && fairValuePrices ? <HeaderFields layout={revenueLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && !structuring && activeTabKey === 'shipping' && shippingHub ? <HeaderFields layout={shippingLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && !structuring && activeTabKey === 'revenue' && fairValuePrices && !createMode ? (
           <FairValuePricesEditor itemId={String(it.id)} canManage={editable} />
         ) : null}
 

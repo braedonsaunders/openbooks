@@ -19,12 +19,24 @@ export interface RecordKindCardOption<V extends string = string> {
 export function RecordKindCards<V extends string>({
   options,
   onChoose,
+  heading,
+  description,
 }: {
   options: RecordKindCardOption<V>[]
   onChoose: (value: V) => void
+  /** Optional step heading after a first choice (kind, then structure). */
+  heading?: string
+  description?: string
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-3">
+      {heading || description ? (
+        <div>
+          {heading ? <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{heading}</h3> : null}
+          {description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
+        </div>
+      ) : null}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {options.map((option) => (
         <button
           key={option.value}
@@ -39,6 +51,7 @@ export function RecordKindCards<V extends string>({
           <span className="mt-1.5 block text-sm leading-5 text-slate-500 dark:text-slate-400">{option.description}</span>
         </button>
       ))}
+      </div>
     </div>
   )
 }

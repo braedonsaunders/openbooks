@@ -36,12 +36,15 @@ export function FamilyVariantsGrid({
   familyId,
   optionNames,
   variants,
+  familyRate,
   canManage,
   onChanged,
 }: {
   familyId: string
   optionNames: string[]
   variants: GridVariant[]
+  /** The family base price pricing variants without their own rate. */
+  familyRate: string | null
   canManage: boolean
   onChanged: () => void
 }) {
@@ -148,20 +151,31 @@ export function FamilyVariantsGrid({
       {
         key: 'price',
         label: t('grid.price'),
-        width: '110px',
+        width: '150px',
         type: 'readonly' as const,
         align: 'right' as const,
-        render: (row: GridRow) =>
-          canManage ? (
+        render: (row: GridRow) => {
+          const own = typeof row.price === 'string' && row.price !== '' ? String(row.price) : null
+          const effective = own ?? (familyRate && familyRate !== '' ? familyRate : null)
+          const editor = canManage ? (
             <CellEditor
-              display={row.price ? formatDecimal(locale, String(row.price)) : ''}
+              display={own ? formatDecimal(locale, own) : ''}
               disabled={busy}
               ariaLabel={t('grid.priceFor', { name: String(row.name) })}
               onCommit={(value) => saveCell(String(row.id), { price: value === '' ? null : value })}
             />
-          ) : (
-            <span>{row.price ? formatDecimal(locale, String(row.price)) : ''}</span>
-          ),
+          ) : null
+          return (
+            <span className="flex items-center justify-end gap-1.5">
+              {editor ?? <span>{effective ? formatDecimal(locale, effective) : ''}</span>}
+              {effective ? (
+                <Badge variant={own ? 'secondary' : 'outline'} title={own ? t('grid.overriddenHint') : t('grid.inheritedHint', { rate: formatDecimal(locale, effective) })}>
+                  {own ? t('grid.overridden') : t('grid.inherited')}
+                </Badge>
+              ) : null}
+            </span>
+          )
+        },
       },
       {
         key: 'barcode',
@@ -195,7 +209,7 @@ export function FamilyVariantsGrid({
         ),
       },
     ],
-    [optionNames, canManage, busy, locale, saveCell, t, tCommon],
+    [optionNames, canManage, busy, familyRate, locale, saveCell, t, tCommon],
   )
 
   return (
@@ -214,6 +228,7 @@ export function FamilyVariantsGrid({
         {canManage && selected.size > 0 ? (
           <>
             <BulkButton disabled={busy} onClick={() => void bulkPrice()} label={t('grid.setPrice')} />
+            {overridingSelected.length > 0 ? <BulkButton disabled={busy} onClick={() => void bulkClearOverrides()} label={t('grid.clearOverrides')} /> : null}
             <BulkButton disabled={busy} onClick={() => void bulkCost()} label={t('grid.setCost')} />
             <BulkButton disabled={busy} onClick={() => void bulkStatus(true)} label={t('grid.activate')} />
             <BulkButton disabled={busy} onClick={() => void bulkStatus(false)} label={t('grid.deactivate')} />
@@ -245,6 +260,42 @@ export function FamilyVariantsGrid({
     const value = await promptDialog({ title: t('grid.setPrice'), label: t('grid.price'), initialValue: '' })
     if (value === null) return
     await bulk({ price: value === '' ? null : value })
+  }
+
+  /** Variants in the selection carrying their own base price, previewed before clearing. */
+  const overridingSelected = useMemo(
+    () => variants.filter((variant) => selected.has(variant.id) && variant.price !== null && variant.price !== ''),
+    [variants, selected],
+  )
+
+  /**
+   * Return the chosen variants to family pricing: clearing the override
+   * NULLs their base price, so they inherit the family price again. The
+   * confirmation names every affected variant first.
+   */
+  async function bulkClearOverrides(): Promise<void> {
+    if (overridingSelected.length === 0) return
+    const preview = overridingSelected.slice(0, 8).map((variant) => variant.code ?? variant.name).join(', ')
+    const confirmed = await confirmDialog({
+      title: t('grid.clearOverridesTitle', { count: overridingSelected.length }),
+      message: t('grid.clearOverridesBody', { sample: preview }),
+      confirmLabel: t('grid.clearOverrides'),
+    })
+    if (!confirmed) return
+    setBusy(true)
+    try {
+      await apiJson(`/api/item-families/${familyId}/bulk-edit`, {
+        method: 'POST',
+        body: JSON.stringify({ variantIds: overridingSelected.map((variant) => variant.id), price: null }),
+      })
+      setSelected(new Set())
+      onChanged()
+      toast.success(t('grid.bulkSaved', { count: overridingSelected.length }))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function bulkCost(): Promise<void> {

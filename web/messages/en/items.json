@@ -119,6 +119,40 @@
     "featureRequired": "Enable Projects to use rate books and scoped pricing.",
     "back": "Change pricing style"
   },
+  "structure": {
+    "title": "How should this {kind} sell?",
+    "description": "Sell it as one item, or as a family of variants — sizes, colours, materials — priced once and inherited by every variant.",
+    "singleTitle": "Single item",
+    "singleDescription": "One item with its own price.",
+    "familyTitle": "Item with variants",
+    "familyDescription": "A family with options; variants inherit the family price unless overridden."
+  },
+  "familyCreate": {
+    "detailsTitle": "Name the family",
+    "detailsDescription": "The family carries the shared name, code, category and base price; every variant inherits them.",
+    "familyCode": "Family code",
+    "category": "Category",
+    "unit": "Unit",
+    "basePrice": "Base price",
+    "basePriceHint": "Variants without their own price sell at this price.",
+    "continue": "Continue",
+    "optionsTitle": "Add options",
+    "optionsDescription": "Options like size or colour; every combination becomes a variant.",
+    "variantCount": "{count, plural, one {# variant} other {# variants}}",
+    "reviewVariants": "Review variants",
+    "previewTitle": "Review variants",
+    "previewDescription": "Untick combinations to skip them; codes, prices and barcodes stay editable. Empty codes render from the pattern on create.",
+    "previewCode": "Code",
+    "previewPrice": "Price",
+    "previewBarcode": "Barcode",
+    "advancedTitle": "Code pattern and skip rules",
+    "advancedSummary": "Codes render as {pattern}",
+    "codePattern": "Code pattern",
+    "codePatternHint": "Use {family} for the family code, {values} for all values, {value1}, {value2}, … for positions.",
+    "create": "Create {count, plural, one {# variant} other {# variants}}",
+    "creating": "Creating…",
+    "created": "Family created"
+  },
   "pricingMatrix": {
     "title": "Price matrix",
     "description": "Effective-dated selling prices by currency, price level or customer, with all-units quantity breaks.",
@@ -155,7 +189,14 @@
     "empty": "No matrix pricing has been configured for this item.",
     "target": "Target",
     "effective": "Effective dates",
-    "breaks": "Quantity prices"
+    "breaks": "Quantity prices",
+      "familyDescription": "Schedules priced here apply to every variant without its own schedule for the scope.",
+      "inheritedTitle": "Inherited from the family",
+      "inheritedDescription": "Family schedules pricing this variant; override one to price this variant alone.",
+      "override": "Override for this variant",
+      "inheritedBadge": "Inherited from {family}",
+      "overriddenBadge": "Overridden",
+      "source": "Source"
   },
   "rates": {
     "title": "Advanced rate pricing",
@@ -378,7 +419,14 @@
       "deactivateBody": "They stay in history but can no longer be sold.",
       "bulkSaved": "{count} variants updated",
       "priceFor": "Price for {name}",
-      "barcodeFor": "Barcode for {name}"
+      "barcodeFor": "Barcode for {name}",
+        "inherited": "Inherited",
+        "overridden": "Override",
+        "inheritedHint": "Sells at the family price {rate}",
+        "overriddenHint": "Carries its own base price",
+        "clearOverrides": "Clear overrides",
+        "clearOverridesTitle": "Clear {count, plural, one {# price override} other {# price overrides}}?",
+        "clearOverridesBody": "These variants return to the family price: {sample}."
     },
     "generate": {
       "action": "Generate missing variants",
@@ -425,13 +473,20 @@
       "loadFailed": "Could not load the variants",
       "siblingCount": "{count} in {family}"
     },
+    "pricing": {
+      "title": "Pricing",
+      "description": "One schedule prices every variant that holds no schedule of its own."
+    },
     "convert": {
       "action": "Convert to family",
       "optionTitle": "Which option does this item carry?",
       "optionLabel": "Option name",
       "valueTitle": "Which {option} is this item?",
       "valueLabel": "Option value",
-      "done": "Family {family} created"
+      "done": "Family {family} created",
+        "cardTitle": "Sell this item in variants",
+        "cardDescription": "Sizes, colours or materials — one family, one price list.",
+        "cardHint": "The item becomes the first variant; the family keeps its code."
     }
   },
   "shipping": {

@@ -218,6 +218,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   getRowKey,
   selection,
   cloneRow,
+  fixedRows = false,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -254,6 +255,12 @@ export function LineGrid<Row extends Record<string, unknown>>({
     selected: ReadonlySet<string>
     onChange: (next: ReadonlySet<string>) => void
   }
+  /**
+   * The caller owns the row set (a generated preview): cells stay editable
+   * and selection stays available, but no row may be added, duplicated or
+   * removed — skipping happens through the selection, never by deleting.
+   */
+  fixedRows?: boolean
   /**
    * Clone a row for duplicate. The default shallow copy preserves a
    * caller-supplied identity field, so callers that pass `getRowKey` must
@@ -530,7 +537,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
     })
   })()
 
-  const rowMenuItems: ContextMenuEntry[] = readOnly || menuIndex === -1 ? [] : [
+  const rowMenuItems: ContextMenuEntry[] = readOnly || fixedRows || menuIndex === -1 ? [] : [
     { key: 'insert-above', label: t('insertAbove'), icon: ArrowUp, onSelect: () => insertRow(menuIndex) },
     { key: 'insert-below', label: t('insertBelow'), icon: ArrowDown, onSelect: () => insertRow(menuIndex + 1) },
     { key: 'duplicate', label: tCommon('actions.duplicate'), icon: Copy, onSelect: () => duplicateRow(menuIndex) },
@@ -553,7 +560,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
           </Button>
         </div>
       ) : null}
-      {!readOnly && addPlacement === 'top' ? (
+      {!readOnly && !fixedRows && addPlacement === 'top' ? (
         <div className="mb-2 flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={() => insertRow(rows.length)}>
             <Plus size={14} /> {addLabel ?? t('addLine')}
@@ -682,10 +689,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
           ))}
         </div>
       </div>
-      <ContextMenu open={!readOnly && menuIndex !== -1 && rowMenu.open} position={rowMenu.position} items={rowMenuItems} onClose={rowMenu.close} />
+      <ContextMenu open={!readOnly && !fixedRows && menuIndex !== -1 && rowMenu.open} position={rowMenu.position} items={rowMenuItems} onClose={rowMenu.close} />
 
       <div className="mt-2 flex items-center justify-between gap-3">
-        {!readOnly && addPlacement === 'bottom' ? (
+        {!readOnly && !fixedRows && addPlacement === 'bottom' ? (
           <Button type="button" variant="outline" size="sm" onClick={() => insertRow(rows.length)}>
             <Plus size={14} /> {addLabel ?? t('addLine')}
           </Button>

@@ -119,12 +119,46 @@
     "featureRequired": "Aktivieren Sie Projekte, um Preisbücher und bereichsbezogene Preise zu verwenden.",
     "back": "Preismodell ändern"
   },
+  "structure": {
+    "title": "Einzelartikel oder Familie?",
+    "description": "Als einzelnen Artikel verkaufen oder als Familie von Varianten – Größen, Farben, Materialien – einmal bepreist, von allen Varianten übernommen.",
+    "singleTitle": "Einzelartikel",
+    "singleDescription": "Ein Artikel mit eigenem Preis.",
+    "familyTitle": "Artikel mit Varianten",
+    "familyDescription": "Eine Familie mit Optionen; Varianten übernehmen den Familienpreis, sofern nicht überschrieben."
+  },
+  "familyCreate": {
+    "detailsTitle": "Familie benennen",
+    "detailsDescription": "Die Familie trägt gemeinsamen Namen, Code, Kategorie und Basispreis; jede Variante übernimmt sie.",
+    "familyCode": "Familiencode",
+    "category": "Kategorie",
+    "unit": "Einheit",
+    "basePrice": "Basispreis",
+    "basePriceHint": "Varianten ohne eigenen Preis werden zu diesem Preis verkauft.",
+    "continue": "Weiter",
+    "optionsTitle": "Optionen hinzufügen",
+    "optionsDescription": "Optionen wie Größe oder Farbe; jede Kombination wird eine Variante.",
+    "variantCount": "{count, plural, one {# Variante} other {# Varianten}}",
+    "reviewVariants": "Varianten prüfen",
+    "previewTitle": "Varianten prüfen",
+    "previewDescription": "Kombinationen abwählen, um sie zu überspringen; Codes, Preise und Barcodes bleiben editierbar. Leere Codes werden beim Erstellen aus dem Muster erzeugt.",
+    "previewCode": "Code",
+    "previewPrice": "Preis",
+    "previewBarcode": "Barcode",
+    "advancedTitle": "Codemuster und Ausschlussregeln",
+    "advancedSummary": "Codes werden als {pattern} erzeugt",
+    "codePattern": "Codemuster",
+    "codePatternHint": "{family} steht für den Familiencode, {values} für alle Werte, {value1}, {value2}, … für Positionen.",
+    "create": "{count, plural, one {# Variante} other {# Varianten}} erstellen",
+    "creating": "Wird erstellt…",
+    "created": "Familie erstellt"
+  },
   "pricingMatrix": {
     "title": "Preismatrix", "description": "Datierte Verkaufspreise nach Währung, Preisstufe oder Kunde mit Mengenstaffeln.", "addSchedule": "Preisschema hinzufügen", "minimumQuantity": "Mindestmenge", "unitPrice": "Stückpreis", "scope": "Preisbereich",
     "scopes": { "base": "Basispreis", "level": "Preisstufe", "customer": "Bestimmter Kunde" },
     "priceLevel": "Preisstufe", "customer": "Kunde", "selectCustomer": "Kunden auswählen…", "currency": "Währung", "quantityBasis": "Mengenbasis",
     "quantityBases": { "line": "Zeilenmenge", "overallItem": "Gesamtmenge dieses Artikels" },
-    "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "breaksTitle": "Mengenstaffeln", "breaksDescription": "Die höchste erreichte Mindestmenge bestimmt den Preis für alle Einheiten.", "addBreak": "Mengenstaffel hinzufügen", "saveFailed": "Preisschema konnte nicht gespeichert werden.", "loadFailed": "Preisschemata konnten nicht geladen werden.", "saved": "Preisschema gespeichert", "changeReason": "Grund der Änderung", "changeReasonPlaceholder": "Warum ändert sich dieser Preis?", "changeReasonHint": "Erforderlich, wenn die neuen Preise bereits wirksame Zeiträume abdecken. Die vorherige Version bleibt erhalten und der Grund wird im Protokoll festgehalten.", "endDateTitle": "Preisschema beenden", "endDateReasonLabel": "Grund für die Beendigung", "ended": "Preisschema beendet", "confirmDelete": "Dieses Preisschema löschen?", "deleteFailed": "Preisschema konnte nicht gelöscht werden.", "deleted": "Preisschema gelöscht", "customerTarget": "Kunde · {customer}", "baseTarget": "Basispreis", "empty": "Für diesen Artikel ist keine Matrix konfiguriert.", "target": "Ziel", "effective": "Gültigkeit", "breaks": "Mengenpreise"
+    "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "breaksTitle": "Mengenstaffeln", "breaksDescription": "Die höchste erreichte Mindestmenge bestimmt den Preis für alle Einheiten.", "addBreak": "Mengenstaffel hinzufügen", "saveFailed": "Preisschema konnte nicht gespeichert werden.", "loadFailed": "Preisschemata konnten nicht geladen werden.", "saved": "Preisschema gespeichert", "changeReason": "Grund der Änderung", "changeReasonPlaceholder": "Warum ändert sich dieser Preis?", "changeReasonHint": "Erforderlich, wenn die neuen Preise bereits wirksame Zeiträume abdecken. Die vorherige Version bleibt erhalten und der Grund wird im Protokoll festgehalten.", "endDateTitle": "Preisschema beenden", "endDateReasonLabel": "Grund für die Beendigung", "ended": "Preisschema beendet", "confirmDelete": "Dieses Preisschema löschen?", "deleteFailed": "Preisschema konnte nicht gelöscht werden.", "deleted": "Preisschema gelöscht", "customerTarget": "Kunde · {customer}", "baseTarget": "Basispreis", "empty": "Für diesen Artikel ist keine Matrix konfiguriert.", "target": "Ziel", "effective": "Gültigkeit", "breaks": "Mengenpreise", "familyDescription": "Hier bepreiste Staffeln gelten für jede Variante ohne eigene Staffel für den Bereich.", "inheritedTitle": "Von der Familie übernommen", "inheritedDescription": "Familienstaffeln, die diese Variante bepreisen; zum abweichenden Bepreisen eine Staffel überschreiben.", "override": "Für diese Variante überschreiben", "inheritedBadge": "Übernommen von {family}", "overriddenBadge": "Überschrieben", "source": "Herkunft"
   },
   "rates": {
     "title": "Erweiterte Preisstaffeln",
@@ -337,7 +371,14 @@
       "deactivateBody": "Sie bleiben in der Historie, können aber nicht mehr verkauft werden.",
       "bulkSaved": "{count} Varianten aktualisiert",
       "priceFor": "Preis für {name}",
-      "barcodeFor": "Barcode für {name}"
+      "barcodeFor": "Barcode für {name}",
+        "inherited": "Übernommen",
+        "overridden": "Überschrieben",
+        "inheritedHint": "Wird zum Familienpreis {rate} verkauft",
+        "overriddenHint": "Hat einen eigenen Basispreis",
+        "clearOverrides": "Überschreibungen löschen",
+        "clearOverridesTitle": "{count, plural, one {# Preisüberschreibung} other {# Preisüberschreibungen}} löschen?",
+        "clearOverridesBody": "Diese Varianten gelten wieder zum Familienpreis: {sample}."
     },
     "generate": {
       "action": "Fehlende Varianten erzeugen",
@@ -384,13 +425,20 @@
       "loadFailed": "Die Varianten konnten nicht geladen werden",
       "siblingCount": "{count} in {family}"
     },
+    "pricing": {
+      "title": "Preise",
+      "description": "Eine Staffel bepreist jede Variante ohne eigene Staffel."
+    },
     "convert": {
       "action": "In Familie umwandeln",
       "optionTitle": "Welche Option trägt dieser Artikel?",
       "optionLabel": "Optionsname",
       "valueTitle": "Welches {option} ist dieser Artikel?",
       "valueLabel": "Optionswert",
-      "done": "Familie {family} angelegt"
+      "done": "Familie {family} angelegt",
+        "cardTitle": "Diesen Artikel in Varianten verkaufen",
+        "cardDescription": "Größen, Farben oder Materialien – eine Familie, eine Preisliste.",
+        "cardHint": "Der Artikel wird zur ersten Variante; die Familie behält seinen Code."
     }
   },
   "shipping": {

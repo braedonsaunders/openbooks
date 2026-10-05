@@ -106,12 +106,46 @@
     "featureRequired": "Active Proyectos para usar libros de tarifas y precios por ámbito.",
     "back": "Cambiar el modelo de precios"
   },
+  "structure": {
+    "title": "¿Artículo único o familia?",
+    "description": "Véndalo como un artículo único o como una familia de variantes — tallas, colores, materiales — con un solo precio heredado por cada variante.",
+    "singleTitle": "Artículo único",
+    "singleDescription": "Un artículo con su propio precio.",
+    "familyTitle": "Artículo con variantes",
+    "familyDescription": "Una familia con opciones; las variantes heredan el precio de la familia salvo excepción."
+  },
+  "familyCreate": {
+    "detailsTitle": "Nombrar la familia",
+    "detailsDescription": "La familia lleva el nombre, el código, la categoría y el precio base compartidos; cada variante los hereda.",
+    "familyCode": "Código de familia",
+    "category": "Categoría",
+    "unit": "Unidad",
+    "basePrice": "Precio base",
+    "basePriceHint": "Las variantes sin precio propio se venden a este precio.",
+    "continue": "Continuar",
+    "optionsTitle": "Añadir opciones",
+    "optionsDescription": "Opciones como talla o color; cada combinación se convierte en una variante.",
+    "variantCount": "{count, plural, one {# variante} other {# variantes}}",
+    "reviewVariants": "Revisar variantes",
+    "previewTitle": "Revisar variantes",
+    "previewDescription": "Desmarque combinaciones para omitirlas; códigos, precios y códigos de barras siguen siendo editables. Los códigos vacíos se generan desde el patrón al crear.",
+    "previewCode": "Código",
+    "previewPrice": "Precio",
+    "previewBarcode": "Código de barras",
+    "advancedTitle": "Patrón de código y reglas de exclusión",
+    "advancedSummary": "Códigos generados como {pattern}",
+    "codePattern": "Patrón de código",
+    "codePatternHint": "{family} para el código de familia, {values} para todos los valores, {value1}, {value2}, … para posiciones.",
+    "create": "Crear {count, plural, one {# variante} other {# variantes}}",
+    "creating": "Creando…",
+    "created": "Familia creada"
+  },
   "pricingMatrix": {
     "title": "Matriz de precios", "description": "Precios con vigencia por moneda, nivel o cliente y tramos de cantidad.", "addSchedule": "Añadir esquema de precios", "minimumQuantity": "Cantidad mínima", "unitPrice": "Precio unitario", "scope": "Ámbito del precio",
     "scopes": { "base": "Precio base", "level": "Nivel de precio", "customer": "Cliente específico" },
     "priceLevel": "Nivel de precio", "customer": "Cliente", "selectCustomer": "Seleccionar cliente…", "currency": "Moneda", "quantityBasis": "Base de cantidad",
     "quantityBases": { "line": "Cantidad de línea", "overallItem": "Cantidad total del artículo" },
-    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "breaksTitle": "Tramos de cantidad", "breaksDescription": "La mayor cantidad mínima alcanzada fija el precio de todas las unidades.", "addBreak": "Añadir tramo", "saveFailed": "No se pudo guardar el esquema.", "loadFailed": "No se pudieron cargar los esquemas de precios.", "saved": "Esquema guardado", "changeReason": "Motivo del cambio", "changeReasonPlaceholder": "¿Por qué cambia este precio?", "changeReasonHint": "Obligatorio cuando los nuevos precios cubren fechas que ya están vigentes. La versión anterior se conserva y el motivo queda registrado en la auditoría.", "endDateTitle": "Finalizar esquema", "endDateReasonLabel": "Motivo de la finalización", "ended": "Esquema finalizado", "confirmDelete": "¿Eliminar este esquema?", "deleteFailed": "No se pudo eliminar el esquema.", "deleted": "Esquema eliminado", "customerTarget": "Cliente · {customer}", "baseTarget": "Precio base", "empty": "No hay precios matriciales para este artículo.", "target": "Destino", "effective": "Vigencia", "breaks": "Precios por cantidad"
+    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "breaksTitle": "Tramos de cantidad", "breaksDescription": "La mayor cantidad mínima alcanzada fija el precio de todas las unidades.", "addBreak": "Añadir tramo", "saveFailed": "No se pudo guardar el esquema.", "loadFailed": "No se pudieron cargar los esquemas de precios.", "saved": "Esquema guardado", "changeReason": "Motivo del cambio", "changeReasonPlaceholder": "¿Por qué cambia este precio?", "changeReasonHint": "Obligatorio cuando los nuevos precios cubren fechas que ya están vigentes. La versión anterior se conserva y el motivo queda registrado en la auditoría.", "endDateTitle": "Finalizar esquema", "endDateReasonLabel": "Motivo de la finalización", "ended": "Esquema finalizado", "confirmDelete": "¿Eliminar este esquema?", "deleteFailed": "No se pudo eliminar el esquema.", "deleted": "Esquema eliminado", "customerTarget": "Cliente · {customer}", "baseTarget": "Precio base", "empty": "No hay precios matriciales para este artículo.", "target": "Destino", "effective": "Vigencia", "breaks": "Precios por cantidad", "familyDescription": "Las tarifas aquí se aplican a cada variante sin tarifa propia para el ámbito.", "inheritedTitle": "Heredado de la familia", "inheritedDescription": "Tarifas de la familia aplicadas a esta variante; sustituya una para tarifar solo esta variante.", "override": "Sustituir para esta variante", "inheritedBadge": "Heredado de {family}", "overriddenBadge": "Sustituido", "source": "Origen"
   },
   "rates": {
     "title": "Precios avanzados por tarifa",
@@ -334,7 +368,14 @@
       "deactivateBody": "Seguirán en el historial, pero ya no podrán venderse.",
       "bulkSaved": "{count} variantes actualizadas",
       "priceFor": "Precio de {name}",
-      "barcodeFor": "Código de {name}"
+      "barcodeFor": "Código de {name}",
+        "inherited": "Heredado",
+        "overridden": "Sustituido",
+        "inheritedHint": "Se vende al precio de familia {rate}",
+        "overriddenHint": "Tiene su propio precio base",
+        "clearOverrides": "Borrar sustituciones",
+        "clearOverridesTitle": "¿Borrar {count, plural, one {# sustitución} other {# sustituciones}}?",
+        "clearOverridesBody": "Estas variantes vuelven al precio de familia: {sample}."
     },
     "generate": {
       "action": "Generar variantes faltantes",
@@ -381,13 +422,20 @@
       "loadFailed": "No se pudieron cargar las variantes",
       "siblingCount": "{count} en {family}"
     },
+    "pricing": {
+      "title": "Precios",
+      "description": "Una sola tarifa para cada variante sin tarifa propia."
+    },
     "convert": {
       "action": "Convertir en familia",
       "optionTitle": "¿Qué opción lleva este artículo?",
       "optionLabel": "Nombre de opción",
       "valueTitle": "¿Qué {option} es este artículo?",
       "valueLabel": "Valor de opción",
-      "done": "Familia {family} creada"
+      "done": "Familia {family} creada",
+        "cardTitle": "Vender este artículo en variantes",
+        "cardDescription": "Tallas, colores o materiales: una familia, una lista de precios.",
+        "cardHint": "El artículo se convierte en la primera variante; la familia conserva su código."
     }
   },
   "shipping": {

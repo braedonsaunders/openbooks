@@ -18,14 +18,22 @@ interface Schedule {
   quantity_basis: 'line_quantity' | 'overall_item_quantity'; effective_from: string; effective_to: string | null;
   is_active: boolean; revision: number; supersedes_id: string | null; change_reason: string | null;
   price_level_name: string | null; customer_name: string | null; breaks: PriceBreak[]
+  inheritedFrom?: { familyId: string; familyCode: string | null; familyName: string | null } | null
 }
-interface PricingData { levels: Level[]; customers: Customer[]; currencies: { code: string; name: string }[]; baseCurrency: string | null; schedules: Schedule[] }
+interface PricingData { levels: Level[]; customers: Customer[]; currencies: { code: string; name: string }[]; baseCurrency: string | null; schedules: Schedule[]; inherited?: Schedule[] }
 
 function responseError(payload: unknown, fallback: string) {
   return payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string' ? payload.error : fallback
 }
 
-export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; canManage: boolean }) {
+/**
+ * The price matrix for one item or one family. A variant additionally lists
+ * the family schedules it inherits as read-only rows: overriding one copies
+ * it into the variant's own schedules, and deleting that copy returns the
+ * variant to inheritance. Exactly one of itemId / familyId is set.
+ */
+export function ItemPriceMatrixEditor({ itemId, familyId, canManage }: { itemId?: string; familyId?: string | null; canManage: boolean }) {
+  const subjectPath = familyId ? `/api/item-families/${familyId}/prices` : `/api/items/${itemId}/prices`
   const t = useTranslations('items.pricingMatrix')
   const common = useTranslations('common')
   const today = useBusinessToday()
@@ -50,7 +58,7 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
   // promise continuation (the fetch response), never synchronously in the
   // effect that calls this. The promise is returned so callers can await it.
   const load = useCallback(() => {
-    return fetch(`/api/items/${itemId}/prices`).then(async (response) => {
+    return fetch(subjectPath).then(async (response) => {
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const message = responseError(payload, t('loadFailed'))
@@ -63,7 +71,7 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
       setError('')
       setCurrency((current) => current || next.baseCurrency || next.currencies[0]?.code || '')
     })
-  }, [itemId, t])
+  }, [subjectPath, t])
   useEffect(() => { void load() }, [load])
 
   const breakColumns = useMemo<LineGridColumn<PriceBreak>[]>(() => [
@@ -94,7 +102,7 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
   async function save() {
     setBusy(true); setError('')
     try {
-      const response = await fetch(`/api/items/${itemId}/prices`, {
+      const response = await fetch(subjectPath, {
         method: editingId === 'new' ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(editingId === 'new' ? { 'Idempotency-Key': createRequestId } : {}) },
         body: JSON.stringify({
@@ -130,7 +138,7 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
       if (!endReason) return
       params.set('reason', endReason)
     } else if (!(await confirmDialog({ message: t('confirmDelete'), confirmLabel: common('actions.delete'), tone: 'danger' }))) return
-    const response = await fetch(`/api/items/${itemId}/prices?${params}`, { method: 'DELETE' })
+    const response = await fetch(`${subjectPath}?${params}`, { method: 'DELETE' })
     if (!response.ok) { const payload = await response.json().catch(() => null); toast.error(responseError(payload, t('deleteFailed'))); await load(); return }
     const outcome = await response.json().catch(() => null)
     toast.success(outcome && typeof outcome === 'object' && (outcome as { endDated?: unknown }).endDated ? t('ended') : t('deleted')); await load()
@@ -140,10 +148,30 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
     ? t('customerTarget', { customer: schedule.customer_name })
     : schedule.price_level_name ?? t('baseTarget')
 
+  /** An inherited row is shadowed when the variant holds its own schedule for the same scope and currency. */
+  const scopeKey = (schedule: Schedule) => `${schedule.customer_id ?? ''}|${schedule.price_level_id ?? ''}|${schedule.currency}`
+  const ownKeys = useMemo(() => new Set((data?.schedules ?? []).map(scopeKey)), [data])
+  const inherited = useMemo(() => data?.inherited ?? [], [data])
+
+  /**
+   * Override an inherited family row: open the create form prefilled from
+   * the family schedule, so the variant's own schedule starts as a copy and
+   * the operator changes only what differs. Only variants reach this button —
+   * family subjects never receive inherited rows.
+   */
+  function beginOverride(schedule: Schedule) {
+    setEditingId('new'); setCreateRequestId(crypto.randomUUID())
+    setScope(schedule.customer_id ? 'customer' : schedule.price_level_id && !data?.levels.find((level) => level.id === schedule.price_level_id)?.is_base ? 'level' : 'base')
+    setPriceLevelId(schedule.price_level_id ?? ''); setCustomerId(schedule.customer_id ?? ''); setCurrency(schedule.currency)
+    setQuantityBasis(schedule.quantity_basis); setEffectiveFrom(schedule.effective_from); setEffectiveTo(schedule.effective_to ?? '')
+    setIsActive(schedule.is_active); setBreaks(schedule.breaks.length ? schedule.breaks : [{ minimumQuantity: '1', unitPrice: '0' }])
+    setEditingRevision(0); setReason(''); setError('')
+  }
+
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('description')}</p></div>
+        <div><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{familyId ? t('familyDescription') : t('description')}</p></div>
       </div>
 
       {editingId !== null ? (
@@ -188,6 +216,33 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
           { key: 'actions', header: '', cell: (row) => canManage ? <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); void remove(row) }}>{common('actions.delete')}</Button> : null },
         ]}
       />
+      {inherited.length > 0 ? (
+        <div className="space-y-2">
+          <div><h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('inheritedTitle')}</h4><p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('inheritedDescription')}</p></div>
+          <PagedTable
+            rows={inherited} rowKey={(row) => row.id} searchable emptyAsRow
+            empty={<span>{t('empty')}</span>}
+            columns={[
+              { key: 'target', header: t('target'), cell: targetLabel, search: targetLabel },
+              { key: 'currency', header: t('currency'), cell: (row) => row.currency, search: (row) => row.currency },
+              { key: 'breaks', header: t('breaks'), cell: (row) => row.breaks.map((entry) => `${entry.minimumQuantity}+: ${row.currency} ${entry.unitPrice}`).join(' · '), search: (row) => row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ') },
+              {
+                key: 'source', header: t('source'), cell: (row) => {
+                  const shadowed = ownKeys.has(scopeKey(row))
+                  return (
+                    <span className="flex items-center gap-1.5">
+                      <Badge variant={shadowed ? 'secondary' : 'outline'}>
+                        {shadowed ? t('overriddenBadge') : t('inheritedBadge', { family: row.inheritedFrom?.familyName ?? '' })}
+                      </Badge>
+                    </span>
+                  )
+                },
+              },
+              { key: 'actions', header: '', cell: (row) => canManage && !ownKeys.has(scopeKey(row)) ? <Button variant="ghost" size="sm" onClick={() => beginOverride(row)}>{t('override')}</Button> : null },
+            ]}
+          />
+        </div>
+      ) : null}
     </section>
   )
 }

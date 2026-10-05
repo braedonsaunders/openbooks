@@ -30,24 +30,34 @@ export function FamilyOptionsEditor({
   variantValues,
   disabled = false,
   onSave,
+  onOptionsChange,
 }: {
   initial: EditableOption[]
   /** option name → value → variants carrying it, for rename confirmations. */
   variantValues: Record<string, Record<string, number>>
   disabled?: boolean
   onSave: (options: { id: string | null; name: string; values: Array<string | { value: string; previousValue: string }> }[]) => Promise<void>
+  /** Live copy of the draft for hosts that derive a preview (create flow). */
+  onOptionsChange?: (options: EditableOption[]) => void
+  /** Hide the save button when the host drives continuation (create flow). */
+  hideSave?: boolean
 }) {
   const t = useTranslations('items.families')
   const [options, setOptions] = useState<EditableOption[]>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  function update(next: EditableOption[]): void {
+    setOptions(next)
+    onOptionsChange?.(next)
+  }
+
   function setName(index: number, name: string): void {
-    setOptions((current) => current.map((option, i) => (i === index ? { ...option, name } : option)))
+    update(options.map((option, i) => (i === index ? { ...option, name } : option)))
   }
 
   function setValues(index: number, values: string[]): void {
-    setOptions((current) => current.map((option, i) => (i === index ? { ...option, values } : option)))
+    update(options.map((option, i) => (i === index ? { ...option, values } : option)))
   }
 
   async function save(): Promise<void> {
@@ -95,7 +105,7 @@ export function FamilyOptionsEditor({
         title={t('options.empty')}
         description={t('options.emptyHint')}
         action={disabled ? undefined : (
-          <Button type="button" variant="outline" size="sm" onClick={() => setOptions([{ id: null, name: '', values: [] }])}>
+          <Button type="button" variant="outline" size="sm" onClick={() => update([{ id: null, name: '', values: [] }])}>
             <Plus size={14} /> {t('options.addOption')}
           </Button>
         )}
@@ -126,7 +136,7 @@ export function FamilyOptionsEditor({
                 size="sm"
                 disabled={saving}
                 aria-label={t('options.removeOption', { name: option.name || t('options.unnamed') })}
-                onClick={() => setOptions((current) => current.filter((_, i) => i !== index))}
+                onClick={() => update(options.filter((_, i) => i !== index))}
               >
                 <Trash2 size={14} />
               </Button>
@@ -144,11 +154,11 @@ export function FamilyOptionsEditor({
       {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
       <div className="flex items-center gap-2">
         {!disabled ? (
-          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => setOptions((current) => [...current, { id: null, name: '', values: [] }])}>
+          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => update([...options, { id: null, name: '', values: [] }])}>
             <Plus size={14} /> {t('options.addOption')}
           </Button>
         ) : null}
-        {!disabled ? (
+        {!disabled && !hideSave ? (
           <Button type="button" size="sm" disabled={saving} onClick={() => void save()}>
             {saving ? t('options.saving') : t('options.saveOptions')}
           </Button>
