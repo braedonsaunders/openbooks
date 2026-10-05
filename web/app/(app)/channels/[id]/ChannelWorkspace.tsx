@@ -58,6 +58,7 @@ export async function ChannelWorkspace({
   if (!authz) notFound();
   if (!can(authz, "channels.read")) notFound();
   const t = await getTranslations("channels");
+  const tRoot = await getTranslations();
   const channel = await loadChannel(authz, channelId);
   const canManage = can(authz, "channels.manage");
   // Connector-contributed tabs arrive through the channel adapter's
@@ -70,12 +71,12 @@ export async function ChannelWorkspace({
   // request happens to register first.
   ensureShopifyAdapterRegistered();
   const adapterTabs = workspaceTabsFor(channel.kind);
-  // Adapter label keys arrive fully namespaced (`channels.tabs.products`)
-  // while this translator is already scoped to the channels catalog, so
-  // resolve the relative key per the workspace-tab contract.
+  // Adapter label keys are fully namespaced catalog keys in the adapter's
+  // own namespace (`channels.tabs.products` today, another catalog for a
+  // later connector), so they resolve through the root translator. A key
+  // with no catalog entry renders as the key path itself.
   const adapterTabLabel = (labelKey: string): string => {
-    const relative = labelKey.startsWith("channels.") ? labelKey.slice("channels.".length) : labelKey;
-    return t.has(relative) ? t(relative) : labelKey;
+    return tRoot.has(labelKey) ? tRoot(labelKey) : labelKey;
   };
   const adapterKeys = new Set(adapterTabs.map((adapterTab) => `adapter:${adapterTab.key}`));
   const activeTab = tab === "activity" || tab === "settings" || adapterKeys.has(tab) ? tab : "overview";

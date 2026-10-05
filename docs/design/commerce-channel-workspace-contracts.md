@@ -28,9 +28,13 @@ fallback.
 
 ## Tab labels
 
-Adapter tab labels are fully namespaced catalog keys (for example
-`channels.tabs.products`). The workspace translator is scoped to the
-`channels` catalog, so the shell strips the `channels.` prefix before
-resolving and renders the key path itself when no entry matches. A raw
-key path on screen is a defect in the adapter declaration or the catalog,
-never in the shell.
+Adapter tab labels are fully namespaced catalog keys in the adapter's own
+namespace (for example `channels.tabs.products` for the Shopify
+connector; a later connector uses its own catalog namespace). The shell
+resolves them with the root translator (`getTranslations()` with no
+namespace argument), so any catalog namespace resolves — not only keys
+under `channels.`. Channel copy elsewhere on the page keeps using the
+scoped `channels` translator. When no catalog entry matches, the shell
+renders the key path itself. A raw key path on screen means the adapter
+declaration or the catalog is wrong: either the adapter named a key in a
+namespace with no catalog, or the catalog is missing the entry.
