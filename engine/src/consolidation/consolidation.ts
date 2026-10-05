@@ -824,8 +824,10 @@ async function neededPairs(orgId: string, runner: Runner): Promise<{ from: strin
 /**
  * Derive the period's consolidated rates from daily fx_rates:
  *   current    — the latest spot rate on/before the period end
- *   average    — the mean of spot rates dated inside the period
- *   historical — carried forward from the prior period (else = current)
+ *   average    — the mean of spot rates dated inside the period (refused
+ *                when the period has no quotes; never the closing spot)
+ *   historical — carried forward from the prior period; the first period
+ *                uses its closing spot, recorded as that basis in the audit
  * Upserts source='derived' rows; rows a controller set to 'manual' are kept.
  */
 export async function deriveConsolidatedRates(
@@ -913,6 +915,14 @@ async function deriveConsolidatedRatesIn(
       'rates-missing');
     }
     const spotAverage = await averageSpotRate(exec, orgId, pair.from, pair.to, period.starts_on, period.ends_on);
+    // A period average needs quotes inside the period. Substituting the
+    // closing spot would translate the whole period's income at one day's
+    // rate without anyone choosing that, so it is refused by name.
+    if (!spotAverage) {
+      throw new ConsolidationError(
+        `no spot rates for ${pair.from}→${pair.to} are dated inside ${period.starts_on} to ${period.ends_on}, so the period average cannot be derived — load the period's daily rates, or enter this period's consolidated rates manually under Setup → Consolidated FX rates`,
+      'rates-missing');
+    }
     // Historical carries forward from the period immediately preceding this
     // one. An adjustment period shares its final regular period's dates, so
     // "ends before this period starts" would skip that regular period (and
@@ -936,7 +946,11 @@ async function deriveConsolidatedRatesIn(
     `));
     const r = hist.rows[0];
     const current = persistDerivedFxRate(spotCurrent);
-    const average = persistDerivedFxRate(spotAverage ?? spotCurrent);
+    const average = persistDerivedFxRate(spotAverage);
+    // With no earlier period to carry from, the first derivation sets the
+    // equity historical rate at this period's closing spot. That is a policy
+    // choice, so it is recorded with the rate's audit evidence below.
+    const historicalBasis = r?.historical ? "carried_forward" : "inception_closing_spot";
     const historical = persistDerivedFxRate(r?.historical ?? spotCurrent);
     const before = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
       select id, current_rate::text as current_rate, average_rate::text as average_rate,
@@ -987,6 +1001,7 @@ async function deriveConsolidatedRatesIn(
                 toCurrency: pair.to,
                 before: beforeSnapshot,
                 after,
+                basis: { current: "closing_spot", average: "period_mean_spot", historical: historicalBasis },
               })}::jsonb,
               ${actorId}, 'derive_consolidated_rates')
     `);
