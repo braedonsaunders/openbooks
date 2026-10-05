@@ -3280,7 +3280,7 @@
         "singular": "Item identifier",
         "description": "Exact GTIN, UPC, EAN and internal values used to identify items during scanning."
       },
-            "channel-account-maps": {
+      "channel-account-maps": {
         "title": "Channel posting accounts",
         "singular": "Channel posting account",
         "description": "Which ledger account each channel posts to, per gateway and tax jurisdiction, with effective dates."
@@ -4085,7 +4085,7 @@
         "last": "Last value",
         "uniqueCount": "Distinct values"
       },
-            "channelAccountRole": {
+      "channelAccountRole": {
         "gateway_clearing": "Gateway clearing",
         "revenue": "Revenue",
         "discount": "Discounts",
@@ -5136,11 +5136,20 @@
         "dependents": "Turn off the dependent feature first: {features}."
       },
       "categories": {
-        "sales": "Sales & customers",
-        "operations": "Operations",
-        "accounting": "Accounting",
+        "finance": "Finance",
+        "sales": "Sales",
+        "billing": "Billing",
+        "inventory": "Inventory",
+        "projects": "Projects",
+        "people": "People",
+        "industries": "Industries",
         "platform": "Platform"
-      }
+      },
+      "tabsAria": "Feature groups",
+      "searchPlaceholder": "Search features…",
+      "noMatches": "No features match “{query}”.",
+      "otherIndustryModules": "Other industry modules",
+      "yourIndustry": "Your industry"
     },
     "readiness": {
       "navTitle": "Go-live guide"

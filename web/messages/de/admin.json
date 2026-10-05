@@ -3355,7 +3355,7 @@
         "singular": "Artikelkennung",
         "description": "Exakte GTIN-, UPC-, EAN- und interne Werte zur Identifizierung von Artikeln beim Scannen."
       },
-            "channel-account-maps": {
+      "channel-account-maps": {
         "title": "Konten für Kanalbuchungen",
         "singular": "Konto für Kanalbuchungen",
         "description": "Auf welches Ledgerkonto jeder Kanal bucht, pro Gateway und Steuerzuständigkeit, mit Gültigkeitsdaten."
@@ -4160,7 +4160,7 @@
         "last": "Letzter Wert",
         "uniqueCount": "Unterschiedliche Werte"
       },
-            "channelAccountRole": {
+      "channelAccountRole": {
         "gateway_clearing": "Gateway-Verrechnung",
         "revenue": "Umsatz",
         "discount": "Rabatte",
@@ -5166,10 +5166,14 @@
       "recommendsNote": "Funktioniert am besten mit {names}.",
       "blockedReason": "Kann nicht ausgeschaltet werden – {items}.",
       "categories": {
-        "accounting": "Buchhaltung",
-        "operations": "Betrieb",
-        "platform": "Plattform",
-        "sales": "Vertrieb & Kunden"
+        "finance": "Finanzen",
+        "sales": "Vertrieb",
+        "billing": "Fakturierung",
+        "inventory": "Vorräte",
+        "projects": "Projekte",
+        "people": "Personal",
+        "industries": "Branchen",
+        "platform": "Plattform"
       },
       "childOptions": "{count, plural, one {# Option nach Aktivierung} other {# Optionen nach Aktivierung}}",
       "confirmDisable": "{name} ausschalten?\n\nDadurch wird {items} ausgeblendet. Die Daten bleiben erhalten und kehren zurück, wenn Sie erneut aktivieren.",
@@ -5221,7 +5225,12 @@
         "trackedVendors": "{count, plural, one {# erfasster Nachunternehmer} other {# erfasste Nachunternehmer}}",
         "unfiledInformationReturns": "{count, plural, one {# finalisierte Informationsmeldung, die nicht eingereicht wurde} other {# finalisierte Informationsmeldungen, die nicht eingereicht wurden}}"
       },
-      "title": "Funktionen"
+      "title": "Funktionen",
+      "tabsAria": "Funktionsgruppen",
+      "searchPlaceholder": "Funktionen suchen…",
+      "noMatches": "Keine Funktion entspricht „{query}“.",
+      "otherIndustryModules": "Weitere Branchenmodule",
+      "yourIndustry": "Ihre Branche"
     },
     "invoicing": {
       "navTitle": "Rechnungsstellung"

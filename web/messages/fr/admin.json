@@ -3235,7 +3235,7 @@
         "singular": "Identifiant d’article",
         "description": "Valeurs GTIN, UPC, EAN et internes exactes pour identifier les articles par scan."
       },
-            "channel-account-maps": {
+      "channel-account-maps": {
         "title": "Comptes comptables du canal",
         "singular": "Compte comptable du canal",
         "description": "Sur quel compte comptable chaque canal comptabilise, par passerelle et juridiction fiscale, avec dates d'effet."
@@ -4040,7 +4040,7 @@
         "last": "Dernière valeur",
         "uniqueCount": "Valeurs distinctes"
       },
-            "channelAccountRole": {
+      "channelAccountRole": {
         "gateway_clearing": "Compensation passerelle",
         "revenue": "Chiffre d'affaires",
         "discount": "Remises",
@@ -5031,9 +5031,13 @@
       "enabled": "{name} activée",
       "disabled": "{name} désactivée",
       "categories": {
-        "sales": "Ventes et clients",
-        "operations": "Opérations",
-        "accounting": "Comptabilité",
+        "finance": "Finance",
+        "sales": "Ventes",
+        "billing": "Facturation",
+        "inventory": "Inventaire",
+        "projects": "Projets",
+        "people": "Personnel",
+        "industries": "Secteurs",
         "platform": "Plateforme"
       },
       "impacts": {
@@ -5092,7 +5096,12 @@
       "blockedReason": "Impossible de désactiver — {items}.",
       "childOptions": "{count, plural, one {# option une fois activé} other {# options une fois activé}}",
       "confirmDisable": "Désactiver {name} ?\n\nCela masque {items}. Les données sont conservées et reviennent si vous réactivez.",
-      "countOn": "{n} sur {total} activés"
+      "countOn": "{n} sur {total} activés",
+      "tabsAria": "Groupes de fonctionnalités",
+      "searchPlaceholder": "Rechercher des fonctionnalités…",
+      "noMatches": "Aucune fonctionnalité ne correspond à « {query} ».",
+      "otherIndustryModules": "Autres modules sectoriels",
+      "yourIndustry": "Votre secteur"
     },
     "bankFeeds": {
       "navTitle": "Flux bancaires"

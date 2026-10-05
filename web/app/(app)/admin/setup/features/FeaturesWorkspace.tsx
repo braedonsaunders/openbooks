@@ -1,42 +1,87 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
+  BadgePercent,
+  Banknote,
+  BarChart3,
   Boxes,
   Briefcase,
+  Building,
   Building2,
   CalendarCheck,
+  ChartLine,
   CircleDollarSign,
-  ClipboardList,
   Code2,
-  Clock,
+  Coins,
+  CreditCard,
   Database,
-  LayoutGrid,
-  Landmark,
+  Factory,
+  FileSignature,
+  Gauge,
+  Gift,
+  Globe,
+  Handshake,
+  Hash,
+  HeartHandshake,
+  History,
+  IdCard,
   KeyRound,
+  Landmark,
+  Layers,
+  LayoutGrid,
   Lock,
+  Megaphone,
+  Network,
   Package,
-  Puzzle,
+  PackageCheck,
   PlugZap,
+  Puzzle,
   Radio,
   Receipt,
+  RefreshCcw,
   Repeat2,
+  ScanBarcode,
+  ScrollText,
+  Shapes,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
+  Split,
+  Store,
   Target,
   TrendingUp,
+  Truck,
+  Undo2,
   Users,
+  Wallet,
+  Warehouse,
+  Webhook,
   Workflow,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import { cn } from '@openbooks/ui'
+import { Button, PageHeader, cn } from '@openbooks/ui'
+import { FEATURE_CATEGORIES, type FeatureCategory } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
+import { SearchInput } from '@/components/search-input'
+import { Switch } from '@/components/switch'
 import { confirmDialog } from '../../../../../lib/confirm'
-import { buildFeatureTree, featureToggleRefusalMessage, type FeatureTreeNode } from './feature-tree'
+import {
+  OTHER_INDUSTRY_MODULES,
+  buildFeatureTree,
+  featureSearchMatcher,
+  featureToggleRefusalMessage,
+  filterFeatureTree,
+  industryLenses,
+  type FeatureIndustry,
+  type FeatureTreeNode,
+  type FeatureTreeSection,
+} from './feature-tree'
 
 type Feature = {
   key: string
@@ -49,45 +94,98 @@ type Feature = {
 type Impact = { labelKey: string; count: number }
 type DisableStatus = { blocked: boolean; impacts: Impact[] }
 
-/** Icon per feature — falls back to a neutral square when unmapped. */
+/** Icon per top-level feature row (nested rows render without one) — falls
+ *  back to a neutral puzzle piece when unmapped. */
 const ICONS: Record<string, LucideIcon> = {
-  crm: Users,
-  orders: ShoppingCart,
-  revenueRecognition: TrendingUp,
-  subscriptionBilling: Repeat2,
-  advancedSubscriptions: Repeat2,
-  projects: Briefcase,
-  timeTracking: Clock,
-  fieldTickets: ClipboardList,
-  subcontracts: ClipboardList,
-  wipBilling: CircleDollarSign,
-  propertyManagement: Building2,
-  inventory: Package,
-  equipment: Wrench,
-  expenses: Receipt,
+  // Finance
   multiSubsidiary: Building2,
-  multiCurrency: CircleDollarSign,
+  multiCurrency: Coins,
   banking: Landmark,
   bankFeeds: Radio,
   fixedAssets: Boxes,
   budgets: Target,
+  allocations: Split,
+  crossBorderTax: Globe,
   continuousClose: CalendarCheck,
+  advancedClose: ShieldCheck,
+  // Sales
+  crm: Users,
+  orders: ShoppingCart,
+  customerPartNumbers: Hash,
+  promotions: BadgePercent,
+  cashSales: Banknote,
+  storedValue: Gift,
+  salesChannels: Store,
+  // Billing
+  subscriptionBilling: Repeat2,
+  advancedSubscriptions: Layers,
+  usageBilling: Gauge,
+  quoteToCash: FileSignature,
+  consolidatedBilling: Network,
+  saasMetrics: ChartLine,
+  billingHistoryImport: History,
+  onlinePayments: CreditCard,
+  autopay: RefreshCcw,
+  revenueRecognition: TrendingUp,
+  contractCosts: CircleDollarSign,
+  // Inventory
+  inventory: Package,
+  itemVariants: Shapes,
+  barcodeScanning: ScanBarcode,
+  warehousing: Warehouse,
+  fulfillment: PackageCheck,
+  returnAuthorizations: Undo2,
+  dropShipping: Truck,
+  demandPlanning: BarChart3,
+  manufacturing: Factory,
+  // Projects
+  projects: Briefcase,
+  wipBilling: CircleDollarSign,
+  subcontracts: Handshake,
+  subcontractorCompliance: ShieldCheck,
+  equipment: Wrench,
+  // People
+  hrm: IdCard,
+  payroll: Wallet,
+  expenses: Receipt,
+  // Industries
+  propertyManagement: Building,
+  nonprofit: HeartHandshake,
+  // Platform
   flows: Workflow,
+  homeAnnouncements: Megaphone,
+  aiGovernanceLedger: ScrollText,
   apps: LayoutGrid,
   scripts: Code2,
   apiAccess: KeyRound,
+  outboundWebhooks: Webhook,
   mcpAccess: PlugZap,
   queryConsole: Database,
 }
 
-const CATEGORY_ORDER = ['sales', 'operations', 'accounting', 'platform'] as const
+/** The `?tab=` value when it names a category; the first tab otherwise. */
+function activeCategory(value: string | null): FeatureCategory {
+  return FEATURE_CATEGORIES.find((category) => category === value) ?? FEATURE_CATEGORIES[0]
+}
 
 /**
- * The Features switchboard — a grouped settings list (icon · name · description ·
- * switch), one panel per category. Saves on toggle; nav re-renders so gated
- * modules appear/disappear. Turning a feature off surfaces what it affects:
- * integrity-critical features (e.g. multi-subsidiary once posted-to) lock; the
- * rest confirm, listing the records that will be hidden.
+ * The Features switchboard — one tab per registry category (`?tab=`), each a
+ * settings list (icon · name · description · switch) in registry order.
+ * Saves on toggle; nav re-renders so gated modules appear/disappear. Turning
+ * a feature off surfaces what it affects: integrity-critical features (e.g.
+ * multi-subsidiary once posted-to) lock; the rest confirm, listing the
+ * records that will be hidden.
+ *
+ * Search filters in place across EVERY tab — an operator looking for a
+ * capability should not have to know which tab owns it — and renders the
+ * matches grouped under their tab names, with per-tab match counts on the
+ * tab strip. Choosing a tab clears the search.
+ *
+ * The Industries tab is a per-vertical view: one section per supported
+ * industry (the org's own first), listing the switches that industry's
+ * wizard preset turns on — the same switches the home tabs carry, never a
+ * second gate. Industry-only modules no preset names still render, under
+ * "Other industry modules", so no switch can fall off the page.
  *
  * Hierarchy: features that declare a `parentKey` render NESTED under their
  * parent row — indented, smaller, behind a quiet rail — and are not rendered
@@ -95,25 +193,41 @@ const CATEGORY_ORDER = ['sales', 'operations', 'accounting', 'platform'] as cons
  * "N options once enabled" hint instead. Hiding is presentation only: stored
  * values are untouched, so re-enabling the parent restores its children.
  * `requiresAll` entries are cross-module requirements, not children, and stay
- * top-level rows with their "Requires X" reason. Category counts cover only
- * visible rows so the header numbers stay honest.
+ * top-level rows with their "Requires X" reason. Counts cover only visible
+ * rows so the numbers stay honest.
  */
 export function FeaturesWorkspace({
   features,
   disableStatus = {},
   wizardHref,
+  industries = [],
+  orgIndustry = null,
 }: {
   features: Feature[]
   disableStatus?: Record<string, DisableStatus>
   wizardHref?: string
+  industries?: FeatureIndustry[]
+  orgIndustry?: string | null
 }) {
   const t = useTranslations('admin')
   const router = useRouter()
+  const pathname = usePathname()
+  const tab = activeCategory(useSearchParams().get('tab'))
   const [state, setState] = useState<Record<string, boolean>>(
     () => Object.fromEntries(features.map((f) => [f.key, f.enabled])),
   )
   const [pending, setPending] = useState<string | null>(null)
   const [awaitingRefresh, setAwaitingRefresh] = useState(false)
+  const [query, setQuery] = useState('')
+
+  // A tab change (including back/forward) is a deliberate change of scope:
+  // drop a cross-tab search so the chosen tab is what renders. Adjusted
+  // during render, never in an effect.
+  const [queryTab, setQueryTab] = useState(tab)
+  if (queryTab !== tab) {
+    setQueryTab(tab)
+    setQuery('')
+  }
 
   // Re-sync from the server after router.refresh(): a toggle commits on the
   // server, and derived rows (children of a freshly enabled parent, or rows
@@ -177,7 +291,40 @@ export function FeaturesWorkspace({
 
   // Nested sections: children attach to their parent's group (in registry
   // order) and vanish — from the page AND the counts — while the parent is off.
-  const sections = buildFeatureTree(features, state, CATEGORY_ORDER)
+  const sections = buildFeatureTree(features, state, FEATURE_CATEGORIES)
+  const categoryLabel = (category: string) => t(`setup.features.categories.${category}`)
+  // Search reads what the operator reads: the row's title, description and
+  // tab name, plus its parent's title so "projects" finds every project
+  // capability.
+  const matcher = featureSearchMatcher(query, (row) => [
+    t(`features.${row.key}.title`),
+    t(`features.${row.key}.description`),
+    categoryLabel(row.category),
+    ...(row.parentKey ? [t(`features.${row.parentKey}.title`)] : []),
+  ])
+  const results = matcher ? filterFeatureTree(sections, matcher) : null
+  const home = sections.find((section) => section.category === tab)
+  const lenses = tab === 'industries' ? industryLenses(sections, industries, orgIndustry) : []
+  // The Industries tab repeats switches across verticals; its summary counts
+  // each feature once.
+  const lensNodes = new Map(
+    lenses.flatMap(({ section }) =>
+      section.groups.flatMap((group) => [group.parent, ...group.visibleChildren].map((node) => [node.row.key, node] as const)),
+    ),
+  )
+  const current: FeatureTreeSection | undefined =
+    tab === 'industries'
+      ? {
+          category: tab,
+          groups: [],
+          visibleTotal: lensNodes.size,
+          visibleOn: [...lensNodes.values()].filter((node) => node.on).length,
+        }
+      : home
+  const resultCount = (category: string) =>
+    results?.find((section) => section.category === category)?.visibleTotal ?? 0
+  const countOn = (section: FeatureTreeSection | undefined) =>
+    t('setup.features.countOn', { n: section?.visibleOn ?? 0, total: section?.visibleTotal ?? 0 })
 
   /** One switchboard row: parent rows full-size, nested children compact. */
   const renderRow = (node: FeatureTreeNode, compact: boolean, hintCount = 0) => {
@@ -220,62 +367,120 @@ export function FeaturesWorkspace({
     )
   }
 
-  return (
-    <div className="space-y-8">
-      <div>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('setup.features.title')}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              {t('setup.features.description')}
-            </p>
-          </div>
-          {wizardHref && (
-            <Link
-              href={wizardHref}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-950/60"
-            >
-              <Sparkles size={15} /> {t('setup.features.runWizard')}
-            </Link>
+  /** One bordered panel: each parent row, then its visible children on a rail. */
+  const renderPanel = (section: FeatureTreeSection) => (
+    <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+      {section.groups.map((group) => (
+        <div key={group.parent.row.key}>
+          {renderRow(group.parent, false, group.hiddenChildCount)}
+          {group.visibleChildren.length > 0 && (
+            <div className="border-t border-slate-100 dark:border-slate-800">
+              <div className="ml-12 border-l border-slate-200 pl-1 dark:border-slate-700">
+                {group.visibleChildren.map((child, index) => (
+                  <div
+                    key={child.row.key}
+                    className={cn(index > 0 && 'border-t border-slate-100 dark:border-slate-800')}
+                  >
+                    {renderRow(child, true)}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
+        </div>
+      ))}
+    </div>
+  )
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title={t('setup.features.title')}
+        description={t('setup.features.description')}
+        actions={
+          // Choosing a tab ends a search even when the URL does not change
+          // (the tab already in `?tab=`), so the chosen tab always renders.
+          <div className="contents" onClickCapture={(event) => {
+            if ((event.target as Element).closest('a')) setQuery('')
+          }}>
+            <ModuleHomeTabs
+              ariaLabel={t('setup.features.tabsAria')}
+              tabs={sections.map((section) => ({
+                href: `${pathname}?tab=${section.category}`,
+                label: categoryLabel(section.category),
+                // While searching, the body spans every tab, so no tab claims
+                // it; each instead counts the matches it holds.
+                active: !results && section.category === tab,
+                count: results ? resultCount(section.category) : undefined,
+              }))}
+            />
+          </div>
+        }
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SearchInput placeholder={t('setup.features.searchPlaceholder')} value={query} onValueChange={setQuery} />
+        <div className="flex items-center gap-3">
+          {results ? null : (
+            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{countOn(current)}</span>
+          )}
+          {wizardHref ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={wizardHref}>
+                <Sparkles size={15} aria-hidden /> {t('setup.features.runWizard')}
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {sections.map((section) => (
-        <section key={section.category} className="space-y-2.5">
-          <div className="flex items-baseline justify-between px-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              {t(`setup.features.categories.${section.category}`)}
-            </h3>
-            <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-              {t('setup.features.countOn', { n: section.visibleOn, total: section.visibleTotal })}
-            </span>
-          </div>
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-            {section.groups.map((group) => (
-              <div key={group.parent.row.key}>
-                {renderRow(group.parent, false, group.hiddenChildCount)}
-                {group.visibleChildren.length > 0 && (
-                  <div className="border-t border-slate-100 dark:border-slate-800">
-                    <div className="ml-12 border-l border-slate-200 pl-1 dark:border-slate-700">
-                      {group.visibleChildren.map((child, index) => (
-                        <div
-                          key={child.row.key}
-                          className={cn(
-                            index > 0 && 'border-t border-slate-100 dark:border-slate-800',
-                          )}
-                        >
-                          {renderRow(child, true)}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+      {results ? (
+        results.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            {t('setup.features.noMatches', { query: query.trim() })}
+          </p>
+        ) : (
+          results.map((section) => (
+            <section key={section.category} className="space-y-2.5">
+              <div className="flex items-baseline justify-between px-1">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {categoryLabel(section.category)}
+                </h3>
+                <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{countOn(section)}</span>
+              </div>
+              {renderPanel(section)}
+            </section>
+          ))
+        )
+      ) : tab === 'industries' ? (
+        lenses.map(({ key, section }) => (
+          <section key={key} className="space-y-2.5">
+            <div className="flex items-end justify-between gap-4 px-1">
+              <div className="min-w-0">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {key === OTHER_INDUSTRY_MODULES
+                    ? t('setup.features.otherIndustryModules')
+                    : t(`setup.wizard.industries.${key}.title`)}
+                  {key === orgIndustry ? (
+                    <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
+                      {t('setup.features.yourIndustry')}
+                    </span>
+                  ) : null}
+                </h3>
+                {key === OTHER_INDUSTRY_MODULES ? null : (
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    {t(`setup.wizard.industries.${key}.description`)}
+                  </p>
                 )}
               </div>
-            ))}
-          </div>
-        </section>
-      ))}
+              <span className="shrink-0 text-xs tabular-nums text-slate-400 dark:text-slate-500">{countOn(section)}</span>
+            </div>
+            {renderPanel(section)}
+          </section>
+        ))
+      ) : home ? (
+        renderPanel(home)
+      ) : null}
     </div>
   )
 }
@@ -357,43 +562,7 @@ function FeatureRow({
         ) : null}
       </div>
 
-      <Switch on={on} disabled={blocked || busy || disabled} onToggle={onToggle} label={title} />
+      <Switch on={on} disabled={blocked || busy || disabled} onToggle={onToggle} label={title} className="mt-0.5" />
     </div>
-  )
-}
-
-/** Accessible on/off switch (role=switch), teal when on. */
-function Switch({
-  on,
-  disabled,
-  onToggle,
-  label,
-}: {
-  on: boolean
-  disabled: boolean
-  onToggle: () => void
-  label: string
-}): ReactNode {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        'relative mt-0.5 inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900',
-        on ? 'bg-teal-600 dark:bg-teal-500' : 'bg-slate-200 dark:bg-slate-700',
-        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
-      )}
-    >
-      <span
-        className={cn(
-          'inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform',
-          on ? 'translate-x-[18px]' : 'translate-x-0.5',
-        )}
-      />
-    </button>
   )
 }

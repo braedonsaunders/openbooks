@@ -1,7 +1,10 @@
 import 'server-only'
 
+import { sql } from 'drizzle-orm'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
+import { INDUSTRIES } from '../../../../../lib/industries'
 import {
   FEATURES,
   resolvedFeatureState,
@@ -29,7 +32,11 @@ import type { FeaturesWorkspace } from './FeaturesWorkspace'
  * multiCurrency data-dependent defaults), the `FEATURES.map` with
  * `featureEnabled`, and the `featureDisableStatuses` probe over exactly
  * the ENABLED keys (What turning each ENABLED feature off would affect).
- * The `wizardHref` literal travels as data. No `t()` calls here — all
+ * The `wizardHref` literal travels as data. The Industries tab's
+ * per-vertical sections come from the industry registry (the wizard's
+ * presets — the single source of what each vertical runs): each industry
+ * contributes the feature keys its preset switches ON, and the org's own
+ * applied industry travels so the tab can lead with it. No `t()` calls here — all
  * copy resolves inside the shared island via its existing hooks, so no
  * message key can be invented.
  */
@@ -40,11 +47,16 @@ export interface FeaturesData {
   features: FeaturesWorkspaceProps['features']
   disableStatus: FeaturesWorkspaceProps['disableStatus']
   wizardHref: string
+  industries: NonNullable<FeaturesWorkspaceProps['industries']>
+  orgIndustry: string | null
 }
 
 export async function loadFeatures(): Promise<FeaturesData> {
   const authz = await requirePermission('admin.setup.manage')
-  const state = await resolvedFeatureState(authz.user.orgId)
+  const [state, org] = await Promise.all([
+    resolvedFeatureState(authz.user.orgId),
+    db.execute<{ industry: string | null }>(sql`select settings->>'industry' as industry from orgs where id = ${authz.user.orgId}`),
+  ])
 
   const features = FEATURES.map((f) => ({
     key: f.key,
@@ -60,7 +72,20 @@ export async function loadFeatures(): Promise<FeaturesData> {
     features.filter((f) => f.enabled).map((f) => f.key),
   )
 
-  return { features, disableStatus, wizardHref: '/admin/setup/wizard' }
+  const industries = INDUSTRIES.map((industry) => ({
+    key: industry.key,
+    features: Object.entries(industry.features)
+      .filter(([, on]) => on)
+      .map(([key]) => key),
+  })).filter((industry) => industry.features.length > 0)
+
+  return {
+    features,
+    disableStatus,
+    wizardHref: '/admin/setup/wizard',
+    industries,
+    orgIndustry: org.rows[0]?.industry ?? null,
+  }
 }
 
 export function featuresSpec(data: FeaturesData): PageSpec {
@@ -78,6 +103,8 @@ export function featuresSpec(data: FeaturesData): PageSpec {
         features: data.features,
         disableStatus: data.disableStatus,
         wizardHref: data.wizardHref,
+        industries: data.industries,
+        orgIndustry: data.orgIndustry,
       }),
     ],
   })

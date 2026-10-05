@@ -3280,7 +3280,7 @@
         "singular": "Identificador de item",
         "description": "Valores GTIN, UPC, EAN e internos exatos para identificar itens durante a leitura."
       },
-            "channel-account-maps": {
+      "channel-account-maps": {
         "title": "Contas contábeis do canal",
         "singular": "Conta contábil do canal",
         "description": "Em qual conta do razão cada canal contabiliza, por gateway e jurisdição fiscal, com datas de vigência."
@@ -4085,7 +4085,7 @@
         "last": "Último valor",
         "uniqueCount": "Valores distintos"
       },
-            "channelAccountRole": {
+      "channelAccountRole": {
         "gateway_clearing": "Compensação de gateway",
         "revenue": "Receita",
         "discount": "Descontos",
@@ -5136,11 +5136,20 @@
         "dependents": "Desative primeiro o recurso dependente: {features}."
       },
       "categories": {
-        "sales": "Vendas e clientes",
-        "operations": "Operações",
-        "accounting": "Contabilidade",
+        "finance": "Finanças",
+        "sales": "Vendas",
+        "billing": "Faturamento",
+        "inventory": "Estoque",
+        "projects": "Projetos",
+        "people": "Pessoas",
+        "industries": "Setores",
         "platform": "Plataforma"
-      }
+      },
+      "tabsAria": "Grupos de funcionalidades",
+      "searchPlaceholder": "Pesquisar funcionalidades…",
+      "noMatches": "Nenhuma funcionalidade corresponde a “{query}”.",
+      "otherIndustryModules": "Outros módulos setoriais",
+      "yourIndustry": "Seu setor"
     },
     "readiness": {
       "navTitle": "Guia de entrada em operação"

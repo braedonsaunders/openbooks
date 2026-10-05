@@ -3235,7 +3235,7 @@
         "singular": "Identificador de artículo",
         "description": "Valores GTIN, UPC, EAN e internos exactos para identificar artículos al escanear."
       },
-            "channel-account-maps": {
+      "channel-account-maps": {
         "title": "Cuentas contables del canal",
         "singular": "Cuenta contable del canal",
         "description": "A qué cuenta del libro mayor contabiliza cada canal, por pasarela y jurisdicción fiscal, con fechas de vigencia."
@@ -4040,7 +4040,7 @@
         "last": "Último valor",
         "uniqueCount": "Valores distintos"
       },
-            "channelAccountRole": {
+      "channelAccountRole": {
         "gateway_clearing": "Compensación de pasarela",
         "revenue": "Ingresos",
         "discount": "Descuentos",
@@ -5031,9 +5031,13 @@
       "enabled": "{name} activada",
       "disabled": "{name} desactivada",
       "categories": {
-        "sales": "Ventas y clientes",
-        "operations": "Operaciones",
-        "accounting": "Contabilidad",
+        "finance": "Finanzas",
+        "sales": "Ventas",
+        "billing": "Facturación",
+        "inventory": "Inventario",
+        "projects": "Proyectos",
+        "people": "Personas",
+        "industries": "Sectores",
         "platform": "Plataforma"
       },
       "impacts": {
@@ -5092,7 +5096,12 @@
       "blockedReason": "No se puede desactivar: {items}.",
       "childOptions": "{count, plural, one {# opción al activar} other {# opciones al activar}}",
       "confirmDisable": "¿Desactivar {name}?\n\nEsto oculta {items}. Los datos se conservan y vuelven si reactiva.",
-      "countOn": "{n} de {total} activos"
+      "countOn": "{n} de {total} activos",
+      "tabsAria": "Grupos de funciones",
+      "searchPlaceholder": "Buscar funciones…",
+      "noMatches": "Ninguna función coincide con «{query}».",
+      "otherIndustryModules": "Otros módulos sectoriales",
+      "yourIndustry": "Su sector"
     },
     "bankFeeds": {
       "navTitle": "Feeds bancarios"

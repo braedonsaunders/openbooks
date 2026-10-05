@@ -698,6 +698,9 @@ export const INDUSTRIES: IndustryDef[] = [
     category: 'commerce',
     features: {
       inventory: true,
+      // The vertical's own module: bills of materials, work orders and
+      // production costing ride on inventory, enabled above.
+      manufacturing: true,
       equipment: true,
       projects: false,
       fieldTickets: false,

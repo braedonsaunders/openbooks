@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/features', scrollIntoView: false, resizeObserver: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/features', scrollIntoView: false })
 window.confirm = (() => {
   throw new Error('native window.confirm must not be used')
 }) as typeof window.confirm
@@ -18,7 +18,15 @@ Object.assign(globalThis, {
 })
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/admin/setup/features' } })
+// The Projects tab is selected by URL, exactly as the tab strip links it.
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return{push(){},refresh(){},replace(){},back(){},forward(){}}}' +
+      "export function usePathname(){return '/admin/setup/features'}" +
+      "export function useSearchParams(){return new URLSearchParams('tab=projects')}",
+  },
+})
 registerHooks({
   resolve(specifier, context, next) {
 
@@ -68,7 +76,7 @@ async function mount() {
         <ConfirmRoot />
         <FeaturesWorkspace
           features={['projects', 'timeTracking', 'fieldTime'].map(
-            (key, index, keys) => ({ key, category: 'operations', enabled: true, ...(index ? { parentKey: keys[index - 1] } : {}) }),
+            (key, index, keys) => ({ key, category: 'projects', enabled: true, ...(index ? { parentKey: keys[index - 1] } : {}) }),
           )}
           disableStatus={{ projects: { blocked: false, impacts: [{ labelKey: 'reconciliations', count: 2 }] } }}
         />
