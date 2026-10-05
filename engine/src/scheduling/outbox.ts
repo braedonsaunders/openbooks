@@ -84,6 +84,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "saas_metrics",
   "usage_rating",
   "stripe_billing_import",
+  "autopay_collection",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -361,6 +362,7 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
  * domain pages, like the overhead C-55 notice's setup href.
  */
 export const DUNNING_SCAN_FAILED_NOTICE_KIND = "dunning_scan_failed";
+export const AUTOPAY_SCAN_FAILED_NOTICE_KIND = "autopay_scan_failed";
 export const PROPERTY_BILLING_SCAN_FAILED_NOTICE_KIND = "property_billing_scan_failed";
 const COLLECTIONS_HREF = "/collections";
 const PROPERTY_MANAGEMENT_HREF = "/property-management";
@@ -522,6 +524,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "subscription_billing") {
     const { runDueSubscriptions } = await import("../billing/subscription-billing.ts");
     await runDueSubscriptions();
+    return;
+  }
+  if (row.kind === "autopay_collection") {
+    const { runAutopayCollection } = await import("../payments/autopay.ts");
+    const result = await runAutopayCollection();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "autopay collection",
+      noticeKind: AUTOPAY_SCAN_FAILED_NOTICE_KIND,
+      href: COLLECTIONS_HREF,
+      remedy: "Review payment methods and enrollments in Collections; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === "saas_metrics") {

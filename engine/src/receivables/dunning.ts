@@ -113,6 +113,41 @@ export function selectDueStage(
   return candidates[0] ?? null;
 }
 
+/**
+ * The latest autopay attempt for a dunning letter's invoice, as template
+ * variables. Read here in plain SQL rather than importing the payments
+ * module: collections stays a communications layer with no engine dependency
+ * on the charging engine. Absent attempts render blank, so letters for
+ * never-enrolled invoices read exactly as before.
+ */
+async function readAutopayRetryVars(
+  orgId: string,
+  documentId: string,
+): Promise<{ autopayStatus: string; autopayNextRetry: string; autopayDecline: string }> {
+  const empty = { autopayStatus: "", autopayNextRetry: "", autopayDecline: "" };
+  const row = (await db.execute<{ status: string; nextRetryOn: string | null; declineCode: string | null }>(sql`
+    select status, next_retry_on::text as "nextRetryOn", decline_code as "declineCode"
+      from collection_attempts
+     where org_id = ${orgId} and invoice_id = ${documentId}
+     order by retry_position desc limit 1
+  `).catch((error: unknown) => {
+    // Pre-autopay databases have no collection_attempts yet: letters send
+    // without retry state instead of failing the whole tick. Anything else
+    // (a real storage fault) still fails loudly. The pg code rides on the
+    // driver's cause — DrizzleQueryError itself carries none.
+    const pgCode = (error as { code?: string }).code
+      ?? ((error as { cause?: { code?: string } }).cause?.code);
+    if (pgCode === "42P01") return { rows: [] as { status: string; nextRetryOn: string | null; declineCode: string | null }[] };
+    throw error;
+  })).rows[0];
+  if (!row) return empty;
+  return {
+    autopayStatus: row.status,
+    autopayNextRetry: row.nextRetryOn ?? "",
+    autopayDecline: row.declineCode ?? "",
+  };
+}
+
 /** Minimal, dependency-free {{token}} substitution for reminder templates. */
 export function renderTemplate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, key: string) =>
@@ -455,6 +490,7 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
             dueDate: doc.dueDate,
             daysOverdue,
             orgName,
+            ...(await readAutopayRetryVars(orgId, doc.id)),
           };
           const subject = renderTemplate(stage.subjectTemplate, vars);
           const body = renderTemplate(stage.bodyTemplate, vars);
