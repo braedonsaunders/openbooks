@@ -30,6 +30,16 @@ export {
 } from "./external-links.ts";
 export { listAccountMaps, upsertAccountMap } from "./account-maps.ts";
 export {
+  approveExceptionSuggestion,
+  exceptionGroupKey,
+  normalizeExceptionSku,
+  rejectExceptionSuggestion,
+  similarExceptionOrderIds,
+  skuMatchScore,
+  suggestExceptionFix,
+  titleMatchScore,
+} from "./exception-assistance.ts";
+export {
   listChannelLocations,
   unlinkChannelLocation,
   upsertChannelLocation,
