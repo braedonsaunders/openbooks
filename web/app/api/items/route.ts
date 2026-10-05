@@ -11,6 +11,7 @@ import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exa
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../lib/list-params'
 import { loadItem } from './_lib'
+import { parseItemShippingFields, type ItemShippingValues } from './shipping-item-fields'
 import { resolveIdempotentReplay } from '@/lib/api/idempotency'
 
 
@@ -58,6 +59,11 @@ const itemCreateSchema = z.object({
   costRecoveryAccountId: nullableText,
   taxCodeId: nullableText,
   showOnTimesheet: z.boolean().optional(),
+  weight: nullableText,
+  weightUnit: nullableText,
+  dimensions: z.unknown().nullable().optional(),
+  hsCode: nullableText,
+  countryOfOrigin: nullableText,
   isActive: z.boolean().optional(),
   custom: z.record(z.string(), z.json()).optional(),
   recognitionRuleId: nullableText,
@@ -173,6 +179,26 @@ export const POST = defineRoute({
       if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'timeTracking'))) {
         throw new CreateNotFound()
       }
+      const touchesShipping = body.weight !== undefined
+        || body.weightUnit !== undefined
+        || body.dimensions !== undefined
+        || body.hsCode !== undefined
+        || body.countryOfOrigin !== undefined
+      if (touchesShipping && !(await isFeatureEnabled(gate.user.orgId, 'shippingHub'))) {
+        throw new CreateNotFound()
+      }
+      const shippingValues: ItemShippingValues = {}
+      if (touchesShipping) {
+        const parsed = parseItemShippingFields({
+          weight: body.weight,
+          weightUnit: body.weightUnit,
+          dimensions: body.dimensions,
+          hsCode: body.hsCode,
+          countryOfOrigin: body.countryOfOrigin,
+        })
+        if (!parsed.ok) throw new CreateInvalid(parsed.message)
+        Object.assign(shippingValues, parsed.values)
+      }
       const touchesRevenueRecognition = body.recognitionRuleId !== undefined
         || body.deferredAccountId !== undefined
         || body.createPlansOn !== undefined
@@ -234,6 +260,11 @@ export const POST = defineRoute({
         cost_recovery_account_id: references.costRecoveryAccountId,
         tax_code_id: references.taxCodeId,
         show_on_timesheet: body.showOnTimesheet === true,
+        weight: shippingValues.weight ?? null,
+        weight_unit: shippingValues.weightUnit ?? null,
+        dimensions: shippingValues.dimensions ?? null,
+        hs_code: shippingValues.hsCode ?? null,
+        country_of_origin: shippingValues.countryOfOrigin ?? null,
         recognition_rule_id: references.recognitionRuleId,
         deferred_account_id: references.deferredAccountId,
         create_plans_on: createPlansOn,
@@ -251,14 +282,19 @@ export const POST = defineRoute({
           (id, org_id, kind, code, name, description, category, unit,
            default_rate, default_cost, income_account_id, expense_account_id,
            payroll_expense_account_id, cost_recovery_account_id, tax_code_id,
-           show_on_timesheet, recognition_rule_id, deferred_account_id,
+           show_on_timesheet, weight, weight_unit, dimensions, hs_code, country_of_origin,
+           recognition_rule_id, deferred_account_id,
            create_plans_on, revenue_allocation, standalone_selling_price,
            is_active, custom, created_by, updated_by)
         values
           (${requestId}, ${gate.user.orgId}, ${body.kind}, ${code}, ${name}, ${description}, ${category}, ${unit},
            ${defaultRateResult.value}, ${defaultCostResult.value}, ${references.incomeAccountId}, ${references.expenseAccountId},
            ${references.payrollExpenseAccountId}, ${references.costRecoveryAccountId}, ${references.taxCodeId},
-           ${body.showOnTimesheet === true}, ${references.recognitionRuleId}, ${references.deferredAccountId},
+           ${body.showOnTimesheet === true},
+           ${shippingValues.weight ?? null}, ${shippingValues.weightUnit ?? null},
+           ${shippingValues.dimensions ? JSON.stringify(shippingValues.dimensions) : null}::jsonb,
+           ${shippingValues.hsCode ?? null}, ${shippingValues.countryOfOrigin ?? null},
+           ${references.recognitionRuleId}, ${references.deferredAccountId},
            ${createPlansOn}, ${revenueAllocation}, ${standalonePriceResult.value},
            ${isActive}, ${JSON.stringify(validatedCustom.cleaned)}::jsonb, ${gate.user.id}, ${gate.user.id})
         on conflict (id) do nothing

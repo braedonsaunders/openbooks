@@ -25,7 +25,16 @@
     "expenseAccount": "Expense account",
     "payrollCostingAccount": "Payroll costing account",
     "taxCode": "Tax code",
-    "family": "Family"
+    "family": "Family",
+    "weight": "Weight",
+    "weightUnit": "Weight unit",
+    "dimUnit": "Size unit",
+    "length": "Length",
+    "width": "Width",
+    "height": "Height",
+    "dimensions": "Package size",
+    "hsCode": "HS code",
+    "countryOfOrigin": "Country of origin"
   },
   "kinds": {
     "service": "Service",
@@ -54,7 +63,7 @@
     "gift_card": "A stored-value sale: posts to the gift card liability, never revenue, and mints a redeemable code on posting."
   },
   "drawer": {
-    "tabs": { "overview": "Overview", "pricing": "Pricing", "accounting": "Accounting", "costing": "Inventory", "revenue": "Revenue recognition" },
+    "tabs": { "overview": "Overview", "pricing": "Pricing", "accounting": "Accounting", "costing": "Inventory", "revenue": "Revenue recognition", "shipping": "Shipping" },
     "newItem": "New item",
     "chooseKindTitle": "Choose an item type",
     "chooseKindDescription": "Start with the accounting and operational behavior this item needs. You can confirm the type again before creating it.",
@@ -424,5 +433,23 @@
       "valueLabel": "Option value",
       "done": "Family {family} created"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "Grams",
+      "kg": "Kilograms",
+      "oz": "Ounces",
+      "lb": "Pounds"
+    },
+    "dimUnits": {
+      "cm": "Centimeters",
+      "in": "Inches"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "Length",
+    "widthPlaceholder": "Width",
+    "heightPlaceholder": "Height",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "US"
   }
 }

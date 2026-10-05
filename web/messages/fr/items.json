@@ -25,7 +25,16 @@
     "expenseAccount": "Compte de charges",
     "payrollCostingAccount": "Compte de coût de paie",
     "taxCode": "Code de taxe",
-    "family": "Famille"
+    "family": "Famille",
+    "weight": "Poids",
+    "weightUnit": "Unité de poids",
+    "dimUnit": "Unité de taille",
+    "length": "Longueur",
+    "width": "Largeur",
+    "height": "Hauteur",
+    "dimensions": "Format du colis",
+    "hsCode": "Code SH",
+    "countryOfOrigin": "Pays d’origine"
   },
   "kinds": {
     "service": "Service",
@@ -54,7 +63,7 @@
     "gift_card": "Une vente de valeur stockée : comptabilisée au passif, jamais en produits, et émet un code utilisable à la comptabilisation."
   },
   "drawer": {
-    "tabs": { "overview": "Vue d’ensemble", "pricing": "Tarification", "accounting": "Comptabilité", "costing": "Inventaire", "revenue": "Comptabilisation des produits" },
+    "tabs": { "overview": "Vue d’ensemble", "pricing": "Tarification", "accounting": "Comptabilité", "costing": "Inventaire", "revenue": "Comptabilisation des produits", "shipping": "Expédition" },
     "newItem": "Nouvel article",
     "chooseKindTitle": "Choisir un type d’article",
     "chooseKindDescription": "Commencez par le comportement comptable et opérationnel requis. Vous pourrez confirmer le type avant la création.",
@@ -380,5 +389,23 @@
       "valueLabel": "Valeur d'option",
       "done": "Famille {family} créée"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "Grammes",
+      "kg": "Kilogrammes",
+      "oz": "Onces",
+      "lb": "Livres"
+    },
+    "dimUnits": {
+      "cm": "Centimètres",
+      "in": "Pouces"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "Longueur",
+    "widthPlaceholder": "Largeur",
+    "heightPlaceholder": "Hauteur",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "FR"
   }
 }

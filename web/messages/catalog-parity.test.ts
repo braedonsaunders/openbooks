@@ -3334,6 +3334,23 @@ const COGNATES = new Set<string>([
   'de:fulfillment.shipping.modeTest|Test',
   'de:fulfillment.shipping.modeLive|Live',
   'fr:fulfillment.shipping.modeTest|Test',
+  // Item shipping placeholders are storable-format examples, identical in
+  // every locale on purpose: decimals always use the point the API stores,
+  // the HS code is a worldwide goods code, and US is the example country.
+  'de:items.shipping.weightPlaceholder|2.5',
+  'es:items.shipping.weightPlaceholder|2.5',
+  'fr:items.shipping.weightPlaceholder|2.5',
+  'ja:items.shipping.weightPlaceholder|2.5',
+  'pt-BR:items.shipping.weightPlaceholder|2.5',
+  'zh:items.shipping.weightPlaceholder|2.5',
+  'de:items.shipping.hsPlaceholder|8471.30',
+  'es:items.shipping.hsPlaceholder|8471.30',
+  'fr:items.shipping.hsPlaceholder|8471.30',
+  'ja:items.shipping.hsPlaceholder|8471.30',
+  'pt-BR:items.shipping.hsPlaceholder|8471.30',
+  'zh:items.shipping.hsPlaceholder|8471.30',
+  'de:items.shipping.originPlaceholder|US',
+  'es:items.shipping.originPlaceholder|US',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {

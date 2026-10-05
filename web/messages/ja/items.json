@@ -25,7 +25,16 @@
     "expenseAccount": "費用勘定",
     "payrollCostingAccount": "給与原価勘定",
     "taxCode": "税コード",
-    "family": "ファミリー"
+    "family": "ファミリー",
+    "weight": "重量",
+    "weightUnit": "重量単位",
+    "dimUnit": "サイズ単位",
+    "length": "長さ",
+    "width": "幅",
+    "height": "高さ",
+    "dimensions": "梱包サイズ",
+    "hsCode": "HSコード",
+    "countryOfOrigin": "原産国"
   },
   "kinds": {
     "service": "サービス",
@@ -54,7 +63,7 @@
     "gift_card": "ストアドバリュー販売：収益ではなく負債に計上し、計上時に利用可能なコードを発行する。"
   },
   "drawer": {
-    "tabs": { "overview": "概要", "pricing": "価格", "accounting": "会計", "costing": "在庫", "revenue": "収益認識" },
+    "tabs": { "overview": "概要", "pricing": "価格", "accounting": "会計", "costing": "在庫", "revenue": "収益認識", "shipping": "配送" },
     "newItem": "新規品目",
     "chooseKindTitle": "品目タイプを選択",
     "chooseKindDescription": "必要な会計および運用上の動作から始めます。作成前にタイプを再確認できます。",
@@ -370,5 +379,23 @@
       "valueLabel": "オプション値",
       "done": "ファミリー{family}を作成しました"
     }
+  },
+  "shipping": {
+    "weightUnits": {
+      "g": "グラム",
+      "kg": "キログラム",
+      "oz": "オンス",
+      "lb": "ポンド"
+    },
+    "dimUnits": {
+      "cm": "センチメートル",
+      "in": "インチ"
+    },
+    "weightPlaceholder": "2.5",
+    "lengthPlaceholder": "長さ",
+    "widthPlaceholder": "幅",
+    "heightPlaceholder": "高さ",
+    "hsPlaceholder": "8471.30",
+    "originPlaceholder": "JP"
   }
 }

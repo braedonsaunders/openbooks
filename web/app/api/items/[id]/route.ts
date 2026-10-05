@@ -8,6 +8,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { loadItem } from '../_lib'
+import { parseItemShippingFields, type ItemShippingValues } from '../shipping-item-fields'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
@@ -89,6 +90,11 @@ const itemPatchSchema = z.object({
   costRecoveryAccountId: nullableText,
   taxCodeId: nullableText,
   showOnTimesheet: z.boolean().optional(),
+  weight: nullableText,
+  weightUnit: nullableText,
+  dimensions: z.unknown().nullable().optional(),
+  hsCode: nullableText,
+  countryOfOrigin: nullableText,
   isActive: z.boolean().optional(),
   custom: z.record(z.string(), z.json()).optional(),
   recognitionRuleId: nullableText,
@@ -347,6 +353,37 @@ export const PATCH = defineRoute({
       if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(user.orgId, 'timeTracking'))) {
         throw new PatchNotFound()
       }
+      // Shipping attributes only rate while the hub is on; the stored
+      // columns stay readable, but a new write without the feature refuses
+      // the same way a gated flag does.
+      const touchesShipping = body.weight !== undefined
+        || body.weightUnit !== undefined
+        || body.dimensions !== undefined
+        || body.hsCode !== undefined
+        || body.countryOfOrigin !== undefined
+      if (touchesShipping && !(await isFeatureEnabled(user.orgId, 'shippingHub'))) {
+        throw new PatchNotFound()
+      }
+      let shipWeight: string | null | undefined
+      let shipWeightUnit: string | null | undefined
+      let shipDimensions: ItemShippingValues['dimensions']
+      let shipHsCode: string | null | undefined
+      let shipOrigin: string | null | undefined
+      if (touchesShipping) {
+        const parsed = parseItemShippingFields({
+          weight: body.weight,
+          weightUnit: body.weightUnit,
+          dimensions: body.dimensions,
+          hsCode: body.hsCode,
+          countryOfOrigin: body.countryOfOrigin,
+        })
+        if (!parsed.ok) throw new PatchInvalid(parsed.message)
+        shipWeight = parsed.values.weight
+        shipWeightUnit = parsed.values.weightUnit
+        shipDimensions = parsed.values.dimensions
+        shipHsCode = parsed.values.hsCode
+        shipOrigin = parsed.values.countryOfOrigin
+      }
       // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
       // Turning that switch off must refuse a new write; the stored kind stays.
       if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
@@ -432,6 +469,11 @@ export const PATCH = defineRoute({
           cost_recovery_account_id = ${costRecoveryAccountId !== undefined ? costRecoveryAccountId : sql`cost_recovery_account_id`},
           tax_code_id = ${taxCodeId !== undefined ? taxCodeId : sql`tax_code_id`},
           show_on_timesheet = ${body.showOnTimesheet !== undefined ? body.showOnTimesheet : sql`show_on_timesheet`},
+          weight = ${shipWeight !== undefined ? shipWeight : sql`weight`},
+          weight_unit = ${shipWeightUnit !== undefined ? shipWeightUnit : sql`weight_unit`},
+          dimensions = ${shipDimensions !== undefined ? (shipDimensions ? JSON.stringify(shipDimensions) : null) : sql`dimensions`}::jsonb,
+          hs_code = ${shipHsCode !== undefined ? shipHsCode : sql`hs_code`},
+          country_of_origin = ${shipOrigin !== undefined ? shipOrigin : sql`country_of_origin`},
           recognition_rule_id = ${recognitionRuleId !== undefined ? recognitionRuleId : sql`recognition_rule_id`},
           deferred_account_id = ${deferredAccountId !== undefined ? deferredAccountId : sql`deferred_account_id`},
           create_plans_on = ${body.createPlansOn !== undefined ? body.createPlansOn : sql`create_plans_on`},

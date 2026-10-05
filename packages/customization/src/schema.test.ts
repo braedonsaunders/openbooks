@@ -377,6 +377,7 @@ test('items expose the universal customizable form and tab contract', () => {
     'accounting',
     'costing',
     'revenue',
+    'shipping',
   ])
   assert.deepEqual(
     item.headerFields.slice(0, 8).map((field) => field.key),
