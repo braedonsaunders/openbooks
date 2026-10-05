@@ -10,7 +10,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount 
   '@openbooks/engine/src/testing/fixtures.ts',
 )
 const { actorAllowedSubsidiaryIds } = await import('@openbooks/engine/src/organization/actor-subsidiaries.ts')
-const { createProgram, issueStoredValue } = await import('@openbooks/engine/src/stored-value/accounts.ts')
+const { createProgram, issueStoredValue, lookupStoredValueByCode } = await import('@openbooks/engine/src/stored-value/accounts.ts')
 const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
 const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
 
@@ -36,7 +36,7 @@ interface ReplayFixture {
 }
 
 async function seedReplayOrg(): Promise<ReplayFixture> {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
   const actorId = await withBypass(() => createScratchUser(org.orgId, 'SV App', 'sv_app'))
   const liability = await withBypass(() =>
     seedPostingAccount(org.orgId, '2600', 'Gift card liability', 'liability_current_other'),
@@ -54,6 +54,20 @@ async function seedReplayOrg(): Promise<ReplayFixture> {
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
       from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))).rows[0]!.id
+  // The application posts the payment dated today, outside the fixture's
+  // 2026-07 period: open the current month so the redemption reaches the
+  // scope and replay boundaries instead of the period guard.
+  const today = new Date().toISOString().slice(0, 10)
+  const year = Number(today.slice(0, 4))
+  const month = Number(today.slice(5, 7))
+  const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)
+  await withBypass(() => db.execute(sql`
+    insert into accounting_periods
+      (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
+    select ${randomUUID()}, ${org.orgId}, fiscal_calendar_id, ${year}, ${month}, ${today.slice(0, 7)},
+           ${`${today.slice(0, 7)}-01`}, ${endsOn}, false
+      from accounting_periods where id = ${org.periodId}
+    on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`))
   const program = await withBypass(() =>
     createProgram({
       orgId: org.orgId,
@@ -129,7 +143,9 @@ async function postRootInvoice(fx: ReplayFixture, amount: string): Promise<strin
       update documents set status = 'approved', updated_at = now()
        where id = ${id} and org_id = ${fx.orgId}`)
   })
-  await withBypass(() =>
+  // Prerequisite inserts stay bypass; posting runs the tenant path exactly
+  // as the application would.
+  await withOrgContext(fx.orgId, () =>
     postDocument(id, { control: { ar: fx.ar, ap: fx.ap, bank: fx.bank } }),
   )
   return id
@@ -137,7 +153,7 @@ async function postRootInvoice(fx: ReplayFixture, amount: string): Promise<strin
 
 /** Real application context with the actor's live resolved scope — never hand-built. */
 async function appContext(fx: ReplayFixture, userId: string) {
-  const scope = await withBypass(() => actorAllowedSubsidiaryIds(db, fx.orgId, userId))
+  const scope = await withOrgContext(fx.orgId, () => actorAllowedSubsidiaryIds(db, fx.orgId, userId))
   return {
     authz: {
       user: {
@@ -161,22 +177,59 @@ async function appContext(fx: ReplayFixture, userId: string) {
   }
 }
 
-test('a different card under the same key redeems fresh instead of replaying', { skip: !DB }, async () => {
+test('an identical retry replays the stored receipt', { skip: !DB }, async () => {
   const fx = await seedReplayOrg()
   try {
-    const inv1 = await postRootInvoice(fx, '100')
-    const inv2 = await postRootInvoice(fx, '100')
+    const inv = await postRootInvoice(fx, '100')
     const key = `app-replay-${randomUUID()}`
     const ctx = await appContext(fx, fx.rootActor)
-    const first = await redeemStoredValueForInvoice(ctx, { code: fx.codeA, invoiceId: inv1, amount: '100', idempotencyKey: key })
+    const first = await redeemStoredValueForInvoice(ctx, { code: fx.codeA, invoiceId: inv, amount: '100', idempotencyKey: key })
     assert.equal(first.replayed, false)
     assert.equal(first.result.accountId, fx.accountA, 'first receipt names the first card')
-    // Same key, same amount, different secret code: the hashed identity
-    // differs, so this must redeem the second card — never replay the first.
-    const second = await redeemStoredValueForInvoice(ctx, { code: fx.codeB, invoiceId: inv2, amount: '100', idempotencyKey: key })
-    assert.equal(second.replayed, false, 'a different code hashes differently and must not replay')
-    assert.equal(second.result.accountId, fx.accountB, 'second receipt names the second card')
-    assert.notEqual(second.result.entryId, first.result.entryId, 'two redemptions post two entries')
+    // Byte-identical input under the same key replays: no second payment,
+    // the same entry receipt comes back.
+    const again = await redeemStoredValueForInvoice(ctx, { code: fx.codeA, invoiceId: inv, amount: '100', idempotencyKey: key })
+    assert.equal(again.replayed, true, 'the identical retry replays instead of executing')
+    assert.equal(again.result.entryId, first.result.entryId, 'the replay returns the stored entry')
+    assert.equal(again.result.paymentId, first.result.paymentId, 'the replay returns the stored payment')
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId))
+  }
+})
+
+test('reusing a key with a different card conflicts instead of replaying', { skip: !DB }, async () => {
+  const fx = await seedReplayOrg()
+  try {
+    const inv = await postRootInvoice(fx, '100')
+    const key = `app-replay-${randomUUID()}`
+    const ctx = await appContext(fx, fx.rootActor)
+    const balanceBefore = await withOrgContext(fx.orgId, () =>
+      lookupStoredValueByCode(fx.orgId, fx.codeB, ctx.authz.allowedSubsidiaryIds))
+    const paymentsBefore = await withOrgContext(fx.orgId, () =>
+      db.execute<{ count: number }>(sql`
+        select count(*)::int as count from documents
+         where org_id = ${fx.orgId} and kind = 'customer_payment'`))
+    const first = await redeemStoredValueForInvoice(ctx, { code: fx.codeA, invoiceId: inv, amount: '100', idempotencyKey: key })
+    assert.equal(first.replayed, false)
+    // Same key, invoice and amount, but a different secret code: the hashed
+    // identity differs, so the stored key refuses instead of replaying the
+    // first card's receipt or executing the second card.
+    const error = await redeemStoredValueForInvoice(ctx, { code: fx.codeB, invoiceId: inv, amount: '100', idempotencyKey: key }).then(
+      () => null,
+      (error: unknown) => error,
+    )
+    assert.ok(error instanceof ApplicationError, 'the changed card fails closed')
+    assert.equal(error.status, 409, 'key reuse with different input is a conflict')
+    assert.match(error.message, /already used with different input/, 'the refusal names the conflict')
+    assert.ok(!JSON.stringify(error).includes(fx.accountA), 'no hidden account id rides the refusal')
+    const balanceAfter = await withOrgContext(fx.orgId, () =>
+      lookupStoredValueByCode(fx.orgId, fx.codeB, ctx.authz.allowedSubsidiaryIds))
+    assert.equal(balanceAfter?.balanceMinor, balanceBefore?.balanceMinor, 'the second card is untouched')
+    const paymentsAfter = await withOrgContext(fx.orgId, () =>
+      db.execute<{ count: number }>(sql`
+        select count(*)::int as count from documents
+         where org_id = ${fx.orgId} and kind = 'customer_payment'`))
+    assert.equal(paymentsAfter.rows[0]!.count, paymentsBefore.rows[0]!.count + 1, 'only the first redemption posted a payment')
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId))
   }
