@@ -77,8 +77,8 @@ export async function applyEarningPaymentKinds(
       `)).rows[0];
       const expenseAccountId = component.expense_account_id ?? args.wageExpenseAccountId;
       const problem = nonCashOffsetProblem(account ? { id: accountId, type: account.type } : undefined, expenseAccountId == null ? null : String(expenseAccountId));
-      if (problem) {
-        throw new PayrollError(`non-cash component "${String(component.name)}": ${problem} — configure its non-cash account in Payroll components`);
+      if (problem || !account) {
+        throw new PayrollError(`non-cash component "${String(component.name)}": ${problem ?? "the non-cash offset account is not available"} — configure its non-cash account in Payroll components`);
       }
       if (!account.in_scope || (account.currency_restriction !== null && account.currency_restriction !== args.currency)) {
         throw new PayrollError(`non-cash component "${String(component.name)}" has a clearing account outside the pay run's entity or currency — select an account available to this entity and ${args.currency}`);
