@@ -3,7 +3,7 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
-import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
+import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
 import { issueInventory, type IssueInput } from "./movements.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
@@ -56,7 +56,11 @@ export async function assertInvoiceIssuesPostable(
   orgId: string,
   documentId: string,
 ): Promise<void> {
-  if (!(await inventoryFeatureEnabled(runner, orgId))) return;
+  if (!(await inventoryFeatureEnabled(runner, orgId))) {
+    await assertInventoryOffHoldsNoStock(runner, orgId,
+      (await loadDocumentInventoryLines(runner, orgId, documentId)).map((line) => line.itemId), "invoice");
+    return;
+  }
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
   if (await isFulfilmentGovernedInvoice(runner, orgId, documentId)) return;
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
@@ -248,7 +252,11 @@ export async function applySalesFulfillmentInventoryIssues(
   date: string,
   subsidiaryId: string | null,
 ): Promise<number> {
-  if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
+  if (!(await inventoryFeatureEnabled(runner, orgId))) {
+    await assertInventoryOffHoldsNoStock(runner, orgId,
+      (await loadDocumentInventoryLines(runner, orgId, documentId)).map((line) => line.itemId), "shipment");
+    return 0;
+  }
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
   if (lines.length === 0) return 0;
   const ctx = await loadSubsidiaryContext(runner, orgId);
@@ -383,7 +391,11 @@ export async function applyInventoryIssuesForInvoice(
   date: string,
   subsidiaryId: string,
 ): Promise<number> {
-  if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
+  if (!(await inventoryFeatureEnabled(db, orgId))) {
+    await assertInventoryOffHoldsNoStock(db, orgId,
+      (await loadDocumentInventoryLines(db, orgId, documentId)).map((line) => line.itemId), "invoice");
+    return 0;
+  }
   if (await isFulfilmentGovernedInvoice(db, orgId, documentId)) return 0;
   return db.transaction(async (tx) => {
     const lines = await loadDocumentInventoryLines(tx, orgId, documentId);
