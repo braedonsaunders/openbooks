@@ -14,6 +14,7 @@ import { type PostingDeps, PostingError } from "../journal/posting-contracts.ts"
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
+import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
@@ -149,6 +150,22 @@ export async function regenerateGlImpactTx(
         ...deps,
         storeCreditLiabilityAccountId: await resolveStoreCreditLiability(tx, doc.orgId, custom.storeCreditProgramId),
       };
+    }
+  }
+  if ((doc.kind === "cash_sale" || doc.kind === "cash_refund") && !deps.cashTenders) {
+    try {
+      deps = {
+        ...deps,
+        cashTenders: await resolveCashPostingTenders(tx, doc.orgId, doc.id, {
+          documentNumber: doc.documentNumber,
+          kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
+          partyId: doc.partyId,
+          custom: doc.custom,
+        }),
+      };
+    } catch (error) {
+      if (error instanceof TenderRefusal) throw new PostingError(error.message);
+      throw error;
     }
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {

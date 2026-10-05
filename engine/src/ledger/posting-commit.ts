@@ -18,6 +18,7 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../reco
 import { allocateEntryNumber, nextFreeEntryNumber } from "../records/entry-number.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
+import { redeemCashSaleTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { enqueueProviderCommitTx, PROVIDER_COMMIT_KINDS } from "../tax/provider-commit.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
@@ -319,6 +320,24 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       throw new PostingError(
         `document ${doc.documentNumber} was already posted or voided`,
       );
+    }
+
+    // A cash sale's stored-value tenders redeem inside the posting commit:
+    // the journal above already debited the liability, so this moves the
+    // subledger against that entry. An overdrawn card throws here and the
+    // whole unit — journal included — rolls back, so a sale never posts
+    // money the till never received. Historical replay replays the journal,
+    // never the subledger dance, so it stands down.
+    if (doc.kind === "cash_sale" && !deps.migration) {
+      try {
+        await redeemCashSaleTenders(doc.orgId, doc.id, {
+          journalEntryId: entry.id,
+          actorId: options.audit?.actorId ?? null,
+        });
+      } catch (error) {
+        if (error instanceof TenderRefusal) throw new PostingError(error.message);
+        throw error;
+      }
     }
 
     // Provider commit tracking rides in the posting transaction: a post that
