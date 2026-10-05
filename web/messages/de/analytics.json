@@ -835,8 +835,8 @@
         "forecastSeasonality": {
           "auto": "Auto-Erkennung",
           "none": "Keine",
-          "monthly": "Monatlich",
-          "quarterly": "Quartalsweise"
+          "monthly": "Jahreszyklus",
+          "quarterly": "Quartalszyklus"
         },
         "forecastAdjustment": {
           "neg10": "Rezession (−10 %)",
