@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { isMatchableSettlementLineKind, setSettlementLineDocument, settlementLineDocumentInEntity } from "../payments/psp-settlement.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
-import { db, withOrgContext } from "../platform/db.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
+import { db } from "../platform/db.ts";
 import { CommerceError } from "./errors.ts";
 
 /**
@@ -215,7 +215,7 @@ async function resolveLineDocument(
       return {
         status: "unmatched",
         reason: "linked_missing",
-        remedy: "The linked document is gone from this organization; link the line to its replacement receipt.",
+        remedy: "The linked reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     if (doc.status !== "posted") {
@@ -255,7 +255,7 @@ async function resolveLineDocument(
         return {
           status: "unmatched",
           reason: "linked_missing",
-          remedy: "The linked document is gone from this organization; link the line to its replacement receipt.",
+          remedy: "The claimed reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
         };
       }
       if (doc.status !== "posted") {
@@ -384,7 +384,13 @@ export async function matchPayoutLines(
   // unrestricted on a forgotten actor.
   const scope = allowedSubsidiaryIds;
   if (scope === undefined) throw new ScopeNotFoundError();
-  return withOrgContext(orgId, async () => {
+  // One repeatable-read snapshot for the discovery reads: the batch guard
+  // runs before any line loads, so a payout outside the caller's entity
+  // refuses as missing without verdicts, and a subsidiary rehomed mid-match
+  // can neither leak another entity's lines into these verdicts nor tear
+  // them. Links land after, each through the link writer's own transaction,
+  // which re-checks scope and entity before writing.
+  const plan = await withScopeSnapshot(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
       refuse(
         "payout_match_feature_off",
@@ -403,48 +409,53 @@ export async function matchPayoutLines(
         "Reload the payouts workspace and match a payout in this organization.",
       );
     }
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     const lines = (await db.execute<SettlementLineRow>(sql`
       select id, kind, external_ref, description, amount::text, currency, document_id, meta
         from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
        order by line_number
     `)).rows;
-    const verdicts: PayoutLineMatch[] = [];
+    const resolved = [];
     for (const line of lines) {
-      // Sequential lines share one workspace view: parallel links would
-      // interleave their row locks and report stale verdicts.
-      const resolved = await resolveLineDocument(orgId, batch.provider, line, scope, batch.subsidiary_id);
-      if (!resolved || resolved.status !== "matched") {
-        if (!resolved) {
-          verdicts.push({ status: "not_applicable", lineId: line.id, kind: line.kind, reason: `${line.kind} lines never link to an order` });
-        } else {
-          verdicts.push({ status: "unmatched", lineId: line.id, kind: line.kind, reason: resolved.reason, remedy: resolved.remedy });
-        }
-        continue;
-      }
-      if (line.document_id === resolved.documentId) {
-        verdicts.push({ lineId: line.id, ...resolved });
-        continue;
-      }
-      try {
-        await setSettlementLineDocument(orgId, batchId, line.id, resolved.documentId, actorId, scope);
-        verdicts.push({ lineId: line.id, ...resolved });
-      } catch (error) {
-        verdicts.push({
-          status: "unmatched",
-          lineId: line.id,
-          kind: line.kind,
-          reason: "link_failed",
-          remedy: error instanceof Error ? error.message.slice(0, 300) : "Linking failed; link the receipt manually.",
-        });
-      }
+      resolved.push({ line, outcome: await resolveLineDocument(orgId, batch.provider, line, scope, batch.subsidiary_id) });
     }
-    return {
-      batchId,
-      matched: verdicts.filter((verdict) => verdict.status === "matched").length,
-      unmatched: verdicts.filter((verdict) => verdict.status === "unmatched").length,
-      notApplicable: verdicts.filter((verdict) => verdict.status === "not_applicable").length,
-      lines: verdicts,
-    };
+    return resolved;
   });
+  const verdicts: PayoutLineMatch[] = [];
+  for (const { line, outcome } of plan) {
+    // Sequential lines share one workspace view: parallel links would
+    // interleave their row locks and report stale verdicts.
+    if (!outcome || outcome.status !== "matched") {
+      if (!outcome) {
+        verdicts.push({ status: "not_applicable", lineId: line.id, kind: line.kind, reason: `${line.kind} lines never link to an order` });
+      } else {
+        verdicts.push({ status: "unmatched", lineId: line.id, kind: line.kind, reason: outcome.reason, remedy: outcome.remedy });
+      }
+      continue;
+    }
+    if (line.document_id === outcome.documentId) {
+      verdicts.push({ lineId: line.id, ...outcome });
+      continue;
+    }
+    try {
+      await setSettlementLineDocument(orgId, batchId, line.id, outcome.documentId, actorId, scope);
+      verdicts.push({ lineId: line.id, ...outcome });
+    } catch (error) {
+      verdicts.push({
+        status: "unmatched",
+        lineId: line.id,
+        kind: line.kind,
+        reason: "link_failed",
+        remedy: error instanceof Error ? error.message.slice(0, 300) : "Linking failed; link the receipt manually.",
+      });
+    }
+  }
+  return {
+    batchId,
+    matched: verdicts.filter((verdict) => verdict.status === "matched").length,
+    unmatched: verdicts.filter((verdict) => verdict.status === "unmatched").length,
+    notApplicable: verdicts.filter((verdict) => verdict.status === "not_applicable").length,
+    lines: verdicts,
+  };
 }

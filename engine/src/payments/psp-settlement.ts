@@ -2599,9 +2599,12 @@ export async function setSettlementLineDocument(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and link the line again`,
       );
     }
+    // The candidate receipt is locked with the batch and line: a subsidiary
+    // rehome committing between this read and the link update would otherwise
+    // move the receipt under the scope and entity checks below.
     const doc = (await db.execute<{ id: string; kind: string; status: string; document_number: string | null; subsidiary_id: string | null }>(sql`
       select id, kind, status, document_number, subsidiary_id from documents
-       where id = ${documentId} and org_id = ${orgId}
+       where id = ${documentId} and org_id = ${orgId} for update
     `)).rows[0];
     if (!doc) {
       throw new PspSettlementError(

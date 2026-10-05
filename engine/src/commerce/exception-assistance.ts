@@ -18,7 +18,7 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
-import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
 import type { PayoutSubsidiaryScope } from "./payout-reconciliation.ts";
 import { db, withOrg } from "../platform/db.ts";
 
@@ -822,7 +822,12 @@ export async function suggestPayoutLineFix(
   lineId: string,
   allowedSubsidiaryIds: PayoutSubsidiaryScope,
 ): Promise<PayoutLineSuggestion> {
-  return suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true);
+  // One repeatable-read snapshot for the whole discovery fan-out: the scoped
+  // line read, candidate documents and similar enumeration all observe the
+  // same entity map, so a subsidiary rehomed mid-suggestion can neither leak
+  // another entity's evidence into the proposal nor tear it. Writes never run
+  // here — approval links later through the link writer's own transaction.
+  return withScopeSnapshot(orgId, () => suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true));
 }
 
 async function suggestPayoutLineFixInner(
@@ -934,7 +939,7 @@ async function suggestPayoutLineFixInner(
   if (dangling.length > 0) {
     return {
       lineId: line.id, batchId: line.batchId, similarCount: 1,
-      ...payoutManual(line.provider, "links_dangling", "The claimed document is gone", "The provider reference claims a document that no longer belongs to this organization. Find its replacement receipt and link the line to it manually.", dangling.flatMap((entry) => [...entry.signals, "The claimed document is gone from this organization."])),
+      ...payoutManual(line.provider, "links_dangling", "The claimed reference is unavailable in this payout's legal entity", "The provider reference names no receipt available in that entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.", dangling.flatMap((entry) => [...entry.signals, "The claimed reference resolves to no visible receipt in this payout's legal entity."])),
     };
   }
   return {
@@ -999,57 +1004,72 @@ export async function approvePayoutSuggestion(
       "rank",
     );
   }
+  // The approval discovers under the same scope as the proposal: the first
+  // read already refuses an out-of-scope or unknown-scope line as missing,
+  // before any candidate, count or manual text is built. Discovery reads run
+  // outside the write transaction — each suggestion observes its own
+  // repeatable-read snapshot — and the link writer re-validates every
+  // document inside its own transaction before writing.
+  if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
+    refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
+  }
+  const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
+  const suggestion = await suggestPayoutLineFix(orgId, lineId, allowedSubsidiaryIds);
+  const candidate = suggestion.candidates[input.rank];
+  if (!candidate) {
+    refuse(
+      "payout_assistance_candidate_unknown",
+      "The chosen fix is not one of the proposed candidates.",
+      "Reload the suggestion and approve one of the listed fixes.",
+      "rank",
+    );
+  }
+  if (candidate.action.type !== "link_document") {
+    refuse(
+      "payout_assistance_manual_only",
+      "This line has no document the assistant can link.",
+      candidate.detail,
+      "rank",
+    );
+  }
+  const targets = input.applyToSimilar
+    ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, allowedSubsidiaryIds, 200)
+    : [lineId];
+  const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
+  const plan: Array<{ targetId: string; batchId: string; documentId: string }> = [];
+  let skipped = 0;
+  for (const targetId of ordered) {
+    const live = targetId === lineId ? suggestion : await suggestPayoutLineFix(orgId, targetId, allowedSubsidiaryIds);
+    if (live.groupKey !== suggestion.groupKey) {
+      skipped += 1;
+      continue;
+    }
+    const pick = targetId === lineId ? candidate : live.candidates[0];
+    if (!pick || pick.action.type !== "link_document") {
+      skipped += 1;
+      continue;
+    }
+    const doc = await readSettlementDocument(orgId, pick.action.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
+    if (!doc || doc.status !== "posted") {
+      skipped += 1;
+      continue;
+    }
+    plan.push({ targetId, batchId: live.batchId, documentId: pick.action.documentId });
+  }
   return withOrg(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
       refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
     }
-    // The approval discovers under the same scope as the proposal: the
-    // first read already refuses an out-of-scope or unknown-scope line as
-    // missing, before any candidate, count or manual text is built.
-    const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
-    const suggestion = await suggestPayoutLineFix(orgId, lineId, allowedSubsidiaryIds);
-    const candidate = suggestion.candidates[input.rank];
-    if (!candidate) {
-      refuse(
-        "payout_assistance_candidate_unknown",
-        "The chosen fix is not one of the proposed candidates.",
-        "Reload the suggestion and approve one of the listed fixes.",
-        "rank",
-      );
-    }
-    if (candidate.action.type !== "link_document") {
-      refuse(
-        "payout_assistance_manual_only",
-        "This line has no document the assistant can link.",
-        candidate.detail,
-        "rank",
-      );
-    }
-    const targets = input.applyToSimilar
-      ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, allowedSubsidiaryIds, 200)
-      : [lineId];
-    const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
     const linked: Array<{ lineId: string; documentId: string }> = [];
-    let skipped = 0;
-    for (const targetId of ordered) {
-      const live = targetId === lineId ? suggestion : await suggestPayoutLineFix(orgId, targetId, allowedSubsidiaryIds);
-      if (live.groupKey !== suggestion.groupKey) {
-        skipped += 1;
-        continue;
-      }
-      const pick = targetId === lineId ? candidate : live.candidates[0];
-      if (!pick || pick.action.type !== "link_document") {
-        skipped += 1;
-        continue;
-      }
-      const doc = await readSettlementDocument(orgId, pick.action.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
+    for (const entry of plan) {
+      const doc = await readSettlementDocument(orgId, entry.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
       if (!doc || doc.status !== "posted") {
         skipped += 1;
         continue;
       }
-      await setSettlementLineDocument(orgId, live.batchId, targetId, pick.action.documentId, actor, allowedSubsidiaryIds);
-      await writePayoutApprovalAudit(orgId, actor, targetId, suggestion.code, `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`);
-      linked.push({ lineId: targetId, documentId: pick.action.documentId });
+      await setSettlementLineDocument(orgId, entry.batchId, entry.targetId, entry.documentId, actor, allowedSubsidiaryIds);
+      await writePayoutApprovalAudit(orgId, actor, entry.targetId, suggestion.code, `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`);
+      linked.push({ lineId: entry.targetId, documentId: entry.documentId });
     }
     if (linked.length === 0) {
       refuse(
