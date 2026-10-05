@@ -23,15 +23,28 @@ stubModules({
   },
   features: true,
   extra: {
-    '@openbooks/engine/platform/database': `export const db = { execute: async () => ({ rows: [] }) }`,
+    'server-only': `export {}`,
+    '@openbooks/engine/platform/database':
+      `export const db = { execute: async (q) => {` +
+      `const s = JSON.stringify(q);` +
+      `if (s.includes('journal_lines')) return { rows: [{ carrying: '0' }] };` +
+      `if (s.includes('contract_cost_amortization')) return { rows: [] };` +
+      `if (s.includes('from currencies')) return { rows: [{ minor_units: 2 }] };` +
+      `if (s.includes('from orgs')) return { rows: [{ base_currency: 'USD' }] };` +
+      `if (s.includes('count(*)')) return { rows: [{ n: '0' }] };` +
+      `return { rows: [] } } }`,
     '../../../../lib/setup/ref-options':
       `export async function loadAccounts(orgId){` +
       `globalThis.__contractCostsLoaderState.loadAccountsOrg = orgId;` +
       `return globalThis.__contractCostsLoaderState.accounts}`,
     '@openbooks/engine/revenue':
+      `export class ContractCostError extends Error {` +
+      `constructor(message, options){ super(message); this.code = options?.code ?? 'contract_cost_invalid';` +
+      `this.remedy = options?.remedy ?? '' } }` +
       `export async function contractCostAttentionItems(){return []}` +
       `export async function assetCarryingMinor(){return 0n}` +
       `export function minorUnitsToCanonical(minor){return String(minor)}` +
+      `export async function currencyExponent(){return 2}` +
       `export async function scheduleForAsset(){return []}`,
   },
 })

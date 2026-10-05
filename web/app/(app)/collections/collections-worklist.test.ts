@@ -8,7 +8,9 @@ const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({ navigation: 'export function redirect(path){throw new Error(`redirect:${path}`)}' })
 registerHooks({
   resolve(specifier, context, next) {
-
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+    }
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,
@@ -39,6 +41,9 @@ registerHooks({
     }
     if (specifier === '../../../lib/features' && context.parentURL?.endsWith('/web/app/(app)/collections/view.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function isFeatureEnabled(){return false}' }
+    }
+    if (specifier === '../../../lib/custom-reports' && context.parentURL?.endsWith('/web/app/(app)/collections/view.ts')) {
+      return { shortCircuit: true, url: 'data:text/javascript,export async function builtInReportDefinitionId(){return null}' }
     }
     return next(specifier, context)
   },

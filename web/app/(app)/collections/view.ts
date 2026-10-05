@@ -7,7 +7,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { isUuid, pickString } from '../../../lib/list-params'
+import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { builtInReportDefinitionId } from '../../../lib/custom-reports'
 import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { findCardsExpiringSoon, getRecoveryMetrics, MISSING_COLLECTION_POLICY } from '@openbooks/engine/payments/autopay'
@@ -50,6 +51,8 @@ export interface RecoveryDashboardData {
   window: { from: string; to: string }
   /** Tenant id of the governed collection-recovery-rate definition; null until seeded. */
   recoveryReportId: string | null
+  /** Whether the viewer may run the governed definition (reports.read). */
+  canRunReport: boolean
   metrics: {
     attempts: number
     invoicesWithFailures: number
@@ -80,7 +83,12 @@ export interface RecoveryDashboardData {
     brand: string | null
     last4: string | null
     expiresOn: string
-    currency: string
+    /**
+     * That customer's own latest invoice currency, or null when they have no
+     * invoice on file. Never another party's currency: the setup-link remedy
+     * refuses by name instead of pricing in it.
+     */
+    currency: string | null
   }[]
   hardStuck: {
     attemptId: string
@@ -143,7 +151,7 @@ export interface CollectionsData {
  * declines with no backup on file. Bounded lists — the Reports hub owns the
  * full history.
  */
-async function loadRecovery(orgId: string): Promise<RecoveryDashboardData> {
+async function loadRecovery(orgId: string, opts?: { canRunReport?: boolean }): Promise<RecoveryDashboardData> {
   const today = await businessToday(orgId)
   const window = { from: addCalendarDays(today, -89), to: addCalendarDays(today, 1) }
   const [metrics, expiringCards, awaitingAuthRows, hardStuckRows] = await Promise.all([
@@ -199,20 +207,33 @@ async function loadRecovery(orgId: string): Promise<RecoveryDashboardData> {
   const expiring = expiringCards.slice(0, 8)
   const awaitingAuth = awaitingAuthRows.rows
   const hardStuck = hardStuckRows.rows
-  const invoiceCurrency = (await db.execute<{ currency: string }>(sql`
-    select d.currency from documents d
-     where d.org_id = ${orgId} and d.kind = 'customer_invoice'
-     order by d.document_date desc limit 1
-  `)).rows[0]?.currency ?? 'USD'
+  // Setup-link currency is per customer, never the book's latest invoice:
+  // pricing one party's remedy in another party's currency misprices the
+  // provider session. Customers with no invoice carry null and refuse by
+  // name at send time.
+  const partyCurrency = new Map<string, string>()
+  if (expiring.length > 0) {
+    const partyIds = [...new Set(expiring.map((row) => row.partyId))]
+    const currencyRows = (await db.execute<{ partyId: string; currency: string }>(sql`
+      select d.party_id as "partyId", d.currency
+        from documents d
+       where d.org_id = ${orgId} and d.kind = 'customer_invoice'
+         and d.party_id = any(${partyIds})
+       order by d.document_date desc
+    `)).rows
+    for (const row of currencyRows) {
+      if (!partyCurrency.has(row.partyId)) partyCurrency.set(row.partyId, row.currency)
+    }
+  }
   // The governed recovery breakdown lives in the Reports hub; the dashboard
-  // links to the tenant's own definition rather than duplicating its lists.
-  const recoveryReport = ((await db.execute<{ id: string }>(sql`
-    select id from report_definitions
-     where org_id = ${orgId} and slug = 'collection-recovery-rate' limit 1
-  `))).rows[0] ?? null
+  // links to the tenant's own built-in definition rather than duplicating
+  // its lists. The shared resolver ensures the catalog row and refuses a
+  // tenant custom report that merely shares the slug.
+  const recoveryReportId = await builtInReportDefinitionId(orgId, 'collection-recovery-rate')
   return {
     window,
-    recoveryReportId: recoveryReport?.id ?? null,
+    recoveryReportId,
+    canRunReport: opts?.canRunReport ?? false,
     metrics: {
       attempts: metrics.attempts,
       invoicesWithFailures: metrics.invoicesWithFailures,
@@ -244,7 +265,7 @@ async function loadRecovery(orgId: string): Promise<RecoveryDashboardData> {
       brand: row.brand,
       last4: row.last4,
       expiresOn: row.expiresOn,
-      currency: invoiceCurrency,
+      currency: partyCurrency.get(row.partyId) ?? null,
     })),
     hardStuck,
   }
@@ -285,7 +306,10 @@ export async function loadCollections(
   let policyNotice: CollectionPolicyNotice | null = null
   if (autopayOn) {
     try {
-      recovery = await loadRecovery(authz.user.orgId)
+      // The drill link reaches the native report runner, which demands
+      // reports.read on top of this page's documents.manage: verify it
+      // before linking so the action never leads to a refusal.
+      recovery = await loadRecovery(authz.user.orgId, { canRunReport: can(authz, 'reports.read') })
     } catch (error) {
       if (!isMissingCollectionPolicy(error)) throw error
       policyNotice = {
@@ -329,7 +353,10 @@ export async function loadCollections(
           drawer: {
             attempt,
             canRetry: can(authz, 'autopay.manage'),
-            closeHref: '/collections',
+            // Closing returns to the attempts list underneath with its
+            // filters intact — never the bare page, which would drop the
+            // view and read as an unrelated body.
+            closeHref: mergeHref('/collections', sp, { attempt: undefined, view: 'attempts' }),
             remountKey: attempt.id,
           },
         },
@@ -363,7 +390,22 @@ export async function loadCollections(
           : worklistHref
             ? 'worklist'
             : 'policies'
-  const viewHref = (view: string) => `/collections?view=${view}`
+  // View tabs keep every other list control (search, filters, saved-view
+  // state) so switching views never silently resets the page around it, but
+  // a drawer belongs to its own view: crossing views closes it rather than
+  // carrying an open record onto an unrelated body. The attempt selector
+  // always clears (the server forces its view while it is open, so keeping
+  // it would override the tab); the record drawers survive only inside
+  // their own views.
+  const viewHref = (view: string) =>
+    mergeHref('/collections', sp, {
+      view,
+      attempt: undefined,
+      subscription: view === 'subscriptions' || view === 'plans' ? pickString(sp.subscription) : undefined,
+      mode: view === 'subscriptions' || view === 'plans' ? pickString(sp.mode) : undefined,
+      form: view === 'subscriptions' || view === 'plans' ? pickString(sp.form) : undefined,
+      policy: view === 'policies' ? pickString(sp.policy) : undefined,
+    })
   const attentionCount = recovery
     ? recovery.awaitingAuth.length + recovery.expiring.length + recovery.hardStuck.length
     : 0
@@ -423,15 +465,10 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
     layout: 'bare',
     header: [],
     body: [
-      {
-        // The recovery cockpit owns its URL view: it never shares the body
-        // with the console or the attempts list.
-        ...widgetBlock('recovery-dashboard', {
-          data: f('recovery'),
-          notice: f('policyNotice'),
-        }),
-        when: f('onRecovery'),
-      },
+      // The shell renders first on every view: it owns the page header and
+      // the native tab strip. On recovery and attempts it renders chrome
+      // only (the client mounts no panel there), so the header always
+      // precedes exactly one selected operational body below.
       widgetBlock('collections-shell', {
         title: f('title'),
         description: f('description'),
@@ -445,6 +482,15 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
         customers: f('customers'),
         incomeAccounts: f('incomeAccounts'),
       }),
+      {
+        // The recovery cockpit owns its URL view: it never shares the body
+        // with the console or the attempts list.
+        ...widgetBlock('recovery-dashboard', {
+          data: f('recovery'),
+          notice: f('policyNotice'),
+        }),
+        when: f('onRecovery'),
+      },
       {
         // The attempts list owns its URL view with its drawer: an open
         // attempt forces this view server-side, so the drawer always has
