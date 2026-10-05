@@ -1725,8 +1725,8 @@
         }
       }
     },
-    "unplacedAr": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar. Añada una fecha de vencimiento para incluirlas.",
-    "unplacedAp": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar. Añada una fecha de vencimiento para incluirlas."
+    "unplacedAr": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar.",
+    "unplacedAp": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar."
   },
   "trueCost": {
     "title": "Costo real",

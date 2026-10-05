@@ -1725,8 +1725,8 @@
         }
       }
     },
-    "unplacedAr": "{count, plural, one {# invoice has} other {# invoices have}} no due date and no payment history · {total} not forecast. Add a due date to place them.",
-    "unplacedAp": "{count, plural, one {# bill has} other {# bills have}} no due date and no payment history · {total} not forecast. Add a due date to place them."
+    "unplacedAr": "{count, plural, one {# invoice has} other {# invoices have}} no due date and no payment history · {total} not forecast.",
+    "unplacedAp": "{count, plural, one {# bill has} other {# bills have}} no due date and no payment history · {total} not forecast."
   },
   "trueCost": {
     "title": "True Cost",
