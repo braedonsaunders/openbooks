@@ -1,4 +1,5 @@
 import { Skeleton } from '@openbooks/ui'
+import { ViewTransition } from './view-transition'
 
 /**
  * In-shell content placeholder. The app shell (sidebar/header) stays mounted
@@ -10,37 +11,40 @@ import { Skeleton } from '@openbooks/ui'
  * placeholder reads correctly under either while the real page loads.
  *
  * Decorative only: hidden from assistive technology, since the loaded page
- * announces itself when it arrives.
+ * announces itself when it arrives. When it does, the placeholder fades out
+ * ahead of the page (the `skeleton-out` route transition).
  */
 export function PageSkeleton() {
   return (
-    <div className="flex h-full min-h-0 flex-col" aria-hidden="true">
-      <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-7 w-48" />
-            <div className="flex-1" />
-            <Skeleton className="h-9 w-24" />
-            <Skeleton className="h-9 w-24" />
+    <ViewTransition exit="skeleton-out" default="none">
+      <div className="flex h-full min-h-0 flex-col" aria-hidden="true">
+        <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
+          <div className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-7 w-48" />
+              <div className="flex-1" />
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 w-56" />
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-6 w-16" />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-8 w-56" />
-            <Skeleton className="h-6 w-16" />
-            <Skeleton className="h-6 w-16" />
-            <Skeleton className="h-6 w-16" />
+        </div>
+        <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-screen-2xl space-y-2 p-3 sm:p-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-2/3" />
           </div>
         </div>
       </div>
-      <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-screen-2xl space-y-2 p-3 sm:p-6">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-2/3" />
-        </div>
-      </div>
-    </div>
+    </ViewTransition>
   )
 }
