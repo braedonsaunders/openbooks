@@ -37,13 +37,11 @@ import {
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 import { exactMoney, isoDate } from "@/lib/api/json";
-// Settlement-side provider configuration spans payout import, not hosted
-// checkout: every settlement provider takes defaults, including the two
-// acceptance-only providers whose payouts never import.
+// Settlement-side provider configuration covers the five importable
+// providers only: acceptance-only providers keep their automation half on
+// the acceptance setup route, whose saves the engine merges by field.
 const configProvider = z.enum([
   "stripe",
-  "adyen",
-  "gocardless",
   "recurly",
   "chargebee",
   "shopify_payments",
