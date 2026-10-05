@@ -9,7 +9,7 @@ SET client_min_messages = warning;
 SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
 
 CREATE TABLE public.stored_value_programs (
- id uuid PRIMARY KEY, org_id uuid NOT NULL REFERENCES public.orgs(id),
+ id uuid DEFAULT public.uuid_generate_v7() PRIMARY KEY, org_id uuid NOT NULL REFERENCES public.orgs(id),
  name text NOT NULL, kind text NOT NULL,
  liability_account_id uuid, breakage_income_account_id uuid,
  breakage_policy text NOT NULL DEFAULT 'none',
@@ -38,7 +38,7 @@ CREATE POLICY org_isolation ON public.stored_value_programs
 COMMENT ON POLICY org_isolation ON public.stored_value_programs IS 'openbooks:org_isolation:v1';
 
 CREATE TABLE public.stored_value_accounts (
- id uuid PRIMARY KEY, org_id uuid NOT NULL REFERENCES public.orgs(id),
+ id uuid DEFAULT public.uuid_generate_v7() PRIMARY KEY, org_id uuid NOT NULL REFERENCES public.orgs(id),
  program_id uuid NOT NULL, kind text NOT NULL,
  code_hash text NOT NULL, code_last4 text NOT NULL,
  customer_party_id uuid, currency text NOT NULL,
@@ -70,7 +70,7 @@ CREATE INDEX stored_value_accounts_program ON public.stored_value_accounts(org_i
 CREATE INDEX stored_value_accounts_customer ON public.stored_value_accounts(org_id,customer_party_id);
 
 CREATE TABLE public.stored_value_entries (
- id uuid PRIMARY KEY, org_id uuid NOT NULL REFERENCES public.orgs(id),
+ id uuid DEFAULT public.uuid_generate_v7() PRIMARY KEY, org_id uuid NOT NULL REFERENCES public.orgs(id),
  account_id uuid NOT NULL, kind text NOT NULL,
  amount_minor bigint NOT NULL, balance_after bigint NOT NULL,
  currency text NOT NULL, document_id uuid, document_line_id uuid,
@@ -92,9 +92,15 @@ COMMENT ON POLICY org_isolation ON public.stored_value_entries IS 'openbooks:org
 CREATE INDEX stored_value_entries_account ON public.stored_value_entries(org_id,account_id);
 
 -- The entries table is the immutable stored-value ledger: corrections are
--- reversal entries, never edits or deletes of posted rows.
+-- reversal entries, never edits or deletes of posted rows. The single
+-- exception is scratch-org teardown, which marks its own transaction with
+-- the teardown org GUC (set only by the test fixture teardown) and may
+-- remove that org's rows.
 CREATE FUNCTION public.stored_value_entries_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_catalog AS $func$
 BEGIN
+ IF current_setting('openbooks.teardown_org', true) = OLD.org_id::text THEN
+  RETURN OLD;
+ END IF;
  RAISE EXCEPTION 'Stored-value entries are immutable; record a reversal entry instead.' USING ERRCODE='23514';
  RETURN NULL;
 END $func$;
