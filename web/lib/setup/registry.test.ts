@@ -486,3 +486,25 @@ test('Benefits is the sole configuration home and write authority for entitlemen
     const entity = SETUP_ENTITY_BY_KEY.get(key!)!; assert.equal(entity.rehomed, true); assert.equal(entity.writePermission, 'hrm.benefits.manage'); assert.equal(setupEntityHref(entity), destination);
   }
 });
+
+test('every domain-owned setup writer declares its import path', () => {
+  // Generic CRUD refuses command-owned and aggregate-owned entities, so the
+  // generic import writer must not be the one path that allows them. Each
+  // such entity declares importVia: rows travel through the engine command
+  // ('command') or import refuses them by name ('none').
+  const undeclared = SETUP_ENTITIES.filter(
+    (entity) => (entity.command ?? entity.mutationPath) && !entity.importVia,
+  ).map((entity) => entity.key)
+  assert.deepEqual(undeclared, [], `command-owned setup entities without an import mapping: ${undeclared.join(', ')}`)
+  // The declaration only takes its two shapes, and 'command' always pairs
+  // with the command marker whose engine call the import row travels.
+  for (const entity of SETUP_ENTITIES) {
+    assert.ok(
+      entity.importVia === undefined || entity.importVia === 'command' || entity.importVia === 'none',
+      `${entity.key} declares an unknown import path`,
+    )
+    if (entity.importVia === 'command') {
+      assert.ok(entity.command, `${entity.key} routes imports through a command it does not declare`)
+    }
+  }
+});
