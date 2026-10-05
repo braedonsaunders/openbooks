@@ -8,6 +8,7 @@ import {
   loadStoredValueProgram,
   lockStoredValueAccount,
   postStoredValueJournal,
+  priorStoredValueEntry,
   requireStoredValueFeature,
   storedValueEnabledFor,
   storedValueLiabilityControlAccount,
@@ -48,6 +49,19 @@ function proportionalDue(redeemedMinor: bigint, issuedMinor: bigint, recognizedM
   return due > recognizedMinor ? due - recognizedMinor : 0n;
 }
 
+/** The balance already moved, so the entry must be this scan's own: a
+ * conflict here is a concurrent scan, and throwing rolls the org's scan back
+ * rather than keeping a balance move no entry records. */
+function requireRecorded(replayed: boolean, codeLast4: string): void {
+  if (!replayed) return;
+  throw storedValueRefusal({
+    message: `Stored-value …${codeLast4} had its breakage recorded by another scan while this one applied it.`,
+    code: "stored_value_balance_changed",
+    remedy: "Let the next scan retry it.",
+    status: 409,
+  });
+}
+
 async function recognizeProportional(
   orgId: string,
   account: StoredValueAccountRow,
@@ -66,6 +80,14 @@ async function recognizeProportional(
   const due = proportionalDue(redeemedMinor, account.issuedMinor, account.breakageRecognizedMinor, program.breakageRate);
   const amount = due < account.balanceMinor ? due : account.balanceMinor;
   if (amount <= 0n) return false;
+  // One recognition per account per period. A later scan in the same period
+  // finds that entry and moves nothing: the journal and the entry are keyed
+  // by period and would replay, so a balance update here would lower the
+  // card with no ledger behind it. Its amount may legitimately differ from
+  // what this scan computes (redemptions since the first scan); recognition
+  // is cumulative, so that difference is recognized next period.
+  const entryKey = `stored-value:breakage-entry:${account.id}:${period}`;
+  if (await priorStoredValueEntry(orgId, entryKey, { accountId: account.id, kind: "breakage" })) return false;
   const liabilityAccountId = account.liabilityAccountId ?? (await storedValueLiabilityControlAccount(orgId));
   const journalEntryId = await postStoredValueJournal({
     orgId,
@@ -98,15 +120,16 @@ async function recognizeProportional(
       status: 409,
     });
   }
-  await insertStoredValueEntry(orgId, {
+  const entry = await insertStoredValueEntry(orgId, {
     accountId: account.id,
     kind: "breakage",
     amountMinor: -amount,
     balanceAfter: account.balanceMinor - amount,
     currency: account.currency,
     journalEntryId,
-    idempotencyKey: `stored-value:breakage-entry:${account.id}:${period}`,
+    idempotencyKey: entryKey,
   });
+  requireRecorded(entry.replayed, account.codeLast4);
   return true;
 }
 
@@ -129,6 +152,21 @@ async function recognizeRemote(
     });
   }
   if (account.balanceMinor <= 0n) return false;
+  // Remote breakage happens once per account and closes it, so a prior entry
+  // on an account that is still active with a balance is damaged history,
+  // never a retry: refuse rather than release the balance a second time.
+  const prior = await priorStoredValueEntry(orgId, `stored-value:remote-entry:${account.id}`, {
+    accountId: account.id,
+    kind: "breakage",
+  });
+  if (prior) {
+    throw storedValueRefusal({
+      message: `Stored-value …${account.codeLast4} already recognized remote breakage yet is still active with a balance.`,
+      code: "stored_value_breakage_replay_conflict",
+      remedy: "Have the stored-value entry history for this account reviewed before the scan releases its balance.",
+      status: 409,
+    });
+  }
   const liabilityAccountId = account.liabilityAccountId ?? (await storedValueLiabilityControlAccount(orgId));
   const journalEntryId = await postStoredValueJournal({
     orgId,
@@ -162,7 +200,7 @@ async function recognizeRemote(
       status: 409,
     });
   }
-  await insertStoredValueEntry(orgId, {
+  const entry = await insertStoredValueEntry(orgId, {
     accountId: account.id,
     kind: "breakage",
     amountMinor: -account.balanceMinor,
@@ -171,6 +209,7 @@ async function recognizeRemote(
     journalEntryId,
     idempotencyKey: `stored-value:remote-entry:${account.id}`,
   });
+  requireRecorded(entry.replayed, account.codeLast4);
   return true;
 }
 
