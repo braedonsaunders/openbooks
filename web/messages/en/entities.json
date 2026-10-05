@@ -333,6 +333,13 @@
       "mixedUse": "Mixed use",
       "industrial": "Industrial",
       "other": "Other"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "Vacant space",
+      "vacancyOccupiedArea": "Occupied leases share the whole pool",
+      "vacancyTotalRentableArea": "Landlord bears the vacant share",
+      "vacancyHint": "With the landlord bearing vacancy, each lease pays its area's share of the property's total rentable area; the vacant share is not billed to tenants.",
+      "vacancyRentableAreaOnly": "Only a rentable-area pool can leave the vacant share with the landlord."
     }
   }
 }

@@ -305,6 +305,13 @@
       "mixedUse": "複合用途",
       "industrial": "工業用",
       "other": "その他"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "空室",
+      "vacancyOccupiedArea": "入居中のリースがプール全体を負担",
+      "vacancyTotalRentableArea": "空室分は貸主が負担",
+      "vacancyHint": "貸主が空室分を負担する場合、各リースは物件の総賃貸可能面積に対する自らの面積の割合を支払います。空室分はテナントに請求されません。",
+      "vacancyRentableAreaOnly": "空室分を貸主負担にできるのは、賃貸可能面積で配賦するプールのみです。"
     }
   },
   "roles": {

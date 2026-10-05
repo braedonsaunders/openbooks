@@ -164,10 +164,18 @@ export interface DepositReversalRow extends Record<string, unknown> {
   currency: string; base_currency: string; book_id: string; subsidiary_id: string;
   journal_entry_id: string; bank_account_id: string | null; offset_account_id: string | null;
 }
+/**
+ * How a rentable-area CAM pool treats vacant space. `occupied_area`: the
+ * occupied leases share the whole pool. `total_rentable_area`: each lease pays
+ * its area-days share of the property's total rentable area, and the vacant
+ * share is not billed to tenants — it stays with the landlord.
+ */
+export type CamVacancyTreatment = "occupied_area" | "total_rentable_area";
+export const CAM_VACANCY_TREATMENTS: readonly CamVacancyTreatment[] = ["occupied_area", "total_rentable_area"];
 export interface CamPoolDbRow extends Record<string, unknown> {
   id: string; property_id: string; status: string; location_id: string | null; period_starts_on: string;
   period_ends_on: string; expense_account_ids: string[]; allocation_basis: "rentable_area" | "equal" | "custom";
-  budget_amount: string; subsidiary_id: string; currency: string;
+  vacancy_treatment: CamVacancyTreatment; budget_amount: string; subsidiary_id: string; currency: string;
 }
 export interface CamLeaseRow extends Record<string, unknown> {
   id: string; lease_number: string; cam_share_percent: string | null; rentable_area: string | null; overlap_start: string;

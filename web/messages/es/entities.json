@@ -305,6 +305,13 @@
       "mixedUse": "Mixto",
       "industrial": "Uso industrial",
       "other": "Otro"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "Espacio vacante",
+      "vacancyOccupiedArea": "Los arrendamientos ocupados comparten todo el fondo",
+      "vacancyTotalRentableArea": "El arrendador asume la parte vacante",
+      "vacancyHint": "Si el arrendador asume la vacancia, cada arrendamiento paga la parte de su superficie sobre la superficie arrendable total del inmueble; la parte vacante no se factura a los inquilinos.",
+      "vacancyRentableAreaOnly": "Solo un fondo por superficie arrendable puede dejar la parte vacante al arrendador."
     }
   },
   "roles": {

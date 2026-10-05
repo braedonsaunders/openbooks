@@ -264,6 +264,8 @@ export type CamPoolRow = {
   periodStartsOn: string;
   periodEndsOn: string;
   allocationBasis: string;
+  /** How vacant rentable area is treated: occupied_area or total_rentable_area. */
+  vacancyTreatment: string;
   budgetAmount: string;
   actualAmount: string | null;
   expenseAccountIds: string[];
@@ -350,7 +352,7 @@ export async function propertyManagementWorkspace(orgId: string, allowedSubsidia
   const deposits = await db.execute<SecurityDepositRow>(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
       exists(select 1 from security_deposit_transactions r where r.org_id=d.org_id and r.reversal_of_id=d.id) as reversed
       from security_deposit_transactions d where d.org_id=${orgId} and d.lease_id = any(${leaseIds}::uuid[]) order by d.occurred_on desc,d.created_at desc`);
-  const pools = await db.execute<CamPoolRow>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} and property_id = any(${propertyIds}::uuid[]) order by fiscal_year desc,name`);
+  const pools = await db.execute<CamPoolRow>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",vacancy_treatment as "vacancyTreatment",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} and property_id = any(${propertyIds}::uuid[]) order by fiscal_year desc,name`);
   const allocations = await db.execute<CamAllocationRow>(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} and lease_id = any(${leaseIds}::uuid[]) order by created_at`);
   const overdueDocumentBalance = new Map<string, string>();
   const overdueByLeaseBalance = new Map<string, string>();

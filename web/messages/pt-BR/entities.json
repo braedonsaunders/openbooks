@@ -305,6 +305,13 @@
       "mixedUse": "Misto",
       "industrial": "Uso industrial",
       "other": "Outro"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "Espaço vago",
+      "vacancyOccupiedArea": "Os contratos ocupados dividem todo o pool",
+      "vacancyTotalRentableArea": "O locador arca com a parcela vaga",
+      "vacancyHint": "Se o locador arcar com a vacância, cada contrato paga a parcela de sua área sobre a área locável total do imóvel; a parcela vaga não é cobrada dos inquilinos.",
+      "vacancyRentableAreaOnly": "Somente um pool por área locável pode deixar a parcela vaga com o locador."
     }
   },
   "roles": {

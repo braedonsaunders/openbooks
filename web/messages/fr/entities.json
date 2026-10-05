@@ -305,6 +305,13 @@
       "mixedUse": "Mixte",
       "industrial": "Industriel",
       "other": "Autre"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "Locaux vacants",
+      "vacancyOccupiedArea": "Les baux occupés se partagent tout le pool",
+      "vacancyTotalRentableArea": "Le bailleur supporte la part vacante",
+      "vacancyHint": "Si le bailleur supporte la vacance, chaque bail paie la part de sa surface dans la surface locative totale de l'immeuble ; la part vacante n'est pas facturée aux locataires.",
+      "vacancyRentableAreaOnly": "Seul un pool réparti par surface locative peut laisser la part vacante au bailleur."
     }
   },
   "roles": {

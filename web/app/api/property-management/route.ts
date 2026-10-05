@@ -81,8 +81,8 @@ const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("levelRent"), asOf: optionalDate, leaseId: optionalUuid }),
   z.object({ action: z.literal("recordDeposit"), leaseId: z.string().uuid(), kind: z.enum(["received", "interest", "applied", "refunded", "adjustment_increase", "adjustment_decrease"]), occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), amount: moneyText("Deposit amount"), bankAccountId: optionalUuid, offsetAccountId: optionalUuid, appliedDocumentId: optionalUuid, memo: z.string().max(500).nullable().optional(), importKey: z.string().max(200).nullable().optional() }),
   z.object({ action: z.literal("reverseDeposit"), transactionId: z.string().uuid(), occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(1).max(500) }),
-  z.object({ action: z.literal("createCamPool"), propertyId: z.string().uuid(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(z.string().uuid()).min(1).max(500) }),
-  z.object({ action: z.literal("updateCamPool"), poolId: z.string().uuid(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(z.string().uuid()).min(1).max(500) }),
+  z.object({ action: z.literal("createCamPool"), propertyId: z.string().uuid(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), vacancyTreatment: z.enum(["occupied_area", "total_rentable_area"]).optional(), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(z.string().uuid()).min(1).max(500) }),
+  z.object({ action: z.literal("updateCamPool"), poolId: z.string().uuid(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), vacancyTreatment: z.enum(["occupied_area", "total_rentable_area"]).optional(), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(z.string().uuid()).min(1).max(500) }),
   z.object({ action: z.literal("cancelCamPool"), poolId: z.string().uuid() }),
   z.object({ action: z.literal("reopenCamPool"), poolId: z.string().uuid(), reason: z.string().trim().min(1).max(500) }),
   z.object({ action: z.literal("finalizeCam"), poolId: z.string().uuid() }),
@@ -669,14 +669,14 @@ export const POST = defineRoute({
             ...body,
             ...common,
             budgetAmount: requireMoney(body.budgetAmount),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment?: "occupied_area" | "total_rentable_area"; budgetAmount: string; expenseAccountIds: string[]; });
           break;
         case "updateCamPool":
           result = await updateCamPool({
             ...body,
             ...common,
             budgetAmount: requireMoney(body.budgetAmount),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment?: "occupied_area" | "total_rentable_area"; budgetAmount: string; expenseAccountIds: string[]; });
           break;
         case "cancelCamPool":
           await cancelCamPool(common.orgId, common.actorId, common.allowedSubsidiaryIds, String(body.poolId));

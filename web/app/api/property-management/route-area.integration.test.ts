@@ -78,3 +78,25 @@ test('unit creation still files an ordinary area', async () => {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test('CAM pool vacancy treatment is validated at the API and persisted as chosen', async () => {
+  const { org, propertyId } = await fixture();
+  try {
+    const pool = { action: 'createCamPool', propertyId, name: 'FY26 CAM', fiscalYear: 2026, periodStartsOn: '2026-07-01',
+      periodEndsOn: '2026-07-31', budgetAmount: '1000', expenseAccountIds: [org.accounts.adjustment] };
+    const refused = await post(org.orgId, { ...pool, allocationBasis: 'equal', vacancyTreatment: 'total_rentable_area' });
+    assert.ok(!refused.ok);
+    const refusal = (await refused.json()) as { error?: string };
+    assert.match(String(refusal.error), /Only a rentable-area CAM pool can leave the vacant share with the landlord/);
+    const unknown = await post(org.orgId, { ...pool, allocationBasis: 'rentable_area', vacancyTreatment: 'vacant_free' });
+    assert.ok(unknown.status >= 400 && unknown.status < 500, `expected a 4xx, got ${unknown.status}`);
+    const created = await post(org.orgId, { ...pool, allocationBasis: 'rentable_area', vacancyTreatment: 'total_rentable_area' });
+    assert.ok(created.ok, JSON.stringify(await created.clone().json().catch(() => null)));
+    const rows = (await withBypassContext(() => db.execute<{ treatment: string }>(sql`
+      select vacancy_treatment as treatment from cam_pools where org_id = ${org.orgId}`))).rows;
+    assert.deepEqual(rows, [{ treatment: 'total_rentable_area' }]);
+  } finally {
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

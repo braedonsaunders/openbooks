@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Drawer, Button, Input, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
@@ -29,6 +30,7 @@ export function CamDrawer({
   onSave: SaveAction;
 }) {
   const today = useBusinessToday();
+  const tCam = useTranslations("entities.propertyManagement.camDrawer");
   const year = Number(today.slice(0, 4));
   const initial = useMemo(
     () => ({
@@ -39,6 +41,8 @@ export function CamDrawer({
       periodStartsOn: pool?.periodStartsOn ?? `${year}-01-01`,
       periodEndsOn: pool?.periodEndsOn ?? `${year}-12-31`,
       allocationBasis: pool?.allocationBasis ?? "rentable_area",
+      // The column default, shown selected: occupied leases share the pool.
+      vacancyTreatment: pool?.vacancyTreatment ?? "occupied_area",
       budgetAmount: pool?.budgetAmount ?? "",
       expenseAccountIds: (pool?.expenseAccountIds ?? []) as string[],
     }),
@@ -114,12 +118,44 @@ export function CamDrawer({
             <Select
               value={form.allocationBasis}
               onChange={(e) =>
-                setForm({ ...form, allocationBasis: e.target.value })
+                setForm({
+                  ...form,
+                  allocationBasis: e.target.value,
+                  // Only a rentable-area pool can leave vacancy with the
+                  // landlord; the server refuses the combination otherwise.
+                  vacancyTreatment:
+                    e.target.value === "rentable_area"
+                      ? form.vacancyTreatment
+                      : "occupied_area",
+                })
               }
             >
               <option value="rentable_area">Rentable area</option>
               <option value="equal">Equal</option>
               <option value="custom">Lease CAM share</option>
+            </Select>
+          </Field>
+          <Field
+            label={tCam("vacancyTreatment")}
+            hint={
+              form.allocationBasis === "rentable_area"
+                ? tCam("vacancyHint")
+                : tCam("vacancyRentableAreaOnly")
+            }
+          >
+            <Select
+              value={form.vacancyTreatment}
+              disabled={form.allocationBasis !== "rentable_area"}
+              onChange={(e) =>
+                setForm({ ...form, vacancyTreatment: e.target.value })
+              }
+            >
+              <option value="occupied_area">
+                {tCam("vacancyOccupiedArea")}
+              </option>
+              <option value="total_rentable_area">
+                {tCam("vacancyTotalRentableArea")}
+              </option>
             </Select>
           </Field>
           <Field label="Period starts">

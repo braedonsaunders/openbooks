@@ -7,8 +7,8 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
-import { add, cmp, mulPercent, mulRatio, neg, sum, toUnits } from "../money/money.ts";
-import { assertEnabled, assertLockedSubsidiaryInScope, audit, exactMoney, lockPropertyInScope, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow } from "./management-foundation.ts";
+import { add, cmp, fromUnits, mulPercent, mulRatio, neg, sum, toUnits } from "../money/money.ts";
+import { assertEnabled, assertLockedSubsidiaryInScope, audit, CAM_VACANCY_TREATMENTS, exactMoney, lockPropertyInScope, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow, type CamVacancyTreatment } from "./management-foundation.ts";
 import { overlapDayCount } from "./management-foundation.ts";
 import { propertyBillingGeneration } from "./rent-billing.ts";
 
@@ -43,15 +43,28 @@ async function assertNoSharedSourceOverlap(
  * still describes the source it was computed from. */
 function camPoolSourceFingerprint(definition: {
   propertyId: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string;
-  allocationBasis: string; budgetAmount: string; expenseAccountIds: string[];
+  allocationBasis: string; vacancyTreatment: CamVacancyTreatment; budgetAmount: string; expenseAccountIds: string[];
 }): string {
   return createHash("sha256").update(canonicalJson({
-    kind: "cam_pool.v1",
+    kind: "cam_pool.v2",
     ...definition,
     expenseAccountIds: [...definition.expenseAccountIds].sort(),
   })).digest("hex");
 }
-export async function createCamPool(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
+/**
+ * Vacancy treatment is meaningful only when costs are shared by rentable area:
+ * an equal or lease-share pool has no area to leave vacant. Refuse the
+ * combination at write time rather than ignore it at finalization, so a saved
+ * pool always finalizes the way its settings read.
+ */
+function validCamVacancyTreatment(allocationBasis: string, vacancyTreatment: string): CamVacancyTreatment {
+  if (!(CAM_VACANCY_TREATMENTS as readonly string[]).includes(vacancyTreatment)) throw new PropertyManagementError("Invalid CAM vacancy treatment");
+  if (vacancyTreatment === "total_rentable_area" && allocationBasis !== "rentable_area") {
+    throw new PropertyManagementError("Only a rentable-area CAM pool can leave the vacant share with the landlord: choose the Rentable area allocation basis, or let occupied leases share the whole pool");
+  }
+  return vacancyTreatment as CamVacancyTreatment;
+}
+export async function createCamPool(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment?: CamVacancyTreatment; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
   const name = input.name.trim();
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
   const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
@@ -60,6 +73,8 @@ export async function createCamPool(input: { orgId: string; actorId: string; all
   if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
   if (!["rentable_area", "equal", "custom"].includes(input.allocationBasis)) throw new PropertyManagementError("Invalid CAM allocation basis");
   if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
+  // The column default: occupied leases share the whole pool.
+  const vacancyTreatment = validCamVacancyTreatment(input.allocationBasis, input.vacancyTreatment ?? "occupied_area");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
     await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
@@ -67,21 +82,21 @@ export async function createCamPool(input: { orgId: string; actorId: string; all
       (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     await assertNoSharedSourceOverlap(tx, input.orgId, input.propertyId, startsOn, endsOn, expenseAccountIds);
-    const result = (await tx.execute<{ id: string }>(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,budget_amount,expense_account_ids,status,created_by,updated_by)
-      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${budgetAmount},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
+    const result = (await tx.execute<{ id: string }>(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,vacancy_treatment,budget_amount,expense_account_ids,status,created_by,updated_by)
+      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${vacancyTreatment},${budgetAmount},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
         from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`));
     if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
     const id = result.rows[0].id;
     await audit(tx, input.orgId, "cam_pools", id, "insert", input.actorId, {
       propertyId: input.propertyId,
       before: null,
-      after: { status: "open", name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds },
-      sourceFingerprint: camPoolSourceFingerprint({ propertyId: input.propertyId, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds }),
+      after: { status: "open", name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, vacancyTreatment, budgetAmount, expenseAccountIds },
+      sourceFingerprint: camPoolSourceFingerprint({ propertyId: input.propertyId, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, vacancyTreatment, budgetAmount, expenseAccountIds }),
     });
     return { id };
   });
 }
-export async function updateCamPool(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
+export async function updateCamPool(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment?: CamVacancyTreatment; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
   const name = input.name.trim();
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
   const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
@@ -97,23 +112,28 @@ export async function updateCamPool(input: { orgId: string; actorId: string; all
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     const editable = (await tx.execute<{
       propertyId: string; status: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string;
-      allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[];
+      allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment: CamVacancyTreatment; budgetAmount: string; expenseAccountIds: string[];
     }>(sql`select property_id as "propertyId",status,name,fiscal_year as "fiscalYear",period_starts_on::text as "periodStartsOn",
-      period_ends_on::text as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount::text as "budgetAmount",
+      period_ends_on::text as "periodEndsOn",allocation_basis as "allocationBasis",vacancy_treatment as "vacancyTreatment",budget_amount::text as "budgetAmount",
       expense_account_ids as "expenseAccountIds"
       from cam_pools where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') for update`));
     const before = editable.rows[0];
     if (!before) throw new PropertyManagementError("Editable CAM pool not found");
     const { propertyId: poolPropertyId, ...beforeSnapshot } = before;
     await lockPropertyInScope(tx, input.orgId, String(poolPropertyId), input.allowedSubsidiaryIds);
+    // An edit that omits the setting keeps the pool's current treatment; a
+    // basis change that would strand a landlord-borne vacancy is refused.
+    const vacancyTreatment = validCamVacancyTreatment(input.allocationBasis, input.vacancyTreatment ?? before.vacancyTreatment);
     await assertNoSharedSourceOverlap(tx, input.orgId, poolPropertyId, startsOn, endsOn, expenseAccountIds, input.poolId);
-    await tx.execute(sql`
+    const updated = await tx.execute<{ id: string }>(sql`
       update cam_pools set name=${name},fiscal_year=${input.fiscalYear},period_starts_on=${startsOn},period_ends_on=${endsOn},
-        allocation_basis=${input.allocationBasis},budget_amount=${budgetAmount},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
+        allocation_basis=${input.allocationBasis},vacancy_treatment=${vacancyTreatment},budget_amount=${budgetAmount},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
         updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open')
+      returning id
     `);
-    const snapshot = { status: beforeSnapshot.status, name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds };
+    if (!updated.rows[0]) throw new PropertyManagementError("Editable CAM pool not found");
+    const snapshot = { status: beforeSnapshot.status, name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, vacancyTreatment, budgetAmount, expenseAccountIds };
     await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, {
       propertyId: poolPropertyId,
       before: beforeSnapshot,
@@ -256,7 +276,11 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
     // both directions: a concurrent edit either commits before these locks
     // are taken (and is counted) or parks behind this transaction until it
     // ends. New units cannot move a sealed weight — only an edit to an
-    // overlapping lease or its unit can, and both are covered.
+    // overlapping lease or its unit can, and both are covered. Under the
+    // total-rentable-area vacancy treatment every unit of the property is a
+    // source (its area is in the denominator); those rows are fenced below,
+    // and unit creation and deletion are serialized by the property row this
+    // transaction already holds FOR UPDATE.
     await tx.execute(sql`
       select l.id from property_leases l where l.org_id=${orgId} and l.property_id=${pool.property_id}
         and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
@@ -310,20 +334,58 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
     if (!weighted.length) throw new PropertyManagementError(pool.allocation_basis === "rentable_area"
       ? "Overlapping CAM leases need positive rentable area" : "Overlapping CAM leases need a positive allocation weight");
     const totalWeight = weighted.reduce((total, lease) => total + lease.weight, 0n);
+    // Vacancy treatment. Under `total_rentable_area` the denominator is the
+    // property's whole rentable area over the pool's days, so each lease pays
+    // exactly its own area-days share and the vacant remainder is never billed
+    // to a tenant. Every unit's area must be known: a unit without one would
+    // understate the denominator and over-bill the occupied tenants.
+    const vacancyTreatment = pool.vacancy_treatment;
+    if (vacancyTreatment === "total_rentable_area" && pool.allocation_basis !== "rentable_area") {
+      throw new PropertyManagementError("Only a rentable-area CAM pool can leave the vacant share with the landlord: choose the Rentable area allocation basis, or let occupied leases share the whole pool");
+    }
+    let totalRentableArea: string | null = null;
+    let capacity: bigint | null = null;
+    if (vacancyTreatment === "total_rentable_area") {
+      const units = (await tx.execute<{ id: string; code: string; rentable_area: string | null }>(sql`
+        select u.id,u.code,u.rentable_area::text as rentable_area from property_units u
+         where u.org_id=${orgId} and u.property_id=${pool.property_id}
+         order by u.id for share`)).rows;
+      const unmeasured = units.filter((unit) => unit.rentable_area == null).map((unit) => unit.code).sort();
+      if (unmeasured.length) {
+        throw new PropertyManagementError(`CAM finalization with the vacant share left to the landlord needs the rentable area of every unit in the property; units without one: ${unmeasured.join(", ")} — set each unit's rentable area, or let occupied leases share the whole pool`);
+      }
+      const areaUnits = units.reduce((total, unit) => total + toUnits(unit.rentable_area!), 0n);
+      totalRentableArea = fromUnits(areaUnits);
+      capacity = areaUnits * BigInt(poolDays);
+      if (totalWeight > capacity) {
+        throw new PropertyManagementError(`Leased area exceeds the property's total rentable area of ${totalRentableArea} over this CAM period, so leases overlap on the same unit — correct the overlapping lease dates or units before finalizing`);
+      }
+    }
     // Rounding residual convention: the largest weight absorbs it (smallest
-    // relative distortion); ties go to the lowest lease id.
-    const residualIndex = pool.allocation_basis === "custom" ? -1
+    // relative distortion); ties go to the lowest lease id. With the vacant
+    // share left to the landlord there is no residual: each lease is billed
+    // its exact share truncated to ledger precision, so no tenant ever pays
+    // more than its own area-days share, and the sub-cent remainders stay
+    // with the vacant (landlord) portion. The allocations then sum to the
+    // billable portion, not to the whole pool.
+    const residualIndex = pool.allocation_basis === "custom" || capacity !== null ? -1
       : weighted.reduce((best, lease, index) => lease.weight > weighted[best]!.weight ? index : best, 0);
+    const exactShareOfCapacity = (amount: string, weight: bigint) => fromUnits((toUnits(amount) * weight) / capacity!);
     const shares: string[] = weighted.map((lease, index) => {
       if (pool.allocation_basis === "custom") return mulRatio(exactMoney(lease.cam_share_percent, "CAM share"), BigInt(lease.days), BigInt(poolDays));
+      if (capacity !== null) return exactShareOfCapacity("100", lease.weight);
       return index === residualIndex ? "0.0000" : mulRatio("100", lease.weight, totalWeight);
     });
     if (residualIndex >= 0) shares[residualIndex] = add("100", neg(sum(shares)));
     if (pool.allocation_basis === "custom" && cmp(sum(shares), "100") > 0) {
       throw new PropertyManagementError("Time-weighted custom CAM shares exceed 100%");
     }
-    const budgetAllocations = shares.map((share, index) => index === residualIndex ? "0.0000" : mulPercent(pool.budget_amount, share));
-    const actualAllocations = shares.map((share, index) => index === residualIndex ? "0.0000" : mulPercent(actualAmount, share));
+    const budgetAllocations = capacity !== null
+      ? weighted.map((lease) => exactShareOfCapacity(pool.budget_amount, lease.weight))
+      : shares.map((share, index) => index === residualIndex ? "0.0000" : mulPercent(pool.budget_amount, share));
+    const actualAllocations = capacity !== null
+      ? weighted.map((lease) => exactShareOfCapacity(actualAmount, lease.weight))
+      : shares.map((share, index) => index === residualIndex ? "0.0000" : mulPercent(actualAmount, share));
     if (residualIndex >= 0) {
       budgetAllocations[residualIndex] = add(pool.budget_amount, neg(sum(budgetAllocations)));
       actualAllocations[residualIndex] = add(actualAmount, neg(sum(actualAllocations)));
@@ -339,7 +401,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       throw new PropertyManagementError("CAM source ledgers changed while finalizing; resolve the entries and retry");
     }
     const finalizeSourceFingerprint = createHash("sha256").update(canonicalJson({
-      kind: "cam_finalize.v3",
+      kind: "cam_finalize.v4",
       poolId,
       propertyId: pool.property_id,
       bookId,
@@ -349,6 +411,10 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       periodEndsOn: pool.period_ends_on,
       locationId: pool.location_id,
       allocationBasis: pool.allocation_basis,
+      // v4: the vacancy treatment and, when the landlord bears vacancy, the
+      // property's total rentable area are sources of every share.
+      vacancyTreatment,
+      totalRentableArea,
       expenseAccountIds: [...pool.expense_account_ids].sort(),
       budgetAmount: pool.budget_amount,
       actualAmount,
@@ -373,6 +439,12 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       currency: pool.currency,
       before: { status: pool.status },
       after: { status: "finalized", actualAmount, allocationCount: weighted.length, budgetAllocationTotal: sum(budgetAllocations), actualAllocationTotal: sum(actualAllocations) },
+      vacancyTreatment,
+      totalRentableArea,
+      // Actuals not billed to any tenant: under total_rentable_area this is
+      // the vacant share the landlord bears; zero when occupied leases share
+      // the whole pool by area or equally.
+      unallocatedActualAmount: add(actualAmount, neg(sum(actualAllocations))),
       sourceFingerprint: finalizeSourceFingerprint,
     });
     return { actualAmount, allocations: weighted.length };

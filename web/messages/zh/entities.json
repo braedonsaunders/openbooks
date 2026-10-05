@@ -305,6 +305,13 @@
       "mixedUse": "混合用途",
       "industrial": "工业",
       "other": "其他"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "空置面积",
+      "vacancyOccupiedArea": "已出租租约分摊整个费用池",
+      "vacancyTotalRentableArea": "空置部分由业主承担",
+      "vacancyHint": "由业主承担空置时，每份租约按其面积占物业总可出租面积的比例付费；空置部分不向租户收费。",
+      "vacancyRentableAreaOnly": "只有按可出租面积分摊的费用池才能将空置部分留给业主承担。"
     }
   },
   "roles": {
