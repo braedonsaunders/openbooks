@@ -137,14 +137,23 @@ test("a malformed forecast formula refuses by name instead of forecasting zero",
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("cash forecast aging places the 90th overdue day in 90+", () => {
+test("cash forecast aging places the 90th overdue day in 90+ and ages untermed items like the aging report", () => {
   const source = `
     import assert from "node:assert/strict";
-    import { bucketOf } from "./web/lib/cash/core.ts";
+    import { bucketOf, summariseSide } from "./web/lib/cash/core.ts";
+    import { bucketOf as agingBucketOf } from "./web/lib/reports/aging.ts";
 
     assert.equal(bucketOf(89), "61-90");
     assert.equal(bucketOf(90), "90+");
     assert.equal(bucketOf(91), "90+");
+    // An invoice with no due date posted 45 days ago is 31-60 on the cockpit,
+    // exactly where the aging report (aging from posting date) puts it.
+    const asOf = new Date("2026-06-30T00:00:00Z");
+    const untermed = { id: "l1", entryId: "e1", docKind: "customer_invoice", docNumber: "INV-1", docId: "d1", partyId: "p1",
+      partyName: "Acme", tranDate: new Date("2026-05-16T00:00:00Z"), dueDate: null, remaining: "100.0000" };
+    const side = summariseSide([untermed], asOf, "0", 0);
+    assert.equal(side.buckets.find((b) => b.label === "31-60").amount, "100.0000");
+    assert.equal(agingBucketOf(45), "b2");
     console.log("cash aging boundary passed: day 89 is 61-90; day 90 begins 90+");
   `;
   const result = spawnSync(

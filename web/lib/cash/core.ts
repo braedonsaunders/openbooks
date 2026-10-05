@@ -6,6 +6,7 @@ import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, 
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
 import { evaluateFormula } from "./formula";
+import { agingBasisDate, agingBucketIndex } from "../aging-basis";
 import { monthYearLabel } from "../format";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
@@ -1415,12 +1416,15 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
     .sort((x, y) => compareMoney(y.balance, x.balance));
 }
 
+const CASH_AGING_BUCKETS = ["Current", "1-30", "31-60", "61-90", "90+"] as const;
+
 export function bucketOf(daysPastDue: number): string {
-  if (daysPastDue <= 0) return "Current";
-  if (daysPastDue <= 30) return "1-30";
-  if (daysPastDue <= 60) return "31-60";
-  if (daysPastDue < 90) return "61-90";
-  return "90+";
+  return CASH_AGING_BUCKETS[agingBucketIndex(daysPastDue)];
+}
+
+/** Days past the shared aging basis date: due date, else posting date. */
+function daysPastDue(it: OpenItem, asOf: Date): number {
+  return daysBetween(agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate })!, asOf);
 }
 
 /** Predict collection/payment date for one open item. */
@@ -1461,7 +1465,7 @@ export function summariseSide(items: OpenItem[], asOf: Date, scheduled: Money, a
   let outstanding = ZERO_MONEY;
   for (const it of items) {
     outstanding = addMoney(outstanding, it.remaining);
-    const dpd = it.dueDate ? daysBetween(it.dueDate, asOf) : 0;
+    const dpd = daysPastDue(it, asOf);
     const b = bucketOf(dpd);
     buckets.set(b, addMoney(buckets.get(b) ?? ZERO_MONEY, it.remaining));
   }
@@ -1495,7 +1499,7 @@ export function scheduleForecast(
     const { date, method } = predict(it, asOf, stats);
     if (date < start || date > end) continue;
     const wk = toISO(weekStart(date));
-    const dpd = it.dueDate ? daysBetween(it.dueDate, asOf) : 0;
+    const dpd = daysPastDue(it, asOf);
     const entry: ForecastEntry = {
       id: it.id,
       entryId: it.entryId,
