@@ -55,6 +55,12 @@ import { isFeatureEnabled } from "../features";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import { auditSetupChange } from "../setup/audit";
 import { validateEntityBody } from "./validate";
+import {
+  findDocumentByExternalRef,
+  isExternalRefCheckViolation,
+  isExternalRefConflict,
+  resolveExternalRefPair,
+} from "../external-ref";
 import { ITEM_EQUIPMENT_KINDS } from "./registry-data";
 import {
   ITEM_REVENUE_RECOGNITION_COLUMNS,
@@ -1189,6 +1195,78 @@ function docEditError(e: unknown): WriteResult | null {
   return null;
 }
 
+/**
+ * Refuse an external (source, ref) already claimed by another document.
+ * The pre-write lookup below answers the common case with the winner's id;
+ * this maps the lost-race storage errors (unique 23505, pair/blank check
+ * 23514) the same way so a concurrent claim never surfaces as a 500.
+ */
+async function externalRefWriteRefusal(
+  user: SessionUser,
+  body: DocApiBody,
+  error: unknown,
+  excludeId?: string,
+): Promise<WriteResult | null> {
+  if (!isExternalRefConflict(error) && !isExternalRefCheckViolation(error)) return null;
+  if (isExternalRefCheckViolation(error)) {
+    return err(
+      422,
+      "externalRef and externalSource travel together and neither may be blank — send both or omit both",
+    );
+  }
+  const pair = resolveExternalRefPair({ externalRef: body.externalRef, externalSource: body.externalSource });
+  if (pair.action !== "set") {
+    return err(
+      422,
+      "externalRef and externalSource travel together and neither may be blank — send both or omit both",
+    );
+  }
+  const winner = await findDocumentByExternalRef(db, user.orgId, pair.ref, pair.source, excludeId);
+  return err(
+    409,
+    winner
+      ? `externalRef "${pair.ref}" from "${pair.source}" already exists on document ${winner.documentNumber} — send a new reference or update the existing document`
+      : `externalRef "${pair.ref}" from "${pair.source}" already exists — send a new reference or update the existing document`,
+    winner ? { existingId: winner.id } : undefined,
+  );
+}
+
+/**
+ * Documents speak camelCase while the schema advertises snake_case columns.
+ * Accept the advertised spelling for the external pair rather than silently
+ * dropping it — a dropped dedupe key would mint the duplicate the index
+ * exists to refuse.
+ */
+function normalizeExternalRefBody(body: DocApiBody): DocApiBody {
+  const snake = body as DocApiBody & { external_ref?: unknown; external_source?: unknown };
+  let out = body;
+  if (out.externalRef === undefined && snake.external_ref !== undefined) {
+    out = { ...out, externalRef: snake.external_ref as string | null };
+  }
+  if (out.externalSource === undefined && snake.external_source !== undefined) {
+    out = { ...out, externalSource: snake.external_source as string | null };
+  }
+  return out;
+}
+
+/** Early duplicate check, so the common replay names the winner without writing. */
+async function externalRefDuplicate(
+  user: SessionUser,
+  body: DocApiBody,
+  excludeId?: string,
+): Promise<WriteResult | null> {
+  const pair = resolveExternalRefPair({ externalRef: body.externalRef, externalSource: body.externalSource });
+  if (pair.action === "refuse") return err(422, pair.message);
+  if (pair.action !== "set") return null;
+  const winner = await findDocumentByExternalRef(db, user.orgId, pair.ref, pair.source, excludeId);
+  if (!winner) return null;
+  return err(
+    409,
+    `externalRef "${pair.ref}" from "${pair.source}" already exists on document ${winner.documentNumber} — send a new reference or update the existing document`,
+    { existingId: winner.id },
+  );
+}
+
 async function createDocument(
   user: SessionUser,
   docKind: string,
@@ -1196,6 +1274,7 @@ async function createDocument(
   source: "api" | "mcp" | "assistant",
   allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
+  body = normalizeExternalRefBody(body);
   if (!(await isDocKindEnabled(user.orgId, docKind)))
     return err(404, "not found");
   if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
@@ -1209,6 +1288,8 @@ async function createDocument(
   ) {
     return err(404, "not found");
   }
+  const duplicate = await externalRefDuplicate(user, body);
+  if (duplicate) return duplicate;
   let precomputedTotals;
   try {
     precomputedTotals = await precomputeDocumentTotalsForCreate(
@@ -1219,6 +1300,8 @@ async function createDocument(
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
+    const refusal = await externalRefWriteRefusal(user, body, e);
+    if (refusal) return refusal;
     throw e;
   }
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, {
@@ -1249,6 +1332,8 @@ async function createDocument(
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
+    const refusal = await externalRefWriteRefusal(user, body, e);
+    if (refusal) return refusal;
     throw e;
   }
   const life = await runDocumentLifecycle(
@@ -1270,6 +1355,7 @@ async function updateDocument(
   source: "api" | "mcp" | "assistant",
   allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
+  body = normalizeExternalRefBody(body);
   const owned = await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
@@ -1307,6 +1393,8 @@ async function updateDocument(
   }
   if (row.status === "voided")
     return err(422, "a voided document cannot be edited");
+  const duplicate = await externalRefDuplicate(user, body, id);
+  if (duplicate) return duplicate;
   try {
     await applyDocumentEdit(id, row, body, {
       orgId: user.orgId,
@@ -1316,6 +1404,8 @@ async function updateDocument(
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
+    const refusal = await externalRefWriteRefusal(user, body, e, id);
+    if (refusal) return refusal;
     throw e;
   }
   // Posted docs already have GL; only advance the lifecycle for pre-post edits.

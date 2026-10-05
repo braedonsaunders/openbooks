@@ -45,6 +45,7 @@ import { checkProjectsWriteEnabled, featureEnabled, isFeatureEnabled, orgFeature
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
+import { resolveExternalRefPair } from './external-ref'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
@@ -1035,6 +1036,12 @@ export async function applyDocumentEdit(
     currency = code
   }
 
+  // The external (source, ref) pair is all or nothing: a lone half would
+  // slip the dedupe index, so refuse it here with the remedy instead of
+  // letting storage answer with a bare constraint code.
+  const external = resolveExternalRefPair({ externalRef: body.externalRef, externalSource: body.externalSource })
+  if (external.action === 'refuse') throw new DocumentEditError(422, external.message)
+
   // custom-field validation (header + line) against the live definitions
   // applyDocumentEdit can participate in a caller-owned transaction (posted
   // correction initialization). Do not overlap queries on that one pinned
@@ -1980,6 +1987,8 @@ export async function applyDocumentEdit(
           document_date = coalesce(${body.documentDate ?? null}, document_date),
           due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
           reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
+          external_ref = ${external.action === 'set' ? external.ref : external.action === 'clear' ? null : sql`external_ref`},
+          external_source = ${external.action === 'set' ? external.source : external.action === 'clear' ? null : sql`external_source`},
           memo = ${body.memo !== undefined ? body.memo : sql`memo`},
           posting_date = ${body.postingDate !== undefined ? body.postingDate : sql`posting_date`},
           department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},

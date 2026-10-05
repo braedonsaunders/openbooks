@@ -9,6 +9,7 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.
 import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from './scoped-options';
 import { notFound } from './api/responses';
 import type { OrderKind } from './order-cycle';
+import { findDocumentByExternalRef, isExternalRefConflict, resolveExternalRefPair } from './external-ref';
 
 export interface OrderHandlerConfig {
   kind: OrderKind;
@@ -49,6 +50,13 @@ export interface OrderPatchBody {
   partyId?: string | null;
   documentDate?: string;
   dueDate?: string | null;
+  /**
+   * The originating external system's id for this order and which system
+   * minted it. Both or neither; the v1 API stamps the storefront reference
+   * here so the header write and the dedupe claim commit together.
+   */
+  externalRef?: string | null;
+  externalSource?: string | null;
   memo?: string | null;
   departmentId?: string | null;
   projectId?: string | null;
@@ -387,6 +395,14 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
     throw new OrderEditError(422, { error: 'only draft orders can be edited' })
   }
 
+  // The external (source, ref) pair is all or nothing: a lone half would
+  // slip the dedupe index, so refuse it here with the remedy instead of
+  // letting storage answer with a bare constraint code.
+  const external = resolveExternalRefPair({ externalRef: body.externalRef, externalSource: body.externalSource })
+  if (external.action === 'refuse') {
+    throw new OrderEditError(422, { error: external.message })
+  }
+
   const segments = await services.segments.segmentRegistry(user.orgId)
   const headerDims = body.extraDims === undefined ? null : services.segments.validateExtraDims(body.extraDims, segments)
   if (headerDims && !headerDims.ok) {
@@ -566,6 +582,8 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
         party_id = ${body.partyId !== undefined ? body.partyId : services.platform.sql`party_id`},
         document_date = coalesce(${body.documentDate ?? null}, document_date),
         due_date = ${body.dueDate !== undefined ? body.dueDate : services.platform.sql`due_date`},
+        external_ref = ${external.action === 'set' ? external.ref : external.action === 'clear' ? null : services.platform.sql`external_ref`},
+        external_source = ${external.action === 'set' ? external.source : external.action === 'clear' ? null : services.platform.sql`external_source`},
         memo = ${body.memo !== undefined ? body.memo : services.platform.sql`memo`},
         department_id = ${body.departmentId !== undefined ? body.departmentId : services.platform.sql`department_id`},
         project_id = ${body.projectId !== undefined ? body.projectId : services.platform.sql`project_id`},
@@ -599,6 +617,18 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
   } catch (error) {
     if (isTenantReferenceViolation(error)) {
       throw new OrderEditError(422, { error: 'Referenced party, account, tax profile, or dimension must belong to this organization' })
+    }
+    // The pre-write duplicate check passed, then a concurrent write claimed
+    // the same external pair: name the winning document instead of
+    // surfacing a bare unique violation.
+    if (external.action === 'set' && isExternalRefConflict(error)) {
+      const winner = await findDocumentByExternalRef(services.platform.db, user.orgId, external.ref, external.source)
+      throw new OrderEditError(409, {
+        error: winner
+          ? `externalRef "${external.ref}" from "${external.source}" already exists on document ${winner.documentNumber} — send a new reference or update the existing document`
+          : `externalRef "${external.ref}" from "${external.source}" already exists — send a new reference or update the existing document`,
+        ...(winner ? { existingId: winner.id } : {}),
+      })
     }
     throw error
   }
