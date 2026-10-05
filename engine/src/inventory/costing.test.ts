@@ -594,3 +594,28 @@ test("a receipt re-reads a costing policy after a concurrent revision commits", 
     await dropScratchOrgReporting(org.orgId);
   }
 });
+
+test("a standard issue spanning layers relieves the GL by exactly what the layers give up", { skip: !DB }, async () => {
+  // Two half-unit receipts at a 0.3333 standard each carry 0.1667. Issuing
+  // the whole unit relieves 0.3334 from the layers; pricing it as one
+  // 1 x 0.3333 multiplication would leave the GL a ten-thousandth above them.
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`update item_inventory_profiles set standard_cost='0.3333'
+      where org_id=${org.orgId} and item_id=${org.items.standard}`);
+    for (let i = 0; i < 2; i++) {
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.standard, stockLocationId: org.stockLocationId, quantity: "0.5", unitCost: "0.3333",
+        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      });
+    }
+    const issue = await issueInventory(org.orgId, null, {
+      itemId: org.items.standard, stockLocationId: org.stockLocationId, quantity: "1",
+      subsidiaryId: org.subsidiaryId, date: org.date,
+    });
+    assert.equal(toUnits(issue.value), toUnits("0.3334"));
+    await assertGlEqualsLayers(org);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
