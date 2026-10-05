@@ -2019,7 +2019,8 @@
       }
     },
     "payment": {
-      "undatedNote": "Excluye {count} facturas sin vencimiento ni condiciones de pago"
+      "undatedNote": "Excluye {count} facturas sin vencimiento ni condiciones de pago",
+      "noHistory": "Aún sin historial de pagos"
     },
     "matrix": {
       "unratedNote": "{count} proveedores aún no tienen historial de pagos y no se grafican"

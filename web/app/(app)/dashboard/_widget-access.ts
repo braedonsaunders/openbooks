@@ -108,6 +108,9 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'list-customers-at-risk': ['ar.read'],
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
+  'kpi-vendor-concentration': ['reports.read'],
+  'kpi-vendor-payment-performance': ['reports.read'],
+  'kpi-spend-velocity': ['reports.read'],
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
 

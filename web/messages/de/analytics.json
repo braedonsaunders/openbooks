@@ -2019,7 +2019,8 @@
       }
     },
     "payment": {
-      "undatedNote": "Ohne {count} Rechnungen ohne Fälligkeitsdatum oder Zahlungsbedingung"
+      "undatedNote": "Ohne {count} Rechnungen ohne Fälligkeitsdatum oder Zahlungsbedingung",
+      "noHistory": "Noch keine Zahlungshistorie"
     },
     "matrix": {
       "unratedNote": "{count} Lieferanten haben noch keine Zahlungshistorie und werden nicht dargestellt"
