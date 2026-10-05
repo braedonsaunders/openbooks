@@ -160,8 +160,10 @@ export const GET = defineRoute({
        limit 200`)
     const groups = await db.execute(sql`
       select g.id, g.code, g.name, g.payer_party_id as "payerPartyId",
-             g.cadence, g.cutoff_day as "cutoffDay", g.grouping
+             g.cadence, g.cutoff_day as "cutoffDay", g.grouping,
+             s.name as "billingSubsidiaryName"
         from consolidation_groups g
+        left join subsidiaries s on s.id = g.billing_subsidiary_id and s.org_id = g.org_id
        where g.org_id = ${orgId} and g.is_active
        order by g.code`)
     const parties = await listScopedPartyOptions(orgId, gate.allowedSubsidiaryIds, { role: 'customer', activeOnly: true })
@@ -258,7 +260,10 @@ async function normalizedInput(
     return { errorCode: 'invalidRecord' } as const
   }
   if (effectiveFrom === undefined || effectiveTo === undefined) return { errorCode: 'dates' } as const
-  if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) return { errorCode: 'dateOrder' } as const
+  // The window start is always known (storage holds no open-started
+  // windows); only the end may stay open.
+  if (!effectiveFrom) return { errorCode: 'dates' } as const
+  if (effectiveTo && effectiveTo < effectiveFrom) return { errorCode: 'dateOrder' } as const
   if (childPartyId === billToPartyId && childPartyId === payerPartyId) return { errorCode: 'noRedirect' } as const
   // The requested customer must be visible first: a restricted caller
   // probing a hidden or missing record reads the same uniform not-found,
