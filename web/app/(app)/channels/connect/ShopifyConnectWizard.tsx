@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { ApiResponseError, readApiErrorMessage } from '../../../../lib/api-error'
+import { waitForShopifyReview } from './shopify-review-poll'
 import { WizardLayout } from '../../../../components/page-layout'
 import { Badge, Button, Input, Label, PageHeader, SearchSelect } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
@@ -49,7 +50,7 @@ type Step = 'shop' | 'method' | 'review'
  */
 export function ShopifyConnectWizard() {
   const t = useTranslations('channels')
-  const tc = useTranslations('common')
+  const tc = useTranslations('common.actions')
   const router = useRouter()
   const searchParams = useSearchParams()
   const oauthError = searchParams.get('oauth')
@@ -63,6 +64,8 @@ export function ShopifyConnectWizard() {
   const [busy, setBusy] = useState(false)
   const [channelId, setChannelId] = useState<string | null>(null)
   const [review, setReview] = useState<Review | null>(null)
+  const [reviewFailure, setReviewFailure] = useState<string | null>(null)
+  const [reviewReload, setReviewReload] = useState(0)
   const [chosen, setChosen] = useState<Record<string, string>>({})
   const [accountOptions, setAccountOptions] = useState<AccountOption[] | null>(null)
 
@@ -90,27 +93,30 @@ export function ShopifyConnectWizard() {
   // the exact pending state instead of starting a second channel.
   useEffect(() => {
     if (!resumeChannel) return
-    let cancelled = false
-    fetch(`/api/channels/${resumeChannel}/review`)
-      .then(async (res) => {
-        if (!res.ok || cancelled) {
-          if (!cancelled && !res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
-          return
-        }
-        const next = (await res.json()) as Review
-        if (cancelled) return
-        setChannelId(resumeChannel)
-        setReview(next)
-        setChosen(proposalChoices(next.proposals))
-        setStep('review')
-      })
-      .catch(() => {
-        if (!cancelled) toast.error(t('toast.loadFailed'))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [resumeChannel, t])
+    setChannelId(resumeChannel)
+    setStep('review')
+  }, [resumeChannel])
+
+  useEffect(() => {
+    if (step !== 'review' || !channelId || review) return
+    const controller = new AbortController()
+    setReviewFailure(null)
+    void waitForShopifyReview<Review>(channelId, {
+      signal: controller.signal,
+      failureMessage: t('toast.loadFailed'),
+      timeoutMessage: t('connect.reviewTimedOut'),
+    }).then((next) => {
+      if (controller.signal.aborted) return
+      setReview(next)
+      setChosen(proposalChoices(next.proposals))
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      const message = error instanceof ApiResponseError ? error.message : t('toast.loadFailed')
+      setReviewFailure(message)
+      toast.error(message)
+    })
+    return () => controller.abort()
+  }, [channelId, step, review, reviewReload, t])
 
   async function start() {
     setBusy(true)
@@ -146,45 +152,17 @@ export function ShopifyConnectWizard() {
       if (body.installUrl) {
         window.open(body.installUrl, '_blank', 'noopener')
         setStep('review')
-        void pollReview(body.channelId)
       }
+    } catch {
+      toast.error(t('toast.loadFailed'))
     } finally {
       setBusy(false)
     }
   }
 
-  async function pollReview(id: string) {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      const res = await fetch(`/api/channels/${id}/review`)
-      if (res.ok) {
-        const next = (await res.json()) as Review
-        if (next.channel.status !== 'draft') {
-          setReview(next)
-          setChosen(proposalChoices(next.proposals))
-          return
-        }
-      }
-    }
-  }
-
-  async function refreshReview() {
-    if (!channelId) return
-    const res = await fetch(`/api/channels/${channelId}/review`)
-    if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
-      return
-    }
-    const next = (await res.json()) as Review
-    setReview(next)
-    setChosen((prev) => {
-      const merged = { ...prev }
-      for (const p of next.proposals) {
-        const key = `${p.role}:${p.key}`
-        if (!(key in merged) && p.accountId) merged[key] = p.accountId
-      }
-      return merged
-    })
+  function refreshReview() {
+    setReviewFailure(null)
+    setReviewReload((value) => value + 1)
   }
 
   async function accept() {
@@ -340,7 +318,8 @@ export function ShopifyConnectWizard() {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <p className="text-sm text-slate-500">{t('connect.waitingOAuth')}</p>
+            {reviewFailure ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{reviewFailure}</p>
+              : <p className="text-sm text-slate-500">{t('connect.waitingOAuth')}</p>}
             <Button variant="outline" size="sm" onClick={refreshReview}>
               {tc('refresh')}
             </Button>

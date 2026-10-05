@@ -102,6 +102,8 @@ jobs:
         run: node --import ./scripts/test-hooks.mjs --test scripts/test-workflow.test.mjs
       - name: Product-neutrality audit
         run: npm run check:product-neutrality
+      - name: Tenant policy bypass guard
+        run: npm run check:rls-bypass-predicate
       - name: Engine module boundaries
         run: npm run check:engine-boundaries
       - name: Source path references

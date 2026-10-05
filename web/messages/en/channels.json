@@ -205,7 +205,8 @@
     "accountsTitle": "Posting accounts",
     "accountsHint": "Unmapped roles refuse at posting time — accepting early never mis-posts.",
     "unmapped": "Unmapped",
-    "acceptHint": "Saving stores the accounts and activates the channel."
+    "acceptHint": "Saving stores the accounts and activates the channel.",
+    "reviewTimedOut": "Shopify approval was not ready within five minutes. Complete approval in Shopify, then refresh to retry."
   },
   "products": {
     "searchPlaceholder": "Search title, SKU or barcode…",

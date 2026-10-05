@@ -24,6 +24,7 @@ const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/en")).default;
+const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
 const { OssConsole } = await import("./OssConsole");
 
 function tick(): Promise<void> {
@@ -78,7 +79,7 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
       return Response.json(
         {
           year: 2026,
-          totalEur: "4200.00",
+          totalEur: "4200.0050",
           threshold: "10000.0000",
           crossed: false,
           translated: [],
@@ -90,7 +91,7 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
     if (url.startsWith("/api/tax/oss-returns/fx-evidence")) {
       return Response.json(
         {
-          rows: [{ currency: "USD", rate: "1.0842000000", rateAsOf: "2026-09-30", rateSource: "ECB" }],
+          rows: [{ currency: "USD", rate: "1.0842500000", rateAsOf: "2026-09-30", rateSource: "ECB" }],
         },
         { status: 200 },
       );
@@ -103,7 +104,7 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <OssConsole setupHref="/admin/setup/tax-oss-registrations" />
+        <BusinessDateProvider today="2026-08-15"><OssConsole setupHref="/admin/setup/tax-oss-registrations" /></BusinessDateProvider>
       </NextIntlClientProvider>,
     );
   });
@@ -129,7 +130,7 @@ test("oss console shows the evidence-conflict queue with a document remedy link"
     assert.match(host.textContent ?? "", /INV-2041/);
   } finally {
     restore();
-    root.unmount();
+    await act(async () => root.unmount());
     host.remove();
   }
 });
@@ -147,11 +148,11 @@ test("oss console shows the threshold monitor and the fx evidence rate", async (
     });
     for (let i = 0; i < 10; i++) await tick();
     assert.ok(calls.some((u) => u.startsWith("/api/tax/oss-returns/turnover")), "expected a turnover fetch");
-    assert.match(host.textContent ?? "", /4[,.]?200/);
-    assert.match(host.textContent ?? "", /1\.0842/);
+    assert.match(host.textContent ?? "", /4[,.]?200\.01/);
+    assert.match(host.textContent ?? "", /1\.0843/);
   } finally {
     restore();
-    root.unmount();
+    await act(async () => root.unmount());
     host.remove();
   }
 });

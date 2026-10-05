@@ -1150,6 +1150,32 @@ export interface SaveQuoteToCashSettingsInput {
   orderFormTemplateId?: string | null;
 }
 
+type QuoteToCashPolicyRow = {
+  id: string;
+  max_discount_percent: string;
+  auto_activate_on_sign: boolean;
+  default_billing_timing: string;
+  default_start_rule: string;
+  signature_expiry_days: number;
+  order_form_template_id: string | null;
+};
+
+function policyEvidence(row: QuoteToCashPolicyRow) {
+  return {
+    maxDiscountPercent: row.max_discount_percent,
+    autoActivateOnSign: row.auto_activate_on_sign,
+    defaultBillingTiming: row.default_billing_timing,
+    defaultStartRule: row.default_start_rule,
+    signatureExpiryDays: row.signature_expiry_days,
+    orderFormTemplateId: row.order_form_template_id,
+  };
+}
+
+/** Serialize singleton creation, replacement and reset before taking org locks. */
+async function lockQuoteToCashPolicy(orgId: string) {
+  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'quote-to-cash-policy:' + orgId}, 0))`);
+}
+
 /**
  * Save the org's quote-to-cash policy (Setup's single policy row). Every
  * field is validated by name before the upsert; an unknown template refuses
@@ -1172,6 +1198,7 @@ export async function saveQuoteToCashSettings(
     }
   }
   return withOrgTransaction(orgId, async () => {
+    await lockQuoteToCashPolicy(orgId);
     await assertQuoteToCashEnabled(db, orgId);
     if (input.orderFormTemplateId) {
       const template = (
@@ -1183,14 +1210,12 @@ export async function saveQuoteToCashSettings(
         throw new QuoteToCashError("That order-form template is not an active template of this organization — pick one in the PDF template designer");
       }
     }
+    const before = (await db.execute<QuoteToCashPolicyRow>(sql`
+      select id, max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+             default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id
+        from quote_to_cash_settings where org_id = ${orgId} for update`)).rows[0];
     const row = (
-      await db.execute<{
-        max_discount_percent: string;
-        auto_activate_on_sign: boolean;
-        default_billing_timing: string;
-        default_start_rule: string;
-        signature_expiry_days: number;
-      }>(sql`
+      await db.execute<QuoteToCashPolicyRow>(sql`
         insert into quote_to_cash_settings
           (org_id, max_discount_percent, auto_activate_on_sign, default_billing_timing,
            default_start_rule, signature_expiry_days, order_form_template_id, created_by, updated_by)
@@ -1206,15 +1231,15 @@ export async function saveQuoteToCashSettings(
                signature_expiry_days = excluded.signature_expiry_days,
                order_form_template_id = excluded.order_form_template_id,
                updated_at = now(), updated_by = excluded.updated_by
-        returning max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
-                  default_billing_timing, default_start_rule, signature_expiry_days`)
+        returning id, max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+                  default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`)
     ).rows[0];
     // The org-scoped upsert always writes exactly one row; zero rows is raised.
     if (!row) throw new QuoteToCashError("The quote-to-cash policy was not recorded");
     await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'quote_to_cash_settings', (select id from quote_to_cash_settings where org_id = ${orgId}),
-              'update', ${JSON.stringify({ after: { maxDiscountPercent: input.maxDiscountPercent } })}::jsonb, ${actorId})`);
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
+      values (${orgId}, 'quote_to_cash_settings', ${row.id},
+              ${before ? 'update' : 'insert'}, ${JSON.stringify({ before: before ? policyEvidence(before) : null, after: policyEvidence(row) })}::jsonb, ${actorId}, clock_timestamp())`);
     return {
       maxDiscountPercent: row.max_discount_percent,
       autoActivateOnSign: row.auto_activate_on_sign,
@@ -1232,19 +1257,22 @@ export async function saveQuoteToCashSettings(
  */
 export async function clearQuoteToCashSettings(orgId: string, actorId: string): Promise<{ cleared: boolean }> {
   return withOrgTransaction(orgId, async () => {
+    await lockQuoteToCashPolicy(orgId);
     await assertQuoteToCashEnabled(db, orgId);
     const deleted = (
-      await db.execute<{ id: string }>(sql`
-        delete from quote_to_cash_settings where org_id = ${orgId} returning id`)
+      await db.execute<QuoteToCashPolicyRow>(sql`
+        delete from quote_to_cash_settings where org_id = ${orgId}
+        returning id, max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+                  default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`)
     ).rows;
     if (deleted.length !== 1) {
       throw new QuoteToCashError("No quote-to-cash policy is saved — the working defaults already apply");
     }
     await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
       values (${orgId}, 'quote_to_cash_settings', ${deleted[0]!.id}, 'delete',
-              ${JSON.stringify({ before: { policy: "cleared to defaults" } })}::jsonb,
-              ${actorId})`);
+              ${JSON.stringify({ before: policyEvidence(deleted[0]!), after: { ...SETTINGS_DEFAULTS, orderFormTemplateId: null }, reason: "Reset to defaults" })}::jsonb,
+              ${actorId}, clock_timestamp())`);
     return { cleared: true };
   });
 }

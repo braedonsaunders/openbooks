@@ -21,6 +21,7 @@ function stubFetch(): PullFetchFn {
       return {
         status: 200,
         json: async () => ({
+          has_more: false,
           data: [
             { id: "txn_scan_1", type: "charge", amount: 10_000, fee: 290, net: 9_710, currency: "cad" },
           ],
@@ -30,7 +31,8 @@ function stubFetch(): PullFetchFn {
     return {
       status: 200,
       json: async () => ({
-        data: [{ id: "po_scan_1", currency: "cad", arrival_date: 1_783_123_200 }],
+        has_more: false,
+        data: [{ id: "po_scan_1", amount: 9710, currency: "cad", arrival_date: 1_783_123_200 }],
       }),
     };
   }) as PullFetchFn;
@@ -50,55 +52,83 @@ async function pullConfig(orgId: string, userId: string, bank: string, fee: stri
 
 test("scheduled pull imports each payout once across refetches", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Pull Scanner", "admin");
-    await db.execute(sql`
-      update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
-    await pullConfig(org.orgId, userId, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
+  await withOrgContext(org.orgId, async () => {
+    try {
+      const userId = await createScratchUser(org.orgId, "Pull Scanner", "admin");
+      await db.execute(sql`
+        update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
+      await pullConfig(org.orgId, userId, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
 
-    // Scoped to the test org: the unscoped scheduler tick would also see
-    // pooled scratch orgs from other tests holding pull configs.
-    const first = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
-    assert.equal(first.failed, 0, `scan errors: ${JSON.stringify(first.orgErrors)}`);
-    assert.equal(first.ran, 1);
-    const batches = (await db.execute<{ external_ref: string }>(sql`
-      select external_ref from psp_settlement_batches
-       where org_id = ${org.orgId} and provider = 'stripe'
-    `)).rows;
-    assert.deepEqual(batches.map((row) => row.external_ref), ["po_scan_1"]);
+      // Scoped to the test org: the unscoped scheduler tick would also see
+      // pooled scratch orgs from other tests holding pull configs.
+      const first = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
+      assert.equal(first.failed, 0, `scan errors: ${JSON.stringify(first.orgErrors)}`);
+      assert.equal(first.ran, 1);
+      const batches = (await db.execute<{ external_ref: string }>(sql`
+        select external_ref from psp_settlement_batches
+         where org_id = ${org.orgId} and provider = 'stripe'
+      `)).rows;
+      assert.deepEqual(batches.map((row) => row.external_ref), ["po_scan_1"]);
 
-    const second = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
-    assert.equal(second.failed, 0, `rescan errors: ${JSON.stringify(second.orgErrors)}`);
-    const rescan = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from psp_settlement_batches
-       where org_id = ${org.orgId} and provider = 'stripe'
-    `)).rows[0]!.n;
-    assert.equal(rescan, 1, "a refetch converges instead of duplicating");
+      const second = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
+      assert.equal(second.failed, 0, `rescan errors: ${JSON.stringify(second.orgErrors)}`);
+      const rescan = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from psp_settlement_batches
+         where org_id = ${org.orgId} and provider = 'stripe'
+      `)).rows[0]!.n;
+      assert.equal(rescan, 1, "a refetch converges instead of duplicating");
 
-    const cursor = (await db.execute<{ last_pull_at: string | null }>(sql`
-      select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`)).rows[0];
-    assert.ok(cursor!.last_pull_at, "pull cursor advances after the scan");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
+      const cursor = (await db.execute<{ last_pull_at: string | null }>(sql`
+        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`)).rows[0];
+      assert.ok(cursor!.last_pull_at, "pull cursor advances after the scan");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
 });
 
 test("scheduled pull skips orgs with the banking feature off", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Pull Scanner", "admin");
-    await db.execute(sql`
-      update orgs set settings = settings || '{"features":{"banking":false}}'::jsonb where id = ${org.orgId}`);
-    await pullConfig(org.orgId, userId, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
-    const result = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
-    assert.equal(result.ran, 0);
-    assert.equal(result.failed, 0);
-    const batches = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from psp_settlement_batches
-       where org_id = ${org.orgId} and provider = 'stripe'
-    `)).rows[0]!.n;
-    assert.equal(batches, 0, "a gated-off org pulls nothing");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
+  await withOrgContext(org.orgId, async () => {
+    try {
+      const userId = await createScratchUser(org.orgId, "Pull Scanner", "admin");
+      await db.execute(sql`
+        update orgs set settings = settings || '{"features":{"banking":false}}'::jsonb where id = ${org.orgId}`);
+      await pullConfig(org.orgId, userId, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
+      const result = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
+      assert.equal(result.ran, 0);
+      assert.equal(result.failed, 0);
+      const batches = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from psp_settlement_batches
+         where org_id = ${org.orgId} and provider = 'stripe'
+      `)).rows[0]!.n;
+      assert.equal(batches, 0, "a gated-off org pulls nothing");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
+});
+
+test("a later provider page failure leaves the scheduled import and pull cursor untouched", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  await withOrgContext(org.orgId, async () => {
+    try {
+        const actor = await createScratchUser(org.orgId, "Pull Scanner", "admin");
+        await db.execute(sql`update orgs set settings=settings || '{"features":{"banking":true}}'::jsonb where id=${org.orgId}`);
+        await pullConfig(org.orgId, actor, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing);
+        const fetchFn = (async (url: string) => {
+          if (url.includes("/v1/payouts")) return { status: 200, json: async () => ({ has_more: false, data: [{ id: "po_truncated", amount: 9710, currency: "cad", arrival_date: 1783123200 }] }) };
+          if (!url.includes("starting_after")) return { status: 200, json: async () => ({ has_more: true, data: [{ id: "txn_first", type: "charge", amount: 10000, fee: 290, net: 9710, currency: "cad" }] }) };
+          return { status: 503, json: async () => ({ error: { message: "Provider temporarily unavailable" } }) };
+        }) as PullFetchFn;
+        const result = await runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), fetchFn);
+        assert.equal(result.failed, 1);
+        assert.equal(result.ran, 0);
+        assert.match(JSON.stringify(result.orgErrors), /po_truncated.*Provider temporarily unavailable.*retry/);
+        const stored = (await db.execute<{ n: number; last_pull_at: string | null }>(sql`
+          select (select count(*)::int from psp_settlement_batches where org_id=${org.orgId}) n, last_pull_at
+          from psp_provider_configs where org_id=${org.orgId} and provider='stripe'`)).rows[0]!;
+        assert.deepEqual(stored, { n: 0, last_pull_at: null });
+      } finally { await dropScratchOrg(org.orgId); }
+  });
 });

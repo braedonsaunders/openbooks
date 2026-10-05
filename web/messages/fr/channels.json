@@ -205,7 +205,8 @@
     "accountsTitle": "Comptes d’imputation",
     "accountsHint": "Les rôles non affectés sont refusés à la comptabilisation — accepter tôt ne comptabilise jamais faux.",
     "unmapped": "Non affecté",
-    "acceptHint": "Enregistrer stocke les comptes et active le canal."
+    "acceptHint": "Enregistrer stocke les comptes et active le canal.",
+    "reviewTimedOut": "L’approbation Shopify n’était pas prête après cinq minutes. Terminez l’approbation dans Shopify, puis actualisez pour réessayer."
   },
   "products": {
     "searchPlaceholder": "Titre, SKU ou code-barres…",

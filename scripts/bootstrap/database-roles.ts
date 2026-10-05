@@ -173,6 +173,14 @@ export async function applyRowLevelSecurity(): Promise<void> {
            )
       )
       or exists (
+        -- A version comment cannot authenticate a permissive tenant policy.
+        -- Any raw bypass read forces the semantic repair and fail-closed scan.
+        select 1 from pg_policies
+         where schemaname = 'public'
+           and (coalesce(qual, '') like '%app.bypass_rls%'
+             or coalesce(with_check, '') like '%app.bypass_rls%')
+      )
+      or exists (
         select 1
           from pg_constraint
          where contype = 'f'

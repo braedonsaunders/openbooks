@@ -415,3 +415,14 @@ test('the aggregator only tolerates a skipped partition on a scoped run', () => 
     'aggregation runs on manual dispatch and still fires when a partition fails',
   )
 })
+
+test('tenant bypass policies gate routine checks and publishing independently', () => {
+  const routine = topLevelJob('typecheck')
+  assert.match(routine, /run: npm run check:rls-bypass-predicate/)
+  const guard = namedStep('Tenant policy bypass guard')
+  assert.doesNotMatch(guard, /if:|continue-on-error|\|\|\s*true/)
+  const publishing = readFileSync(new URL('../.github/workflows/publish-container.yml', import.meta.url), 'utf8')
+  const guardAt = publishing.indexOf('npm run check:rls-bypass-predicate')
+  assert.ok(guardAt >= 0, 'publishing must directly execute the tenant policy guard')
+  assert.ok(guardAt < publishing.indexOf('engine/src/platform/db-rls.integration.test.ts'), 'guard must precede the database release smoke')
+})

@@ -188,6 +188,7 @@ jobs:
           finally { await pool.end(); } })();"
       - name: Verify release policies
         run: |
+          npm run check:rls-bypass-predicate
           npm run check:repository-artifacts
           npm run check:dependencies
           npm run check:container-security
