@@ -40,6 +40,11 @@
       "banks": "Lohnkonten",
       "accounts": "Bankkonten"
     },
+    "paymentMethodSubtabs": {
+      "ariaLabel": "Zahlungsmethodenbereiche",
+      "methods": "Gespeicherte Zahlungsmethoden",
+      "autopay": "Automatischer Einzug"
+    },
     "tabs": {
       "employment": "Beschäftigung",
       "ariaLabel": "Abschnitte des Geschäftspartner-Datensatzes",

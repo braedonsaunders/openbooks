@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, CreditCard } from 'lucide-react'
 import { fetchAction, type ActionResult } from '@braedonsaunders/appkit-errors'
 import { Badge, Button, DisclosureSection, Input, Label, Select } from '@openbooks/ui'
-import { Switch } from '../../../components/switch'
 import { useAppAction } from '../../../lib/use-app-action'
 import { confirmDialog } from '../../../lib/confirm'
 import { SublistEmpty, SublistHeading } from './PartySummary'
@@ -27,14 +26,6 @@ interface StoredMethodRow {
   status: string
 }
 
-interface EnrollmentRow {
-  id: string
-  subscriptionId: string | null
-  subscriptionName: string | null
-  status: string
-  chargeOnIssue: boolean
-}
-
 const PROVIDERS = ['stripe', 'adyen', 'gocardless'] as const
 
 function providerLabel(provider: string): string {
@@ -51,54 +42,45 @@ function methodTitle(method: StoredMethodRow): string {
 }
 
 /**
- * Stored payment methods and the autopay switch on a customer drawer.
- * Methods are tokens at the provider (brand, last four, expiry) — full
- * numbers never reach OpenBooks. Writes ride the autopay API routes, which
- * re-check every grant and refusal the panel gates on.
+ * Stored payment methods on a customer drawer. Methods are tokens at the
+ * provider (brand, last four, expiry) — full numbers never reach OpenBooks.
+ * Writes ride the autopay API routes, which re-check every grant and
+ * refusal the panel gates on. Autopay enrollments live in PartyAutopayPanel
+ * behind the same tab's second sub-tab, never stacked with the methods.
  */
 export function PartyPaymentMethodsPanel({
   partyId,
   canManageMethods,
-  canManageAutopay,
   defaultCurrency,
 }: {
   partyId: string
   canManageMethods: boolean
-  canManageAutopay: boolean
   defaultCurrency: string
 }) {
   const t = useTranslations('parties.drawer.autopay')
   const tc = useTranslations('common')
   const { busy, refusal, execute } = useAppAction()
   const [methods, setMethods] = useState<StoredMethodRow[] | null>(null)
-  const [enrollments, setEnrollments] = useState<EnrollmentRow[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [provider, setProvider] = useState<string>('stripe')
   const [currency, setCurrency] = useState(defaultCurrency)
   const [setupUrl, setSetupUrl] = useState<string | null>(null)
-  const [chargeOnIssue, setChargeOnIssue] = useState(false)
 
   // The mount effect keeps its promise-chain shape, which never resets state
   // synchronously inside the effect body; mutations refresh through the
   // same reload and apply pair.
   const reload = useCallback(async (signal?: AbortSignal) => {
-    const [methodsRes, enrollmentsRes] = await Promise.all([
-      fetch(`/api/autopay/methods?partyId=${encodeURIComponent(partyId)}`, { signal }),
-      fetch(`/api/autopay/enrollments?partyId=${encodeURIComponent(partyId)}`, { signal }),
-    ])
-    if (!methodsRes.ok || !enrollmentsRes.ok) {
-      const failed = !methodsRes.ok ? methodsRes : enrollmentsRes
-      const body = await failed.json().catch(() => null)
+    const methodsRes = await fetch(`/api/autopay/methods?partyId=${encodeURIComponent(partyId)}`, { signal })
+    if (!methodsRes.ok) {
+      const body = await methodsRes.json().catch(() => null)
       throw new Error((body?.error as string | undefined) ?? t('loadFailed'))
     }
     const methodsBody = (await methodsRes.json()) as { methods?: StoredMethodRow[] }
-    const enrollmentsBody = (await enrollmentsRes.json()) as { enrollments?: EnrollmentRow[] }
-    return { methods: methodsBody.methods ?? [], enrollments: enrollmentsBody.enrollments ?? [] }
+    return methodsBody.methods ?? []
   }, [partyId, t])
 
-  const applyLoaded = useCallback((applied: { methods: StoredMethodRow[]; enrollments: EnrollmentRow[] }) => {
-    setMethods(applied.methods)
-    setEnrollments(applied.enrollments)
+  const applyLoaded = useCallback((applied: StoredMethodRow[]) => {
+    setMethods(applied)
     setLoadError(null)
   }, [])
 
@@ -106,7 +88,6 @@ export function PartyPaymentMethodsPanel({
     if (error instanceof DOMException && error.name === 'AbortError') return
     setLoadError(error instanceof Error ? error.message : t('loadFailed'))
     setMethods(null)
-    setEnrollments(null)
   }, [t])
 
   useEffect(() => {
@@ -204,31 +185,7 @@ export function PartyPaymentMethodsPanel({
     }
   }
 
-  async function enroll() {
-    await execute(() => fetchAction(`/api/autopay/enrollments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ partyId, chargeOnIssue }),
-    }), {
-      fallbackMessage: t('enrollFailed'),
-      onOk: () => refresh(),
-    })
-  }
-
-  async function moveEnrollment(id: string, status: 'active' | 'paused') {
-    await execute(() => fetchAction(`/api/autopay/enrollments/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    }), {
-      fallbackMessage: t('updateFailed'),
-      onOk: () => refresh(),
-    })
-  }
-
-  const loaded = methods !== null && enrollments !== null
-  const customerEnrollment = enrollments?.find((row) => row.subscriptionId === null)
-  const subscriptionEnrollments = enrollments?.filter((row) => row.subscriptionId !== null) ?? []
+  const loaded = methods !== null
   const defaultMethod = methods?.find((method) => method.isDefault && method.status === 'active')
   // The backup chain in charge order: the default always charges first, then
   // active backups by priority with creation time breaking ties — the same
@@ -375,49 +332,6 @@ export function PartyPaymentMethodsPanel({
               ) : null}
             </div>
           ) : null}
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('enrollmentHeading')}</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('enrollmentDescription')}</p>
-            {customerEnrollment ? (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <Switch
-                  on={customerEnrollment.status === 'active'}
-                  disabled={busy || !canManageAutopay}
-                  label={t('customerScope')}
-                  onToggle={() => void moveEnrollment(
-                    customerEnrollment.id,
-                    customerEnrollment.status === 'active' ? 'paused' : 'active',
-                  )}
-                />
-                <Badge variant={customerEnrollment.status === 'active' ? 'success' : 'secondary'}>
-                  {customerEnrollment.status === 'active' ? t('active') : t('paused')}
-                </Badge>
-              </div>
-            ) : canManageAutopay ? (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => void enroll()}>
-                  {t('enroll')}
-                </Button>
-                <Switch on={chargeOnIssue} disabled={busy} label={t('chargeOnIssue')} onToggle={() => setChargeOnIssue((flag) => !flag)} />
-              </div>
-            ) : null}
-            {subscriptionEnrollments.map((enrollment) => (
-              <div key={enrollment.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <Switch
-                  on={enrollment.status === 'active'}
-                  disabled={busy || !canManageAutopay}
-                  label={t('subscriptionScope', { name: enrollment.subscriptionName ?? enrollment.subscriptionId ?? '' })}
-                  onToggle={() => void moveEnrollment(
-                    enrollment.id,
-                    enrollment.status === 'active' ? 'paused' : 'active',
-                  )}
-                />
-                <Badge variant={enrollment.status === 'active' ? 'success' : 'secondary'}>
-                  {enrollment.status === 'active' ? t('active') : t('paused')}
-                </Badge>
-              </div>
-            ))}
-          </div>
           {defaultMethod?.providerCustomerId || defaultMethod?.providerMethodId ? (
             <DisclosureSection title={t('providerDetail')} summary={t('providerDetailSummary')}>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">

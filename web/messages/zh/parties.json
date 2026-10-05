@@ -40,6 +40,11 @@
       "banks": "工资银行",
       "accounts": "银行账户"
     },
+    "paymentMethodSubtabs": {
+      "ariaLabel": "付款方式分区",
+      "methods": "已保存的方式",
+      "autopay": "自动付款"
+    },
     "tabs": {
       "employment": "雇用",
       "ariaLabel": "往来单位记录分区",

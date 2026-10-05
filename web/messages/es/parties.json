@@ -37,6 +37,11 @@
       "banks": "Bancos de pago",
       "accounts": "Cuentas bancarias"
     },
+    "paymentMethodSubtabs": {
+      "ariaLabel": "Secciones de métodos de pago",
+      "methods": "Métodos guardados",
+      "autopay": "Cobro automático"
+    },
     "tabs": {
       "employment": "Empleo",
       "ariaLabel": "Secciones del registro del tercero",

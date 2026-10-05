@@ -37,6 +37,11 @@
       "banks": "Banques de paie",
       "accounts": "Comptes bancaires"
     },
+    "paymentMethodSubtabs": {
+      "ariaLabel": "Sections des moyens de paiement",
+      "methods": "Moyens enregistrés",
+      "autopay": "Prélèvement automatique"
+    },
     "tabs": {
       "employment": "Emploi",
       "ariaLabel": "Sections du dossier du tiers",

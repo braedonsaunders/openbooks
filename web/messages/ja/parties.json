@@ -40,6 +40,11 @@
       "banks": "バンク",
       "accounts": "銀行口座"
     },
+    "paymentMethodSubtabs": {
+      "ariaLabel": "支払い方法セクション",
+      "methods": "保存済みの方法",
+      "autopay": "自動支払い"
+    },
     "tabs": {
       "employment": "雇用",
       "ariaLabel": "取引先レコードのセクション",
