@@ -3489,6 +3489,16 @@
         "title": "参与人员",
         "singular": "参与人员",
         "description": "审批课程规则、安排培训并记录员工结果。"
+      },
+      "business-calendars": {
+        "title": "营业日历",
+        "singularTitle": "营业日历",
+        "description": "按组织和子公司设置周起始日、周末和法定节假日（按生效日期）。预测和仪表板均读取此日历。"
+      },
+      "aging-bucket-policies": {
+        "title": "账龄分段",
+        "singularTitle": "账龄分段策略",
+        "description": "将逾期天数转换为账龄分段的天数分界（按生效日期）。未设置策略时采用30/60/90分段。"
       }
     },
     "fields": {
@@ -4031,7 +4041,12 @@
       "bufferQuantity": "预留库存",
       "stopSellingAtZero": "为零时停止销售",
       "scheme": "方案",
-      "identificationState": "识别成员国"
+      "identificationState": "识别成员国",
+      "weekStartsOn": "周起始日",
+      "weekendDays": "周末",
+      "holidayCountry": "节假日国家",
+      "boundaries": "分界天数",
+      "holidayRegion": "节假日地区"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4089,7 +4104,7 @@
       "includedJobTitles": "仅此处列出的职位可享受本规则——从花名册职位中选择或输入新职位。留空则人人适用。匹配忽略大小写与空格。",
       "excludedJobTitles": "此处列出的职位永不享受本规则。排除优先于包含。匹配忽略大小写与空格。",
       "excludeFromWages": "该分录记录现场事件——值班日、住宿夜——而非工作时间。派生收入规则读取它；工资计算跳过它。",
-      "holidayJurisdiction": "本次变更所属的日历辖区。请用员工参保的省份；联邦监管雇主请用加拿大（联邦）。",
+      "holidayJurisdiction": "本选项或休息日所属的法定日历——所有已申报的日历包均可选择。",
       "holidayEffectiveTo": "留空表示无结束日期。生效日期与假日日期比对，因此过往工资运行保留当时运行所用的日历。",
       "holidayPackKey": "本选项适用的法定假日，例如 boxing_day 或 heritage_day。留空则添加自家公司假日。只有可选假日可关闭——强制假日会被拒绝。",
       "holidayName": "您要添加的公司假日名称。当本行是对法定假日的选项时留空。",
@@ -4173,7 +4188,11 @@
       "shippingMarkup": "在承运商运费上加收的费用，以基点计。100 即百分之一。",
       "shippingCustomsDefaults": "发往国外的出货默认内容说明。",
       "payBandTarget": "可选。请输入范围内已批准的目标薪酬。如果政策只规定最低值和最高值，请留空；系统不会推定中间值。",
-      "compensationCriteria": "在确定经批准的同等价值工作评估依据之前，此项可选。薪酬公平评估要求明确的标准和权重。"
+      "compensationCriteria": "在确定经批准的同等价值工作评估依据之前，此项可选。薪酬公平评估要求明确的标准和权重。",
+      "businessCalendarWeekendDays": "以JSON列表表示ISO星期几，例如[6, 7]表示周六和周日。空列表表示没有周末。",
+      "businessCalendarHolidayCountry": "法定节假日取自唯一的就业日历：该国的，或该国按地区设历时的该地区（在下方设置地区）。没有核算包的国家不可用——不设节假日国家保存则仅适用周末规则。",
+      "agingBucketBoundaries": "以升序天数的JSON列表表示，例如[30, 60, 90]。最后一个分界开启最后一个分段，因此逾期90天即属于90+。",
+      "businessCalendarHolidayRegion": "选择就业节假日历的地区限定词：安大略用ON（不可用CA-ON）。联邦日历与地区日历并存时，FEDERAL指联邦日历。该国只有单一日历时留空；按地区设历的国家必须填写。"
     },
     "options": {
       "storedValueKind": {
@@ -4864,6 +4883,15 @@
       "portalOfferKind": {
         "pause": "改为暂停",
         "discount": "促销折扣"
+      },
+      "weekday": {
+        "monday": "星期一",
+        "tuesday": "星期二",
+        "wednesday": "星期三",
+        "thursday": "星期四",
+        "friday": "星期五",
+        "saturday": "星期六",
+        "sunday": "星期日"
       }
     },
     "payroll": {

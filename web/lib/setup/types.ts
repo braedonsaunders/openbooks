@@ -99,6 +99,11 @@ export const setupOptionLabel = (
  *   programs (engine/src/payroll/packs.ts), for the pay-component program
  *   exclusion picker. Cross-pack union; free entry covers the rest, and a
  *   key no pack declares is inert on runs.
+ * - `payroll-holiday-jurisdictions` — every declared statutory holiday
+ *   calendar key (engine/src/payroll/packs.ts), for the holiday election
+ *   jurisdiction picker. Company closures file under the calendar they
+ *   close, so every declared key must be fileable, not just the CA/US pair
+ *   the static fallback predates.
  */
 export type SetupDynamicOptionsSource =
   | 'payroll-filing-countries'
@@ -107,6 +112,7 @@ export type SetupDynamicOptionsSource =
   | 'payroll-deduction-treatments'
   | 'payroll-protection-classes'
   | 'payroll-contribution-programs'
+  | 'payroll-holiday-jurisdictions'
   | 'payroll-statutory-reporting-categories'
 
 export interface SetupField {

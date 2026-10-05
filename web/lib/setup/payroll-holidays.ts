@@ -65,7 +65,7 @@ export const PAYROLL_HOLIDAYS_ENTITY: SetupEntity = {
   // not observe Boxing Day" invisible the moment it was saved.
   hasActive: false,
   columns: [
-    { key: 'jurisdiction', kind: 'badge', options: HOLIDAY_JURISDICTIONS },
+    { key: 'jurisdiction', kind: 'badge', options: HOLIDAY_JURISDICTIONS, optionsSource: 'payroll-holiday-jurisdictions' },
     { key: 'packKey', kind: 'code' },
     { key: 'name', kind: 'text' },
     { key: 'ruleKind', kind: 'badge', options: HOLIDAY_RULE_KINDS },
@@ -75,10 +75,11 @@ export const PAYROLL_HOLIDAYS_ENTITY: SetupEntity = {
     { key: 'effectiveFrom', kind: 'date' },
     { key: 'effectiveTo', kind: 'date' },
   ],
-  filters: [{ key: 'jurisdiction', options: HOLIDAY_JURISDICTIONS }],
+  filters: [{ key: 'jurisdiction', options: HOLIDAY_JURISDICTIONS, optionsSource: 'payroll-holiday-jurisdictions' }],
   fields: [
     {
       key: 'jurisdiction', kind: 'select', required: true, options: HOLIDAY_JURISDICTIONS,
+      optionsSource: 'payroll-holiday-jurisdictions',
       helpTextKey: 'fieldHelp.holidayJurisdiction',
     },
     // Effective dating is compared against the holiday's OBSERVED DATE, never

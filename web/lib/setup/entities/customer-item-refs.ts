@@ -9,6 +9,7 @@ import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
 import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
 import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
 import { validatePromotionWrite, validateRestockingFeeWrite } from '../sales-validation'
+import { validateAgingBucketPolicyWrite, validateBusinessCalendarWrite } from '../calendar-validation'
 import { validateContributionWrite, validateDepartmentExpenseWrite, validateEntitlementPlan, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
 
 type CurrentIdentifier = { item_id: string; unit: string | null }
@@ -63,6 +64,8 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   'restocking-fee-policies': validateRestockingFeeWrite,
   'pay-component-department-expenses': validateDepartmentExpenseWrite,
   'stored-value-programs': validateStoredValueProgramWrite,
+  'business-calendars': validateBusinessCalendarWrite,
+  'aging-bucket-policies': validateAgingBucketPolicyWrite,
 }
 
 /** Attach entity-owned validation to the shared setup write pipeline. */

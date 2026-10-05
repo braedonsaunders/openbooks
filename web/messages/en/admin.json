@@ -3489,6 +3489,16 @@
         "title": "Participants",
         "singular": "Participants",
         "description": "Approve course policies, schedule delivery and record employee outcomes."
+      },
+      "business-calendars": {
+        "title": "Business calendars",
+        "singularTitle": "Business calendar",
+        "description": "Week start, weekend days and statutory holidays per organization and subsidiary, effective-dated. Forecasts and dashboards read this calendar."
+      },
+      "aging-bucket-policies": {
+        "title": "Aging bucket policies",
+        "singularTitle": "Aging bucket policy",
+        "description": "Day boundaries that turn days-past-due into aging buckets, effective-dated. Without a policy the 30/60/90 buckets apply."
       }
     },
     "fields": {
@@ -4031,7 +4041,12 @@
       "bufferQuantity": "Keep-back buffer",
       "stopSellingAtZero": "Stop selling at zero",
       "scheme": "Scheme",
-      "identificationState": "Member state of identification"
+      "identificationState": "Member state of identification",
+      "weekStartsOn": "Week starts on",
+      "weekendDays": "Weekend days",
+      "holidayCountry": "Holiday country",
+      "boundaries": "Boundaries",
+      "holidayRegion": "Holiday region"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4089,7 +4104,7 @@
       "includedJobTitles": "Only employees whose job title is listed here earn this rule — pick from the roster's titles or type a new one. Leave it empty to pay everyone. Matching ignores case and spacing.",
       "excludedJobTitles": "Employees whose job title is listed here never earn this rule. Exclusions win over inclusions. Matching ignores case and spacing.",
       "excludeFromWages": "The entry records a field event — an on-call day, a per-diem night — not worked time. Derived earnings rules read it; the wage calculation skips it.",
-      "holidayJurisdiction": "The jurisdiction whose calendar this changes. Use the province your employees are covered by, or Canada (federal) for a federally regulated employer.",
+      "holidayJurisdiction": "The statutory calendar this election or closure belongs to — every declared pack calendar is offered.",
       "holidayEffectiveTo": "Leave empty for no end date. Effective dates are compared against the holiday's date, so past pay runs keep the calendar they were run under.",
       "holidayPackKey": "The statutory holiday this election applies to, for example boxing_day or heritage_day. Leave empty to add a company holiday of your own. Only optional holidays can be switched off — a mandatory one is refused.",
       "holidayName": "The name of the company holiday you are adding. Leave empty when this row is an election on a statutory holiday.",
@@ -4173,7 +4188,11 @@
       "shippingMarkup": "Extra charge added to the carrier rate, in basis points. 100 is one percent.",
       "shippingCustomsDefaults": "Default contents description for shipments that leave the country.",
       "payBandTarget": "Optional. Enter an approved target within the range. Leave blank when the policy defines only minimum and maximum; no midpoint is inferred.",
-      "compensationCriteria": "Optional until an approved equal-value assessment basis is defined. Pay-equity assessments require declared criteria and weights."
+      "compensationCriteria": "Optional until an approved equal-value assessment basis is defined. Pay-equity assessments require declared criteria and weights.",
+      "businessCalendarWeekendDays": "ISO weekdays as a JSON list, for example [6, 7] for Saturday and Sunday. An empty list states that no weekday is a weekend day.",
+      "businessCalendarHolidayCountry": "Statutory holidays resolve from one employment calendar: this country's, or its region's where the country keeps one per region (set the region below). A country with no transcribed pack cannot be used — save without a holiday country for weekends only.",
+      "agingBucketBoundaries": "Ascending day counts as a JSON list, for example [30, 60, 90]. The final boundary opens the last bucket, so 90 days past due is already 90+.",
+      "businessCalendarHolidayRegion": "Region qualifier selecting the employment holiday calendar: ON for Ontario (never CA-ON). Where a federal calendar sits beside regional ones, FEDERAL names the federal calendar. Leave empty where the country keeps a single calendar; a country of regional calendars requires it."
     },
     "options": {
       "storedValueKind": {
@@ -4864,6 +4883,15 @@
       "portalOfferKind": {
         "pause": "Pause instead",
         "discount": "Discount with promotion"
+      },
+      "weekday": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
       }
     },
     "payroll": {

@@ -3414,6 +3414,16 @@
         "title": "Participantes",
         "singular": "Participantes",
         "description": "Apruebe políticas de cursos, programe sesiones y registre resultados."
+      },
+      "business-calendars": {
+        "title": "Calendarios laborales",
+        "singularTitle": "Calendario laboral",
+        "description": "Inicio de semana, días de fin de semana y festivos por organización y filial, con fecha de vigencia. Los pronósticos y paneles leen este calendario."
+      },
+      "aging-bucket-policies": {
+        "title": "Antigüedad de saldos",
+        "singularTitle": "Política de antigüedad",
+        "description": "Límites de días que convierten los días vencidos en tramos de antigüedad, con fecha de vigencia. Sin política se aplican los tramos 30/60/90."
       }
     },
     "fields": {
@@ -3956,7 +3966,12 @@
       "bufferQuantity": "Existencias reservadas",
       "stopSellingAtZero": "Dejar de vender en cero",
       "scheme": "Esquema",
-      "identificationState": "Estado miembro de identificación"
+      "identificationState": "Estado miembro de identificación",
+      "weekStartsOn": "Inicio de la semana",
+      "weekendDays": "Días de fin de semana",
+      "holidayCountry": "País de festivos",
+      "boundaries": "Límites",
+      "holidayRegion": "Región de festivos"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4010,7 +4025,7 @@
       "holidayEffectiveTo": "Déjelo vacío si no hay fecha de fin. Las fechas de vigencia se comparan con la fecha del festivo, así que los ciclos pasados conservan el calendario con el que se ejecutaron.",
       "holidayIsObserved": "Desactivado suprime un festivo opcional elegido anteriormente.",
       "holidayIsPaid": "Desactivado lo convierte en un cierre cuyo día no se paga. Los festivos legales siempre se pagan.",
-      "holidayJurisdiction": "La jurisdicción cuyo calendario cambia esto. Use la provincia que cubra a sus empleados, o Canadá (federal) para un empleador de regulación federal.",
+      "holidayJurisdiction": "El calendario legal al que pertenecen esta elección o cierre — se ofrecen todos los calendarios declarados.",
       "holidayName": "El nombre del festivo de empresa que añade. Déjelo vacío cuando esta fila sea una elección sobre un festivo legal.",
       "holidayObservance": "Los festivos legales conservan su fecha y la ley otorga en cambio un día libre sustituto. Elija un desplazamiento solo para un festivo de empresa que realmente mueva.",
       "holidayPackKey": "El festivo legal al que aplica esta elección, por ejemplo boxing_day o heritage_day. Déjelo vacío para añadir un festivo propio de la empresa. Solo los festivos opcionales pueden desactivarse: uno obligatorio se rechaza.",
@@ -4098,7 +4113,11 @@
       "shippingMarkup": "Cargo adicional sobre la tarifa del transportista, en puntos básicos. 100 es un uno por ciento.",
       "shippingCustomsDefaults": "Descripción de contenido predeterminada para envíos al extranjero.",
       "payBandTarget": "Opcional. Introduzca un objetivo aprobado dentro del rango. Déjelo vacío si la política solo define el mínimo y el máximo; no se calcula un punto medio.",
-      "compensationCriteria": "Opcional hasta definir una base aprobada para evaluar trabajos de igual valor. Las evaluaciones de equidad salarial requieren criterios y ponderaciones definidos."
+      "compensationCriteria": "Opcional hasta definir una base aprobada para evaluar trabajos de igual valor. Las evaluaciones de equidad salarial requieren criterios y ponderaciones definidos.",
+      "businessCalendarWeekendDays": "Días de la semana ISO como lista JSON, por ejemplo [6, 7] para sábado y domingo. Una lista vacía indica que ningún día es fin de semana.",
+      "businessCalendarHolidayCountry": "Los festivos provienen de un solo calendario laboral: el del país o el de su región donde el país lleva uno por región (indique la región abajo). Un país sin paquete transcrito no puede usarse — guarde sin país de festivos para solo fines de semana.",
+      "agingBucketBoundaries": "Cantidades de días ascendentes como lista JSON, por ejemplo [30, 60, 90]. El último límite abre el último tramo: 90 días vencidos ya son 90+.",
+      "businessCalendarHolidayRegion": "Calificador de región que selecciona el calendario laboral: ON para Ontario (nunca CA-ON). Donde un calendario federal convive con calendarios regionales, FEDERAL nombra el calendario federal. Déjelo vacío donde el país lleva un solo calendario; un país de calendarios regionales lo exige."
     },
     "options": {
       "storedValueKind": {
@@ -4789,6 +4808,15 @@
       "portalOfferKind": {
         "pause": "Pausar en su lugar",
         "discount": "Descuento con promoción"
+      },
+      "weekday": {
+        "monday": "lunes",
+        "tuesday": "martes",
+        "wednesday": "miércoles",
+        "thursday": "jueves",
+        "friday": "viernes",
+        "saturday": "sábado",
+        "sunday": "domingo"
       }
     },
     "laborCosting": {
