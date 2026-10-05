@@ -272,9 +272,10 @@ test("commitments and budget control preserve posting policy and derived balance
     const first = await draftActual("45.0000");
     await linkEncumbranceDocumentLine({ orgId: org.orgId, encumbranceId: commitment.id, documentLineId: first.documentLineId, actorId });
     assert.equal(await openBalance(), "75.0000");
+    // Effects run inline: the void below refuses while posting effects are pending.
     await withOrgContext(org.orgId, () => postDocument(first.documentId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    }, { deferEffects: true }));
+    }));
     assert.equal(await openBalance(), "30.0000");
     // The posted 45.00 is counted once: the remaining 30.00 links in full,
     // and one cent more is refused.
