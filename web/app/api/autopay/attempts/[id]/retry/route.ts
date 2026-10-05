@@ -6,6 +6,7 @@ import {
 } from '@openbooks/engine/payments/autopay'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
+import { guardCollectionAttemptScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
@@ -20,6 +21,8 @@ export const POST = defineRoute({
   handler: async ({ authz, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'attempt id is required' }, { status: 400 })
+    const outOfScope = await guardCollectionAttemptScope(authz, id)
+    if (outOfScope) return outOfScope
     try {
       const result = await retryAttemptNow(authz.user.orgId, id, authz.user.id)
       return NextResponse.json(result)

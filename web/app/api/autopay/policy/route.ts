@@ -7,6 +7,7 @@ import {
 } from '@openbooks/engine/payments/autopay'
 import { uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
+import { guardUnrestrictedScope } from '@/lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -27,6 +28,9 @@ export const POST = defineRoute({
   feature: 'autopay',
   body: policyBody,
   handler: async ({ authz, body }) => {
+    // A collection policy governs autopay for customers of every subsidiary.
+    const scopeDenied = guardUnrestrictedScope(authz)
+    if (scopeDenied) return scopeDenied
     try {
       const policy = await saveAutopayPolicy(authz.user.orgId, {
         policyId: body.policyId,

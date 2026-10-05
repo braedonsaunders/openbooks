@@ -11,6 +11,7 @@ import {
 import { uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
+import { guardAutopayPartyScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,8 @@ export const GET = defineRoute({
   handler: async ({ authz, request }) => {
     const partyId = new URL(request.url).searchParams.get('partyId') ?? ''
     if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+    const outOfScope = await guardAutopayPartyScope(authz, partyId)
+    if (outOfScope) return outOfScope
     try {
       const methods = await listPaymentMethods(authz.user.orgId, partyId)
       return NextResponse.json({ methods })
@@ -50,6 +53,8 @@ export const POST = defineRoute({
   feature: 'autopay',
   body: startSetupBody,
   handler: async ({ authz, body }) => {
+    const outOfScope = await guardAutopayPartyScope(authz, body.partyId)
+    if (outOfScope) return outOfScope
     const setupToken = randomBytes(32).toString('hex')
     try {
       const session = await startMethodSetup(authz.user.orgId, {

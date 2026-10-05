@@ -8,6 +8,7 @@ import {
 } from '@openbooks/engine/payments/autopay'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
+import { guardPaymentMethodScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +22,8 @@ export const PATCH = defineRoute({
   handler: async ({ authz, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'method id is required' }, { status: 400 })
+    const outOfScope = await guardPaymentMethodScope(authz, id)
+    if (outOfScope) return outOfScope
     try {
       await setDefaultMethod(authz.user.orgId, id, authz.user.id)
       return NextResponse.json({ ok: true })
@@ -38,6 +41,8 @@ export const DELETE = defineRoute({
   handler: async ({ authz, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'method id is required' }, { status: 400 })
+    const outOfScope = await guardPaymentMethodScope(authz, id)
+    if (outOfScope) return outOfScope
     try {
       await removeMethod(authz.user.orgId, id, authz.user.id)
       return NextResponse.json({ ok: true })
