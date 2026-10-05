@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export default async function ImportHistoryPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
   const data = await loadImportHistory(sp)
