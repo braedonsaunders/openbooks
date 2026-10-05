@@ -3272,7 +3272,7 @@
     "form": {
       "addCategory": "Ajouter une catégorie",
       "adjustmentPct": "Ajustement %",
-      "amount": "Montant",
+      "amount": "Montant ({code})",
       "bankAccounts": "Comptes bancaires",
       "calcMethod": "Méthode de calcul",
       "cancel": "Annuler",
@@ -3305,7 +3305,7 @@
       "searchBankAccounts": "Rechercher des comptes bancaires…",
       "searchCardAccounts": "Rechercher des comptes de carte…",
       "searchVendors": "Rechercher des fournisseurs…",
-      "threshold": "Seuil de paiement significatif ($)",
+      "threshold": "Seuil de paiement significatif ({code})",
       "thresholdHelp": "0 = détection auto (50 % du paiement médian)",
       "transfers": "Virements",
       "type": "Type",

@@ -181,12 +181,12 @@
       "prediction": {
         "label": "Prévision de la date d’encaissement",
         "value": "Statistique → Moyenne globale → Échéance",
-        "note": "Délai moyen par client (+½σ de marge), au plus tôt à la date d'échéance — sans aucun historique, l'échéance elle-même s'applique"
+        "note": "Délai moyen d’encaissement par client plus la marge de variabilité configurée, au plus tôt à la date d’échéance — sans aucun historique, l’échéance elle-même s’applique"
       },
       "overduePush": {
         "label": "Report de retard",
-        "value": "+7 / +14 / +28 jours",
-        "note": "Les factures en retard sont décalées selon leur ancienneté (≤30 / ≤60 / >60 jours)"
+        "value": "Croît avec l’ancienneté",
+        "note": "Les factures en retard sont d’autant plus décalées qu’elles sont anciennes"
       },
       "businessDay": {
         "label": "Ajustement au jour ouvré",
@@ -194,7 +194,7 @@
         "note": "Les dates prévues le week-end passent au jour ouvré suivant"
       },
       "dso": {
-        "label": "Délai moyen d’encaissement (DSO)",
+        "label": "Délai moyen d’encaissement",
         "value": "{dso} j",
         "note": "Vide sans historique de paiement — la prévision utilise les échéances"
       },

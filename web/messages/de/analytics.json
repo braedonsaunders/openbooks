@@ -3272,7 +3272,7 @@
     "form": {
       "addCategory": "Kategorie hinzufügen",
       "adjustmentPct": "Anpassung %",
-      "amount": "Betrag",
+      "amount": "Betrag ({code})",
       "bankAccounts": "Bankkonten",
       "calcMethod": "Berechnungsmethode",
       "cancel": "Abbrechen",
@@ -3305,7 +3305,7 @@
       "searchBankAccounts": "Bankkonten suchen…",
       "searchCardAccounts": "Kartenkonten suchen…",
       "searchVendors": "Lieferanten suchen…",
-      "threshold": "Schwelle wesentliche Zahlung ($)",
+      "threshold": "Schwelle wesentliche Zahlung ({code})",
       "thresholdHelp": "0 = auto (50 % der medianen Zahlung)",
       "transfers": "Umbuchungen",
       "type": "Art",

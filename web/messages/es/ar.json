@@ -181,12 +181,12 @@
       "prediction": {
         "label": "Predicción de fecha de cobro",
         "value": "Estadístico → Promedio global → Vencimiento",
-        "note": "Promedio de días de cobro por cliente (+½σ de margen), nunca antes del vencimiento — sin ningún historial rige el propio vencimiento"
+        "note": "Promedio de días de cobro por cliente más el margen de variabilidad configurado, nunca antes del vencimiento — sin ningún historial rige el propio vencimiento"
       },
       "overduePush": {
         "label": "Aplazamiento por atraso",
-        "value": "+7 / +14 / +28 días",
-        "note": "Las facturas vencidas se desplazan según su atraso (≤30 / ≤60 / >60 días)"
+        "value": "Crece con la antigüedad",
+        "note": "Las facturas vencidas se desplazan tanto más cuanto mayor es su atraso"
       },
       "businessDay": {
         "label": "Ajuste a día hábil",
@@ -194,7 +194,7 @@
         "note": "Las fechas previstas en fin de semana pasan al siguiente día hábil"
       },
       "dso": {
-        "label": "Promedio de días para cobrar (DSO)",
+        "label": "Promedio de días para cobrar",
         "value": "{dso} d",
         "note": "Vacío sin historial de pagos — el pronóstico usa los vencimientos"
       },

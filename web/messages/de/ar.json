@@ -181,12 +181,12 @@
       "prediction": {
         "label": "Prognose des Zahlungstermins",
         "value": "Statistisch → Globaler Durchschnitt → Fälligkeit",
-        "note": "Durchschnittliche Zahlungsdauer je Kunde (+½σ-Puffer), frühestens am Fälligkeitstag — ganz ohne Historie gilt der Fälligkeitstag selbst"
+        "note": "Durchschnittliche Inkassotage je Kunde plus dem eingestellten Schwankungspuffer, frühestens am Fälligkeitstag — ganz ohne Historie gilt der Fälligkeitstag selbst"
       },
       "overduePush": {
         "label": "Überfälligkeitsaufschub",
-        "value": "+7 / +14 / +28 Tage",
-        "note": "Überfällige Rechnungen werden abhängig von ihrer Überfälligkeit verschoben (≤30 / ≤60 / >60 Tage)"
+        "value": "Wächst mit der Überfälligkeit",
+        "note": "Überfällige Rechnungen werden umso weiter verschoben, je überfälliger sie sind"
       },
       "businessDay": {
         "label": "Werktagsanpassung",
@@ -194,7 +194,7 @@
         "note": "Prognosen am Wochenende werden auf den nächsten Werktag verschoben"
       },
       "dso": {
-        "label": "Durchschnittliche Zahlungsdauer (DSO)",
+        "label": "Durchschnittliche Inkassotage",
         "value": "{dso} T.",
         "note": "Ohne Zahlungshistorie leer — die Prognose verwendet stattdessen Fälligkeitstage"
       },

@@ -3272,7 +3272,7 @@
     "form": {
       "addCategory": "カテゴリを追加",
       "adjustmentPct": "調整率",
-      "amount": "金額",
+      "amount": "金額（{code}）",
       "bankAccounts": "銀行口座",
       "calcMethod": "計算方法",
       "cancel": "キャンセル",
@@ -3305,7 +3305,7 @@
       "searchBankAccounts": "銀行口座を検索…",
       "searchCardAccounts": "カード口座を検索…",
       "searchVendors": "仕入先を検索…",
-      "threshold": "重要支払しきい値（$）",
+      "threshold": "重要支払しきい値（{code}）",
       "thresholdHelp": "0＝自動検出（支払中央値の50%）",
       "transfers": "振替",
       "type": "タイプ",

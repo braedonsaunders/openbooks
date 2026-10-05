@@ -94,7 +94,11 @@ test("subsidiary attribution round-trips through the category editor", async () 
     await act(async () => {
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-          <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={SUBSIDIARIES} initialCategories={[]} />
+          <MoneyProvider currency="USD">
+            <BusinessDateProvider today="2026-09-01">
+              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={SUBSIDIARIES} initialCategories={[]} />
+            </BusinessDateProvider>
+          </MoneyProvider>
         </NextIntlClientProvider>,
       );
       await tick();

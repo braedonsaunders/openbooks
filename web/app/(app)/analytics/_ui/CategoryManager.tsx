@@ -392,7 +392,7 @@ export function CategoryManager({
                   <input type="number" min={1} max={24} value={draft.historyMonths ?? 6} onChange={(e) => set({ historyMonths: Number(e.target.value) })} className={numCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>{tForm('threshold')} ({presentationCode})</label>
+                  <label className={labelCls}>{tForm('threshold', { code: presentationCode })}</label>
                   <input type="number" min={0} step="0.0001" value={draft.significantPaymentThreshold ?? '0'} onChange={(e) => set({ significantPaymentThreshold: e.target.value })} className={numCls} />
                   <span className={helpCls}>{tForm('thresholdHelp')}</span>
                 </div>
@@ -402,7 +402,7 @@ export function CategoryManager({
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>{tForm('amount')} ({presentationCode})</label>
+                  <label className={labelCls}>{tForm('amount', { code: presentationCode })}</label>
                   <input type="number" min={0} step="0.0001" value={draft.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} className={numCls} />
                 </div>
                 <div>

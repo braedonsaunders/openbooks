@@ -10,6 +10,11 @@
     "reason": "Reader default; the timeline builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts Sep 7 / fr septembre)"
   },
   {
+    "path": "web/lib/cash/core.ts",
+    "fn": "forecastCategoryOrUnavailable",
+    "reason": "Reader default; all four UI position builders pass the viewer locale explicitly — the default serves direct engine consumers, whose labels only surface through the callers' locale"
+  },
+  {
     "path": "web/lib/cash/ap-position.ts",
     "fn": "apPosition",
     "reason": "Reader default; the AP loader passes getLocale() — the default serves the label-agnostic ap_position agent-tool caller"

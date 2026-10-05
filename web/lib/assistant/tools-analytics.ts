@@ -358,7 +358,7 @@ const vendorPerformanceTool: AssistantToolDef = {
 const cashflowTool: AssistantToolDef = {
   name: "analytics_cashflow",
   description:
-    "Cash forecast over 1–52 weeks (default the org's configured cashflow horizon): predicted AR, scheduled AP, recurring flows — runway, burn, lowest-cash week, DSO/DPO. Read-only.",
+    "Cash forecast over 1–52 weeks (default the org's configured cashflow horizon): predicted AR, scheduled AP, recurring flows — runway, burn, lowest-cash week, average days to settle. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({

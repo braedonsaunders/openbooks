@@ -3272,7 +3272,7 @@
     "form": {
       "addCategory": "Añadir categoría",
       "adjustmentPct": "Ajuste %",
-      "amount": "Importe",
+      "amount": "Importe ({code})",
       "bankAccounts": "Cuentas bancarias",
       "calcMethod": "Método de cálculo",
       "cancel": "Cancelar",
@@ -3305,7 +3305,7 @@
       "searchBankAccounts": "Buscar cuentas bancarias…",
       "searchCardAccounts": "Buscar cuentas de tarjeta…",
       "searchVendors": "Buscar proveedores…",
-      "threshold": "Umbral de pago significativo ($)",
+      "threshold": "Umbral de pago significativo ({code})",
       "thresholdHelp": "0 = detección auto (50 % del pago mediano)",
       "transfers": "Transferencias",
       "type": "Tipo",

@@ -181,12 +181,12 @@
       "prediction": {
         "label": "Collection-date prediction",
         "value": "Statistical → Global average → Due date",
-        "note": "Per-customer average collection days (+½σ buffer), floored at the due date — with no history anywhere, the due date itself"
+        "note": "Per-customer average collection days plus the configured variability buffer, floored at the due date — with no history anywhere, the due date itself"
       },
       "overduePush": {
         "label": "Overdue push",
-        "value": "+7 / +14 / +28 days",
-        "note": "Overdue invoices move forward based on how overdue they are (≤30 / ≤60 / >60 days)"
+        "value": "Grows with overdue age",
+        "note": "Overdue invoices move further forward the more overdue they are"
       },
       "businessDay": {
         "label": "Business-day adjustment",
@@ -194,7 +194,7 @@
         "note": "Predicted weekend dates move to the next business day"
       },
       "dso": {
-        "label": "Average days to collect (DSO)",
+        "label": "Average days to collect",
         "value": "{dso}d",
         "note": "Empty with no payment history — the forecast uses due dates instead"
       },
