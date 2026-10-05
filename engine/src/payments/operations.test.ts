@@ -20,6 +20,7 @@ import { PaymentError } from "../payments-core/payment-errors.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -115,6 +116,10 @@ test(
           "ui",
           { deferEffects: true },
         );
+        // Production drains posting effects synchronously; the deferred
+        // fixture must drain explicitly before the return path voids, or the
+        // void guard refuses before the intended evidence boundary.
+        await runPostDocumentEffects(payment.id);
 
         const runId = randomUUID();
         const instructionId = randomUUID();
@@ -305,6 +310,9 @@ test(
           "ui",
           { deferEffects: true },
         );
+        // Same deferred-effects drain as above: reach the intended evidence
+        // failure boundary instead of the void guard.
+        await runPostDocumentEffects(payment.id);
 
         const runId = randomUUID();
         const instructionId = randomUUID();
@@ -1122,6 +1130,9 @@ test(
           "ui",
           { deferEffects: true },
         );
+        // Same deferred-effects drain: the boundary-valid retry below must
+        // reach the void path, not the effects guard.
+        await runPostDocumentEffects(payment.id);
 
         const runId = randomUUID();
         const instructionId = randomUUID();
