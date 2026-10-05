@@ -537,7 +537,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
                 {overrideSync ? t('locations.syncOn') : t('locations.syncOff')}
               </label>
               <Button size="sm" disabled={busy || overrideItem === ''} onClick={saveOverride}>
-                {tc('save')}
+                {tc('actions.save')}
               </Button>
             </div>
             {policies.length > 0 ? (
@@ -611,10 +611,10 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setMapping(null)}>
-                {tc('cancel')}
+                {tc('actions.cancel')}
               </Button>
               <Button disabled={busy} onClick={saveMapping}>
-                {tc('save')}
+                {tc('actions.save')}
               </Button>
             </div>
           </div>

@@ -211,7 +211,12 @@ export interface ChannelContext {
  */
 export interface ChannelWorkspaceTab {
   key: string;
-  /** next-intl label key the shell translates. */
+  /**
+   * next-intl label key the shell translates. Keys arrive fully namespaced
+   * (`channels.tabs.products`); the workspace translator is already scoped
+   * to the channels catalog, so the shell resolves the relative key and
+   * falls back to the full key text, never a raw key.
+   */
   labelKey: string;
 }
 

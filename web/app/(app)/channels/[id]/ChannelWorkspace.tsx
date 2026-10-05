@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { can, getAuthz, subsidiaryScopeAllows, type Authz } from "../../../../lib/authz";
 import {
   CommerceError,
+  ensureShopifyAdapterRegistered,
   getChannel,
   listInboundEvents,
   workspaceTabsFor,
@@ -63,7 +64,19 @@ export async function ChannelWorkspace({
   // `workspaceTabs()`; a kind with no adapter contributes none, so the
   // built-in tabs stand alone instead of refusing. An adapter key the
   // channel's own adapter did not contribute falls back to overview.
+  // Installed connectors register on demand per process (never at import
+  // time), so the workspace ensures them before the tabs lookup: a fresh
+  // server render otherwise misses the adapter tabs until an unrelated
+  // request happens to register first.
+  ensureShopifyAdapterRegistered();
   const adapterTabs = workspaceTabsFor(channel.kind);
+  // Adapter label keys arrive fully namespaced (`channels.tabs.products`)
+  // while this translator is already scoped to the channels catalog, so
+  // resolve the relative key per the workspace-tab contract.
+  const adapterTabLabel = (labelKey: string): string => {
+    const relative = labelKey.startsWith("channels.") ? labelKey.slice("channels.".length) : labelKey;
+    return t.has(relative) ? t(relative) : labelKey;
+  };
   const adapterKeys = new Set(adapterTabs.map((adapterTab) => `adapter:${adapterTab.key}`));
   const activeTab = tab === "activity" || tab === "settings" || adapterKeys.has(tab) ? tab : "overview";
   const statusLabel = t.has(`status.${channel.status}`) ? t(`status.${channel.status}`) : channel.status;
@@ -96,7 +109,7 @@ export async function ChannelWorkspace({
             { key: "settings", label: t("workspace.tabs.settings") },
             ...adapterTabs.map((adapterTab) => ({
               key: `adapter:${adapterTab.key}` as const,
-              label: t.has(adapterTab.labelKey) ? t(adapterTab.labelKey) : adapterTab.labelKey,
+              label: adapterTabLabel(adapterTab.labelKey),
             })),
           ]}
         />

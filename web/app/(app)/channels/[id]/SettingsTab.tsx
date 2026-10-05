@@ -69,7 +69,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
         body: JSON.stringify({ settings }),
       })
       if (!res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
-      else toast.success(tc('save'))
+      else toast.success(tc('actions.save'))
     } finally {
       setSaving(false)
     }
