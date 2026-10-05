@@ -14,6 +14,9 @@ import { readApiErrorMessage } from "@/lib/api-error";
  */
 const COLUMNS = ["contractNumber", "amount", "date"] as const;
 
+/** One per-row answer from the import API (the engine's CommissionImportResult). */
+type ImportRowResult = { assetId: string | null; ok: boolean; error?: string; remedy?: string };
+
 export function ImportCommissionsButton({
   expenseAccounts,
   baseCurrency,
@@ -27,7 +30,7 @@ export function ImportCommissionsButton({
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
   const [expenseAccountId, setExpenseAccountId] = useState("");
-  const [report, setReport] = useState<{ ok: number; refused: { error: string; remedy?: string }[] } | null>(null);
+  const [report, setReport] = useState<{ ok: number; refused: ImportRowResult[] } | null>(null);
 
   async function submit() {
     const rows = text
@@ -59,9 +62,7 @@ export function ImportCommissionsButton({
         }),
       });
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t("import.failed")));
-      const result = (await res.json()) as {
-        rows: { assetId: string | null; ok: boolean; error?: string; remedy?: string }[];
-      };
+      const result = (await res.json()) as { rows: ImportRowResult[] };
       const ok = result.rows.filter((row) => row.ok).length;
       const refused = result.rows.filter((row) => !row.ok);
       setReport({ ok, refused });
