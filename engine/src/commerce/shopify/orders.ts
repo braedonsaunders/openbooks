@@ -101,7 +101,13 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
   const order = payload as Record<string, unknown>;
   const externalId = text(order.id !== undefined && order.id !== null ? String(order.id) : null);
   if (!externalId) fail("The Shopify order carries no id.", "Replay the orders/create delivery from Shopify, then ingest it again.");
-  const currency = (text(order.currency) ?? "USD").toUpperCase();
+  const currency = text(order.currency)?.toUpperCase();
+  if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+    fail(
+      `Shopify order ${externalId} carries no usable shop currency.`,
+      "Re-sync the order from Shopify so its shop currency arrives with its amounts, then replay it.",
+    );
+  }
   const customer = (order.customer ?? {}) as Record<string, unknown>;
   const customerAddress = addressOf(order.billing_address ?? order.shipping_address ?? customer.default_address);
   const discountCodes = Array.isArray(order.discount_codes)
@@ -235,10 +241,24 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
     fail("The Shopify refund payload is not an object.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
   }
   const refund = payload as Record<string, unknown>;
-  // Refund deliveries carry no currency of their own: the amounts are in
-  // the order's shop currency, so the caller passes it and only a truly
-  // unknown order falls back to USD (ingest refuses that case by name).
-  const currency = (text(refund.currency) ?? text(orderCurrency) ?? "USD").toUpperCase();
+  const refundId = text(refund.id !== undefined && refund.id !== null ? String(refund.id) : null);
+  if (!refundId) fail("The Shopify refund carries no id.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
+  // Refund amounts are denominated in the stored order's shop currency.
+  // A delivery cannot replace that evidence with a different currency.
+  const currency = text(orderCurrency)?.toUpperCase();
+  if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+    fail(
+      `Shopify refund ${refundId} has no verified order currency for order ${orderExternalId}.`,
+      "Re-sync the linked order from Shopify, then replay this refund.",
+    );
+  }
+  const declaredCurrency = text(refund.currency)?.toUpperCase();
+  if (declaredCurrency && declaredCurrency !== currency) {
+    fail(
+      `Shopify refund ${refundId} declares ${declaredCurrency}, but order ${orderExternalId} uses ${currency}.`,
+      "Re-sync the linked order and refund from Shopify so their shop currencies agree, then replay this refund.",
+    );
+  }
   const refundLineItems = Array.isArray(refund.refund_line_items)
     ? (refund.refund_line_items as Array<Record<string, unknown>>)
     : [];
@@ -246,8 +266,6 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
   const adjustments = Array.isArray(refund.order_adjustments)
     ? (refund.order_adjustments as Array<Record<string, unknown>>)
     : [];
-  const refundId = text(refund.id !== undefined && refund.id !== null ? String(refund.id) : null);
-  if (!refundId) fail("The Shopify refund carries no id.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
   return {
     externalId: refundId,
     orderExternalId,

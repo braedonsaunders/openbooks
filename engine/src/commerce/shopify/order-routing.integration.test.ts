@@ -124,7 +124,7 @@ function delivery(orgId: string, channelId: string, topic: string, body: unknown
 }
 
 test(
-  "orders/create through the adapter posts one cash sale and redelivery is a no-op",
+  "Shopify orders and refunds retain their distinct identifiers and order redelivery is a no-op",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());
@@ -149,6 +149,29 @@ test(
         select count(*)::text as count from channel_orders
          where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`)).rows[0]!.count;
       assert.equal(again, "1");
+      const refund = await adapter.handleEvent(delivery(org.orgId, channelId, "refunds/create", {
+        id: 8101, order_id: 7001, created_at: "2026-07-16T12:00:00Z",
+        refund_line_items: [{ quantity: 2, subtotal: "50.00", total_tax: "4.83", restock: false,
+          line_item: { id: 1, variant_id: 8001, sku: "TEE-RED-M" } }],
+        order_adjustments: [{ kind: "shipping_refund", amount: "6.00" }],
+        transactions: [{ gateway: "shopify_payments", amount: "60.83" }],
+      }));
+      const refundRef = refund.resultRef as { eventId?: string; orderExternalId?: string };
+      assert.equal(refundRef.orderExternalId, "7001", "the refund id cannot replace its parent order id");
+      const event = (await db.execute<{ order_id: string; payload: { shopCurrency?: string; totalMinor?: string } }>(sql`
+        select order_id, payload from channel_order_events
+         where org_id = ${org.orgId} and id = ${refundRef.eventId}`)).rows[0];
+      assert.equal(event?.order_id, rows[0]!.id);
+      assert.equal(event?.payload.totalMinor, "6083");
+      for (const topic of ["refunds/create", "fulfillments/create"]) {
+        await assert.rejects(() => adapter.handleEvent(delivery(org.orgId, channelId, topic, { id: 7001 })),
+          (error: unknown) => {
+            assert.ok(error instanceof CommerceError);
+            assert.equal(error.code, "shopify_order_unreadable");
+            assert.match(error.message, /no order id/);
+            return true;
+          });
+      }
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -169,7 +192,13 @@ test(
           id: 8101, order_id: 4242, created_at: "2026-07-16T12:00:00Z", note: null,
           refund_line_items: [], transactions: [{ gateway: "shopify_payments", amount: "60.83" }],
         })),
-        (error: unknown) => error instanceof CommerceError && error.code === "channel_order_unknown",
+        (error: unknown) => {
+          assert.ok(error instanceof CommerceError);
+          assert.equal(error.code, "channel_order_unknown");
+          assert.match(error.message, /4242/);
+          assert.match(error.remedy, /orders\/create/);
+          return true;
+        },
         "a refund without its order refuses instead of parking nowhere",
       );
       const payout = await adapter.handleEvent(delivery(org.orgId, channelId, "shopify_payments/payouts", { id: "p1" }));
