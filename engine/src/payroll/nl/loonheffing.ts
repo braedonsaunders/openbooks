@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
 import { addMonthsClamped, isIsoCalendarDate } from "../../platform/business-date.ts";
@@ -81,18 +82,18 @@ function parseCents(value: string, what: string): bigint {
 
 /** A rate with up to 5 decimals → integer per 100000 (the voorschriften give factors to 5). */
 function parseRate5(value: string, what: string): bigint {
-  const raw = value.trim();
-  const m = /^(\d+)(?:\.(\d{1,5}))?$/.exec(raw);
-  if (!m) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a rate with at most 5 decimals`);
-  return BigInt(m[1]!) * 100000n + BigInt(((m[2] ?? "") + "00000").slice(0, 5));
+  const canonical = canonicalNonNegativeDecimal(value,5);
+  if (canonical === null) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a rate with at most 5 decimals`);
+  const [whole = "0", fraction = ""] = canonical.split(".");
+  return BigInt(whole) * 100000n + BigInt(fraction.padEnd(5,'0'));
 }
 
 /** A whole-percent or 2-decimal percent → integer per 100. */
 function parseRate2(value: string, what: string): bigint {
-  const raw = value.trim();
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(raw);
-  if (!m) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a percentage`);
-  return BigInt(m[1]!) * 100n + BigInt(((m[2] ?? "") + "00").slice(0, 2));
+  const canonical = canonicalNonNegativeDecimal(value,2);
+  if (canonical === null) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a percentage`);
+  const [whole = "0", fraction = ""] = canonical.split(".");
+  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2,'0'));
 }
 
 const ceilDiv = (num: bigint, den: bigint): bigint => (num + den - 1n) / den;
@@ -784,7 +785,7 @@ export async function computeNlStatutory(
     const hoursRaw = contract?.answers["contract_hours_per_week"] ?? null;
     if (hoursRaw !== null && hoursRaw !== "") {
       const hours = Number(hoursRaw.trim());
-      if (!/^\d+(\.\d{1,4})?$/.test(hoursRaw.trim()) || !Number.isFinite(hours) || hours <= 0) {
+      if (canonicalNonNegativeDecimal(hoursRaw.trim(), 4) === null || !Number.isFinite(hours) || hours <= 0) {
         throw new PayrollError(
           `the NL contract hours per week must be a positive decimal ("40", "32"), got "${hoursRaw}". `
           + "Correct the contract hours on the nl_contract certificate before running payroll",

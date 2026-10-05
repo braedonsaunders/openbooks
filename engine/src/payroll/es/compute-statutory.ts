@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * Phase 9 — ES pack statutory pass: 2026 IRPF + Seguridad Social.
  *
@@ -61,10 +62,11 @@ function treatyRateHundredths(raw: string | null | undefined): bigint {
       + "employment income)",
     );
   }
-  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(raw.trim());
-  const hundredths = match == null
+  const canonical = canonicalNonNegativeDecimal(raw, 2);
+  const [whole, fraction = ""] = canonical?.split(".") ?? [];
+  const hundredths = canonical === null
     ? -1n
-    : BigInt(match[1]!) * 100n + BigInt((match[2] ?? "0").padEnd(2, "0"));
+    : BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
   if (hundredths < 0n || hundredths > 10000n) {
     fail(`tasa_convenio "${raw}" is not a percent 0–100 with at most two decimals`);
   }

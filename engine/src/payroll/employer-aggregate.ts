@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, mulPercent, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import { PayrollPackError } from "./packs.ts";
 import type { PayrollEmployerAggregateLevy } from "./packs.ts";
@@ -131,7 +132,7 @@ function assertAggregateLevyValid(levy: PayrollEmployerAggregateLevy): void {
   if (levy.base?.source === "pensionable") {
     for (const period of ["weekly", "monthly", "annual"] as const) {
       const floor = levy.base.periodFloor?.[period];
-      if (floor === undefined || !/^\d+(\.\d+)?$/.test(floor)) {
+      if (floor === undefined || canonicalNonNegativeDecimal(floor, Infinity) === null) {
         throw new PayrollPackError(
           `employer-aggregate levy "${levy.key}" prices a pensionable base with no ${period} `
           + "period floor — declare the year's weekly, monthly and annual floors",
@@ -326,7 +327,7 @@ function assertPercent(where: string, value: string | undefined): void {
   if (value === undefined || value === "") {
     throw new PayrollPackError(`${where} declares no percent`);
   }
-  if (!/^\d+(\.\d+)?$/.test(value)) {
+  if (canonicalNonNegativeDecimal(value, Infinity) === null) {
     throw new PayrollPackError(
       `${where} declares percent "${value}" — a percent is a non-negative number, as the agency states it`,
     );

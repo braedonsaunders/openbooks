@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";;
 /**
  * The FR pack's statutory pass: PAS (prélèvement à la source) for calendar
  * 2026.
@@ -81,12 +82,13 @@ const CENT_UNITS = 100n;
 
 /** Exact 1e6-scale rate from a PERCENT string ("2.9" means 2.9 %). */
 function percent6(value: string): bigint {
-  if (!/^\d+(\.\d{1,2})?$/.test(value)) {
+  const canonical = canonicalNonNegativeDecimal(value,2);
+  if (canonical === null) {
     throw new PayrollPackError(
       `FR PAS transmitted rate is not a percent with at most two decimals: "${value}"`,
     );
   }
-  const [whole = "0", fraction = ""] = value.split(".");
+  const [whole = "0", fraction = ""] = canonical.split(".");
   return BigInt(whole) * RATE6 + BigInt((fraction + "00").slice(0, 2)) * 10_000n;
 }
 

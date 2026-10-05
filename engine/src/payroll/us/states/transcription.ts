@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../../money/exact-decimal.ts";
 /**
  * Helpers for transcribing a publication's own notation without translating it.
  *
@@ -29,12 +30,13 @@ export class UsStateTranscriptionError extends PayrollError {}
  */
 export function pctToRate(printed: string): string {
   const raw = printed.trim().replace(/\s*%$/, "");
-  if (!/^\d+(\.\d+)?$/.test(raw)) {
+  if (canonicalNonNegativeDecimal(raw, Infinity) === null) {
     throw new UsStateTranscriptionError(
       `not a percentage as a publication prints one: "${printed}"`,
     );
   }
-  const [whole = "0", fraction = ""] = raw.split(".");
+  const [integer = "", fraction = ""] = raw.replace(/^[+-]/, "").split(".");
+  const whole = integer || "0";
   const digits = whole + fraction;
   // Two zeros of headroom so a one-digit whole part still has somewhere to go.
   const padded = "00" + digits;

@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -115,9 +116,6 @@ function requirePositionStatus(value: unknown): PositionStatus {
 
 // --- Exact decimal FTE math (no floating point) ------------------------------
 
-/** FTE wire shape: numeric(7,4) as text, e.g. "1.0000". */
-const FTE_PATTERN = /^(\d+)(?:\.(\d{1,4}))?$/;
-
 /**
  * Parse an FTE decimal string to exact ten-thousandths (bigint). "1.5" and
  * "1.5000" are the same 15000n; anything else (negatives, NaN, scientific
@@ -131,16 +129,15 @@ export function parseFte(value: unknown): bigint {
       "fte must be a decimal string with up to 4 fraction digits — check the supplied value",
     );
   }
-  const match = FTE_PATTERN.exec(value);
-  if (match === null || match[0] !== value) {
+  const canonical = canonicalNonNegativeDecimal(value, 4);
+  if (canonical === null) {
     throw new HrmPositionError(
       "INVALID_INPUT",
       `fte ${value} is not a non-negative decimal with up to 4 fraction digits — use a plain decimal like 1.0000`,
     );
   }
-  const whole = BigInt(match[1] ?? "0");
-  const fraction = (match[2] ?? "").padEnd(4, "0");
-  return whole * 10000n + BigInt(fraction);
+  const [whole = "0", fraction = ""] = canonical.split(".");
+  return BigInt(whole) * 10000n + BigInt(fraction.padEnd(4, "0"));
 }
 
 /** Format ten-thousandths back to the stored 4dp shape ("15000n" → "1.5000"). */
@@ -1145,7 +1142,7 @@ export async function writePositionFunding(query: WritePositionFundingQuery): Pr
   let amount: string | null = null;
   let currency: string | null = null;
   if (amountRaw !== null && currencyRaw !== null) {
-    if (typeof amountRaw !== "string" || !/^\d+(\.\d{1,4})?$/.test(amountRaw)) {
+    if (typeof amountRaw !== "string" || canonicalNonNegativeDecimal(amountRaw, 4) === null) {
       throw new HrmPositionError(
         "INVALID_INPUT",
         "plan amount must be a non-negative decimal with up to 4 fraction digits — check the supplied value",

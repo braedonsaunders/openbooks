@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 /**
  * Crew batch service: foreman batch lifecycle with signatures, Flows
@@ -211,10 +212,11 @@ type CrewLineRow = {
 }
 
 function validHours(value: string, what: string): string {
-  if (!/^\d+(?:\.\d{1,4})?$/.test(value) || Number(value) <= 0) {
+  const canonical = canonicalNonNegativeDecimal(value, 4);
+  if (canonical === null || canonical === "0") {
     refuse("invalid_hours", `${what} must be a positive number with at most 4 decimals — fix the line and retry`);
   }
-  return value;
+  return canonical;
 }
 
 async function validateLines(

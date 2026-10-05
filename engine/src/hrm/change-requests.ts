@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -146,7 +147,7 @@ const uuidField = (field: string) => z.string().uuid(`${field} must be a uuid`);
 
 const fteField = z
   .string()
-  .regex(/^\d+(\.\d{1,4})?$/, "fte must be a decimal string with up to 4 fraction digits")
+  .refine((value) => canonicalNonNegativeDecimal(value, 4) !== null, "fte must be a decimal string with up to 4 fraction digits")
   .refine(
     (value) => {
       const n = Number(value);

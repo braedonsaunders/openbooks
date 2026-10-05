@@ -1,4 +1,4 @@
-import { DECIMAL_RE } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 
 /**
  * HRM review-template body normalization (pure — no server imports, so
@@ -25,7 +25,7 @@ export class HrmReviewTemplateScaleError extends Error {}
  */
 function coerceScaleBound(field: 'min' | 'max', slot: string, value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && DECIMAL_RE.test(value)) return Number(value)
+  if (typeof value === 'string' && canonicalDecimal(value, Infinity) !== null && Number.isFinite(Number(value))) return Number(value)
   throw new HrmReviewTemplateScaleError(
     `the review template rating scale ${field} must be a number, got ${JSON.stringify(value) ?? 'nothing'} — fix ${slot} before saving`,
   )

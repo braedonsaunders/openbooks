@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * The FR pack's 2026 cotisation pass: URSSAF employee and employer
  * contributions from the transcribed tables in ./cotisations-2026.ts.
@@ -89,12 +90,13 @@ const CENT_UNITS = 100n;
 
 /** Exact 1e6-scale rate from a tenant PERCENT string ("1.1" means 1.1 %). */
 function percent6(value: string, what: string): bigint {
-  if (!/^\d+(\.\d{1,4})?$/.test(value)) {
+  const canonical = canonicalNonNegativeDecimal(value, 4);
+  if (canonical === null) {
     throw new PayrollPackError(
       `FR ${what} is not a percent with at most four decimals: "${value}"`,
     );
   }
-  const [whole = "0", fraction = ""] = value.split(".");
+  const [whole = "0", fraction = ""] = canonical.split(".");
   const pct6 = BigInt(whole) * RATE6 + BigInt((fraction + "000000").slice(0, 6));
   if (pct6 < 0n || pct6 > 100n * RATE6) {
     throw new PayrollPackError(`FR ${what} out of range 0–100 %: "${value}"`);

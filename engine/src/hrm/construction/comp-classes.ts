@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
 import { resolveEffectiveEmployment } from "../effective-employment.ts";
@@ -75,7 +76,7 @@ export async function createCompClass(
   const actorId = requireId(input.actorId, "actorId");
   const code = requireText(input.code, "code");
   const name = requireText(input.name, "name");
-  if (input.ratePer100 !== undefined && input.ratePer100 !== null && !/^\d+(\.\d{1,4})?$/.test(input.ratePer100)) {
+  if (input.ratePer100 !== undefined && input.ratePer100 !== null && canonicalNonNegativeDecimal(input.ratePer100, 4) === null) {
     throw new HrmConstructionError(`ratePer100 must be a non-negative decimal with at most 4 places — got ${input.ratePer100}.`);
   }
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");

@@ -1,3 +1,4 @@
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, formatMoney, neg } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import type {
@@ -35,13 +36,10 @@ import type {
  * deliverable; a reconstructed transmission format would not be.
  */
 
-/** Whether a reported value is an amount the correction can subtract. */
-const MONEY = /^-?\d+(\.\d+)?$/;
-
 /** Column 3 of a 941-X: corrected minus originally reported, exactly. */
 function difference(current: string | null, previous: string | null): string | null {
   if (current == null || previous == null) return null;
-  if (!MONEY.test(current) || !MONEY.test(previous)) return null;
+  if (canonicalDecimal(current, Infinity) === null || canonicalDecimal(previous, Infinity) === null) return null;
   // Dollars and cents, like the columns either side of it — money.ts's
   // canonical four-decimal form beside two-decimal box amounts would read as
   // two different quantities on one line of a printed form.
@@ -95,7 +93,7 @@ export function buildW2c(row: PayrollFilingCorrectionRow, taxYear: number): Payr
         code: field.code,
         label: field.label,
         previous: field.value,
-        current: MONEY.test(field.value) ? "0.00" : field.value,
+        current: canonicalDecimal(field.value, Infinity) !== null ? "0.00" : field.value,
         redacted: false,
       }))
     : row.changes.filter((change) => change.code != null);

@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
 import {
@@ -497,7 +498,7 @@ export async function addScheduleLine(
     ["fringeCreditRate", input.fringeCreditRate ?? "0"],
     ["overtimeMultiplier", input.overtimeMultiplier ?? "1.5"],
   ] as const) {
-    if (!/^\d+(\.\d{1,4})?$/.test(value)) {
+    if (canonicalNonNegativeDecimal(value, 4) === null) {
       throw new HrmConstructionError(`${field} must be a non-negative decimal with at most 4 places — got ${value}.`);
     }
   }

@@ -181,7 +181,7 @@ function requireCriteria(input: unknown): EqualValueCriterion[] {
       );
     }
     const weight = e.weight;
-    if (typeof weight !== "string" || !/^-?\d+(\.\d+)?$/.test(weight) || !(Number(weight) > 0)) {
+    if (typeof weight !== "string" || canonicalDecimal(weight, Infinity) === null || compareDecimal(canonicalDecimal(weight, Infinity)!, "0") <= 0) {
       throw new CompensationError(
         "INVALID_INPUT",
         `criterion ${i + 1} needs a positive weight — weightless criteria cannot order equal value`,

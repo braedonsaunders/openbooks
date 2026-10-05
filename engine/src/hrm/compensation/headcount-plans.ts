@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
@@ -159,7 +160,7 @@ export function requisitionHeadcountFor(roundedFte: number): number {
  */
 export function requireBurdenRate(raw: unknown): string {
   const rate = typeof raw === "string" ? raw.trim() : "";
-  if (!/^\d+(\.\d+)?$/.test(rate)) {
+  if (canonicalNonNegativeDecimal(rate, Infinity) === null) {
     throw new CompensationError(
       "REFUSED",
       `the declared burden rate ${JSON.stringify(raw)} is not a decimal fraction — fix it in compensation settings before costing plan lines`,
@@ -456,7 +457,7 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
   if (typeof query.title !== "string" || query.title.trim().length === 0) {
     throw new CompensationError("INVALID_INPUT", "a line title is required");
   }
-  if (!/^\d+(\.\d{1,4})?$/.test(query.plannedFte) || !(Number(query.plannedFte) > 0)) {
+  if (canonicalNonNegativeDecimal(query.plannedFte, 4) === null || !(Number(query.plannedFte) > 0)) {
     throw new CompensationError("INVALID_INPUT", "plannedFte must be a positive FTE figure with at most 4 decimals");
   }
   if (!isCivilDate(query.startOn)) {

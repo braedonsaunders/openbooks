@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { fromUnits, roundDiv, sum, toUnits } from "../../money/money.ts";
 import type { Money } from "../../money/brands.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
@@ -31,18 +32,19 @@ import { AU_SUPER_2027 } from "./tax-year-2027.ts";
  * confirmed nil liability.
  */
 
-const RATE_SCALE = 1_000_000n;
 const CENTS_PER_UNIT = 100n;
 
-function rateUnits(rate: string): bigint {
-  if (!/^\d+(\.\d+)?$/.test(rate)) {
+function rateFraction(rate: string): { numerator: bigint; denominator: bigint } {
+  const canonical = canonicalNonNegativeDecimal(rate, Infinity);
+  if (canonical === null) {
     throw new PayrollPackError(
       `AU workers' compensation rate "${rate}" is not a decimal fraction — `
       + "enter the premium rate from the state insurer's notice (0.027 for 2.7%)",
     );
   }
-  const [whole = "0", fraction = ""] = rate.split(".");
-  return BigInt(whole) * RATE_SCALE + BigInt((fraction + "000000").slice(0, 6));
+  const [whole = "0", fraction = ""] = canonical.split(".");
+  const denominator = 10n ** BigInt(fraction.length);
+  return { numerator: BigInt(whole) * denominator + BigInt(fraction || "0"), denominator };
 }
 
 /**
@@ -58,8 +60,8 @@ export function assessAuWorkersComp(
   rate: string,
   pensionable: string,
 ): { amount: Money; assessable: Money } {
-  const units = rateUnits(rate);
-  if (units > RATE_SCALE) {
+  const premium = rateFraction(rate);
+  if (premium.numerator > premium.denominator) {
     throw new PayrollPackError(
       `AU workers' compensation rate "${rate}" exceeds 1 (100%) — `
       + "correct the au_workers_comp rate for the state instead of pricing it",
@@ -71,11 +73,10 @@ export function assessAuWorkersComp(
     throw new PayrollPackError("AU workers' compensation gross and OTE bases must be non-negative");
   }
   // Match the pack's SG computation: 12% of OTE, rounded half-up to cents.
-  const superCents = roundDiv(
-    ote * rateUnits(AU_SUPER_2027.chargeRate), RATE_SCALE * CENTS_PER_UNIT,
-  );
+  const superRate = rateFraction(AU_SUPER_2027.chargeRate);
+  const superCents = roundDiv(ote * superRate.numerator, superRate.denominator * CENTS_PER_UNIT);
   const assessableUnits = earnings + superCents * CENTS_PER_UNIT;
-  const cents = roundDiv(assessableUnits * units, RATE_SCALE * CENTS_PER_UNIT);
+  const cents = roundDiv(assessableUnits * premium.numerator, premium.denominator * CENTS_PER_UNIT);
   return {
     amount: fromUnits(cents * CENTS_PER_UNIT) as Money,
     assessable: fromUnits(assessableUnits) as Money,

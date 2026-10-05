@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal, compareDecimal } from "../money/exact-decimal.ts";
 /**
  * WHICH jurisdictions withhold from this employee, and under what authority.
  *
@@ -746,35 +747,16 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
   }
 }
 
-/**
- * Compare two decimal rate strings EXACTLY, without a float.
- *
- * `Number("0.01") > Number("0.0099")` happens to be right and
- * `Number("0.1") + Number("0.2")` famously is not; a rate comparison that
- * decides which jurisdiction gets an employee's money does not get to rely on
- * which side of that line it falls. Compared digit by digit on padded integer
- * strings — no parsing, no scaling, no precision to lose.
- */
+/** Compare non-negative statutory rates with the shared exact-decimal contract. */
 export function compareRates(a: string, b: string): number {
   const parse = (value: string) => {
-    const raw = value.trim();
-    if (!/^\d+(\.\d+)?$/.test(raw)) {
+    const canonical = canonicalNonNegativeDecimal(value, Infinity);
+    if (canonical === null) {
       throw new PayrollWithholdingResolutionError(`not a non-negative decimal rate: "${value}"`);
     }
-    const [whole = "0", fraction = ""] = raw.split(".");
-    return { whole: whole.replace(/^0+(?=\d)/, ""), fraction };
+    return canonical;
   };
-  const left = parse(a);
-  const right = parse(b);
-  if (left.whole.length !== right.whole.length) {
-    return left.whole.length < right.whole.length ? -1 : 1;
-  }
-  if (left.whole !== right.whole) return left.whole < right.whole ? -1 : 1;
-  const width = Math.max(left.fraction.length, right.fraction.length);
-  const lf = left.fraction.padEnd(width, "0");
-  const rf = right.fraction.padEnd(width, "0");
-  if (lf === rf) return 0;
-  return lf < rf ? -1 : 1;
+  return compareDecimal(parse(a), parse(b));
 }
 
 /** Blocking gaps only — the ones a run must stop for. */

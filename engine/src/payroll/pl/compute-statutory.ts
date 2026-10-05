@@ -1,3 +1,4 @@
+import { canonicalNonNegativeDecimal, compareDecimal } from "../../money/exact-decimal.ts";
 /**
  * The PL pack's statutory pass: monthly PIT advances (zaliczki) and ZUS/NFZ
  * contributions for calendar years 2024–2026.
@@ -340,9 +341,8 @@ function requirePayYear(payDate: string, tables: PlYearTables): void {
  */
 function parseWymiarEtatu(raw: string | null | undefined): { num: bigint; scale: bigint } | null {
   if (raw == null || raw === "") return null;
-  const text = raw.trim();
-  const match = /^(1(?:\.0+)?|0\.\d{1,4})$/.exec(text);
-  if (!match) {
+  const text = canonicalNonNegativeDecimal(raw, 4);
+  if (text === null || compareDecimal(text, "1") > 0) {
     throw new PayrollPackError(
       `PL working-time fraction (emp pl_wymiar_etatu) must be a decimal above 0 through 1 `
       + `with at most four decimals ("1" full time, "0.5" half time), got "${raw}". Correct the `
@@ -574,12 +574,13 @@ export function calculatePlZusWithTables(
   const wypPct = input.wypadkowePct ?? null;
   let wypadkoweEr = 0n;
   if (wypPct !== null && wypPct !== "") {
-    if (!/^\d+(\.\d{1,4})?$/.test(wypPct)) {
+    const canonical = canonicalNonNegativeDecimal(wypPct, 4);
+    if (canonical === null) {
       throw new PayrollPackError(
         `PL wypadkowe rate is not a percent with at most four decimals: "${wypPct}"`,
       );
     }
-    const [whole = "0", fraction = ""] = wypPct.split(".");
+    const [whole = "0", fraction = ""] = canonical.split(".");
     const pct6 = BigInt(whole) * RATE6 + BigInt((fraction + "000000").slice(0, 6));
     if (pct6 < 0n || pct6 > 100n * RATE6) {
       throw new PayrollPackError(`PL wypadkowe rate out of range 0–100 %: "${wypPct}"`);
