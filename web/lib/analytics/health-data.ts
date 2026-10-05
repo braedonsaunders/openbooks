@@ -3,9 +3,13 @@ import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { flowRates } from "../fx-presentation";
+import { defaultFiscalCalendarPeriods } from "../fiscal";
+import type { FiscalPeriod } from "@openbooks/reports";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { financialHealth, priorFiscalWindow, type FinancialHealth, type HealthFigures } from "./financial-health";
@@ -285,11 +289,13 @@ function insightNumber(value: string): number {
   return Math.max(-Number.MAX_SAFE_INTEGER, Math.min(Number.MAX_SAFE_INTEGER, n));
 }
 
-function priorYear(iso: string): string {
-  return addMonthsClamped(iso, -12);
-}
-
-/** 12-month P&L series ending at the period end (fills gaps with zero). */
+/**
+ * Trailing P&L series ending at the period end (fills gaps with zero).
+ * Monthly-cadence organizations keep calendar months; any other declared
+ * calendar prices its own trailing fiscal periods and labels them with the
+ * period names, so a 4-4-5 or quarterly calendar never sees month-sliced
+ * figures it cannot reconcile to its periods.
+ */
 async function monthlySeries(
   orgId: string,
   to: string,
@@ -297,6 +303,10 @@ async function monthlySeries(
   months = 12,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<MonthPoint[]> {
+  const declared = await defaultFiscalCalendarPeriods(orgId);
+  if (declared && declared.cadence !== "monthly") {
+    return fiscalPeriodSeries(orgId, to, allowed, months, declared.periods);
+  }
   const end = new Date(to + "T00:00:00Z");
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
   // onto 1900-1999; month underflow normalizes the same way.
@@ -403,6 +413,95 @@ async function monthlySeries(
   return out;
 }
 
+/**
+ * The same trailing series over declared fiscal periods instead of calendar
+ * months. Period boundaries come from the organization's own calendar, so a
+ * weekly or quarterly calendar prices whole periods it can reconcile. Each
+ * point keys on the period's start date and labels with the period name.
+ * Periods do not align with months, so the series reads the journal lines
+ * directly — the monthly gl_month_activity rollup cannot bucket them.
+ */
+async function fiscalPeriodSeries(
+  orgId: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+  months: number,
+  periods: FiscalPeriod[],
+): Promise<MonthPoint[]> {
+  // The trailing periods at or before the period end, the last possibly
+  // partial. Older activity stays outside the window, as with months.
+  const trailing = periods.filter((p) => p.from <= to).slice(-months);
+  if (trailing.length === 0) return [];
+  const bucket = (i: number) => `period_${i}`;
+  const whens = trailing.map((p, i) => sql`when l.posting_date >= ${p.from}::date and l.posting_date <= ${p.to}::date then ${bucket(i)}`);
+  const ranges = trailing.map((p) => sql`(l.posting_date >= ${p.from}::date and l.posting_date <= ${p.to}::date)`);
+  const r = ((await db.execute(sql`
+    select (case ${sql.join(whens, sql` `)} end) as month,
+      sub.base_currency as func,
+      max(l.posting_date)::text as late,
+      -sum(case when a.type in ('income','income_other') then l.amount else 0 end) as revenue,
+      -sum(case when a.type = 'income' then l.amount else 0 end) as operating_revenue,
+      sum(case when a.type = 'cogs' then l.amount else 0 end) as cogs,
+      sum(case when a.type in (${OPEX_TYPES_SQL}) then l.amount else 0 end) as opex,
+      sum(case when a.type = 'expense_other' then l.amount else 0 end) as other_exp
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+    where l.org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      and a.type in (${PNL_TYPES_SQL})
+      and (${sql.join(ranges, sql` or `)})
+    group by 1, 2
+  `)));
+  const rows = r.rows as unknown as (HealthMonthSqlRow & { month: string })[];
+  const ctx = await flowRates(orgId, rows.map((x) => ({
+    func: x.func ?? null, date: String(x.late ?? to).slice(0, 10),
+  })));
+  const rateAt = (func: string | null, date: string) => ctx.rateAt(func, date);
+  const by = new Map<string, HealthMonthSqlRow>();
+  for (const x of rows) {
+    const prior = by.get(x.month);
+    const date = String(x.late ?? to).slice(0, 10);
+    const t = (v: SqlNumeric) => translateAmount(String(v ?? 0), x.func ?? null, date, rateAt);
+    by.set(x.month, prior
+      ? {
+        ...prior,
+        revenue: add(String(prior.revenue ?? 0), t(x.revenue)),
+        operating_revenue: add(String(prior.operating_revenue ?? 0), t(x.operating_revenue)),
+        cogs: add(String(prior.cogs ?? 0), t(x.cogs)),
+        opex: add(String(prior.opex ?? 0), t(x.opex)),
+        other_exp: add(String(prior.other_exp ?? 0), t(x.other_exp)),
+      }
+      : { ...x, revenue: t(x.revenue), operating_revenue: t(x.operating_revenue), cogs: t(x.cogs), opex: t(x.opex), other_exp: t(x.other_exp) });
+  }
+  return trailing.map((p, i) => {
+    const row = by.get(bucket(i));
+    const revenue = String(row?.revenue ?? 0);
+    const cogs = String(row?.cogs ?? 0);
+    const opex = String(row?.opex ?? 0);
+    const operatingRevenue = String(row?.operating_revenue ?? 0);
+    const otherExp = String(row?.other_exp ?? 0);
+    const grossProfit = sum([revenue, neg(cogs)]);
+    const operatingIncome = sum([operatingRevenue, neg(cogs), neg(opex)]);
+    const netIncome = sum([revenue, neg(cogs), neg(opex), neg(otherExp)]);
+    const revPositive = cmp(revenue, "0") > 0;
+    return {
+      month: p.from,
+      label: p.name,
+      revenue,
+      cogs,
+      grossProfit,
+      grossMarginPct: revPositive ? amountRatio(grossProfit, revenue) : 0,
+      opex,
+      operatingIncome,
+      operatingMarginPct: revPositive ? amountRatio(operatingIncome, revenue) : 0,
+      netIncome,
+    };
+  });
+}
+
 /** Operating-margin target and warning share behind the segment health dot, exact fractions. */
 interface SegmentHealthPolicy {
   target: string;
@@ -420,8 +519,9 @@ async function segmentsBy(
   healthPolicy: SegmentHealthPolicy,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<SegmentRow[]> {
-  const pFrom = priorYear(from);
-  const pTo = priorYear(to);
+  // The comparison window is the same window one fiscal year earlier on
+  // the organization's own calendar, never calendar −12 months.
+  const { from: pFrom, to: pTo } = await priorFiscalWindow(orgId, from, to);
   const col = sql.raw(`l.${dimCol}`);
   const tbl = sql.raw(dimTable);
   // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (the
@@ -530,8 +630,9 @@ async function segmentsBy(
 
 /** Top account-level movers vs prior year, split into revenue and cost. */
 async function drivers(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
-  const pFrom = priorYear(from);
-  const pTo = priorYear(to);
+  // The comparison window is the same window one fiscal year earlier on
+  // the organization's own calendar, never calendar −12 months.
+  const { from: pFrom, to: pTo } = await priorFiscalWindow(orgId, from, to);
   // Retain the selective line-date predicate while enforcing ledger status/book.
   const r = ((await analyticsQuery(sql`
     select a.id, a.name, a.type, sub.base_currency as func,
@@ -605,8 +706,9 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
  * account — each revenue account is the "line item". Current vs prior year.
  */
 async function itemAnalysis(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<HealthData["items"]> {
-  const pFrom = priorYear(from);
-  const pTo = priorYear(to);
+  // The comparison window is the same window one fiscal year earlier on
+  // the organization's own calendar, never calendar −12 months.
+  const { from: pFrom, to: pTo } = await priorFiscalWindow(orgId, from, to);
   const r = ((await analyticsQuery(sql`
     select a.id, a.name, sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
