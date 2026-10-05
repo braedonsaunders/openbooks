@@ -3,6 +3,7 @@
 import { LineGrid, type LineGridColumn } from "@/components/line-grid";
 import { PagedTable } from "@/components/paged-table";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { readApiErrorMessage } from "@/lib/api-error";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -59,8 +60,7 @@ type Snapshot = {
 async function readJson(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, init);
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `Request failed (${res.status})`);
+    throw new Error(await readApiErrorMessage(res, `Request failed (${res.status})`));
   }
   return res.json();
 }
@@ -123,7 +123,10 @@ export function PlanVersionEntitlementsDrawer({
 }) {
   const t = useTranslations("ar.collections.subscriptions.advanced");
   const et = useTranslations("ar.collections.subscriptions.advanced.entitlements");
-  const forms = useTranslations("ar.collections.forms");
+  const forms = useTranslations("common.labels");
+  const actions = useTranslations("common.actions");
+  const [readReady, setReadReady] = useState(false);
+  const [retry, setRetry] = useState(0);
   const today = useBusinessToday();
   const [catalog, setCatalog] = useState<CatalogFeature[]>([]);
   const [rows, setRows] = useState<GrantRow[]>([]);
@@ -144,6 +147,7 @@ export function PlanVersionEntitlementsDrawer({
     const asOf = today;
     void (async () => {
       setLoading(true);
+      setReadReady(false);
       setNotice(null);
       setFailure(null);
       setEffectiveFrom(asOf);
@@ -167,13 +171,14 @@ export function PlanVersionEntitlementsDrawer({
         }));
         setRows(next);
         setBaseline(JSON.stringify(next.map((r) => [String(r.feature), canonicalGrant(r)])));
+        setReadReady(true);
       } catch (error) {
         setFailure(error instanceof Error && error.message ? error.message : t("loadFailedFallback"));
       } finally {
         setLoading(false);
       }
     })();
-  }, [open, versionId, today, et, t]);
+  }, [open, versionId, today, et, t, retry]);
 
   const usedKeys = useMemo(() => new Set(rows.map((r) => String(r.feature ?? ""))), [rows]);
 
@@ -242,7 +247,7 @@ export function PlanVersionEntitlementsDrawer({
   }, [rows, baseline]);
 
   const save = async () => {
-    if (!versionId) return;
+    if (!versionId || !readReady || loading) return;
     setSaving(true);
     setNotice(null);
     setFailure(null);
@@ -305,30 +310,36 @@ export function PlanVersionEntitlementsDrawer({
       description={et("versionDescription")}
       footer={
         <>
-          <Field label={et("effectiveFrom")}>
+          {readReady ? <Field label={et("effectiveFrom")}>
             <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
-          </Field>
-          <Button variant="outline" onClick={onClose}>{t("cancel")}</Button>
-          <Button onClick={save} disabled={saving || loading || changedCount === 0}>
+          </Field> : null}
+          <Button variant="outline" onClick={onClose}>{actions("cancel")}</Button>
+          {readReady ? <Button onClick={save} disabled={saving || loading || changedCount === 0}>
             {saving ? t("saving") : `${et("saveGrants")} (${changedCount})`}
-          </Button>
+          </Button> : null}
         </>
       }
     >
-      {failure ? <p className="text-sm text-destructive">{failure}</p> : null}
+      {failure ? <div role="alert" className="space-y-2 text-sm text-destructive">
+        <p>{failure}</p>
+        {!readReady && !loading ? <Button variant="outline" onClick={() => setRetry((value) => value + 1)}>{actions("retry")}</Button> : null}
+      </div> : null}
+      {!readReady && loading ? <p className="text-sm text-muted-foreground">{actions("loading")}</p> : null}
       {notice ? <p className="text-sm text-success">{notice}</p> : null}
-      {rows.every((row) => String(row.feature ?? "") === "") ? (
-        <p className="text-sm text-muted-foreground">{et("emptyGrants")}</p>
-      ) : null}
-      <LineGrid
-        columns={columns}
-        rows={rows}
-        onRowsChange={handleRowsChange}
-        getRowKey={(row, index) => String(row._row ?? row.feature ?? `row-${index}`)}
-        emptyRow={() => ({ feature: "", type: "", enabled: "true", limit: "", custom: "", overage: "block", meter: "" })}
-        addLabel={et("addGrant")}
-        readOnly={loading}
-      />
+      {readReady ? <>
+        {rows.every((row) => String(row.feature ?? "") === "") ? (
+          <p className="text-sm text-muted-foreground">{et("emptyGrants")}</p>
+        ) : null}
+        <LineGrid
+          columns={columns}
+          rows={rows}
+          onRowsChange={handleRowsChange}
+          getRowKey={(row, index) => String(row._row ?? row.feature ?? `row-${index}`)}
+          emptyRow={() => ({ feature: "", type: "", enabled: "true", limit: "", custom: "", overage: "block", meter: "" })}
+          addLabel={et("addGrant")}
+          readOnly={loading}
+        />
+      </> : null}
     </Drawer>
   );
 }
@@ -347,7 +358,10 @@ export function SubscriptionEntitlementsDrawer({
 }) {
   const t = useTranslations("ar.collections.subscriptions.advanced");
   const et = useTranslations("ar.collections.subscriptions.advanced.entitlements");
-  const forms = useTranslations("ar.collections.forms");
+  const forms = useTranslations("common.labels");
+  const actions = useTranslations("common.actions");
+  const [readReady, setReadReady] = useState(false);
+  const [retry, setRetry] = useState(0);
   const today = useBusinessToday();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [catalog, setCatalog] = useState<CatalogFeature[]>([]);
@@ -379,6 +393,7 @@ export function SubscriptionEntitlementsDrawer({
     const asOf = today;
     void (async () => {
       setLoading(true);
+      setReadReady(false);
       setNotice(null);
       setFailure(null);
       setForm((f) => ({ ...f, effectiveFrom: asOf }));
@@ -388,16 +403,17 @@ export function SubscriptionEntitlementsDrawer({
         };
         setCatalog(featuresBody.features.filter((f) => f.isActive));
         await reload(id);
+        setReadReady(true);
       } catch (error) {
         setFailure(error instanceof Error && error.message ? error.message : t("loadFailedFallback"));
       } finally {
         setLoading(false);
       }
     })();
-  }, [open, subscriptionId, today, t]);
+  }, [open, subscriptionId, today, t, retry]);
 
   const saveOverride = async () => {
-    if (!subscriptionId) return;
+    if (!subscriptionId || !readReady || loading) return;
     setSaving(true);
     setNotice(null);
     setFailure(null);
@@ -428,7 +444,7 @@ export function SubscriptionEntitlementsDrawer({
   };
 
   const expireOverride = async (featureKey: string) => {
-    if (!subscriptionId) return;
+    if (!subscriptionId || !readReady || loading) return;
     setSaving(true);
     setNotice(null);
     setFailure(null);
@@ -453,121 +469,127 @@ export function SubscriptionEntitlementsDrawer({
       onClose={onClose}
       title={`${et("subscriptionTitle")} · ${subscriptionLabel}`}
       description={et("subscriptionDescription")}
-      footer={<Button variant="outline" onClick={onClose}>{t("close")}</Button>}
+      footer={<Button variant="outline" onClick={onClose}>{actions("close")}</Button>}
     >
-      {failure ? <p className="text-sm text-destructive">{failure}</p> : null}
+      {failure ? <div role="alert" className="space-y-2 text-sm text-destructive">
+        <p>{failure}</p>
+        {!readReady && !loading ? <Button variant="outline" onClick={() => setRetry((value) => value + 1)}>{actions("retry")}</Button> : null}
+      </div> : null}
+      {!readReady && loading ? <p className="text-sm text-muted-foreground">{actions("loading")}</p> : null}
       {notice ? <p className="text-sm text-success">{notice}</p> : null}
-      {snapshot?.grandfathered ? (
-        <p className="text-sm text-warning">{et("pinnedNote")}</p>
-      ) : null}
-      <PagedTable
-        searchable
-        columns={[
-          {
-            key: "feature",
-            header: <>{et("colFeature")}</>,
-            search: (f: EffectiveFeature) => f.featureKey,
-            cell: (f: EffectiveFeature) => <>{f.featureKey}</>,
-          },
-          {
-            key: "type",
-            header: <>{et("colType")}</>,
-            cell: (f: EffectiveFeature) => <>{et(TYPE_LABEL[f.featureType] ?? "typeCustom")}</>,
-          },
-          {
-            key: "grant",
-            header: <>{et("colGrant")}</>,
-            cell: (f: EffectiveFeature) => <>{grantDisplay(forms, f)}</>,
-          },
-          {
-            key: "policy",
-            header: <>{et("colPolicy")}</>,
-            cell: (f: EffectiveFeature) => <>{et(POLICY_LABEL[f.overagePolicy] ?? "policyBlock")}</>,
-          },
-          {
-            key: "source",
-            header: <>{et("colSource")}</>,
-            cell: (f: EffectiveFeature) => (
-              <Badge variant={f.source === "override" ? "warning" : "secondary"}>
-                {et(f.source === "override" ? "sourceOverride" : "sourcePlan")}
-              </Badge>
-            ),
-          },
-          {
-            key: "actions",
-            header: <></>,
-            cell: (f: EffectiveFeature) =>
-              f.source === "override" ? (
-                <Button variant="outline" size="sm" onClick={() => expireOverride(f.featureKey)} disabled={saving}>
-                  {et("expireOverride")}
-                </Button>
-              ) : null,
-          },
-        ]}
-        rows={snapshot?.features ?? []}
-        rowKey={(f: EffectiveFeature) => f.featureKey}
-        empty={loading ? et("emptyGrants") : et("noOverride")}
-      />
-      <DisclosureSection title={et("overrideTitle")} summary={et("overrideDescription")}>
-        <div className="grid gap-3">
-          <Field label={et("feature")}>
-            <Select searchable value={form.featureKey} onChange={(e) => setForm({ ...form, featureKey: e.target.value })}>
-              <option value="">{et("feature")}</option>
-              {catalog.map((f) => (
-                <option key={f.key} value={f.key}>{`${f.name} (${f.key})`}</option>
-              ))}
-            </Select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={et("enabled")}>
-              <Select value={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.value })}>
-                <option value="true">{forms("yes")}</option>
-                <option value="false">{forms("no")}</option>
+      {readReady ? <>
+        {snapshot?.grandfathered ? (
+          <p className="text-sm text-warning">{et("pinnedNote")}</p>
+        ) : null}
+        <PagedTable
+          searchable
+          columns={[
+            {
+              key: "feature",
+              header: <>{et("colFeature")}</>,
+              search: (f: EffectiveFeature) => f.featureKey,
+              cell: (f: EffectiveFeature) => <>{f.featureKey}</>,
+            },
+            {
+              key: "type",
+              header: <>{et("colType")}</>,
+              cell: (f: EffectiveFeature) => <>{et(TYPE_LABEL[f.featureType] ?? "typeCustom")}</>,
+            },
+            {
+              key: "grant",
+              header: <>{et("colGrant")}</>,
+              cell: (f: EffectiveFeature) => <>{grantDisplay(forms, f)}</>,
+            },
+            {
+              key: "policy",
+              header: <>{et("colPolicy")}</>,
+              cell: (f: EffectiveFeature) => <>{et(POLICY_LABEL[f.overagePolicy] ?? "policyBlock")}</>,
+            },
+            {
+              key: "source",
+              header: <>{et("colSource")}</>,
+              cell: (f: EffectiveFeature) => (
+                <Badge variant={f.source === "override" ? "warning" : "secondary"}>
+                  {et(f.source === "override" ? "sourceOverride" : "sourcePlan")}
+                </Badge>
+              ),
+            },
+            {
+              key: "actions",
+              header: <></>,
+              cell: (f: EffectiveFeature) =>
+                f.source === "override" ? (
+                  <Button variant="outline" size="sm" onClick={() => expireOverride(f.featureKey)} disabled={saving}>
+                    {et("expireOverride")}
+                  </Button>
+                ) : null,
+            },
+          ]}
+          rows={snapshot?.features ?? []}
+          rowKey={(f: EffectiveFeature) => f.featureKey}
+          empty={loading ? et("emptyGrants") : et("noOverride")}
+        />
+        <DisclosureSection title={et("overrideTitle")} summary={et("overrideDescription")}>
+          <div className="grid gap-3">
+            <Field label={et("feature")}>
+              <Select searchable value={form.featureKey} onChange={(e) => setForm({ ...form, featureKey: e.target.value })}>
+                <option value="">{et("feature")}</option>
+                {catalog.map((f) => (
+                  <option key={f.key} value={f.key}>{`${f.name} (${f.key})`}</option>
+                ))}
               </Select>
             </Field>
-            <Field label={et("overagePolicy")}>
-              <Select value={form.overagePolicy} onChange={(e) => setForm({ ...form, overagePolicy: e.target.value })}>
-                <option value="">{et("overagePolicy")}</option>
-                <option value="block">{et("policyBlock")}</option>
-                <option value="allow_and_bill">{et("policyAllowBill")}</option>
-                <option value="alert">{et("policyAlert")}</option>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={et("enabled")}>
+                <Select value={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.value })}>
+                  <option value="true">{forms("yes")}</option>
+                  <option value="false">{forms("no")}</option>
+                </Select>
+              </Field>
+              <Field label={et("overagePolicy")}>
+                <Select value={form.overagePolicy} onChange={(e) => setForm({ ...form, overagePolicy: e.target.value })}>
+                  <option value="">{et("overagePolicy")}</option>
+                  <option value="block">{et("policyBlock")}</option>
+                  <option value="allow_and_bill">{et("policyAllowBill")}</option>
+                  <option value="alert">{et("policyAlert")}</option>
+                </Select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={et("limit")}>
+                <Input value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} placeholder="100" />
+              </Field>
+              <Field label={et("customValue")}>
+                <Input value={form.customValue} onChange={(e) => setForm({ ...form, customValue: e.target.value })} />
+              </Field>
+            </div>
+            <Field label={et("reason")}>
+              <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
             </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={et("effectiveFrom")}>
+                <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+              </Field>
+              <Field label={et("effectiveTo")}>
+                <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
+              </Field>
+            </div>
+            <div>
+              <Button onClick={saveOverride} disabled={saving || form.featureKey === "" || form.reason.trim() === ""}>
+                {saving ? t("saving") : et("saveOverride")}
+              </Button>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={et("limit")}>
-              <Input value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} placeholder="100" />
-            </Field>
-            <Field label={et("customValue")}>
-              <Input value={form.customValue} onChange={(e) => setForm({ ...form, customValue: e.target.value })} />
-            </Field>
-          </div>
-          <Field label={et("reason")}>
-            <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={et("effectiveFrom")}>
-              <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
-            </Field>
-            <Field label={et("effectiveTo")}>
-              <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
-            </Field>
-          </div>
-          <div>
-            <Button onClick={saveOverride} disabled={saving || form.featureKey === "" || form.reason.trim() === ""}>
-              {saving ? t("saving") : et("saveOverride")}
-            </Button>
-          </div>
-        </div>
-      </DisclosureSection>
-      {snapshot ? (
-        <DisclosureSection
-          title={snapshot.planVersionId ?? "—"}
-          summary={`${et("colSource")}: ${snapshot.sourceHash.slice(0, 8)}`}
-        >
-          <p className="text-sm text-muted-foreground">{snapshot.resolvedAt}</p>
         </DisclosureSection>
-      ) : null}
+        {snapshot ? (
+          <DisclosureSection
+            title={snapshot.planVersionId ?? "—"}
+            summary={`${et("colSource")}: ${snapshot.sourceHash.slice(0, 8)}`}
+          >
+            <p className="text-sm text-muted-foreground">{snapshot.resolvedAt}</p>
+          </DisclosureSection>
+        ) : null}
+      </> : null}
     </Drawer>
   );
 }

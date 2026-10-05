@@ -44,6 +44,8 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default
 const { CollectionsClient } = await import('./CollectionsClient')
+const { PlanVersionEntitlementsDrawer, SubscriptionEntitlementsDrawer } = await import('./EntitlementDrawers')
+const { BusinessDateProvider } = await import('../../../components/business-date-provider')
 const { MoneyProvider } = await import('../../../components/money-provider')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -189,4 +191,44 @@ test('editing reminders preserves their identities and numbers additions after t
   const stages = script.writes[0].stages as typeof POLICY.stages
   assert.ok(stages[0]); assert.equal(stages[0].id, 'stage-1'); assert.equal(stages[0].sequence, 4)
   assert.equal(stages[0].bodyTemplate, 'Please contact Accounts Receivable.')
+})
+
+
+for (const kind of ['plan', 'subscription'] as const) test(`${kind} entitlement refusal retains its remedy and retries in the same drawer`, async (t) => {
+  const prior = globalThis.fetch
+  let refused = true
+  const requests: string[] = []
+  globalThis.fetch = (async (input, init) => {
+    assert.equal(init?.method ?? 'GET', 'GET', 'a failed read cannot write grants')
+    requests.push(String(input))
+    return refused ? Response.json({
+      error: 'The selected plan version is no longer available.',
+      remedy: 'Choose the current plan version before changing its entitlements.',
+    }, { status: 404 }) : Response.json(String(input).includes('features=1') ? { features: [] } : kind === 'plan' ? { entitlements: [] } : { snapshot: { subscriptionId: 'sub-1', planVersionId: null, planVersionNumber: null, grandfathered: false, features: [], sourceHash: 'test-read', resolvedAt: '2026-10-05T10:00:00Z' } })
+  }) as typeof fetch
+  const host = document.createElement('div'); document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior })
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <BusinessDateProvider today="2026-10-05">{kind === 'plan' ? <PlanVersionEntitlementsDrawer
+        versionId="00000000-0000-4000-8000-000000000001" versionName="Annual support" open onClose={() => {}}
+      /> : <SubscriptionEntitlementsDrawer subscriptionId="sub-1" subscriptionLabel="Annual support" open onClose={() => {}} />}</BusinessDateProvider>
+    </NextIntlClientProvider>)
+    await tick(); await tick()
+  })
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog, 'the native drawer remains open')
+  assert.match(dialog.textContent ?? '', /selected plan version is no longer available/)
+  assert.match(dialog.textContent ?? '', /Choose the current plan version before changing its entitlements/)
+  assert.ok(!dialog.textContent?.includes(kind === 'plan' ? 'No grants yet' : 'No open overrides'), 'a failed read is not an empty result')
+  assert.ok(!findButton('Add feature'), 'the grid cannot edit unread grants')
+  assert.ok(!dialog.textContent?.includes('ar.collections.'), 'shared action labels resolve')
+  refused = false
+  await click(findButton('Retry')!)
+  assert.equal(document.querySelector('[role="dialog"]'), dialog, 'retry keeps the same native dialog')
+  assert.equal(requests.length, kind === 'plan' ? 4 : 3, 'retry rereads both the catalog and the current grants')
+  assert.ok(dialog.textContent?.includes(kind === 'plan' ? 'No grants yet' : 'No open overrides'), 'only the successful read can report the current grants')
+  assert.ok(!dialog.textContent?.includes('ar.collections.'), 'loaded grant controls resolve their labels')
+  if (kind === 'plan') assert.ok(findButton('Add feature'), 'editing becomes available after the successful read')
 })
