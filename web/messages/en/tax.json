@@ -196,5 +196,39 @@
     },
     "postFailed": "The provision could not be posted."
   },
-  "registration": "Filing registration"
+  "registration": "Filing registration",
+  "oss": {
+    "title": "One-Stop-Shop returns",
+    "description": "Quarterly Union and monthly Import OSS returns from posted cross-border supplies, grouped by member state of consumption and rate.",
+    "scheme": "Scheme",
+    "schemes": {
+      "union": "Union OSS (quarterly)",
+      "nonUnion": "Non-Union OSS (quarterly)",
+      "ioss": "Import OSS (monthly)"
+    },
+    "from": "From",
+    "to": "To",
+    "prepare": "Prepare return",
+    "preparing": "Preparing…",
+    "prepareFailed": "The return could not be prepared.",
+    "emptyTitle": "No return prepared yet",
+    "emptyDescription": "Pick the scheme and period, then prepare the return. Register the OSS identification in Tax setup first — the return refuses without it.",
+    "setupAction": "Open OSS registrations",
+    "totalBase": "Taxable base (EUR)",
+    "totalVat": "VAT due (EUR)",
+    "registration": "Registration",
+    "columns": {
+      "record": "Record",
+      "country": "State of consumption",
+      "rate": "Rate",
+      "base": "Taxable base",
+      "vat": "VAT"
+    },
+    "current": "Current",
+    "correction": "Correction {quarter}",
+    "exportCsv": "Export CSV",
+    "exportNote": "Generic EU OSS layout for portal hand-keying. Member-state portal file formats are not implemented.",
+    "noLinesTitle": "No cross-border supplies",
+    "noLinesDescription": "Nothing posted with a customer-country verdict falls in this period."
+  }
 }

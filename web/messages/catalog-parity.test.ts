@@ -295,6 +295,12 @@ const COGNATES = new Set<string>([
   // German and Brazilian Portuguese consulting use “Retainer” as a loanword for a prepaid engagement.
   'de:customization.recordTypes.retainer|Retainer',
   'pt-BR:customization.recordTypes.retainer|Retainer',
+  // “Signal” is spelled identically in German; French spells “Signal”,
+  // “Source” and “Correction” exactly like English.
+  'de:ar.supplyEvidence.signal|Signal',
+  'fr:ar.supplyEvidence.signal|Signal',
+  'fr:ar.supplyEvidence.source|Source',
+  'fr:tax.oss.correction|Correction {quarter}',
   // Per-area reviewed identical terms (the local identicalByFact sets across the area backfills).
   'de:agents.drawer.assignment.roles.administrator|Administrator',
   'de:agents.drawer.assignment.roles.controller|Controller',

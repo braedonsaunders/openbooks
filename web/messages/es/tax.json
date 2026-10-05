@@ -196,5 +196,39 @@
     "prepare": "Preparar una declaración",
     "history": "Declaraciones anteriores"
   },
-  "registration": "Registro para declaraciones"
+  "registration": "Registro para declaraciones",
+  "oss": {
+    "title": "Declaraciones de ventanilla única",
+    "description": "Declaraciones OSS trimestrales de la Unión y mensuales de importación a partir de ventas transfronterizas contabilizadas, agrupadas por Estado miembro de consumo y tipo.",
+    "scheme": "Régimen",
+    "schemes": {
+      "union": "OSS de la Unión (trimestral)",
+      "nonUnion": "OSS no UE (trimestral)",
+      "ioss": "IOSS de importación (mensual)"
+    },
+    "from": "Desde",
+    "to": "Hasta",
+    "prepare": "Preparar declaración",
+    "preparing": "Preparando…",
+    "prepareFailed": "No se pudo preparar la declaración.",
+    "emptyTitle": "Aún no hay declaración",
+    "emptyDescription": "Elija el régimen y el período y prepare la declaración. Registre antes la identificación OSS en la configuración fiscal — sin ella la declaración se rechaza.",
+    "setupAction": "Abrir registros OSS",
+    "totalBase": "Base imponible (EUR)",
+    "totalVat": "IVA adeudado (EUR)",
+    "registration": "Registro",
+    "columns": {
+      "record": "Registro",
+      "country": "Estado de consumo",
+      "rate": "Tipo",
+      "base": "Base imponible",
+      "vat": "IVA"
+    },
+    "current": "Corriente",
+    "correction": "Corrección {quarter}",
+    "exportCsv": "Exportar CSV",
+    "exportNote": "Diseño OSS genérico de la UE para carga manual en el portal. Los formatos de archivo de los portales nacionales no están implementados.",
+    "noLinesTitle": "Sin ventas transfronterizas",
+    "noLinesDescription": "Nada contabilizado con veredicto de país del cliente cae en este período."
+  }
 }

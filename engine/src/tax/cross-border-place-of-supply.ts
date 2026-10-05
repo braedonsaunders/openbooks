@@ -77,7 +77,7 @@ export type CrossBorderOutcome =
       note: string;
     }
   | { outcome: "seller_country"; country: string; note: string }
-  | { outcome: "export"; country: string; note: string };
+  | { outcome: "export"; country: string; evidence: EvidenceKind[]; note: string };
 
 const EU_MEMBER_STATES: ReadonlySet<string> = new Set([
   "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR",
@@ -248,6 +248,7 @@ export function determineCrossBorderSupply(
       return {
         outcome: "export",
         country: shipTo,
+        evidence: ["ship_to"],
         note: "Zero-rated export outside the covered states; keep the shipping proof with the invoice",
       };
     }

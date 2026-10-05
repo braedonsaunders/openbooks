@@ -502,5 +502,48 @@
       "summaryFailed": "无法托收发票{invoice}的{amount}。",
       "summaryCanceled": "已取消对发票{invoice}的{amount}托收。"
     }
+  },
+  "supplyEvidence": {
+    "title": "供应地",
+    "loadFailed": "无法加载证据。",
+    "loading": "正在加载证据…",
+    "domestic": "国内税务处理 — 无跨境指定。",
+    "elect": "添加跨境处理",
+    "supplyKind": "供应",
+    "supplyKindOptions": {
+      "digital_service": "数字服务",
+      "goods": "货物"
+    },
+    "customerKind": "客户",
+    "customerKindOptions": {
+      "consumer": "消费者",
+      "business": "企业"
+    },
+    "signal": "信号",
+    "kinds": {
+      "billing_address": "账单地址",
+      "ip_country": "卡片国家",
+      "card_bin_country": "IP国家",
+      "bank_country": "银行国家",
+      "sim_country": "SIM国家",
+      "ship_to": "收货地"
+    },
+    "country": "国家",
+    "source": "来源",
+    "remove": "删除",
+    "addSignal": "添加信号",
+    "save": "保存证据",
+    "saving": "保存中…",
+    "cancel": "取消",
+    "saveFailed": "无法保存证据。",
+    "pending": "过账时判定 — 待定。",
+    "edit": "编辑",
+    "outcomes": {
+      "customer_country": "B2C — 供应地：{country}",
+      "reverse_charge": "反向征收 — {country}",
+      "seller_country": "国内 — {country}",
+      "export": "范围外 — {country}"
+    },
+    "vatId": "增值税号 {id}"
   }
 }

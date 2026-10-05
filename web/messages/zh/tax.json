@@ -196,5 +196,39 @@
     "prepare": "编制申报表",
     "history": "历史申报"
   },
-  "registration": "申报登记"
+  "registration": "申报登记",
+  "oss": {
+    "title": "一站式申报",
+    "description": "根据已过账跨境销售，按消费成员国和税率汇总的季度欧盟OSS与月度进口OSS申报。",
+    "scheme": "机制",
+    "schemes": {
+      "union": "欧盟OSS（季度）",
+      "nonUnion": "非欧盟OSS（季度）",
+      "ioss": "进口OSS（月度）"
+    },
+    "from": "自",
+    "to": "至",
+    "prepare": "生成申报",
+    "preparing": "生成中…",
+    "prepareFailed": "无法生成申报。",
+    "emptyTitle": "尚未生成申报",
+    "emptyDescription": "选择机制与期间后生成申报。请先在税务设置中登记OSS识别号 — 缺少登记将被拒绝。",
+    "setupAction": "打开OSS注册",
+    "totalBase": "计税基数（EUR）",
+    "totalVat": "应纳增值税（EUR）",
+    "registration": "注册",
+    "columns": {
+      "record": "记录",
+      "country": "消费国",
+      "rate": "税率",
+      "base": "计税基数",
+      "vat": "增值税"
+    },
+    "current": "当期",
+    "correction": "更正 {quarter}",
+    "exportCsv": "导出CSV",
+    "exportNote": "用于门户手工录入的欧盟通用OSS格式。各国门户文件格式暂未实现。",
+    "noLinesTitle": "无跨境销售",
+    "noLinesDescription": "本期间没有带客户国判定的过账记录。"
+  }
 }

@@ -333,5 +333,33 @@
       "overlap": "Ce dossier possède déjà une tarification active pour une partie de cette période.",
       "save": "Impossible d’enregistrer l’affectation."
     }
+  },
+  "taxIds": {
+    "title": "Numéros de TVA professionnels",
+    "hint": "Les numéros validés auprès de l'autorité décident de l'autoliquidation. Une panne de l'autorité conserve le verdict précédent.",
+    "loadFailed": "Les numéros n'ont pas pu être chargés.",
+    "empty": "Aucun numéro enregistré.",
+    "checked": "vérifié {date}",
+    "neverChecked": "jamais vérifié",
+    "consultation": "référence {id}",
+    "validate": "Valider",
+    "validating": "Validation…",
+    "validateFailed": "Le numéro n'a pas pu être validé.",
+    "scheme": "Régime",
+    "schemes": {
+      "vies": "VIES UE",
+      "hmrc": "HMRC RU",
+      "abn": "ABN AU",
+      "gst": "Registre TVA"
+    },
+    "number": "Numéro",
+    "numberPlaceholder": "p. ex. DE123456789",
+    "add": "Ajouter",
+    "saveFailed": "Le numéro n'a pas pu être enregistré.",
+    "status": {
+      "valid": "N° TVA valide ({scheme})",
+      "invalid": "N° TVA invalide ({scheme})",
+      "unverified": "N° TVA non vérifié ({scheme})"
+    }
   }
 }

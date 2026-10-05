@@ -502,5 +502,48 @@
       "summaryFailed": "Impossible de recouvrer {amount} pour la facture {invoice}.",
       "summaryCanceled": "Le recouvrement de {amount} pour la facture {invoice} a été annulé."
     }
+  },
+  "supplyEvidence": {
+    "title": "Lieu de prestation",
+    "loadFailed": "Les preuves n'ont pas pu être chargées.",
+    "loading": "Chargement des preuves…",
+    "domestic": "Traitement fiscal national — aucune opération transfrontalière.",
+    "elect": "Ajouter un traitement transfrontalier",
+    "supplyKind": "Prestation",
+    "supplyKindOptions": {
+      "digital_service": "Service numérique",
+      "goods": "Biens"
+    },
+    "customerKind": "Client",
+    "customerKindOptions": {
+      "consumer": "Consommateur",
+      "business": "Entreprise"
+    },
+    "signal": "Signal",
+    "kinds": {
+      "billing_address": "Adresse de facturation",
+      "ip_country": "Pays de la carte",
+      "card_bin_country": "Pays IP",
+      "bank_country": "Pays bancaire",
+      "sim_country": "Pays SIM",
+      "ship_to": "Livraison"
+    },
+    "country": "Pays",
+    "source": "Source",
+    "remove": "Retirer",
+    "addSignal": "Ajouter un signal",
+    "save": "Enregistrer les preuves",
+    "saving": "Enregistrement…",
+    "cancel": "Annuler",
+    "saveFailed": "Les preuves n'ont pas pu être enregistrées.",
+    "pending": "Jugé à la comptabilisation — en attente.",
+    "edit": "Modifier",
+    "outcomes": {
+      "customer_country": "B2C — lieu de prestation : {country}",
+      "reverse_charge": "Autoliquidation — {country}",
+      "seller_country": "National — {country}",
+      "export": "Hors champ — {country}"
+    },
+    "vatId": "N° TVA {id}"
   }
 }

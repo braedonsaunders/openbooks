@@ -238,6 +238,7 @@ describe("EU distance-sales threshold", () => {
     const result = assessEuDistanceThreshold("9999.99", "0.01");
     assert.equal(result.crossed, true);
     assert.equal(result.total, "10000.0000");
+    assert.ok(result.alert);
     assert.match(result.alert, /10,000/);
   });
 

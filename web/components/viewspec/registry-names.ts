@@ -545,6 +545,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'tax-depreciation-overview',
   'tax-filing-drawer',
   'tax-page',
+  'oss-console',
   'tax-pools',
   'tax-return-library',
   'tax-setup-guide',

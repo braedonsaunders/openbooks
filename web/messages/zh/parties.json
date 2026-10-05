@@ -333,5 +333,33 @@
       "overlap": "该记录在该日期范围的部分期间已有生效的人工定价。",
       "save": "无法保存人工定价分配。"
     }
+  },
+  "taxIds": {
+    "title": "企业税号",
+    "hint": "经税务机关验证的号码决定反向征收。机关故障时保留原有判定。",
+    "loadFailed": "无法加载税号。",
+    "empty": "尚未登记税号。",
+    "checked": "已验证 {date}",
+    "neverChecked": "从未验证",
+    "consultation": "咨询号 {id}",
+    "validate": "验证",
+    "validating": "验证中…",
+    "validateFailed": "无法验证该号码。",
+    "scheme": "机制",
+    "schemes": {
+      "vies": "欧盟VIES",
+      "hmrc": "英国HMRC",
+      "abn": "澳洲ABN",
+      "gst": "GST登记"
+    },
+    "number": "号码",
+    "numberPlaceholder": "如 DE123456789",
+    "add": "添加",
+    "saveFailed": "无法保存税号。",
+    "status": {
+      "valid": "增值税号有效 ({scheme})",
+      "invalid": "增值税号无效 ({scheme})",
+      "unverified": "增值税号未验证 ({scheme})"
+    }
   }
 }

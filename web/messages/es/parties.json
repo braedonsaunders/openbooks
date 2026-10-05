@@ -333,5 +333,33 @@
       "overlap": "Este registro ya tiene precios activos durante parte de ese período.",
       "save": "No se pudo guardar la asignación."
     }
+  },
+  "taxIds": {
+    "title": "NIF-IVA de la empresa",
+    "hint": "Los números validados ante la autoridad deciden la inversión del sujeto pasivo. Un fallo de la autoridad conserva el veredicto anterior.",
+    "loadFailed": "No se pudieron cargar los números.",
+    "empty": "Aún no hay número registrado.",
+    "checked": "verificado {date}",
+    "neverChecked": "nunca verificado",
+    "consultation": "referencia {id}",
+    "validate": "Validar",
+    "validating": "Validando…",
+    "validateFailed": "No se pudo validar el número.",
+    "scheme": "Régimen",
+    "schemes": {
+      "vies": "VIES UE",
+      "hmrc": "HMRC RU",
+      "abn": "ABN AU",
+      "gst": "Registro IVA"
+    },
+    "number": "Número",
+    "numberPlaceholder": "p. ej. DE123456789",
+    "add": "Añadir",
+    "saveFailed": "No se pudo guardar el número.",
+    "status": {
+      "valid": "NIF-IVA válido ({scheme})",
+      "invalid": "NIF-IVA inválido ({scheme})",
+      "unverified": "NIF-IVA sin verificar ({scheme})"
+    }
   }
 }

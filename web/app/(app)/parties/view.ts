@@ -269,6 +269,7 @@ export async function loadParties(
     crmEnabled,
     complianceEnabled,
     autopayEnabled,
+    crossBorderTaxOn,
   ] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
@@ -318,6 +319,7 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'crm'),
     isFeatureEnabled(orgId, 'subcontractorCompliance'),
     isFeatureEnabled(orgId, 'autopay'),
+    isFeatureEnabled(orgId, 'crossBorderTax'),
   ])
   const resolvedPartyForm =
     (openParty || creating) && pickers && role
@@ -409,6 +411,13 @@ export async function loadParties(
           salesReps: pickers[7].rows,
           canManage,
           canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
+          // Customer tax IDs ride the drawer like compliance does: identity
+          // and the manage grant from the loader, rows from the section's
+          // own read. Hidden while the feature is off; data is kept.
+          taxIds:
+            crossBorderTaxOn && openParty && partyId && partyId !== 'new'
+              ? { partyId: String(openParty.party.id), canManage }
+              : null,
           canManageWages: can(authz, 'admin.setup.manage'),
           payrollEnabled,
           // Stored methods ride the autopay feature plus the read grant;

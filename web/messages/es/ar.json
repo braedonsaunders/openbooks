@@ -502,5 +502,48 @@
       "summaryFailed": "No se pudo cobrar {amount} de la factura {invoice}.",
       "summaryCanceled": "Se canceló el cobro de {amount} de la factura {invoice}."
     }
+  },
+  "supplyEvidence": {
+    "title": "Lugar de suministro",
+    "loadFailed": "No se pudieron cargar las pruebas.",
+    "loading": "Cargando pruebas…",
+    "domestic": "Tratamiento fiscal nacional — sin operación transfronteriza.",
+    "elect": "Añadir tratamiento transfronterizo",
+    "supplyKind": "Suministro",
+    "supplyKindOptions": {
+      "digital_service": "Servicio digital",
+      "goods": "Bienes"
+    },
+    "customerKind": "Cliente",
+    "customerKindOptions": {
+      "consumer": "Consumidor",
+      "business": "Empresa"
+    },
+    "signal": "Señal",
+    "kinds": {
+      "billing_address": "Dirección de facturación",
+      "ip_country": "País de la tarjeta",
+      "card_bin_country": "País IP",
+      "bank_country": "País del banco",
+      "sim_country": "País SIM",
+      "ship_to": "Destino"
+    },
+    "country": "País",
+    "source": "Fuente",
+    "remove": "Quitar",
+    "addSignal": "Añadir señal",
+    "save": "Guardar pruebas",
+    "saving": "Guardando…",
+    "cancel": "Cancelar",
+    "saveFailed": "No se pudieron guardar las pruebas.",
+    "pending": "Se juzga al contabilizar — pendiente.",
+    "edit": "Editar",
+    "outcomes": {
+      "customer_country": "B2C — lugar de suministro: {country}",
+      "reverse_charge": "Inversión del sujeto pasivo — {country}",
+      "seller_country": "Nacional — {country}",
+      "export": "Fuera de ámbito — {country}"
+    },
+    "vatId": "NIF-IVA {id}"
   }
 }

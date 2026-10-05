@@ -502,5 +502,48 @@
       "summaryFailed": "Não foi possível cobrar {amount} da fatura {invoice}.",
       "summaryCanceled": "A cobrança de {amount} da fatura {invoice} foi cancelada."
     }
+  },
+  "supplyEvidence": {
+    "title": "Local da prestação",
+    "loadFailed": "Não foi possível carregar as evidências.",
+    "loading": "Carregando evidências…",
+    "domestic": "Tratamento fiscal nacional — sem operação transfronteiriça.",
+    "elect": "Adicionar tratamento transfronteiriço",
+    "supplyKind": "Fornecimento",
+    "supplyKindOptions": {
+      "digital_service": "Serviço digital",
+      "goods": "Bens"
+    },
+    "customerKind": "Cliente",
+    "customerKindOptions": {
+      "consumer": "Consumidor",
+      "business": "Empresa"
+    },
+    "signal": "Sinal",
+    "kinds": {
+      "billing_address": "Endereço de cobrança",
+      "ip_country": "País do cartão",
+      "card_bin_country": "País IP",
+      "bank_country": "País do banco",
+      "sim_country": "País SIM",
+      "ship_to": "Destino"
+    },
+    "country": "País",
+    "source": "Fonte",
+    "remove": "Remover",
+    "addSignal": "Adicionar sinal",
+    "save": "Salvar evidências",
+    "saving": "Salvando…",
+    "cancel": "Cancelar",
+    "saveFailed": "Não foi possível salvar as evidências.",
+    "pending": "Julgado no lançamento — pendente.",
+    "edit": "Editar",
+    "outcomes": {
+      "customer_country": "B2C — local da prestação: {country}",
+      "reverse_charge": "Autoliquidação — {country}",
+      "seller_country": "Nacional — {country}",
+      "export": "Fora do escopo — {country}"
+    },
+    "vatId": "IVA {id}"
   }
 }
