@@ -8,6 +8,7 @@ import {
   SubscriptionError,
   billSubscriptionNow,
   changeSubscription,
+  firstPeriodStub,
   lockCustomerForScope,
   lockSubscriptionCustomerForScope,
   monthlyRecurringRevenue,
@@ -415,10 +416,23 @@ export const POST = defineRoute({
               // unrestricted party rehome must serialize before or after this
               // subscription is created, never between the scope check and write.
               await lockCustomerForScope(tx, orgId, String(body.customerId), authz.allowedSubsidiaryIds);
-              // The anchor day pins month-end starts to the start date's day, so a
-              // subscription starting Jan 31 bills Mar 31 after Feb 28, not Mar 28.
-              // startOn is a validated YYYY-MM-DD string (checked above).
-              const anchorDay = Number(startOn.slice(8, 10));
+              // The billing cycle runs through the first bill date, so the anchor
+              // day is that date's day: a cycle billing Jan 31 bills Mar 31 after
+              // Feb 28, not Mar 28, and a stub ending Aug 1 keeps billing on the
+              // 1st rather than the start date's day. firstBillOn is a validated
+              // YYYY-MM-DD string (checked above).
+              const anchorDay = Number(firstBillOn.slice(8, 10));
+              if (prorateFirstPeriod) {
+                // Refuse an unpriceable stub before the subscription commits, so
+                // a refused first-period proration never leaves a subscription
+                // behind without its first invoice.
+                const plan = (await tx.execute<{ interval: string; intervalCount: number }>(sql`
+                  select interval, interval_count as "intervalCount"
+                    from subscription_plans where id = ${body.planId} and org_id = ${orgId}`)).rows[0];
+                if (!plan) throw new SubscriptionError("billing plan not found", 404);
+                const cadence = normalizeSubscriptionCadence(plan.interval, plan.intervalCount);
+                firstPeriodStub(startOn, firstBillOn, cadence.interval, cadence.intervalCount, anchorDay);
+              }
               const row = (await tx.execute<Record<string, unknown>>(sql`
                 insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
                                            next_bill_on, current_period_start, auto_post, memo, anchor_day, created_by, updated_by)

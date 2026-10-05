@@ -12,9 +12,11 @@ import {
 import {
   changeSubscription,
   monthlyRecurringRevenue,
+  normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
   prorate,
   prorationDocument,
+  remainingPeriodProration,
 } from "../billing/subscription-billing.ts";
 import { applyPromotion } from "../sales/promotions.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -56,6 +58,7 @@ type ClassicSubRow = {
   plan_amount: string;
   plan_interval: string;
   plan_interval_count: number;
+  anchor_day: number;
   advanced_lifecycle: boolean;
 };
 
@@ -65,6 +68,7 @@ async function loadClassicSub(runner: SqlExecutor, orgId: string, subscriptionId
            s.start_on::text as start_on, s.current_period_start::text as current_period_start,
            s.next_bill_on::text as next_bill_on, p.amount::text as plan_amount,
            p.interval as plan_interval, p.interval_count as plan_interval_count,
+           coalesce(s.anchor_day, extract(day from s.start_on)::int) as anchor_day,
            (sl.subscription_id is not null) as advanced_lifecycle
       from subscriptions s
       join subscription_plans p on p.org_id = s.org_id and p.id = s.plan_id
@@ -89,7 +93,9 @@ export type SubscriptionPreview = {
 /**
  * Price a subscription change for the remaining slice of the current period.
  * Classic subscriptions use the billing engine's own proration (the same
- * `prorate` over the same period the commit path bills); advanced
+ * `remainingPeriodProration` over the same period and cadence the commit
+ * path bills, so a change inside a prorated first stub previews at the full
+ * period's daily rate exactly as changeSubscription charges it); advanced
  * lifecycles price the component totals the amendment snapshots carry, so
  * the preview and the applied amendment always agree.
  */
@@ -129,8 +135,9 @@ export async function previewSubscriptionChange(
       normalizeSubscriptionMoney(newQuantity, "quantity", "positive"),
       normalizeSubscriptionMoney(newPrice, "price", "nonnegative"),
     );
-    const beforeRemaining = prorate(beforeTotal, periodStart, periodEnd, effectiveOn);
-    const afterRemaining = prorate(afterTotal, periodStart, periodEnd, effectiveOn);
+    const cadence = normalizeSubscriptionCadence(sub.plan_interval, sub.plan_interval_count);
+    const beforeRemaining = remainingPeriodProration(beforeTotal, periodStart, periodEnd, effectiveOn, cadence.interval, cadence.intervalCount, sub.anchor_day);
+    const afterRemaining = remainingPeriodProration(afterTotal, periodStart, periodEnd, effectiveOn, cadence.interval, cadence.intervalCount, sub.anchor_day);
     const adjustment = add(afterRemaining, neg(beforeRemaining));
     return {
       beforeTotal,

@@ -13,7 +13,8 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { resolveSubscriptionBillingTarget } from "./consolidated-billing.ts";
-import { advanceAnchoredMonth } from "./cadence.ts";
+import { advanceAnchoredMonth, retreatAnchoredMonth } from "./cadence.ts";
+import { daysInCivilMonth } from "../platform/civil-date.ts";
 import {
   advancedBillingSnapshot,
   prepareAdvancedSubscriptionBilling,
@@ -241,6 +242,123 @@ export function advanceSubscription(
   } catch {
     throw new SubscriptionError("billing cadence advances outside the supported date range");
   }
+}
+
+/**
+ * The anchor day of the billing cycle that passes through `billOn`. A stored
+ * anchor is honoured when it lands on that date (anchor 31 lands on Feb 28);
+ * an anchor that does not land on it cannot describe a cycle through it, and
+ * the bill date's own day is the only cycle that does.
+ */
+function cycleAnchorThrough(billOn: string, interval: Interval, anchorDay: number | null | undefined): number {
+  const [y, m, d] = billOn.split("-").map(Number);
+  if (interval === "weekly" || anchorDay == null) return d!;
+  if (!Number.isSafeInteger(anchorDay) || anchorDay < 1 || anchorDay > 31) {
+    throw new SubscriptionError("billing anchor day must be between 1 and 31");
+  }
+  return Math.min(anchorDay, daysInCivilMonth(y!, m!)) === d ? anchorDay : d!;
+}
+
+/**
+ * Start of the full billing period that ends on `periodEnd`: one interval
+ * (× intervalCount) back, with month-based steps pinned to the cycle's
+ * anchor exactly as advanceSubscription pins them forward, so advancing the
+ * returned date reproduces `periodEnd`. Pure — unit-tested.
+ */
+export function billingPeriodStartBefore(
+  periodEnd: string, interval: Interval, intervalCount = 1, anchorDay?: number | null,
+): string {
+  const cadence = normalizeSubscriptionCadence(interval, intervalCount);
+  const n = cadence.intervalCount;
+  const endDate = subscriptionDate(periodEnd);
+  if (cadence.interval === "weekly") {
+    const base = new Date(endDate);
+    base.setUTCDate(base.getUTCDate() - 7 * n);
+    if (Number.isNaN(base.getTime()) || base.getUTCFullYear() < 1) {
+      throw new SubscriptionError("billing cadence steps outside the supported date range");
+    }
+    return toIso(base);
+  }
+  const anchor = cycleAnchorThrough(periodEnd, cadence.interval, anchorDay);
+  const [y, m] = periodEnd.split("-").map(Number);
+  const monthStep = (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
+  try {
+    return retreatAnchoredMonth(y!, m!, monthStep, anchor);
+  } catch {
+    throw new SubscriptionError("billing cadence steps outside the supported date range");
+  }
+}
+
+/**
+ * The first-period stub [startOn, firstBillOn) and the FULL billing period
+ * that ends on firstBillOn, whose length prices the stub. A stub longer than
+ * one billing period is refused by name: pricing it as one period would
+ * silently discount the earlier service, and pricing it above one period
+ * would bill a cycle the schedule never shows. Pure — unit-tested.
+ */
+export function firstPeriodStub(
+  startOn: string,
+  firstBillOn: string,
+  interval: Interval,
+  intervalCount = 1,
+  anchorDay?: number | null,
+): { periodStart: string; stubDays: number; periodDays: number } {
+  subscriptionDate(startOn);
+  if (firstBillOn <= startOn) throw new SubscriptionError("nothing to prorate for the first period");
+  const periodStart = billingPeriodStartBefore(firstBillOn, interval, intervalCount, anchorDay);
+  if (startOn < periodStart) {
+    throw new SubscriptionError(
+      `the first period ${startOn} → ${firstBillOn} is longer than one billing period ` +
+        `(${periodStart} → ${firstBillOn}); choose a first bill date no more than one billing period after the start date`,
+    );
+  }
+  return {
+    periodStart,
+    stubDays: calendarDaysBetween(startOn, firstBillOn),
+    periodDays: calendarDaysBetween(periodStart, firstBillOn),
+  };
+}
+
+/**
+ * Charge for a first-period stub: the stub's days over the length of the
+ * full billing period it belongs to, so six days of a 300.00 monthly plan
+ * billing on Aug 1 charge 300 × 6/31. Pure — unit-tested.
+ */
+export function firstPeriodProration(
+  fullAmount: string,
+  startOn: string,
+  firstBillOn: string,
+  interval: Interval,
+  intervalCount = 1,
+  anchorDay?: number | null,
+): string {
+  const stub = firstPeriodStub(startOn, firstBillOn, interval, intervalCount, anchorDay);
+  return mulRatio(fullAmount, BigInt(stub.stubDays), BigInt(stub.periodDays));
+}
+
+/**
+ * Value of `fullAmount` for the unused remainder of the current period
+ * ending on periodEnd, from max(asOf, serviceStart): the remaining days over
+ * the FULL billing period length. During a prorated first stub the
+ * denominator is still the full period, so a mid-stub change is priced at the
+ * same daily rate the stub was billed at; days before service started are
+ * never counted. Pure — unit-tested.
+ */
+export function remainingPeriodProration(
+  fullAmount: string,
+  serviceStart: string,
+  periodEnd: string,
+  asOf: string,
+  interval: Interval,
+  intervalCount = 1,
+  anchorDay?: number | null,
+): string {
+  if (periodEnd <= serviceStart) return "0.0000";
+  const periodStart = billingPeriodStartBefore(periodEnd, interval, intervalCount, anchorDay);
+  const total = calendarDaysBetween(periodStart, periodEnd);
+  const from = asOf > serviceStart ? asOf : serviceStart;
+  const remaining = Math.max(0, Math.min(total, calendarDaysBetween(from, periodEnd)));
+  return mulRatio(fullAmount, BigInt(remaining), BigInt(total));
 }
 
 /**
@@ -1108,6 +1226,7 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
            (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "rootSubsidiaryId",
            o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
            s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status,
+           coalesce(s.anchor_day, extract(day from s.start_on)::int) as "anchorDay",
            s.last_invoice_id as "lastInvoiceId", s.run_count as "runCount",
            exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
       from subscriptions s
@@ -1174,9 +1293,11 @@ export async function changeSubscription(
 
     const periodStart = row.currentPeriodStart ?? row.startOn;
     const periodEnd = row.nextBillOn;
-    // Prorated value of each configuration for the remaining slice of the period.
-    const oldRemaining = prorate(oldFull, periodStart, periodEnd, today);
-    const newRemaining = prorate(newFull, periodStart, periodEnd, today);
+    // Prorated value of each configuration for the remaining slice of the
+    // period, at the full billing period's daily rate (a prorated first stub
+    // is shorter than the period but billed at that same rate).
+    const oldRemaining = remainingPeriodProration(oldFull, periodStart, periodEnd, today, row.interval, row.intervalCount, row.anchorDay);
+    const newRemaining = remainingPeriodProration(newFull, periodStart, periodEnd, today, row.interval, row.intervalCount, row.anchorDay);
     const adjustment = add(newRemaining, neg(oldRemaining)); // >0 upgrade charge, <0 credit
 
     let invoiceId: string | null = null;
@@ -1225,10 +1346,11 @@ export async function changeSubscription(
 }
 
 /**
- * Bill a prorated first invoice for the partial period [startOn, firstBillOn]
+ * Bill a prorated first invoice for the partial period [startOn, firstBillOn)
  * and set the subscription's period tracking. Used when a subscription starts
  * mid-period and the customer should pay only for the days used before the first
- * full cycle. Positive charge → taxed like a normal invoice. The invoice is
+ * full cycle: the stub's share of the full billing period ending on
+ * firstBillOn (see firstPeriodProration). Positive charge → taxed like a normal invoice. The invoice is
  * attributed to `actor.actorId` (the authenticated caller; omitted means
  * engine-initiated system provenance) — never to the subscription itself.
  */
@@ -1271,8 +1393,14 @@ export async function prorateFirstInvoice(
     }
     const price = row.priceOverride ?? row.planAmount;
     const full = mul(row.quantity, price);
-    // Prorate the partial period [startOn, firstBillOn] for the days from start.
-    const amount = prorate(full, row.startOn, firstBillOn, row.startOn);
+    // The stub [startOn, firstBillOn) is priced against the full billing
+    // period that ends on firstBillOn, and the cycle is anchored on that
+    // period so the scheduler's next advance from firstBillOn continues the
+    // same cadence the stub was priced against.
+    const anchorDay = row.interval === "weekly"
+      ? row.anchorDay
+      : cycleAnchorThrough(firstBillOn, row.interval, row.anchorDay);
+    const amount = firstPeriodProration(full, row.startOn, firstBillOn, row.interval, row.intervalCount, anchorDay);
     if (toUnits(amount) <= 0n) throw new SubscriptionError("nothing to prorate for the first period");
 
     const target = await resolveSubscriptionBillingTarget(orgId, row.customerId, today, {
@@ -1303,6 +1431,7 @@ export async function prorateFirstInvoice(
     });
     await db.execute(sql`
       update subscriptions set next_bill_on = ${firstBillOn}, current_period_start = ${row.startOn},
+             anchor_day = ${anchorDay},
              run_count = run_count + 1, last_invoice_id = ${gen.invoiceId}, last_billed_at = now()
        where id = ${subscriptionId} and org_id = ${orgId}
     `);
