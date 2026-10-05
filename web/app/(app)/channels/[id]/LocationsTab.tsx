@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
-import { Badge, Button, Drawer, EmptyState, Label, SearchSelect } from '@openbooks/ui'
+import { Badge, Button, DisclosureSection, Drawer, EmptyState, Input, Label, SearchSelect } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
 
 interface LocationRow {
@@ -17,26 +18,78 @@ interface LocationRow {
   stockLocationId: string | null
   syncInventory: boolean
   fulfilsOrders: boolean
+  bufferQuantity: string
+  stopSellingAtZero: boolean
+}
+
+interface SyncState {
+  stockLocationId: string
+  stockLocationCode: string
+  externalLocationId: string
+  externalName: string
+  syncInventory: boolean
+  bufferQuantity: string
+  stopSellingAtZero: boolean
+  mappedPairs: number
+  lastPushedAt: string | null
+  openConflicts: number
+  errorPairs: number
+  pendingPairs: number
+}
+
+interface ConflictRow {
+  id: string
+  channelId: string
+  channelName: string
+  stockLocationId: string
+  stockLocationCode: string
+  externalName: string
+  itemId: string
+  itemCode: string | null
+  itemName: string
+  openbooksQuantity: number
+  shopifyQuantity: number
+  createdAt: string
+}
+
+interface PolicyRow {
+  itemId: string
+  itemCode: string | null
+  itemName: string
+  bufferQuantity: string | null
+  stopSellingAtZero: boolean | null
+  syncInventory: boolean
 }
 
 /**
- * The Locations tab: every Shopify location with its stock mapping and
- * sync flags. Unmapped rows say what happens to their orders (parked,
- * never moved) so the operator maps with the consequence in view.
+ * Locations & stock: every Shopify location with its stock mapping, the
+ * push state beside it, and the conflict queue on top. Everyday reads
+ * state and the next action; the mapping drawer configures buffer and
+ * policy; per-item overrides sit one disclosure deeper.
  */
 export function LocationsTab({ channelId, canManage }: { channelId: string; canManage: boolean }) {
   const t = useTranslations('channels')
   const tc = useTranslations('common')
   const [rows, setRows] = useState<LocationRow[]>([])
+  const [states, setStates] = useState<SyncState[]>([])
+  const [conflicts, setConflicts] = useState<ConflictRow[]>([])
+  const [policies, setPolicies] = useState<PolicyRow[]>([])
   const [mapping, setMapping] = useState<LocationRow | null>(null)
   const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null)
+  const [itemOptions, setItemOptions] = useState<{ value: string; label: string }[]>([])
   const [stockId, setStockId] = useState('')
   const [sync, setSync] = useState(true)
   const [fulfils, setFulfils] = useState(true)
+  const [buffer, setBuffer] = useState('')
+  const [stop, setStop] = useState(true)
+  const [overrideItem, setOverrideItem] = useState('')
+  const [overrideBuffer, setOverrideBuffer] = useState('')
+  const [overrideInheritBuffer, setOverrideInheritBuffer] = useState(true)
+  const [overrideStop, setOverrideStop] = useState(true)
+  const [overrideInheritStop, setOverrideInheritStop] = useState(true)
+  const [overrideSync, setOverrideSync] = useState(true)
   const [busy, setBusy] = useState(false)
 
-  // Fetch kickoff: every update sits in a promise continuation, never
-  // synchronously in the effect body (react-hooks/set-state-in-effect).
   const load = useCallback(() => {
     return fetch(`/api/channels/${channelId}/locations`)
       .then(async (res) => {
@@ -46,6 +99,23 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
         }
         const body = (await res.json()) as { locations: LocationRow[] }
         setRows(body.locations)
+      })
+      .catch(() => {
+        toast.error(t('toast.loadFailed'))
+      })
+  }, [channelId, t])
+
+  const loadSync = useCallback(() => {
+    return fetch(`/api/channels/${channelId}/inventory`)
+      .then(async (res) => {
+        if (!res.ok) {
+          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
+          return
+        }
+        const body = (await res.json()) as { states: SyncState[]; conflicts: ConflictRow[]; policies: PolicyRow[] }
+        setStates(body.states)
+        setConflicts(body.conflicts)
+        setPolicies(body.policies)
       })
       .catch(() => {
         toast.error(t('toast.loadFailed'))
@@ -67,24 +137,62 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       })
   }, [channelId, t])
 
+  const loadItems = useCallback(() => {
+    return fetch('/api/forms/options?source=reference&table=items')
+      .then(async (res) => {
+        if (!res.ok) return
+        const body = (await res.json()) as { options: { value: string; label: string }[] }
+        setItemOptions(body.options)
+      })
+      .catch(() => undefined)
+  }, [])
+
   useEffect(() => {
     void load()
+    void loadSync()
     void loadOptions()
-  }, [load, loadOptions])
+    void loadItems()
+  }, [load, loadSync, loadOptions, loadItems])
 
-  // The edit form starts from the picked row, not from whatever a previous
-  // row left behind: initialize here at pick time instead of syncing in an
-  // effect.
   function pick(row: LocationRow) {
     setMapping(row)
     setStockId(row.stockLocationId ?? '')
     setSync(row.syncInventory)
     setFulfils(row.fulfilsOrders)
+    setBuffer(row.bufferQuantity === '0.0000' ? '' : row.bufferQuantity)
+    setStop(row.stopSellingAtZero)
+  }
+
+  function pickPolicy(policy: PolicyRow) {
+    setOverrideItem(policy.itemId)
+    setOverrideBuffer(policy.bufferQuantity ?? '')
+    setOverrideInheritBuffer(policy.bufferQuantity === null)
+    setOverrideStop(policy.stopSellingAtZero ?? true)
+    setOverrideInheritStop(policy.stopSellingAtZero === null)
+    setOverrideSync(policy.syncInventory)
   }
 
   function stockLabel(row: LocationRow): string | null {
     if (!row.stockLocationId) return null
     return options?.find((option) => option.value === row.stockLocationId)?.label ?? row.stockLocationId
+  }
+
+  function stateFor(row: LocationRow): SyncState | null {
+    return states.find((state) => state.externalLocationId === row.externalLocationId) ?? null
+  }
+
+  async function postInventory(body: Record<string, unknown>): Promise<boolean> {
+    const res = await fetch(`/api/channels/${channelId}/inventory`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
+      return false
+    }
+    await loadSync()
+    return true
   }
 
   async function saveMapping() {
@@ -101,6 +209,8 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
           stockLocationId: stockId === '' ? null : stockId,
           syncInventory: sync,
           fulfilsOrders: fulfils,
+          bufferQuantity: buffer === '' ? null : buffer,
+          stopSellingAtZero: stop,
         }),
       })
       if (!res.ok) {
@@ -109,6 +219,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       }
       setMapping(null)
       await load()
+      await loadSync()
     } finally {
       setBusy(false)
     }
@@ -129,9 +240,84 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
         return
       }
       await load()
+      await loadSync()
     } finally {
       setBusy(false)
     }
+  }
+
+  async function pushNow(row: LocationRow) {
+    if (!row.stockLocationId) return
+    setBusy(true)
+    try {
+      await postInventory({ action: 'push-now', stockLocationId: row.stockLocationId })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resolveConflict(conflictId: string, resolution: 'pushed_openbooks' | 'accepted_shopify') {
+    setBusy(true)
+    try {
+      await postInventory({ action: 'resolve', conflictId, resolution })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resolveAll(resolution: 'pushed_openbooks' | 'accepted_shopify') {
+    const confirmed = await confirmDialog(t('locations.resolveAllConfirm', { count: conflicts.length }))
+    if (!confirmed) return
+    setBusy(true)
+    try {
+      await postInventory({ action: 'resolve-all', resolution })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveOverride() {
+    if (overrideItem === '') return
+    setBusy(true)
+    try {
+      const ok = await postInventory({
+        action: 'set-policy',
+        itemId: overrideItem,
+        bufferQuantity: overrideInheritBuffer ? null : overrideBuffer === '' ? null : overrideBuffer,
+        stopSellingAtZero: overrideInheritStop ? null : overrideStop,
+        syncInventory: overrideSync,
+      })
+      if (ok) {
+        setOverrideItem('')
+        setOverrideBuffer('')
+        setOverrideInheritBuffer(true)
+        setOverrideInheritStop(true)
+        setOverrideSync(true)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function clearOverride(itemId: string) {
+    setBusy(true)
+    try {
+      await postInventory({ action: 'clear-policy', itemId })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function syncBadge(row: LocationRow) {
+    const state = stateFor(row)
+    if (!row.stockLocationId || !row.syncInventory) {
+      return <Badge variant="outline">{t('locations.pausedBadge')}</Badge>
+    }
+    if (!state) return <Badge variant="secondary">{t('locations.pendingBadge')}</Badge>
+    if (state.openConflicts > 0) return <Badge variant="warning">{t('locations.conflictBadge', { count: state.openConflicts })}</Badge>
+    if (state.errorPairs > 0) return <Badge variant="destructive">{t('locations.errorBadge', { count: state.errorPairs })}</Badge>
+    if (state.pendingPairs > 0 || !state.lastPushedAt) return <Badge variant="secondary">{t('locations.pendingBadge')}</Badge>
+    return <Badge variant="success">{t('locations.syncedBadge')}</Badge>
   }
 
   const columns: PagedColumn<LocationRow>[] = [
@@ -157,6 +343,21 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       },
     },
     {
+      key: 'sync',
+      header: t('locations.columnSync'),
+      cell: (row) => {
+        const state = stateFor(row)
+        return (
+          <span>
+            {syncBadge(row)}
+            <span className="block text-xs text-slate-500">
+              {state?.lastPushedAt ? t('locations.lastPush', { time: state.lastPushedAt }) : t('locations.neverPushed')}
+            </span>
+          </span>
+        )
+      },
+    },
+    {
       key: 'flags',
       header: '',
       cell: (row) => (
@@ -175,6 +376,11 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
                 <Button size="sm" variant="ghost" onClick={() => pick(row)}>
                   {t('actions.map')}
                 </Button>
+                {row.stockLocationId && row.syncInventory ? (
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => pushNow(row)}>
+                    {t('locations.pushNow')}
+                  </Button>
+                ) : null}
                 {row.stockLocationId ? (
                   <Button size="sm" variant="ghost" onClick={() => unmap(row)}>
                     {t('actions.unmatch')}
@@ -187,8 +393,75 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       : []),
   ]
 
+  const conflictColumns: PagedColumn<ConflictRow>[] = [
+    {
+      key: 'item',
+      header: t('locations.conflictItem'),
+      cell: (row) => (
+        <span>
+          <span className="font-medium">{row.itemCode ?? row.itemName}</span>
+          <span className="block text-xs text-slate-500">{row.stockLocationCode} · {row.externalName}</span>
+        </span>
+      ),
+      search: (row) => `${row.itemCode ?? ''} ${row.itemName} ${row.externalName}`,
+    },
+    {
+      key: 'quantities',
+      header: t('locations.conflictQuantities'),
+      cell: (row) => (
+        <span className="text-sm">{t('locations.conflictLevels', { open: row.openbooksQuantity, shop: row.shopifyQuantity })}</span>
+      ),
+    },
+    ...(canManage
+      ? [
+          {
+            key: 'rowActions',
+            header: '',
+            cell: (row: ConflictRow) => (
+              <span className="flex gap-1">
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => resolveConflict(row.id, 'pushed_openbooks')}>
+                  {t('locations.pushOurs')}
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => resolveConflict(row.id, 'accepted_shopify')}>
+                  {t('locations.acceptTheirs')}
+                </Button>
+              </span>
+            ),
+          } as PagedColumn<ConflictRow>,
+        ]
+      : []),
+  ]
+
   return (
     <div className="space-y-3">
+      {conflicts.length > 0 ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-medium text-amber-900 dark:text-amber-100">{t('locations.conflictsTitle', { count: conflicts.length })}</h2>
+              <p className="text-xs text-amber-700 dark:text-amber-300">{t('locations.conflictsHint')}</p>
+            </div>
+            {canManage ? (
+              <span className="flex gap-1">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => resolveAll('pushed_openbooks')}>
+                  {t('locations.pushAll')}
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => resolveAll('accepted_shopify')}>
+                  {t('locations.acceptAll')}
+                </Button>
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-3">
+            <PagedTable<ConflictRow>
+              columns={conflictColumns}
+              rows={conflicts}
+              rowKey={(row) => row.id}
+              empty={<EmptyState title={t('locations.conflictsTitle', { count: 0 })} description={t('locations.conflictsHint')} />}
+            />
+          </div>
+        </section>
+      ) : null}
       {canManage ? (
         <div className="flex justify-end">
           <Button
@@ -200,7 +473,10 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               try {
                 const res = await fetch(`/api/channels/${channelId}/locations/import`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
                 if (!res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
-                else await load()
+                else {
+                  await load()
+                  await loadSync()
+                }
               } finally {
                 setBusy(false)
               }
@@ -220,6 +496,79 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
           empty={<EmptyState title={t('locations.emptyTitle')} description={t('locations.unmappedHint')} />}
         />
       )}
+      {canManage ? (
+        <DisclosureSection
+          title={t('locations.overrideTitle')}
+          summary={t('locations.overrideSummary', { count: policies.length })}
+        >
+          <div className="space-y-3 pt-1">
+            <p className="text-xs text-slate-500">{t('locations.overrideHint')}</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-52 flex-1 space-y-1">
+                <Label>{t('locations.overrideItem')}</Label>
+                <SearchSelect value={overrideItem} onChange={setOverrideItem} options={itemOptions} ariaLabel={t('locations.overrideItem')} />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <Switch on={!overrideInheritBuffer} onToggle={() => setOverrideInheritBuffer((value) => !value)} disabled={busy} label={t('locations.overrideBuffer')} />
+                {t('locations.overrideBuffer')}
+              </label>
+              {!overrideInheritBuffer ? (
+                <Input
+                  className="w-24"
+                  inputMode="decimal"
+                  aria-label={t('locations.bufferLabel')}
+                  value={overrideBuffer}
+                  onChange={(event) => setOverrideBuffer(event.target.value)}
+                  placeholder="2"
+                />
+              ) : null}
+              <label className="flex items-center gap-2 text-sm">
+                <Switch on={!overrideInheritStop} onToggle={() => setOverrideInheritStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
+                {t('locations.stopLabel')}
+              </label>
+              {!overrideInheritStop ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch on={overrideStop} onToggle={() => setOverrideStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
+                  {overrideStop ? t('locations.stopOn') : t('locations.stopOff')}
+                </label>
+              ) : null}
+              <label className="flex items-center gap-2 text-sm">
+                <Switch on={overrideSync} onToggle={() => setOverrideSync((value) => !value)} disabled={busy} label={t('locations.syncStock')} />
+                {overrideSync ? t('locations.syncOn') : t('locations.syncOff')}
+              </label>
+              <Button size="sm" disabled={busy || overrideItem === ''} onClick={saveOverride}>
+                {tc('save')}
+              </Button>
+            </div>
+            {policies.length > 0 ? (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {policies.map((policy) => (
+                  <li key={policy.itemId} className="flex items-center justify-between gap-3 py-1.5">
+                    <span className="min-w-0 truncate">
+                      {policy.itemCode ?? policy.itemName}
+                      <span className="text-slate-400">
+                        {' · '}
+                        {policy.bufferQuantity ?? t('locations.inherited')}
+                        {' · '}
+                        {policy.stopSellingAtZero === null ? t('locations.inherited') : policy.stopSellingAtZero ? t('locations.stopOn') : t('locations.stopOff')}
+                        {policy.syncInventory ? '' : ` · ${t('locations.syncOff')}`}
+                      </span>
+                    </span>
+                    <span className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => pickPolicy(policy)}>
+                        {t('actions.map')}
+                      </Button>
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => clearOverride(policy.itemId)}>
+                        {t('locations.clearOverride')}
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </DisclosureSection>
+      ) : null}
       <Drawer open={mapping !== null} onClose={() => setMapping(null)} title={mapping ? t('locations.mapTitle', { name: mapping.externalName }) : ''}>
         {mapping ? (
           <div className="space-y-4 p-1">
@@ -239,6 +588,24 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               <Switch on={fulfils} onToggle={() => setFulfils((value) => !value)} disabled={busy} label={t('locations.fulfils')} />
               {t('locations.fulfils')}
             </label>
+            <div className="space-y-2">
+              <Label>{t('locations.bufferLabel')}</Label>
+              <Input
+                inputMode="decimal"
+                aria-label={t('locations.bufferLabel')}
+                value={buffer}
+                onChange={(event) => setBuffer(event.target.value)}
+                placeholder="0"
+              />
+              <p className="text-xs text-slate-500">{t('locations.bufferHint')}</p>
+            </div>
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm">
+                <Switch on={stop} onToggle={() => setStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
+                {t('locations.stopLabel')}
+              </label>
+              <p className="text-xs text-slate-500">{t('locations.stopHint')}</p>
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setMapping(null)}>
                 {tc('cancel')}

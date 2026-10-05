@@ -48,6 +48,7 @@ export {
   listDueSyncPairs,
   listInventoryConflicts,
   listItemChannelStock,
+  listItemInventoryPolicies,
   listLocationSyncStates,
   listSyncPairs,
   pushInventoryPair,
@@ -57,6 +58,7 @@ export {
   upsertItemInventoryPolicy,
   type InventoryConflictRow,
   type ItemChannelStockRow,
+  type ItemPolicyRow,
   type LocationSyncState,
   type SyncPair,
 } from "./inventory-sync.ts";
