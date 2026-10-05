@@ -1137,7 +1137,10 @@ export async function categoryWeekly(
              sum(round(abs(d.total * d.fx_rate), 4)) as paid,
              max(coalesce(d.document_date, d.posting_date))::text as late
       from documents d
-      join subsidiaries sub on sub.id = d.subsidiary_id
+      -- Root-owned documents carry no subsidiary: a left join keeps them
+      -- (their null functional maps to the org base at translation time)
+      -- instead of silently dropping their payments from the history.
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - (${historyMonths} || ' months')::interval
@@ -1459,7 +1462,10 @@ export async function categoryWeekly(
              sum(round(abs(d.total * d.fx_rate), 4)) as paid,
              max(coalesce(d.document_date, d.posting_date))::text as late
       from documents d
-      join subsidiaries sub on sub.id = d.subsidiary_id
+      -- Root-owned documents carry no subsidiary: a left join keeps them
+      -- (their null functional maps to the org base at translation time)
+      -- instead of silently dropping their payments from the history.
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
