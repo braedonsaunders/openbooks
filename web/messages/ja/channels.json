@@ -307,6 +307,22 @@
     "price": "単価",
     "amount": "金額"
   },
+  "assistance": {
+    "loading": "解決策を検索中…",
+    "loadFailed": "提案を読み込めませんでした。注文を再実行するか、もう一度お試しください。",
+    "apply": "修正を適用",
+    "applySimilar": "{count}件の類似に適用",
+    "similar": "この原因を共有する注文が{count}件",
+    "reject": "却下",
+    "rejectTitle": "この提案を却下しますか？",
+    "rejectLabel": "なぜ正しくないのですか？",
+    "rejected": "却下を監査ログに記録しました。",
+    "approved": "修正を適用しました：{posted}件を計上、{parked}件はまだブロックされています。",
+    "confirmTitle": "この修正を適用しますか？",
+    "confirmBody": "{fix} {count}件の注文を再実行します。計上済みの履歴の勘定は変わりません。",
+    "evidence": "この修正の理由",
+    "evidenceSummary": "理由が{count}件"
+  },
   "posting": {
     "mode": "転記モード",
     "modePerOrder": "注文ごと",

@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -10,7 +11,10 @@ import { DisclosureSection } from '@openbooks/ui'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { useAppAction } from '@/lib/use-app-action'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { createMoneyFormatter, minorToMajorText } from '@/lib/money-format'
+import { confirmDialog } from '@/lib/confirm'
+import { promptDialog } from '@/lib/prompt'
 import { channelRequest } from './channel-client'
 import type { ChannelOrderDrawerData } from './order-detail'
 
@@ -20,6 +24,187 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
   if (status === 'excluded') return 'secondary'
   if (status === 'pending') return 'warning'
   return 'outline'
+}
+
+interface AssistanceCandidate {
+  rank: number
+  kind: 'link_variant' | 'map_account' | 'map_location' | 'manual'
+  label: string
+  detail: string
+  confidence: 'high' | 'medium' | 'low'
+  evidence: string[]
+}
+
+interface AssistanceSuggestion {
+  orderId: string
+  code: string
+  candidates: AssistanceCandidate[]
+  similarCount: number
+  explanation: string
+  modelRanked: boolean
+}
+
+function confidenceVariant(confidence: string): 'success' | 'secondary' | 'outline' {
+  if (confidence === 'high') return 'success'
+  if (confidence === 'medium') return 'secondary'
+  return 'outline'
+}
+
+/**
+ * Classified fix proposal for one parked order. Everyday depth is the top
+ * candidate chip with Apply; the candidate list is the configure depth;
+ * evidence and the posting consequence sit inside a collapsed advanced
+ * section. Approving asks for confirmation first and never posts by itself.
+ */
+function ExceptionAssistance({ orderId, canManage }: { orderId: string; canManage: boolean }) {
+  const t = useTranslations('channels')
+  const router = useRouter()
+  const { busy, refusal, execute } = useAppAction()
+  const [suggestion, setSuggestion] = React.useState<AssistanceSuggestion | null>(null)
+  const [modelNote, setModelNote] = React.useState<string | null>(null)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [rank, setRank] = React.useState(0)
+
+  React.useEffect(() => {
+    let live = true
+    fetch(`/api/channels/exceptions/${orderId}/suggestion`, { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) {
+          if (live) setLoadError(await readApiErrorMessage(res, 'The proposed fix did not load.'))
+          return
+        }
+        const body = (await res.json()) as {
+          suggestion: AssistanceSuggestion
+          ranking: { modelRanked: boolean; note: string | null }
+        }
+        if (live) {
+          setSuggestion(body.suggestion)
+          setModelNote(body.ranking.note)
+          setRank(0)
+        }
+      })
+      .catch(() => {
+        if (live) setLoadError('The proposed fix did not load. Check your connection and try again.')
+      })
+      .finally(() => {
+        if (live) setLoading(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [orderId])
+
+  const candidate = suggestion?.candidates[rank] ?? null
+
+  const onApprove = async (applyToSimilar: boolean) => {
+    if (!suggestion || !candidate || candidate.kind === 'manual') return
+    const confirmed = await confirmDialog({
+      title: t('assistance.confirmTitle'),
+      message: t('assistance.confirmBody', {
+        fix: candidate.detail,
+        count: applyToSimilar ? suggestion.similarCount : 1,
+      }),
+      confirmLabel: t('assistance.apply'),
+    })
+    if (!confirmed) return
+    await execute(
+      () =>
+        channelRequest<{ applied: string; replay: { replayed: number; posted: number; parked: number; waiting: number } }>(
+          `/api/channels/exceptions/${orderId}/approve`,
+          { method: 'POST', body: { rank, applyToSimilar } },
+          t('assistance.apply'),
+        ),
+      {
+        fallbackMessage: t('assistance.apply'),
+        onOk: (outcome) => {
+          router.refresh()
+          toast.success(t('assistance.approved', { posted: outcome.replay.posted, parked: outcome.replay.parked }))
+        },
+      },
+    )
+  }
+
+  const onReject = async () => {
+    const reason = await promptDialog({ title: t('assistance.rejectTitle'), label: t('assistance.rejectLabel') })
+    if (reason === null) return
+    await execute(
+      () => channelRequest(`/api/channels/exceptions/${orderId}/reject`, { method: 'POST', body: { reason } }, t('assistance.reject')),
+      {
+        fallbackMessage: t('assistance.reject'),
+        onOk: () => {
+          router.refresh()
+          toast.success(t('assistance.rejected'))
+        },
+      },
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <p className="text-sm text-slate-500">{t('assistance.loading')}</p>
+      </div>
+    )
+  }
+  if (loadError || !suggestion || !candidate) {
+    return (
+      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <p className="text-sm text-slate-500">{loadError ?? t('assistance.loadFailed')}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+      <ActionAlert error={refusal} fallbackMessage={t('assistance.apply')} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={candidate.kind === 'manual' ? 'warning' : confidenceVariant(candidate.confidence)}>{candidate.label}</Badge>
+        {suggestion.similarCount > 1 ? (
+          <span className="text-xs text-slate-500">{t('assistance.similar', { count: suggestion.similarCount })}</span>
+        ) : null}
+      </div>
+      <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{modelNote ?? suggestion.explanation}</p>
+      {suggestion.candidates.length > 1 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {suggestion.candidates.map((entry) => (
+            <Button key={entry.rank} size="sm" variant={entry.rank === rank ? 'default' : 'outline'} disabled={busy} onClick={() => setRank(entry.rank)}>
+              {entry.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      <DisclosureSection title={t('assistance.evidence')} summary={t('assistance.evidenceSummary', { count: candidate.evidence.length })}>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-200">
+          {candidate.evidence.map((line, index) => (
+            <li key={index}>{line}</li>
+          ))}
+        </ul>
+        <p className="mt-2 text-sm text-slate-500">{candidate.detail}</p>
+      </DisclosureSection>
+      {canManage && candidate.kind !== 'manual' ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" disabled={busy} onClick={() => onApprove(false)}>
+            {t('assistance.apply')}
+          </Button>
+          {suggestion.similarCount > 1 ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => onApprove(true)}>
+              {t('assistance.applySimilar', { count: suggestion.similarCount })}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" disabled={busy} onClick={onReject}>
+            {t('assistance.reject')}
+          </Button>
+        </div>
+      ) : null}
+      {canManage && candidate.kind === 'manual' ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" disabled={busy} onClick={onReject}>
+            {t('assistance.reject')}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrderDrawerData; closeHref: string }) {
@@ -167,6 +352,7 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
             ) : null}
           </div>
         ) : null}
+        {drawer.exception ? <ExceptionAssistance orderId={drawer.id} canManage={drawer.canManage} /> : null}
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <dt className="text-slate-500">{t('drawer.customer')}</dt>

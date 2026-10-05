@@ -307,6 +307,22 @@
     "price": "Preis",
     "amount": "Betrag"
   },
+  "assistance": {
+    "loading": "Lösung wird gesucht…",
+    "loadFailed": "Der Lösungsvorschlag konnte nicht geladen werden. Bestellung erneut verarbeiten oder wiederholen.",
+    "apply": "Lösung anwenden",
+    "applySimilar": "Auf {count} ähnliche anwenden",
+    "similar": "{count, plural, one {# Bestellung teilt} other {# Bestellungen teilen}} diese Ursache",
+    "reject": "Ablehnen",
+    "rejectTitle": "Diesen Vorschlag ablehnen?",
+    "rejectLabel": "Warum ist er falsch?",
+    "rejected": "Ablehnung im Prüfprotokoll vermerkt.",
+    "approved": "Lösung angewendet: {posted} gebucht, {parked} weiter blockiert.",
+    "confirmTitle": "Diese Lösung anwenden?",
+    "confirmBody": "{fix} Dadurch {count, plural, one {wird # Bestellung} other {werden # Bestellungen}} erneut verarbeitet. Bereits gebuchte Vorgänge behalten ihre Konten.",
+    "evidence": "Warum diese Lösung",
+    "evidenceSummary": "{count, plural, one {# Grund} other {# Gründe}}"
+  },
   "posting": {
     "mode": "Buchungsmodus",
     "modePerOrder": "Pro Bestellung",
