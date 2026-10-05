@@ -1117,6 +1117,16 @@ export const POST = defineRoute({
         }
         case "voidChangeOrder": {
           await db.transaction(async (tx) => {
+            // Fenced recheck inside the write transaction, like every other
+            // change-order writer: the entry guard may be stale, and a void
+            // must not land on a project whose Projects feature was turned
+            // off in between.
+            await acquireFeatureGateLock(orgId, tx);
+            if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+              throw new ConstructionBillingError(
+                "Projects feature is disabled",
+              );
+            }
             // Lock the project before its change order, like the approval
             // above: a rehome racing this void must refuse first.
             await lockEntryProject(tx);

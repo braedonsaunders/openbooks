@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -88,6 +89,8 @@ const mockSources = new Map<string, string>([
       export async function withBypass(work) { return work() }
       export async function withBypassContext(_opts, work) { return work() }
       export function inDbTransaction(_work) { throw new Error('unexpected inDbTransaction') }
+      // Executors handed in are joined as the caller's own unit, like the real helper.
+      export async function inExecutorTransaction(executor, work) { return work(executor) }
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
@@ -112,6 +115,24 @@ const mockSources = new Map<string, string>([
     `,
   ],
 ])
+
+// Every runtime export of the real pool module must exist on the double, or a
+// module anywhere in the route's import graph fails to link and the file
+// reports no tests. Exports these paths never call throw if reached.
+{
+  const declared = (source: string) =>
+    new Set([...source.matchAll(/^\s*export (?:async )?(?:function|const|let|class) (\w+)/gm)].map((m) => m[1]!))
+  const real = readFileSync(new URL('../../../../engine/src/platform/db.ts', import.meta.url), 'utf8')
+  const realNames = new Set([
+    ...declared(real),
+    ...[...real.matchAll(/^export \{([^}]*)\}/gm)].flatMap((m) => m[1]!.split(',').map((n) => n.trim()).filter(Boolean)),
+  ])
+  const mocked = declared(mockSources.get('mock:db')!)
+  const missing = [...realNames].filter((name) => !mocked.has(name))
+  mockSources.set('mock:db', mockSources.get('mock:db')! + missing
+    .map((name) => `export function ${name}() { throw new Error('unexpected ${name} in the construction fence test') }`)
+    .join('\n'))
+}
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
@@ -250,6 +271,32 @@ test('approveChangeOrder refused when Projects disables between the entry guard 
   assert.ok(
     !txTexts().some((t) => t.includes('insert into sov_lines')),
     'a refused approval must never land its SOV line',
+  )
+})
+
+test('voidChangeOrder takes the fence and rechecks Projects before touching the order', async () => {
+  reset()
+  const res = await post({ action: 'voidChangeOrder', id: '00000000-0000-4000-8000-00000000c002' })
+  assert.equal(res.status, 422)
+  assert.equal(((await res.json()) as { error: string }).error, 'Only a draft change order can be voided')
+  const texts = txTexts()
+  const fence = texts.findIndex((t) => t.includes('pg_advisory_xact_lock'))
+  const recheck = texts.findIndex((t) => t.includes('for share') && t.includes('from orgs'))
+  const lookup = texts.findIndex((t) => t.includes('from change_orders'))
+  assert.ok(fence >= 0 && recheck >= 0 && lookup >= 0, 'fence, recheck and lookup all run in the void transaction')
+  assert.ok(fence < recheck && recheck < lookup, 'fence, recheck, then work — in that order')
+})
+
+test('voidChangeOrder refused when Projects disables between the entry guard and the void', async () => {
+  reset()
+  fenceState.entryFeatures = { projects: true }
+  fenceState.txFeatures = { projects: false }
+  const res = await post({ action: 'voidChangeOrder', id: '00000000-0000-4000-8000-00000000c002' })
+  assert.equal(res.status, 422)
+  assert.equal(((await res.json()) as { error: string }).error, 'Projects feature is disabled')
+  assert.ok(
+    !txTexts().some((t) => t.includes('change_orders')),
+    'a refused void must never read or write the change order',
   )
 })
 
