@@ -293,7 +293,9 @@
       "title": "过账前先解决证据冲突",
       "description": "这些未过账单据申报了跨境待遇, 但其位置信号指向一个以上国家。在证据一致之前过账仍会被拒绝 — 请在单据所在位置逐一修正。",
       "countries": "信号指向{countries}",
-      "fix": "打开单据"
+      "fix": "打开单据",
+      "clearTitle": "无证据冲突",
+      "clearDescription": "目前没有未过账单据存在相互矛盾的国家证据。"
     },
     "advanced": {
       "title": "申报证据与阈值",
@@ -316,6 +318,13 @@
       "status": "{year}年已过账B2C营业额€{total} / €{threshold}, 不含增值税。",
       "translated": "{currency}基数{base}, {asOf}汇率{rate}",
       "uncovered": "{currencies}没有欧洲央行汇率 — 合计已将其排除。采信此数值前请先补足汇率。"
-    }
+    },
+    "tabs": {
+      "return": "申报",
+      "conflicts": "证据冲突",
+      "fx": "货币换算",
+      "threshold": "销售阈值"
+    },
+    "contextUnavailable": "无法加载申报证据。请重试后再依据这些信息操作。"
   }
 }

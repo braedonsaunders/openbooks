@@ -293,7 +293,9 @@
       "title": "Nachweiskonflikte vor dem Buchen beheben",
       "description": "Diese noch nicht gebuchten Dokumente beanspruchen eine grenzüberschreitende Behandlung, doch ihre Standortnachweise nennen mehr als ein Land. Das Buchen bleibt verweigert, bis die Nachweise übereinstimmen — korrigieren Sie jedes Dokument dort, wo es liegt.",
       "countries": "Nachweise nennen {countries}",
-      "fix": "Dokument öffnen"
+      "fix": "Dokument öffnen",
+      "clearTitle": "Keine Nachweiskonflikte",
+      "clearDescription": "Derzeit hat kein ungebuchter Beleg widersprüchliche Ländernachweise."
     },
     "advanced": {
       "title": "Nachweise und Schwelle",
@@ -316,6 +318,13 @@
       "status": "€{total} von €{threshold} gebuchtem B2C-Umsatz in {year}, ohne MwSt.",
       "translated": "{currency}-Basis {base} zu {rate} am {asOf}",
       "uncovered": "Kein EZB-Kurs für {currencies} — die Summe schließt sie aus. Ergänzen Sie die Kurse, bevor Sie sich auf diesen Wert verlassen."
-    }
+    },
+    "tabs": {
+      "return": "Meldung",
+      "conflicts": "Nachweiskonflikte",
+      "fx": "Währungsumrechnung",
+      "threshold": "Umsatzschwelle"
+    },
+    "contextUnavailable": "Die Meldungsnachweise konnten nicht geladen werden. Wiederholen Sie den Vorgang, bevor Sie sich darauf verlassen."
   }
 }

@@ -293,7 +293,9 @@
       "title": "Corrija os conflitos de evidência antes de contabilizar",
       "description": "Estes documentos não contabilizados declaram tratamento transfronteiriço, mas seus sinais de localização nomeiam mais de um país. A contabilização continua recusada até a evidência concordar — corrija cada documento onde ele está.",
       "countries": "os sinais nomeiam {countries}",
-      "fix": "Abrir documento"
+      "fix": "Abrir documento",
+      "clearTitle": "Nenhum conflito de evidências",
+      "clearDescription": "Atualmente, nenhum documento não contabilizado tem evidências de país conflitantes."
     },
     "advanced": {
       "title": "Evidência e limite da declaração",
@@ -316,6 +318,13 @@
       "status": "€{total} de €{threshold} de faturamento B2C contabilizado em {year}, IVA excluído.",
       "translated": "base em {currency} {base} a {rate} em {asOf}",
       "uncovered": "Sem taxa do BCE para {currencies} — o total as exclui. Adicione as taxas antes de confiar neste valor."
-    }
+    },
+    "tabs": {
+      "return": "Declaração",
+      "conflicts": "Conflitos de evidências",
+      "fx": "Conversão de moeda",
+      "threshold": "Limite de vendas"
+    },
+    "contextUnavailable": "Não foi possível carregar as evidências da declaração. Tente novamente antes de se basear nelas."
   }
 }

@@ -293,7 +293,9 @@
       "title": "Corrija los conflictos de evidencia antes de contabilizar",
       "description": "Estos documentos sin contabilizar declaran tratamiento transfronterizo, pero sus señales de ubicación nombran más de un país. La contabilización seguirá denegada hasta que la evidencia concuerde — corrija cada documento donde reside.",
       "countries": "las señales nombran {countries}",
-      "fix": "Abrir documento"
+      "fix": "Abrir documento",
+      "clearTitle": "Sin conflictos de pruebas",
+      "clearDescription": "Actualmente ningún documento sin contabilizar tiene pruebas de país contradictorias."
     },
     "advanced": {
       "title": "Evidencia y umbral de declaración",
@@ -316,6 +318,13 @@
       "status": "€{total} de €{threshold} de volumen B2C contabilizado en {year}, IVA excluido.",
       "translated": "base en {currency} {base} a {rate} el {asOf}",
       "uncovered": "Sin tipo del BCE para {currencies} — el total las excluye. Añada los tipos antes de confiar en esta cifra."
-    }
+    },
+    "tabs": {
+      "return": "Declaración",
+      "conflicts": "Conflictos de pruebas",
+      "fx": "Conversión de moneda",
+      "threshold": "Umbral de ventas"
+    },
+    "contextUnavailable": "No se pudieron cargar las pruebas de la declaración. Reintente antes de basarse en ellas."
   }
 }

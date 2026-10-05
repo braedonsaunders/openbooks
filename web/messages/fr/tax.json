@@ -293,7 +293,9 @@
       "title": "Corriger les conflits de preuves avant comptabilisation",
       "description": "Ces documents non comptabilisés revendiquent un traitement transfrontalier, mais leurs signaux de localisation nomment plus d’un pays. La comptabilisation reste refusée tant que les preuves divergent — corrigez chaque document là où il se trouve.",
       "countries": "les signaux nomment {countries}",
-      "fix": "Ouvrir le document"
+      "fix": "Ouvrir le document",
+      "clearTitle": "Aucun conflit de justificatifs",
+      "clearDescription": "Aucun document non comptabilisé ne présente actuellement de justificatifs de pays contradictoires."
     },
     "advanced": {
       "title": "Preuves et seuil de déclaration",
@@ -316,6 +318,13 @@
       "status": "€{total} sur €{threshold} de chiffre B2C comptabilisé en {year}, TVA exclue.",
       "translated": "base {currency} {base} à {rate} le {asOf}",
       "uncovered": "Aucun taux BCE pour {currencies} — le total les exclut. Ajoutez les taux avant de vous fier à ce chiffre."
-    }
+    },
+    "tabs": {
+      "return": "Déclaration",
+      "conflicts": "Conflits de justificatifs",
+      "fx": "Conversion monétaire",
+      "threshold": "Seuil de ventes"
+    },
+    "contextUnavailable": "Les justificatifs de déclaration n’ont pas pu être chargés. Réessayez avant de vous y fier."
   }
 }

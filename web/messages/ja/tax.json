@@ -293,7 +293,9 @@
       "title": "転記前に証拠の矛盾を解消",
       "description": "これらの未転記文書は国境を越える取引として申告されていますが、所在地シグナルが複数の国を示しています。証拠が一致するまで転記は拒否されます — 各文書はその文書のある場所で修正してください。",
       "countries": "シグナルは{countries}を示しています",
-      "fix": "文書を開く"
+      "fix": "文書を開く",
+      "clearTitle": "証拠の矛盾はありません",
+      "clearDescription": "現在、国の証拠が矛盾している未記帳の書類はありません。"
     },
     "advanced": {
       "title": "申告の証拠としきい値",
@@ -316,6 +318,13 @@
       "status": "{year}年の転記済みB2C売上€{total} / €{threshold} (VAT除く)。",
       "translated": "{currency}基準{base}、{asOf}レート{rate}",
       "uncovered": "{currencies}のECBレートがありません — 合計から除外されています。この数値を利用する前にレートを追加してください。"
-    }
+    },
+    "tabs": {
+      "return": "申告",
+      "conflicts": "証拠の矛盾",
+      "fx": "通貨換算",
+      "threshold": "売上基準額"
+    },
+    "contextUnavailable": "申告の証拠を読み込めませんでした。内容を利用する前に再試行してください。"
   }
 }

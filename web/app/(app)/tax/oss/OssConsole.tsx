@@ -6,7 +6,8 @@ import { useLocale, useTranslations } from 'next-intl'
 import { addCalendarDays, addMonthsStart, calendarQuarterBounds, startOfMonth } from '@openbooks/engine/platform/civil-date'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { ActionError, kindForStatus, transportError, type ActionResult } from '@braedonsaunders/appkit-errors'
-import { Badge, Button, Card, CardContent, DisclosureSection, EmptyState, Input, Label, PageHeader, Select } from '@openbooks/ui'
+import { Badge, Button, Card, CardContent, EmptyState, Input, Label, PageHeader, Select } from '@openbooks/ui'
+import { RecordTabs } from '@/components/module-home/record-tabs'
 import { KpiStrip } from '@/components/kpi-strip'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { ListPageLayout } from '@/components/page-layout'
@@ -84,15 +85,17 @@ function schemePeriod(scheme: Scheme, anchor: string): { from: string; to: strin
  * prepare the return, review per-state lines with corrections flagged, and
  * export the filing file. Configure: the OSS registration lives in Tax
  * setup — the empty and refusal states link straight there. Advanced: the
- * ECB translation evidence, the distance-sales threshold monitor, and the
- * member-state portal layouts sit inside one disclosure.
+ * translation evidence, evidence conflicts and distance-sales threshold
+ * each have a separate shared tab; the return retains its export controls.
  */
 export function OssConsole({ setupHref }: { setupHref: string }) {
   const t = useTranslations('tax.oss')
+  const tc = useTranslations('common')
   const locale = useLocale()
   const router = useRouter()
   const today = useBusinessToday()
   const defaults = useMemo(() => schemePeriod('union', today), [today])
+  const [activeTab, setActiveTab] = useState<'return' | 'conflicts' | 'fx' | 'threshold'>('return')
   const [scheme, setScheme] = useState<Scheme>('union')
   const [from, setFrom] = useState(defaults.from)
   const [to, setTo] = useState(defaults.to)
@@ -101,30 +104,37 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
   const [format, setFormat] = useState<ExportFormat>('generic')
   const [conflicts, setConflicts] = useState<SupplyConflict[] | null>(null)
   const [turnover, setTurnover] = useState<Turnover | null>(null)
+  const [contextErrors, setContextErrors] = useState<Partial<Record<'conflicts' | 'fx' | 'threshold', string>>>({})
   const [evidence, setEvidence] = useState<FxEvidenceRow[] | null>(null)
   const { busy, execute } = useAppAction()
 
-  async function readJson<T>(url: string): Promise<T | null> {
-    try {
-      const res = await fetch(url)
-      if (!res.ok) return null
-      return (await res.json()) as T
-    } catch {
-      return null
-    }
+  async function readJson<T>(url: string): Promise<T> {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, t('contextUnavailable')))
+    return (await res.json()) as T
   }
 
   async function refreshContext(next: OssResult) {
     const params = new URLSearchParams({ scheme, from, to })
     const year = Number(next.to.slice(0, 4))
-    const [conflictBody, turnoverBody, evidenceBody] = await Promise.all([
+    setConflicts(null)
+    setTurnover(null)
+    setEvidence(null)
+    setContextErrors({})
+    const [conflictBody, turnoverBody, evidenceBody] = await Promise.allSettled([
       readJson<{ conflicts: SupplyConflict[] }>('/api/tax/oss-returns/conflicts'),
       readJson<Turnover>(`/api/tax/oss-returns/turnover?year=${year}`),
       readJson<{ rows: FxEvidenceRow[] }>(`/api/tax/oss-returns/fx-evidence?${params.toString()}`),
     ])
-    setConflicts(conflictBody?.conflicts ?? [])
-    setTurnover(turnoverBody)
-    setEvidence(evidenceBody?.rows ?? [])
+    const errors: Partial<Record<'conflicts' | 'fx' | 'threshold', string>> = {}
+    const message = (error: unknown) => error instanceof Error ? error.message : t('contextUnavailable')
+    if (conflictBody.status === 'fulfilled') setConflicts(conflictBody.value.conflicts)
+    else errors.conflicts = message(conflictBody.reason)
+    if (turnoverBody.status === 'fulfilled') setTurnover(turnoverBody.value)
+    else errors.threshold = message(turnoverBody.reason)
+    if (evidenceBody.status === 'fulfilled') setEvidence(evidenceBody.value.rows)
+    else errors.fx = message(evidenceBody.reason)
+    setContextErrors(errors)
   }
 
   async function runPrepare(): Promise<ActionResult<OssResult>> {
@@ -223,7 +233,24 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
         />
       ) : null}
       {result ? (
-        <div className="space-y-4">
+        <RecordTabs
+          label={t('title')}
+          active={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { key: 'return', label: t('tabs.return') },
+            { key: 'conflicts', label: t('tabs.conflicts'), count: conflicts?.length },
+            { key: 'fx', label: t('tabs.fx') },
+            { key: 'threshold', label: t('tabs.threshold') },
+          ]}
+        >
+          {contextErrors[activeTab as 'conflicts' | 'fx' | 'threshold'] ? (
+            <div role="alert" className="space-y-2">
+              <p>{contextErrors[activeTab as 'conflicts' | 'fx' | 'threshold']}</p>
+              <Button variant="outline" size="sm" onClick={() => void refreshContext(result)}>{tc('actions.retry')}</Button>
+            </div>
+          ) : null}
+          {activeTab === 'return' ? <div className="space-y-4">
           <KpiStrip
             items={[
               { label: t('totalBase'), value: formatDecimal(locale, result.totalBase, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
@@ -237,7 +264,30 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
             rowKey={(row, index) => `${row.kind}-${row.consumptionCountry}-${row.ratePercent}-${index}`}
             empty={<EmptyState title={t('noLinesTitle')} description={t('noLinesDescription')} />}
           />
-          {(conflicts?.length ?? 0) > 0 ? (
+          <div className="flex items-end gap-3">
+            <div className="space-y-1.5">
+              <Label>{t('format')}</Label>
+              <Select value={format} onChange={(event) => setFormat(event.target.value as ExportFormat)}>
+                <option value="generic">{t('formats.generic')}</option>
+                <option value="DE">{t('formats.DE')}</option>
+                <option value="FR">{t('formats.FR')}</option>
+                <option value="NL">{t('formats.NL')}</option>
+                <option value="IE">{t('formats.IE')}</option>
+              </Select>
+            </div>
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/tax/oss-returns/export?${new URLSearchParams({ scheme, from, to, format }).toString()}`}
+                download
+              >
+                {t('export')}
+              </a>
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t(`exportNotes.${format}`)}</p>
+          </div> : null}
+          {activeTab === 'conflicts' && !contextErrors.conflicts ? (
+            (conflicts?.length ?? 0) > 0 ? (
             <Card>
               <CardContent className="space-y-2 py-4">
                 <div className="flex items-center gap-2">
@@ -270,30 +320,9 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
                 </ul>
               </CardContent>
             </Card>
+          ) : conflicts === null ? <p role="status">{tc('feedback.loading')}</p> : <EmptyState title={t('conflicts.clearTitle')} description={t('conflicts.clearDescription')} />
           ) : null}
-          <div className="flex items-end gap-3">
-            <div className="space-y-1.5">
-              <Label>{t('format')}</Label>
-              <Select value={format} onChange={(event) => setFormat(event.target.value as ExportFormat)}>
-                <option value="generic">{t('formats.generic')}</option>
-                <option value="DE">{t('formats.DE')}</option>
-                <option value="FR">{t('formats.FR')}</option>
-                <option value="NL">{t('formats.NL')}</option>
-                <option value="IE">{t('formats.IE')}</option>
-              </Select>
-            </div>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/tax/oss-returns/export?${new URLSearchParams({ scheme, from, to, format }).toString()}`}
-                download
-              >
-                {t('export')}
-              </a>
-            </Button>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t(`exportNotes.${format}`)}</p>
-          <DisclosureSection title={t('advanced.title')} summary={t('advanced.summary')} defaultOpen={(conflicts?.length ?? 0) > 0}>
-            {result.currency !== 'EUR' ? (
+          {activeTab === 'fx' && !contextErrors.fx ? (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('fx.title')}</p>
                 {(evidence?.length ?? 0) > 0 ? (
@@ -304,11 +333,11 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
                     empty={<EmptyState title={t('noLinesTitle')} description={t('noLinesDescription')} />}
                   />
                 ) : (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('fx.pending')}</p>
+                  <p role="status" className="text-sm text-slate-500 dark:text-slate-400">{evidence === null ? tc('feedback.loading') : t('fx.pending')}</p>
                 )}
               </div>
             ) : null}
-            {turnover ? (
+          {activeTab === 'threshold' && !contextErrors.threshold ? (turnover ? (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('threshold.title')}</p>
                 <div className="flex items-center gap-2">
@@ -341,9 +370,8 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
                   </p>
                 ) : null}
               </div>
-            ) : null}
-          </DisclosureSection>
-        </div>
+            ) : <p role="status" className="text-sm text-slate-500">{tc('feedback.loading')}</p>) : null}
+        </RecordTabs>
       ) : null}
     </ListPageLayout>
   )
