@@ -6060,6 +6060,10 @@
       "title": "Tarjetas regalo y crédito",
       "description": "Tarjetas regalo y crédito en tienda registrados como pasivo, con emisión, canje, caducidad y deterioro."
     },
+    "crossBorderTax": {
+      "title": "Fiscalidad transfronteriza",
+      "description": "Lugar de suministro a partir de pruebas recogidas, validación de NIF-IVA intracomunitarios con inversión del sujeto pasivo, control del umbral de ventas a distancia de la UE y declaraciones de ventanilla única."
+    },
     "subcontractorCompliance": {
       "title": "Cumplimiento de subcontratistas",
       "description": "Certificados de seguro, renuncias de gravamen y declaraciones 1099-NEC/MISC y T4A, con retención de pagos cuando la cobertura de un subcontratista caduca."

@@ -225,6 +225,10 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "assembly_disassemblies", columnName: "reason", transform: "redact" },
   { tableName: "provision_obligations", columnName: "name", transform: "redact" },
   { tableName: "document_goods_tax_snapshots", columnName: "snapshot", transform: "null_out" },
+  // Validated tax IDs and authority responses may name a sole trader —
+  // nulled in sandboxes like tax_ids, never faked into a plausible lie.
+  { tableName: "party_tax_ids", columnName: "value", transform: "null_out" },
+  { tableName: "party_tax_ids", columnName: "response_excerpt", transform: "null_out" },
   // HR-9 self-service (0198): the emergency contact is candidate PII —
   // nulled in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "parties", columnName: "emergency_contact", transform: "null_out" },

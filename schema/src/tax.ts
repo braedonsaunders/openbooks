@@ -241,6 +241,106 @@ export const marketplaceFacilitators = pgTable(
 );
 
 /**
+ * One-Stop-Shop registrations: the member state of identification, scheme and
+ * number the org files under. One active registration per scheme; a
+ * re-registration closes the old window and opens a new row, so a filed
+ * period always resolves to the registration that covered it.
+ */
+export const taxOssRegistrations = pgTable(
+  "tax_oss_registrations",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id"),
+    scheme: text("scheme", { enum: ["union", "non_union", "ioss"] }).notNull(),
+    identificationState: text("identification_state").notNull(),
+    registrationNumber: text("registration_number").notNull(),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_oss_registrations_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("tax_oss_registrations_one_active_scheme")
+      .on(t.orgId, t.scheme)
+      .where(sql`${t.isActive}`),
+    index("tax_oss_registrations_org_scheme").on(t.orgId, t.scheme),
+  ],
+);
+
+/**
+ * Validated business tax IDs per customer: the normalized number, which
+ * authority checked it, the verdict, when it was checked, the authority's
+ * consultation reference and a bounded excerpt of the authority response.
+ * History is kept per value; a failed authority call leaves the previous
+ * verdict with status unverified, never a silent pass.
+ */
+export const partyTaxIds = pgTable(
+  "party_tax_ids",
+  {
+    id: id(),
+    orgId: orgRef(),
+    partyId: uuid("party_id").notNull(),
+    scheme: text("scheme", { enum: ["vies", "hmrc", "abn", "gst"] }).notNull(),
+    value: text("value").notNull(),
+    status: text("status", { enum: ["valid", "invalid", "unverified"] })
+      .notNull()
+      .default("unverified"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    checkedBy: uuid("checked_by"),
+    consultationNumber: text("consultation_number"),
+    responseExcerpt: jsonb("response_excerpt"),
+    revalidateAfter: date("revalidate_after"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("party_tax_ids_org_id_id_unique").on(t.orgId, t.id),
+    unique("party_tax_ids_identity_unique").on(
+      t.orgId,
+      t.partyId,
+      t.scheme,
+      t.value,
+    ),
+    index("party_tax_ids_org_party").on(t.orgId, t.partyId),
+  ],
+);
+
+/**
+ * Place-of-supply evidence per sales document: each independently collected
+ * location signal with the country it asserts and the system that observed
+ * it. Only derived country codes are stored — never raw IPs, PANs or BINs.
+ */
+export const documentSupplyEvidence = pgTable(
+  "document_supply_evidence",
+  {
+    orgId: orgRef(),
+    documentId: uuid("document_id").notNull(),
+    kind: text("kind", {
+      enum: [
+        "billing_address",
+        "ip_country",
+        "card_bin_country",
+        "bank_country",
+        "sim_country",
+        "ship_to",
+      ],
+    }).notNull(),
+    countryCode: text("country_code").notNull(),
+    source: text("source").notNull(),
+    observedOn: date("observed_on"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (t) => [
+    index("document_supply_evidence_org_document").on(t.orgId, t.documentId),
+  ],
+);
+
+/**
  * Whether a state's economic-nexus threshold counts marketplace-facilitated
  * sales. Global reference data: seeded only where the rule is cited; a state
  * with no row defaults to included pending review.

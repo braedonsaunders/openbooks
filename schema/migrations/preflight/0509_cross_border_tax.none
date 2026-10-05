@@ -1,0 +1,4 @@
+Adds three empty tables for cross-border tax (OSS registrations, validated
+party tax IDs, per-document supply evidence) with org isolation, a
+draft-only evidence guard and the query-catalog entries. No existing row is
+read, rewritten, or deleted; no backfill runs.

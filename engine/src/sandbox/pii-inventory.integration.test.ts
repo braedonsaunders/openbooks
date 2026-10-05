@@ -593,6 +593,11 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "document_lines.unit",
   "document_links.link_type",
   "document_links.reason",
+  // Supply evidence stores derived country codes and system source keys only;
+  // raw IPs, PANs and BINs are never persisted, so every column is non-personal.
+  "document_supply_evidence.country_code",
+  "document_supply_evidence.kind",
+  "document_supply_evidence.source",
   "documents.billing_method",
   "documents.currency",
   "documents.document_number",
@@ -1449,6 +1454,12 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "party_bank_accounts.country",
   "party_bank_accounts.currency",
   "party_bank_accounts.retirement_reason",
+  // A validated tax ID's scheme, verdict and authority consultation reference
+  // identify nobody; the number itself and the authority response excerpt are
+  // masked (a sole trader's VAT ID is personal data).
+  "party_tax_ids.consultation_number",
+  "party_tax_ids.scheme",
+  "party_tax_ids.status",
   "pay_applications.kind",
   "pay_applications.memo",
   "pay_applications.status",
@@ -2153,6 +2164,11 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "tax_registrations.filing_frequency",
   "tax_registrations.registration_number",
   "tax_registrations.return_form_code",
+  // An OSS registration number is a business filing identity like a domestic
+  // registration number; scheme and identification state are enumerations.
+  "tax_oss_registrations.identification_state",
+  "tax_oss_registrations.registration_number",
+  "tax_oss_registrations.scheme",
   "tax_report_lines.basis",
   "tax_report_lines.input_key",
   "tax_report_lines.formula",

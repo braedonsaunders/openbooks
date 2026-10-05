@@ -276,6 +276,14 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and (s.customer_sku = d.customer_sku or s.item_id = d.item_id)",
   },
   {
+    // A validated tax ID is unique per customer, scheme and value. A duplicate
+    // customer carrying the same number keeps its validation history on the
+    // absorbed row instead of violating the identity or dropping evidence.
+    table: "party_tax_ids",
+    column: "party_id",
+    conflict: "s.org_id = d.org_id and s.scheme = d.scheme and s.value = d.value",
+  },
+  {
     table: "employee_payroll_profiles",
     column: "employee_party_id",
     conflict: "s.org_id = d.org_id",

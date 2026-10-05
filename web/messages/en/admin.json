@@ -6132,6 +6132,10 @@
       "title": "Stored value",
       "description": "Gift cards and store credit carried as liabilities, with issuance, redemption, breakage, and expiry."
     },
+    "crossBorderTax": {
+      "title": "Cross-border tax",
+      "description": "Place of supply from collected evidence, business VAT ID validation with reverse charge, EU distance-sales threshold monitoring, and One-Stop-Shop returns."
+    },
     "subcontractorCompliance": {
       "title": "Subcontractor compliance",
       "description": "Certificates of insurance, lien waivers, and 1099-NEC/MISC and T4A information returns, with payment holds when a subcontractor's coverage lapses."
