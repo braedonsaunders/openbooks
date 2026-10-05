@@ -78,7 +78,13 @@
     "healthInsights": "Financial findings",
     "revenueTrend": "Revenue and profit trend",
     "marginTrend": "Margin trend",
-    "budgetVariance": "Budget vs actual"
+    "budgetVariance": "Budget vs actual",
+    "kpiVendorConcentration": "Vendor concentration",
+    "kpiVendorPayment": "Vendor payment performance",
+    "kpiSpendVelocity": "Spend velocity",
+    "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
+    "kpiVendorPaymentHint": "Avg {days} days to pay · {late} late · {period}",
+    "kpiSpendVelocityHint": "{savings} potential savings · {period}"
   },
   "metricContext": {
     "today": "Posted today",
@@ -179,7 +185,10 @@
     "healthInsights": "Issues, recommendations and anomalies Financial Health found for the period.",
     "revenueTrend": "Monthly revenue, gross profit and operating income for the trailing months.",
     "marginTrend": "Monthly gross and operating margins for the trailing months.",
-    "budgetVariance": "The approved budget against actuals for the period, with the accounts off track."
+    "budgetVariance": "The approved budget against actuals for the period, with the accounts off track.",
+    "kpiVendorConcentration": "Supplier HHI and top-5 spend share from Vendor Performance.",
+    "kpiVendorPayment": "On-time payment rate and late-paid spend from Vendor Performance.",
+    "kpiSpendVelocity": "Open spend alerts and savings potential from Spend Velocity."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

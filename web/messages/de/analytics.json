@@ -1081,7 +1081,8 @@
     "title": "Lieferantenleistung",
     "backToHub": "Analytik",
     "labels": {
-      "unknownVendor": "Unbekannt"
+      "unknownVendor": "Unbekannt",
+      "unrated": "Unbewertet"
     },
     "chart": {
       "spend": "Ausgaben",
@@ -1185,13 +1186,100 @@
       "overview": "Überblick",
       "payment": "Zahlungsverhalten",
       "scorecard": "Scorecards",
-      "vendors": "Lieferanten"
+      "vendors": "Lieferanten",
+      "configuration": "Konfiguration"
     },
     "tier": {
       "core": "Kern",
       "strategic": "Strategisch",
       "tactical": "Taktisch",
       "tail": "Long Tail"
+    },
+    "config": {
+      "fields": {
+        "engagementCapBills": {
+          "label": "Bindungsobergrenze (Rechnungen)",
+          "help": "Rechnungszahl für die volle Bindungswertung"
+        },
+        "gradeA": {
+          "label": "Note-A-Grenze",
+          "help": "Beziehungswerte ab dieser Grenze erhalten die Note A"
+        },
+        "gradeB": {
+          "label": "Note-B-Grenze",
+          "help": "Beziehungswerte ab dieser Grenze erhalten die Note B"
+        },
+        "gradeC": {
+          "label": "Note-C-Grenze",
+          "help": "Beziehungswerte ab dieser Grenze erhalten die Note C"
+        },
+        "gradeD": {
+          "label": "Note-D-Grenze",
+          "help": "Beziehungswerte ab dieser Grenze erhalten die Note D"
+        },
+        "hhiCritical": {
+          "label": "HHI-kritische Stufe",
+          "help": "Lieferantenkonzentration darüber gilt als stark konzentriert"
+        },
+        "hhiWarning": {
+          "label": "HHI-Warnstufe",
+          "help": "Lieferantenkonzentration darüber gilt als mäßig konzentriert"
+        },
+        "highPerformanceScore": {
+          "label": "Leistungsschwelle",
+          "help": "Zahlungsgesundheit ab dieser Schwelle zählt als hoch in der Matrix"
+        },
+        "highSpendPercentile": {
+          "label": "Ausgaben-Perzentil",
+          "help": "Ausgaben ab diesem Perzentil zählen als hoch in der Matrix"
+        },
+        "neutralStabilityScore": {
+          "label": "Neutrale Stabilität",
+          "help": "Stabilitätswertung ohne Vorperiodenvergleich"
+        },
+        "onTimeGoodRate": {
+          "label": "Gute Pünktlichkeit (%)",
+          "help": "Pünktliche Zahlung ab dieser Schwelle gilt als gesund"
+        },
+        "significanceCore": {
+          "label": "Kernbedeutung",
+          "help": "Scorecard-Punkte für die Kernstufe"
+        },
+        "significanceStrategic": {
+          "label": "Strategische Bedeutung",
+          "help": "Scorecard-Punkte für die strategische Stufe"
+        },
+        "significanceTactical": {
+          "label": "Taktische Bedeutung",
+          "help": "Scorecard-Punkte für die taktische Stufe"
+        },
+        "significanceTail": {
+          "label": "Randbedeutung",
+          "help": "Scorecard-Punkte für die Randstufe"
+        },
+        "slowPayDays": {
+          "label": "Langsame Zahlung (Tage)",
+          "help": "Ø Zahlungstage darüber gelten als langsam"
+        },
+        "tierCorePct": {
+          "label": "Kern (%)",
+          "help": "Lieferanten bis zu diesem Anteil bilden die Kernstufe"
+        },
+        "tierStrategicPct": {
+          "label": "Strategisch (%)",
+          "help": "Bestplatzierte Lieferanten bis zu diesem Anteil bilden die strategische Stufe"
+        },
+        "tierTacticalPct": {
+          "label": "Taktisch (%)",
+          "help": "Lieferanten bis zu diesem Anteil bilden die taktische Stufe"
+        }
+      }
+    },
+    "payment": {
+      "undatedNote": "Ohne {count} Rechnungen ohne Fälligkeitsdatum oder Zahlungsbedingung"
+    },
+    "matrix": {
+      "unratedNote": "{count} Lieferanten haben noch keine Zahlungshistorie und werden nicht dargestellt"
     }
   },
   "cashflow": {
@@ -2029,7 +2117,8 @@
       },
       "seasonalHigh": "Höhere Ausgaben fallen typischerweise in {months}",
       "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}",
-      "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen."
+      "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen.",
+      "fragmentationUnconfigured": "Setzen Sie die Fragmentierungs-Obergrenze unter Spend Velocity → Konfiguration"
     },
     "banner": {
       "count": "{total} Warnungen gesamt",
@@ -2050,7 +2139,7 @@
     "config": {
       "anomalyThreshold": {
         "label": "Anomalieschwelle",
-        "note": "Z-Wert für statistische Ausreißer (kritisch bei 3σ)"
+        "note": "Z-Wert für statistische Ausreißer (kritisch bei {critical}σ)"
       },
       "boilingFrog": {
         "label": "Kochender Frosch",
@@ -2066,7 +2155,7 @@
           "label": "Frosch-Monate"
         },
         "fragmentationAvgSize": {
-          "help": "Obergrenze der Ø-Transaktionsgröße für den Fragmentierungsdetektor",
+          "help": "Obergrenze der Ø-Transaktionsgröße in {currency} für den Fragmentierungsdetektor — leer heißt: nicht konfiguriert",
           "label": "Ø-Größe Fragmentierung"
         },
         "fragmentationTxns": {
@@ -2084,6 +2173,310 @@
         "zombieMonths": {
           "help": "Monatlich identische Lieferantensummen über mindestens so viele Monate",
           "label": "Zombie-Monate"
+        },
+        "accelMild": {
+          "label": "Milde Beschleunigung (%/Mon.)",
+          "help": "Beschleunigung darüber gilt als mild"
+        },
+        "accelStrong": {
+          "label": "Starke Beschleunigung (%/Mon.)",
+          "help": "Beschleunigung darüber gilt als stark"
+        },
+        "accountFilterChange": {
+          "label": "Kontofilter Änderung (%)",
+          "help": "Grenze für die Steigerungs-/Rückgangsfilter"
+        },
+        "accountFilterHighVel": {
+          "label": "Kontofilter Dynamik (%/Mon.)",
+          "help": "Grenze für den Hochdynamik-Filter"
+        },
+        "alertBannerThreshold": {
+          "label": "Alarm-Banner (Anzahl)",
+          "help": "Alarmanzahlen darüber rendern das Banner kritisch"
+        },
+        "anomalyCriticalOffset": {
+          "label": "Kritik-Offset (σ)",
+          "help": "Anomalien jenseits Schwelle plus dieser Wert sind kritisch"
+        },
+        "boilingFrogCriticalCreep": {
+          "label": "Kriech-Kritik (%)",
+          "help": "Gesamtkriechen darüber ist kritisch"
+        },
+        "boilingFrogMinIncrease": {
+          "label": "Kriech-Minimum (%)",
+          "help": "Gesamtkriechen ab dieser Schwelle meldet Frosch-Konten"
+        },
+        "boilingFrogMonotonicRatio": {
+          "label": "Monotoniequote (%)",
+          "help": "Anteil kriechender Monate für die Frosch-Meldung"
+        },
+        "boilingFrogStepCap": {
+          "label": "Kriech-Stufenobergrenze (%)",
+          "help": "Nur Monatsanstiege bis hier zählen als stilles Kriechen"
+        },
+        "boilingFrogWarningCreep": {
+          "label": "Kriech-Warnung (%)",
+          "help": "Gesamtkriechen darüber ist eine Warnung"
+        },
+        "categoryIncreaseThreshold": {
+          "label": "Kategorieanstieg (%)",
+          "help": "Kategoriewachstum darüber speist die Anstiegssumme"
+        },
+        "cliffCriticalGap": {
+          "label": "Klipp-Kritiklücke (pp)",
+          "help": "Kauf-/Verkaufs-Dynamiklücke darüber ist kritisch"
+        },
+        "cliffCriticalHorizon": {
+          "label": "Klipp-Kritikhorizont (Mon.)",
+          "help": "Horizont bei kritischer Klippe"
+        },
+        "cliffCriticalPoints": {
+          "label": "Klipp-Kritikpunkte",
+          "help": "Gesundheitsabzug bei kritischer Klippe"
+        },
+        "cliffCriticalRatio": {
+          "label": "Klipp-Kritikquote",
+          "help": "Kauf-/Verkaufs-Quote darüber ist kritisch"
+        },
+        "cliffWarningGap": {
+          "label": "Klipp-Warnlücke (pp)",
+          "help": "Kauf-/Verkaufs-Dynamiklücke darüber ist eine Warnung"
+        },
+        "cliffWarningHorizon": {
+          "label": "Klipp-Warnhorizont (Mon.)",
+          "help": "Horizont bei warnender Klippe"
+        },
+        "cliffWarningPoints": {
+          "label": "Klipp-Warnpunkte",
+          "help": "Gesundheitsabzug bei warnender Klippe"
+        },
+        "cliffWarningRatio": {
+          "label": "Klipp-Warnquote",
+          "help": "Kauf-/Verkaufs-Quote darüber ist eine Warnung"
+        },
+        "concentrationHighShare": {
+          "label": "Hoher Anteil (%)",
+          "help": "Risikoanteil darüber ist schwerwiegend"
+        },
+        "concentrationShareThreshold": {
+          "label": "Risikoanteil (%)",
+          "help": "Konten über diesem Anteil bei heißer Dynamik sind Konzentrationsrisiken"
+        },
+        "concentrationTop1Warning": {
+          "label": "Top-Konto-Warnung (%)",
+          "help": "Ein Top-Konto darüber löst einen Konzentrationshinweis aus"
+        },
+        "fragmentationHighTxns": {
+          "label": "Fragmentierung hoch (Trans./Mon.)",
+          "help": "Monatstransaktionen darüber sind schwerwiegend"
+        },
+        "fragmentationUnitCap": {
+          "label": "Fragmentierungsdeckel",
+          "help": "Maximale Strukturpunkte für Fragmentierung"
+        },
+        "fragmentationUnitWeight": {
+          "label": "Fragmentierungsgewicht",
+          "help": "Strukturpunkte je fragmentierter Kategorie"
+        },
+        "healthCriticalAnomalyCap": {
+          "label": "Kritik-Anomalie-Deckel",
+          "help": "Maximalabzug für kritische Anomalien"
+        },
+        "healthCriticalAnomalyUnit": {
+          "label": "Kritik-Anomalie-Stück",
+          "help": "Abzug je kritischer Anomalie"
+        },
+        "healthCriticalCap": {
+          "label": "Kritikobergrenze",
+          "help": "Maximalabzug für kritische Probleme"
+        },
+        "healthCriticalFrogCap": {
+          "label": "Kritik-Kriech-Deckel",
+          "help": "Maximalabzug für kritisches Kriechen"
+        },
+        "healthCriticalFrogUnit": {
+          "label": "Kritik-Kriech-Stück",
+          "help": "Abzug je kritischem Frosch-Konto"
+        },
+        "healthCriticalZombieCap": {
+          "label": "Kritik-Zombie-Deckel",
+          "help": "Maximalabzug für kritische Zombies"
+        },
+        "healthCriticalZombieUnit": {
+          "label": "Kritik-Zombie-Stück",
+          "help": "Abzug je kritischem Zombie-Abo"
+        },
+        "healthGradeA": {
+          "label": "Gesundheit A",
+          "help": "Gesundheitswert ab hier erhält Note A"
+        },
+        "healthGradeB": {
+          "label": "Gesundheit B",
+          "help": "Gesundheitswert ab hier erhält Note B"
+        },
+        "healthGradeC": {
+          "label": "Gesundheit C",
+          "help": "Gesundheitswert ab hier erhält Note C"
+        },
+        "healthGradeD": {
+          "label": "Gesundheit D",
+          "help": "Gesundheitswert ab hier erhält Note D"
+        },
+        "healthStructuralCap": {
+          "label": "Strukturobergrenze",
+          "help": "Maximalabzug für Strukturrisiko"
+        },
+        "healthVelocityCap": {
+          "label": "Dynamikobergrenze",
+          "help": "Maximalabzug für heiße Dynamik"
+        },
+        "healthVelocityUnit": {
+          "label": "Dynamik-Stückkosten",
+          "help": "Abzug je heißem Dynamikkonto"
+        },
+        "healthVelocityUnitCap": {
+          "label": "Dynamik-Stückdeckel",
+          "help": "Maximaler Dynamikabzug je Kontogruppe"
+        },
+        "healthWarningAnomalyCap": {
+          "label": "Warn-Anomalie-Deckel",
+          "help": "Maximalabzug für nicht-kritische Anomalien"
+        },
+        "healthWarningAnomalyUnit": {
+          "label": "Warn-Anomalie-Stück",
+          "help": "Abzug je nicht-kritischer Anomalie"
+        },
+        "healthWarningCap": {
+          "label": "Warnobergrenze",
+          "help": "Maximalabzug für Warnungen"
+        },
+        "healthWarningFrogCap": {
+          "label": "Warn-Kriech-Deckel",
+          "help": "Maximalabzug für nicht-kritisches Kriechen"
+        },
+        "healthWarningFrogUnit": {
+          "label": "Warn-Kriech-Stück",
+          "help": "Abzug je nicht-kritischem Frosch-Konto"
+        },
+        "healthWarningZombieCap": {
+          "label": "Warn-Zombie-Deckel",
+          "help": "Maximalabzug für nicht-kritische Zombies"
+        },
+        "healthWarningZombieUnit": {
+          "label": "Warn-Zombie-Stück",
+          "help": "Abzug je nicht-kritischem Zombie-Abo"
+        },
+        "highVelocityAlert": {
+          "label": "Hochdynamik-Alarm (%/Mon.)",
+          "help": "Konten über dieser Dynamik lösen einen Wachstumshinweis aus"
+        },
+        "minBaseAmount": {
+          "label": "Mindestbasis",
+          "help": "Serien unter diesem Betrag in {currency} überspringt die Engine — leer heißt: kein Minimum"
+        },
+        "opexRatioAlert": {
+          "label": "OpEx-Quotenalarm (%)",
+          "help": "Betriebskosten über diesem Umsatzanteil lösen einen Hinweis aus"
+        },
+        "projectionCapAccount": {
+          "label": "Prognoseobergrenze, Konto (%)",
+          "help": "Kontoprognose-Änderung wird hierauf begrenzt"
+        },
+        "projectionCapTotal": {
+          "label": "Prognoseobergrenze, gesamt (%)",
+          "help": "Gesamtprognose-Änderung wird hierauf begrenzt"
+        },
+        "savingsCriticalPoints": {
+          "label": "Sparpunkte, kritisch",
+          "help": "Abzug beim Überschreiten der kritischen Stufe"
+        },
+        "savingsHighPoints": {
+          "label": "Sparpunkte, hoch",
+          "help": "Abzug beim Überschreiten der hohen Stufe"
+        },
+        "savingsLowPoints": {
+          "label": "Sparpunkte, niedrig",
+          "help": "Abzug beim Überschreiten der niedrigen Stufe"
+        },
+        "savingsMediumPoints": {
+          "label": "Sparpunkte, mittel",
+          "help": "Abzug beim Überschreiten der mittleren Stufe"
+        },
+        "savingsRatioCritical": {
+          "label": "Sparquote, kritisch (%)",
+          "help": "Spar-/Ausgabenquote darüber zieht kritische Punkte ab"
+        },
+        "savingsRatioHigh": {
+          "label": "Sparquote, hoch (%)",
+          "help": "Spar-/Ausgabenquote darüber zieht hohe Punkte ab"
+        },
+        "savingsRatioLow": {
+          "label": "Sparquote, niedrig (%)",
+          "help": "Spar-/Ausgabenquote darüber zieht niedrige Punkte ab"
+        },
+        "savingsRatioMedium": {
+          "label": "Sparquote, mittel (%)",
+          "help": "Spar-/Ausgabenquote darüber zieht mittlere Punkte ab"
+        },
+        "savingsRatioWatch": {
+          "label": "Sparquote, beobachten (%)",
+          "help": "Spar-/Ausgabenquote darüber zieht Beobachtungspunkte ab"
+        },
+        "savingsWatchPoints": {
+          "label": "Sparpunkte, beobachten",
+          "help": "Abzug beim Überschreiten der Beobachtungsstufe"
+        },
+        "seasonalBand": {
+          "label": "Saisonband (%)",
+          "help": "Monatsabweichung jenseits meldet Hoch-/Tiefsaison"
+        },
+        "seasonalCriticalDeviation": {
+          "label": "Saison-Kritik (%)",
+          "help": "Absolute Abweichung darüber ist ein schwerer Saisonalarm"
+        },
+        "spenderIncreaseThreshold": {
+          "label": "Ausgeberanstieg (%)",
+          "help": "Ausgeberwachstum darüber zählt als Top-Steiger"
+        },
+        "structuralTop1High": {
+          "label": "Top-Anteil hoch (%)",
+          "help": "Top-Kontoanteil darüber gibt hohe Strukturpunkte"
+        },
+        "structuralTop1HighPoints": {
+          "label": "Top-Punkte (hoch)",
+          "help": "Strukturpunkte beim Überschreiten der hohen Stufe"
+        },
+        "structuralTop1Low": {
+          "label": "Top-Anteil niedrig (%)",
+          "help": "Top-Kontoanteil darüber gibt niedrige Strukturpunkte"
+        },
+        "structuralTop1LowPoints": {
+          "label": "Top-Punkte (niedrig)",
+          "help": "Strukturpunkte beim Überschreiten der niedrigen Stufe"
+        },
+        "structuralTop1Medium": {
+          "label": "Top-Anteil mittel (%)",
+          "help": "Top-Kontoanteil darüber gibt mittlere Strukturpunkte"
+        },
+        "structuralTop1MediumPoints": {
+          "label": "Top-Punkte (mittel)",
+          "help": "Strukturpunkte beim Überschreiten der mittleren Stufe"
+        },
+        "topVendorsCount": {
+          "label": "Top-Lieferanten",
+          "help": "Lieferanten im Drill-down, nach Ausgaben sortiert"
+        },
+        "typeImbalanceGap": {
+          "label": "Typ-Ungleichgewicht (pp)",
+          "help": "Rechnungs-/Spesen-Dynamiklücke darüber löst einen Hinweis aus"
+        },
+        "zombieCriticalMonths": {
+          "label": "Zombie-Kritik (Monate)",
+          "help": "Unveränderte Abos über so viele Monate sind kritisch"
+        },
+        "zombieMaxDeviation": {
+          "label": "Zombie-Abweichung (%)",
+          "help": "Größte Schwankung um den Mittelwert, die noch als unverändert gilt"
         }
       },
       "fragmentation": {
@@ -2102,7 +2495,8 @@
       "zombieWindow": {
         "label": "Zombie-Fenster",
         "note": "Identische wiederkehrende Lieferantensummen (<1 % Abweichung)"
-      }
+      },
+      "unsetMinimum": "Kein Minimum — jede Serie wird ab ihrem ersten Monat bewertet"
     },
     "csv": {
       "changePct": "Änderung %",
@@ -2124,7 +2518,7 @@
     },
     "detectors": {
       "anomaly": {
-        "desc": "Statistische Ausreißer (>2,5σ)",
+        "desc": "Statistische Ausreißer (>{sigma}σ)",
         "label": "Anomalien",
         "sub": "kritisch"
       },
