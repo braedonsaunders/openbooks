@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { cn, Badge, Drawer } from '@openbooks/ui'
 import type { SentinelData, FlaggedDoc, DuplicateGroup } from '../../../../lib/analytics/sentinel-data'
+import { RISK_SCORE_BANDS } from '../../../../lib/analytics/sentinel-scoring'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Chart } from '../_ui/charts'
@@ -141,8 +142,10 @@ function RiskPill({ score }: { score: number }) {
 /** Overall-risk gauge (Risk-meter, inverted: high = red). */
 function RiskGauge({ score }: { score: number }) {
   const t = useTranslations('analytics.sentinel')
-  const color = score >= 60 ? '#ef4444' : score >= 40 ? '#f97316' : score >= 20 ? '#f59e0b' : '#10b981'
-  const label = score >= 60 ? t('risk.high') : score >= 40 ? t('risk.elevated') : score >= 20 ? t('risk.moderate') : t('risk.low')
+  // Band cut-offs come from the shared severity model, so the gauge and the
+  // dashboard tiles agree on what a score means.
+  const color = score >= RISK_SCORE_BANDS.high ? '#ef4444' : score >= RISK_SCORE_BANDS.elevated ? '#f97316' : score >= RISK_SCORE_BANDS.moderate ? '#f59e0b' : '#10b981'
+  const label = score >= RISK_SCORE_BANDS.high ? t('risk.high') : score >= RISK_SCORE_BANDS.elevated ? t('risk.elevated') : score >= RISK_SCORE_BANDS.moderate ? t('risk.moderate') : t('risk.low')
   const arcLength = 141.37
   const offset = arcLength * (1 - Math.min(score, 100) / 100)
   return (
