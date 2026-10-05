@@ -325,6 +325,18 @@ const COGNATES = new Set<string>([
   // The payout reconciliation report column is the same noun as the channel
   // sales document column already declared above.
   'fr:reports.catalog.columns.payout_reconciliation.document_number|Document',
+  // “N/A” is the standard no-value abbreviation in German and Spanish
+  // business software, shipped verbatim like the analytics what-if tag.
+  'de:banking.payouts.notApplicableLabel|N/A',
+  'es:banking.payouts.notApplicableLabel|N/A',
+  // “Status” and “Transfer” are spelled identically in German.
+  'de:banking.payouts.statusHead|Status',
+  'de:banking.payouts.kindLabels.transfer|Transfer',
+  // “#” is the universal line-number symbol, not English prose: Japanese and
+  // Chinese tables ship it exactly like English, French and German use
+  // their own abbreviations (N°, Nr.).
+  'ja:banking.payouts.lineHead|#',
+  'zh:banking.payouts.lineHead|#',
   // “Promotion(s)” and “Document” are spelled identically in French.
   'fr:admin.features.promotions.title|Promotions',
   'fr:salesOrders.promotion.chip|Promotion',
