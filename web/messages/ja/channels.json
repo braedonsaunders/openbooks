@@ -285,7 +285,7 @@
     "rateLimitHint": "1回のインポートが使うAPIコストの上限。超過時は再インポートで再開。",
     "topics": "購読中のWebhookトピック",
     "saveSettings": "設定を保存",
-    "webhookUrl": "Webhook URL",
+    "webhookUrl": "ウェブフックURL",
     "webhookUrlHint": "Shopifyアプリの通知先をここに向けます。配信は保存済みシークレットで検証されます。"
   },
   "toast": {

@@ -6599,12 +6599,12 @@
       "description": "能力ミラー、追記専用ログ、通知とレビュー周期。"
     },
     "salesManagement": {
-      "description": "Employee representatives, sales teams, approved quotas and dated territories.",
-      "title": "Sales management"
+      "description": "従業員担当者、営業チーム、承認済みノルマ、期間付きテリトリー。",
+      "title": "営業管理"
     },
     "geographicTerritories": {
-      "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
-      "title": "Geographic territories"
+      "description": "国・都道府県・郡の境界を描画したカバレッジと検証済み顧客所在地。",
+      "title": "テリトリー"
     },
     "revenueContracts": {
       "title": "スコープ別収益契約",

@@ -53,7 +53,7 @@
     "compliance-vendors": "下請業者",
     "continuous-close": "決算モニター",
     "crm-activities": "活動",
-    "crm-forecasts": "Forecasts",
+    "crm-forecasts": "予測",
     "crm-opportunities": "商談",
     "customers": "得意先",
     "dashboard": "ダッシュボード",
@@ -134,10 +134,10 @@
     "hrm-performance-retention": "定着",
     "hrm-performance-settings": "業績管理の設定",
     "crm-sales": "概要",
-    "crm-sales-representatives": "Representatives",
-    "crm-sales-teams": "Teams",
-    "crm-sales-quotas": "Quotas",
-    "crm-sales-territories": "Territories",
+    "crm-sales-representatives": "営業担当",
+    "crm-sales-teams": "営業チーム",
+    "crm-sales-quotas": "販売ノルマ",
+    "crm-sales-territories": "営業テリトリー",
     "hrm-benefits-programs": "プログラム",
     "hrm-performance-succession": "後継者計画",
     "hrm-performance-templates": "評価フォーム",
@@ -195,7 +195,7 @@
     "inventory-views": "在庫",
     "inbox-views": "受信トレイ",
     "me-views": "自分",
-    "crm-sales": "Sales",
+    "crm-sales": "営業",
     "hrm-compensation": "報酬"
   },
   "modulesShort": {
@@ -229,7 +229,7 @@
     "setup-tax-depreciation": "税務減価償却",
     "setup-overhead": "間接費",
     "setup-payments": "支払と銀行取引",
-    "crm-sales": "Sales",
+    "crm-sales": "営業",
     "hrm-compensation": "報酬"
   }
 }

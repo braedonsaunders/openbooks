@@ -53,7 +53,7 @@
     "compliance-vendors": "Subunternehmer",
     "continuous-close": "Abschlussmonitor",
     "crm-activities": "Aktivitäten",
-    "crm-forecasts": "Forecasts",
+    "crm-forecasts": "Prognosen",
     "crm-opportunities": "Verkaufschancen",
     "customers": "Kunden",
     "dashboard": "Dashboard",
@@ -134,14 +134,14 @@
     "hrm-performance-retention": "Bindung",
     "hrm-performance-settings": "Leistungseinstellungen",
     "crm-sales": "Übersicht",
-    "crm-sales-representatives": "Representatives",
-    "crm-sales-teams": "Teams",
-    "crm-sales-quotas": "Quotas",
-    "crm-sales-territories": "Territories",
+    "crm-sales-representatives": "Vertriebsmitarbeiter",
+    "crm-sales-teams": "Vertriebsteams",
+    "crm-sales-quotas": "Vertriebsquoten",
+    "crm-sales-territories": "Vertriebsgebiete",
     "hrm-benefits-programs": "Programme",
     "hrm-performance-succession": "Nachfolgepläne",
     "hrm-performance-templates": "Beurteilungsformulare",
-    "hrm-benefits-employees": "Benefits",
+    "hrm-benefits-employees": "Leistungen",
     "hrm-benefits-delivery": "Bereitstellung"
   },
   "groups": {
@@ -195,7 +195,7 @@
     "inventory-views": "Bestand",
     "inbox-views": "Posteingang",
     "me-views": "Ich",
-    "crm-sales": "Sales",
+    "crm-sales": "Vertrieb",
     "hrm-compensation": "Vergütung"
   },
   "modulesShort": {
@@ -223,13 +223,13 @@
     "me-views": "Ich",
     "tax-views": "Steuererklärungen",
     "close-views": "Kontinuierlicher Abschluss",
-    "insights-views": "Insights",
+    "insights-views": "Einblicke",
     "setup-allocations": "Umlagen",
     "setup-depreciation": "Buch-Abschreibung",
     "setup-tax-depreciation": "Steuerliche Abschreibung",
     "setup-overhead": "Gemeinkosten",
     "setup-payments": "Zahlungen & Banking",
-    "crm-sales": "Sales",
+    "crm-sales": "Vertrieb",
     "hrm-compensation": "Vergütung"
   }
 }

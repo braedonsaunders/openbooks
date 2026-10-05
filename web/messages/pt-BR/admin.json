@@ -6599,12 +6599,12 @@
       "description": "Espelho de capacidades, log imutável, avisos e cadência."
     },
     "salesManagement": {
-      "description": "Employee representatives, sales teams, approved quotas and dated territories.",
-      "title": "Sales management"
+      "description": "Representantes funcionários, equipes de vendas, cotas aprovadas e territórios datados.",
+      "title": "Gestão de vendas"
     },
     "geographicTerritories": {
-      "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
-      "title": "Geographic territories"
+      "description": "Limites de país, província/estado e condado com cobertura desenhada e locais de clientes verificados.",
+      "title": "Territórios geográficos"
     },
     "revenueContracts": {
       "title": "Contratos de receita por pedido",

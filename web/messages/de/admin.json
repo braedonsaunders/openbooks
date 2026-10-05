@@ -6599,12 +6599,12 @@
       "description": "Fähigkeitsspiegel, unveränderliches Entscheidungsprotokoll, Hinweise und Prüfrhythmus."
     },
     "salesManagement": {
-      "description": "Employee representatives, sales teams, approved quotas and dated territories.",
-      "title": "Sales management"
+      "description": "Mitarbeiter im Vertrieb, Vertriebsteams, freigegebene Quoten und datierte Gebiete.",
+      "title": "Vertriebssteuerung"
     },
     "geographicTerritories": {
-      "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
-      "title": "Geographic territories"
+      "description": "Länder-, Bundesland- und Landkreisgrenzen mit gezeichneter Abdeckung und geprüften Kundenstandorten.",
+      "title": "Geografische Gebiete"
     },
     "revenueContracts": {
       "title": "Auftragsbezogene Umsatzverträge",

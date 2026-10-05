@@ -968,12 +968,12 @@
         "description": "月および通貨別に、予定時間、売上、労務費、利益を予測します。"
       },
       "sales_evidence": {
-        "label": "Sales evidence",
-        "description": "Immutable attributed sales credits and reversals, including historical attribution gaps."
+        "label": "販売エビデンス",
+        "description": "帰属済み売上クレジットと戻し（不変）、過去の帰属ギャップを含む。"
       },
       "sales_quota_attainment": {
-        "label": "Sales quota attainment",
-        "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
+        "label": "販売ノルマ達成度",
+        "description": "ノルマのバージョン、ライフサイクル、従業員またはチーム目標、および対象通貨での不変の販売エビデンスに基づく実績。"
       },
       "cash_tenders": {
         "label": "現金販売の支払手段",
@@ -2351,35 +2351,35 @@
         "cost_status": "労務費の状態"
       },
       "sales_evidence": {
-        "id": "Evidence key",
-        "source_id": "Source record",
-        "source_kind": "Source kind",
-        "source_number": "Source number",
-        "employee": "Employee",
-        "employee_id": "Employee key",
-        "team": "Team",
-        "effective_date": "Effective date",
-        "metric": "Measure",
-        "event_kind": "Event",
-        "currency": "Currency",
-        "amount": "Amount"
+        "id": "エビデンスキー",
+        "source_id": "ソースレコード",
+        "source_kind": "ソース種別",
+        "source_number": "ソース番号",
+        "employee": "従業員",
+        "employee_id": "従業員（ID）",
+        "team": "チーム",
+        "effective_date": "有効日",
+        "metric": "測定値",
+        "event_kind": "イベント種別",
+        "currency": "通貨",
+        "amount": "金額"
       },
       "sales_quota_attainment": {
-        "id": "Quota key",
-        "name": "Quota",
-        "target": "Target",
-        "employee_id": "Employee key",
-        "sales_team_id": "Team key",
-        "parent_quota_id": "Parent quota",
-        "supersedes_id": "Replaces quota",
-        "period_start": "Period start",
-        "period_end": "Period end",
-        "lifecycle": "Lifecycle",
-        "metric": "Measure",
-        "currency": "Currency",
-        "amount": "Target amount",
-        "actual": "Actual",
-        "attainment": "Attainment percent"
+        "id": "ノルマ（ID）",
+        "name": "ノルマ",
+        "target": "目標",
+        "employee_id": "従業員（ID）",
+        "sales_team_id": "チーム（ID）",
+        "parent_quota_id": "親ノルマ",
+        "supersedes_id": "置換対象ノルマ",
+        "period_start": "期間開始",
+        "period_end": "期間終了",
+        "lifecycle": "ライフサイクル",
+        "metric": "測定値",
+        "currency": "通貨",
+        "amount": "目標金額",
+        "actual": "実績",
+        "attainment": "達成率"
       },
       "cash_tenders": {
         "document_date": "書類日付",

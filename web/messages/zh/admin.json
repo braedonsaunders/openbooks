@@ -6599,12 +6599,12 @@
       "description": "能力镜像、只增日志、提示与评审周期。"
     },
     "salesManagement": {
-      "description": "Employee representatives, sales teams, approved quotas and dated territories.",
-      "title": "Sales management"
+      "description": "员工业绩代表、销售团队、已批准配额和带日期的区域。",
+      "title": "销售管理"
     },
     "geographicTerritories": {
-      "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
-      "title": "Geographic territories"
+      "description": "国家、省/州和县边界，含绘制的覆盖范围和已验证的客户位置。",
+      "title": "地理区域"
     },
     "revenueContracts": {
       "title": "按范围核算的收入合同",

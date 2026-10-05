@@ -968,12 +968,12 @@
         "description": "Prevê horas, receita, custo de mão de obra e margem por mês e moeda."
       },
       "sales_evidence": {
-        "label": "Sales evidence",
-        "description": "Immutable attributed sales credits and reversals, including historical attribution gaps."
+        "label": "Evidência de vendas",
+        "description": "Créditos de vendas atribuídos imutáveis e reversões, incluindo lacunas históricas de atribuição."
       },
       "sales_quota_attainment": {
-        "label": "Sales quota attainment",
-        "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
+        "label": "Atingimento de cotas de vendas",
+        "description": "Versão da cota, ciclo de vida, meta de funcionário ou equipe, e realizados da evidência de vendas imutável na moeda da meta."
       },
       "cash_tenders": {
         "label": "Meios de pagamento (vendas à vista)",
@@ -2351,35 +2351,35 @@
         "cost_status": "Status do custo de mão de obra"
       },
       "sales_evidence": {
-        "id": "Evidence key",
-        "source_id": "Source record",
-        "source_kind": "Source kind",
-        "source_number": "Source number",
-        "employee": "Employee",
-        "employee_id": "Employee key",
-        "team": "Team",
-        "effective_date": "Effective date",
-        "metric": "Measure",
-        "event_kind": "Event",
-        "currency": "Currency",
-        "amount": "Amount"
+        "id": "Chave de evidência",
+        "source_id": "Registro de origem",
+        "source_kind": "Tipo de origem",
+        "source_number": "Número de origem",
+        "employee": "Funcionário",
+        "employee_id": "Funcionário (id)",
+        "team": "Equipe",
+        "effective_date": "Data efetiva",
+        "metric": "Medida",
+        "event_kind": "Tipo de evento",
+        "currency": "Moeda",
+        "amount": "Valor"
       },
       "sales_quota_attainment": {
-        "id": "Quota key",
-        "name": "Quota",
-        "target": "Target",
-        "employee_id": "Employee key",
-        "sales_team_id": "Team key",
-        "parent_quota_id": "Parent quota",
-        "supersedes_id": "Replaces quota",
-        "period_start": "Period start",
-        "period_end": "Period end",
-        "lifecycle": "Lifecycle",
-        "metric": "Measure",
-        "currency": "Currency",
-        "amount": "Target amount",
-        "actual": "Actual",
-        "attainment": "Attainment percent"
+        "id": "Cota (id)",
+        "name": "Cota",
+        "target": "Meta",
+        "employee_id": "Funcionário (id)",
+        "sales_team_id": "Equipe (id)",
+        "parent_quota_id": "Cota principal",
+        "supersedes_id": "Substitui cota",
+        "period_start": "Início do período",
+        "period_end": "Fim do período",
+        "lifecycle": "Ciclo de vida",
+        "metric": "Medida",
+        "currency": "Moeda",
+        "amount": "Valor da meta",
+        "actual": "Realizado",
+        "attainment": "Percentual de atingimento"
       },
       "cash_tenders": {
         "document_date": "Data do documento",
