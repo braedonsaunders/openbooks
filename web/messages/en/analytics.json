@@ -3786,7 +3786,7 @@
         },
         "duplicateMinAmount": {
           "label": "Duplicate minimum ({currency})",
-          "help": "Pairs below this translated amount are ignored"
+          "help": "Pairs below this translated amount are ignored. Empty means the duplicate check reports not configured."
         },
         "sequentialMinCount": {
           "label": "Sequential run minimum",
@@ -3859,6 +3859,14 @@
         "ghostNameMinLength": {
           "label": "Ghost-name minimum length",
           "help": "Employee names shorter than this never match a vendor name"
+        },
+        "summaryFlaggedMedium": {
+          "label": "Medium flag volume",
+          "help": "Flagged documents at or above this count raise the summary risk by the medium step"
+        },
+        "summaryFlaggedHigh": {
+          "label": "High flag volume",
+          "help": "Flagged documents at or above this count raise the summary risk by the high step"
         }
       },
       "rsfValue": "at least {threshold}×",

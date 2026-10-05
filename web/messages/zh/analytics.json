@@ -3624,7 +3624,7 @@
         },
         "duplicateMinAmount": {
           "label": "重复下限 ({currency})",
-          "help": "折算后低于该金额的不予考虑"
+          "help": "折算后低于该金额的不予考虑。为空时，重复检查报\"未配置\"。"
         },
         "sequentialMinCount": {
           "help": "无断号发票序列至少需要该数量单据",
@@ -3697,6 +3697,14 @@
         "ghostNameMinLength": {
           "label": "幽灵名称最短长度",
           "help": "短于该长度的员工姓名永不与供应商匹配"
+        },
+        "summaryFlaggedMedium": {
+          "label": "标记量中阈值",
+          "help": "标记单据达到该数即按中档计入总体风险"
+        },
+        "summaryFlaggedHigh": {
+          "label": "标记量高阈值",
+          "help": "标记单据达到该数即按高档计入总体风险"
         }
       },
       "rsfNote": "金额 ÷ 供应商历史第二大金额（{months}个月基准，下限{floor}）",

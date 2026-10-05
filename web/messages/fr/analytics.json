@@ -3624,7 +3624,7 @@
         },
         "duplicateMinAmount": {
           "label": "Minimum doublons ({currency})",
-          "help": "Les paires sous ce montant converti sont ignorées"
+          "help": "Les paires sous ce montant converti sont ignorées. Vide signifie que le contrôle des doublons se déclare non configuré."
         },
         "sequentialMinCount": {
           "help": "Les séries de numéros de facture sans interruption doivent compter au moins autant de documents",
@@ -3697,6 +3697,14 @@
         "ghostNameMinLength": {
           "label": "Longueur minimale du nom fantôme",
           "help": "Les noms d’employé plus courts ne correspondent jamais à un fournisseur"
+        },
+        "summaryFlaggedMedium": {
+          "label": "Volume moyen de signalements",
+          "help": "Les documents signalés dès ce nombre augmentent le risque résumé de la tranche moyenne"
+        },
+        "summaryFlaggedHigh": {
+          "label": "Volume élevé de signalements",
+          "help": "Les documents signalés dès ce nombre augmentent le risque résumé de la tranche haute"
         }
       },
       "rsfNote": "Montant ÷ 2ᵉ plus gros du fournisseur sur une référence {months} mois (plancher de référence {floor})",
