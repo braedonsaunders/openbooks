@@ -35,7 +35,7 @@ const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/p
 const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
-const { MissingRatesError } = await import("@/lib/consolidation.ts");
+const { MissingExchangeRateError } = await import("@/lib/fx-presentation.ts");
 const { cashPosition } = await import("@/lib/cash/cash-position.ts");
 const { analyticsConfig } = await import("@/lib/analytics/config.ts");
 const { ANALYTICS_CONFIG } = await import("@/lib/analytics/config-spec.ts");
@@ -155,7 +155,7 @@ test("blocked FX rates refuse into nulls; anything else still throws", { skip: !
     const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "banking.read"]);
     const refusing: DashboardMoneyReaders = {
       ...throwingReaders([]),
-      cashPosition: (async () => { throw new MissingRatesError("rates blocked"); }) as DashboardMoneyReaders["cashPosition"],
+      cashPosition: (async () => { throw new MissingExchangeRateError("USD", "CAD", "2026-07-15"); }) as DashboardMoneyReaders["cashPosition"],
     };
     const nulled = await pinClock(TODAY, () =>
       withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...RUNWAY_IDS], refusing)),
