@@ -488,3 +488,136 @@
 [data-page-actions] [data-subtabs-track] {
   order: 9999;
 }
+
+/* ── Route transitions ──────────────────────────────────────────────────────
+   Keyframes for `components/route-transitions.tsx`. The browser animates
+   snapshots of the old and new page on the compositor, so none of this costs
+   layout or script time. Exits are quick so the old page never competes with
+   the new one; entrances are gentler and arrive once the exit is underway. */
+
+:root {
+  --route-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --route-ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Clicks pass through to the live page while an animation finishes. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(root) {
+  animation-duration: 200ms;
+}
+
+/* Every page-to-page navigation: the old page lifts away, the new one settles. */
+::view-transition-group(.route-change),
+::view-transition-group(.route-recede) {
+  animation-duration: 300ms;
+  animation-timing-function: var(--route-ease-out);
+}
+::view-transition-old(.route-change) {
+  animation: 140ms var(--route-ease-in) both route-lift-out;
+}
+::view-transition-new(.route-change) {
+  animation: 300ms var(--route-ease-out) 60ms both route-settle-in;
+}
+
+/* Opening a report from the hub: the library recedes behind the sheet that
+   is growing into the report, and the report's own chrome arrives once the
+   paper has landed. */
+::view-transition-old(.route-recede) {
+  transform-origin: 50% 0;
+  animation: 320ms var(--route-ease-out) both route-recede-out;
+}
+::view-transition-new(.route-recede) {
+  animation: 300ms var(--route-ease-out) 240ms both route-settle-in;
+}
+
+/* The page placeholder steps aside as soon as the real page streams in. */
+::view-transition-old(.skeleton-out) {
+  animation: 150ms var(--route-ease-in) both route-fade-out;
+}
+
+/* A hub sheet and its report paper are one object: the group carries it
+   between the two positions, lifting it mid-flight like a page being picked
+   up and laid down. */
+::view-transition-group(.report-sheet) {
+  z-index: 20;
+  animation-duration: 480ms;
+  animation-timing-function: var(--route-ease-out);
+}
+::view-transition-image-pair(.report-sheet) {
+  overflow: clip;
+  border-radius: 6px;
+  animation: 480ms var(--route-ease-out) both report-sheet-flight;
+}
+/* Returning: the paper, cropped to its letterhead, shrinks back into its
+   sheet, which resolves underneath it as it lands. */
+::view-transition-old(.report-sheet) {
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  animation: 200ms ease-in 220ms both route-fade-out;
+}
+::view-transition-new(.report-sheet) {
+  animation: 200ms ease-out 180ms both route-fade-in;
+}
+/* Opening: the sheet hands over to the paper's letterhead almost at once,
+   and the paper unrolls downward as the group grows. */
+:root:active-view-transition-type(report-open) {
+  &::view-transition-group(.report-sheet),
+  &::view-transition-image-pair(.report-sheet) {
+    animation-duration: 560ms;
+  }
+  &::view-transition-old(.report-sheet) {
+    height: auto;
+    object-fit: fill;
+    animation: 160ms ease-out both route-fade-out;
+  }
+  &::view-transition-new(.report-sheet) {
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    animation: 220ms ease-out 40ms both route-fade-in;
+  }
+}
+
+@keyframes route-fade-out {
+  to { opacity: 0; }
+}
+@keyframes route-fade-in {
+  from { opacity: 0; }
+}
+@keyframes route-lift-out {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes route-settle-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+}
+@keyframes route-recede-out {
+  to { opacity: 0; transform: scale(0.975); filter: blur(3px); }
+}
+@keyframes report-sheet-flight {
+  0%, 100% {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  }
+  40% {
+    transform: rotate(-0.6deg);
+    box-shadow: 0 28px 60px -16px rgb(15 23 42 / 0.3), 0 10px 20px -10px rgb(15 23 42 / 0.18);
+  }
+}
+/* The rule that sweeps a hub sheet's top edge while its report renders. */
+@keyframes report-sheet-progress {
+  0% { opacity: 1; transform: translateX(-100%); }
+  100% { opacity: 1; transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

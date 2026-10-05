@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { getTranslations } from 'next-intl/server'
 import { AppShell } from '../../components/app-shell'
+import { RouteTransition } from '../../components/route-transitions'
 import { PageSkeleton } from '../../components/page-skeleton'
 import { SandboxBanner } from '../../components/sandbox-banner'
 import { ThemeProvider } from '../../components/theme-provider'
@@ -123,8 +124,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {/* Page content streams behind the skeleton so the shell
               (sidebar/header) paints before slow page loaders resolve.
               Every ModuleView page renders inside {children}, so this one
-              boundary covers them without touching each page. */}
-            <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+              boundary covers them without touching each page. The route
+              transition inside it animates navigation between pages. */}
+            <Suspense fallback={<PageSkeleton />}>
+              <RouteTransition>{children}</RouteTransition>
+            </Suspense>
           </AppShell>
           {can(authz, 'admin.setup.manage') && <OnboardingWizard authz={authz} />}
           </ViewTabsProvider>

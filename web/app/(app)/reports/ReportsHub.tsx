@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
   ArrowUpRight,
@@ -32,6 +32,12 @@ import { PageHeader, cn } from '@openbooks/ui'
 import { RecordTabs } from '../../../components/module-home/record-tabs'
 import { SearchInput } from '../../../components/search-input'
 import { NewReportButton } from './custom/NewReportButton'
+import {
+  REPORT_OPEN_TRANSITION,
+  ReportSheetTransition,
+  openReportSheet,
+  reportSheetName,
+} from '../../../components/route-transitions'
 
 const ICONS: Record<string, typeof FileText> = {
   Users,
@@ -273,15 +279,22 @@ const SHEET = 'rounded-[4px] border border-slate-200 bg-white dark:border-slate-
  * miniature of the printed report — letterhead, then its layout — over a
  * caption with the real title and description. On hover the stack fans,
  * the sheet lifts and its corner turns; reduced-motion users get the
- * static stack.
+ * static stack. Opening it, the sheet grows into the report's paper (see
+ * `route-transitions`), and returns to its place on the way back.
  */
-function ReportSheet({ card, accent, descId }: { card: HubCard; accent: (typeof ACCENTS)[string]; descId: string }) {
-  const Icon = ICONS[card.icon] ?? FileText
+function ReportSheet({ card, accent, descId, transitionName }: {
+  card: HubCard
+  accent: (typeof ACCENTS)[string]
+  descId: string
+  transitionName: string
+}) {
   const motion = 'transition-transform duration-300 ease-out motion-reduce:transition-none'
   return (
     <Link
       href={card.href}
       aria-describedby={descId}
+      transitionTypes={[REPORT_OPEN_TRANSITION]}
+      onClick={() => openReportSheet(card.href, transitionName)}
       className="group relative block h-full rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-4 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950"
     >
       <span
@@ -302,60 +315,89 @@ function ReportSheet({ card, accent, descId }: { card: HubCard; accent: (typeof 
           '[transform:translate(-1px,4px)_rotate(-0.8deg)] group-hover:[transform:translate(-7px,6px)_rotate(-2.6deg)] motion-reduce:group-hover:[transform:translate(-1px,4px)_rotate(-0.8deg)]',
         )}
       />
+      <ReportSheetTransition name={transitionName}>
+        <SheetFace card={card} accent={accent} descId={descId} motion={motion} transitionName={transitionName} />
+      </ReportSheetTransition>
+    </Link>
+  )
+}
+
+/**
+ * The top sheet. While its report renders, the sheet stays picked up and a
+ * thin rule sweeps its top edge, so the click is acknowledged before the
+ * report arrives; the delay keeps an instant navigation from flickering it.
+ */
+function SheetFace({ card, accent, descId, motion, transitionName }: {
+  card: HubCard
+  accent: (typeof ACCENTS)[string]
+  descId: string
+  motion: string
+  /** Lets browser back and forward find this sheet to animate it. */
+  transitionName: string
+}) {
+  const { pending } = useLinkStatus()
+  const Icon = ICONS[card.icon] ?? FileText
+  return (
+    <div
+      data-report-sheet={transitionName}
+      className={cn(
+        'relative h-full drop-shadow-sm group-hover:-translate-y-1 group-hover:drop-shadow-lg motion-reduce:group-hover:translate-y-0',
+        pending && '-translate-y-1.5 drop-shadow-xl motion-reduce:translate-y-0',
+        motion,
+      )}
+    >
       <div
         className={cn(
-          'relative h-full drop-shadow-sm group-hover:-translate-y-1 group-hover:drop-shadow-lg motion-reduce:group-hover:translate-y-0',
-          motion,
+          'relative flex h-full flex-col overflow-hidden transition-[clip-path,border-color] duration-300 ease-out group-hover:border-slate-300 motion-reduce:transition-none dark:group-hover:border-slate-700',
+          SHEET,
+          '[clip-path:polygon(0_0,100%_0,100%_0,100%_100%,0_100%)] group-hover:[clip-path:polygon(0_0,calc(100%-18px)_0,100%_18px,100%_100%,0_100%)] motion-reduce:group-hover:[clip-path:none]',
         )}
       >
-        <div
-          className={cn(
-            'relative flex h-full flex-col overflow-hidden transition-[clip-path,border-color] duration-300 ease-out group-hover:border-slate-300 motion-reduce:transition-none dark:group-hover:border-slate-700',
-            SHEET,
-            '[clip-path:polygon(0_0,100%_0,100%_0,100%_100%,0_100%)] group-hover:[clip-path:polygon(0_0,calc(100%-18px)_0,100%_18px,100%_100%,0_100%)] motion-reduce:group-hover:[clip-path:none]',
-          )}
-        >
-          {/* The turned corner: the underside of the flap the clip cuts away. */}
+        {/* The turned corner: the underside of the flap the clip cuts away. */}
+        <span
+          aria-hidden
+          className="absolute top-0 right-0 z-10 size-[18px] origin-top-right scale-0 rounded-bl-[3px] bg-[linear-gradient(225deg,transparent_50%,var(--color-slate-200)_50%)] shadow-[-1px_1px_2px_rgb(15_23_42/0.12)] transition-transform duration-300 ease-out group-hover:scale-100 motion-reduce:hidden dark:bg-[linear-gradient(225deg,transparent_50%,var(--color-slate-700)_50%)]"
+        />
+        {pending ? (
+          <span aria-hidden className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden">
+            <span className={cn('block h-full w-1/3 opacity-0 motion-safe:animate-[report-sheet-progress_1.1s_ease-in-out_120ms_infinite] motion-reduce:w-full motion-reduce:opacity-100', accent.ribbon)} />
+          </span>
+        ) : null}
+        {card.saved ? (
           <span
             aria-hidden
-            className="absolute top-0 right-0 z-10 size-[18px] origin-top-right scale-0 rounded-bl-[3px] bg-[linear-gradient(225deg,transparent_50%,var(--color-slate-200)_50%)] shadow-[-1px_1px_2px_rgb(15_23_42/0.12)] transition-transform duration-300 ease-out group-hover:scale-100 motion-reduce:hidden dark:bg-[linear-gradient(225deg,transparent_50%,var(--color-slate-700)_50%)]"
+            className={cn('absolute top-0 right-7 z-10 h-7 w-3.5 [clip-path:polygon(0_0,100%_0,100%_100%,50%_74%,0_100%)]', accent.ribbon)}
           />
-          {card.saved ? (
-            <span
-              aria-hidden
-              className={cn('absolute top-0 right-7 z-10 h-7 w-3.5 [clip-path:polygon(0_0,100%_0,100%_100%,50%_74%,0_100%)]', accent.ribbon)}
-            />
-          ) : null}
-          <div aria-hidden className="h-[9.5rem] shrink-0 overflow-hidden px-[9%] pt-4 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
-            <div className="mb-3.5 flex flex-col items-center gap-[5px]">
-              <Bar width={22} className={INK.label} />
-              <span className="max-w-full truncate text-[10.5px] leading-3 font-bold tracking-tight text-slate-700 dark:text-slate-200">
-                {card.title}
-              </span>
-              <Bar width={32} className="bg-slate-200/80 dark:bg-slate-700/80" />
-            </div>
-            <SheetBody card={card} ink={accent.ink} />
-          </div>
-          <div className="flex flex-1 items-start gap-3 border-t border-slate-100 bg-slate-50/60 px-4 pt-3 pb-3.5 dark:border-slate-800 dark:bg-slate-950/30">
-            <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg ring-1', accent.chip)}>
-              <Icon size={16} />
+        ) : null}
+        <div aria-hidden className="h-[9.5rem] shrink-0 overflow-hidden px-[9%] pt-4 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
+          <div className="mb-3.5 flex flex-col items-center gap-[5px]">
+            <Bar width={22} className={INK.label} />
+            <span className="max-w-full truncate text-[10.5px] leading-3 font-bold tracking-tight text-slate-700 dark:text-slate-200">
+              {card.title}
             </span>
-            <div className="min-w-0 flex-1">
-              <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">{card.title}</h3>
-              <p id={descId} className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-500 dark:text-slate-400">{card.desc}</p>
-            </div>
-            <ArrowUpRight
-              size={15}
-              aria-hidden
-              className={cn(
-                'mt-0.5 shrink-0 text-slate-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 dark:text-slate-600',
-                accent.link,
-              )}
-            />
+            <Bar width={32} className="bg-slate-200/80 dark:bg-slate-700/80" />
           </div>
+          <SheetBody card={card} ink={accent.ink} />
+        </div>
+        <div className="flex flex-1 items-start gap-3 border-t border-slate-100 bg-slate-50/60 px-4 pt-3 pb-3.5 dark:border-slate-800 dark:bg-slate-950/30">
+          <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg ring-1', accent.chip)}>
+            <Icon size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">{card.title}</h3>
+            <p id={descId} className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-500 dark:text-slate-400">{card.desc}</p>
+          </div>
+          <ArrowUpRight
+            size={15}
+            aria-hidden
+            className={cn(
+              'mt-0.5 shrink-0 text-slate-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 dark:text-slate-600',
+              accent.link,
+            )}
+          />
         </div>
       </div>
-    </Link>
+    </div>
   )
 }
 
@@ -367,7 +409,13 @@ function SheetGrid({ group }: { group: HubGroup }) {
         // Titles wrap instead of truncating mid-word, and a still-clamped
         // description stays reachable through aria-describedby — never a
         // title tooltip alone.
-        <ReportSheet key={card.href} card={card} accent={accent} descId={`reports-hub-card-${group.key}-${cardIndex}`} />
+        <ReportSheet
+          key={card.href}
+          card={card}
+          accent={accent}
+          descId={`reports-hub-card-${group.key}-${cardIndex}`}
+          transitionName={reportSheetName(`${group.key}|${card.href}`)}
+        />
       ))}
     </div>
   )
