@@ -1456,7 +1456,6 @@ export function OrderDrawer({
             )
           },
         }] : []),
-
         ...segments.filter((segment) => segment.showOnLines).map((segment): LineGridColumn<LineRow> => ({
           key: `seg_${segment.key}`,
           label: segment.name,
@@ -1621,29 +1620,29 @@ export function OrderDrawer({
           key: 'related',
           label: t('linksTitle'),
           content: (
-          <div className="space-y-2">
-            <Label>{t('linksTitle')}</Label>
-            <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-              {order.links.map((l) => (
-                <div key={`${l.direction}-${l.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {l.direction === 'from' ? t('linkCreatedFrom') : t('linkConvertedInto')}
-                  </span>
-                  <Link
-                    href={docHref(l.kind, l.id)}
-                    className="font-mono text-teal-700 hover:underline dark:text-teal-300"
-                  >
-                    {l.document_number}
-                  </Link>
-                  <span className="text-slate-400 dark:text-slate-500">{t('docKind', { kind: l.kind })}</span>
-                  <span className="flex-1" />
-                  <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
-                    {statusLabel(l.status)}
-                  </Badge>
-                </div>
-              ))}
+            <div className="space-y-2">
+              <Label>{t('linksTitle')}</Label>
+              <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                {order.links.map((l) => (
+                  <div key={`${l.direction}-${l.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {l.direction === 'from' ? t('linkCreatedFrom') : t('linkConvertedInto')}
+                    </span>
+                    <Link
+                      href={docHref(l.kind, l.id)}
+                      className="font-mono text-teal-700 hover:underline dark:text-teal-300"
+                    >
+                      {l.document_number}
+                    </Link>
+                    <span className="text-slate-400 dark:text-slate-500">{t('docKind', { kind: l.kind })}</span>
+                    <span className="flex-1" />
+                    <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
+                      {statusLabel(l.status)}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
           ),
         }] : []),
         {
@@ -1843,7 +1842,6 @@ export function OrderDrawer({
             formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
-
       </div>
     </TransactionDrawer>
   )
