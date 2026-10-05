@@ -454,6 +454,7 @@ function main(ctx) {
   const mode = (ctx.request && ctx.request.body && ctx.request.body.mode) || "query";
   if (mode === "load") return ob.record.load("accounts", ob.search("accounts", { number: "5100" })[0].id);
   if (mode === "search") return ob.search("accounts", { number: "5100" });
+  if (mode === "payroll") return ob.query("select count(*)::int as n from pay_stubs");
   return ob.query("select count(*)::int as n from journal_lines");
 }
 `;
@@ -527,6 +528,16 @@ test("ob.query honours the queryConsole feature and the unrestricted-scope rule 
     const searched = await run({ mode: "search" });
     assert.equal(searched!.status, "ok", searched!.abortReason ?? "");
     assert.equal((searched!.returned as { number: string }[]).length, 1);
+
+    // Payroll relations follow payroll.read, exactly like the console.
+    const payroll = await run({ mode: "payroll" });
+    assert.equal(payroll!.status, "error");
+    assert.match(payroll!.abortReason ?? "", /requires the payroll\.read permission: this query reads pay_stubs/);
+    await db.execute(sql`
+      update app_roles set permissions = '["sql.execute","payroll.read"]'::jsonb
+       where org_id = ${seeded.org.orgId} and key = 'analyst'`);
+    const payrollGranted = await run({ mode: "payroll" });
+    assert.equal(payrollGranted!.status, "ok", payrollGranted!.abortReason ?? "");
 
     // Restricted subsidiary scope: raw SQL cannot apply the allowlist, so refused.
     await restrictRole(seeded.org.orgId, "analyst", [seeded.org.subsidiaryId]);

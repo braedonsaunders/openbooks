@@ -29,6 +29,38 @@ export interface UserSqlOptions {
    * May only tighten the default; it cannot raise USER_SQL_MAX_RESULT_BYTES.
    */
   maxBytes?: number;
+  /**
+   * The caller holds payroll.read. Payroll relations (pay runs, stubs,
+   * employee pay components and profiles, payroll balances and payroll
+   * configuration) are refused by name otherwise. Defaults to false, so a
+   * caller that does not decide never reads payroll.
+   */
+  payrollRead?: boolean;
+}
+
+/**
+ * Base tables of the payroll module. Payroll data in the governed catalog is
+ * held to payroll.read exactly like the payroll pages and report entities.
+ * This is a naming rule over the base tables PostgreSQL reports the query
+ * reads (views expanded), so a new payroll table is covered when it lands and
+ * no alias, CTE or join can hide one: pay_* (except construction pay
+ * applications), payroll_* and employee_pay*.
+ */
+export function isPayrollRelation(table: string): boolean {
+  return /^(?:payroll_|employee_pay|pay_(?!application))/.test(table);
+}
+
+/** Every base relation a plan reads, from EXPLAIN (FORMAT JSON). */
+function planRelations(plan: unknown, into = new Set<string>()): Set<string> {
+  if (Array.isArray(plan)) {
+    for (const node of plan) planRelations(node, into);
+  } else if (plan !== null && typeof plan === "object") {
+    for (const [key, value] of Object.entries(plan as Record<string, unknown>)) {
+      if (key === "Relation Name" && typeof value === "string") into.add(value);
+      else planRelations(value, into);
+    }
+  }
+  return into;
 }
 
 /** Host-side result budget for runUserSql. Callers cannot raise this. */
@@ -437,6 +469,23 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
   try {
     await prepareQueryContext(client, opts.orgId);
     await beginGovernedReadTransaction(client, opts.orgId, timeoutMs);
+    if (opts.payrollRead !== true) {
+      // PostgreSQL resolves what the statement reads — views expanded — before
+      // anything runs; a plan that touches payroll is refused by name.
+      const explained = await client.query<{ "QUERY PLAN": unknown }>({
+        text: `explain (verbose, format json) ${wrapped}`,
+        values: [maxRows + 1, maxBytes],
+      });
+      const plan = explained.rows[0]?.["QUERY PLAN"];
+      if (plan === undefined) throw new UserSqlRefusal("query refused: the relations it reads could not be determined");
+      const payroll = [...planRelations(plan)].filter(isPayrollRelation).sort();
+      if (payroll.length > 0) {
+        throw new UserSqlRefusal(
+          `payroll data requires the payroll.read permission: this query reads ${payroll.join(", ")}. `
+            + "Ask an administrator for payroll.read, or query relations outside payroll.",
+        );
+      }
+    }
     const res = await client.query({
       text: wrapped,
       values: [maxRows + 1, maxBytes],
