@@ -166,6 +166,7 @@ export const TENANT_TABLE_POLICIES = {
   "document_lines": "clone:catalog-uuid-rebase",
   "document_links": "clone:catalog-uuid-rebase",
   "document_supply_evidence": "clone:catalog-uuid-rebase",
+  "document_tenders": "clone:catalog-uuid-rebase",
   "documents": "clone:catalog-uuid-rebase",
   "drop_ship_lines": "clone:catalog-uuid-rebase",
   "drop_ship_orders": "clone:catalog-uuid-rebase",

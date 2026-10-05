@@ -604,6 +604,13 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "document_supply_evidence.country_code",
   "document_supply_evidence.kind",
   "document_supply_evidence.source",
+  // Tenders name settlement accounts, method labels, and gateway references:
+  // operational payment evidence in the same standing as line descriptions.
+  "document_tenders.currency",
+  "document_tenders.external_ref",
+  "document_tenders.kind",
+  "document_tenders.method_label",
+  "document_tenders.reference",
   "documents.billing_method",
   "documents.currency",
   "documents.document_number",

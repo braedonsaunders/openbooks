@@ -609,6 +609,67 @@ export const documentLines = pgTable(
 );
 
 /**
+ * Paid-at-sale settlement evidence for cash_sale and cash_refund (0494): one
+ * row per tender naming how part of the total settled. Replaces the
+ * documents.custom.tenders JSON cash sales wrote before 0494, so masked clones
+ * keep the evidence and tenders are reportable and constrainable. The
+ * storage boundary mirrors document lines: migration 0494 installs
+ * document_tender_lifecycle_guard, so ordinary writes need a draft parent —
+ * except the refund mint-fill, the single-column fill recording the
+ * store-credit account the settle effect minted after posting.
+ */
+export const documentTenders = pgTable(
+  "document_tenders",
+  {
+    id: id(),
+    orgId: orgRef(),
+    documentId: uuid("document_id").notNull(),
+    position: integer("position").notNull(),
+    kind: text("kind", {
+      enum: ["cash", "card", "bank_transfer", "wallet", "gateway", "stored_value", "other"],
+    }).notNull(),
+    /** Plain-words method label shown to the operator ("Cash", "Visa ending 4242"). */
+    methodLabel: text("method_label").notNull(),
+    /** Clearing or bank account settled; null only for stored_value. */
+    accountId: uuid("account_id"),
+    /** Stored-value account redeemed or credited; sale tenders resolve it at
+     * draft, refund tenders may leave it for the settle effect to mint. */
+    storedValueAccountId: uuid("stored_value_account_id"),
+    /** Settled amount in ledger minor units (10^-4 of major, like toUnits). */
+    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    currency: currencyCode("currency").notNull(),
+    /** Operator reference (authorization code, slip number). Never a card number. */
+    reference: text("reference"),
+    /** Gateway/provider reference for clearing reconciliation. */
+    externalRef: text("external_ref"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("document_tenders_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("document_tenders_document_position").on(t.orgId, t.documentId, t.position),
+    index("document_tenders_document").on(t.orgId, t.documentId),
+    index("document_tenders_stored_value_account")
+      .on(t.orgId, t.storedValueAccountId)
+      .where(sql`${t.storedValueAccountId} IS NOT NULL`),
+    foreignKey({
+      columns: [t.orgId, t.documentId],
+      foreignColumns: [documents.orgId, documents.id],
+      name: "document_tenders_document_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.accountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+      name: "document_tenders_account_id_fkey",
+    }),
+    // No foreign key to stored_value_accounts: that table lands in a higher
+    // ordinal (0495), so the reference would fail on a fresh install. The
+    // tender writer locks the stored-value row instead of trusting the id.
+    check("document_tenders_position", sql`${t.position} >= 1`),
+    check("document_tenders_amount_positive", sql`${t.amountMinor} > 0`),
+  ],
+);
+
+/**
  * Document relationship chains (SO → fulfillment → invoice, SO → PO,
  * bill → payment run):
  * explicit and queryable, replacing source platform's tangle of createdfrom +
