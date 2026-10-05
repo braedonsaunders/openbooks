@@ -19,7 +19,7 @@ import type { PayoutsWorkspaceProps } from './sections'
 
 const strings = new Proxy({ queueTitle: 'Needs review', batchesTitle: 'Payout batches', kindLabels: { sale: 'Sale' } }, {
   get(target, key: string) { return key in target ? target[key as keyof typeof target] : key },
-}) as PayoutsWorkspaceProps['strings']
+}) as unknown as PayoutsWorkspaceProps['strings']
 const props = {
   canReconcile: false,
   tiles: [],
