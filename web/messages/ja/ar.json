@@ -7,6 +7,9 @@
     "searchPlaceholder": "請求書、貸方票、得意先、参照番号を検索…",
     "emptyTitle": "請求書はまだありません",
     "emptyDescription": "最初の得意先請求書または貸方票を入力して AR ワークフローを開始します。",
+    "filters": {
+      "serviceParty": "サービス提供先"
+    },
     "columns": {
       "number": "番号",
       "invoice": "請求書",

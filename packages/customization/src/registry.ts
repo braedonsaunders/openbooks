@@ -229,6 +229,7 @@ const CUSTOMER_INVOICE: RecordTypeMeta = {
   listFilters: [
     APPROVAL_STATUS_FILTER,
     { key: "party_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+    { key: "service_party_id", labelKey: "ar.list.filters.serviceParty", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
     DATE_FILTER,
     { key: "reference_number", labelKey: "common.labels.reference", kind: "text", operators: OPERATORS_BY_KIND.text },
   ],

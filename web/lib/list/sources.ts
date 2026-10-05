@@ -14,6 +14,7 @@ import {
   BANK_TRANSACTION_ACCOUNT_MATCH,
   bankTransactionWhere,
   fulfillmentWhere,
+  invoiceServicePartyWhere,
   payRunWhere,
   type AdhocFilters,
 } from '../customization/list-query'
@@ -197,6 +198,27 @@ const SOURCES: Record<string, DocListSource> = {
     drawerParam: 'doc',
     multiKind: true,
     partyRole: 'customer',
+    // Consolidated invoices serve several children on one payer header;
+    // the service-party filter finds the payer invoices carrying one
+    // child's charges. Options stay empty (and the control hidden) until
+    // a line actually names a service party.
+    where: invoiceServicePartyWhere,
+    quickFilters: [{
+      paramKey: 'serviceParty',
+      filterKey: 'service_party_id',
+      searchSelect: true,
+      loadOptions: async (orgId, allowedSubsidiaryIds) => {
+        const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
+          select p.id::text as value, p.display_name as label, count(distinct d.id)::int as count
+            from documents d
+            join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+            join parties p on p.id = dl.service_party_id and p.org_id = d.org_id
+           where d.org_id = ${orgId} and d.kind = 'customer_invoice'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
+           group by p.id, p.display_name
+           order by p.display_name`)
+        return result.rows
+      },
+    }],
   }),
   cash_sale: documentSource({
     recordType: 'cash_sale',

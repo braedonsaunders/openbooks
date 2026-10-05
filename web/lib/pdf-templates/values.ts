@@ -172,11 +172,13 @@ async function loadDocumentValues(
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
+           l.service_party_id, sp.display_name as service_party_name,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
            i.name as item_name, cir.customer_sku
       from document_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join items i on i.id = l.item_id and i.org_id = l.org_id
+      left join parties sp on sp.id = l.service_party_id and sp.org_id = l.org_id
       left join customer_item_refs cir on cir.org_id = l.org_id and cir.customer_id = ${doc.party_id}
            and cir.item_id = l.item_id and ${customerPartNumbersEnabled}
      where l.document_id = ${id} and l.org_id = ${orgId}
@@ -213,6 +215,51 @@ async function loadDocumentValues(
   const taxTotal = String(doc.tax_total ?? '0')
   const total = String(doc.total ?? '0')
 
+  // Grouped-by-service-party layout for consolidated invoices: one entry per
+  // service customer in first-seen line order, each with its lines plus
+  // exact decimal subtotals (never float math on money). Lines naming no
+  // service party stay in `lines` only, so standalone invoices carry no
+  // empty groups.
+  const groups = new Map<string, { name: string; lines: Record<string, unknown>[]; subtotal: string[]; tax: string[] }>()
+  const lineValues = lines.rows.map((l) => {
+    const line: Record<string, unknown> = {
+      line_number: String(l.line_number ?? ''),
+      item_name: l.item_name ?? '',
+      customer_sku: l.customer_sku ?? '',
+      account_name: l.account_name ?? '',
+      description: l.description ?? '',
+      quantity: fmtQty(l.quantity, locale),
+      unit: l.unit ?? '',
+      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(String(l.unit_price)),
+      tax_amount: l.tax_amount === null || l.tax_amount === undefined || isZero(String(l.tax_amount)) ? '' : money(String(l.tax_amount)),
+      amount: money(String(l.amount ?? '0')),
+      service_party_name: l.service_party_name ?? '',
+    }
+    const servicePartyId = l.service_party_id as string | null
+    if (servicePartyId) {
+      let group = groups.get(servicePartyId)
+      if (!group) {
+        group = { name: String(l.service_party_name ?? ''), lines: [], subtotal: [], tax: [] }
+        groups.set(servicePartyId, group)
+      }
+      group.lines.push(line)
+      group.subtotal.push(String(l.amount ?? '0'))
+      group.tax.push(String(l.tax_amount ?? '0'))
+    }
+    return line
+  })
+  const lineGroups = [...groups.values()].map((group) => {
+    const groupSubtotal = sum(group.subtotal)
+    const groupTax = sum(group.tax)
+    return {
+      service_party_name: group.name,
+      lines: group.lines,
+      group_subtotal: money(groupSubtotal),
+      group_tax: money(groupTax),
+      group_total: money(add(groupSubtotal, groupTax)),
+    }
+  })
+
   const values: Record<string, unknown> = {
     document_number: doc.document_number ?? '',
     document_date: fmtDate(doc.document_date, locale),
@@ -235,18 +282,8 @@ async function loadDocumentValues(
     balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(String(doc.balance_due)),
     org_name: org.name,
     printed_date: fmtDate(await businessToday(orgId), locale),
-    lines: lines.rows.map((l) => ({
-      line_number: String(l.line_number ?? ''),
-      item_name: l.item_name ?? '',
-      customer_sku: l.customer_sku ?? '',
-      account_name: l.account_name ?? '',
-      description: l.description ?? '',
-      quantity: fmtQty(l.quantity, locale),
-      unit: l.unit ?? '',
-      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(String(l.unit_price)),
-      tax_amount: l.tax_amount === null || l.tax_amount === undefined || isZero(String(l.tax_amount)) ? '' : money(String(l.tax_amount)),
-      amount: money(String(l.amount ?? '0')),
-    })),
+    lines: lineValues,
+    line_groups: lineGroups,
     ...(await customFieldValues(orgId, 'documents', meta.docKind, (doc.custom ?? {}) as Record<string, unknown>, format)),
   }
 

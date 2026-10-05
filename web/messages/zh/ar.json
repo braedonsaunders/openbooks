@@ -7,6 +7,9 @@
     "searchPlaceholder": "搜索发票、贷项、客户、参考号……",
     "emptyTitle": "暂无发票",
     "emptyDescription": "录入第一张客户发票或贷项通知单，以启动应收账款流程。",
+    "filters": {
+      "serviceParty": "服务客户"
+    },
     "columns": {
       "number": "编号",
       "invoice": "发票",

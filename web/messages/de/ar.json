@@ -7,6 +7,9 @@
     "searchPlaceholder": "Rechnungen, Gutschriften, Kunden, Referenzen durchsuchen…",
     "emptyTitle": "Noch keine Ausgangsrechnungen",
     "emptyDescription": "Erfassen Sie die erste Ausgangsrechnung oder Gutschrift, um den Forderungs-Workflow zu starten.",
+    "filters": {
+      "serviceParty": "Servicekunde"
+    },
     "columns": {
       "number": "Nummer",
       "invoice": "Rechnung",
