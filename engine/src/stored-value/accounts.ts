@@ -215,21 +215,29 @@ export async function programLiabilityAccount(
   return storedValueLiabilityControlAccount(orgId);
 }
 
-export async function createProgram(input: {
-  orgId: string;
+export interface ProgramCandidate {
   name: string;
-  kind: StoredValueKind;
+  kind: string;
   liabilityAccountId?: string | null;
   breakageIncomeAccountId?: string | null;
-  breakagePolicy?: StoredValueBreakagePolicy;
+  breakagePolicy?: string;
   breakageRate?: string;
   expiryMonths?: number | null;
-  inactivityMonths?: number;
-  currency?: string | null;
-  actorId?: string | null;
-}): Promise<StoredValueProgramRow> {
-  await requireStoredValueFeature(db, input.orgId);
-  const name = input.name.trim();
+}
+
+/**
+ * Program validation shared by the engine create path and the Setup
+ * boundary: one source of truth, so a program saved in Setup carries the
+ * same guarantees as one created through the API. Returns the normalized
+ * name, policy and rate the insert reuses.
+ */
+export async function validateProgramCandidate(
+  runner: SqlExecutor,
+  orgId: string,
+  candidate: ProgramCandidate,
+  excludeId: string | null = null,
+): Promise<{ name: string; policy: StoredValueBreakagePolicy; rate: string }> {
+  const name = candidate.name.trim();
   if (!name) {
     throw storedValueRefusal({
       message: "A stored-value program needs a name.",
@@ -238,7 +246,7 @@ export async function createProgram(input: {
       field: "name",
     });
   }
-  if (input.kind !== "gift_card" && input.kind !== "store_credit") {
+  if (candidate.kind !== "gift_card" && candidate.kind !== "store_credit") {
     throw storedValueRefusal({
       message: "A stored-value program is either a gift card or store credit program.",
       code: "stored_value_program_kind_invalid",
@@ -246,8 +254,8 @@ export async function createProgram(input: {
       field: "kind",
     });
   }
-  const policy = input.breakagePolicy ?? "none";
-  const rate = input.breakageRate ?? "0";
+  const policy = (candidate.breakagePolicy ?? "none") as StoredValueBreakagePolicy;
+  const rate = candidate.breakageRate ?? "0";
   const rateUnits = toMinor(rate, "breakage rate");
   if (rateUnits < 0n || cmp(rate, "1") >= 0) {
     throw storedValueRefusal({
@@ -265,14 +273,14 @@ export async function createProgram(input: {
       field: "breakageRate",
     });
   }
-  if (input.liabilityAccountId) {
-    await assertPostingAccount(db, input.orgId, input.liabilityAccountId, "Program liability account", [
+  if (candidate.liabilityAccountId) {
+    await assertPostingAccount(runner, orgId, candidate.liabilityAccountId, "Program liability account", [
       "liability_payable",
       "liability_current_other",
     ]);
   }
   if (policy !== "none") {
-    if (!input.breakageIncomeAccountId) {
+    if (!candidate.breakageIncomeAccountId) {
       throw storedValueRefusal({
         message: "A breakage policy needs the income account that recognized breakage credits.",
         code: "stored_value_breakage_income_missing",
@@ -280,7 +288,7 @@ export async function createProgram(input: {
         field: "breakageIncomeAccountId",
       });
     }
-    await assertPostingAccount(db, input.orgId, input.breakageIncomeAccountId, "Breakage income account", [
+    await assertPostingAccount(runner, orgId, candidate.breakageIncomeAccountId, "Breakage income account", [
       "income",
       "income_other",
     ]);
@@ -288,7 +296,7 @@ export async function createProgram(input: {
   // Expiry posts like breakage (DR liability, CR breakage income), so a
   // program that expires cards needs the income account even when it never
   // recognizes proportional or remote breakage.
-  if ((input.expiryMonths ?? null) && !input.breakageIncomeAccountId) {
+  if ((candidate.expiryMonths ?? null) && !candidate.breakageIncomeAccountId) {
     throw storedValueRefusal({
       message: "An expiring program needs the income account that expired balances credit.",
       code: "stored_value_expiry_income_missing",
@@ -296,7 +304,7 @@ export async function createProgram(input: {
       field: "breakageIncomeAccountId",
     });
   }
-  if (input.expiryMonths !== undefined && input.expiryMonths !== null && input.expiryMonths <= 0) {
+  if (candidate.expiryMonths !== undefined && candidate.expiryMonths !== null && candidate.expiryMonths <= 0) {
     throw storedValueRefusal({
       message: "Gift card expiry must be a positive number of months.",
       code: "stored_value_expiry_invalid",
@@ -304,19 +312,38 @@ export async function createProgram(input: {
       field: "expiryMonths",
     });
   }
-  const idempotencyGuard = (await db.execute<{ id: string }>(sql`
+  const idempotencyGuard = (await runner.execute<{ id: string }>(sql`
     select id from stored_value_programs
-     where org_id = ${input.orgId} and kind = ${input.kind} and name = ${name}
+     where org_id = ${orgId} and kind = ${candidate.kind} and name = ${name}
+       and (${excludeId}::uuid is null or id <> ${excludeId}::uuid)
   `)).rows[0];
   if (idempotencyGuard) {
     throw storedValueRefusal({
-      message: `A ${input.kind === "gift_card" ? "gift card" : "store credit"} program named "${name}" already exists.`,
+      message: `A ${candidate.kind === "gift_card" ? "gift card" : "store credit"} program named "${name}" already exists.`,
       code: "stored_value_program_duplicate",
       remedy: "Reuse the existing program or choose a different name.",
       field: "name",
       status: 409,
     });
   }
+  return { name, policy, rate };
+}
+
+export async function createProgram(input: {
+  orgId: string;
+  name: string;
+  kind: StoredValueKind;
+  liabilityAccountId?: string | null;
+  breakageIncomeAccountId?: string | null;
+  breakagePolicy?: StoredValueBreakagePolicy;
+  breakageRate?: string;
+  expiryMonths?: number | null;
+  inactivityMonths?: number;
+  currency?: string | null;
+  actorId?: string | null;
+}): Promise<StoredValueProgramRow> {
+  await requireStoredValueFeature(db, input.orgId);
+  const { name, policy, rate } = await validateProgramCandidate(db, input.orgId, input);
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into stored_value_programs
       (org_id, name, kind, liability_account_id, breakage_income_account_id,
@@ -995,6 +1022,45 @@ export async function resolveStoredValueTender(orgId: string, code: string): Pro
   `)).rows;
   const row = rows[0];
   if (!row || !digestsEqual(digest, row.codeHash)) return null;
+  return {
+    accountId: row.id,
+    kind: row.kind,
+    currency: row.currency,
+    balanceMinor: BigInt(row.balanceRaw),
+    status: row.status,
+    customerPartyId: row.customerPartyId,
+    codeLast4: row.codeLast4,
+    liabilityAccountId: row.accountLiability ?? row.programLiability,
+  };
+}
+
+/**
+ * Reload one tender account by id for a payment draft that echoes an
+ * already-resolved tender. The plaintext code is shown once at issue and is
+ * gone by design; the snapshot carries the account id instead. Posting
+ * re-locks the account and re-verifies balance, currency and status, so
+ * re-accepting the snapshot here cannot overspend.
+ */
+export async function loadStoredValueTenderAccount(
+  orgId: string,
+  accountId: string,
+): Promise<TenderResolution | null> {
+  const rows = (await db.execute<{
+    id: string; kind: StoredValueKind; currency: string; balanceRaw: string;
+    status: StoredValueStatus; customerPartyId: string | null;
+    codeLast4: string; accountLiability: string | null; programLiability: string | null;
+  }>(sql`
+    select a.id, a.kind, a.currency, a.balance_minor::text as "balanceRaw", a.status,
+           a.customer_party_id as "customerPartyId",
+           a.code_last4 as "codeLast4", a.liability_account_id as "accountLiability",
+           p.liability_account_id as "programLiability"
+      from stored_value_accounts a
+      join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
+     where a.org_id = ${orgId} and a.id = ${accountId}
+     limit 1
+  `)).rows;
+  const row = rows[0];
+  if (!row) return null;
   return {
     accountId: row.id,
     kind: row.kind,

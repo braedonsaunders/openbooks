@@ -14,7 +14,7 @@ import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
+import { loadStoredValueTenderAccount, resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
 export { isPaymentKind, lockEditablePaymentDocument };
 const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
@@ -134,9 +134,11 @@ export async function updateDraftPayment(
     /** Stored-value tenders (customer receipts only): gift card codes or the
      * customer's store credit applied against the receipt. Each tender debits
      * the stored-value liability instead of bank; the amounts split the
-     * receipt total. Codes resolve to accounts here and re-verify at posting.
+     * receipt total. Fresh codes resolve to accounts here and re-verify at
+     * posting; already-resolved echoes carry the account id (the code is
+     * shown once at issue and is gone by design) and re-verify the same way.
      */
-    storedValueTenders?: Array<{ code: string; amount: string }>;
+    storedValueTenders?: Array<{ code: string; amount: string } | { accountId: string; amount: string }>;
   },
   userId: string | null,
   orgId: string,
@@ -237,7 +239,12 @@ export async function updateDraftPayment(
       for (const tender of patch.storedValueTenders) {
         const tenderUnits = persistPaymentMoney(tender.amount, "stored-value tender amount");
         if (tenderUnits <= 0n) throw new PaymentError("stored-value tender amount must be positive");
-        const resolved = await resolveStoredValueTender(doc.orgId, tender.code);
+        const resolved = "code" in tender && tender.code
+          ? await resolveStoredValueTender(doc.orgId, tender.code)
+          : await loadStoredValueTenderAccount(
+            doc.orgId,
+            "accountId" in tender && typeof tender.accountId === "string" ? tender.accountId : "",
+          );
         if (!resolved) throw new PaymentError("stored-value code not found; check the code and retry");
         if (resolved.status !== "active") {
           throw new PaymentError(
