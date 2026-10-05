@@ -2564,7 +2564,8 @@
       },
       "pay-components": {
         "title": "Pay Components",
-        "description": "Earnings, deductions, and employer contributions with their tax treatment, GL accounts, and remittance vendors."
+        "description": "Earnings, deductions, and employer contributions with their tax treatment, GL accounts, and remittance vendors.",
+        "singularTitle": "Pay Component"
       },
       "union-agreements": {
         "title": "Union Agreements",

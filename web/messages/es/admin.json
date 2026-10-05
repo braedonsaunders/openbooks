@@ -2784,7 +2784,8 @@
       },
       "pay-components": {
         "title": "Componentes de nómina",
-        "description": "Percepciones, deducciones y aportaciones patronales con su tratamiento fiscal, sus cuentas contables y sus proveedores de remesa."
+        "description": "Percepciones, deducciones y aportaciones patronales con su tratamiento fiscal, sus cuentas contables y sus proveedores de remesa.",
+        "singularTitle": "Concepto de nómina"
       },
       "union-agreements": {
         "title": "Convenios colectivos",

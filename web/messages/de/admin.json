@@ -2777,7 +2777,8 @@
       },
       "pay-components": {
         "title": "Lohnbestandteile",
-        "description": "Bezüge, Abzüge und Arbeitgeberbeiträge mit ihrer steuerlichen Behandlung, Hauptbuchkonten und Abführungslieferanten."
+        "description": "Bezüge, Abzüge und Arbeitgeberbeiträge mit ihrer steuerlichen Behandlung, Hauptbuchkonten und Abführungslieferanten.",
+        "singularTitle": "Lohnart"
       },
       "union-agreements": {
         "title": "Tarifverträge",

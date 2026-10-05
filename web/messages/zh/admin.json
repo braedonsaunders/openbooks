@@ -2564,7 +2564,8 @@
       },
       "pay-components": {
         "title": "工资项",
-        "description": "收入、扣款与雇主缴款，含税务处理、总账科目与汇款供应商。"
+        "description": "收入、扣款与雇主缴款，含税务处理、总账科目与汇款供应商。",
+        "singularTitle": "工资项目"
       },
       "union-agreements": {
         "title": "工会协议",
