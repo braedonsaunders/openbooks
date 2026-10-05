@@ -69,6 +69,9 @@ const mockSources = new Map<string, string>([
           if (text.includes('from psp_settlement_lines')) {
             return { rows: state.lineRows }
           }
+          if (text.includes('reconciliation_matches') || text.includes('psp_payout_accruals')) {
+            return { rows: [] }
+          }
           return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
         }
       }
@@ -227,6 +230,54 @@ const mockSources = new Map<string, string>([
         state.domainCalls.push({ action: 'reverse', orgId, userId, input: { batchId, ...input, allowedSubsidiaryIds } })
         return { entryId: 'entry-reverse' }
       }
+
+      export async function batchDepositTieout(orgId, batchId) {
+        return {
+          status: 'untied', batchId, provider: 'stripe', externalRef: 'payout-1',
+          netAmount: '1.0000', currency: 'USD', settlementDate: '2026-08-24',
+          depositLines: [], gapAmount: '1.0000',
+        }
+      }
+
+      export async function setSettlementLineDocument(orgId, batchId, lineId, documentId, userId) {
+        state.domainCalls.push({ action: 'link', orgId, userId, input: { batchId, lineId, documentId } })
+        return { lineId, documentId }
+      }
+
+      export async function clearSettlementLineDocument(orgId, batchId, lineId, userId) {
+        state.domainCalls.push({ action: 'unlink', orgId, userId, input: { batchId, lineId } })
+        return { lineId }
+      }
+
+      export async function markSettlementLineAdjustment(orgId, batchId, lineId, userId) {
+        state.domainCalls.push({ action: 'markAdjustment', orgId, userId, input: { batchId, lineId } })
+        return { lineId, kind: 'adjustment' }
+      }
+
+      export async function accruePayoutsInTransit(orgId, accrualDate, userId) {
+        state.domainCalls.push({ action: 'accrue', orgId, userId, input: { accrualDate } })
+        return { accrualDate, reversalDate: accrualDate, accrued: [], reversed: [], skipped: [] }
+      }
+    `,
+  ],
+  [
+    "mock:commerce",
+    `
+      const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
+
+      export class CommerceError extends Error {
+        constructor(code, message, remedy, options) {
+          super(message)
+          this.code = code
+          this.remedy = remedy
+          this.status = options?.status ?? 422
+        }
+      }
+
+      export async function matchPayoutLines(orgId, batchId, userId) {
+        state.domainCalls.push({ action: 'match', orgId, userId, input: { batchId } })
+        return { batchId, matched: 1, unmatched: 0, notApplicable: 0, lines: [] }
+      }
     `,
   ],
 ]);
@@ -234,6 +285,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/payments/psp-settlement.ts", "mock:psp-settlement"],
+  ["@openbooks/engine/payments/settlement", "mock:psp-settlement"],
+  ["@openbooks/engine/commerce", "mock:commerce"],
   ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:psp-settlement"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
   ["../../../../lib/authz", "mock:authz"],
@@ -701,4 +754,65 @@ test("settlement detail of another tenant's batch is a 404", async () => {
   );
 
   assert.equal(response.status, 404);
+});
+
+test("match runs line matching on a payout batch", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "match",
+    batchId: "00000000-0000-4000-8000-0000000000b1",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as { matched: number }).matched, 1);
+  assert.equal(routeState.domainCalls[0]?.action, "match");
+});
+
+test("link stores a manual document link on an unmatched line", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "link",
+    batchId: "00000000-0000-4000-8000-0000000000b1",
+    lineId: "00000000-0000-4000-8000-0000000000c1",
+    documentId: "00000000-0000-4000-8000-0000000000d1",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(routeState.domainCalls[0]?.action, "link");
+});
+
+test("link refuses a malformed line id without reaching storage", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "link",
+    batchId: "00000000-0000-4000-8000-0000000000b1",
+    lineId: "not-a-uuid",
+    documentId: "00000000-0000-4000-8000-0000000000d1",
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(routeState.domainCalls, []);
+});
+
+test("accrue books the month-end in-transit position", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({ action: "accrue", accrualDate: "2026-08-31" });
+
+  assert.equal(response.status, 200);
+  assert.equal(routeState.domainCalls[0]?.action, "accrue");
+});
+
+test("resolveDoc lists posted documents for manual links", async () => {
+  reset(["banking.read"]);
+
+  const response = await GET(
+    new Request("http://openbooks.test/api/psp/settlements?resolveDoc=INV"),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json() as { documents: unknown[] }).documents, []);
 });
