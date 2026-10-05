@@ -46,7 +46,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function getTranslations() { const base = globalThis.__f17t; const t = (key) => base(key); t.has = (key) => base.has(key); return t; }",
+        url: "data:text/javascript,export async function getTranslations() { const base = globalThis.__f17t; const t = (key) => base(key); t.has = (key) => base.has(key); return t; } export async function getLocale() { return 'en'; }",
       };
     }
     if (owned && specifier === "../authz") {
