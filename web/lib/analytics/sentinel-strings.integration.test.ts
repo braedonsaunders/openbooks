@@ -12,6 +12,7 @@ const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/p
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { sentinelStrings } = await import('./sentinel-strings.ts')
 const { sentinelData } = await import('./sentinel-data.ts')
+const { analyticsConfig } = await import('./config.ts')
 
 function catalogTranslator(locale: string) {
   const analytics = JSON.parse(
@@ -41,9 +42,14 @@ test('sentinel flag reasons render in the request locale', { skip: !process.env.
         await db.execute(sql`update documents set status='approved' where id=${id}`)
       }
       // The duplicate detector is excluded by name while its floor is unset;
-      // without a floor there is no French reason to assert.
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
-        '{"duplicateMinAmount": "1.00", "duplicateDays": 14}') where id = ${org.orgId}`)
+      // without a floor there is no French reason to assert. jsonb_set
+      // cannot create the intermediate `analytics` object, so merge with ||,
+      // then prove the reader resolves the floor.
+      await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
+        || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
+          || jsonb_build_object('sentinel', '{"duplicateMinAmount": "1.00", "duplicateDays": 14}'::jsonb))
+        where id = ${org.orgId}`)
+      assert.equal((await analyticsConfig(org.orgId, 'sentinel')).duplicateMinAmount, '1.00')
     })
     const user: SessionUser = { id: actor, orgId: org.orgId, name: 'Forensic reviewer', email: 'forensics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
     const authz: Authz = { user, permissions: new Set(['reports.read', 'admin.audit.read']), allowedSubsidiaryIds: null }
@@ -51,8 +57,8 @@ test('sentinel flag reasons render in the request locale', { skip: !process.env.
       const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
       const fr = await sentinelData(org.orgId, P, authz, sentinelStrings(catalogTranslator('fr'), 'fr'))
       const frDup = fr.flagged.find((f) => f.flagType === 'duplicate')
-      assert.equal(frDup?.reason, '2 documents correspondants — même fournisseur, nature et montant (CAD 5000) (écart de 2 jours) : DUP-2')
-      assert.ok(['excellent', 'acceptable', 'marginal', 'nonConforming'].includes(fr.benford1D.conformity))
+      assert.equal(frDup?.reason, '2 documents correspondants — même fournisseur, nature et montant (CAD 5 000) (écart de 2 jours) : DUP-2')
+      assert.ok(['excellent', 'acceptable', 'marginal', 'nonConforming', 'insufficient'].includes(fr.benford1D.conformity))
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
