@@ -4,6 +4,7 @@ import { useMoney } from "@/components/money-provider";
 import { useTranslations } from "next-intl";
 import {
   Badge,
+  DisclosureSection,
   Table,
   TableBody,
   TableCell,
@@ -24,6 +25,7 @@ import {
   financialChangeStatusLabel,
 } from "@openbooks/engine/src/platform/financial-change-labels.ts";
 import type { RevenueModificationOptions, ContractPayload } from "./_lib";
+import type { MoneyFormatter } from "@/lib/money-format";
 
 const STATUS_VARIANT: Record<
   string,
@@ -92,6 +94,30 @@ export function ContractDrawer({
       description={c.customer}
     >
       <div className="space-y-6 p-1">
+        {/* -- everyday: what this contract covers and where it stands, in
+            plain words. Posting detail lives one level down. */}
+        <section className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{t(`scope.${c.scope}`)}</Badge>
+            {c.source?.href ? (
+              <Link
+                className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                href={c.source.href}
+              >
+                {c.source.label}
+              </Link>
+            ) : c.source ? (
+              <span className="text-sm font-medium">{c.source.label}</span>
+            ) : null}
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {coverageLine(t, c, payload)}
+          </p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {positionLine(t, money, payload)}
+          </p>
+        </section>
+
         {/* -- summary ------------------------------------------------- */}
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat
@@ -108,6 +134,42 @@ export function ContractDrawer({
           />
           <Stat label={t("labels.deferred")} value={money(totals.deferred)} />
         </section>
+
+        {/* -- configure: every billing posted against this contract ------ */}
+        {payload.billings.length > 0 ? (
+          <section className="space-y-2">
+            <h3 className="font-semibold">{t("drawer.billingsTitle")}</h3>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("drawer.billingInvoice")}</TableHead>
+                  <TableHead>{t("drawer.billedOn")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("drawer.billedAmount")}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payload.billings.map((b) => (
+                  <TableRow key={b.id}>
+                    <TableCell>
+                      <Link
+                        className="underline"
+                        href={`/ar/invoices?doc=${b.id}`}
+                      >
+                        {b.document_number}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{b.billed_on}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {money(b.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </section>
+        ) : null}
 
         {/* -- cancellation: the dedicated workflow the invoice-void refusal
             points at. Only an active invoice-sourced contract names a live
@@ -192,52 +254,70 @@ export function ContractDrawer({
                 <ReconcileLegacyButton obligationId={o.id} />
               ) : null}
             </div>
-            {o.lines.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {t("drawer.noSchedule")}
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("drawer.period")}</TableHead>
-                    <TableHead className="text-right">
-                      {t("drawer.planned")}
-                    </TableHead>
-                    <TableHead className="text-right">
-                      {t("drawer.recognized")}
-                    </TableHead>
-                    <TableHead>{tCommon("labels.status")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {o.lines.map((l, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{l.period_name}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {money(l.planned_amount)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {l.journal_entry_id ? money(l.recognized_amount) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={l.journal_entry_id ? "success" : "outline"}
-                        >
-                          {l.superseded_by_change_id
-                            ? t("drawer.supersededStatus")
-                            : l.reversal_journal_entry_id
-                              ? t("drawer.reversedStatus")
-                              : l.journal_entry_id
-                                ? t("drawer.postedStatus")
-                                : t("drawer.plannedStatus")}
-                        </Badge>
-                      </TableCell>
+            {/* -- advanced: period-by-period posting detail, collapsed with
+                its position summarized. Forced open while it needs
+                attention (no plan, unverified history, out-of-range
+                allocation). */}
+            <DisclosureSection
+              title={t("drawer.scheduleTitle")}
+              summary={t("drawer.scheduleSummary", {
+                periods: o.lines.length,
+                recognized: money(o.recognized),
+                planned: money(o.planned),
+              })}
+              forceOpen={
+                o.lines.length === 0 ||
+                o.legacy_unverified ||
+                o.fair_value_flag !== null
+              }
+            >
+              {o.lines.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("drawer.noSchedule")}
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("drawer.period")}</TableHead>
+                      <TableHead className="text-right">
+                        {t("drawer.planned")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("drawer.recognized")}
+                      </TableHead>
+                      <TableHead>{tCommon("labels.status")}</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                  </TableHeader>
+                  <TableBody>
+                    {o.lines.map((l, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{l.period_name}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {money(l.planned_amount)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {l.journal_entry_id ? money(l.recognized_amount) : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={l.journal_entry_id ? "success" : "outline"}
+                          >
+                            {l.superseded_by_change_id
+                              ? t("drawer.supersededStatus")
+                              : l.reversal_journal_entry_id
+                                ? t("drawer.reversedStatus")
+                                : l.journal_entry_id
+                                  ? t("drawer.postedStatus")
+                                  : t("drawer.plannedStatus")}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </DisclosureSection>
           </section>
         ))}
       </div>
@@ -252,4 +332,58 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-lg font-semibold tabular-nums">{value}</div>
     </div>
   );
+}
+
+type Translator = ReturnType<typeof useTranslations>;
+type MoneyFormat = MoneyFormatter["money"];
+
+/** Everyday coverage: which agreement this contract bills, in plain words. */
+function coverageLine(
+  t: Translator,
+  c: ContractPayload["contract"],
+  payload: ContractPayload,
+): string {
+  if (c.scope === "order" && c.source) {
+    return payload.billings.length === 0
+      ? t("coverage.orderShell", { source: c.source.label })
+      : t("coverage.order", {
+          source: c.source.label,
+          count: payload.billings.length,
+        });
+  }
+  if (c.scope === "subscription" && c.source) {
+    return payload.billings.length === 0
+      ? t("coverage.subscriptionShell", { source: c.source.label })
+      : t("coverage.subscription", {
+          source: c.source.label,
+          count: payload.billings.length,
+        });
+  }
+  return t("coverage.invoice", {
+    source: c.sourceInvoiceNumber ?? c.contract_number,
+  });
+}
+
+/** Everyday position: billed against recognized, with the side named. */
+function positionLine(
+  t: Translator,
+  money: MoneyFormat,
+  payload: ContractPayload,
+): string {
+  const position = payload.position;
+  if (position.side === "settled") return t("position.settled");
+  if (position.side === "liability") {
+    return t("position.liability", {
+      billed: money(position.billed),
+      recognized: money(position.recognized),
+      net: money(position.net),
+    });
+  }
+  return t("position.asset", {
+    billed: money(position.billed),
+    recognized: money(position.recognized),
+    net: money(
+      position.net.startsWith("-") ? position.net.slice(1) : position.net,
+    ),
+  });
 }
