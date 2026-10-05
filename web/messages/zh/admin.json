@@ -1083,6 +1083,7 @@
       "manufacturing": "制造",
       "items": "物料与服务",
       "orders": "订单与履行",
+      "channels": "销售渠道",
       "projects": "项目与作业成本核算",
       "resourcing": "资源规划",
       "time": "工时与工时单",
@@ -1162,6 +1163,8 @@
     "orders_fulfill": "订单拣货、包装和发运",
     "returns_waive_fee": "免除退货的重新入库费用",
     "shipping_manage": "查询、购买和作废承运面单",
+    "channels_read": "查看店面渠道、关联和动态",
+    "channels_manage": "连接渠道、映射科目并重放事件",
     "projects_read": "查看项目和作业成本核算",
     "projects_manage": "创建并编辑项目",
     "resourcing_read": "查看资源分配和请求",
@@ -6135,6 +6138,10 @@
     "crossBorderTax": {
       "title": "跨境税务",
       "description": "根据所收集证据判定供应地、验证企业增值税号并适用反向征收、监控欧盟远程销售阈值，以及一站式申报。"
+    },
+    "salesChannels": {
+      "title": "销售渠道",
+      "description": "店面连接（Shopify）、外部身份映射和订单收件箱。"
     },
     "subcontractorCompliance": {
       "title": "分包商合规",

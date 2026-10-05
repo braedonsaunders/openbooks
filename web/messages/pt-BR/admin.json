@@ -1083,6 +1083,7 @@
       "manufacturing": "Manufatura",
       "items": "Itens e serviços",
       "orders": "Pedidos e atendimento",
+      "channels": "Canais de venda",
       "projects": "Projetos e apropriação de custos",
       "resourcing": "Alocação de recursos",
       "time": "Tempo e planilhas de horas",
@@ -1162,6 +1163,8 @@
     "orders_fulfill": "Separar, embalar e expedir pedidos",
     "returns_waive_fee": "Isentar taxas de reestocagem em devoluções",
     "shipping_manage": "Cotar, comprar e anular etiquetas de envio",
+    "channels_read": "Ver canais de loja, vínculos e atividade",
+    "channels_manage": "Conectar canais, mapear contas e reprocessar eventos",
     "projects_read": "Ver projetos e apropriação de custos",
     "projects_manage": "Criar e editar projetos",
     "resourcing_read": "Ver alocações e solicitações de recursos",
@@ -6135,6 +6138,10 @@
     "crossBorderTax": {
       "title": "Fiscalidade transfronteiriça",
       "description": "Local da prestação apurado a partir de evidências coletadas, validação de números de IVA de empresas com autoliquidação, monitoramento do limite europeu de vendas a distância e declarações do Balcão Único."
+    },
+    "salesChannels": {
+      "title": "Canais de venda",
+      "description": "Conexões de loja (Shopify), o mapa de identidades externas e a caixa de entrada de pedidos."
     },
     "subcontractorCompliance": {
       "title": "Conformidade de subcontratados",

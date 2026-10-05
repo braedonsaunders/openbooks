@@ -133,6 +133,11 @@ export const PERMISSION_CATALOGUE = [
   // account setup. Buying a label spends money and posts carrier cost, so it
   // rides with fulfillment rather than catalog maintenance.
   "shipping.manage",
+  // Sales channels: storefront connections, the external-identity map and the
+  // inbound webhook inbox. read = see channels, links and activity; manage =
+  // connect, pause, resume, disconnect, map accounts and replay events.
+  "channels.read",
+  "channels.manage",
   // Projects & job costing
   "projects.read",
   "projects.manage",
@@ -549,6 +554,14 @@ export const PERMISSION_GROUPS: {
       { key: "orders.fulfill", labelKey: permissionLabelKey("orders.fulfill") },
       { key: "returns.waive_fee", labelKey: permissionLabelKey("returns.waive_fee") },
       { key: "shipping.manage", labelKey: permissionLabelKey("shipping.manage") },
+    ],
+  },
+  {
+    key: "channels",
+    labelKey: "permissions.groups.channels",
+    permissions: [
+      { key: "channels.read", labelKey: permissionLabelKey("channels.read") },
+      { key: "channels.manage", labelKey: permissionLabelKey("channels.manage") },
     ],
   },
   {
@@ -1010,6 +1023,7 @@ export const BUILT_IN_ROLES: Record<
       "orders.fulfill",
       "returns.waive_fee",
       "shipping.manage",
+      "channels.read",
       "projects.read",
       "projects.manage",
       "resourcing.read",
@@ -1109,6 +1123,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "stored_value.manage", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "channels.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
@@ -1126,6 +1141,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "channels.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",

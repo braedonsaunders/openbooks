@@ -94,6 +94,13 @@
         "tax"
       ]
     },
+    "commerce": {
+      "description": "Storefront channels, the external-identity map, the inbound webhook inbox, and the channel adapter contract.",
+      "dependsOn": [
+        "organization",
+        "platform"
+      ]
+    },
     "close": {
       "description": "Period close: calendars, module fences, close packages and automations, FX revaluation, posting-period assignment.",
       "dependsOn": [
@@ -582,6 +589,7 @@
         "banking",
         "billing",
         "close",
+        "commerce",
         "continuous-close",
         "delivery",
         "flows",
@@ -662,6 +670,7 @@
         "banking",
         "billing",
         "close",
+        "commerce",
         "composition",
         "connectors",
         "crm",

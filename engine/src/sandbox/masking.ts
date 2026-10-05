@@ -349,6 +349,10 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_succession_candidates", columnName: "notes", transform: "redact" },
   { tableName: "hrm_succession_plans", columnName: "notes", transform: "redact" },
   // HR-17 end
+  // Raw inbound webhook bodies may hold customer contact data. The inbox is
+  // excluded from clones, so this policy documents the classification rather
+  // than rewriting rows; a clone path that ever copies the table must empty it.
+  { tableName: "integration_inbound_events", columnName: "raw_body", transform: "null_out" },
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the
