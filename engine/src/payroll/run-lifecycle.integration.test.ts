@@ -467,7 +467,10 @@ describe("calculation-rollback", () => {
               assert.equal(result.employees, 1);
               assert.deepEqual(result.errors, []);
               assert.equal(cmp(result.gross, "240"), 0);
-              if (mode === "simulation") assert.equal(result.stubs?.length, 1);
+              assert.equal(result.stubs?.length, 1, "preview exposes the actual employee result before rollback");
+              assert.equal(cmp(result.stubs![0]!.gross, result.gross), 0);
+              assert.equal(cmp(result.stubs![0]!.netPay, result.net), 0);
+              assert.ok(result.stubs![0]!.lines.some((line) => line.kind === "earning" && cmp(line.amount, "240") === 0));
               assert.deepEqual(await evidence(fx.orgId), before, "preview must preserve IDs, values, and audit evidence");
             };
             if (ambient) {
@@ -475,7 +478,7 @@ describe("calculation-rollback", () => {
                 await db.execute(sql`update parties set custom=custom || '{"previewCallerWork":true}'::jsonb
                   where org_id=${fx.orgId} and id=${fx.employeeId}`);
                 await preview();
-              });
+              }, { isolationLevel: "REPEATABLE READ" });
               assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'previewCallerWork')::boolean as marker
                 from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true,
               "preview rollback must preserve the caller's earlier work");
