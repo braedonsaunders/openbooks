@@ -798,7 +798,10 @@
         "liquiditySolvency": "流动性与偿债能力目标",
         "efficiencyOperating": "效率与经营目标",
         "grading": "等级与分数区间",
-        "findings": "发现阈值"
+        "findings": "发现阈值",
+        "budget": "预算容忍度",
+        "segments": "分部集中度",
+        "model": "预测模型"
       },
       "options": {
         "forecastMethod": {

@@ -798,7 +798,10 @@
         "liquiditySolvency": "Liquiditäts- und Solvenzziele",
         "efficiencyOperating": "Effizienz- und Betriebsziele",
         "grading": "Notenstufen und Bewertungsbänder",
-        "findings": "Schwellenwerte für Hinweise"
+        "findings": "Schwellenwerte für Hinweise",
+        "budget": "Budgettoleranz",
+        "segments": "Segmentkonzentration",
+        "model": "Prognosemodell"
       },
       "options": {
         "forecastMethod": {

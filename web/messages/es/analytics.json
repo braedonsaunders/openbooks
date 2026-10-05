@@ -798,7 +798,10 @@
         "liquiditySolvency": "Objetivos de liquidez y solvencia",
         "efficiencyOperating": "Objetivos de eficiencia y operación",
         "grading": "Calificaciones y bandas de puntuación",
-        "findings": "Umbrales de hallazgos"
+        "findings": "Umbrales de hallazgos",
+        "budget": "Tolerancia presupuestaria",
+        "segments": "Concentración por segmento",
+        "model": "Modelo de pronóstico"
       },
       "options": {
         "forecastMethod": {

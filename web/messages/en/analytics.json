@@ -798,7 +798,10 @@
         "liquiditySolvency": "Liquidity and solvency targets",
         "efficiencyOperating": "Efficiency and operating targets",
         "grading": "Grading and score bands",
-        "findings": "Finding thresholds"
+        "findings": "Finding thresholds",
+        "budget": "Budget tolerance",
+        "segments": "Segment concentration",
+        "model": "Forecast model"
       },
       "options": {
         "forecastMethod": {

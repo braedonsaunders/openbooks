@@ -798,7 +798,10 @@
         "liquiditySolvency": "Objectifs de liquidité et de solvabilité",
         "efficiencyOperating": "Objectifs d’efficacité et d’exploitation",
         "grading": "Notes et seuils de score",
-        "findings": "Seuils des constats"
+        "findings": "Seuils des constats",
+        "budget": "Tolérance budgétaire",
+        "segments": "Concentration par segment",
+        "model": "Modèle de prévision"
       },
       "options": {
         "forecastMethod": {

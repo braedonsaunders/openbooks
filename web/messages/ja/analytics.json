@@ -798,7 +798,10 @@
         "liquiditySolvency": "流動性・安全性の目標",
         "efficiencyOperating": "効率性・営業の目標",
         "grading": "評価とスコア帯",
-        "findings": "指摘のしきい値"
+        "findings": "指摘のしきい値",
+        "budget": "予算許容度",
+        "segments": "セグメント集中度",
+        "model": "予測モデル"
       },
       "options": {
         "forecastMethod": {

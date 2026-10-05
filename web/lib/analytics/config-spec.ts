@@ -227,7 +227,10 @@ export const ANALYTICS_CONFIG = {
       { labelKey: "analytics.financialHealth.config.groups.liquiditySolvency", fields: ["currentRatioTarget", "quickRatioTarget", "debtToEquityTarget", "liabilitiesToEquityTarget", "interestCoverageTarget"] },
       { labelKey: "analytics.financialHealth.config.groups.efficiencyOperating", fields: ["revenuePerEmployee", "gpPerEmployee", "assetTurnoverTarget", "cogsRatioTarget", "opexRatioTarget", "operatingLeverageTarget", "ruleOf40Target"] },
       { labelKey: "analytics.financialHealth.config.groups.grading", fields: ["gradeDPercent", "gradeCPercent", "gradeBPercent", "gradeAPercent", "scoreAverage", "scoreGood", "scoreExcellent"] },
-      { labelKey: "analytics.financialHealth.config.groups.findings", fields: ["insightCriticalPercent", "insightWarningPercent", "revenueDeclineAlertPercent", "revenueTrendAlertPercent", "marginCompressionPoints", "breakevenSafetyPercent", "anomalySigma"] },
+      { labelKey: "analytics.financialHealth.config.groups.budget", fields: ["budgetOnTrackPercent", "budgetWatchPercent"] },
+      { labelKey: "analytics.financialHealth.config.groups.segments", fields: ["segmentHhiWarning", "segmentHhiCritical"] },
+      { labelKey: "analytics.financialHealth.config.groups.findings", fields: ["insightCriticalPercent", "insightWarningPercent", "revenueDeclineAlertPercent", "revenueTrendAlertPercent", "marginCompressionPoints", "breakevenSafetyPercent", "breakevenComfortPercent", "anomalySigma"] },
+      { labelKey: "analytics.financialHealth.config.groups.model", fields: ["forecastMethod", "forecastHorizon", "forecastConfidence", "forecastSeasonality", "forecastAdjustment", "forecastEtsAlpha", "forecastEtsBeta", "forecastEtsGamma", "forecastDampedPhi", "forecastMa1", "forecastSeasonalityMinCorr", "forecastSeasonalityMinPeriods"] },
     ],
   },
   customerIntelligence: {
