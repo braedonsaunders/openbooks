@@ -203,21 +203,29 @@ Corollaries:
   `DetailPageLayout`), one house-style New button, no duplicate header actions.
 - When a shared component almost fits, extend it (new prop/slot) — never fork
   it or approximate it with local markup.
-- **One entity or concept table per active page, tab, or drawer body.** Never
-  stack tables, grids, or entity-list sections for different entities or
-  concepts vertically. Put each separate concept in a shared tab/subtab, or
-  open its related records in a drawer. Channel posting accounts, location
-  mappings, and ad spend belong in separate Settings subtabs; product-family
-  variants and pricing belong in separate drawer tabs. Cards, headings, and
-  collapsed disclosures do not make stacked concept tables acceptable.
-  Summary values and controls for the active concept may sit beside its
-  table; another concept's table must have its own tab or drawer.
-- Review the rendered composition, including tables hidden inside child
+- **Related concepts belong together through a clear parent–child workflow,
+  never through two stacked tables.** Keep the parent in context and reveal
+  its children when the operator selects it: use the shared record drawer or
+  a focused master–detail pane with an explicit selected-parent heading.
+  Child records must be scoped to that parent, and changing the selection
+  must change the child context. Prefer this composition when it makes the
+  relationship easier to understand and reduces navigation.
+- **One independent entity or concept table per active body.** Separate
+  unrelated or peer concepts with the shared tab/subtab machinery, or open
+  related records in a drawer. Never stack independent tables, grids, or
+  entity-list sections vertically. Channel posting accounts, location
+  mappings, and ad spend are peer Settings concepts. Product-family variants
+  and pricing need a clear parent–child interaction or separate drawer tabs.
+  Cards, headings, and collapsed disclosures do not make stacked concept
+  tables acceptable. Summary values and controls for the active concept may
+  sit beside its table; another independent table needs its own active view.
+- Review the rendered composition, including lists hidden inside child
   components, rather than approving each component in isolation. Before
-  calling a page or drawer complete, name the concept on every tab, verify
-  that switching tabs replaces the body, and check populated and empty
-  states at both desktop viewport sizes. Preserve URL navigation,
-  permissions, and create/save/reopen flows when moving a concept.
+  calling a page or drawer complete, name each concept and its relationship.
+  Verify that tabs replace the active body, or that selecting a parent opens
+  only that parent's children with the relationship visibly named. Check
+  populated and empty states at both desktop viewport sizes. Preserve URL
+  navigation, permissions, drafts, and create/save/reopen flows.
 - An asynchronously loaded record uses **one drawer shell**. A native record
   component that owns its dialog mounts once its full payload is ready (see
   `web/components/list-drawer-host.tsx`); never wrap it in a loading dialog.
