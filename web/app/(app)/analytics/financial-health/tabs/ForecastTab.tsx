@@ -104,9 +104,16 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
   // Memoized chain: `result` below can only be compiled when its `series`
   // dep holds a stable identity across renders.
-  const hist = useMemo(
-    () => data.monthly.filter((p) => cmp(p.revenue, '0') !== 0 || cmp(p.cogs, '0') !== 0),
-    [data.monthly],
+  //
+  // Zero-activity periods stay in the series: model steps and bucket names
+  // both anchor to the window end, so bucket 1 is always the period after
+  // the end. Dropping a quiet current period would hand its name to the
+  // period after next. Activity below counts the forecastable window for
+  // the not-enough-history refusal.
+  const hist = data.monthly
+  const activeCount = useMemo(
+    () => hist.filter((p) => cmp(p.revenue, '0') !== 0 || cmp(p.cogs, '0') !== 0).length,
+    [hist],
   )
   // The forecaster is a statistical model (smoothing/regression with
   // confidence bands): it consumes the documented one-way chart projection
@@ -124,7 +131,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
   // empty state: the caught error carries the offending level, and the
   // branch below renders it with the levels that would work.
   const outcome = useMemo(() => {
-    if (invalid || adjValue === undefined || series.length < 3) return null
+    if (invalid || adjValue === undefined || series.length < 3 || activeCount < 3) return null
     try {
       const r = applyForecastMethod(
         series,
@@ -152,7 +159,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
       if (e instanceof UnknownConfidenceError) return { error: e }
       throw e
     }
-  }, [series, invalid, adjValue, method, horizon, seasonality, confidence, fp])
+  }, [series, invalid, adjValue, activeCount, method, horizon, seasonality, confidence, fp])
   const result = outcome && 'result' in outcome ? outcome.result : null
   const confidenceError = outcome && 'error' in outcome ? outcome.error : null
 
