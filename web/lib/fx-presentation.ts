@@ -97,9 +97,9 @@ export async function presentationRates(
   for (const row of r.rows) rates.set(row.from_currency, row.rate);
   const missing = needed.filter((c) => !rates.has(c));
   if (missing.length > 0) {
-    throw new Error(
-      `no spot rate for ${missing.join(", ")}→${base} on or before ${refDate}`,
-    );
+    // One typed refusal for the cash tiles and forecast readers to catch
+    // exactly; several missing currencies report the first.
+    throw new MissingExchangeRateError(missing[0]!, base, refDate);
   }
   return rates;
 }
