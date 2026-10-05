@@ -34,6 +34,7 @@ export * from "./autopay";
 export * from "./construction";
 export * from "./compliance";
 export * from "./subscriptions";
+export * from "./consolidated-billing";
 export * from "./usage";
 export * from "./subcontracts";
 export * from "./property-management";

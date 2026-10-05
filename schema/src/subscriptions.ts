@@ -74,6 +74,12 @@ export const subscriptions = pgTable(
     canceledOn: date("canceled_on"),
     /** Auto-post the generated invoice vs leave it as a draft. */
     autoPost: boolean("auto_post").notNull().default(false),
+    /**
+     * Per-subscription bill-to/payer overrides. Null means the payer
+     * hierarchy relationship (or self-billing) applies on the billing date.
+     */
+    billToPartyId: uuid("bill_to_party_id"),
+    payerPartyId: uuid("payer_party_id"),
     lastInvoiceId: uuid("last_invoice_id"),
     lastBilledAt: timestamp("last_billed_at", { withTimezone: true }),
     runCount: integer("run_count").notNull().default(0),
