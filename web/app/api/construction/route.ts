@@ -16,6 +16,7 @@ import {
   submitPayApplication,
   voidPayApplication,
 } from "@openbooks/engine/src/projects/construction-billing.ts";
+import { projectBillingHasBegun } from "@openbooks/engine/projects/header-controls";
 import {
   ScopeNotFoundError,
   lockProjectForScope,
@@ -665,10 +666,9 @@ export const POST = defineRoute({
             // lock, so a rehome racing this insert refuses instead of
             // billing B's project. Missing and out-of-scope share one 404.
             await lockEntryProject(tx);
-            const prior = await tx.execute(
-              sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`,
-            );
-            if (prior.rows.length)
+            // The same billing-has-begun predicate the project header edit
+            // enforces for contract value: one rule, one owner.
+            if (await projectBillingHasBegun(tx, orgId, body.projectId as string))
               throw new ConstructionBillingError(
                 "After billing begins, contract value must change through an approved change order",
               );

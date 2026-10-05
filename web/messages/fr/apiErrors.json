@@ -1,3 +1,5 @@
 {
-  "internalError": "Une erreur inattendue s’est produite. Réessayez. Si le problème persiste, contactez l’assistance avec l’identifiant de requête {requestId}."
+  "internalError": "Une erreur inattendue s’est produite. Réessayez. Si le problème persiste, contactez l’assistance avec l’identifiant de requête {requestId}.",
+  "projectContractValueControlled": "Une fois la facturation commencée, la valeur du contrat ne peut changer que par un avenant approuvé. Saisissez un avenant dans Avenants, sous l’onglet Facturation du projet, et faites-le approuver par un autre utilisateur ; l’approbation met à jour la valeur du contrat.",
+  "projectContractValueControlledTypeChanged": "Une fois la facturation commencée, la valeur du contrat ne peut changer que par un avenant approuvé, mais le type de ce projet ne facture plus par demandes de paiement, si bien que les avenants sont indisponibles. Rattachez de nouveau le projet à un type qui facture par demandes de paiement, puis saisissez et approuvez un avenant sous son onglet Facturation."
 }

@@ -1,3 +1,5 @@
 {
-  "internalError": "Ocorreu um erro inesperado. Tente novamente. Se o problema persistir, entre em contato com o suporte e informe o ID da solicitação {requestId}."
+  "internalError": "Ocorreu um erro inesperado. Tente novamente. Se o problema persistir, entre em contato com o suporte e informe o ID da solicitação {requestId}.",
+  "projectContractValueControlled": "Depois que o faturamento começa, o valor do contrato só pode mudar por meio de uma ordem de alteração aprovada. Registre uma ordem de alteração em Ordens de alteração, na aba Faturamento do projeto, e peça a outro usuário que a aprove; a aprovação atualiza o valor do contrato.",
+  "projectContractValueControlledTypeChanged": "Depois que o faturamento começa, o valor do contrato só pode mudar por meio de uma ordem de alteração aprovada, mas o tipo deste projeto não fatura mais por solicitações de pagamento, então as ordens de alteração estão indisponíveis. Volte o projeto para um tipo que fature por solicitações de pagamento e, em seguida, registre e aprove uma ordem de alteração na aba Faturamento."
 }

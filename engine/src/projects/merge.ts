@@ -399,7 +399,10 @@ async function planMerge(
           : null;
   if (billingMismatch) {
     throw new ProjectMergeError(
-      `cannot merge: the projects disagree on ${billingMismatch}; reconcile it on one side first`,
+      billingMismatch === "contract value"
+        ? "cannot merge: the projects disagree on contract value; reconcile it on one side first " +
+            "(once billing has begun, through an approved change order on that project's Billing tab)"
+        : `cannot merge: the projects disagree on ${billingMismatch}; reconcile it on one side first`,
     );
   }
   // Cycle fence: the survivor must not sit under the duplicate.

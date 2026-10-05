@@ -16,6 +16,12 @@ import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 import { notFound } from "@/lib/api/responses";
+import { getTranslations } from 'next-intl/server'
+import {
+  ProjectHeaderControlError,
+  assertProjectHeaderChangeAllowed,
+  type ProjectHeaderControlCode,
+} from '@openbooks/engine/projects/header-controls'
 
 
 const projectParams = z.object({ id: z.string() })
@@ -67,6 +73,23 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
     return normalizeMoney(exact)
   } catch {
     return 'invalid'
+  }
+}
+
+const HEADER_CONTROL_KEYS: Record<Exclude<ProjectHeaderControlCode, 'project_not_found'>, string> = {
+  contract_value_controlled: 'projectContractValueControlled',
+  contract_value_controlled_type_changed: 'projectContractValueControlledTypeChanged',
+}
+
+/** The refusal in the caller's language; the engine's English copy is the
+ * fallback where no request locale is available. */
+async function headerControlMessage(error: ProjectHeaderControlError): Promise<string> {
+  if (error.code === 'project_not_found') return error.message
+  try {
+    const t = await getTranslations('apiErrors')
+    return t(HEADER_CONTROL_KEYS[error.code])
+  } catch {
+    return error.message
   }
 }
 
@@ -303,6 +326,23 @@ export const PATCH = defineRoute({
     if (lockedWillBeActive && (!lockedEffectiveName || lockedEffectiveName === 'New project')) {
       txRefused = bad(
         body.isActive === true ? 'Give the project a real name before activating it' : 'An active project needs a name',
+      )
+      return
+    }
+    // Contract value carries billed history: the shared engine control
+    // locks this row and refuses a contract-value edit once billing has
+    // begun, on this transaction and before the write below.
+    try {
+      await assertProjectHeaderChangeAllowed(db, user.orgId, id, { contractValue })
+    } catch (error) {
+      if (!(error instanceof ProjectHeaderControlError)) throw error
+      if (error.code === 'project_not_found') {
+        scopeRefused = true
+        return
+      }
+      txRefused = NextResponse.json(
+        { error: await headerControlMessage(error), code: error.code },
+        { status: error.status },
       )
       return
     }

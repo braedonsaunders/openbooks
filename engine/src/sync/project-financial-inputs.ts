@@ -5,6 +5,10 @@ import type {
   MigrationSource,
 } from "./source.ts";
 import { isUuid } from "../platform/uuid.ts";
+import {
+  ProjectHeaderControlError,
+  assertProjectHeaderChangeAllowed,
+} from "../projects/header-controls.ts";
 
 export interface ProjectFinancialInputSyncResult {
   sourceTimeEntries: number;
@@ -662,6 +666,32 @@ export async function syncProjectFinancialInputs(
           `project-financial input sync detected concurrent time-entry edits; retry (expected ${batch.length} updates, applied ${write.rows.length})`,
         );
       }
+    }
+    // Contract value is controlled once billing begins: every project whose
+    // mirrored contract sum would move is locked and checked here, in id
+    // order, on the same transaction as the write. A refused project fails
+    // the whole apply by name rather than landing a sum no change order
+    // records.
+    const controlled: string[] = [];
+    let controlMessage = "";
+    for (const project of [...changedProjects].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+      if (project.afterContractValue === project.beforeContractValue) continue;
+      try {
+        await assertProjectHeaderChangeAllowed(tx, options.orgId, project.id, {
+          contractValue: project.afterContractValue,
+        });
+      } catch (error) {
+        if (!(error instanceof ProjectHeaderControlError)) throw error;
+        controlled.push(project.sourceRef);
+        controlMessage ||= error.message;
+      }
+    }
+    if (controlled.length) {
+      throw new Error(
+        `project-financial input sync refused ${controlled.length} contract-value change(s) (first: ${controlled
+          .slice(0, 20)
+          .join(", ")}): ${controlMessage}`,
+      );
     }
     for (
       let offset = 0;

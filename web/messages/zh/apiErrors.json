@@ -1,3 +1,5 @@
 {
-  "internalError": "发生意外错误，请重试。如果问题仍然存在，请向支持人员提供请求 ID {requestId}。"
+  "internalError": "发生意外错误，请重试。如果问题仍然存在，请向支持人员提供请求 ID {requestId}。",
+  "projectContractValueControlled": "开始开票后，合同金额只能通过已批准的变更单进行变更。请在项目“开票”选项卡的“变更单”中登记变更单，并由其他用户批准；批准后合同金额将随之更新。",
+  "projectContractValueControlledTypeChanged": "开始开票后，合同金额只能通过已批准的变更单进行变更，但此项目的类型已不再按付款申请开票，因此无法使用变更单。请先将项目改回按付款申请开票的项目类型，然后在其“开票”选项卡中登记并批准变更单。"
 }
