@@ -68,6 +68,17 @@ test("the unfiltered directory reads no employment predicate", () => {
   assert.doesNotMatch(text, /emp\./, "no directory predicate without a directory filter");
 });
 
+test("show inactive admits former employees whose role is inactive", () => {
+  const current = whereText();
+  assert.match(current, /r\.is_active/, "the default list holds current employees only");
+  assert.match(current, /p\.is_active/);
+  const where = employeeWhere({ ...defaultListView("employee"), filters: [] }, { filters: {}, hrmEnabled: true, showInactive: true }, ORG, null);
+  const all = db.select({ n: sql`count(*)` }).from(sql.raw("parties p")).where(where).toSQL().sql;
+  assert.match(all, /employee_roles/, "a party never holding the role stays out");
+  assert.doesNotMatch(all, /r\.is_active/, "an ended role no longer hides the person");
+  assert.doesNotMatch(all, /p\.is_active/);
+});
+
 test("department quick filter resolves to the primary assignment", () => {
   assert.match(
     whereText([], { department: DEPT }),

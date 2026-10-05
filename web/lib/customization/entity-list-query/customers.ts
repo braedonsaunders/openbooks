@@ -195,9 +195,12 @@ export function rolePartyWhere(
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
   const roleTable = sql.raw(`${role}_roles`)
+  // Show inactive widens the role too: a former employee or vendor keeps an
+  // inactive role row, and the list is where an operator looks them up.
+  const roleActive = adhoc.showInactive ? sql`` : sql` and r.is_active`
   const parts: SQL[] = [
     sql`p.org_id = ${orgId}`,
-    sql`and exists (select 1 from ${roleTable} r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
+    sql`and exists (select 1 from ${roleTable} r where r.party_id = p.id and r.org_id = p.org_id${roleActive})`,
   ]
   if (!adhoc.showInactive) parts.push(sql`and p.is_active`)
   if (allowedSubsidiaryIds) {
