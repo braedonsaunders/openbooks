@@ -1,0 +1,137 @@
+{
+  "home": {
+    "title": "Verkaufskanäle",
+    "description": "Storefront-Verbindungen, ihre Lieferungen und was Aufmerksamkeit braucht.",
+    "connect": "Storefront verbinden",
+    "emptyTitle": "Noch keine Storefronts verbunden",
+    "emptyBody": "Kanäle verbinden Storefronts wie Shopify mit OpenBooks. Jede Verbindung synchronisiert Produkte, übernimmt Bestellungen und protokolliert jede Lieferung zur Wiederholung.",
+    "emptyFeaturesAction": "Verkaufskanäle einschalten",
+    "loadFailedTitle": "Kanäle wurden nicht geladen",
+    "tiles": {
+      "active": "Aktive Kanäle",
+      "attention": "Lieferungen mit Handlungsbedarf",
+      "attentionSub": "Fehlgeschlagen oder abgelegt — Warteschlange prüfen",
+      "attentionClear": "Alles verarbeitet",
+      "ordersToday": "Bestellungen heute",
+      "ordersTodaySub": "Bestellsync kommt mit dem ersten Connector",
+      "lastDelivery": "Letzte Lieferung"
+    },
+    "attentionTitle": "Handlungsbedarf",
+    "attentionHint": "Fehlgeschlagene oder abgelegte Lieferungen, mit dem zuständigen Kanal.",
+    "attentionReason": "{failed, plural, =0 {} other {# fehlgeschlagen · }}{dead, plural, =0 {} other {# abgelegt}}",
+    "review": "Prüfen",
+    "channelsTitle": "Verbindungen",
+    "channelsHint": "Eine Karte pro Storefront, mit Zustand und Aktionen.",
+    "cardAttention": "{count, plural, one {# Lieferung braucht} other {# Lieferungen brauchen}} Aufmerksamkeit",
+    "cardClear": "Alles in Ordnung · letzte Lieferung {delivery}",
+    "open": "Öffnen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "disconnect": "Trennen",
+    "pauseTitle": "{name} pausieren?",
+    "pauseBody": "Neue Lieferungen warten, solange der Kanal pausiert ist. Gespeichertes geht nicht verloren.",
+    "resumeTitle": "{name} fortsetzen?",
+    "resumeBody": "Wartende Lieferungen werden dort weiterverarbeitet, wo sie stehen geblieben sind.",
+    "disconnectTitle": "{name} trennen?",
+    "disconnectBody": "Die Storefront liefert nicht mehr. Bisherige Bestellungen, Links und Verlauf bleiben in OpenBooks.",
+    "disconnectVerify": "{name} trennen? Der Verlauf bleibt, aber es kommen keine neuen Lieferungen.",
+    "reasonLabel": "Grund",
+    "pauseConfirm": "Kanal pausieren",
+    "resumeConfirm": "Kanal fortsetzen",
+    "disconnectConfirm": "Kanal trennen",
+    "advancedTitle": "Erweitert",
+    "advancedSummary": "Webhook-Secrets und Buchungsdetails",
+    "advancedBody": "Lieferprüfung und Buchungsdetails pro Ereignis liegen im Arbeitsbereich jedes Kanals, unter dessen Reitern Aktivität und Einstellungen.",
+    "connectTitle": "{kind} verbinden",
+    "connectBody": "Benennen Sie die Verbindung und sagen Sie OpenBooks, welches Storefront-Konto es ist. Das Signatur-Secret unten wird bei der Storefront hinterlegt.",
+    "connectConfirm": "Storefront verbinden",
+    "connectNameLabel": "Kanalname",
+    "connectNamePlaceholder": "Innenstadt-Onlineshop",
+    "connectAccountLabel": "Storefront-Konto",
+    "connectAccountPlaceholder": "shop.myshopify.com",
+    "connectCurrencyLabel": "Währung",
+    "secretBody": "Hinterlegen Sie dieses Signatur-Secret jetzt bei der Storefront — es wird versiegelt und nie wieder angezeigt.",
+    "toast": {
+      "loadFailed": "Kanäle wurden nicht geladen (Status {status}).",
+      "actionFailed": "Die Aktion wurde nicht abgeschlossen (Status {status}).",
+      "paused": "Kanal pausiert.",
+      "resumed": "Kanal fortgesetzt.",
+      "disconnected": "Kanal getrennt.",
+      "connected": "Storefront verbunden.",
+      "createFailed": "Die Storefront wurde nicht verbunden (Status {status})."
+    }
+  },
+  "workspace": {
+    "back": "Kanäle",
+    "tabs": {
+      "overview": "Überblick",
+      "activity": "Aktivität",
+      "settings": "Einstellungen"
+    },
+    "attentionBanner": "{count, plural, one {# Lieferung braucht} other {# Lieferungen brauchen}} Aufmerksamkeit — siehe Reiter Aktivität.",
+    "healthTitle": "Sync-Zustand",
+    "healthEmpty": "Noch melden keine Sync-Ströme. Der Zustand erscheint, sobald der Connector läuft.",
+    "recentTitle": "Neueste Lieferungen",
+    "recentEmpty": "Noch keine Lieferungen. Der erste Webhook der Storefront erscheint hier.",
+    "settingsHint": "Buchungskonten und Lagerorte für diesen Kanal. Änderungen gelten für neue Bestellungen; der Verlauf wird nie umgeschrieben."
+  },
+  "activity": {
+    "loading": "Lieferungen werden geladen…",
+    "loadFailedTitle": "Lieferungen wurden nicht geladen",
+    "retry": "Wiederholen",
+    "filterLabel": "Nach Status filtern",
+    "filters": {
+      "all": "Alle",
+      "pending": "Ausstehend",
+      "failed": "Fehlgeschlagen",
+      "dead": "Abgelegt",
+      "processed": "Verarbeitet"
+    },
+    "columns": {
+      "received": "Eingegangen",
+      "topic": "Lieferung",
+      "status": "Status",
+      "error": "Problem"
+    },
+    "emptyTitle": "Keine Lieferungen in diesem Ausschnitt",
+    "emptyBody": "Lieferungen der Storefront erscheinen hier mit Prüf- und Verarbeitungsstand.",
+    "replaySelected": "{count, plural, one {# Lieferung} other {# Lieferungen}} wiederholen",
+    "replayOne": "Wiederholen",
+    "replayTitle": "{count, plural, one {# Lieferung} other {# Lieferungen}} wiederholen?",
+    "replayBody": "Die Lieferungen laufen erneut durch den Connector. Bereits Angewendetes bleibt angewendet — Wiederholung ist idempotent.",
+    "replayConfirm": "Wiederholen",
+    "status": {
+      "pending": "Ausstehend",
+      "processing": "In Verarbeitung",
+      "processed": "Verarbeitet",
+      "ignored": "Ignoriert",
+      "failed": "Fehlgeschlagen",
+      "dead": "Abgelegt"
+    },
+    "toast": {
+      "loadFailed": "Lieferungen wurden nicht geladen (Status {status}).",
+      "replayFailed": "Wiederholung wurde nicht abgeschlossen (Status {status}).",
+      "replayed": "{count, plural, one {# Lieferung} other {# Lieferungen}} erneut eingereiht."
+    }
+  },
+  "status": {
+    "draft": "Entwurf",
+    "connecting": "Wird verbunden",
+    "active": "Aktiv",
+    "paused": "Pausiert",
+    "disconnecting": "Wird getrennt",
+    "disconnected": "Getrennt",
+    "error": "Fehler"
+  },
+  "links": {
+    "unlinkTitle": "{externalId} trennen?",
+    "unlinkBody": "Das {provider}-Objekt im Konto {externalAccount} bleibt bestehen, aber OpenBooks ordnet es hier nicht mehr zu.",
+    "unlinkConfirm": "Trennen",
+    "unlink": "Trennen",
+    "emptyBody": "Noch keine externen IDs. Zugeordnete Storefront- und Anbieter-Identitäten erscheinen hier.",
+    "toast": {
+      "unlinkFailed": "Trennen wurde nicht abgeschlossen (Status {status}).",
+      "unlinked": "Externe ID getrennt."
+    }
+  }
+}

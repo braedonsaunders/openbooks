@@ -56,7 +56,8 @@
       "payroll": "工资",
       "pulse": "动态",
       "relationship": "关系",
-      "paymentMethods": "付款方式"
+      "paymentMethods": "付款方式",
+      "externalIds": "外部 ID"
     },
     "autopay": {
       "heading": "付款方式",

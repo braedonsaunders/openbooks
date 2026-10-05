@@ -1,0 +1,137 @@
+{
+  "home": {
+    "title": "販売チャネル",
+    "description": "ストアの接続、その配信、対応が必要な項目。",
+    "connect": "ストアを接続",
+    "emptyTitle": "まだストアが接続されていません",
+    "emptyBody": "チャネルはShopifyのようなストアをOpenBooksに接続します。各接続は商品を同期し、注文を受け付け、すべての配信を記録して再実行できます。",
+    "emptyFeaturesAction": "販売チャネルを有効化",
+    "loadFailedTitle": "チャネルを読み込めませんでした",
+    "tiles": {
+      "active": "アクティブなチャネル",
+      "attention": "対応が必要な配信",
+      "attentionSub": "失敗または破棄 — キューを確認",
+      "attentionClear": "すべて処理済み",
+      "ordersToday": "今日の注文",
+      "ordersTodaySub": "注文同期は最初のコネクタとともに提供",
+      "lastDelivery": "最新の配信"
+    },
+    "attentionTitle": "要対応",
+    "attentionHint": "失敗または破棄された配信と、その所有チャネル。",
+    "attentionReason": "失敗 {failed} 件 · 破棄 {dead} 件",
+    "review": "確認",
+    "channelsTitle": "接続",
+    "channelsHint": "ストアごとのカード。状態とアクション付き。",
+    "cardAttention": "{count} 件の配信に要対応",
+    "cardClear": "問題なし · 最新の配信 {delivery}",
+    "open": "開く",
+    "pause": "一時停止",
+    "resume": "再開",
+    "disconnect": "切断",
+    "pauseTitle": "{name} を一時停止しますか?",
+    "pauseBody": "一時停止中、新しい配信は待機します。保存済みのデータは失われません。",
+    "resumeTitle": "{name} を再開しますか?",
+    "resumeBody": "待機中の配信は停止したところから処理を再開します。",
+    "disconnectTitle": "{name} を切断しますか?",
+    "disconnectBody": "ストアからの配信が停止します。過去の注文・リンク・履歴はOpenBooksに残ります。",
+    "disconnectVerify": "{name} を切断しますか?履歴は残りますが、新しい配信は届きません。",
+    "reasonLabel": "理由",
+    "pauseConfirm": "チャネルを一時停止",
+    "resumeConfirm": "チャネルを再開",
+    "disconnectConfirm": "チャネルを切断",
+    "advancedTitle": "詳細設定",
+    "advancedSummary": "Webhookシークレットと転記内容",
+    "advancedBody": "配信の検証とイベントごとの転記内容は、各チャネルのワークスペースの[アクティビティ]タブと[設定]タブにあります。",
+    "connectTitle": "{kind} を接続",
+    "connectBody": "接続に名前を付け、どのストアのアカウントかをOpenBooksに伝えます。以下の署名シークレットをストア側に登録します。",
+    "connectConfirm": "ストアを接続",
+    "connectNameLabel": "チャネル名",
+    "connectNamePlaceholder": "中心街のウェブショップ",
+    "connectAccountLabel": "ストアのアカウント",
+    "connectAccountPlaceholder": "shop.myshopify.com",
+    "connectCurrencyLabel": "通貨",
+    "secretBody": "この署名シークレットを今すぐストアに登録してください — 封印され、二度と表示されません。",
+    "toast": {
+      "loadFailed": "チャネルを読み込めませんでした(ステータス {status})。",
+      "actionFailed": "操作を完了できませんでした(ステータス {status})。",
+      "paused": "チャネルを一時停止しました。",
+      "resumed": "チャネルを再開しました。",
+      "disconnected": "チャネルを切断しました。",
+      "connected": "ストアを接続しました。",
+      "createFailed": "ストアを接続できませんでした(ステータス {status})。"
+    }
+  },
+  "workspace": {
+    "back": "チャネル",
+    "tabs": {
+      "overview": "概要",
+      "activity": "アクティビティ",
+      "settings": "設定"
+    },
+    "attentionBanner": "{count} 件の配信に要対応 — [アクティビティ]タブを確認してください。",
+    "healthTitle": "同期の状態",
+    "healthEmpty": "まだ同期ストリームの報告がありません。コネクタの実行後に表示されます。",
+    "recentTitle": "最近の配信",
+    "recentEmpty": "まだ配信がありません。ストアの最初のWebhookがここに表示されます。",
+    "settingsHint": "このチャネルの転記勘定と在庫拠点。変更は新しい注文に適用されます。履歴は書き換えません。"
+  },
+  "activity": {
+    "loading": "配信を読み込み中…",
+    "loadFailedTitle": "配信を読み込めませんでした",
+    "retry": "再試行",
+    "filterLabel": "ステータスで絞り込み",
+    "filters": {
+      "all": "すべて",
+      "pending": "保留中",
+      "failed": "失敗",
+      "dead": "破棄",
+      "processed": "処理済み"
+    },
+    "columns": {
+      "received": "受信",
+      "topic": "配信",
+      "status": "ステータス",
+      "error": "問題"
+    },
+    "emptyTitle": "この条件の配信はありません",
+    "emptyBody": "ストアの配信が検証・処理状態とともにここに表示されます。",
+    "replaySelected": "{count} 件の配信を再実行",
+    "replayOne": "再実行",
+    "replayTitle": "{count} 件の配信を再実行しますか?",
+    "replayBody": "配信はコネクタを再度通過します。適用済みの効果はそのまま — 再実行はべき等です。",
+    "replayConfirm": "再実行",
+    "status": {
+      "pending": "保留中",
+      "processing": "処理中",
+      "processed": "処理済み",
+      "ignored": "無視",
+      "failed": "失敗",
+      "dead": "破棄"
+    },
+    "toast": {
+      "loadFailed": "配信を読み込めませんでした(ステータス {status})。",
+      "replayFailed": "再実行を完了できませんでした(ステータス {status})。",
+      "replayed": "{count} 件の配信を再登録しました。"
+    }
+  },
+  "status": {
+    "draft": "下書き",
+    "connecting": "接続中",
+    "active": "アクティブ",
+    "paused": "一時停止中",
+    "disconnecting": "切断中",
+    "disconnected": "切断済み",
+    "error": "エラー"
+  },
+  "links": {
+    "unlinkTitle": "{externalId} のリンクを解除しますか?",
+    "unlinkBody": "{externalAccount} の {provider} オブジェクトは残りますが、OpenBooksはここへのマッピングを停止します。",
+    "unlinkConfirm": "解除",
+    "unlink": "解除",
+    "emptyBody": "まだ外部IDがありません。このレコードにひも付くストア・プロバイダのIDがここに表示されます。",
+    "toast": {
+      "unlinkFailed": "リンクを解除できませんでした(ステータス {status})。",
+      "unlinked": "外部IDのリンクを解除しました。"
+    }
+  }
+}

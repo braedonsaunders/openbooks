@@ -1,0 +1,137 @@
+{
+  "home": {
+    "title": "销售渠道",
+    "description": "网店连接、其交付以及需要处理的事项。",
+    "connect": "连接网店",
+    "emptyTitle": "尚未连接任何网店",
+    "emptyBody": "渠道将 Shopify 等网店连接到 OpenBooks。每个连接同步商品、接收订单，并记录每次交付以便重放。",
+    "emptyFeaturesAction": "启用销售渠道",
+    "loadFailedTitle": "渠道加载失败",
+    "tiles": {
+      "active": "活跃渠道",
+      "attention": "需要处理的交付",
+      "attentionSub": "失败或已丢弃 — 请查看队列",
+      "attentionClear": "全部已处理",
+      "ordersToday": "今日订单",
+      "ordersTodaySub": "订单同步将随首个连接器提供",
+      "lastDelivery": "最近交付"
+    },
+    "attentionTitle": "需要处理",
+    "attentionHint": "失败或已丢弃的交付及其所属渠道。",
+    "attentionReason": "失败 {failed} 次 · 已丢弃 {dead} 次",
+    "review": "查看",
+    "channelsTitle": "连接",
+    "channelsHint": "每个网店一张卡片，含状态与操作。",
+    "cardAttention": "{count} 次交付需要处理",
+    "cardClear": "一切正常 · 最近交付 {delivery}",
+    "open": "打开",
+    "pause": "暂停",
+    "resume": "恢复",
+    "disconnect": "断开",
+    "pauseTitle": "暂停 {name}？",
+    "pauseBody": "渠道暂停期间，新的交付将等待。已保存的内容不会丢失。",
+    "resumeTitle": "恢复 {name}？",
+    "resumeBody": "等待中的交付将从停止处继续处理。",
+    "disconnectTitle": "断开 {name}？",
+    "disconnectBody": "网店将停止交付。过去的订单、关联与历史保留在 OpenBooks 中。",
+    "disconnectVerify": "断开 {name}？历史保留，但不再有新的交付。",
+    "reasonLabel": "原因",
+    "pauseConfirm": "暂停渠道",
+    "resumeConfirm": "恢复渠道",
+    "disconnectConfirm": "断开渠道",
+    "advancedTitle": "高级",
+    "advancedSummary": "Webhook 密钥与记账明细",
+    "advancedBody": "交付验证与按事件的记账明细位于各渠道工作区的“动态”与“设置”选项卡中。",
+    "connectTitle": "连接 {kind}",
+    "connectBody": "为连接命名，并告诉 OpenBooks 它是哪个网店账户。下面的签名密钥将在网店侧注册。",
+    "connectConfirm": "连接网店",
+    "connectNameLabel": "渠道名称",
+    "connectNamePlaceholder": "市中心网店",
+    "connectAccountLabel": "网店账户",
+    "connectAccountPlaceholder": "shop.myshopify.com",
+    "connectCurrencyLabel": "币种",
+    "secretBody": "请立即在网店侧注册此签名密钥 — 它将被封存，不再显示。",
+    "toast": {
+      "loadFailed": "渠道加载失败（状态 {status}）。",
+      "actionFailed": "操作未完成（状态 {status}）。",
+      "paused": "渠道已暂停。",
+      "resumed": "渠道已恢复。",
+      "disconnected": "渠道已断开。",
+      "connected": "网店已连接。",
+      "createFailed": "网店连接失败（状态 {status}）。"
+    }
+  },
+  "workspace": {
+    "back": "渠道",
+    "tabs": {
+      "overview": "概览",
+      "activity": "动态",
+      "settings": "设置"
+    },
+    "attentionBanner": "{count} 次交付需要处理 — 请查看“动态”选项卡。",
+    "healthTitle": "同步健康状况",
+    "healthEmpty": "尚无同步流上报。连接器运行后将在此显示。",
+    "recentTitle": "最近交付",
+    "recentEmpty": "尚无交付。网店的第一个 Webhook 将显示在这里。",
+    "settingsHint": "该渠道的记账科目与库存地点。更改适用于新订单；历史永不改写。"
+  },
+  "activity": {
+    "loading": "正在加载交付…",
+    "loadFailedTitle": "交付加载失败",
+    "retry": "重试",
+    "filterLabel": "按状态筛选",
+    "filters": {
+      "all": "全部",
+      "pending": "待处理",
+      "failed": "失败",
+      "dead": "已丢弃",
+      "processed": "已处理"
+    },
+    "columns": {
+      "received": "接收时间",
+      "topic": "交付",
+      "status": "状态",
+      "error": "问题"
+    },
+    "emptyTitle": "该筛选下没有交付",
+    "emptyBody": "网店的交付将连同验证与处理状态显示在这里。",
+    "replaySelected": "重放 {count} 次交付",
+    "replayOne": "重放",
+    "replayTitle": "重放 {count} 次交付？",
+    "replayBody": "交付将再次通过连接器。已生效的不变 — 重放是幂等的。",
+    "replayConfirm": "重放",
+    "status": {
+      "pending": "待处理",
+      "processing": "处理中",
+      "processed": "已处理",
+      "ignored": "已忽略",
+      "failed": "失败",
+      "dead": "已丢弃"
+    },
+    "toast": {
+      "loadFailed": "交付加载失败（状态 {status}）。",
+      "replayFailed": "重放未完成（状态 {status}）。",
+      "replayed": "已将 {count} 次交付重新排队。"
+    }
+  },
+  "status": {
+    "draft": "草稿",
+    "connecting": "连接中",
+    "active": "活跃",
+    "paused": "已暂停",
+    "disconnecting": "断开中",
+    "disconnected": "已断开",
+    "error": "错误"
+  },
+  "links": {
+    "unlinkTitle": "取消关联 {externalId}？",
+    "unlinkBody": "账户 {externalAccount} 中的 {provider} 对象保留，但 OpenBooks 不再在此映射它。",
+    "unlinkConfirm": "取消关联",
+    "unlink": "取消关联",
+    "emptyBody": "尚无外部 ID。与此记录关联的网店与供应商标识将显示在这里。",
+    "toast": {
+      "unlinkFailed": "取消关联未完成（状态 {status}）。",
+      "unlinked": "外部 ID 已取消关联。"
+    }
+  }
+}

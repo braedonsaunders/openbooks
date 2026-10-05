@@ -56,7 +56,8 @@
       "payroll": "給与",
       "pulse": "パルス",
       "relationship": "関係",
-      "paymentMethods": "お支払い方法"
+      "paymentMethods": "お支払い方法",
+      "externalIds": "外部ID"
     },
     "autopay": {
       "heading": "お支払い方法",

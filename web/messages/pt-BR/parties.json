@@ -56,7 +56,8 @@
       "payroll": "Folha de pagamento",
       "pulse": "Pulso",
       "relationship": "Relacionamento",
-      "paymentMethods": "Métodos de pagamento"
+      "paymentMethods": "Métodos de pagamento",
+      "externalIds": "IDs externos"
     },
     "autopay": {
       "heading": "Métodos de pagamento",

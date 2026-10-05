@@ -43,6 +43,7 @@ import { promptDialog } from '../../../lib/prompt'
 import { PartyPulseSection } from './PartyPulseSection'
 import { StoreCreditPanel } from './StoreCreditPanel'
 import { PartyRelationshipSection } from './PartyRelationshipSection'
+import { ExternalIdsPanel } from '../channels/ExternalIdsPanel'
 
 export function PartyDrawer({
   payload,
@@ -72,6 +73,7 @@ export function PartyDrawer({
   taxIds = null,
   storedValue = null,
   hrm = null,
+  externalIdsTab = null,
   role,
   autopay = null,
   initialTab = 'overview',
@@ -143,6 +145,13 @@ export function PartyDrawer({
    *  employments (null = gated, so the tab never renders without the read
    *  surface behind it). */
   hrm?: { employmentIds: string[]; canManageHrm: boolean; canReadExits: boolean; canRecordExit: boolean; canVerb?: boolean } | null
+  /** Customer storefront identities with unlink rights (null = gated). Rows
+   *  cross as plain data; the tab never renders without the read surface
+   *  behind it. */
+  externalIdsTab?: {
+    links: { id: string; channelId: string | null; provider: string; externalAccount: string; objectType: string; externalId: string; lastSyncedAt: string | null }[];
+    canUnlink: boolean;
+  } | null
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -207,6 +216,10 @@ export function PartyDrawer({
   // button, the deep-link fallback, and the panel, so a stale
   // ?partyTab=store-credit can never strand the drawer on a missing panel.
   const showStoreCreditTab = storedValue != null && (role === 'customer' || (!role && payload.customer != null))
+  // External storefront identities ride the customer record the same way:
+  // the server passes the rendered tab (null = gated), so the button never
+  // appears without the identity surface behind it.
+  const showExternalIdsTab = externalIdsTab != null && (role === 'customer' || (!role && payload.customer != null))
   /**
    * `role` says which role's FIELDS to show, and opening a record from the
    * account list used to mean "force the customer role on". It cannot any
@@ -232,6 +245,7 @@ export function PartyDrawer({
     (initialTab === 'benefits' && !showBenefitsTab) ||
     (initialTab === 'activities' && !canReadActivities) ||
     (initialTab === 'relationship' && !showRelationshipTab) ||
+    (initialTab === 'external-ids' && !showExternalIdsTab) ||
     (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
     (initialTab === 'compliance' && !showComplianceTab) ||
     (initialTab === 'paymentMethods' && !showPaymentMethodsTab) ||
@@ -958,6 +972,7 @@ export function PartyDrawer({
     { key: 'overview', label: t('tabs.overview') },
     ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pulse' as const, label: t('tabs.pulse') }] : []),
     ...(showRelationshipTab ? [{ key: 'relationship' as const, label: t('tabs.relationship') }] : []),
+    ...(showExternalIdsTab ? [{ key: 'external-ids' as const, label: t('tabs.externalIds') }] : []),
     // Invoicing preferences + labor pricing live on their own subtabs (customers only),
     // out of the crowded overview.
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
@@ -1776,6 +1791,11 @@ export function PartyDrawer({
       {showRelationshipTab && keptTabs.has('relationship') ? (
         <div hidden={tab !== 'relationship'} className="space-y-7 p-1">
           <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} />
+        </div>
+      ) : null}
+      {showExternalIdsTab && keptTabs.has('external-ids') ? (
+        <div hidden={tab !== 'external-ids'} className="space-y-7 p-1">
+          <ExternalIdsPanel links={externalIdsTab!.links} canUnlink={externalIdsTab!.canUnlink} />
         </div>
       ) : null}
       {(!role || role === 'vendor') && keptTabs.has('accounting') ? (

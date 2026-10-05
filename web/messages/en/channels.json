@@ -1,0 +1,137 @@
+{
+  "home": {
+    "title": "Sales channels",
+    "description": "Storefront connections, their deliveries, and what needs attention.",
+    "connect": "Connect a storefront",
+    "emptyTitle": "No storefronts connected yet",
+    "emptyBody": "Channels connect storefronts like Shopify to OpenBooks. Each connection syncs products, takes orders, and files every delivery in its activity log for replay.",
+    "emptyFeaturesAction": "Turn on Sales Channels",
+    "loadFailedTitle": "Channels did not load",
+    "tiles": {
+      "active": "Active channels",
+      "attention": "Deliveries needing attention",
+      "attentionSub": "Failed or dead — review the queue",
+      "attentionClear": "Everything processed",
+      "ordersToday": "Orders today",
+      "ordersTodaySub": "Order sync arrives with the first connector",
+      "lastDelivery": "Last delivery"
+    },
+    "attentionTitle": "Needs attention",
+    "attentionHint": "Deliveries that failed or dead-lettered, with the channel that owns them.",
+    "attentionReason": "{failed, plural, =0 {} other {# failed · }}{dead, plural, =0 {} other {# dead}}",
+    "review": "Review",
+    "channelsTitle": "Connections",
+    "channelsHint": "One card per storefront, with its health and actions.",
+    "cardAttention": "{count, plural, one {# delivery needs} other {# deliveries need}} attention",
+    "cardClear": "All clear · last delivery {delivery}",
+    "open": "Open",
+    "pause": "Pause",
+    "resume": "Resume",
+    "disconnect": "Disconnect",
+    "pauseTitle": "Pause {name}?",
+    "pauseBody": "New deliveries wait while the channel is paused. Nothing already stored is lost.",
+    "resumeTitle": "Resume {name}?",
+    "resumeBody": "Waiting deliveries process again from where they stopped.",
+    "disconnectTitle": "Disconnect {name}?",
+    "disconnectBody": "The storefront stops delivering. Past orders, links, and history stay in OpenBooks.",
+    "disconnectVerify": "Disconnect {name}? Its history stays, but no new deliveries arrive.",
+    "disconnectConfirm": "Disconnect channel",
+    "reasonLabel": "Reason",
+    "pauseConfirm": "Pause channel",
+    "resumeConfirm": "Resume channel",
+    "advancedTitle": "Advanced",
+    "advancedSummary": "Webhook secrets and posting detail",
+    "advancedBody": "Delivery verification and per-event posting detail live on each channel's workspace, under its Activity and Settings tabs.",
+    "connectTitle": "Connect {kind}",
+    "connectBody": "Name the connection and tell OpenBooks which storefront account it is. The signing secret below registers with the storefront.",
+    "connectConfirm": "Connect storefront",
+    "connectNameLabel": "Channel name",
+    "connectNamePlaceholder": "Downtown webshop",
+    "connectAccountLabel": "Storefront account",
+    "connectAccountPlaceholder": "shop.myshopify.com",
+    "connectCurrencyLabel": "Currency",
+    "secretBody": "Register this signing secret with the storefront now — it seals and never shows again.",
+    "toast": {
+      "loadFailed": "Channels did not load (status {status}).",
+      "actionFailed": "The action did not complete (status {status}).",
+      "paused": "Channel paused.",
+      "resumed": "Channel resumed.",
+      "disconnected": "Channel disconnected.",
+      "connected": "Storefront connected.",
+      "createFailed": "The storefront did not connect (status {status})."
+    }
+  },
+  "workspace": {
+    "back": "Channels",
+    "tabs": {
+      "overview": "Overview",
+      "activity": "Activity",
+      "settings": "Settings"
+    },
+    "attentionBanner": "{count, plural, one {# delivery needs} other {# deliveries need}} attention — review the Activity tab.",
+    "healthTitle": "Sync health",
+    "healthEmpty": "No sync streams report yet. Health appears once the connector runs.",
+    "recentTitle": "Recent deliveries",
+    "recentEmpty": "No deliveries yet. The storefront's first webhook appears here.",
+    "settingsHint": "Posting accounts and stock locations for this channel. Changes take effect for new orders; history is never rewritten."
+  },
+  "activity": {
+    "loading": "Loading deliveries…",
+    "loadFailedTitle": "Deliveries did not load",
+    "retry": "Retry",
+    "filterLabel": "Filter by status",
+    "filters": {
+      "all": "All",
+      "pending": "Pending",
+      "failed": "Failed",
+      "dead": "Dead",
+      "processed": "Processed"
+    },
+    "columns": {
+      "received": "Received",
+      "topic": "Delivery",
+      "status": "Status",
+      "error": "Problem"
+    },
+    "emptyTitle": "No deliveries in this slice",
+    "emptyBody": "Deliveries from the storefront appear here with their verification and processing state.",
+    "replaySelected": "Replay {count, plural, one {# delivery} other {# deliveries}}",
+    "replayOne": "Replay",
+    "replayTitle": "Replay {count, plural, one {# delivery} other {# deliveries}}?",
+    "replayBody": "The deliveries run through the connector again. Already-applied effects stay applied — replay is idempotent.",
+    "replayConfirm": "Replay",
+    "status": {
+      "pending": "Pending",
+      "processing": "Processing",
+      "processed": "Processed",
+      "ignored": "Ignored",
+      "failed": "Failed",
+      "dead": "Dead"
+    },
+    "toast": {
+      "loadFailed": "Deliveries did not load (status {status}).",
+      "replayFailed": "Replay did not complete (status {status}).",
+      "replayed": "{count, plural, one {# delivery} other {# deliveries}} requeued."
+    }
+  },
+  "status": {
+    "draft": "Draft",
+    "connecting": "Connecting",
+    "active": "Active",
+    "paused": "Paused",
+    "disconnecting": "Disconnecting",
+    "disconnected": "Disconnected",
+    "error": "Error"
+  },
+  "links": {
+    "unlinkTitle": "Unlink {externalId}?",
+    "unlinkBody": "The {provider} object in account {externalAccount} stays, but OpenBooks stops mapping it here.",
+    "unlinkConfirm": "Unlink",
+    "unlink": "Unlink",
+    "emptyBody": "No external IDs yet. Storefront and provider identities linked to this record appear here.",
+    "toast": {
+      "unlinkFailed": "Unlink did not complete (status {status}).",
+      "unlinked": "External ID unlinked."
+    }
+  }
+}

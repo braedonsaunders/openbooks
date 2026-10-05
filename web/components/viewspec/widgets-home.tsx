@@ -28,6 +28,8 @@ import { DashboardEditSlot } from './dashboard-edit-slot'
 import { CustomizeDashboardHeader } from '../../app/(app)/dashboard/customize/sections'
 import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
 import { BillingHistoryClient } from '../../app/(app)/sync/billing-history/BillingHistoryClient'
+import { ChannelsConsole } from '../../app/(app)/channels/ChannelsConsole'
+import { ChannelWorkspace } from '../../app/(app)/channels/[id]/ChannelWorkspace'
 import { AppNotice, AppRuntimeChrome } from '../../app/(app)/apps/[key]/sections'
 import { DashboardBuilder } from '../../app/(app)/insights/dashboards/[id]/DashboardBuilder'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
@@ -190,6 +192,20 @@ export const HOME_WIDGETS = {
    *  connect, preflight review, accept-and-run, and the reconciliation
    *  differences — behind one drawer shell. */
   'billing-history-console': () => <BillingHistoryClient />,
+
+  /* --- sales channels ------------------------------------------------------------- */
+  /** No props. The console holds the list fetch, tiles, cards, lifecycle
+   *  actions and the connect drawer. */
+  'channels-console': () => <ChannelsConsole />,
+  /** Server workspace: channel header, tab strip, overview, activity and the
+   *  rehomed settings sections. `sp` carries the tab and drawer URL state. */
+  'channel-workspace': (props) => (
+    <ChannelWorkspace
+      channelId={str(props, 'channelId') ?? ''}
+      tab={str(props, 'tab') ?? 'overview'}
+      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
 
   /* --- installed-app runtime -------------------------------------------------------- */
   /** ONE entry for BOTH notice branches (not-found and disabled): the markup

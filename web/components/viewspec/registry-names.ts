@@ -108,6 +108,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'cashflow-view',
   'change-set-drawer',
   'choose-recon-account',
+  'channels-console',
+  'channel-workspace',
   'close-action-cell',
   'close-readiness-cell',
   'close-status-cell',

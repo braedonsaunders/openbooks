@@ -1,0 +1,137 @@
+{
+  "home": {
+    "title": "Canaux de vente",
+    "description": "Connexions des boutiques, leurs livraisons et ce qui demande attention.",
+    "connect": "Connecter une boutique",
+    "emptyTitle": "Aucune boutique connectée pour l'instant",
+    "emptyBody": "Les canaux relient des boutiques comme Shopify à OpenBooks. Chaque connexion synchronise les produits, reçoit les commandes et journalise chaque livraison pour la rejouer.",
+    "emptyFeaturesAction": "Activer Canaux de vente",
+    "loadFailedTitle": "Les canaux ne se sont pas chargés",
+    "tiles": {
+      "active": "Canaux actifs",
+      "attention": "Livraisons à examiner",
+      "attentionSub": "Échouées ou classées — vérifiez la file",
+      "attentionClear": "Tout est traité",
+      "ordersToday": "Commandes du jour",
+      "ordersTodaySub": "La synchro des commandes arrive avec le premier connecteur",
+      "lastDelivery": "Dernière livraison"
+    },
+    "attentionTitle": "Demande attention",
+    "attentionHint": "Livraisons échouées ou classées, avec le canal responsable.",
+    "attentionReason": "{failed, plural, =0 {} other {# échouées · }}{dead, plural, =0 {} other {# classées}}",
+    "review": "Examiner",
+    "channelsTitle": "Connexions",
+    "channelsHint": "Une carte par boutique, avec son état et ses actions.",
+    "cardAttention": "{count, plural, one {# livraison demande} other {# livraisons demandent}} attention",
+    "cardClear": "Tout est en ordre · dernière livraison {delivery}",
+    "open": "Ouvrir",
+    "pause": "Suspendre",
+    "resume": "Reprendre",
+    "disconnect": "Déconnecter",
+    "pauseTitle": "Suspendre {name} ?",
+    "pauseBody": "Les nouvelles livraisons attendent tant que le canal est suspendu. Rien d'enregistré n'est perdu.",
+    "resumeTitle": "Reprendre {name} ?",
+    "resumeBody": "Les livraisons en attente reprennent où elles s'étaient arrêtées.",
+    "disconnectTitle": "Déconnecter {name} ?",
+    "disconnectBody": "La boutique cesse de livrer. Commandes, liens et historique passés restent dans OpenBooks.",
+    "disconnectVerify": "Déconnecter {name} ? Son historique reste, mais plus aucune livraison n'arrive.",
+    "reasonLabel": "Motif",
+    "pauseConfirm": "Suspendre le canal",
+    "resumeConfirm": "Reprendre le canal",
+    "disconnectConfirm": "Déconnecter le canal",
+    "advancedTitle": "Avancé",
+    "advancedSummary": "Secrets de webhook et détail comptable",
+    "advancedBody": "La vérification des livraisons et le détail comptable par événement vivent dans l'espace de chaque canal, sous ses onglets Activité et Paramètres.",
+    "connectTitle": "Connecter {kind}",
+    "connectBody": "Nommez la connexion et indiquez à OpenBooks quel compte boutique il s'agit. Le secret de signature ci-dessous s'enregistre auprès de la boutique.",
+    "connectConfirm": "Connecter la boutique",
+    "connectNameLabel": "Nom du canal",
+    "connectNamePlaceholder": "Boutique web du centre",
+    "connectAccountLabel": "Compte de la boutique",
+    "connectAccountPlaceholder": "shop.myshopify.com",
+    "connectCurrencyLabel": "Devise",
+    "secretBody": "Enregistrez ce secret de signature auprès de la boutique maintenant — il est scellé et ne s'affichera plus.",
+    "toast": {
+      "loadFailed": "Les canaux ne se sont pas chargés (statut {status}).",
+      "actionFailed": "L'action ne s'est pas terminée (statut {status}).",
+      "paused": "Canal suspendu.",
+      "resumed": "Canal repris.",
+      "disconnected": "Canal déconnecté.",
+      "connected": "Boutique connectée.",
+      "createFailed": "La boutique ne s'est pas connectée (statut {status})."
+    }
+  },
+  "workspace": {
+    "back": "Canaux",
+    "tabs": {
+      "overview": "Aperçu",
+      "activity": "Activité",
+      "settings": "Paramètres"
+    },
+    "attentionBanner": "{count, plural, one {# livraison demande} other {# livraisons demandent}} attention — voyez l'onglet Activité.",
+    "healthTitle": "État de synchronisation",
+    "healthEmpty": "Aucun flux ne rend compte pour l'instant. L'état apparaît quand le connecteur tourne.",
+    "recentTitle": "Livraisons récentes",
+    "recentEmpty": "Aucune livraison pour l'instant. Le premier webhook de la boutique apparaît ici.",
+    "settingsHint": "Comptes comptables et emplacements de stock de ce canal. Les changements valent pour les nouvelles commandes ; l'historique n'est jamais réécrit."
+  },
+  "activity": {
+    "loading": "Chargement des livraisons…",
+    "loadFailedTitle": "Les livraisons ne se sont pas chargées",
+    "retry": "Réessayer",
+    "filterLabel": "Filtrer par statut",
+    "filters": {
+      "all": "Toutes",
+      "pending": "En attente",
+      "failed": "Échouées",
+      "dead": "Classées",
+      "processed": "Traitées"
+    },
+    "columns": {
+      "received": "Reçue",
+      "topic": "Livraison",
+      "status": "Statut",
+      "error": "Problème"
+    },
+    "emptyTitle": "Aucune livraison dans ce filtre",
+    "emptyBody": "Les livraisons de la boutique apparaissent ici avec leur vérification et leur état.",
+    "replaySelected": "Rejouer {count, plural, one {# livraison} other {# livraisons}}",
+    "replayOne": "Rejouer",
+    "replayTitle": "Rejouer {count, plural, one {# livraison} other {# livraisons}} ?",
+    "replayBody": "Les livraisons repassent par le connecteur. Ce qui est déjà appliqué reste appliqué — rejouer est idempotent.",
+    "replayConfirm": "Rejouer",
+    "status": {
+      "pending": "En attente",
+      "processing": "En traitement",
+      "processed": "Traitée",
+      "ignored": "Ignorée",
+      "failed": "Échouée",
+      "dead": "Classée"
+    },
+    "toast": {
+      "loadFailed": "Les livraisons ne se sont pas chargées (statut {status}).",
+      "replayFailed": "La relecture ne s'est pas terminée (statut {status}).",
+      "replayed": "{count, plural, one {# livraison} other {# livraisons}} remise(s) en file."
+    }
+  },
+  "status": {
+    "draft": "Brouillon",
+    "connecting": "Connexion en cours",
+    "active": "Actif",
+    "paused": "Suspendu",
+    "disconnecting": "Déconnexion en cours",
+    "disconnected": "Déconnecté",
+    "error": "Erreur"
+  },
+  "links": {
+    "unlinkTitle": "Dissocier {externalId} ?",
+    "unlinkBody": "L'objet {provider} du compte {externalAccount} subsiste, mais OpenBooks cesse de le rattacher ici.",
+    "unlinkConfirm": "Dissocier",
+    "unlink": "Dissocier",
+    "emptyBody": "Aucun identifiant externe pour l'instant. Les identités de boutique et de prestataire rattachées apparaissent ici.",
+    "toast": {
+      "unlinkFailed": "La dissociation ne s'est pas terminée (statut {status}).",
+      "unlinked": "Identifiant externe dissocié."
+    }
+  }
+}
