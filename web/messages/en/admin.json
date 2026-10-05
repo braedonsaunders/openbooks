@@ -3046,7 +3046,7 @@
           "systemRule": {
             "title": "Allocation kernel rule",
             "body": "Each posting above is built by the engine-owned allocation rule {key} (version {version}, effective {date}, definition {hash}). It mirrors this policy and the published rate card, so it cannot be edited or deleted here — change the policy or publish new rates instead.",
-            "noVersion": "No rule version is in force: the policy is not an active net-zero pair or the hourly rate card is empty. Postings resume through the kernel once both hold.",
+            "noVersion": "No rule version is in force: the policy is not an active net-zero pair or the hourly rate card is empty. Postings resume once both hold.",
             "viewRule": "View in Allocations"
           }
         },

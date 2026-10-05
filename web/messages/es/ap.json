@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Facturas de proveedor",
-    "description": "Facturas y notas de crédito de proveedor — sus cuentas por pagar: borrador → aprobación → contabilizadas a través del kernel.",
+    "description": "Facturas y notas de crédito de proveedor — sus cuentas por pagar: borrador → aprobación → contabilizadas.",
     "searchPlaceholder": "Buscar facturas, notas de crédito, proveedores, referencias…",
     "columns": {
       "number": "Número",

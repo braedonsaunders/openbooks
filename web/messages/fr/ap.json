@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Factures fournisseurs",
-    "description": "Factures et notes de crédit fournisseurs — vos comptes fournisseurs : brouillon → approbation → comptabilisées par le noyau.",
+    "description": "Factures et notes de crédit fournisseurs — vos comptes fournisseurs : brouillon → approbation → comptabilisées.",
     "searchPlaceholder": "Rechercher factures, notes de crédit, fournisseurs, réf.…",
     "columns": {
       "number": "Numéro",

@@ -2914,7 +2914,7 @@
           "systemRule": {
             "title": "Règle noyau de répartition",
             "body": "Chaque comptabilisation ci-dessus est construite par la règle de répartition appartenant au moteur {key} (version {version}, en vigueur le {date}, définition {hash}). Elle reflète cette politique et la fiche tarifaire publiée : elle ne peut donc être ni modifiée ni supprimée ici — modifiez plutôt la politique ou publiez de nouveaux taux.",
-            "noVersion": "Aucune version de règle n’est en vigueur : la politique n’est pas une paire nette-zéro active ou la fiche des taux horaires est vide. Les comptabilisations reprendront via le noyau quand les deux conditions seront remplies.",
+            "noVersion": "Aucune version de règle n’est en vigueur : la politique n’est pas une paire nette-zéro active ou la fiche des taux horaires est vide. Les comptabilisations reprendront quand les deux conditions seront remplies.",
             "viewRule": "Voir dans Répartitions"
           }
         },

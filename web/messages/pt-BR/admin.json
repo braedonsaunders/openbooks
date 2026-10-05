@@ -3046,7 +3046,7 @@
           "systemRule": {
             "title": "Regra central de rateio",
             "body": "Cada lançamento acima é construído pela regra de rateio {key} do motor (versão {version}, vigente em {date}, definição {hash}). Ela espelha esta política e o cartão publicado, então não pode ser editada nem excluída aqui — mude a política ou publique novas taxas.",
-            "noVersion": "Sem versão de regra vigente: a política não é um par líquido-zero ativo ou o cartão de taxas horárias está vazio. Lançamentos retomam pelo núcleo quando ambos valerem.",
+            "noVersion": "Sem versão de regra vigente: a política não é um par líquido-zero ativo ou o cartão de taxas horárias está vazio. Lançamentos retomam quando ambos valerem.",
             "viewRule": "Ver em Rateios"
           }
         },

@@ -2,8 +2,8 @@
   "list": {
     "title": "Invoices",
     "cashTitle": "Cash sales",
-    "cashDescription": "Paid-at-sale receipts and refunds — money in the till, no receivable: draft → tendered → posted through the kernel.",
-    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted through the kernel.",
+    "cashDescription": "Paid-at-sale receipts and refunds — money in the till, no receivable: draft → tendered → posted.",
+    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted.",
     "searchPlaceholder": "Search invoices, credits, customers, refs…",
     "emptyTitle": "No invoices yet",
     "emptyDescription": "Enter the first customer invoice or credit memo to start the AR workflow.",

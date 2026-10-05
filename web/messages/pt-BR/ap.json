@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Contas a pagar",
-    "description": "Contas a pagar e memorandos de crédito de fornecedores — suas contas a pagar: rascunho → aprovação → lançado pelo kernel.",
+    "description": "Contas a pagar e memorandos de crédito de fornecedores — suas contas a pagar: rascunho → aprovação → aprovados.",
     "searchPlaceholder": "Buscar contas, créditos, fornecedores, refs…",
     "columns": {
       "number": "Número",

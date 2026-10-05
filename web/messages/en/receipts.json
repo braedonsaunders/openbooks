@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Customer Payments",
-    "description": "Customer payments received and applied to open invoices through the kernel.",
+    "description": "Customer payments received and applied to open invoices.",
     "newReceipt": "New customer payment",
     "newCollectionRun": "New collection run",
     "tabs": { "receipts": "Receipts", "collections": "Direct-debit runs" }

@@ -3,7 +3,7 @@
     "title": "Factures clients",
     "cashTitle": "Ventes au comptant",
     "cashDescription": "Reçus payés immédiatement et remboursements — de l’argent en caisse, sans créances.",
-    "description": "Factures et notes de crédit clients — vos comptes clients : brouillon → approbation → comptabilisées par le noyau.",
+    "description": "Factures et notes de crédit clients — vos comptes clients : brouillon → approbation → comptabilisées.",
     "searchPlaceholder": "Rechercher factures, notes de crédit, clients, réf.…",
     "emptyTitle": "Aucune facture client pour l’instant",
     "emptyDescription": "Saisissez la première facture ou note de crédit client pour lancer le flux des comptes clients.",

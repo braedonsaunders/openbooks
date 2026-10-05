@@ -2914,7 +2914,7 @@
           "systemRule": {
             "title": "Regla de distribución del núcleo",
             "body": "Cada contabilización anterior la construye la regla de distribución propia del motor {key} (versión {version}, vigente el {date}, definición {hash}). Refleja esta política y la tarjeta de tasas publicada, por lo que no puede editarse ni eliminarse aquí: cambie la política o publique nuevas tasas.",
-            "noVersion": "Ninguna versión de regla está vigente: la política no es un par activo de suma cero o la tarjeta de tasas por hora está vacía. Las contabilizaciones se reanudan por el núcleo cuando ambas condiciones se cumplan.",
+            "noVersion": "Ninguna versión de regla está vigente: la política no es un par activo de suma cero o la tarjeta de tasas por hora está vacía. Las contabilizaciones se reanudan cuando ambas condiciones se cumplan.",
             "viewRule": "Ver en Distribuciones"
           }
         },

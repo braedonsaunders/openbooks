@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Bills",
-    "description": "Vendor bills and credit memos — your accounts payable: draft → approval → posted through the kernel.",
+    "description": "Vendor bills and credit memos — your accounts payable: draft → approval → posted.",
     "searchPlaceholder": "Search bills, credits, vendors, refs…",
     "columns": {
       "number": "Number",
