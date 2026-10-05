@@ -59,6 +59,8 @@ interface LineRow extends Record<string, unknown> {
    * position it used to occupy.
    */
   clientKey: string
+  /** Persisted parent identity for row-scoped fulfillment controls; never sent by the draft serializer. */
+  persistedLineId: string
   itemId: string
   accountId: string
   description: string
@@ -328,6 +330,7 @@ function docHref(kind: string, id: string): string {
 
 const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   clientKey: crypto.randomUUID(),
+  persistedLineId: '',
   itemId: '',
   accountId: '',
   description: '',
@@ -400,6 +403,7 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     // Fresh client identity on every load (see the field comment): the
     // grid's React key must be unique among the live rows.
     clientKey: crypto.randomUUID(),
+    persistedLineId: lineText(l.id),
     itemId: lineText(l.item_id),
     accountId: lineText(l.account_id),
     description: lineText(l.description),
@@ -1427,6 +1431,32 @@ export function OrderDrawer({
         // tenant layouts predate the key, so placement alone would hide it.
         ...(warehouseColumn ? [warehouseColumn] : []),
         ...(promotionColumn ? [promotionColumn] : []),
+        ...(dropShipping && kind === 'sales_order' && isApproved ? [{
+          key: '_dropShip',
+          label: t('dropShip.routedLines'),
+          width: 'minmax(170px,1fr)',
+          type: 'readonly' as const,
+          render: (row: LineRow) => {
+            if (!row.persistedLineId || !stockedItemIds.has(row.itemId)) return null
+            const route = dropShipRoutes.find((candidate) => candidate.salesOrderLineId === row.persistedLineId)
+            return (
+              <span className="flex flex-wrap items-center gap-2 text-sm">
+                {route?.purchaseOrderId ? (
+                  <Link className="font-mono text-teal-700 hover:underline dark:text-teal-300" href={`/purchase-orders?order=${encodeURIComponent(route.purchaseOrderId)}`}>
+                    {t('dropShip.purchaseOrderLinked')}
+                  </Link>
+                ) : route ? <span className="text-slate-500 dark:text-slate-400">{t('dropShip.routed')}</span> : null}
+                {canRouteDropShip && !route ? (
+                  <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(row.persistedLineId, true)}>{t('dropShip.routeLine')}</Button>
+                ) : null}
+                {canRouteDropShip && route && !route.purchaseOrderLineId ? (
+                  <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(row.persistedLineId, false)}>{t('dropShip.unrouteLine')}</Button>
+                ) : null}
+              </span>
+            )
+          },
+        }] : []),
+
         ...segments.filter((segment) => segment.showOnLines).map((segment): LineGridColumn<LineRow> => ({
           key: `seg_${segment.key}`,
           label: segment.name,
@@ -1438,7 +1468,7 @@ export function OrderDrawer({
       ]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn, promotionColumn, customerSkuByItem, barcodeScanningEnabled, partyId],
+    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn, promotionColumn, customerSkuByItem, barcodeScanningEnabled, partyId, dropShipping, isApproved, stockedItemIds, dropShipRoutes, canRouteDropShip, busy],
   )
 
   const field = 'space-y-1.5'
@@ -1585,7 +1615,37 @@ export function OrderDrawer({
           </>
         ) : null
       }
+      keepRecordTabsMounted={['subscription']}
       detailTabs={createMode ? [] : [
+        ...(order.links.length > 0 ? [{
+          key: 'related',
+          label: t('linksTitle'),
+          content: (
+          <div className="space-y-2">
+            <Label>{t('linksTitle')}</Label>
+            <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+              {order.links.map((l) => (
+                <div key={`${l.direction}-${l.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {l.direction === 'from' ? t('linkCreatedFrom') : t('linkConvertedInto')}
+                  </span>
+                  <Link
+                    href={docHref(l.kind, l.id)}
+                    className="font-mono text-teal-700 hover:underline dark:text-teal-300"
+                  >
+                    {l.document_number}
+                  </Link>
+                  <span className="text-slate-400 dark:text-slate-500">{t('docKind', { kind: l.kind })}</span>
+                  <span className="flex-1" />
+                  <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
+                    {statusLabel(l.status)}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+          ),
+        }] : []),
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
@@ -1778,71 +1838,12 @@ export function OrderDrawer({
             onRowsChange={onRowsChange}
             emptyRow={() => emptyLine(segments)}
             getRowKey={(row, i) => row.clientKey !== '' ? row.clientKey : `row-${i}`}
-            cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID() })}
+            cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID(), persistedLineId: '' })}
             readOnly={!editable}
             formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
 
-        {dropShipping && kind === 'sales_order' && isApproved ? (
-          <section className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <Label>{t('dropShip.routedLines')}</Label>
-            {order.lines.filter((line) => line.item_id && stockedItemIds.has(String(line.item_id))).map((line) => {
-              const lineId = String(line.id ?? '')
-              const route = dropShipRoutes.find((row) => row.salesOrderLineId === lineId)
-              return (
-                <div key={lineId} className="flex items-center gap-3 text-sm">
-                  <span className="min-w-0 flex-1 truncate">
-                    {t('backorders.line', { line: Number(line.line_number ?? 0) })}: {String(line.item_name ?? line.description ?? '')}
-                  </span>
-                  {route?.purchaseOrderId ? (
-                    <Link className="font-mono text-teal-700 hover:underline dark:text-teal-300" href={`/purchase-orders?order=${encodeURIComponent(route.purchaseOrderId)}`}>
-                      {t('dropShip.purchaseOrderLinked')}
-                    </Link>
-                  ) : route ? (
-                    <span className="text-slate-500 dark:text-slate-400">{t('dropShip.routed')}</span>
-                  ) : null}
-                  {canRouteDropShip && !route ? (
-                    <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(lineId, true)}>
-                      {t('dropShip.routeLine')}
-                    </Button>
-                  ) : null}
-                  {canRouteDropShip && route && !route.purchaseOrderLineId ? (
-                    <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(lineId, false)}>
-                      {t('dropShip.unrouteLine')}
-                    </Button>
-                  ) : null}
-                </div>
-              )
-            })}
-          </section>
-        ) : null}
-
-        {order.links.length > 0 ? (
-          <div className="space-y-2">
-            <Label>{t('linksTitle')}</Label>
-            <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-              {order.links.map((l) => (
-                <div key={`${l.direction}-${l.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {l.direction === 'from' ? t('linkCreatedFrom') : t('linkConvertedInto')}
-                  </span>
-                  <Link
-                    href={docHref(l.kind, l.id)}
-                    className="font-mono text-teal-700 hover:underline dark:text-teal-300"
-                  >
-                    {l.document_number}
-                  </Link>
-                  <span className="text-slate-400 dark:text-slate-500">{t('docKind', { kind: l.kind })}</span>
-                  <span className="flex-1" />
-                  <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
-                    {statusLabel(l.status)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
     </TransactionDrawer>
   )
