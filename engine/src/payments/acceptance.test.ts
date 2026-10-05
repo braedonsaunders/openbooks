@@ -537,6 +537,84 @@ test("adyen webhook: success flags normalize boolean and case variants", () => {
   assert.equal(capsEvent.externalRef, "PSP-CAPS");
 });
 
+test("adyen webhook: a recurring contract with card detail keys the stable detail reference and refreshes", () => {
+  const keyBytes = Buffer.alloc(32, 19);
+  const secret = keyBytes.toString("base64");
+  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [{
+    pspReference: "PSP-CONTRACT-1",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "shopper-42",
+    eventCode: "RECURRING_CONTRACT",
+    additionalData: {
+      shopperReference: "shopper-42",
+      "recurring.recurringDetailReference": "DETAIL-9X2",
+      cardSummary: "0010",
+      expiryDate: "03/2030",
+      paymentMethodVariant: "visa",
+    },
+  }]);
+  const event = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: secret });
+  assert.ok(event);
+  assert.equal(event.setupCompleted, true);
+  // The stored method keys on Adyen's stable detail reference — not the
+  // notification's pspReference — so reissues refresh instead of duplicating.
+  assert.equal(event.setupRef, "DETAIL-9X2");
+  assert.equal(event.setupCustomerRef, "shopper-42");
+  assert.deepEqual(event.cardUpdaterRefresh, {
+    providerMethodId: "DETAIL-9X2",
+    brand: "visa",
+    last4: "0010",
+    expMonth: 3,
+    expYear: 2030,
+  });
+});
+
+test("adyen webhook: a recurring contract without card detail keeps the notification reference", () => {
+  const keyBytes = Buffer.alloc(32, 23);
+  const secret = keyBytes.toString("base64");
+  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [{
+    pspReference: "PSP-CONTRACT-2",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "shopper-43",
+    eventCode: "RECURRING_CONTRACT",
+    additionalData: { shopperReference: "shopper-43" },
+  }]);
+  const event = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: secret });
+  assert.ok(event);
+  assert.equal(event.setupCompleted, true);
+  assert.equal(event.setupRef, "PSP-CONTRACT-2");
+  assert.equal(event.cardUpdaterRefresh, null);
+});
+
+test("adyen webhook: a recurring contract with an unreadable expiry is quarantined", () => {
+  const keyBytes = Buffer.alloc(32, 29);
+  const secret = keyBytes.toString("base64");
+  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [{
+    pspReference: "PSP-CONTRACT-3",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "shopper-44",
+    eventCode: "RECURRING_CONTRACT",
+    additionalData: {
+      shopperReference: "shopper-44",
+      "recurring.recurringDetailReference": "DETAIL-BAD",
+      cardSummary: "0010",
+      expiryDate: "13/2030",
+    },
+  }]);
+  const captured = captureConsoleError();
+  let delivery;
+  try {
+    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: secret });
+  } finally {
+    captured.restore();
+  }
+  assert.equal(delivery.signatureValid, true);
+  assert.deepEqual(delivery.events, [], "an unreadable updater expiry must not refresh or claim a method");
+});
+
 test("gocardless webhook: raw-body HMAC verified", () => {
   const secret = "gc-whsec";
   const body = JSON.stringify({
