@@ -347,17 +347,10 @@ export function unsupportedAutomationActionRefusal(action: AutomationAction): st
       `so no flow would ever start — remove the start_flow action and configure the flow's own trigger instead`
     );
   }
-  if (action.kind === "webhook") {
-    // There is no outbound webhook transport: no outbox kind, no worker,
-    // no endpoint caller anywhere in the engine carries automation
-    // webhooks (the only webhook code is inbound payments). Enqueuing the
-    // call as a flow email with no recipients fails every run with an
-    // email-validation error, so the honest behavior is a named refusal.
-    return (
-      `webhook action to endpoint '${action.endpointKey}' cannot run: automations have no outbound webhook transport, ` +
-      `so the call would never leave OpenBooks — remove the webhook action and use send_notification, send_email, or create_task instead`
-    );
-  }
+  // The webhook action delivers through the outbound webhook transport
+  // (endpoints in Settings → Developers → Webhooks): it always publishes,
+  // and execution refuses by name when the gate is off or the named
+  // endpoint is missing or disabled.
   return null;
 }
 
