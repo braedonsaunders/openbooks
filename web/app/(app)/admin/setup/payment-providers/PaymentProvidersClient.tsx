@@ -5,11 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
 import { fetchAction, type ActionError } from "@braedonsaunders/appkit-errors";
+import { SwitchField } from "../../../../../components/switch";
 import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
 import { StripeBillingImport } from "./StripeBillingImport";
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
+
+type AutomationProviderKey = "paypal" | "shopify_payments";
 
 type Config = {
   provider: ProviderKey;
@@ -22,6 +25,23 @@ type Config = {
   settings: Record<string, unknown>;
   hasSecrets: boolean;
   lastError: string | null;
+  refundPolicy: "automatic" | "review" | null;
+  defaultDisputedFundsAccountId: string | null;
+  defaultChargebackLossAccountId: string | null;
+  defaultDisputeFeeAccountId: string | null;
+};
+
+/** Settlement-automation half of a provider that never takes hosted checkout:
+ * policy and dispute posting accounts only, saved through the settlements
+ * configuration endpoint. */
+type AutomationConfig = {
+  provider: AutomationProviderKey;
+  displayName: string;
+  isEnabled: boolean;
+  refundPolicy: "automatic" | "review" | null;
+  defaultDisputedFundsAccountId: string | null;
+  defaultChargebackLossAccountId: string | null;
+  defaultDisputeFeeAccountId: string | null;
 };
 
 type Account = { id: string; number: string | null; name: string };
@@ -43,8 +63,10 @@ type Rule = {
 
 type Data = {
   configs: Config[];
+  automationConfigs: AutomationConfig[];
   bankAccounts: Account[];
   incomeAccounts: Account[];
+  postingAccounts: Account[];
   surchargeRules: Rule[];
 };
 
@@ -52,6 +74,11 @@ const PROVIDERS: { key: ProviderKey; label: string; merchantAccount?: boolean }[
   { key: "stripe", label: "Stripe" },
   { key: "adyen", label: "Adyen", merchantAccount: true },
   { key: "gocardless", label: "GoCardless (bank debit)" },
+];
+
+const AUTOMATION_PROVIDERS: { key: AutomationProviderKey; nameKey: string; descriptionKey: string; channelsNote: boolean }[] = [
+  { key: "paypal", nameKey: "paypalName", descriptionKey: "paypalDescription", channelsNote: false },
+  { key: "shopify_payments", nameKey: "shopifyName", descriptionKey: "shopifyDescription", channelsNote: true },
 ];
 
 export function PaymentProvidersClient() {
@@ -109,6 +136,27 @@ export function PaymentProvidersClient() {
     return saved;
   }
 
+  // Settlement-automation saves travel through the settlements configuration
+  // endpoint (banking domain), not the acceptance endpoint above: the two
+  // cards own only policy and posting accounts, never hosted checkout.
+  async function postSettlement(body: Record<string, unknown>) {
+    setError(null);
+    setNotice(null);
+    let saved = false;
+    const fallbackMessage = tc("feedback.somethingWentWrong");
+    await execute(() => fetchAction("/api/psp/settlements", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }), {
+      fallbackMessage,
+      onOk: () => { saved = true; setNotice(t("saved")); },
+      onRefused: (failure) => setError(actionFailureMessage(failure, fallbackMessage)),
+    });
+    if (saved) await load();
+    return saved;
+  }
+
   if (!data) return loading
     ? <p className="text-sm text-slate-500">…</p>
     : <div className="space-y-2" role="alert"><p className="text-sm text-red-600">{error ?? tc("feedback.somethingWentWrong")}</p><Button variant="outline" onClick={() => { setLoading(true); void load(); }}>{tc("actions.retry")}</Button></div>;
@@ -128,8 +176,21 @@ export function PaymentProvidersClient() {
           provider={p}
           config={data.configs.find((c) => c.provider === p.key)}
           bankAccounts={data.bankAccounts}
+          postingAccounts={data.postingAccounts}
           rules={data.surchargeRules.filter((r) => r.isActive)}
           onSave={post}
+          busy={busy}
+          t={t}
+        />
+      ))}
+
+      {AUTOMATION_PROVIDERS.map((p) => (
+        <AutomationProviderCard
+          key={p.key}
+          providerKey={p.key}
+          config={data.automationConfigs.find((c) => c.provider === p.key)}
+          postingAccounts={data.postingAccounts}
+          onSave={postSettlement}
           busy={busy}
           t={t}
         />
@@ -150,6 +211,7 @@ function ProviderCard({
   provider,
   config,
   bankAccounts,
+  postingAccounts,
   rules,
   onSave,
   busy,
@@ -158,6 +220,7 @@ function ProviderCard({
   provider: { key: ProviderKey; label: string; merchantAccount?: boolean };
   config: Config | undefined;
   bankAccounts: Account[];
+  postingAccounts: Account[];
   rules: Rule[];
   onSave: (body: Record<string, unknown>) => Promise<boolean>;
   busy: boolean;
@@ -172,6 +235,10 @@ function ProviderCard({
   );
   const [bankAccountId, setBankAccountId] = useState(config?.defaultBankAccountId ?? "");
   const [surchargeRuleId, setSurchargeRuleId] = useState(config?.surchargeRuleId ?? "");
+  const [reviewRequired, setReviewRequired] = useState((config?.refundPolicy ?? "automatic") === "review");
+  const [disputedFundsAccountId, setDisputedFundsAccountId] = useState(config?.defaultDisputedFundsAccountId ?? "");
+  const [chargebackLossAccountId, setChargebackLossAccountId] = useState(config?.defaultChargebackLossAccountId ?? "");
+  const [disputeFeeAccountId, setDisputeFeeAccountId] = useState(config?.defaultDisputeFeeAccountId ?? "");
   const tc = useTranslations("common");
   const { busy: testing, execute } = useAppAction();
   const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
@@ -256,6 +323,18 @@ function ProviderCard({
               ))}
             </Select>
           </div>
+          <AutomationFields
+            reviewRequired={reviewRequired}
+            onReviewToggle={() => setReviewRequired((v) => !v)}
+            disputedFundsAccountId={disputedFundsAccountId}
+            onDisputedFundsChange={setDisputedFundsAccountId}
+            chargebackLossAccountId={chargebackLossAccountId}
+            onChargebackLossChange={setChargebackLossAccountId}
+            disputeFeeAccountId={disputeFeeAccountId}
+            onDisputeFeeChange={setDisputeFeeAccountId}
+            postingAccounts={postingAccounts}
+            t={t}
+          />
           <div className="space-y-1.5 sm:col-span-2">
             <Label>{t("webhookUrl")}</Label>
             <div className="flex items-center gap-2">
@@ -299,6 +378,10 @@ function ProviderCard({
                 defaultBankAccountId: bankAccountId || null,
                 publishableKey: publishableKey || null,
                 surchargeRuleId: surchargeRuleId || null,
+                refundPolicy: reviewRequired ? "review" : "automatic",
+                defaultDisputedFundsAccountId: disputedFundsAccountId || null,
+                defaultChargebackLossAccountId: chargebackLossAccountId || null,
+                defaultDisputeFeeAccountId: disputeFeeAccountId || null,
                 settings: provider.merchantAccount ? { merchantAccount } : {},
                 apiKey: apiKey || null,
                 webhookSecret: webhookSecret || null,
@@ -309,6 +392,169 @@ function ProviderCard({
           </Button>
         </div>
         {provider.key === "stripe" && config?.hasSecrets ? <StripeBillingImport /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The refunds-and-disputes half of a provider card, shared by hosted-checkout
+ * providers and automation-only ones: one review switch and the three posting
+ * accounts the automation journals through. Plain language first — the
+ * accounting role follows each label as secondary text.
+ */
+function AutomationFields({
+  reviewRequired,
+  onReviewToggle,
+  disputedFundsAccountId,
+  onDisputedFundsChange,
+  chargebackLossAccountId,
+  onChargebackLossChange,
+  disputeFeeAccountId,
+  onDisputeFeeChange,
+  postingAccounts,
+  t,
+}: {
+  reviewRequired: boolean;
+  onReviewToggle: () => void;
+  disputedFundsAccountId: string;
+  onDisputedFundsChange: (value: string) => void;
+  chargebackLossAccountId: string;
+  onChargebackLossChange: (value: string) => void;
+  disputeFeeAccountId: string;
+  onDisputeFeeChange: (value: string) => void;
+  postingAccounts: Account[];
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const pickers = [
+    {
+      label: t("disputedFundsAccount"),
+      hint: t("disputedFundsHint"),
+      value: disputedFundsAccountId,
+      onChange: onDisputedFundsChange,
+    },
+    {
+      label: t("chargebackLossAccount"),
+      hint: t("chargebackLossHint"),
+      value: chargebackLossAccountId,
+      onChange: onChargebackLossChange,
+    },
+    {
+      label: t("disputeFeeAccount"),
+      hint: t("disputeFeeHint"),
+      value: disputeFeeAccountId,
+      onChange: onDisputeFeeChange,
+    },
+  ] as const;
+  return (
+    <>
+      <div className="border-t border-slate-100 pt-4 sm:col-span-2 dark:border-slate-800">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("automationTitle")}</h3>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("automationHint")}</p>
+      </div>
+      <div className="sm:col-span-2">
+        <SwitchField
+          label={t("refundReviewSwitch")}
+          description={t("refundReviewHint")}
+          on={reviewRequired}
+          onToggle={onReviewToggle}
+        />
+      </div>
+      {pickers.map((picker) => (
+        <div key={picker.label} className="space-y-1.5">
+          <Label>{picker.label}</Label>
+          <Select value={picker.value} onChange={(e) => picker.onChange(e.target.value)}>
+            <option value="">—</option>
+            {postingAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.number ? `${a.number} · ` : ""}
+                {a.name}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{picker.hint}</p>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
+ * PayPal and Shopify Payments never take hosted checkout: no keys, no
+ * surcharge rules, no webhook URL. Their card owns the settlement-automation
+ * half only — enablement, review policy and dispute posting accounts.
+ * Shopify settles through the Channels workspace; this card only prepares
+ * what its payouts post into.
+ */
+function AutomationProviderCard({
+  providerKey,
+  config,
+  postingAccounts,
+  onSave,
+  busy,
+  t,
+}: {
+  providerKey: AutomationProviderKey;
+  config: AutomationConfig | undefined;
+  postingAccounts: Account[];
+  onSave: (body: Record<string, unknown>) => Promise<boolean>;
+  busy: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const [automationEnabled, setAutomationEnabled] = useState(config?.isEnabled ?? false);
+  const [reviewRequired, setReviewRequired] = useState((config?.refundPolicy ?? "automatic") === "review");
+  const [disputedFundsAccountId, setDisputedFundsAccountId] = useState(config?.defaultDisputedFundsAccountId ?? "");
+  const [chargebackLossAccountId, setChargebackLossAccountId] = useState(config?.defaultChargebackLossAccountId ?? "");
+  const [disputeFeeAccountId, setDisputeFeeAccountId] = useState(config?.defaultDisputeFeeAccountId ?? "");
+  const name = t(providerKey === "paypal" ? "paypalName" : "shopifyName");
+  const description = t(providerKey === "paypal" ? "paypalDescription" : "shopifyDescription");
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900 dark:text-white">{name}</h2>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={automationEnabled} onChange={(e) => setAutomationEnabled(e.target.checked)} />
+            {t("enableAutomation")}
+          </label>
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+        {providerKey === "shopify_payments" ? (
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t("shopifyChannelsNote")}</p>
+        ) : null}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <AutomationFields
+            reviewRequired={reviewRequired}
+            onReviewToggle={() => setReviewRequired((v) => !v)}
+            disputedFundsAccountId={disputedFundsAccountId}
+            onDisputedFundsChange={setDisputedFundsAccountId}
+            chargebackLossAccountId={chargebackLossAccountId}
+            onChargebackLossChange={setChargebackLossAccountId}
+            disputeFeeAccountId={disputeFeeAccountId}
+            onDisputeFeeChange={setDisputeFeeAccountId}
+            postingAccounts={postingAccounts}
+            t={t}
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void onSave({
+                action: "saveConfig",
+                provider: providerKey,
+                isEnabled: automationEnabled,
+                refundPolicy: reviewRequired ? "review" : "automatic",
+                defaultDisputedFundsAccountId: disputedFundsAccountId || null,
+                defaultChargebackLossAccountId: chargebackLossAccountId || null,
+                defaultDisputeFeeAccountId: disputeFeeAccountId || null,
+              })
+            }
+          >
+            {t("save")}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
