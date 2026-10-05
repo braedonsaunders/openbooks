@@ -7,7 +7,9 @@ import { nextPeriodAfter } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payrollSettings } from "@openbooks/engine/src/payroll/run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/src/payroll/readiness.ts'
-import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
+import { packSlotState, payrollTaxYearForDate } from '@openbooks/engine/src/payroll/packs.ts'
+import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { flowRates } from '../fx-presentation'
 import {
   missingPayrollControlAccounts,
   type MissingPayrollControlAccount,
@@ -80,6 +82,7 @@ export interface PreviousRun {
 }
 
 export interface PayrollHome {
+  /** Latest current tax year across installed packs; run/YTD counts cover every installed pack's current year. */
   taxYear: number
   activeEmployees: number
   /** Committed runs in the current tax year (Harmony's "30 of 52"). */
@@ -105,6 +108,39 @@ export interface PayrollHome {
 
 const EXCEPTION_LIMIT = 6
 
+/**
+ * The current tax year of every installed payroll pack, per the PACK's own
+ * year definition (HMRC's 6 April, the ATO's 1 July) — never the calendar
+ * year, which silently splits one statutory year across two for fiscal-year
+ * packs. An undeclared country contributes nothing rather than refusing the
+ * whole surface; with no installed pack (or no readable settings) the
+ * calendar year stands in, the pre-pack behaviour for pack-less orgs.
+ */
+async function currentPayrollTaxYears(
+  orgId: string,
+  payrollBlob: Record<string, unknown>,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+  today: string,
+): Promise<number[]> {
+  try {
+    const countries = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds)
+    const years = new Set<number>()
+    for (const country of countries) {
+      try {
+        years.add(payrollTaxYearForDate(country, today).taxYear)
+      } catch (error) {
+        if (!(error instanceof PayrollError)) throw error
+      }
+    }
+    if (years.size > 0) return [...years].sort((a, b) => a - b)
+  } catch (error) {
+    // A caller who cannot read payroll settings keeps the calendar year
+    // below; anything else is a real defect and still throws.
+    if (!(error instanceof PayrollError)) throw error
+  }
+  return [Number(today.slice(0, 4))]
+}
+
 function scheduleScopeFilter(
   orgId: string,
   allowedSubsidiaryIds: PayrollSubsidiaryScope,
@@ -125,9 +161,18 @@ export async function payrollHome(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayrollHome> {
   const today = await businessToday(orgId)
-  const taxYear = Number(today.slice(0, 4))
+  // Raw payroll settings blob (also the installed-pack marker for the
+  // checklist walk below) — read up front: the tax-year resolution needs
+  // the installed packs before the YTD queries are built.
+  const payrollBlob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
+    select settings->'payroll' as p from orgs where id = ${orgId}`)).rows[0]?.p ?? {}
+  const taxYears = await currentPayrollTaxYears(orgId, payrollBlob, allowedSubsidiaryIds, today)
+  // The headline year is the latest current year across installed packs;
+  // the counts below cover every installed pack's current year.
+  const taxYear = Math.max(...taxYears)
+  const yearList = sql.join(taxYears.map((year) => sql`${year}`), sql`, `)
 
-  const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings, blobRes] = (await Promise.all([
+  const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.
     db.execute<PayrollScheduleHomeRow>(sql`
       select s.id, s.name, s.frequency, s.periods_per_year,
@@ -174,7 +219,7 @@ export async function payrollHome(
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}) as active_employees,
         (select count(*) from pay_runs r
           join documents d on d.id = r.document_id and d.org_id = r.org_id
-         where r.org_id = ${orgId} and r.tax_year = ${taxYear} and r.run_status = 'committed'
+         where r.org_id = ${orgId} and r.tax_year in (${yearList}) and r.run_status = 'committed'
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as runs_this_year,
         (select count(*) from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
           where r.org_id = ${orgId} and d.status in ('draft', 'approved')
@@ -184,16 +229,20 @@ export async function payrollHome(
          where r.org_id = ${orgId}
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as total_runs
     `),
-    // YTD = committed stubs for the current tax year (matches the engine's YTD basis).
+    // YTD = committed stubs for the current tax year of every installed
+    // pack (matches the engine's YTD basis), grouped by stub currency and
+    // pay date — translated below, never summed raw across currencies.
     db.execute(sql`
-      select coalesce(sum(st.gross), 0) as gross,
+      select st.currency_code as currency, st.pay_date::text as pay_date,
+             coalesce(sum(st.gross), 0) as gross,
              coalesce(sum(st.net_pay), 0) as net,
              coalesce(sum(st.employer_cost), 0) as employer_cost
         from pay_stubs st
         join pay_runs r on r.document_id = st.pay_run_document_id and r.org_id = st.org_id and r.run_status = 'committed'
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where st.org_id = ${orgId} and st.tax_year = ${taxYear}
+       where st.org_id = ${orgId} and st.tax_year in (${yearList})
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       group by st.currency_code, st.pay_date::text
     `),
     // Active employees with no active payroll profile.
     db.execute(sql`
@@ -285,8 +334,24 @@ export async function payrollHome(
 
   const prev = prevRes.rows[0]
   const stats = statsRes.rows[0] ?? {}
-  const ytd = ytdRes.rows[0] ?? {}
-  const ytdMoney = payrollYtdMoneyAmounts(ytd as { gross?: string | null; net?: string | null; employer_cost?: string | null })
+  // YTD stubs translate at their pay-date spot into the presentation
+  // currency — flows doctrine, same as the customer pipeline. Missing
+  // coverage fails closed rather than dropping (or, worse, raw-adding) a
+  // currency.
+  const ytdFx = await flowRates(
+    orgId,
+    ytdRes.rows.map((r) => ({ func: (r.currency ?? null) as string | null, date: String(r.pay_date).slice(0, 10) })),
+  )
+  let ytdGross = '0'
+  let ytdNet = '0'
+  let ytdEmployerCost = '0'
+  for (const r of ytdRes.rows) {
+    const rate = ytdFx.rateAt((r.currency ?? null) as string | null, String(r.pay_date).slice(0, 10))
+    ytdGross = add(ytdGross, mulDecimal(String(r.gross ?? '0'), rate))
+    ytdNet = add(ytdNet, mulDecimal(String(r.net ?? '0'), rate))
+    ytdEmployerCost = add(ytdEmployerCost, mulDecimal(String(r.employer_cost ?? '0'), rate))
+  }
+  const ytdMoney = payrollYtdMoneyAmounts({ gross: ytdGross, net: ytdNet, employer_cost: ytdEmployerCost })
   const defaultSchedule = schedules.find((s) => s.isDefault) ?? schedules[0]
 
   // Setup checklist: the same packSlotState walk the run
@@ -298,8 +363,7 @@ export async function payrollHome(
   // employer is never told to map Québec accounts here either.
   let missingSettings: MissingPayrollControlAccount[] = []
   if (settings) {
-    const blob = blobRes.rows[0]?.p ?? {}
-    const installed = await installedPayrollCountries(orgId, blob, allowedSubsidiaryIds)
+    const installed = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds)
     const regions = await payrollPopulationRegions(orgId, allowedSubsidiaryIds)
     const states = await packSlotState(orgId, installed, settings as unknown as Record<string, unknown>, regions)
     missingSettings = missingPayrollControlAccounts({
