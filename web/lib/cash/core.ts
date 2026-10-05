@@ -264,6 +264,11 @@ export interface CategoryContext {
   arWeekly: Record<string, Money>;
   apWeekly: Record<string, Money>;
   cashStart: Money;
+  /**
+   * The organization's forecast-model knobs. Loaders pass the resolved
+   * config; direct callers may omit it and forecast on the spec defaults.
+   */
+  model?: ForecastModelParams;
   /** Active subsidiary view — SQL-backed strategies scope their history to it
    * (manual/formula strategies are org-level models and ignore it). */
   subIds?: string[];
@@ -376,6 +381,28 @@ export function forecastModelParams(
 /** The organization's forecast-model knobs (one analytics-config read). */
 export async function cashflowModel(orgId: string): Promise<ForecastModelParams> {
   return forecastModelParams(await analyticsConfig(orgId, "cashflow"));
+}
+
+/**
+ * Blend a card's median payment with its current-cycle trajectory estimate.
+ * The median takes the configured weight; the trajectory takes the exact
+ * remainder — never a float subtraction (1 - 0.7 in binary is
+ * 0.30000000000000004, which would corrupt the blend).
+ */
+export function blendTrajectoryPayment(median: Money, trajectory: Money, medianWeight: number): Money {
+  const medianPart = multiplyMoney(median, String(medianWeight));
+  const trajectoryPart = multiplyMoney(trajectory, subtractMoney("1", String(medianWeight)));
+  return addMoney(medianPart, trajectoryPart);
+}
+
+/**
+ * Square an outlier sigma multiple exactly: the variance filter compares
+ * squared ratios, so a 2σ filter squares to 4 — computed in decimal, never
+ * as a float product.
+ */
+export function outlierVarianceFactor(sigma: number): Money {
+  const exact = String(sigma);
+  return multiplyMoney(exact, exact);
 }
 
 /** The trailing payment-history window, in months (one analytics-config read). */
@@ -849,6 +876,10 @@ export async function categoryWeekly(
   // evaluator returns a canonical numeric(19,4) string, never a float.
   const weekly = new Array<Money>(n).fill(ZERO_MONEY);
   const weeklyExact = new Array<Money | null>(n).fill(null);
+  // The forecast-model knobs ride the context the loaders resolved — one
+  // config read per load, not one per category — with the spec defaults
+  // behind direct callers that never resolved one.
+  const model = forecastModelParams(context.model ?? {});
   const asOf = parseISO(asOfIso);
   const tStart = parseISO(weekStarts[0]!);
   const tEnd = addDays(parseISO(weekStarts[n - 1]!), 6);
@@ -1198,7 +1229,7 @@ export async function categoryWeekly(
 
     // Primary payment day (mode; median when all unique).
     const primaryDays = completedMonths.filter((m) => m.largestPaymentDay !== null).map((m) => m.largestPaymentDay!);
-    let detectedPaymentDay = 24;
+    let detectedPaymentDay = model.cardDefaultPayDay;
     if (primaryDays.length > 0) {
       const counts = new Map<number, number>();
       for (const d of primaryDays) counts.set(d, (counts.get(d) ?? 0) + 1);
@@ -1217,7 +1248,7 @@ export async function categoryWeekly(
       : compareMoney(medianPayment, ZERO_MONEY) > 0 ? multiplyMoney(medianPayment, "0.5") : normalizeMoneyValue("10000");
     const significantPayments = days.filter((d) => compareMoney(d.paid, effectiveThreshold) > 0).sort((a, b) => b.date.getTime() - a.date.getTime());
     const lastPaymentDate = significantPayments[0]?.date ?? null;
-    const daysSinceLastPayment = lastPaymentDate ? Math.ceil((asOf.getTime() - lastPaymentDate.getTime()) / MS_DAY) : 30;
+    const daysSinceLastPayment = lastPaymentDate ? Math.ceil((asOf.getTime() - lastPaymentDate.getTime()) / MS_DAY) : model.cardStalePaymentDays;
 
     let nextPaymentDate = new Date(asOf);
     nextPaymentDate.setUTCDate(Math.min(detectedPaymentDay, daysInMonthUTC(nextPaymentDate)));
@@ -1228,7 +1259,7 @@ export async function categoryWeekly(
     nextPaymentDate = businessDay(nextPaymentDate);
 
     // Projected growth to statement close, then trajectory/median blend.
-    const daysFromPaymentToStatementClose = 27;
+    const daysFromPaymentToStatementClose = model.cardStatementCloseDays;
     const cycleProgress = compareMoney(medianPayment, ZERO_MONEY) > 0
       ? compareMoney(totalCurrentBalance, medianPayment) >= 0
         ? "1.0000"
@@ -1243,14 +1274,14 @@ export async function categoryWeekly(
       : ZERO_MONEY;
     let projectedPayment: Money;
     let projectionMethod: string;
-    if (compareMoney(varianceFromMedian, "0.2000") <= 0) {
+    if (compareMoney(varianceFromMedian, normalizeMoneyValue(String(model.cardTrajectoryTolerance))) <= 0) {
       projectedPayment = trajectoryEstimate;
       projectionMethod = "Current Cycle Trajectory";
     } else if (compareMoney(trajectoryEstimate, medianPayment) < 0) {
       projectedPayment = medianPayment;
       projectionMethod = "Historical Median (Low Trajectory)";
     } else {
-      projectedPayment = addMoney(multiplyMoney(medianPayment, "0.7"), multiplyMoney(trajectoryEstimate, "0.3"));
+      projectedPayment = blendTrajectoryPayment(medianPayment, trajectoryEstimate, model.cardMedianBlendWeight);
       projectionMethod = "Blended (High Trajectory)";
     }
 
@@ -1392,7 +1423,7 @@ export async function categoryWeekly(
             return multiplyMoney(ratio, ratio);
           })), String(amounts.length))
         : ZERO_MONEY;
-      const varianceThreshold = multiplyMoney(variance, "4");
+      const varianceThreshold = outlierVarianceFactor(model.vendorOutlierSigma);
       let filtered = amounts;
       if (amounts.length >= 4 && compareMoney(variance, ZERO_MONEY) > 0 && compareMoney(mean, ZERO_MONEY) > 0) {
         filtered = amounts.filter((amount) => {

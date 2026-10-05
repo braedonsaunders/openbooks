@@ -156,7 +156,7 @@ export async function apPosition(
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds };
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
   const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
   const timeline = buildTimeline({

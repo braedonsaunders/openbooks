@@ -288,6 +288,7 @@ export async function cashPosition(
     arWeekly: weekTotals(ar.byWeek),
     apWeekly: weekTotals(ap.byWeek),
     cashStart: startingCash,
+    model,
     subIds,
     includeNullSubsidiary: includeNullSubsidiary === true,
   };

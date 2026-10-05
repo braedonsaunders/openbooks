@@ -142,7 +142,7 @@ export async function cashflowData(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds };
   const visibleCategoryConfigs = catConfigs.filter((category) =>
     isCategoryVisibleInScope(category, subIds, allowedSubsidiaryIds),
   );
