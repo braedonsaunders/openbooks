@@ -137,7 +137,10 @@
       "growth": "Interanual {pct}",
       "grossProfit": "MB: {amount}",
       "opex": "Gastos: {amount}",
-      "perMonth": "por mes"
+      "perMonth": "por mes",
+      "noPriorYear": "Sin ingresos en el mismo período del año anterior",
+      "forPeriod": "Ingresos necesarios en este período",
+      "noBreakeven": "Requiere un margen bruto positivo"
     },
     "score": {
       "title": "Puntuación de salud financiera",
@@ -145,12 +148,16 @@
       "excellent": "Excelente",
       "good": "Bueno",
       "average": "Medio",
-      "needsWork": "A mejorar"
+      "needsWork": "A mejorar",
+      "notScored": "Todavía no se pudo calificar nada en este período.",
+      "unscored": "Sin puntuación"
     },
     "categories": {
       "profitability": "Rentabilidad",
       "efficiency": "Eficiencia",
-      "operating": "Operación"
+      "operating": "Operación",
+      "liquidity": "Liquidez",
+      "solvency": "Solvencia"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "Margen bruto",
         "formula": "Utilidad bruta / Ingresos",
         "desc": "Parte de los ingresos que queda tras el costo directo.",
-        "interpret": "Más alto es mejor. Las empresas de servicios suelen apuntar a 35–50 %."
+        "interpret": "Cuanto más alto, mejor; los niveles habituales varían mucho por sector, así que fije un objetivo adecuado."
       },
       "operating_margin": {
         "label": "Margen operativo",
         "formula": "Resultado operativo / Ingresos",
         "desc": "Rentabilidad de la operación central, antes de intereses y partidas no operativas.",
-        "interpret": "Por encima del 15 % es sólido para la mayoría de los negocios."
+        "interpret": "Cuanto más alto, mejor; compárelo con el objetivo que fijó."
       },
       "ebitda_margin": {
         "label": "Margen EBITDA",
         "formula": "(Resultado operativo + Depreciación + Amortización) / Ingresos",
         "desc": "Rentabilidad operativa antes de cargos no monetarios y financiación.",
-        "interpret": "Por encima del 20 % es saludable; útil para comparar estructuras de capital."
+        "interpret": "Útil para comparar empresas con estructuras de capital distintas; compárelo con el objetivo que fijó."
       },
       "net_margin": {
         "label": "Margen neto",
         "formula": "Resultado neto / Ingresos",
         "desc": "Utilidad final como parte de los ingresos, después de todo.",
-        "interpret": "Por encima del 10 % es saludable en la mayoría de los sectores."
+        "interpret": "Cuanto más alto, mejor; compárelo con el objetivo que fijó."
       },
       "roa": {
         "label": "Rentabilidad sobre activos",
         "formula": "Resultado neto / Activos totales",
-        "desc": "Eficiencia con la que los activos generan utilidad.",
-        "interpret": "Por encima del 8 % indica un buen uso de los activos."
+        "desc": "Con qué eficiencia los activos generan beneficio, anualizado en períodos inferiores al año.",
+        "interpret": "Cuanto más alto, mejor; compárelo con el objetivo que fijó."
       },
       "roe": {
         "label": "Rentabilidad sobre patrimonio",
         "formula": "Resultado neto / Patrimonio total",
-        "desc": "Rendimiento generado sobre el patrimonio de los accionistas.",
-        "interpret": "Por encima del 15 % generalmente se considera sólido."
+        "desc": "Rentabilidad sobre el patrimonio de los accionistas, anualizada en períodos inferiores al año. No es significativa con patrimonio negativo.",
+        "interpret": "Cuanto más alto, mejor; compárelo con el objetivo que fijó."
       },
       "roic": {
         "label": "Rentabilidad sobre capital invertido",
         "formula": "NOPAT / Capital invertido",
-        "desc": "Rendimiento de todo el capital invertido. NOPAT = Resultado operativo × (1 − 25 % de impuesto supuesto). Capital invertido = Patrimonio + Deuda a largo plazo.",
-        "interpret": "Por encima del costo de capital (típicamente 8–12 %) crea valor."
+        "desc": "Rentabilidad de todo el capital invertido. NOPAT = resultado operativo × (1 − tipo impositivo), con el tipo efectivo contabilizado en el período o, si no, el tipo legal de la configuración fiscal. Capital invertido = patrimonio + la deuda con intereses que usted clasifique.",
+        "interpret": "Por encima de su coste de capital crea valor; compárelo con el objetivo que fijó."
       },
       "roce": {
         "label": "Rentabilidad sobre capital empleado",
-        "formula": "Resultado operativo / Capital invertido",
-        "desc": "Rendimiento operativo antes de impuestos del capital empleado.",
-        "interpret": "Por encima del 15 % indica un despliegue eficiente del capital."
+        "formula": "Resultado operativo / (Activo total − Pasivo corriente)",
+        "desc": "Rentabilidad operativa antes de impuestos sobre el capital empleado a largo plazo, anualizada en períodos inferiores al año.",
+        "interpret": "Cuanto más alto, mejor; compárelo con el objetivo que fijó."
       },
       "rev_per_employee": {
         "label": "Ingresos por empleado",
-        "formula": "Ingresos / Plantilla al cierre del período",
+        "formula": "Ingresos anualizados / Plantilla al cierre del período",
         "desc": "Productividad comercial de la plantilla.",
-        "interpret": "Los referentes varían mucho según sector, geografía y moneda."
+        "interpret": "Las referencias varían por sector, geografía y moneda; solo se califica frente a un objetivo que usted fije."
       },
       "gp_per_employee": {
         "label": "Utilidad bruta por empleado",
-        "formula": "Utilidad bruta / Plantilla al cierre del período",
+        "formula": "Beneficio bruto anualizado / Plantilla al cierre del período",
         "desc": "Valor que aporta cada empleado tras los costos directos.",
         "interpret": "Una señal de productividad más limpia que los ingresos por cabeza."
       },
       "asset_turnover": {
         "label": "Rotación de activos",
         "formula": "Ingresos / Activos totales",
-        "desc": "Ingresos generados por cada unidad monetaria de activos.",
-        "interpret": "Por encima de 1,0x, los activos rotan más de una vez al año."
+        "desc": "Ingresos generados por unidad de activo, anualizados en períodos inferiores al año.",
+        "interpret": "Por encima de 1,0× los activos rotan más de una vez al año."
       },
       "cogs_ratio": {
         "label": "Ratio de costo de ventas",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "Cobertura de intereses",
-        "formula": "Resultado operativo / Otros gastos",
-        "desc": "Veces que el resultado operativo cubre los gastos no operativos (intereses).",
-        "interpret": "Por encima de 5x es holgado; por debajo de 1,5x es una alerta."
+        "formula": "Resultado operativo / Gastos por intereses",
+        "desc": "Cuántas veces el resultado operativo cubre los gastos por intereses de las cuentas que usted clasifica como intereses.",
+        "interpret": "Cuanto más alto, más seguro; compárelo con su objetivo y las condiciones de sus prestamistas."
       },
       "rule_of_40": {
         "label": "Regla del 40",
         "formula": "Crecimiento de ingresos % + Margen operativo %",
         "desc": "Equilibra crecimiento y rentabilidad en un solo número.",
-        "interpret": "40 o más es excelente — intercambie crecimiento por margen o viceversa."
+        "interpret": "Cambie crecimiento por margen o viceversa; compárelo con el objetivo que fijó."
+      },
+      "current_ratio": {
+        "label": "Ratio de liquidez corriente",
+        "formula": "Activo corriente / Pasivo corriente",
+        "desc": "Activos a corto plazo disponibles por cada unidad de obligaciones con vencimiento en un año.",
+        "interpret": "Por debajo de 1,0× las obligaciones corrientes superan al activo corriente."
+      },
+      "quick_ratio": {
+        "label": "Prueba ácida",
+        "formula": "(Efectivo + Cuentas por cobrar) / Pasivo corriente",
+        "desc": "Cobertura de las obligaciones a un año solo con efectivo y cuentas por cobrar, sin vender inventario.",
+        "interpret": "Desde 1,0× las obligaciones a corto plazo quedan cubiertas sin inventario."
+      },
+      "working_capital": {
+        "label": "Capital circulante",
+        "formula": "Activo corriente − Pasivo corriente",
+        "desc": "Los recursos a corto plazo que quedan tras atender las obligaciones a un año.",
+        "interpret": "Un capital circulante negativo indica que las obligaciones corrientes superan al activo corriente."
+      },
+      "debt_to_equity": {
+        "label": "Deuda sobre patrimonio",
+        "formula": "Deuda con intereses / Patrimonio total",
+        "desc": "Apalancamiento financiero: deuda por unidad de patrimonio, con las cuentas de deuda que usted clasifica. Más bajo es más seguro.",
+        "interpret": "Más bajo es más seguro; compárelo con su objetivo y las condiciones de sus prestamistas."
+      },
+      "liabilities_to_equity": {
+        "label": "Pasivo sobre patrimonio",
+        "formula": "Pasivo total / Patrimonio total",
+        "desc": "Todo lo que la empresa debe por unidad de patrimonio. Más bajo es más seguro.",
+        "interpret": "Más bajo es más seguro; compárelo con el objetivo que fijó."
       }
     },
     "ratioNotes": {
-      "noDA": "No se encontraron cuentas de depreciación/amortización",
+      "noDA": "Hay activos fijos con saldo, pero no se encontró depreciación ni amortización en el período",
       "noBalanceSheet": "Sin datos de balance",
       "noHeadcount": "Sin empleados activos",
       "noInterestExpense": "Sin gastos por intereses",
       "unavailable": "Datos no disponibles",
-      "perEmployees": "{revenue} / {count, plural, one {# empleado} other {# empleados}}"
+      "perEmployees": "{revenue} / {count, plural, one {# empleado} other {# empleados}}",
+      "noRevenue": "Sin ingresos en el período",
+      "noCurrentLiabilities": "Sin pasivos corrientes al cierre del período",
+      "noPriorComparison": "Requiere ingresos en el mismo período del año anterior",
+      "equityNotPositive": "El patrimonio es cero o negativo",
+      "investedCapitalNotPositive": "El capital invertido es cero o negativo",
+      "debtNotClassified": "Elija sus cuentas de deuda con intereses en Salud financiera → Configuración",
+      "interestNotClassified": "Elija sus cuentas de gastos por intereses en Salud financiera → Configuración",
+      "noTaxRate": "No hay impuesto sobre la renta contabilizado en el período ni un tipo configurado: añada uno en Configuración → Impuestos → Tipos del impuesto sobre la renta",
+      "mixedTaxRates": "Las entidades visibles tributan a tipos legales distintos; la rentabilidad del capital invertido usa el tipo efectivo cuando se contabilice el impuesto del período",
+      "annualized": "anualizado a partir de {periodDays} de {yearDays} días",
+      "effectiveTaxRate": "tipo impositivo efectivo {rate}",
+      "statutoryTaxRate": "tipo impositivo legal {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "Referencia para la calificación ROIC (requiere datos del balance)"
         },
         "revenuePerEmployee": {
-          "label": "Ingresos por empleado ({currency})",
-          "help": "Referencia de productividad de la plantilla"
+          "label": "Objetivo de ingresos por empleado ({currency})",
+          "help": "Importe anual por empleado; déjelo vacío para mostrar el ratio sin calificación"
         },
         "gpPerEmployee": {
-          "label": "Beneficio bruto por empleado ({currency})",
-          "help": "Referencia de productividad de la plantilla"
+          "label": "Objetivo de beneficio bruto por empleado ({currency})",
+          "help": "Importe anual por empleado; déjelo vacío para mostrar el ratio sin calificación"
+        },
+        "roceTarget": {
+          "label": "Objetivo de rentabilidad del capital empleado (%)",
+          "help": "Referencia para la calificación ROCE (requiere datos del balance)"
+        },
+        "currentRatioTarget": {
+          "label": "Objetivo de liquidez corriente (×)",
+          "help": "Activo corriente por unidad de pasivo corriente que se califica como en objetivo"
+        },
+        "quickRatioTarget": {
+          "label": "Objetivo de prueba ácida (×)",
+          "help": "Efectivo y cuentas por cobrar por unidad de pasivo corriente que se califican como en objetivo"
+        },
+        "debtToEquityTarget": {
+          "label": "Límite de deuda sobre patrimonio (×)",
+          "help": "Más bajo es mejor: igual o por debajo se califica como en objetivo"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "Límite de pasivo sobre patrimonio (×)",
+          "help": "Más bajo es mejor: igual o por debajo se califica como en objetivo"
+        },
+        "interestCoverageTarget": {
+          "label": "Objetivo de cobertura de intereses (×)",
+          "help": "Veces que el resultado operativo debe cubrir los intereses"
+        },
+        "assetTurnoverTarget": {
+          "label": "Objetivo de rotación de activos (×)",
+          "help": "Ingresos anuales por unidad de activo que se califican como en objetivo"
+        },
+        "cogsRatioTarget": {
+          "label": "Límite del coste de ventas (% de ingresos)",
+          "help": "Más bajo es mejor: igual o por debajo se califica como en objetivo"
+        },
+        "opexRatioTarget": {
+          "label": "Límite de gastos operativos (% de ingresos)",
+          "help": "Más bajo es mejor: igual o por debajo se califica como en objetivo"
+        },
+        "operatingLeverageTarget": {
+          "label": "Objetivo de apalancamiento operativo (×)",
+          "help": "Crecimiento del resultado operativo por unidad de crecimiento de ingresos"
+        },
+        "ruleOf40Target": {
+          "label": "Objetivo de la regla del 40 (puntos)",
+          "help": "Crecimiento de ingresos % más margen operativo % que se califica como en objetivo"
+        },
+        "gradeDPercent": {
+          "label": "Calificación D desde (% del objetivo)",
+          "help": "Logro frente al objetivo (invertido si más bajo es mejor) necesario para esta calificación; por debajo de D es F"
+        },
+        "gradeCPercent": {
+          "label": "Calificación C desde (% del objetivo)",
+          "help": "Logro frente al objetivo (invertido si más bajo es mejor) necesario para esta calificación; por debajo de D es F"
+        },
+        "gradeBPercent": {
+          "label": "Calificación B desde (% del objetivo)",
+          "help": "Logro frente al objetivo (invertido si más bajo es mejor) necesario para esta calificación; por debajo de D es F"
+        },
+        "gradeAPercent": {
+          "label": "Calificación A desde (% del objetivo)",
+          "help": "Logro frente al objetivo (invertido si más bajo es mejor) necesario para esta calificación; por debajo de D es F"
+        },
+        "scoreAverage": {
+          "label": "Puntuación “Media” desde",
+          "help": "Puntuación global (0–100) necesaria para esta etiqueta"
+        },
+        "scoreGood": {
+          "label": "Puntuación “Buena” desde",
+          "help": "Puntuación global (0–100) necesaria para esta etiqueta"
+        },
+        "scoreExcellent": {
+          "label": "Puntuación “Excelente” desde",
+          "help": "Puntuación global (0–100) necesaria para esta etiqueta"
+        },
+        "insightCriticalPercent": {
+          "label": "Hallazgo crítico por debajo de (% del objetivo)",
+          "help": "Un margen por debajo de esta parte de su objetivo se informa como crítico"
+        },
+        "insightWarningPercent": {
+          "label": "Hallazgo de advertencia por debajo de (% del objetivo)",
+          "help": "Un margen por debajo de esta parte de su objetivo se informa como muy por debajo"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "Alerta de caída de ingresos (%)",
+          "help": "Una caída frente al mismo período del año anterior superior a esto se informa como ingresos en descenso"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "Alerta de tendencia de ingresos a tres meses (%)",
+          "help": "Una caída en los últimos tres meses con ingresos superior a esto se informa como tendencia a la baja"
+        },
+        "marginCompressionPoints": {
+          "label": "Alerta de compresión del margen (puntos)",
+          "help": "Una caída del margen bruto en los últimos tres meses superior a estos puntos porcentuales"
+        },
+        "breakevenSafetyPercent": {
+          "label": "Margen de seguridad sobre el punto de equilibrio (%)",
+          "help": "Ingresos dentro de esta parte por encima del equilibrio se informan como margen estrecho"
+        },
+        "anomalySigma": {
+          "label": "Umbral de anomalía (σ)",
+          "help": "Los meses que se alejan de la media más de estas desviaciones típicas se informan como anomalías"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "N/D",
+      "ungraded": "Sin objetivo",
+      "noTarget": "Sin objetivo fijado: no se califica",
+      "target": "Objetivo: {target}",
+      "versusTarget": "frente al objetivo de {target}",
+      "formula": "Fórmula",
+      "meaning": "Qué significa",
+      "interpretation": "Interpretación",
+      "thisPeriod": "Este período"
+    },
+    "dupont": {
+      "title": "Análisis DuPont",
+      "hint": "ROE = Margen neto × Rotación de activos × Multiplicador de capital",
+      "netMargin": "Margen neto",
+      "netMarginSub": "Resultado neto ÷ ingresos",
+      "assetTurnover": "Rotación de activos",
+      "assetTurnoverSub": "Ingresos anualizados ÷ activo total",
+      "equityMultiplier": "Multiplicador de capital",
+      "equityMultiplierSub": "Activo total ÷ patrimonio (apalancamiento)",
+      "roe": "Rentabilidad del patrimonio"
+    },
+    "grading": {
+      "title": "Cómo se calculan las calificaciones",
+      "body": "Cada ratio se compara con su objetivo. Alcanzar {a} del objetivo o más da una A, {b} una B, {c} una C y {d} una D; por debajo, una F. En los ratios en los que más bajo es mejor (costes, apalancamiento) la comparación se invierte. Un ratio sin objetivo o sin los datos necesarios se muestra pero no se califica.",
+      "labels": "La puntuación promedia las categorías calificadas: desde {excellent} es Excelente, desde {good} Buena, desde {average} Media y por debajo Necesita mejorar. Todos estos valores se fijan en Umbrales."
+    },
+    "ratioInputs": {
+      "title": "Datos de los ratios",
+      "hint": "Qué cuentas leen los ratios de apalancamiento",
+      "notDecided": "Aún sin elegir: los ratios que lo necesitan indican por qué no están disponibles.",
+      "add": "Añadir una cuenta…",
+      "remove": "Quitar {account}",
+      "save": "Guardar",
+      "saved": "Guardado: los ratios se recalculan.",
+      "saveFailed": "No se pudo guardar la clasificación.",
+      "loadFailed": "No se pudieron cargar las clasificaciones.",
+      "interest_expense": {
+        "title": "Gastos por intereses",
+        "help": "Cuentas de gasto que registran intereses de financiación. La cobertura de intereses divide el resultado operativo entre su total.",
+        "none": "Sin cuentas de gastos por intereses: la cobertura de intereses no aplica.",
+        "confirmNone": "No tenemos gastos por intereses"
+      },
+      "interest_bearing_debt": {
+        "title": "Deuda con intereses",
+        "help": "Cuentas de pasivo con préstamos, líneas de crédito, bonos y otra financiación, tanto la parte corriente como la a largo plazo. La deuda sobre patrimonio y la rentabilidad del capital invertido leen sus saldos.",
+        "none": "Sin deuda con intereses: la deuda sobre patrimonio es cero.",
+        "confirmNone": "No tenemos deuda con intereses"
       }
     }
   },

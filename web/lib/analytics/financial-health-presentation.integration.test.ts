@@ -14,6 +14,8 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { financialHealth } = await import('./financial-health')
+const { mulRatio } = await import('@openbooks/engine/src/money/money.ts')
+const { decimalRatio } = await import('../reports/decimals')
 
 const D = '2026-07-14'
 const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
@@ -72,16 +74,17 @@ test('financial health translates a multi-currency org through the matrix', { sk
   try {
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
-        const health = await financialHealth(P, undefined, org.orgId, null)
-        const ratio = (cat: string, id: string) =>
-          (health.ratios as unknown as Record<string, { id: string; value: number | null }[]>)[cat]!.find((r) => r.id === id)!.value
+        const health = await financialHealth(P, org.orgId, null)
+        const turnover = health.ratios.efficiency.find((r) => r.id === 'asset_turnover')!
         // Revenue 100 + 200×1.35 = 370; operating expense 40 + 100×1.35
         // = 175 (the scratch COGS account carries type expense, exactly as
         // the refusing reader classifies it); assets 60 + 100×1.35 = 195.
-        assert.equal(health.figures.revenue, 370)
-        assert.equal(health.figures.opex, 175)
-        assert.equal(health.figures.totalAssets, 195)
-        assert.ok(Math.abs((ratio('efficiency', 'asset_turnover') ?? 0) - 370 / 195) < 1e-9)
+        assert.equal(health.figures.revenue, '370.0000')
+        assert.equal(health.figures.opex, '175.0000')
+        assert.equal(health.figures.totalAssets, '195.0000')
+        assert.equal(health.currency, 'CAD', 'figures are stated in the presentation currency')
+        // Turnover annualizes July's revenue over the fiscal year.
+        assert.equal(turnover.value, decimalRatio(mulRatio('370.0000', BigInt(health.period.fiscalYearDays), BigInt(health.period.days)), '195.0000'))
       })
     })
   } finally {

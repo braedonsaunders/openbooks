@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// An unavailable ratio card with no loader note rendered the hardcoded
-// English "Data not available" in every locale. The card now falls back to
-// the translated analytics.financialHealth.ratioNotes.unavailable string,
-// while a loader-supplied noDataMsg (already localized via ratioNotes) still
-// wins. (The prop is populated by the financial-health loader — only the
-// fallback was English.)
+// A ratio card renders the engine's exact value in the reader's locale, and an
+// unavailable ratio shows the engine's translated reason — never a zero, never
+// English in a French card.
 
 // jsdom first: the card reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
@@ -44,7 +41,23 @@ const DEF = {
   interpret: "lecture",
 };
 
-async function renderCard(noDataMsg?: string) {
+import type { RatioResult } from "../../../../lib/analytics/financial-health";
+
+const RATIO: RatioResult = {
+  id: "gross_margin",
+  category: "profitability",
+  value: "0.2534",
+  format: "pct",
+  benchmark: "0.4000",
+  inverse: false,
+  calc: "253 400 $ / 1 000 000 $",
+  basis: null,
+  unavailable: null,
+  score: 63,
+  grade: "D",
+};
+
+async function renderCard(data: RatioResult) {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -53,19 +66,7 @@ async function renderCard(noDataMsg?: string) {
     root.render(
       <NextIntlClientProvider locale="fr" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <RatioCard
-            data={{
-              id: "gross_margin",
-              value: null,
-              format: "pct",
-              benchmark: 0.4,
-              calc: "N/A",
-              noData: true,
-              ...(noDataMsg === undefined ? {} : { noDataMsg }),
-              grade: null,
-            }}
-            def={DEF}
-          />
+          <RatioCard data={data} def={DEF} />
         </MoneyProvider>
       </NextIntlClientProvider>,
     );
@@ -82,18 +83,26 @@ async function renderCard(noDataMsg?: string) {
   };
 }
 
-test("an unavailable ratio without a loader note renders the French fallback", async (t) => {
-  const { unmount } = await renderCard();
+test("an unavailable ratio shows the engine's reason in the reader's language", async (t) => {
+  const { unmount } = await renderCard({ ...RATIO, value: null, score: null, grade: null, unavailable: "Aucun chiffre d’affaires sur la période" });
   t.after(unmount);
   const text = document.body.textContent ?? "";
-  assert.match(text, /Données non disponibles/, "the fallback must be translated");
-  assert.ok(!/Data not available/.test(text), "no English fallback may leak into the French card");
+  assert.match(text, /Aucun chiffre d’affaires sur la période/, "the reason must render");
+  assert.match(text, /N\/D/, "the value reads as not available");
+  assert.ok(!/0[,.]0 ?%/.test(text), "an unavailable ratio never renders as zero");
 });
 
-test("a loader-supplied note still wins over the translated fallback", async (t) => {
-  const { unmount } = await renderCard("Aucune donnée de bilan");
+test("a value renders exactly in the reader's locale against its target", async (t) => {
+  const { unmount } = await renderCard(RATIO);
+  t.after(unmount);
+  const text = (document.body.textContent ?? "").replace(/\u202f|\u00a0/g, " ");
+  assert.match(text, /25,3 %/, "0.2534 renders as a French percentage");
+  assert.match(text, /40 %/, "the target renders in the same unit");
+});
+
+test("a ratio without a target shows ungraded rather than a grade", async (t) => {
+  const { unmount } = await renderCard({ ...RATIO, benchmark: null, score: null, grade: null });
   t.after(unmount);
   const text = document.body.textContent ?? "";
-  assert.match(text, /Aucune donnée de bilan/, "the loader note must render verbatim");
-  assert.ok(!/Données non disponibles/.test(text), "the fallback must not override the loader note");
+  assert.match(text, /Sans objectif/, "the ungraded state is named");
 });

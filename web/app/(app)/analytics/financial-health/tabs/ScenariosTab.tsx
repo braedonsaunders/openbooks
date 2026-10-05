@@ -7,7 +7,7 @@ import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { GroupedBar } from '../../_ui/charts'
-import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct, toChartNumber } from '../../_ui/format'
 
 interface Inputs {
   growth: number
@@ -31,7 +31,16 @@ const NUM = 'h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-righ
 
 export function ScenariosTab({ data }: { data: HealthData }) {
   const fmtMoney = useAnalyticsMoney()
-  const f = data.figures
+  const fig = data.figures
+  const f = useMemo(() => ({
+    revenue: toChartNumber(fig.revenue),
+    grossProfit: toChartNumber(fig.grossProfit),
+    operatingIncome: toChartNumber(fig.operatingIncome),
+    netIncome: toChartNumber(fig.netIncome),
+    cogs: toChartNumber(fig.cogs),
+    opex: toChartNumber(fig.opex),
+    otherExpense: toChartNumber(fig.otherExpense),
+  }), [fig])
   const [inp, setInp] = useState<Inputs>({ growth: 0, price: 0, cogs: 0, opex: 0 })
 
   const scenario = useMemo(() => {

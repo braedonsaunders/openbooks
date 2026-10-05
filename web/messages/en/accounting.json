@@ -10,12 +10,15 @@
       "excellent": "Excellent",
       "good": "Good",
       "average": "Average",
-      "needsWork": "Needs work"
+      "needsWork": "Needs work",
+      "unscored": "Not scored"
     },
     "categories": {
       "profitability": "Profitability",
       "efficiency": "Efficiency",
-      "operating": "Operating"
+      "operating": "Operating",
+      "liquidity": "Liquidity",
+      "solvency": "Solvency"
     },
     "vitals": {
       "healthScore": "Health score",
