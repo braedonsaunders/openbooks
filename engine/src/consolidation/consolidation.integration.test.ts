@@ -465,6 +465,25 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
   }
 });
 
+test("rate derivation refuses a period with no quotes instead of averaging the closing spot", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    // The only quote predates July: it can price July's closing balance but
+    // says nothing about July's average.
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId}, 'USD', 'CAD', '2026-06-30', 'spot', '1.3000000000', 'manual')`);
+    await assert.rejects(deriveConsolidatedRates(org.orgId, org.periodId, actorId),
+      /no spot rates for USD→CAD are dated inside 2026-07-01 to 2026-07-31, so the period average cannot be derived/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("intercompany balances stay eliminated when the rate moves between periods", { skip: !DB }, async () => {
   // A USD subsidiary's 100 USD due-from is eliminated at 1.30 in July. In
   // August the rate is 1.40 and nothing new is booked: the balance sheet
