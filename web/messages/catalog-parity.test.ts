@@ -276,6 +276,12 @@ const COGNATES = new Set<string>([
   'fr:reports.formats.ratio|Ratio',
   // French spells the Features-page tab “Finance” identically.
   'fr:admin.setup.features.categories.finance|Finance',
+  // French spells concentration, fragmentation and projections exactly like
+  // English; these analytics group headings are the correct French terms.
+  'fr:analytics.vendor.config.groups.concentration|Concentration',
+  'fr:analytics.spendVelocity.config.groups.concentration|Concentration',
+  'fr:analytics.spendVelocity.config.groups.fragmentation|Fragmentation',
+  'fr:analytics.spendVelocity.config.groups.projections|Projections',
   // Order margin: CM1/CM2/CM3 are abbreviations every locale keeps, and the
   // bare percent template carries no translatable words.
   'de:channels.drawer.cm1|CM1',

@@ -711,6 +711,33 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
 
 /* ----------------------------------------------------------- Configuration */
 
+/**
+ * The fixed health-score rubric, read-only from the loader's severity model:
+ * point weights and deduction caps are product behaviour, not organization
+ * thresholds, so the tab shows every number with no editor.
+ */
+function SeverityModelPanel({ data }: { data: SpendVelocityData }) {
+  const t = useTranslations('analytics.spendVelocity')
+  const sections = ['velocity', 'critical', 'warning', 'structural', 'savings'] as const
+  return (
+    <Panel title={t('panels.severityModel')} icon={SlidersHorizontal} bodyClassName="p-0">
+      {sections.map((section) => (
+        <div key={section} className="border-b border-slate-50 px-4 py-3 last:border-0 dark:border-slate-800/60">
+          <p className="mb-1.5 text-xs font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">{t(`model.${section}.label`)}</p>
+          <ul className="space-y-1">
+            {Object.entries(data.severityModel[section]).map(([leaf, value]) => (
+              <li key={leaf} className="flex items-start justify-between gap-4">
+                <span className="text-sm text-slate-600 dark:text-slate-300">{t(`model.${section}.${leaf}`)}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{String(value)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </Panel>
+  )
+}
+
 function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolean }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
@@ -727,6 +754,7 @@ function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolea
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
         <ConfigEditor dashboard="spendVelocity" canEdit={canEdit} />
+        <SeverityModelPanel data={data} />
         <Panel title={t('panels.modelThresholds')} icon={SlidersHorizontal} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (

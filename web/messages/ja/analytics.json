@@ -2024,6 +2024,13 @@
           "label": "戦術層（%）",
           "help": "仕入先件数のこの割合までが戦術層になります"
         }
+      },
+      "groups": {
+        "grading": "評価",
+        "tiers": "階層",
+        "scorecard": "スコアカード",
+        "concentration": "集中度",
+        "paymentMarks": "支払い基準"
       }
     },
     "payment": {
@@ -3055,10 +3062,6 @@
           "label": "崖重大ギャップ（pp）",
           "help": "購買/販売速度差がこの値を超えたら重大です"
         },
-        "cliffCriticalPoints": {
-          "label": "崖重大点数",
-          "help": "重大な崖の健全性減点"
-        },
         "cliffCriticalRatio": {
           "label": "崖重大比率",
           "help": "購買/販売比率がこの値を超えたら重大です"
@@ -3066,10 +3069,6 @@
         "cliffWarningGap": {
           "label": "崖警告ギャップ（pp）",
           "help": "購買/販売速度差がこの値を超えたら警告です"
-        },
-        "cliffWarningPoints": {
-          "label": "崖警告点数",
-          "help": "警告の崖の健全性減点"
         },
         "cliffWarningRatio": {
           "label": "崖警告比率",
@@ -3091,42 +3090,6 @@
           "label": "断片化重度（取引/月）",
           "help": "この値を超える月取引数は重度です"
         },
-        "fragmentationUnitCap": {
-          "label": "断片化上限",
-          "help": "断片化の構造点数の上限"
-        },
-        "fragmentationUnitWeight": {
-          "label": "断片化重み",
-          "help": "断片化カテゴリ1件あたりの構造点数"
-        },
-        "healthCriticalAnomalyCap": {
-          "label": "重大異常上限",
-          "help": "重大異常の減点の上限"
-        },
-        "healthCriticalAnomalyUnit": {
-          "label": "重大異常単価",
-          "help": "重大異常1件あたりの減点"
-        },
-        "healthCriticalCap": {
-          "label": "重大上限",
-          "help": "重大問題の減点の上限"
-        },
-        "healthCriticalFrogCap": {
-          "label": "重大這い上がり上限",
-          "help": "重大這い上がりの減点の上限"
-        },
-        "healthCriticalFrogUnit": {
-          "label": "重大這い上がり単価",
-          "help": "重大ゆでガエル1件あたりの減点"
-        },
-        "healthCriticalZombieCap": {
-          "label": "重大ゾンビ上限",
-          "help": "重大ゾンビの減点の上限"
-        },
-        "healthCriticalZombieUnit": {
-          "label": "重大ゾンビ単価",
-          "help": "重大ゾンビ1件あたりの減点"
-        },
         "healthGradeA": {
           "label": "健全性A",
           "help": "この値以上でグレードAになります"
@@ -3142,50 +3105,6 @@
         "healthGradeD": {
           "label": "健全性D",
           "help": "この値以上でグレードDになります"
-        },
-        "healthStructuralCap": {
-          "label": "構造上限",
-          "help": "構造リスクの減点の上限"
-        },
-        "healthVelocityCap": {
-          "label": "速度上限",
-          "help": "高速速度の健全性減点の上限"
-        },
-        "healthVelocityUnit": {
-          "label": "速度単価",
-          "help": "高速口座1件あたりの減点"
-        },
-        "healthVelocityUnitCap": {
-          "label": "速度単価上限",
-          "help": "グループあたりの速度減点の上限"
-        },
-        "healthWarningAnomalyCap": {
-          "label": "警告異常上限",
-          "help": "非重大異常の減点の上限"
-        },
-        "healthWarningAnomalyUnit": {
-          "label": "警告異常単価",
-          "help": "非重大異常1件あたりの減点"
-        },
-        "healthWarningCap": {
-          "label": "警告上限",
-          "help": "警告の減点の上限"
-        },
-        "healthWarningFrogCap": {
-          "label": "警告這い上がり上限",
-          "help": "非重大這い上がりの減点の上限"
-        },
-        "healthWarningFrogUnit": {
-          "label": "警告這い上がり単価",
-          "help": "非重大ゆでガエル1件あたりの減点"
-        },
-        "healthWarningZombieCap": {
-          "label": "警告ゾンビ上限",
-          "help": "非重大ゾンビの減点の上限"
-        },
-        "healthWarningZombieUnit": {
-          "label": "警告ゾンビ単価",
-          "help": "非重大ゾンビ1件あたりの減点"
         },
         "hhiCritical": {
           "label": "HHI重大水準",
@@ -3215,22 +3134,6 @@
           "label": "予測上限（合計）（%）",
           "help": "合計の予測変動はこの値で制限されます"
         },
-        "savingsCriticalPoints": {
-          "label": "節約点数（重大）",
-          "help": "重大水準超過時の減点"
-        },
-        "savingsHighPoints": {
-          "label": "節約点数（高）",
-          "help": "高水準超過時の減点"
-        },
-        "savingsLowPoints": {
-          "label": "節約点数（低）",
-          "help": "低水準超過時の減点"
-        },
-        "savingsMediumPoints": {
-          "label": "節約点数（中）",
-          "help": "中水準超過時の減点"
-        },
         "savingsRatioCritical": {
           "label": "節約率（重大）（%）",
           "help": "この値を超えたら重大点数が減点されます"
@@ -3251,10 +3154,6 @@
           "label": "節約率（注視）（%）",
           "help": "この値を超えたら注視点数が減点されます"
         },
-        "savingsWatchPoints": {
-          "label": "節約点数（注視）",
-          "help": "注視水準超過時の減点"
-        },
         "seasonalBand": {
           "label": "季節バンド（%）",
           "help": "この値を超える月次乖離は繁忙期・閑散期と判定されます"
@@ -3271,25 +3170,13 @@
           "label": "首位占有率（高）（%）",
           "help": "首位口座がこの値を超えたら構造点（高）が加算されます"
         },
-        "structuralTop1HighPoints": {
-          "label": "首位点数（高）",
-          "help": "高水準超過時の構造点数"
-        },
         "structuralTop1Low": {
           "label": "首位占有率（低）（%）",
           "help": "首位口座がこの値を超えたら構造点（低）が加算されます"
         },
-        "structuralTop1LowPoints": {
-          "label": "首位点数（低）",
-          "help": "低水準超過時の構造点数"
-        },
         "structuralTop1Medium": {
           "label": "首位占有率（中）（%）",
           "help": "首位口座がこの値を超えたら構造点（中）が加算されます"
-        },
-        "structuralTop1MediumPoints": {
-          "label": "首位点数（中）",
-          "help": "中水準超過時の構造点数"
         },
         "topVendorsCount": {
           "label": "上位仕入先数",
@@ -3325,7 +3212,21 @@
         "label": "ゾンビ期間",
         "note": "同一の定期仕入先合計（偏差1%未満）"
       },
-      "unsetMinimum": "下限なし — すべての系列は最初の月から評価されます"
+      "unsetMinimum": "下限なし — すべての系列は最初の月から評価されます",
+      "groups": {
+        "growth": "成長",
+        "anomalyDetection": "異常検出",
+        "creepAndZombies": "ゆでガエルとゾンビ",
+        "fragmentation": "断片化",
+        "seasonal": "季節性",
+        "concentration": "集中度",
+        "cliff": "コミットメントクリフ",
+        "projections": "予測",
+        "insightTriggers": "インサイトのトリガー",
+        "grading": "評価",
+        "structuralBands": "構造バンド",
+        "savingsBands": "節約バンド"
+      }
     },
     "csv": {
       "changePct": "変動率",
@@ -3420,6 +3321,7 @@
       "highestVelocity": "最高速度の勘定",
       "insights": "洞察",
       "modelThresholds": "モデルとしきい値",
+      "severityModel": "スコアリングモデル",
       "monthlySpendVelocity": "月次支出速度",
       "monthlySpendVelocityHint": "当月と前年同月の比較",
       "monthlySummary": "月次サマリー",
@@ -3533,6 +3435,53 @@
     "labels": {
       "unknownParty": "不明",
       "accountFallback": "口座{id}"
+    },
+    "model": {
+      "velocity": {
+        "label": "速度の控除",
+        "cap": "控除上限",
+        "unit": "口座あたりの点数",
+        "unitCap": "口座あたりの上限"
+      },
+      "critical": {
+        "label": "重大問題の控除",
+        "cap": "控除上限",
+        "anomalyUnit": "重大な異常あたりの点数",
+        "anomalyCap": "異常の上限",
+        "frogUnit": "ゆでガエル口座あたりの点数（重大）",
+        "frogCap": "ゆでガエルの上限",
+        "zombieUnit": "重大なゾンビあたりの点数",
+        "zombieCap": "ゾンビの上限"
+      },
+      "warning": {
+        "label": "警告の控除",
+        "cap": "控除上限",
+        "anomalyUnit": "警告の異常あたりの点数",
+        "anomalyCap": "異常の上限",
+        "frogUnit": "ゆでガエル口座あたりの点数（警告）",
+        "frogCap": "ゆでガエルの上限",
+        "zombieUnit": "警告のゾンビあたりの点数",
+        "zombieCap": "ゾンビの上限"
+      },
+      "structural": {
+        "label": "構造リスクの控除",
+        "cap": "控除上限",
+        "top1HighPoints": "トップ1高ポイント",
+        "top1MediumPoints": "トップ1中ポイント",
+        "top1LowPoints": "トップ1低ポイント",
+        "fragmentationUnitWeight": "断片化カテゴリあたりの点数",
+        "fragmentationUnitCap": "断片化の上限",
+        "cliffCriticalPoints": "重大なクリフの点数",
+        "cliffWarningPoints": "警告のクリフの点数"
+      },
+      "savings": {
+        "label": "節約効果の控除",
+        "watchPoints": "注意ポイント",
+        "lowPoints": "低ポイント",
+        "mediumPoints": "中ポイント",
+        "highPoints": "高ポイント",
+        "criticalPoints": "重大ポイント"
+      }
     }
   },
   "sentinel": {

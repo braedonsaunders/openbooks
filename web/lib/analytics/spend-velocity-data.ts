@@ -52,6 +52,30 @@ import { toChartNumber } from "../chart-number";
 
 export type SpendVelocityConfig = ConfigValuesOf<"spendVelocity">;
 
+/**
+ * The fixed severity model behind the Spend Velocity health score: every
+ * point weight and deduction cap, in one exported place. Detection
+ * thresholds (when something fires) stay organization configuration in the
+ * threshold spec; these numbers (how much a firing costs the score) are the
+ * product's documented scoring rubric, rendered read-only on the
+ * Configuration tab from this object. Grade cut-offs stay configuration:
+ * an organization reasonably sets its own A–F bands.
+ */
+export const SPEND_VELOCITY_SEVERITY_MODEL = {
+  velocity: { cap: 20, unit: 1.5, unitCap: 10 },
+  critical: { cap: 25, anomalyUnit: 4, anomalyCap: 12, frogUnit: 3, frogCap: 8, zombieUnit: 2, zombieCap: 5 },
+  warning: { cap: 15, anomalyUnit: 1.5, anomalyCap: 6, frogUnit: 1, frogCap: 4, zombieUnit: 1, zombieCap: 3 },
+  structural: {
+    cap: 15,
+    top1HighPoints: 5, top1MediumPoints: 3, top1LowPoints: 1,
+    fragmentationUnitWeight: 0.5, fragmentationUnitCap: 4,
+    cliffCriticalPoints: 6, cliffWarningPoints: 3,
+  },
+  savings: { watchPoints: 1, lowPoints: 3, mediumPoints: 5, highPoints: 7, criticalPoints: 10 },
+} as const;
+
+export type SpendVelocitySeverityModel = typeof SPEND_VELOCITY_SEVERITY_MODEL;
+
 const SPEND_KINDS = ["vendor_bill", "expense_report", "check", "vendor_credit"] as const;
 
 // ---- shapes -----------------------------------------------------------------
@@ -100,6 +124,7 @@ export interface SVInsight {
 export interface SpendVelocityData {
   period: { from: string; to: string; label: string };
   config: SpendVelocityConfig;
+  severityModel: SpendVelocitySeverityModel;
   summary: {
     totalSpend: string;
     accountCount: number;
@@ -1177,42 +1202,46 @@ export async function spendVelocityData(
   const acceleratingCount = accountVelocity.filter((a) => a.trend === "accelerating").length;
   const highVelocityCount = accountVelocity.filter((a) => a.velocity > C.velocityHighThreshold).length;
 
+  // The health score reads its point weights and caps from the fixed
+  // severity model above; the organization's config holds only detection
+  // thresholds, bands and grade cut-offs.
+  const SEV = SPEND_VELOCITY_SEVERITY_MODEL;
   let deductions = 0;
   // Velocity health: hot-velocity accounts cost unit points each, capped twice.
-  deductions += Math.min(C.healthVelocityCap,
-    Math.min(C.healthVelocityUnitCap, highVelocityCount * C.healthVelocityUnit)
-    + Math.min(C.healthVelocityUnitCap, acceleratingCount * C.healthVelocityUnit));
+  deductions += Math.min(SEV.velocity.cap,
+    Math.min(SEV.velocity.unitCap, highVelocityCount * SEV.velocity.unit)
+    + Math.min(SEV.velocity.unitCap, acceleratingCount * SEV.velocity.unit));
   // Critical issues.
   const criticalFrog = boilingFrog.summary.criticalCount;
   const criticalZombies = zombies.summary.criticalCount;
-  deductions += Math.min(C.healthCriticalCap,
-    Math.min(C.healthCriticalAnomalyCap, anomalies.summary.criticalCount * C.healthCriticalAnomalyUnit)
-    + Math.min(C.healthCriticalFrogCap, criticalFrog * C.healthCriticalFrogUnit)
-    + Math.min(C.healthCriticalZombieCap, criticalZombies * C.healthCriticalZombieUnit));
+  deductions += Math.min(SEV.critical.cap,
+    Math.min(SEV.critical.anomalyCap, anomalies.summary.criticalCount * SEV.critical.anomalyUnit)
+    + Math.min(SEV.critical.frogCap, criticalFrog * SEV.critical.frogUnit)
+    + Math.min(SEV.critical.zombieCap, criticalZombies * SEV.critical.zombieUnit));
   // Warnings.
-  deductions += Math.min(C.healthWarningCap,
-    Math.min(C.healthWarningAnomalyCap, (anomalies.summary.count - anomalies.summary.criticalCount) * C.healthWarningAnomalyUnit) +
-    Math.min(C.healthWarningFrogCap, (boilingFrog.summary.count - criticalFrog) * C.healthWarningFrogUnit) +
-    Math.min(C.healthWarningZombieCap, (zombies.summary.count - criticalZombies) * C.healthWarningZombieUnit));
+  deductions += Math.min(SEV.warning.cap,
+    Math.min(SEV.warning.anomalyCap, (anomalies.summary.count - anomalies.summary.criticalCount) * SEV.warning.anomalyUnit) +
+    Math.min(SEV.warning.frogCap, (boilingFrog.summary.count - criticalFrog) * SEV.warning.frogUnit) +
+    Math.min(SEV.warning.zombieCap, (zombies.summary.count - criticalZombies) * SEV.warning.zombieUnit));
   // Structural risk.
   let structural = 0;
   const top1 = concentration.summary.top1Share;
-  if (top1 > C.structuralTop1High) structural += C.structuralTop1HighPoints;
-  else if (top1 > C.structuralTop1Medium) structural += C.structuralTop1MediumPoints;
-  else if (top1 > C.structuralTop1Low) structural += C.structuralTop1LowPoints;
-  structural += Math.min(C.fragmentationUnitCap, fragmentation.summary.fragmentedCategories * C.fragmentationUnitWeight);
-  if (commitmentCliff.summary.status === "critical") structural += C.cliffCriticalPoints;
-  else if (commitmentCliff.summary.status === "warning") structural += C.cliffWarningPoints;
-  deductions += Math.min(C.healthStructuralCap, structural);
+  if (top1 > C.structuralTop1High) structural += SEV.structural.top1HighPoints;
+  else if (top1 > C.structuralTop1Medium) structural += SEV.structural.top1MediumPoints;
+  else if (top1 > C.structuralTop1Low) structural += SEV.structural.top1LowPoints;
+  structural += Math.min(SEV.structural.fragmentationUnitCap, fragmentation.summary.fragmentedCategories * SEV.structural.fragmentationUnitWeight);
+  if (commitmentCliff.summary.status === "critical") structural += SEV.structural.cliffCriticalPoints;
+  else if (commitmentCliff.summary.status === "warning") structural += SEV.structural.cliffWarningPoints;
+  deductions += Math.min(SEV.structural.cap, structural);
   // Financial impact: savings potential as a share of total spend.
   const savingsPotential = add(boilingFrog.summary.totalAnnualizedCreep, zombies.summary.totalAnnualCost);
   if (cmp(totalSpend, ZERO) > 0) {
     const savingsRatio = toChartNumber(div(savingsPotential, totalSpend)) * 100;
-    if (savingsRatio > C.savingsRatioCritical) deductions += C.savingsCriticalPoints;
-    else if (savingsRatio > C.savingsRatioHigh) deductions += C.savingsHighPoints;
-    else if (savingsRatio > C.savingsRatioMedium) deductions += C.savingsMediumPoints;
-    else if (savingsRatio > C.savingsRatioLow) deductions += C.savingsLowPoints;
-    else if (savingsRatio > C.savingsRatioWatch) deductions += C.savingsWatchPoints;
+    if (savingsRatio > C.savingsRatioCritical) deductions += SEV.savings.criticalPoints;
+    else if (savingsRatio > C.savingsRatioHigh) deductions += SEV.savings.highPoints;
+    else if (savingsRatio > C.savingsRatioMedium) deductions += SEV.savings.mediumPoints;
+    else if (savingsRatio > C.savingsRatioLow) deductions += SEV.savings.lowPoints;
+    else if (savingsRatio > C.savingsRatioWatch) deductions += SEV.savings.watchPoints;
   }
   const healthScore = Math.round(Math.max(0, Math.min(100, 100 - deductions)));
   const healthGrade = healthScore >= C.healthGradeA ? "A" : healthScore >= C.healthGradeB ? "B" : healthScore >= C.healthGradeC ? "C" : healthScore >= C.healthGradeD ? "D" : "F";
@@ -1253,6 +1282,7 @@ export async function spendVelocityData(
   return {
     period,
     config: C,
+    severityModel: SPEND_VELOCITY_SEVERITY_MODEL,
     summary: {
       totalSpend, accountCount: accountVelocity.length,
       avgVelocity: r1(avgVelocity), avgAcceleration: r1(avgAcceleration),
