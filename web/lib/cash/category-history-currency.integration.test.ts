@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { daysInCivilMonth } from "@openbooks/engine/src/platform/civil-date.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -21,7 +22,7 @@ async function seedPeriod(org: ScratchOrg, year: number, month: number): Promise
   `)).rows[0]!.fiscal_calendar_id;
   const id = randomUUID();
   const mm = String(month).padStart(2, "0");
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const last = daysInCivilMonth(year, month);
   await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
     values (${id},${org.orgId},${year},${month},${`${year}-${mm}`},${`${year}-${mm}-01`},${`${year}-${mm}-${String(last).padStart(2, "0")}`},false,${cal})`);
   return id;
