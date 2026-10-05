@@ -592,6 +592,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/setup/performance': {
+    route: '/admin/setup/performance',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/performance/view')
+      return {
+        load: () => m.loadPerformanceSetup(),
+        spec: (data) => m.performanceSetupSpec(data as never),
+      }
+    },
+  },
   '/admin/setup/project-types': {
     route: '/admin/setup/project-types',
     segments: [],
@@ -619,11 +631,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/setup/review-templates': {
     route: '/admin/setup/review-templates',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/setup/review-templates/view')
       return {
-        load: () => m.loadReviewTemplates(),
+        load: (input) => m.loadReviewTemplates(input.searchParams ?? {}),
         spec: (data) => m.reviewTemplatesSpec(data as never),
       }
     },
@@ -637,6 +649,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadReviewTemplateBuilder(segment(input, 'id')),
         spec: (data) => m.reviewTemplateBuilderSpec(data as never),
+      }
+    },
+  },
+  '/admin/setup/shipping': {
+    route: '/admin/setup/shipping',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/shipping/view')
+      return {
+        load: (input) => m.loadShippingSetup(input.searchParams ?? {}),
+        spec: (data) => m.shippingSetupSpec(data as never),
       }
     },
   },
@@ -1120,6 +1144,54 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/cash-sales': {
+    route: '/cash-sales',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/cash-sales/view')
+      return {
+        load: (input) => m.loadCashSales(input.searchParams ?? {}),
+        spec: (data) => m.cashSalesSpec(data as never),
+      }
+    },
+  },
+  '/channels': {
+    route: '/channels',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/channels/view')
+      return {
+        load: () => m.loadChannelsHome(),
+        spec: () => m.channelsHomeSpec(),
+      }
+    },
+  },
+  '/channels/[id]': {
+    route: '/channels/[id]',
+    segments: ['id'],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/channels/[id]/view')
+      return {
+        load: (input) => m.loadChannelWorkspace(segment(input, 'id'), input.searchParams ?? {}),
+        spec: (data) => m.channelWorkspaceSpec(data as never),
+      }
+    },
+  },
+  '/channels/connect': {
+    route: '/channels/connect',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/channels/connect/view')
+      return {
+        load: () => m.loadConnect(),
+        spec: () => m.connectSpec(),
+      }
+    },
+  },
   '/channels/exceptions': {
     route: '/channels/exceptions',
     segments: [],
@@ -1171,11 +1243,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/collections': {
     route: '/collections',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/collections/view')
       return {
-        load: () => m.loadCollections(),
+        load: (input) => m.loadCollections(input.searchParams ?? {}),
         spec: (data) => m.collectionsSpec(data as never),
       }
     },
@@ -1351,11 +1423,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/data/import/history': {
     route: '/data/import/history',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/data/import/history/view')
       return {
-        load: () => m.loadImportHistory(),
+        load: (input) => m.loadImportHistory(input.searchParams ?? {}),
         spec: () => m.importHistorySpec(),
       }
     },
@@ -1621,6 +1693,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadPerformancePage(input.searchParams ?? {}),
         spec: (data) => m.performanceSpec(data as never),
+      }
+    },
+  },
+  '/hrm/performance/conversations': {
+    route: '/hrm/performance/conversations',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/performance/conversations/view')
+      return {
+        load: (input) => m.loadConversations(input.searchParams ?? {}),
+        spec: (data) => m.conversationsSpec(data as never),
+      }
+    },
+  },
+  '/hrm/performance/goals': {
+    route: '/hrm/performance/goals',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/performance/goals/view')
+      return {
+        load: (input) => m.loadGoalsWorkspace(input.searchParams ?? {}),
+        spec: (data) => m.goalsWorkspaceSpec(data as never),
+      }
+    },
+  },
+  '/hrm/performance/templates': {
+    route: '/hrm/performance/templates',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/performance/templates/view')
+      return {
+        load: (input) => m.loadTemplateWorkspace(input.searchParams ?? {}),
+        spec: (data) => m.templateWorkspaceSpec(data as never),
       }
     },
   },
@@ -2749,6 +2857,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadBulkBuy(input.searchParams ?? {}),
         spec: (data) => m.bulkBuySpec(data as never),
+      }
+    },
+  },
+  '/stored-value': {
+    route: '/stored-value',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/stored-value/view')
+      return {
+        load: (input) => m.loadStoredValuePage(input.searchParams ?? {}),
+        spec: (data) => m.storedValueSpec(data as never),
       }
     },
   },
