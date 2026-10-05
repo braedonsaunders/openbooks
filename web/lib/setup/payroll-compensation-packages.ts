@@ -78,9 +78,13 @@ export function packageVersionPresentation(pack: CompensationPackageRecord, orgI
     { key: 'conditional' as const, inputs: [numeric('amount', 'money', 'assignment'), { name: 'eligible', type: { kind: 'boolean' }, source: 'assignment' }], args: { amountInput: 'amount', conditionInput: 'eligible' } },
   ]
   function currencyControls(field: SetupField): SetupField {
-    return field.key === 'currency' && !field.hidden ? { ...field, kind: 'select', options: [{ value: pack.currency, label: pack.currency }] } : { ...field, ...(field.fields ? { fields: field.fields.map(currencyControls) } : {}) }
+    const projected = { ...field, ...(field.fields ? { fields: field.fields.map(currencyControls) } : {}) }
+    if (field.key === 'currency' && !field.hidden) return { ...projected, kind: 'select', options: [{ value: pack.currency, label: pack.currency }] }
+    if (field.key === 'rounding') return { ...projected, defaultValue: { ...field.defaultValue as object, scale: pack.currencyMinorUnits } }
+    if (field.key === 'scale') return { ...projected, max: pack.currencyMinorUnits }
+    return projected
   }
-  return { ...PAYROLL_COMPENSATION_VERSIONS_ENTITY, fields: PAYROLL_COMPENSATION_VERSIONS_ENTITY.fields.map(currencyControls), mutationPath: `/api/payroll/compensation-packages/${pack.id}/versions`, createChooser: creating ? { titleKey: label('choosePattern'), descriptionKey: label('patternHint'), options: patterns.map(pattern => ({ key: pattern.key, labelKey: label(`patterns.${pattern.key}`), descriptionKey: label(`patternDescriptions.${pattern.key}`), iconKey: 'banknote', values: { definition: { orgId, country: pack.country, currency: pack.currency, partialPeriod: 'refuse', inputs: pattern.inputs, rules: [{ key: 'payment', componentId: '', expression: compensationPackagePattern({ pattern: pattern.key, ...pattern.args }), condition: null, proration: 'none', rounding: { scale: 4, mode: 'half_away_from_zero', maxWholeDigits: 15 } }] } } })) } : undefined }
+  return { ...PAYROLL_COMPENSATION_VERSIONS_ENTITY, fields: PAYROLL_COMPENSATION_VERSIONS_ENTITY.fields.map(currencyControls), mutationPath: `/api/payroll/compensation-packages/${pack.id}/versions`, createChooser: creating ? { titleKey: label('choosePattern'), descriptionKey: label('patternHint'), options: patterns.map(pattern => ({ key: pattern.key, labelKey: label(`patterns.${pattern.key}`), descriptionKey: label(`patternDescriptions.${pattern.key}`), iconKey: 'banknote', values: { definition: { orgId, country: pack.country, currency: pack.currency, partialPeriod: 'refuse', inputs: pattern.inputs, rules: [{ key: 'payment', componentId: '', expression: compensationPackagePattern({ pattern: pattern.key, ...pattern.args }), condition: null, proration: 'none', rounding: { scale: pack.currencyMinorUnits, mode: 'half_away_from_zero', maxWholeDigits: 15 } }] } } })) } : undefined }
 }
 
 /** Employee controls are built from the approved version, never copied policy values. */

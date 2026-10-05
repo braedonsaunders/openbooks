@@ -3,7 +3,7 @@ import { compensationPackageSchemaRefusal } from './compensation-package-error.t
 import test from "node:test";
 import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
 import { PayrollError } from "./error.ts";
-import { validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
+import { validateCompensationPackagePayrollPolicy, validateCompensationPackageCurrencyRounding } from './compensation-package-payroll-policy.ts';
 
 const orgId = "10000000-0000-4000-8000-000000000001";
 const componentId = "10000000-0000-4000-8000-000000000002";
@@ -105,3 +105,13 @@ test('an absent package schema names server maintenance without masking unrelate
   const cycle: { cause?: unknown } = {}; cycle.cause = cycle
   assert.equal(compensationPackageSchemaRefusal(cycle), null)
 })
+
+test('native currency precision admits zero through four payable places and refuses finer or unknown quanta', () => {
+  for (const minorUnits of [0,2,3,4]) {
+    const valid={...definition,rules:definition.rules.map(rule=>({...rule,rounding:{...rule.rounding,scale:minorUnits}}))};
+    assert.doesNotThrow(()=>validateCompensationPackageCurrencyRounding(valid,minorUnits));
+    if (minorUnits<4) assert.throws(()=>validateCompensationPackageCurrencyRounding({...valid,rules:valid.rules.map(rule=>({...rule,
+      rounding:{...rule.rounding,scale:minorUnits+1}}))},minorUnits),/rule travel.*correct the draft.*approve and assign a replacement/);
+  }
+  for (const invalid of [-1,5,NaN]) assert.throws(()=>validateCompensationPackageCurrencyRounding(definition,invalid),/CAD has no supported payable precision/);
+});

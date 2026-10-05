@@ -98,6 +98,7 @@
         "missing": "el ciclo mismo",
         "components": "componentes de nómina de empleados",
         "componentDefinitions": "configuración de componentes de nómina",
+        "compensationPackages": "condiciones de remuneración aprobadas",
         "derivedRules": "reglas de percepciones derivadas",
         "entitlements": "bancos de pago",
         "workerComp": "tasas de compensación laboral",

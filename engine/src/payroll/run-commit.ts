@@ -1,3 +1,4 @@
+import { requireCompensationPackageConfiguration } from './compensation-package-payroll.ts';
 import { lockPayrollServiceConfiguration } from './service-credit.ts';
 import { assertRecurringBenefitsRunFresh } from './benefit-plan-inputs.ts';
 import { payrollSettings } from "./run-setup.ts";
@@ -439,6 +440,7 @@ export async function commitPayRun(input: {
     // snapshot the claim below will run under. Dynamic import keeps the
     // payroll-run ↔ payroll-readiness cycle out of the engine's load order
     // (same idiom as the approval gate just below).
+    await requireCompensationPackageConfiguration(tx, orgId);
     await lockPayrollServiceConfiguration(tx, orgId);
     const { assertPayRunNotStale, staleCalculationMessage } =
       await import("./readiness.ts");
@@ -499,6 +501,7 @@ export async function commitPayRun(input: {
     );
     if (!currentSource) throw new PayrollError("pay run not found");
     const changes = payRunCalculationSourceChanges(storedSource, currentSource);
+    if (changes.compensationPackages) throw new PayrollError('Approved compensation terms or their native component policy changed since calculation — recalculate this editable pay run before committing.');
     const sourceReasons = [
       changes.time ? "time" : null,
       changes.timeTypes ? "timeTypes" : null,

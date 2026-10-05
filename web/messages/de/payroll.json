@@ -98,6 +98,7 @@
         "missing": "der Lauf selbst",
         "components": "Mitarbeiter-Lohnbestandteile",
         "componentDefinitions": "Lohnbestandteil-Einrichtung",
+        "compensationPackages": "genehmigte Vergütungsbedingungen",
         "derivedRules": "abgeleitete Bezugsregeln",
         "entitlements": "Lohnkonten",
         "workerComp": "Unfallversicherungs-Beitragssätze",

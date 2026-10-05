@@ -6247,7 +6247,7 @@
       "inputName": "Nom de la donnée",
       "inputType": "Type de valeur",
       "source": "Origine de la valeur",
-      "sourceHint": "Choisissez une constante approuvée, une valeur propre au salarié ou une donnée native de paie. Les affectations ne peuvent pas remplacer les données natives.",
+      "sourceHint": "Choisissez une constante approuvée, une valeur du salarié ou une donnée native de paie. Les données natives ne peuvent pas être remplacées. Les règles de gains utilisent le brut avant les gains du package ; les règles suivantes utilisent le brut complet. Le travail daté conserve ses dates ; les montants de période non datés sont répartis selon les jours civils couverts.",
       "value": "Valeur constante",
       "minimum": "Valeur minimale",
       "maximum": "Valeur maximale",

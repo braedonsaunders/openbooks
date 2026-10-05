@@ -1368,6 +1368,7 @@ export const STALENESS_INPUT_CLASSES = [
   "roster",
   "components",
   "componentDefinitions",
+  "compensationPackages",
   "derivedRules",
   "entitlements",
   "workerComp",
@@ -1673,6 +1674,7 @@ export async function payRunStaleness(
     orgId, documentId, executor, allowedSubsidiaryIds,
   );
   let selectionChanged = false;
+  let exactCompensationPackagesChanged = false;
   let exactTimeChanged = false;
   let exactTimeTypesChanged = false;
   let exactWagesChanged = false;
@@ -1699,7 +1701,8 @@ export async function payRunStaleness(
       exactTimeTypesChanged = changes.timeTypes;
       exactWagesChanged = changes.wages;
       exactItemsChanged = changes.items;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items;
+      exactCompensationPackagesChanged = changes.compensationPackages;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages;
     }
   }
   const reasons = [
@@ -1713,6 +1716,7 @@ export async function payRunStaleness(
     row.roster_changed || row.employment_changed ? "roster" : null,
     row.components_changed ? "components" : null,
     row.component_definitions_changed ? "componentDefinitions" : null,
+    exactCompensationPackagesChanged ? "compensationPackages" : null,
     row.derived_rules_changed ? "derivedRules" : null,
     row.entitlements_changed ? "entitlements" : null,
     row.worker_comp_changed ? "workerComp" : null,
@@ -1905,7 +1909,7 @@ async function employerLevyRoomConsumed(
  * say exactly the same thing to the operator.
  */
 export const staleCalculationMessage = (reasons: readonly string[]): string =>
-  `the run's inputs changed after it was last calculated (${reasons.join(", ")})`
+  `the run's inputs changed after it was last calculated (${reasons.map(reason => reason === "compensationPackages" ? "approved compensation terms" : reason).join(", ")})`
   + " — recalculate before committing";
 
 /**

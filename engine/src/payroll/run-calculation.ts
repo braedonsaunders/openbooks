@@ -1,3 +1,4 @@
+import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { recurringBenefitsRunSource } from './benefit-plan-inputs.ts';
 import { reresolveRunToSubsidiary } from "./run-lifecycle.ts";
 import { statutoryHolidayPayEnabled, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents } from "./run-setup.ts";
@@ -250,6 +251,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       );
     }
 
+    await requireCompensationPackageConfiguration(tx, orgId);
+
     // A subsidiary-scoped schedule pays only that entity's employees; an
     // org-wide schedule keeps everyone (the historical behaviour).
     const scheduleScope = (await tx.execute<{ subsidiary_id: string | null }>(sql`
@@ -485,6 +488,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         delete from entitlement_ledger
          where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     }
+    await clearCompensationPackageCalculations(tx, { orgId, documentId, simulate: !!input.simulate });
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
 
     // Run-level input adjustments: exclusions drop the employee entirely;

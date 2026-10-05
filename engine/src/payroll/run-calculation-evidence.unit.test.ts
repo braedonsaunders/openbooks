@@ -40,7 +40,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, compensationPackages: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {
@@ -50,4 +50,27 @@ test("canonical evidence ignores object key order but preserves array order and 
   const reordered = { claimEntryIds: [], itemAccounts: [], payRates: [], timeTypes: [], timeEntries: [], version: 1 as const };
   assert.equal(payRunCalculationSourceDigest(first), payRunCalculationSourceDigest(reordered));
   assert.notEqual(payRunCalculationSourceDigest(first), payRunCalculationSourceDigest({ ...first, claimEntryIds: ["new-claim"] }));
+});
+
+test('legacy payroll evidence treats absent package terms as empty and detects newly approved financial sources', () => {
+  const legacy = snapshot();
+  const empty = { ...snapshot(), compensationPackages: [] };
+  assert.equal(payRunCalculationSourceChanges(legacy, empty).compensationPackages, false);
+  const source: NonNullable<PayRunCalculationSourceSnapshot['compensationPackages']>[number] = {
+    assignmentId: 'assignment', packageId: 'package', packageCode: 'FIELD', employmentId: 'employment', employeePartyId: 'employee',
+    subsidiaryId: 'employer', country: 'CA', currency: 'CAD', currencyMinorUnits: 2, effectiveFrom: '2026-01-01', effectiveTo: null, inputs: { allowance: '310' },
+    versionId: 'approved-version', versionEffectiveFrom: '2026-01-01', versionEffectiveTo: null, definitionHash: 'approved-hash',
+    definition: { orgId: 'organization', country: 'CA', currency: 'CAD', partialPeriod: 'allow', inputs: [], rules: [] }, components: [],
+  };
+  const current = { ...snapshot(), compensationPackages: [source] };
+  assert.equal(payRunCalculationSourceChanges(legacy, current).compensationPackages, true);
+  assert.notEqual(payRunCalculationSourceDigest(current), payRunCalculationSourceDigest(empty));
+  const changed = { ...snapshot(), compensationPackages: [{ ...source, inputs: { allowance: '320' } }] };
+  assert.equal(payRunCalculationSourceChanges(current, changed).compensationPackages, true);
+});
+
+test('a malformed optional package source is refused rather than treated as an empty legacy population', () => {
+  for (const compensationPackages of [null, false, '[]', {}]) {
+    assert.equal(parsePayRunCalculationSource({ ...snapshot(), compensationPackages }), null);
+  }
 });

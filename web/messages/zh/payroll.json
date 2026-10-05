@@ -98,6 +98,7 @@
         "missing": "本次核算本身",
         "components": "员工工资组成",
         "componentDefinitions": "工资组成设置",
+        "compensationPackages": "已批准的薪酬条款",
         "derivedRules": "衍生应发规则",
         "entitlements": "工资银行",
         "workerComp": "工伤保险费率",
