@@ -13,6 +13,7 @@ import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 import { emitItemUpdated } from '@openbooks/engine/webhooks'
+import { wholeDigits } from "@openbooks/engine/money";
 
 
 const ITEM_KINDS = [
@@ -60,11 +61,6 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   const s = strOrNull(v)
   if (s === null) return null
   return isUuid(s) ? s : 'invalid'
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 const nullableText = z.string().nullable().optional()

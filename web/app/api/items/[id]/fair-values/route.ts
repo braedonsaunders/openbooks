@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isUuid } from '../../../../../lib/list-params'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -37,11 +37,6 @@ const fairValueUpdateBody = fairValueCreateBody.extend({ id: uuidId })
 async function itemExists(id: string, orgId: string) {
   const r = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)))
   return Boolean(r.rows[0])
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 function money(value: unknown): string | null | 'range' | 'unreadable' {

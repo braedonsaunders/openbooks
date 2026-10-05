@@ -9,7 +9,7 @@ import {
   type usageRatingPlanVersions,
   type usageRatingPlans,
 } from "@openbooks/schema";
-import { cmp } from "../../money/money.ts";
+import { cmp, wholeDigits } from "../../money/money.ts";
 import { parseMoney, parseQuantity } from "../../money/brands.ts";
 import { compareDecimal } from "../../money/exact-decimal.ts";
 import {
@@ -159,8 +159,7 @@ function quantityText(value: unknown, field: string): string {
     }
     refuse("usage_band_quantity_invalid", `${field} must be an exact decimal with no more than 8 decimal places.`, `Provide a non-negative ${field} with no more than 8 decimal places.`, field);
   }
-  const wholeDigits = quantity.split(".", 1)[0]!.replace(/^0+/, "");
-  if (wholeDigits.length > 20) {
+  if (wholeDigits(quantity) > 20) {
     refuse("usage_band_quantity_invalid", `${field} exceeds the supported numeric(28,8) range.`, `Provide a ${field} that fits numeric(28,8).`, field);
   }
   if (compareDecimal(quantity, "0") < 0) {

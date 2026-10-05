@@ -20,6 +20,7 @@ import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { wholeDigits } from "@openbooks/engine/money";
 
 const exactDecimalText = (field: string) => z.string().superRefine((value, ctx) => {
   if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
@@ -70,11 +71,6 @@ function requiresUnrestrictedOverheadScope(body: Record<string, unknown>): boole
     default:
       return false
   }
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 /** Drizzle/node-postgres may expose the server error directly or as `cause`. */

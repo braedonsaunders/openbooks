@@ -9,7 +9,7 @@ import '@/lib/authz';
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid, pickString } from '@/lib/list-params'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { isIso4217CurrencyCode } from '@openbooks/engine/src/fx/currencies.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
@@ -37,11 +37,6 @@ const requestBodySchema = z.object({
   waiverType: z.enum(['conditional_progress', 'unconditional_progress', 'conditional_final', 'unconditional_final']).optional(),
 })
 
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 export const runtime = 'nodejs'
 

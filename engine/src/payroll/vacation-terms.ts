@@ -4,7 +4,7 @@ import { isIsoCalendarDate } from '../platform/civil-date.ts';
 import { isUuid } from '../platform/uuid.ts';
 import { decimalNullRefusal, moneyRefusal } from '../money/decimal-refusal.ts';
 import { canonicalDecimal } from '../money/exact-decimal.ts';
-import { cmp } from '../money/money.ts';
+import { cmp, wholeDigits } from '../money/money.ts';
 import { PayrollError } from './error.ts';
 import { lockPayrollServiceConfiguration } from './service-credit.ts';
 
@@ -60,9 +60,8 @@ export async function validateVacationTermConfiguration(executor: Pick<typeof db
     if (values[key] != null && values[key] !== '') {
       const value = canonicalDecimal(values[key], 4);
       if (value === null) throw new PayrollError(decimalNullRefusal(key, key === 'percentFloor' ? 'a percentage' : 'an annual day allowance', values[key], 4));
-      const wholeDigits = value.split('.')[0]!.replace(/^[-+]/, '').length;
       const maximumDigits = key === 'percentFloor' ? 3 : 8;
-      if (wholeDigits > maximumDigits) throw new PayrollError(moneyRefusal(key, values[key], key === 'percentFloor' ? 'a percentage' : 'an annual day allowance', 4, maximumDigits));
+      if (wholeDigits(value) > maximumDigits) throw new PayrollError(moneyRefusal(key, values[key], key === 'percentFloor' ? 'a percentage' : 'an annual day allowance', 4, maximumDigits));
       if (cmp(value, '0') < 0) throw new PayrollError(`${key} cannot be negative; enter a nonnegative value.`);
     }
   }

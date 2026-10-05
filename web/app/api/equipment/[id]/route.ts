@@ -4,7 +4,7 @@ import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp, normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import '../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
@@ -36,11 +36,6 @@ const requestBodySchema = z.object({
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
 function bad(error: string) { return NextResponse.json({ error, code: error }, { status: 422 }) }
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 export const GET = defineRoute({
   permission: 'assets.read',

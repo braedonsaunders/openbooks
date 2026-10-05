@@ -13,6 +13,7 @@ import { isUuid } from '../../../lib/list-params'
 import { loadItem } from './_lib'
 import { parseItemShippingFields, type ItemShippingValues } from './shipping-item-fields'
 import { resolveIdempotentReplay } from '@/lib/api/idempotency'
+import { wholeDigits } from '@openbooks/engine/money'
 
 
 const ITEM_KINDS = [
@@ -90,10 +91,6 @@ function uuidOrNull(value: unknown): string | null | 'invalid' {
   const normalized = textOrNull(value)
   if (normalized === null) return null
   return isUuid(normalized) ? normalized : 'invalid'
-}
-
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 function money(

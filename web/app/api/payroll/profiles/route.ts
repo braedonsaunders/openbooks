@@ -31,7 +31,7 @@ import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPayrollFilingAccounts, payrollVisibleScheduleFilter } from '../subsidiary-scope'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../../lib/list-params'
@@ -305,11 +305,6 @@ function claimCode(
   const n = Number(value)
   if (!Number.isInteger(n) || n < bounds.min || n > bounds.max) return 'invalid'
   return n
-}
-
-/** Whole-digit width of a canonical decimal, for column-range guards. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 /** snake_case profile column → the camelCase body key (`es_grupo_cotizacion` → `esGrupoCotizacion`). */

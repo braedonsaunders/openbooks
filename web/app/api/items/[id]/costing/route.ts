@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
@@ -80,11 +80,6 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'inventory',
 
 function accountRef(value: unknown): string | null {
   return value && isUuid(String(value)) ? String(value) : null
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 function moneyOrNull(value: unknown): string | null | 'invalid' {

@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
 import { can } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -62,11 +62,6 @@ const projectChargeBody = z.object({
   referenceNumber: z.string().nullable().optional(),
   lines: z.array(chargeLineSchema).min(1),
 }).strict()
-
-/** Whole-digit width of a canonical decimal. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 function moneyOrNull(v: unknown): string | null | 'invalid' {
   if (v === null || v === undefined || v === '') return null

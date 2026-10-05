@@ -4,7 +4,7 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature } from '@/lib/compliance'
@@ -46,11 +46,6 @@ const requestBodySchema = z.object({
 
 
 export const runtime = 'nodejs'
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 function optionalCoverageMoney(value: unknown): string | null | 'invalid' | 'range' {
   if (value == null || value === '') return null
