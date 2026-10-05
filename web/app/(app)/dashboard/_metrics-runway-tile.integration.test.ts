@@ -74,7 +74,7 @@ function throwingReaders(calls: string[]): DashboardMoneyReaders {
     }) as DashboardMoneyReaders["cashPosition"],
     cashflowConfig: (async () => {
       calls.push("cashflowConfig");
-      return { weeklyCap: "0.0000", restrictToSafe: false };
+      return { weeklyCap: "0.0000", restrictToSafe: false, horizonWeeks: 13 };
     }) as DashboardMoneyReaders["cashflowConfig"],
   };
 }

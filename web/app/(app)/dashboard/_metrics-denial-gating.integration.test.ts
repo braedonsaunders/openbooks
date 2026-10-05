@@ -190,11 +190,16 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
       paymentStats: (async (...args: Parameters<DashboardMoneyReaders["paymentStats"]>) => { calls.push(`paymentStats:${args[0]}`); return { map: new Map(), globalAvg: 45 }; }) as DashboardMoneyReaders["paymentStats"],
       cashPosition: (async () => {
         calls.push("cashPosition");
-        return { runwayWeeks: "40", runwayStatus: "healthy", projectedEnd: "4300", lowestCash: "4300", lowestWeek: "2026-07-20" };
+        // Full CashPosition shape: the cash widget reader consumes weeks,
+        // burn, coverage and settlement means alongside the runway fields.
+        return {
+          runwayWeeks: "40", runwayStatus: "healthy", projectedEnd: "4300", lowestCash: "4300", lowestWeek: "2026-07-20",
+          horizonWeeks: 13, burnRate: "0", netChange: "0", arCoverage: null, dso: null, dpo: null, weeks: [],
+        };
       }) as unknown as DashboardMoneyReaders["cashPosition"],
       cashflowConfig: (async () => {
         calls.push("cashflowConfig");
-        return { weeklyCap: "0.0000", restrictToSafe: false };
+        return { weeklyCap: "0.0000", restrictToSafe: false, horizonWeeks: 13 };
       }) as DashboardMoneyReaders["cashflowConfig"],
     };
     const fullId = await withBypass(() => createScratchUser(org.orgId, "Full Reader", "admin"));

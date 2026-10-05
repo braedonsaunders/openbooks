@@ -23,6 +23,7 @@ const messages = (await import("../../../../messages/en")).default;
 const { CategoryManager } = await import("./CategoryManager");
 const { MoneyProvider } = await import("../../../../components/money-provider");
 const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
+import type { ForecastCategory } from "../../../../lib/cash/core";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -30,7 +31,7 @@ declare global {
   var __cmRouter: { push(url: string): void; refresh(): void } | undefined;
 }
 
-let capturedPut: { categories: { subsidiaryIds?: string[] }[]; expectedRevision: unknown } | undefined;
+let capturedPut: { categories: ForecastCategory[]; expectedRevision: unknown } | undefined;
 
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
