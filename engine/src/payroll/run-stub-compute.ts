@@ -36,6 +36,7 @@ import { applyBankDrawdown } from "./run-bank-drawdown.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
+import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, cashGrossEarnings, nonCashEarnings } from "./non-cash-earnings.ts";
 import { appendRecurringBenefitLines } from './benefit-plan-inputs.ts';
 export async function calculateStub(
@@ -686,11 +687,21 @@ export async function calculateStub(
   //                case). Capping it raises taxable income, which lowers net,
   //                which lowers the cap, so statutory and protection are run
   //                alternately until the pass's input equals its output.
+  //
+  // A protected order's class (a creditor garnishment, a support order)
+  // adds its pack-declared exempt floor beside the configured percentage.
+  const exemptFloors = await resolveProtectionExemptFloors({
+    tx, orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null, country,
+    classes: pack.protectionClasses ?? [], payDate: run.pay_date!, periodsPerYear: P,
+    employeeLabel: emp.display_name ?? employeePartyId,
+    lines: lines.filter((line) => line.kind === "deduction" && line.protectionBase && line.protectionBase !== "none"),
+  });
   const { lastProtection, protectedLines, protectionRequested } =
     await settleDeductionProtection({
       lines, gross,
       employeeLabel: emp.display_name ?? employeePartyId,
       packTreatments,
+      exemptFloors,
       runStatutoryPass,
     });
 

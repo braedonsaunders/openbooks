@@ -15,6 +15,21 @@ export const US_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     required: false,
   },
   {
+    key: "us_garnishment_minimum_hourly_wage",
+    kind: "decimal",
+    scale: 2,
+    min: "0.01",
+    label: "Minimum hourly wage for garnishment protection",
+    refusalReason:
+      "an ordinary creditor garnishment may not reach disposable earnings below 30 times this hourly wage per week; "
+      + "record the federal minimum hourly wage (or a higher state minimum where state garnishment law protects more), "
+      + "effective from the date it applies",
+    legalBasis:
+      "15 U.S.C. §1673(a)(2), measured against the federal minimum hourly wage of 29 U.S.C. §206(a)(1); "
+      + "U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
+    required: false,
+  },
+  {
     key: "sui_financing_method",
     kind: "choice",
     scope: "filing_account",

@@ -256,6 +256,30 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       source: "https://www.irs.gov/instructions/iw2w3",
     },
   ],
+  // The CCPA's classes of order (15 U.S.C. §1673; DOL Fact Sheet #30). An
+  // ordinary creditor garnishment takes at most the lesser of its share of
+  // disposable earnings (25%) and the disposable earnings above 30 times
+  // the minimum hourly wage per week; a support order is limited by its
+  // share alone (50–65%). Federal and state tax levies follow their own
+  // exemption tables and are not classes here.
+  protectionClasses: [
+    {
+      key: "us_creditor_garnishment",
+      label: "Ordinary creditor garnishment",
+      help: "A garnishment for an ordinary debt: withholds at most the lesser of the configured share of disposable "
+        + "earnings (25% under the CCPA) and the disposable earnings above 30 times the minimum hourly wage per week. "
+        + "Below that floor nothing is withheld, and the unpaid amount is reported as a shortfall.",
+      legalBasis: "15 U.S.C. §1673(a); U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
+      exemptFloor: { employerFactKey: "us_garnishment_minimum_hourly_wage", weeklyHours: "30" },
+    },
+    {
+      key: "us_support_order",
+      label: "Child or spousal support order",
+      help: "A support order withholds at most its configured share of disposable earnings (50% to 65% under the CCPA, "
+        + "depending on other dependents and arrears); no minimum-wage floor applies.",
+      legalBasis: "15 U.S.C. §1673(b)(2); U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
+    },
+  ],
   deductionTreatments: [
     // §125 cafeteria and 401(k) elective deferrals reduce FIT-able wages but
     // NOT Social Security or Medicare wages. NE, ND and NC also exclude these

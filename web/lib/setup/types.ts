@@ -77,6 +77,9 @@ export const setupOptionLabel = (
  * - `payroll-deduction-treatments` — the packs' declared pre-tax treatments,
  *   resolved per country into `scopedOptions` (plus the cross-pack union as
  *   the flat `options` fallback)
+ * - `payroll-protection-classes` — the packs' declared classes of protected
+ *   order (creditor garnishment, support order), scoped per country like
+ *   the treatments
  * - `payroll-contribution-programs` — the packs' declared contribution
  *   programs (engine/src/payroll/packs.ts), for the pay-component program
  *   exclusion picker. Cross-pack union; free entry covers the rest, and a
@@ -87,6 +90,7 @@ export type SetupDynamicOptionsSource =
   | 'payroll-filing-program-types'
   | 'payroll-component-countries'
   | 'payroll-deduction-treatments'
+  | 'payroll-protection-classes'
   | 'payroll-contribution-programs'
   | 'payroll-statutory-reporting-categories'
 

@@ -161,6 +161,34 @@ export interface PayrollDeductionTreatment {
   reduces: readonly PayrollTaxBaseKey[];
 }
 
+/**
+ * A class of protected order the pack recognises (`pay_components.
+ * protection_class`): the legal kind of garnishment, which decides the
+ * statutory limit beside the component's configured percentage. A class
+ * with an `exemptFloor` keeps that much of the period's protected base out
+ * of the order's reach — the order takes at most the lesser of its
+ * percentage and the base above the floor — and a class without one is
+ * limited by its percentage alone. Classes are not shared across packs: a
+ * key the employee's pack does not declare refuses the run by name.
+ */
+export interface PayrollProtectionClass {
+  key: string;
+  label: string;
+  help: string;
+  /** The citation that makes the class's limit law. */
+  legalBasis: string;
+  exemptFloor?: {
+    /**
+     * Legal-employer decimal employer fact holding the hourly wage the floor
+     * multiplies — effective-dated configuration, refused by name when the
+     * run needs it and nothing is recorded for the pay date.
+     */
+    employerFactKey: string;
+    /** Hours of that wage the floor protects per WEEK (prorated to the pay period). */
+    weeklyHours: string;
+  };
+}
+
 /** An effective-dated tax-form code for a classified pay component. */
 export interface PayrollStatutoryReportingCode {
   category: string;
@@ -806,6 +834,8 @@ export interface PayrollCountryPack {
   deductionTreatments: readonly PayrollDeductionTreatment[];
   /** Tax-form reporting mappings keyed by component classification category. */
   statutoryReportingCodes?: readonly PayrollStatutoryReportingCode[];
+  /** Classes of protected order the pack recognises (see `PayrollProtectionClass`). */
+  protectionClasses?: readonly PayrollProtectionClass[];
   /**
    * The ONE currency the pack's statutory engine computes, remits and files
    * in. T4127 produces CAD and Pub 15-T produces USD; there is no currency

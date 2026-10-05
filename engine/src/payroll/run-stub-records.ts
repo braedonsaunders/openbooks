@@ -107,6 +107,8 @@ export interface Line {
   protectionBase?: string;
   protectionMaxPercent?: string | null;
   protectionPriority?: number;
+  /** pay_components.protection_class — the pack-declared class of order. */
+  protectionClass?: string | null;
   includeInDisposableEarnings?: boolean;
   paymentKind?: "cash" | "non_cash";
   nonCashAccountId?: string | null;
