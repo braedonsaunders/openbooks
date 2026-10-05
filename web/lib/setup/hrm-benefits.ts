@@ -109,7 +109,8 @@ export function benefitPlanPresentation(kind: 'health' | 'retirement', creating 
       fields: child.fields.map((field) => child.key === 'benefit-contribution-rules' && field.key === 'rate'
         ? { ...field, labelKey: `benefitBuilder.${kind}.rate` }
         : !retirement && ['rateFormula', 'matchRuleId', 'requiresMatchEligibility', 'enforcePolicyCap'].includes(field.key)
-          ? { ...field, sectionKey: 'sections.benefitAdvanced' } : field),
+          ? { ...field, sectionKey: 'sections.benefitAdvanced' } : field)
+        .sort((left, right) => Number(left.sectionKey === 'sections.benefitAdvanced') - Number(right.sectionKey === 'sections.benefitAdvanced')),
     })),
     singularTitleKey: `benefitBuilder.${kind}.title`,
     creationSteps: [
