@@ -354,8 +354,16 @@ test('percent fees price whole yen on JPY and refuse unknown precision', { skip:
         lines: [{ key: 'l1', itemId: null, itemCategory: null, lineTotalMinor: 10000n }],
         waived: false, canWaive: false,
       })),
-      (error: unknown) => error instanceof RestockingFeeRefusal && error.code === 'currency_precision_unknown'
-        && error.status === 422 && /platform currency seed/.test(error.remedy ?? ''),
+      (error: unknown) => {
+        if (!(error instanceof RestockingFeeRefusal) || error.code !== 'currency_precision_unknown' || error.status !== 422) {
+          return false;
+        }
+        const remedy = error.remedy ?? '';
+        return /platform currency seed/.test(remedy)
+          && /review the original currency evidence/.test(remedy)
+          && !/choose a supported currency code/.test(remedy)
+          && !/must be replaced/.test(remedy);
+      },
     )
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
