@@ -64,18 +64,18 @@ export async function planMovementsForStub(
   const plans = input.plans ?? (await entitlementPlans(orgId, executor));
   if (plans.length === 0) return { movements: [], warnings: [] };
 
-  const bankable = input.earnings.filter((line) => line.bankable !== false);
-  const earnings = sum(bankable.map((line) => line.amount));
-  const hours = sum(
-    input.earnings.filter((line) => line.hours != null).map((line) => String(line.hours)),
-  );
-
   const tiers = await resolveServiceTier(executor, orgId, employeePartyId, input.policyDate ?? movementDate, input.employmentId);
   // One scope lookup serves every plan's limit resolution for this employee.
   const scope = await employeeScope(executor, orgId, employeePartyId, { onDate: input.policyDate ?? movementDate, employmentId: input.employmentId });
   const movements: EntitlementMovement[] = [];
   const warnings: EntitlementWarning[] = [];
   for (const plan of plans) {
+    // Settling this bank cannot replenish it. Deferred wages paid from a
+    // different bank retain their declared eligibility for this plan.
+    const eligible = input.earnings.filter((line) =>
+      plan.payoutComponentId === null || line.componentId !== plan.payoutComponentId);
+    const earnings = sum(eligible.filter((line) => line.bankable !== false).map((line) => line.amount));
+    const hours = sum(eligible.filter((line) => line.hours != null).map((line) => String(line.hours)));
     const openingBalance = await planBalanceExcludingRun(
       executor, orgId, plan.id, employeePartyId, movementDate, payRunDocumentId,
     );

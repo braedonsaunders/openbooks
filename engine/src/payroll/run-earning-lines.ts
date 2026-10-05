@@ -705,17 +705,16 @@ export async function applyEntitlementPlanMovements(
     const bankablePlans = (payVacationInCash || args.excludeVacationAccrual) && vacationPlan
       ? plans.filter((p) => p.id !== vacationPlan.id)
       : plans;
-    // A payout-component line is a bank settlement, never earnings: the
-    // payout component is not vacationable even when its flags say otherwise,
-    // so paying out of the bank accrues no further bank. Deposit-component
-    // funding lines stay in the basis — their cash reversal nets the earnings
-    // they bank away.
-    const payoutComponents = new Set(plans.map((p) => p.payoutComponentId).filter((id) => id !== null));
+    // Each plan excludes its own settlement inside planMovementsForStub.
+    // Other bank payouts remain earnings under their declared eligibility;
+    // deferred wages can earn vacation when the wage component allows it.
+    // Deposit funding stays in the basis so its cash reversal nets the wages
+    // being banked away.
     const { movements, warnings } = await planMovementsForStub(tx, {
       orgId, employeePartyId, employmentId: args.employmentId, policyDate: args.policyDate, movementDate: payDate,
       payRunDocumentId: documentId,
       earnings: lines
-        .filter((l) => l.kind === "earning" && !l.accrualOnly && !payoutComponents.has(l.componentId ?? ""))
+        .filter((l) => l.kind === "earning" && !l.accrualOnly)
         .map((l) => ({
           componentId: l.componentId, amount: l.amount,
           hours: l.hours ?? null, bankable: l.vacationable ?? true,
