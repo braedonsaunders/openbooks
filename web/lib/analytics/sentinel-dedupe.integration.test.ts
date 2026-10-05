@@ -13,13 +13,10 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { sentinelData } = await import('./sentinel-data')
+const { analyticsConfig } = await import('./config.ts')
+import type { DuplicateGroup } from './sentinel-data.ts'
 
 type Authz = Parameters<typeof sentinelData>[2]
-type SentinelGroups = Array<{
-  groupId: string; partyName: string; kind: string; currency: string; amount: number
-  funcTotal: number; count: number; dateSpanDays: number; sameReference: boolean
-  members: Array<{ docId: string; docNumber: string; reference: string; date: string; amount: number }>
-}>
 
 const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
 
@@ -45,8 +42,16 @@ async function seedVendorBills(orgId: string, subsidiaryId: string, name: string
 // nothing and the assertions would pass vacuously.
 async function configureDuplicateFloor(orgId: string) {
   await withBypass(async () => {
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
-      '{"duplicateMinAmount": "1.00", "duplicateDays": 14}') where id = ${orgId}`)
+    // jsonb_set cannot create the intermediate `analytics` object on a
+    // scratch org that has none, so merge the sentinel blob in with ||.
+    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
+      || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
+        || jsonb_build_object('sentinel', '{"duplicateMinAmount": "1.00", "duplicateDays": 14}'::jsonb))
+      where id = ${orgId}`)
+    // A fixture write that no read can observe is not a setup: prove the
+    // reader resolves the floor before any scenario runs.
+    const cfg = await analyticsConfig(orgId, 'sentinel')
+    assert.equal(cfg.duplicateMinAmount, '1.00')
   })
 }
 
@@ -59,8 +64,8 @@ async function runSentinel(orgId: string) {
   return withOrgContext(orgId, () => sentinelData(orgId, P, authz))
 }
 
-function groupsOf(data: Awaited<ReturnType<typeof sentinelData>>): SentinelGroups {
-  return (data.duplicates as unknown as { groups?: SentinelGroups }).groups ?? []
+function groupsOf(data: Awaited<ReturnType<typeof sentinelData>>): DuplicateGroup[] {
+  return data.duplicates.groups
 }
 
 /**
@@ -126,12 +131,12 @@ test('sentinel duplicates report one finding per natural-key group', { skip: !en
     assert.equal(groups[0]!.count, 3)
     assert.equal(groups[0]!.members.length, 3)
     assert.equal(groups[0]!.currency, 'USD')
-    assert.equal(groups[0]!.amount, 300)
+    assert.equal(groups[0]!.amount, '300.0000')
     assert.equal(groups[0]!.sameReference, true)
     // Boundary member rides along: the June copy is listed as evidence.
     assert.ok(groups[0]!.members.some((m) => m.docNumber === 'BILL-A'))
     // Value at risk: two excess copies translated at document FX.
-    assert.equal(data.summary.totalDuplicateAmount, 810)
+    assert.equal(data.summary.totalDuplicateAmount, '810.0000')
     assert.equal(data.flagged.filter((f) => f.flagType === 'duplicate').length, 1)
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

@@ -14,6 +14,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { sentinelData } = await import('./sentinel-data')
+const { analyticsConfig } = await import('./config.ts')
 
 type Authz = Parameters<typeof sentinelData>[2]
 type Data = Awaited<ReturnType<typeof sentinelData>>
@@ -42,8 +43,18 @@ async function seedVendorBills(orgId: string, subsidiaryId: string, name: string
 // detector reports nothing and the assertions pass vacuously.
 async function configureSentinel(orgId: string, values: Record<string, string | number>) {
   await withBypass(async () => {
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
-      ${JSON.stringify(values)}::jsonb) where id = ${orgId}`)
+    // jsonb_set cannot create the intermediate `analytics` object on a
+    // scratch org that has none, so merge the sentinel blob in with ||.
+    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
+      || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
+        || jsonb_build_object('sentinel', ${JSON.stringify(values)}::jsonb))
+      where id = ${orgId}`)
+    // A fixture write that no read can observe is not a setup: prove the
+    // reader resolves every configured value before the scenario runs.
+    const cfg = await analyticsConfig(orgId, 'sentinel') as unknown as Record<string, unknown>
+    for (const [key, value] of Object.entries(values)) {
+      assert.equal(cfg[key], value)
+    }
   })
 }
 

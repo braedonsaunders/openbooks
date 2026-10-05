@@ -33,6 +33,7 @@ const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { loadRiskWidgetMetrics } = await import("./_metrics-risk.ts");
 const { sentinelData } = await import("../../../lib/analytics/sentinel-data.ts");
+const { analyticsConfig } = await import("../../../lib/analytics/config.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type DashboardWidgetContext = import("./_metrics-context.ts").DashboardWidgetContext;
 
@@ -63,8 +64,14 @@ async function seedDuplicateBills(orgId: string, subsidiaryId: string) {
 
 async function setDuplicateFloor(orgId: string) {
   await withBypass(async () => {
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics,sentinel}',
-      '{"duplicateMinAmount": "100.00", "duplicateDays": 14}') where id = ${orgId}`);
+    // jsonb_set cannot create the intermediate `analytics` object on a
+    // scratch org that has none, so merge the sentinel blob in with ||,
+    // then prove the reader resolves the floor.
+    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
+      || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
+        || jsonb_build_object('sentinel', '{"duplicateMinAmount": "100.00", "duplicateDays": 14}'::jsonb))
+      where id = ${orgId}`);
+    assert.equal((await analyticsConfig(orgId, 'sentinel')).duplicateMinAmount, '100.00');
   });
 }
 
