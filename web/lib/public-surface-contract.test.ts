@@ -150,6 +150,23 @@ const TOKEN_SURFACES: TokenSurface[] = [
     refusalMarker: /invalid signature/,
   },
   {
+    dir: join(webApp, "api", "portal"),
+    kind: "api",
+    tokenMarker: /resolvePortalSession|requestPortalLink|requestPortalReturn|portalReturnableSources/,
+    refusalMarker: /public: 'token'/,
+  },
+  {
+    // Token pages only: the request page carries no credential to verify
+    // (it only posts an email address for a magic link).
+    dir: join(webApp, "portal", "[token]"),
+    kind: "page",
+    // Section pages verify through the shared portalPage loader (session
+    // resolve + gate + section check, 404ing inside); the token page
+    // resolves directly and 404s itself.
+    tokenMarker: /resolvePortalSession|consumePortalLink|portalPage\(/,
+    refusalMarker: /notFound\(\)|portalPage\(/,
+  },
+  {
     dir: join(webApp, "api", "channels", "[id]", "webhooks"),
     kind: "api",
     tokenMarker: /receiveInboundEvent/,

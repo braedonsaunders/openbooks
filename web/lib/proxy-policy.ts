@@ -28,6 +28,14 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/api/v1",
   "/pay",
   "/api/pay",
+  // Customer portal: every route under /portal and its APIs authenticates by
+  // magic-link/session token in-route (see the portal surface entries in
+  // public-surface-contract.test.ts). The API dir holds only token routes.
+  "/portal",
+  "/api/portal/request",
+  "/api/portal/actions",
+  "/api/portal/returns",
+  "/api/portal/invoices",
   "/api/payments/webhooks",
   // Carrier tracker deliveries (/api/shipping/webhooks): the aggregators
   // hold no session — every delivery is verified inside the route (relay

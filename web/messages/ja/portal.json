@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "戻る",
+    "viewAll": "すべて見る"
+  },
+  "request": {
+    "title": "顧客サインイン",
+    "detail": "請求先または連絡先メールを入力すると、使い捨てサインインリンクをお送りします。",
+    "email": "メールアドレス",
+    "submit": "リンクを送信",
+    "sent": "受信箱をご確認ください — そのアドレスが顧客のものであればリンクが届きます。"
+  },
+  "home": {
+    "title": "こんにちは、{name}",
+    "openInvoices": "未払いの請求書",
+    "noInvoices": "未払いの請求書はありません。新しい請求書は発行され次第ここに表示されます。",
+    "subscriptions": "サブスクリプション",
+    "noSubscriptions": "まだありません。",
+    "balances": "クレジットと前払い残高",
+    "storeCredit": "ストアクレジット",
+    "prepaid": "前払い利用分",
+    "orders": "最近の注文",
+    "noOrders": "まだ注文がありません。"
+  },
+  "nav": {
+    "invoices": "請求書",
+    "methods": "支払方法",
+    "subscriptions": "サブスク",
+    "orders": "注文",
+    "returns": "返品",
+    "giftCards": "ギフトカード"
+  },
+  "invoices": {
+    "title": "請求書",
+    "empty": "未払いの請求書はありません。新しい請求書は発行され次第ここに表示されます。",
+    "payNow": "今すぐ支払う",
+    "downloadPdf": "PDFをダウンロード",
+    "ofTotal": "{total}のうち"
+  },
+  "subscriptions": {
+    "title": "サブスクリプション",
+    "empty": "まだありません。",
+    "status": "状態: {status}",
+    "nextBill": "次回請求 {date}",
+    "quantity": "数量",
+    "price": "単価",
+    "preview": "変更をプレビュー",
+    "apply": "変更を適用",
+    "increase": "増やす",
+    "decrease": "減らす",
+    "charge": "追加請求",
+    "credit": "クレジット",
+    "pause": "一時停止",
+    "resume": "再開",
+    "cancelTitle": "解約する",
+    "cancelReason": "解約理由を教えてください",
+    "cancelReasonPlaceholder": "一文でお聞かせください",
+    "cancel": "解約する",
+    "takeOffer": "オファーを受ける"
+  },
+  "methods": {
+    "title": "支払方法",
+    "empty": "保存済みの支払方法がありません。追加するとワンクリックで支払えます。",
+    "default": "標準",
+    "setDefault": "標準にする",
+    "remove": "削除",
+    "add": "支払方法を追加"
+  },
+  "orders": {
+    "title": "注文",
+    "empty": "まだ注文がありません。",
+    "fulfilment": "発送: {status}",
+    "noTrackingNumber": "追跡番号はまだありません"
+  },
+  "returns": {
+    "title": "返品",
+    "empty": "返品できる請求書がまだありません。",
+    "window": "請求書から{days}日以内なら返品できます。",
+    "start": "返品を開始",
+    "nothingReturnable": "この請求書でオンライン返品できるものはありません — 仕入先にお問い合わせください。",
+    "available": "返品可能: {quantity}",
+    "quantity": "数量",
+    "reason": "理由",
+    "resolution": "対応",
+    "submit": "返品をリクエスト",
+    "submitted": "返品を受け付けました",
+    "refund": "返金",
+    "exchange": "交換",
+    "storeCredit": "ストアクレジット"
+  },
+  "giftCards": {
+    "title": "ギフトカード",
+    "lookupTitle": "残高を確認",
+    "code": "カードコード",
+    "check": "残高を確認",
+    "yours": "あなたのクレジット",
+    "empty": "クレジットも前払い残高もありません。",
+    "storeCredit": "ストアクレジット",
+    "prepaid": "前払い利用分"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "Voltar",
+    "viewAll": "Ver tudo"
+  },
+  "request": {
+    "title": "Acesso do cliente",
+    "detail": "Informe seu e-mail de cobrança ou contato e enviaremos um link único de acesso.",
+    "email": "E-mail",
+    "submit": "Enviar link",
+    "sent": "Verifique sua caixa — se esse endereço for de um cliente, um link está a caminho."
+  },
+  "home": {
+    "title": "Olá, {name}",
+    "openInvoices": "Faturas em aberto",
+    "noInvoices": "Sem faturas em aberto. As novas aparecem aqui assim que emitidas.",
+    "subscriptions": "Assinaturas",
+    "noSubscriptions": "Sem assinaturas ainda.",
+    "balances": "Créditos e saldos pré-pagos",
+    "storeCredit": "Crédito na loja",
+    "prepaid": "Uso pré-pago",
+    "orders": "Pedidos recentes",
+    "noOrders": "Sem pedidos ainda."
+  },
+  "nav": {
+    "invoices": "Faturas",
+    "methods": "Métodos de pagamento",
+    "subscriptions": "Assinaturas",
+    "orders": "Pedidos",
+    "returns": "Devoluções",
+    "giftCards": "Vales-presente"
+  },
+  "invoices": {
+    "title": "Faturas",
+    "empty": "Sem faturas em aberto. As novas aparecem aqui assim que emitidas.",
+    "payNow": "Pagar agora",
+    "downloadPdf": "Baixar PDF",
+    "ofTotal": "de {total}"
+  },
+  "subscriptions": {
+    "title": "Assinaturas",
+    "empty": "Sem assinaturas ainda.",
+    "status": "Situação: {status}",
+    "nextBill": "Próxima fatura {date}",
+    "quantity": "Quantidade",
+    "price": "Preço por unidade",
+    "preview": "Prévia",
+    "apply": "Aplicar",
+    "increase": "Aumentar",
+    "decrease": "Reduzir",
+    "charge": "Cobrança extra",
+    "credit": "Crédito",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "cancelTitle": "Cancelar assinatura",
+    "cancelReason": "Por que está cancelando?",
+    "cancelReasonPlaceholder": "Conte em uma frase",
+    "cancel": "Cancelar assinatura",
+    "takeOffer": "Aceitar oferta"
+  },
+  "methods": {
+    "title": "Métodos de pagamento",
+    "empty": "Sem métodos salvos. Adicione um para pagar faturas com um clique.",
+    "default": "Padrão",
+    "setDefault": "Tornar padrão",
+    "remove": "Remover",
+    "add": "Adicionar método"
+  },
+  "orders": {
+    "title": "Pedidos",
+    "empty": "Sem pedidos ainda.",
+    "fulfilment": "Envio: {status}",
+    "noTrackingNumber": "Rastreio ainda não informado"
+  },
+  "returns": {
+    "title": "Devoluções",
+    "empty": "Sem faturas para devolver ainda.",
+    "window": "Devoluções aceitas em até {days} dias da fatura.",
+    "start": "Iniciar devolução",
+    "nothingReturnable": "Nada desta fatura pode ser devolvido online — fale com seu fornecedor.",
+    "available": "Passível de devolução: {quantity}",
+    "quantity": "Qtd.",
+    "reason": "Motivo",
+    "resolution": "Resultado",
+    "submit": "Solicitar devolução",
+    "submitted": "Devolução solicitada",
+    "refund": "Reembolso",
+    "exchange": "Troca",
+    "storeCredit": "Crédito na loja"
+  },
+  "giftCards": {
+    "title": "Vales-presente",
+    "lookupTitle": "Consultar saldo",
+    "code": "Código",
+    "check": "Consultar",
+    "yours": "Seu crédito",
+    "empty": "Sem crédito nem saldos pré-pagos.",
+    "storeCredit": "Crédito na loja",
+    "prepaid": "Uso pré-pago"
+  }
+}

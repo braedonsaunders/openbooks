@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "返回",
+    "viewAll": "查看全部"
+  },
+  "request": {
+    "title": "客户登录",
+    "detail": "输入账单或联系邮箱，我们将发送一次性登录链接。",
+    "email": "邮箱地址",
+    "submit": "发送登录链接",
+    "sent": "请查收邮箱 — 如果该地址属于客户，链接正在发送。"
+  },
+  "home": {
+    "title": "您好，{name}",
+    "openInvoices": "未付发票",
+    "noInvoices": "暂无未付发票。新发票开具后会显示在这里。",
+    "subscriptions": "订阅",
+    "noSubscriptions": "暂无订阅。",
+    "balances": "信用与预付余额",
+    "storeCredit": "储值信用",
+    "prepaid": "预付用量",
+    "orders": "最近订单",
+    "noOrders": "暂无订单。"
+  },
+  "nav": {
+    "invoices": "发票",
+    "methods": "付款方式",
+    "subscriptions": "订阅",
+    "orders": "订单",
+    "returns": "退货",
+    "giftCards": "礼品卡"
+  },
+  "invoices": {
+    "title": "发票",
+    "empty": "暂无未付发票。新发票开具后会显示在这里。",
+    "payNow": "立即付款",
+    "downloadPdf": "下载 PDF",
+    "ofTotal": "共 {total}"
+  },
+  "subscriptions": {
+    "title": "订阅",
+    "empty": "暂无订阅。",
+    "status": "状态：{status}",
+    "nextBill": "下次账单 {date}",
+    "quantity": "数量",
+    "price": "单价",
+    "preview": "预览变更",
+    "apply": "应用变更",
+    "increase": "增加",
+    "decrease": "减少",
+    "charge": "补收",
+    "credit": "退款",
+    "pause": "暂停",
+    "resume": "恢复",
+    "cancelTitle": "取消订阅",
+    "cancelReason": "请问取消原因？",
+    "cancelReasonPlaceholder": "一句话告诉我们",
+    "cancel": "取消订阅",
+    "takeOffer": "接受优惠"
+  },
+  "methods": {
+    "title": "付款方式",
+    "empty": "暂无保存的付款方式。添加后可一键支付发票。",
+    "default": "默认",
+    "setDefault": "设为默认",
+    "remove": "删除",
+    "add": "添加付款方式"
+  },
+  "orders": {
+    "title": "订单",
+    "empty": "暂无订单。",
+    "fulfilment": "履约：{status}",
+    "noTrackingNumber": "暂无追踪单号"
+  },
+  "returns": {
+    "title": "退货",
+    "empty": "暂无可退货的发票。",
+    "window": "发票开具后 {days} 天内可退货。",
+    "start": "发起退货",
+    "nothingReturnable": "该发票暂不支持在线退货 — 请联系供应商。",
+    "available": "可退数量：{quantity}",
+    "quantity": "数量",
+    "reason": "原因",
+    "resolution": "处理方式",
+    "submit": "提交退货",
+    "submitted": "退货已提交",
+    "refund": "退款",
+    "exchange": "换货",
+    "storeCredit": "储值信用"
+  },
+  "giftCards": {
+    "title": "礼品卡",
+    "lookupTitle": "查询余额",
+    "code": "卡号",
+    "check": "查询余额",
+    "yours": "您的信用",
+    "empty": "暂无储值或预付余额。",
+    "storeCredit": "储值信用",
+    "prepaid": "预付用量"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "Zurück",
+    "viewAll": "Alle ansehen"
+  },
+  "request": {
+    "title": "Kundenanmeldung",
+    "detail": "Geben Sie Ihre Abrechnungs- oder Kontakt-E-Mail ein — wir senden Ihnen einen einmaligen Anmeldelink.",
+    "email": "E-Mail-Adresse",
+    "submit": "Anmeldelink senden",
+    "sent": "Prüfen Sie Ihr Postfach — gehört die Adresse zu einem Kunden, ist ein Link unterwegs."
+  },
+  "home": {
+    "title": "Hallo, {name}",
+    "openInvoices": "Offene Rechnungen",
+    "noInvoices": "Keine offenen Rechnungen. Neue Rechnungen erscheinen hier sofort nach Ausstellung.",
+    "subscriptions": "Abos",
+    "noSubscriptions": "Noch keine Abos.",
+    "balances": "Guthaben und Vorauszahlungen",
+    "storeCredit": "Guthaben",
+    "prepaid": "Vorausbezahlte Nutzung",
+    "orders": "Aktuelle Bestellungen",
+    "noOrders": "Noch keine Bestellungen."
+  },
+  "nav": {
+    "invoices": "Rechnungen",
+    "methods": "Zahlungsmethoden",
+    "subscriptions": "Abos",
+    "orders": "Bestellungen",
+    "returns": "Retouren",
+    "giftCards": "Geschenkkarten"
+  },
+  "invoices": {
+    "title": "Rechnungen",
+    "empty": "Keine offenen Rechnungen. Neue Rechnungen erscheinen hier sofort nach Ausstellung.",
+    "payNow": "Jetzt zahlen",
+    "downloadPdf": "PDF laden",
+    "ofTotal": "von {total}"
+  },
+  "subscriptions": {
+    "title": "Abos",
+    "empty": "Noch keine Abos.",
+    "status": "Status: {status}",
+    "nextBill": "Nächste Abrechnung {date}",
+    "quantity": "Menge",
+    "price": "Preis pro Einheit",
+    "preview": "Änderung vorschau",
+    "apply": "Änderung anwenden",
+    "increase": "Erhöhen",
+    "decrease": "Senken",
+    "charge": "Nachbelastung",
+    "credit": "Gutschrift",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "cancelTitle": "Abo kündigen",
+    "cancelReason": "Warum kündigen Sie?",
+    "cancelReasonPlaceholder": "Sagen Sie es uns in einem Satz",
+    "cancel": "Abo kündigen",
+    "takeOffer": "Angebot annehmen"
+  },
+  "methods": {
+    "title": "Zahlungsmethoden",
+    "empty": "Keine gespeicherten Zahlungsmethoden. Fügen Sie eine hinzu, um Rechnungen mit einem Klick zu zahlen.",
+    "default": "Standard",
+    "setDefault": "Als Standard",
+    "remove": "Entfernen",
+    "add": "Zahlungsmethode hinzufügen"
+  },
+  "orders": {
+    "title": "Bestellungen",
+    "empty": "Noch keine Bestellungen.",
+    "fulfilment": "Versand: {status}",
+    "noTrackingNumber": "Noch keine Sendungsnummer"
+  },
+  "returns": {
+    "title": "Retouren",
+    "empty": "Noch keine Rechnungen für Retouren.",
+    "window": "Retouren sind bis {days} Tage nach der Rechnung möglich.",
+    "start": "Retoure starten",
+    "nothingReturnable": "Davon kann online nichts retourniert werden — wenden Sie sich an Ihren Lieferanten.",
+    "available": "Rückgabefähig: {quantity}",
+    "quantity": "Menge",
+    "reason": "Grund",
+    "resolution": "Ergebnis",
+    "submit": "Retoure anfordern",
+    "submitted": "Retoure angefordert",
+    "refund": "Erstattung",
+    "exchange": "Umtausch",
+    "storeCredit": "Guthaben"
+  },
+  "giftCards": {
+    "title": "Geschenkkarten",
+    "lookupTitle": "Guthaben prüfen",
+    "code": "Kartencode",
+    "check": "Guthaben prüfen",
+    "yours": "Ihr Guthaben",
+    "empty": "Kein Guthaben und keine Vorauszahlungen.",
+    "storeCredit": "Guthaben",
+    "prepaid": "Vorausbezahlte Nutzung"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "common": {
+    "back": "Volver",
+    "viewAll": "Ver todo"
+  },
+  "request": {
+    "title": "Acceso de clientes",
+    "detail": "Introduzca su correo de facturación o contacto y le enviaremos un enlace de acceso único.",
+    "email": "Correo electrónico",
+    "submit": "Enviar enlace",
+    "sent": "Revise su bandeja — si esa dirección pertenece a un cliente, un enlace va en camino."
+  },
+  "home": {
+    "title": "Hola, {name}",
+    "openInvoices": "Facturas abiertas",
+    "noInvoices": "Sin facturas abiertas. Las nuevas aparecen aquí en cuanto se emiten.",
+    "subscriptions": "Suscripciones",
+    "noSubscriptions": "Sin suscripciones todavía.",
+    "balances": "Saldos de crédito y prepago",
+    "storeCredit": "Crédito en tienda",
+    "prepaid": "Uso prepagado",
+    "orders": "Pedidos recientes",
+    "noOrders": "Sin pedidos todavía."
+  },
+  "nav": {
+    "invoices": "Facturas",
+    "methods": "Métodos de pago",
+    "subscriptions": "Suscripciones",
+    "orders": "Pedidos",
+    "returns": "Devoluciones",
+    "giftCards": "Tarjetas regalo"
+  },
+  "invoices": {
+    "title": "Facturas",
+    "empty": "Sin facturas abiertas. Las nuevas aparecen aquí en cuanto se emiten.",
+    "payNow": "Pagar ahora",
+    "downloadPdf": "Descargar PDF",
+    "ofTotal": "de {total}"
+  },
+  "subscriptions": {
+    "title": "Suscripciones",
+    "empty": "Sin suscripciones todavía.",
+    "status": "Estado: {status}",
+    "nextBill": "Próxima factura {date}",
+    "quantity": "Cantidad",
+    "price": "Precio por unidad",
+    "preview": "Vista previa",
+    "apply": "Aplicar cambio",
+    "increase": "Aumentar",
+    "decrease": "Reducir",
+    "charge": "Cargo extra",
+    "credit": "Crédito",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "cancelTitle": "Cancelar suscripción",
+    "cancelReason": "¿Por qué cancela?",
+    "cancelReasonPlaceholder": "Cuéntenos en una frase",
+    "cancel": "Cancelar suscripción",
+    "takeOffer": "Aceptar oferta"
+  },
+  "methods": {
+    "title": "Métodos de pago",
+    "empty": "Sin métodos guardados. Añada uno para pagar facturas con un clic.",
+    "default": "Predeterminado",
+    "setDefault": "Predeterminado",
+    "remove": "Eliminar",
+    "add": "Añadir método de pago"
+  },
+  "orders": {
+    "title": "Pedidos",
+    "empty": "Sin pedidos todavía.",
+    "fulfilment": "Envío: {status}",
+    "noTrackingNumber": "Aún sin número de seguimiento"
+  },
+  "returns": {
+    "title": "Devoluciones",
+    "empty": "Aún sin facturas para devolver.",
+    "window": "Se aceptan devoluciones dentro de los {days} días de la factura.",
+    "start": "Iniciar devolución",
+    "nothingReturnable": "Nada de esta factura puede devolverse en línea — contacte a su proveedor.",
+    "available": "Disponible para devolución: {quantity}",
+    "quantity": "Cant.",
+    "reason": "Motivo",
+    "resolution": "Resultado",
+    "submit": "Solicitar devolución",
+    "submitted": "Devolución solicitada",
+    "refund": "Reembolso",
+    "exchange": "Cambio",
+    "storeCredit": "Crédito en tienda"
+  },
+  "giftCards": {
+    "title": "Tarjetas regalo",
+    "lookupTitle": "Consultar saldo",
+    "code": "Código",
+    "check": "Consultar saldo",
+    "yours": "Su crédito",
+    "empty": "Sin crédito ni saldos prepagados.",
+    "storeCredit": "Crédito en tienda",
+    "prepaid": "Uso prepagado"
+  }
+}

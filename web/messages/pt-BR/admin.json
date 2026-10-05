@@ -3437,6 +3437,11 @@
         "title": "Configurações de envio",
         "singular": "Configurações de envio",
         "description": "Quais contas levam o custo das etiquetas, qual pacote completa medidas ausentes e os padrões de tarifa, acréscimo, seguro, assinatura e alfândega."
+      },
+      "customer-portal": {
+        "title": "Portal do cliente",
+        "singular": "Ajustes do portal",
+        "description": "O que os clientes veem após entrar: nome, seções, regras de devolução e ofertas de retenção, com vigência."
       }
     },
     "fields": {
@@ -4798,6 +4803,10 @@
         "none": "Sem assinatura",
         "direct": "Assinatura direta",
         "adult": "Assinatura de adulto"
+      },
+      "portalOfferKind": {
+        "pause": "Pausar em vez disso",
+        "discount": "Desconto com promoção"
       }
     },
     "payroll": {
@@ -6083,6 +6092,40 @@
       "signatureExpiryDays": "Validade do link (dias)",
       "orderFormTemplateId": "Modelo do formulário",
       "orderFormTemplateHelp": "Modelo PDF da tela de assinatura. Vazio mantém o padrão do orçamento."
+    },
+    "customerPortalFields": {
+      "portalName": "Nome do portal",
+      "effectiveFrom": "Vigente desde",
+      "effectiveFromHelp": "Regras novas valem desde esta data; solicitações passadas mantêm as suas.",
+      "sectionsInvoices": "Faturas",
+      "sectionsPaymentMethods": "Métodos de pagamento",
+      "sectionsSubscriptions": "Assinaturas",
+      "sectionsUsage": "Uso e saldos",
+      "sectionsOrders": "Pedidos",
+      "sectionsReturns": "Devoluções",
+      "sectionsGiftCards": "Vales-presente",
+      "returnWindowDays": "Prazo de devolução (dias)",
+      "returnReasons": "Motivos de devolução",
+      "returnReasonsHelp": "Rótulos curtos à escolha, ex. avariado, item errado.",
+      "resolutionRefund": "Oferecer reembolso",
+      "resolutionExchange": "Oferecer troca",
+      "resolutionStoreCredit": "Oferecer crédito",
+      "storeCreditBonusPercent": "Bônus de crédito %",
+      "storeCreditBonusHelp": "Crédito extra quando a devolução liquida como crédito.",
+      "saveOffers": "Ofertas de retenção",
+      "saveOffersHelp": "Ofertas antes de cancelar: pausar a assinatura ou descontá-la com promoção.",
+      "saveOffer": "Oferta",
+      "addSaveOffer": "Adicionar oferta",
+      "offerLabel": "Texto da oferta",
+      "offerKind": "Tipo de oferta",
+      "promotionCode": "Código promocional",
+      "note": "Nota"
+    },
+    "customerPortalSections": {
+      "branding": "Nome e vigência",
+      "sections": "Seções visíveis",
+      "returns": "Regras de devolução",
+      "saveOffers": "Ofertas de retenção"
     }
   },
   "flows": {

@@ -246,14 +246,15 @@ export type SetupCommandName =
   | 'setFunctionalMapping'
   | 'upsertChannelAccountMap'
   | 'upsertChannelLocation'
+  | 'savePortalSettings'
 
 export interface SetupCommandDescriptor {
   /** Exhaustive dispatch key — one literal per domain command, dispatched in the command route. */
   name: SetupCommandName
   /** Mutation grant the command endpoint enforces (least privilege per domain). */
-  permission: 'funds.manage' | 'channels.manage'
+  permission: 'funds.manage' | 'channels.manage' | 'documents.manage'
   /** Authoritative Company Settings → Features key enforced server-side. */
-  feature: 'fundAccounting' | 'functionalExpenses' | 'salesChannels'
+  feature: 'fundAccounting' | 'functionalExpenses' | 'salesChannels' | 'customerPortal'
 }
 
 /**
