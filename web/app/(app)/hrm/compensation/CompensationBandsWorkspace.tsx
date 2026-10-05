@@ -74,6 +74,7 @@ export async function CompensationBandsWorkspace({ orgId, actorId, allowedSubsid
       basePath={basePath} currentParams={searchParams}
       sort={pickString(searchParams.bandSort) ?? 'default'} dir={pickString(searchParams.bandDir) === 'desc' ? 'desc' : 'asc'}
       sortParamKey="bandSort" dirParamKey="bandDir"
+      resetPageKey={filter}
       rows={rows} rowKey={(row) => row.id}
       empty={<EmptyState title={t('bandsEmptyFiltered')} />}
       toolbarAfter={<FilterChips label={t('bandStatus.label')} options={options} defaultValue="active"
