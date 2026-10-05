@@ -4,6 +4,7 @@ import test from 'node:test'
 Object.assign(globalThis, {
   __recoveryCalls: [] as [string, string][],
   __recoveryAttemptId: '11111111-1111-1111-1111-111111111111',
+  __recoverySql: [] as string[],
 })
 const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({
@@ -20,7 +21,7 @@ stubModules({
     'server-only': `export {}`,
     '@openbooks/engine/src/platform/db.ts':
       `export const db = { execute: async (q) => {` +
-      `const s = JSON.stringify(q);` +
+      `const s = JSON.stringify(q); globalThis.__recoverySql.push(s);` +
       `if (s.includes('needs_authentication')) return { rows: [] };` +
       `if (s.includes("decline_kind = 'hard'")) return { rows: [] };` +
       `if (s.includes('customer_invoice')) return { rows: [` +
@@ -72,12 +73,21 @@ test('recovery resolves its drill link through the built-in report contract', as
  * Setup-link currency is per customer: the billed customer's own latest
  * invoice currency prices the remedy, while a customer with no invoice
  * carries null and refuses by name instead of inheriting another party's.
+ * Same-day ties resolve deterministically in the database — document day,
+ * then creation time, then id — so the loader's first-row win is stable.
  */
 test('expiring rows carry their own party currency, never the book default', async () => {
+  globalThis.__recoverySql.length = 0
   const data = await loadCollections({})
   const expiring = data.recovery?.expiring ?? []
   assert.equal(expiring.find((row) => row.partyId === 'p1')?.currency, 'EUR')
   assert.equal(expiring.find((row) => row.partyId === 'p2')?.currency, null)
+  const currencyQuery = globalThis.__recoverySql.find((s) => s.includes('customer_invoice'))
+  assert.ok(currencyQuery, 'the loader reads per-party invoice currencies')
+  assert.ok(
+    currencyQuery.includes('order by d.document_date desc, d.created_at desc, d.id desc'),
+    'ties break deterministically instead of depending on scan order',
+  )
 })
 
 /**

@@ -285,19 +285,30 @@ export function minorUnitsToCanonical(amountMinor: bigint, exponent: number): st
 /**
  * ISO minor-unit exponent for one currency code. Shared with read paths so a
  * missing registry row refuses by name instead of guessing 2dp (which would
- * misprice zero- and three-decimal currencies). The global currencies
- * registry is read-only: the remedy names recording in a registry currency.
+ * misprice zero- and three-decimal currencies). History is never
+ * reinterpreted: the remedy restores the missing or damaged registry row
+ * from the canonical seed, which only repairs precision and leaves every
+ * posted amount untouched.
  */
 export async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
   const row = (await runner.execute<{ minor_units: number }>(sql`
     select minor_units from currencies where code = ${currency}`)).rows[0];
+  const restoreRemedy =
+    "Restore the currency row with the canonical registry seed (seedCurrencies), which restores its precision without changing posted history.";
   if (!row) {
     throw new ContractCostError(`Unknown currency ${currency}.`, {
       code: "contract_cost_currency_unknown",
-      remedy: "Record the cost in a currency from the ISO registry.",
+      remedy: restoreRemedy,
     });
   }
-  return row.minor_units;
+  const precision = row.minor_units;
+  if (!Number.isInteger(precision) || (precision as number) < 0 || (precision as number) > 4) {
+    throw new ContractCostError(`Currency ${currency} has an unsupported precision ${String(precision)}.`, {
+      code: "contract_cost_currency_exponent",
+      remedy: restoreRemedy,
+    });
+  }
+  return precision;
 }
 
 function checkDate(value: string, what: string): void {
