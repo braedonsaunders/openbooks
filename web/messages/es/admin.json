@@ -3700,6 +3700,7 @@
       "customerSku": "Número de pieza del cliente",
       "paymentKind": "Forma de entrega",
       "nonCashAccountId": "Cuenta de compensación de beneficios en especie",
+      "unitOfMeasure": "Unidad de medida",
       "family": "Familia del programa",
       "legalEntityId": "Entidad legal",
       "deliveryMethod": "Entrega",
@@ -3875,6 +3876,7 @@
       "benefitFrequency": "Frecuencia de medición: mensual, trimestral, anual, fin de proyecto o manual.",
       "benefitPeriodBasis": "Los programas trimestrales y anuales nombran períodos de calendario o de ejercicio.",
       "paymentKind": "Los beneficios en especie conservan el tratamiento fiscal configurado, pero su valor no se paga en efectivo.",
+      "unitOfMeasure": "Lo que cuentan las unidades del concepto. Las líneas de horas alimentan toda base de horas: tarifas por hora, bases de horas de beneficios, horas asegurables e informes de horas. Las líneas de cantidad (viajes, comidas, unidades de incentivo) pagan su importe pero nunca cuentan como horas. Los conceptos por hora siempre usan horas.",
       "nonCashAccountId": "Use un activo prepagado, un pasivo de compensación con el proveedor o una cuenta de contrapartida de gasto. La nómina carga el gasto de la prestación y abona esta cuenta; las compras al proveedor deben usar la misma cuenta de compensación para no contar el gasto dos veces. Una contrapartida de gasto (distinta de la cuenta de gasto) sirve para una prestación cuyo coste ya está contabilizado como gasto, como el uso personal de un vehículo de empresa.",
       "zonedDateTime": "Introduzca una fecha y hora ISO con Z o un desplazamiento explícito, como 2026-10-01T09:00:00-04:00. Se conserva el desplazamiento.",
       "ianaTimezone": "Introduzca una zona horaria IANA, como Europe/Madrid."
@@ -4461,6 +4463,10 @@
       "payPaymentKind": {
         "cash": "Remuneración en efectivo",
         "nonCash": "Beneficio en especie"
+      },
+      "payUnitOfMeasure": {
+        "hours": "Horas",
+        "quantity": "Cantidad"
       },
       "retentionRegions": {
         "all": "Todas las regiones",

@@ -787,6 +787,7 @@ export async function validateEntityIntegrity(
     const currentComponent = rowId
       ? (((await executor.execute(sql`
           select c.country, c.tax_treatment, c.kind, c.non_periodic, c.payment_kind, c.non_cash_account_id, c.system_key,
+                 c.basis, c.unit_of_measure,
                  ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
             from pay_components c
             join pay_component_earning_classifications ec
@@ -868,6 +869,21 @@ export async function validateEntityIntegrity(
         || (reporting.taxTreatment && componentTreatment !== reporting.taxTreatment)) {
         return `statutory reporting category "${statutoryReportingCategory}" requires a ${reporting.componentKind ?? 'declared'} component with tax treatment ${reporting.taxTreatment ?? 'declared by the pack'}; correct the component kind and treatment before selecting this reporting code`
       }
+    }
+    // Units are hours or a quantity (trips, meals, incentive units); only
+    // hours lines feed an hours basis. A per-hour basis pays its rate against
+    // the run's hours, so it cannot count quantities — refused here, by name,
+    // on create and on edit alike (the pay_components check enforces the same
+    // rule for every other writer).
+    const unitOfMeasure = body.unitOfMeasure !== undefined
+      ? String(body.unitOfMeasure)
+      : ((currentComponent?.unit_of_measure as string | null) ?? 'hours')
+    if (!['hours', 'quantity'].includes(unitOfMeasure)) {
+      return 'Choose hours or quantity as the component unit of measure'
+    }
+    const basis = String(body.basis ?? (currentComponent as { basis?: string } | null)?.basis ?? 'fixed_amount')
+    if (basis === 'per_hour' && unitOfMeasure !== 'hours') {
+      return 'Per-hour components pay their rate against the run\u2019s hours, so they always use hours as the unit of measure — choose a fixed-amount basis for quantity units, or hours for this component'
     }
   }
   if (entity.key === 'pay-schedules') {

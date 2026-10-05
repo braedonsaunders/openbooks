@@ -18,6 +18,8 @@ import { legacyStatutoryLiabilityAccount, PAYROLL_COUNTRY_PACKS } from "./packs.
 import { laborCostingSettings } from "../projects/labor-costing.ts";
 import { canonicalJson, payRunCalculationSourceDigest, parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, type PayRunCalculationError, type PayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
 import { lockStatutoryRatesForPayRun } from "./statutory-rates.ts";
+import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
+import { assertPeriodSequence, periodRunIdentity } from "./period-priors.ts";
 /**
  * The commit refusal: names every refused in-scope employee WITH the pack's
  * own words for why, so the operator sees at POST exactly what the exception
@@ -342,7 +344,7 @@ export async function commitPayRun(input: {
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<Record<string, string>>(sql`
-      select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
+      select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id, d.document_number from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
     `));
@@ -444,6 +446,17 @@ export async function commitPayRun(input: {
           + " — review the retro run's source periods before paying it",
         );
       }
+    }
+    // A calculated share is only committable while the period still sequences
+    // around it: a run created or committed after the calculation can leave
+    // its priors stale. Asked here as well as at calculate, on this
+    // transaction, so the commit cannot land on a period that moved.
+    if (PERIODIC_RUN_TYPES.has(run.run_type ?? "regular")) {
+      await assertPeriodSequence(tx, orgId, periodRunIdentity(run, {
+        documentId,
+        documentNumber: run.document_number ?? documentId,
+        runType: run.run_type ?? "regular",
+      }), "commit");
     }
     // Money must not move before the run is approved. Asked ON THIS
     // TRANSACTION, under the run row lock taken above: the old call ran on

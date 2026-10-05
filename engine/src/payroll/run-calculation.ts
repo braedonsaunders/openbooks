@@ -15,6 +15,7 @@ import { PayrollError } from "./error.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { add } from "../money/money.ts";
 import { ensurePackSlotRoleAccounts, packRates, resolveEmployeePayrollContext, resolvePayrollRunContext } from "./packs.ts";
+import { installablePackOrThrow } from "./run-stub-records.ts";
 import { resolveStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { effectiveFilingAccountSql } from "./filing.ts";
@@ -22,6 +23,11 @@ import { payrollPaymentMethodSettings } from "./payment-method.ts";
 import { payRunCalculationSourceDigest, payRunCalculationSource, type PayRunCalculationError, type PayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
 import { calculateStub } from "./run-stub-compute.ts";
 import { employerEmployeeCount } from "./run-calculation-support.ts";
+import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
+import {
+  assertPeriodSequence, assertSupplementalSupported, loadPeriodPriors,
+  periodRunIdentity, supplementalTaxMethodForOrg, type PayPeriodPriors,
+} from "./period-priors.ts";
 /** One line of a stub, as `captureCalculatedStubs` hands it back. */
 export interface CapturedStubLine {
   componentId: string | null;
@@ -215,7 +221,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.currency as doc_currency,
-             d.subsidiary_id as doc_subsidiary_id,
+             d.subsidiary_id as doc_subsidiary_id, d.document_number,
              sub.name as subsidiary_name, sub.country as subsidiary_country,
              sub.base_currency as subsidiary_currency
         from pay_runs r
@@ -309,6 +315,26 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       );
     }
     const runType = (run.run_type as string) ?? "regular";
+    // ---- Supplemental-period sequencing and priors -----------------------
+    // A period builds in pay-date order: earlier runs of the period must
+    // already be committed (their withheld shares are this run's priors),
+    // and no later run may be (it was computed without this run's share).
+    // Bonus, termination, and retro runs are taxed with the non-periodic
+    // method and never share the period basis, so they sequence alone.
+    const periodIdentity = periodRunIdentity(run, {
+      documentId, documentNumber: run.document_number, runType,
+    });
+    const periodSiblings = PERIODIC_RUN_TYPES.has(runType)
+      ? await assertPeriodSequence(tx, orgId, periodIdentity, "calculate")
+      : [];
+    const periodPriorsByEmployee = periodSiblings.length > 0
+      ? await loadPeriodPriors(tx, orgId, periodSiblings, documentId)
+      : new Map<string, PayPeriodPriors>();
+    const calcPack = installablePackOrThrow(runContext.country);
+    assertSupplementalSupported(calcPack, runContext.country, runType, periodPriorsByEmployee.size > 0);
+    const supplementalTaxMethod = calcPack.supplementalPayTreatment
+      ? await supplementalTaxMethodForOrg(tx, orgId, calcPack)
+      : "period_cumulative" as const;
     // `distinct on (p.id)` is load-bearing, not tidiness: employee_roles is
     // joined per party and a second role row would run calculateStub twice for
     // one person — a duplicate stub, doubled pay, and (because the EHT and WCB
@@ -547,6 +573,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           holidayEligibility: input.holidayEligibility,
           simulate: input.simulate === true,
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+          periodPriors: periodPriorsByEmployee.get(emp.party_id!),
+          supplementalTaxMethod,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);

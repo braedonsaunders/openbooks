@@ -2,6 +2,8 @@ import type { db } from "../platform/db.ts";
 import type { Money } from "../money/brands.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
 import type { PayrollAssessedOn, PayrollTaxBases } from "./packs.ts";
+import type { SupplementalTaxMethod } from "./pack-types.ts";
+import type { PayPeriodPriors } from "./period-priors.ts";
 import type { StatutoryRateResolution } from "./statutory-rates.ts";
 import type { UsSupplementalWageAmount } from "./supplemental-wages.ts";
 import type { UsStatutoryExemptionAmount } from "./statutory-exemptions.ts";
@@ -231,4 +233,21 @@ export interface PayrollStatutoryComputeContext {
   /** Bound by `calculateStub` — the pack refuses unsupported regions itself. */
   assertRegionSupported: (region: string) => void;
   employerLevies: PayrollEmployerLevyFactors;
+  /**
+   * Period-to-date priors from earlier runs of the same period and schedule
+   * (see engine/src/payroll/period-priors.ts): bases and amounts those runs
+   * already paid and withheld. Absent (undefined) only on
+   * unit-constructed contexts, where every prior reads zero — the engine
+   * always provides it. The pack decides how each statutory item uses them;
+   * a pack with no `supplementalPayTreatment` declaration never receives a
+   * non-empty one (the generic layer refuses first).
+   */
+  periodPriors?: PayPeriodPriors;
+  /**
+   * The org's supplemental income-tax method for this run
+   * (`period_cumulative` or `per_run`), resolved from payroll settings by
+   * the generic layer. Absent (undefined) only on unit-constructed contexts,
+   * which read `per_run`.
+   */
+  supplementalTaxMethod?: SupplementalTaxMethod;
 }

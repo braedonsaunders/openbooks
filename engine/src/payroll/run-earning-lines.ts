@@ -513,10 +513,17 @@ export async function applyRunLineAdjustments(
     // Operator-entered adjustment, closed through roundMoney: canonical Money.
     const amount = roundMoney(String(adj.adj_amount), 2) as Money;
     if (cmp(amount, "0") === 0) continue;
+    // A quantity-unit component counts trips, meals, or incentive units —
+    // never hours. Its units stay on the adjustment for the audit trail, but
+    // no hours reach the line: every hours basis downstream (per-hour rates,
+    // benefit hours bases, insurable-hours and wage-hour reports) reads
+    // lines and stub hours, so a quantity line is excluded everywhere by
+    // carrying none.
+    const quantityUnits = (adj.unit_of_measure as string | null) === "quantity";
     lines.push({
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
       description: (adj.note as string | null) || (adj.name as string),
-      hours: adj.adj_hours != null ? String(adj.adj_hours) : undefined,
+      hours: quantityUnits || adj.adj_hours == null ? undefined : String(adj.adj_hours),
       amount, sequence: Number(adj.sequence),
       taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,
       insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,

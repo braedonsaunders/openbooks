@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { add, cmp, div, fromUnits, mulDecimal, mulPercent, neg, toUnits } from "../../money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulPercent, neg, sum, toUnits } from "../../money/money.ts";
 import { certificateCount, type ResolvedCertificate } from "../certificates.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
@@ -11,6 +11,8 @@ import { calculateTp1015 } from "./quebec/tp1015.ts";
 import { qcRatesForPayDate } from "./quebec/rates.ts";
 import { ratesForPayDate, type Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { payrollPack } from "../packs.ts";
+import { EMPTY_PERIOD_PRIORS, periodPriorsEmpty } from "../period-priors.ts";
 import { cumulativeHistory } from "./cumulative-history.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { PayrollPackError } from "../payroll-error.ts";
@@ -176,18 +178,85 @@ export async function computeCaStatutory(
     ? div(fromUnits(annualEligibleShares - eligibleAnnualFtqShares), String(P))
     : requestedFondactionSharesPerPeriod;
 
+  // ---- Supplemental-period priors ----------------------------------------
+  // Earlier runs of the same period and schedule already paid and withheld
+  // part of this period. Contributions always price on the period-to-date
+  // base (a per-period exemption applies once per period); income tax
+  // follows the org's supplemental method. With no priors every combined leg
+  // below equals its current leg and every subtraction is zero, so the first
+  // run of a period prices exactly as a standalone run.
+  const priors = ctx.periodPriors ?? EMPTY_PERIOD_PRIORS;
+  const priorFactor = (key: string): string => priors.factors[key] ?? "0";
+  const priorWithheld = (keys: readonly string[]): string =>
+    sum(keys.map((key) => priors.withheldBySystemKey[key] ?? "0"));
+  const hasPriors = !periodPriorsEmpty(priors);
+  const supplementalMethod = ctx.supplementalTaxMethod ?? "per_run";
+  const runType = (run.run_type as string) ?? "regular";
+  // A supplemental run IS periodic pay for tax (that is what distinguishes it
+  // from a bonus run), so under the cumulative method its own non-periodic
+  // lines join the period's single periodic pay too. A regular run keeps its
+  // bonus method until a second run actually shares the period — otherwise
+  // every existing bonus-carrying regular run would reprice.
+  const foldBonus = supplementalMethod === "period_cumulative" && (hasPriors || runType === "supplemental");
+  const treatment = payrollPack(ctx.country).supplementalPayTreatment;
+  const priorFederalTax = treatment ? priorWithheld(treatment.federalTaxSystemKeys) : "0";
+  const priorProvincialTax = treatment ? priorWithheld(treatment.provincialTaxSystemKeys) : "0";
+  // A share is never negative: annual maxima that moved under an already-paid
+  // period (a mid-year edition change) floor this run at zero rather than
+  // booking a refund through payroll.
+  const nonNegative = (value: string): string => (cmp(value, "0") < 0 ? "0" : value);
+
+  // Period-to-date legs: earlier runs' traced factors rejoin the current
+  // legs. The stub keeps tracing its OWN legs (B, I, PI, IE, F, … below), so
+  // a later run's priors telescope: each run adds its share, never the total.
+  const periodPensionable = add(priors.pensionable, pensionable);
+  const periodInsurable = add(priors.insurable, insurable);
+  const periodQpipInsurable = add(add(priorFactor("CA_QPIP_PE"), priorFactor("CA_BQPIP")), qpipInsurable);
+  const taxIncome = foldBonus
+    ? add(add(add(priorFactor("I"), priorFactor("B")), income), nonPeriodic)
+    : income;
+  const taxNonPeriodic = foldBonus ? "0" : nonPeriodic;
+  const taxPensionDeductions = foldBonus
+    ? add(add(add(priorFactor("F"), priorFactor("F3")), deduction("pension_f")), deduction("pension_f_bonus"))
+    : deduction("pension_f");
+  const taxAlimony = foldBonus ? add(priorFactor("F2"), deduction("alimony")) : deduction("alimony");
+  const taxUnionDues = foldBonus ? add(priorFactor("U1"), deduction("union_dues")) : deduction("union_dues");
+  const taxNonPeriodicPension = foldBonus ? "0" : deduction("pension_f_bonus");
+  // Annual-room year-to-date legs exclude the current period's earlier runs
+  // (they rejoin through the period legs above); the non-periodic history
+  // legs exclude them too, since the combined call already counts them.
+  // Unit-constructed contexts omit year-to-date legs the engine always
+  // provides; absent reads as zero, exactly as the guide engine does.
+  const roomYtd = (value: string | undefined, prior: string): string => add(value ?? "0", neg(prior));
+  const ytdCpp = roomYtd(ytd.cpp, priorFactor("C"));
+  const ytdCpp2 = roomYtd(ytd.cpp2, priorFactor("C2"));
+  const ytdEi = roomYtd(ytd.ei, priorFactor("EI"));
+  const ytdQpip = roomYtd(ytd.qpip, priorFactor("QPIP"));
+  const ytdQpipEmployer = roomYtd(ytd.qpip_employer, priorFactor("QPIP_ER"));
+  const ytdPensionable = roomYtd(ytd.pensionable, priors.pensionable);
+  const ytdNonPeriodic = roomYtd(ytd.non_periodic, priorFactor("B"));
+  const ytdNonPeriodicPension = roomYtd(ytd.pension_deductions_bonus, priorFactor("F3"));
+  const ytdNonPeriodicEnhanced = roomYtd(ytd.f5b, priorFactor("F5B"));
+
   const cumulative=await cumulativeHistory(ctx);
+  if (cumulative?.averaging && hasPriors) {
+    throw new PayrollPackError(
+      `cumulative averaging cannot combine with a supplemental-period share for ${employeePartyId} — `
+      + "process the period's pay in a single run while cumulative averaging is elected",
+    );
+  }
   const t4127Input: T4127Input = {
     averaging:cumulative?.averaging,
-    pensionableNonPeriodic:ctx.pensionableNonPeriodic,
-    insurableNonPeriodic:ctx.insurableNonPeriodic,
-    qpipNonPeriodic:ctx.programNonPeriodicBases?.qpip,
+    pensionableNonPeriodic: foldBonus ? "0" : ctx.pensionableNonPeriodic,
+    insurableNonPeriodic: foldBonus ? "0" : ctx.insurableNonPeriodic,
+    qpipNonPeriodic: foldBonus ? "0" : ctx.programNonPeriodicBases?.qpip,
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
-    income, nonPeriodic, pensionable, insurable, qpipInsurable,
-    pensionDeductions: deduction("pension_f"),
-    alimonyDeductions: deduction("alimony"),
-    nonPeriodicPensionDeductions:deduction("pension_f_bonus"),
-    unionDues: deduction("union_dues"),
+    income: taxIncome, nonPeriodic: taxNonPeriodic,
+    pensionable: periodPensionable, insurable: periodInsurable, qpipInsurable: periodQpipInsurable,
+    pensionDeductions: taxPensionDeductions,
+    alimonyDeductions: taxAlimony,
+    nonPeriodicPensionDeductions: taxNonPeriodicPension,
+    unionDues: taxUnionDues,
     labourFundsCreditFederal: region === "QC"
       ? mulPercent(
         add(ftqSharesPerPeriod, fondactionSharesPerPeriod),
@@ -210,54 +279,136 @@ export async function computeCaStatutory(
     cppExempt: bool(empFact("CA", emp, "cpp_exempt")),
     eiExempt: bool(empFact("CA", emp, "ei_exempt")),
     ytd: {
-      cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip, qpipEmployer: ytd.qpip_employer,
-      pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
-      nonPeriodicPensionDeductions:ytd.pension_deductions_bonus,
-      nonPeriodicCppEnhancedDeductions: ytd.f5b,
+      cpp: ytdCpp, cpp2: ytdCpp2, ei: ytdEi, qpip: ytdQpip, qpipEmployer: ytdQpipEmployer,
+      pensionable: ytdPensionable, nonPeriodic: ytdNonPeriodic,
+      nonPeriodicPensionDeductions: ytdNonPeriodicPension,
+      nonPeriodicCppEnhancedDeductions: ytdNonPeriodicEnhanced,
       ...(cumulative?.bonusYtd??{}),
     },
   };
+  // Call 1 — contributions on the period-to-date base (always). Its tax
+  // outputs serve the cumulative method; the per-run method prices tax in
+  // call 2 below and discards these.
   const statutory = calculateT4127(t4127Input);
 
-  pushStatutory("income_tax", "deduction", "Income tax", statutory.totalTax, 110);
-  pushStatutory("cpp", "deduction", region === "QC" ? "QPP" : "CPP", statutory.cpp, 120);
-  pushStatutory("cpp2", "deduction", region === "QC" ? "QPP2" : "CPP2", statutory.cpp2, 130);
-  pushStatutory("ei", "deduction", "EI", statutory.ei, 140);
-  pushStatutory("qpip", "deduction", "QPIP", statutory.qpip, 150);
+  // This run's share of each combined amount: the period total minus what
+  // earlier runs of the period already withheld. Each stub traces its share,
+  // so the next run's priors telescope to the period total exactly.
+  const cpp = nonNegative(add(statutory.cpp, neg(priorFactor("C"))));
+  const cpp2 = nonNegative(add(statutory.cpp2, neg(priorFactor("C2"))));
+  const cppEmployer = add(cpp, cpp2);
+  const ei = nonNegative(add(statutory.ei, neg(priorFactor("EI"))));
+  const eiEmployer = nonNegative(add(statutory.eiEmployer, neg(priorFactor("EI_ER"))));
+  const qpip = nonNegative(add(statutory.qpip, neg(priorFactor("QPIP"))));
+  const qpipEmployer = nonNegative(add(statutory.qpipEmployer, neg(priorFactor("QPIP_ER"))));
+
+  // Call 2 — income tax with each run taxed as its own periodic pay (T4127
+  // Option 1 on this run's income alone, annualized by P). The K2 credits
+  // and the F5 deduction price off what this run actually withheld (the
+  // shares above), not a standalone recomputation: only the credits follow
+  // the period, never the income. Annual maxima still read the full
+  // year-to-date, so a max reached with this run caps the credit exactly as
+  // the guide states.
+  const standaloneTax = supplementalMethod === "per_run" && hasPriors
+    ? calculateT4127({
+      ...t4127Input,
+      averaging: undefined,
+      income, nonPeriodic,
+      pensionable, insurable, qpipInsurable,
+      pensionableNonPeriodic: ctx.pensionableNonPeriodic,
+      insurableNonPeriodic: ctx.insurableNonPeriodic,
+      qpipNonPeriodic: ctx.programNonPeriodicBases?.qpip,
+      pensionDeductions: deduction("pension_f"),
+      alimonyDeductions: deduction("alimony"),
+      nonPeriodicPensionDeductions: deduction("pension_f_bonus"),
+      unionDues: deduction("union_dues"),
+      cppWithheld: cpp,
+      cpp2Withheld: cpp2,
+      eiWithheld: ei,
+      qpipWithheld: qpip,
+      ytd: {
+        cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip,
+        qpipEmployer: ytd.qpip_employer, pensionable: ytd.pensionable,
+        nonPeriodic: ytd.non_periodic,
+        nonPeriodicPensionDeductions: ytd.pension_deductions_bonus,
+        nonPeriodicCppEnhancedDeductions: ytd.f5b,
+        ...(cumulative?.bonusYtd ?? {}),
+      },
+    })
+    : null;
+  // The enhanced-CPP deduction splits periodic/bonus by the CURRENT call's
+  // bonus share; this run traces its own share so a third run telescopes.
+  // Under the fold the whole period is periodic, so this run absorbs the
+  // earlier runs' bonus share into its periodic share.
+  const f5a = nonNegative(add(add(statutory.f5A, neg(priorFactor("F5A"))), neg(foldBonus ? priorFactor("F5B") : "0")));
+  const f5b = foldBonus ? "0" : nonNegative(add(statutory.f5B, neg(priorFactor("F5B"))));
+  const f5 = add(f5a, f5b);
+  const federalTax = standaloneTax !== null
+    ? standaloneTax.totalTax
+    : hasPriors && supplementalMethod === "period_cumulative"
+      ? nonNegative(add(statutory.totalTax, neg(priorFederalTax)))
+      : statutory.totalTax;
+
+  pushStatutory("income_tax", "deduction", "Income tax", federalTax, 110);
+  pushStatutory("cpp", "deduction", region === "QC" ? "QPP" : "CPP", cpp, 120);
+  pushStatutory("cpp2", "deduction", region === "QC" ? "QPP2" : "CPP2", cpp2, 130);
+  pushStatutory("ei", "deduction", "EI", ei, 140);
+  pushStatutory("qpip", "deduction", "QPIP", qpip, 150);
   pushStatutory("cpp", "employer_contribution",
-    region === "QC" ? "QPP (employer)" : "CPP (employer)", statutory.cppEmployer, 210);
-  pushStatutory("ei", "employer_contribution", "EI (employer)", statutory.eiEmployer, 220);
-  pushStatutory("qpip", "employer_contribution", "QPIP (employer)", statutory.qpipEmployer, 230);
+    region === "QC" ? "QPP (employer)" : "CPP (employer)", cppEmployer, 210);
+  pushStatutory("ei", "employer_contribution", "EI (employer)", eiEmployer, 220);
+  pushStatutory("qpip", "employer_contribution", "QPIP (employer)", qpipEmployer, 230);
 
   let qcFactors: Record<string, string> = {};
   if (region === "QC") {
     const qc = calculateTp1015({
       payDate: run.pay_date!, periodsPerYear: P,
-      income, nonPeriodic,
-      pensionDeductions: deduction("pension_f"),
-      qpp: statutory.cpp, qpp2: statutory.cpp2,
-      pensionable,
+      income: taxIncome, nonPeriodic: taxNonPeriodic,
+      pensionDeductions: taxPensionDeductions,
+      nonPeriodicPensionDeductions: taxNonPeriodicPension,
+      // The period's QPP under the fold (the whole period is one pay);
+      // this run's share otherwise, which keeps a standalone provincial
+      // calculation on its own contributions. The pensionable salary follows
+      // the same split: the period's under the fold, this run's otherwise.
+      qpp: foldBonus ? statutory.cpp : cpp, qpp2: foldBonus ? statutory.cpp2 : cpp2,
+      pensionable: foldBonus ? periodPensionable : pensionable,
       personalCredits: empFact("CA", emp, "provincial_claim_amount") ?? undefined,
       ftqSharesPerPeriod,
       fondactionSharesPerPeriod,
       authorizedAnnualCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
       taxExempt: bool(empFact("CA", emp, "tax_exempt")),
-      ytd: { nonPeriodic: ytd.non_periodic, csb: ytd.qc_csb },
+      ytd: {
+        nonPeriodic: foldBonus ? roomYtd(ytd.non_periodic, priorFactor("B")) : ytd.non_periodic,
+        csb: foldBonus ? roomYtd(ytd.qc_csb, priorFactor("QC_CSB")) : ytd.qc_csb,
+      },
     });
-    pushStatutory("qc_income_tax", "deduction", "Québec income tax", qc.totalTax, 115);
+    const provincialTax = supplementalMethod === "per_run"
+      ? qc.totalTax
+      : hasPriors
+        ? nonNegative(add(qc.totalTax, neg(priorProvincialTax)))
+        : qc.totalTax;
+    pushStatutory("qc_income_tax", "deduction", "Québec income tax", provincialTax, 115);
     qcFactors = qc.factors;
   }
 
+  // The trace shows the tax computation's own factors (the standalone call
+  // under the per-run method), with this run's contribution shares swapped
+  // in: each stub traces its share, never the period total.
+  const taxFactors = standaloneTax?.factors ?? statutory.factors;
   return {
-    ...statutory.factors,
+    ...taxFactors,
     ...qcFactors,
     B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
     F:deduction("pension_f"),F2:deduction("alimony"),U1:deduction("union_dues"),F3:deduction("pension_f_bonus"),
+    C: cpp, C2: cpp2, EI: ei, QPIP: qpip, QPIP_ER: qpipEmployer, EI_ER: eiEmployer,
+    F5: f5, F5A: f5a, F5B: f5b,
+    ...(hasPriors || foldBonus ? { T: federalTax } : {}),
     CA_PE:add(pensionable,neg(ctx.pensionableNonPeriodic??"0")),CA_IE:add(insurable,neg(ctx.insurableNonPeriodic??"0")),
     CA_QPIP_PE:add(qpipInsurable,neg(ctx.programNonPeriodicBases?.qpip??"0")),
     CA_BPE:ctx.pensionableNonPeriodic??"0",CA_BIE:ctx.insurableNonPeriodic??"0",CA_BQPIP:ctx.programNonPeriodicBases?.qpip??"0",
-    CA_T_BASE:add(statutory.periodicTax,neg(t4127Input.additionalTaxPerPeriod??"0")),
-    QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
+    CA_T_BASE: (hasPriors || foldBonus)
+      ? nonNegative(add(federalTax, neg(t4127Input.additionalTaxPerPeriod ?? "0")))
+      : add(statutory.periodicTax,neg(t4127Input.additionalTaxPerPeriod??"0")),
     ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
     ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),
     ...(cmp(hsfEarnings, "0") > 0 ? { HSF: hsfAmount, HSF_EARN: hsfEarnings } : {}),

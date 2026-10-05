@@ -25,6 +25,7 @@ const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   bonus: "Off-cycle bonus run",
   termination: "Final pay run",
   retro: "Retroactive pay run",
+  supplemental: "Supplemental pay run",
 };
 
 /** Run types that must NAME the employees they pay before they can exist. */
@@ -136,11 +137,23 @@ export async function createPayRun(input: {
     });
     const taxYear = runContext.taxYear;
 
+    // A supplemental run pays inside an already-open period, so it cannot
+    // derive one: the regular-cycle anchor below would silently hand it the
+    // NEXT period (the open one is already covered) and it would pay the
+    // wrong week. Name the period explicitly instead.
+    const runType: PayRunType = input.runType ?? "regular";
+    if (runType === "supplemental" && (input.periodStart == null || input.periodEnd == null)) {
+      throw new PayrollError(
+        "a supplemental run must name its pay period explicitly (periodStart and periodEnd) — "
+        + "it pays inside an already-open period, so choose the period it belongs to",
+      );
+    }
+
     // Guard 1 — no REGULAR run may overlap another regular run on the same
     // schedule: two of them covering one period would pay (and remit) the
-    // period twice. Off-cycle bonus and termination runs are exempt — landing
-    // inside an already-paid period is exactly what they are for.
-    const runType: PayRunType = input.runType ?? "regular";
+    // period twice. Off-cycle bonus, supplemental, and termination runs are
+    // exempt — landing inside an already-paid period is exactly what they
+    // are for.
     if (runType === "regular") {
       const overlap = (await tx.execute<{ document_number: string }>(sql`
         select d.document_number from pay_runs r
@@ -156,7 +169,8 @@ export async function createPayRun(input: {
       `));
       if (overlap.rows[0]) {
         throw new PayrollError(
-          `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd}`,
+          `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd} — `
+          + "a second regular run would pay the period twice; create a supplemental run for the same period instead",
         );
       }
     }

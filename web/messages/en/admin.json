@@ -3745,6 +3745,7 @@
       "customerSku": "Customer part number",
       "paymentKind": "Payment representation",
       "nonCashAccountId": "Non-cash clearing account",
+      "unitOfMeasure": "Unit of measure",
       "family": "Program family",
       "legalEntityId": "Legal entity",
       "deliveryMethod": "Delivery",
@@ -3920,6 +3921,7 @@
       "benefitFrequency": "How often the program measures: monthly, quarterly, annual, project complete, or manual.",
       "benefitPeriodBasis": "Quarterly and annual programs name calendar or fiscal periods so settlement and payroll agree.",
       "paymentKind": "Non-cash earnings retain the configured statutory treatment but do not pay their value as cash.",
+      "unitOfMeasure": "What the component's units count. Hours lines feed every hours basis — per-hour rates, benefit hours bases, insurable hours and wage-hour reports. Quantity lines (trips, meals, incentive units) pay their amount but never count as hours. Per-hour components always use hours.",
       "nonCashAccountId": "Use a prepaid asset, a provider clearing liability, or a contra-expense account. Payroll debits benefit expense and credits this account; provider purchases must use the same clearing account to avoid counting expense twice. A contra-expense (different from the expense account) suits a benefit whose cost is already expensed, such as personal use of a company vehicle.",
       "zonedDateTime": "Enter an ISO timestamp with Z or an explicit offset, such as 2026-10-01T09:00:00-04:00. The offset is preserved.",
       "ianaTimezone": "Enter an IANA time zone, such as America/Toronto."
@@ -4506,6 +4508,10 @@
       "payPaymentKind": {
         "cash": "Cash earnings",
         "nonCash": "Non-cash benefit"
+      },
+      "payUnitOfMeasure": {
+        "hours": "Hours",
+        "quantity": "Quantity"
       },
       "retentionRegions": {
         "all": "All regions",

@@ -3820,6 +3820,7 @@
       "customerSku": "Kundenteilenummer",
       "paymentKind": "Auszahlungsart",
       "nonCashAccountId": "Verrechnungskonto für Sachleistungen",
+      "unitOfMeasure": "Maßeinheit",
       "family": "Programmfamilie",
       "legalEntityId": "Rechtsträger",
       "deliveryMethod": "Auszahlung",
@@ -3995,6 +3996,7 @@
       "benefitFrequency": "Wie oft das Programm misst: monatlich, quartalsweise, jährlich, Projektabschluss oder manuell.",
       "benefitPeriodBasis": "Quartals- und Jahresprogramme benennen Kalender- oder Geschäftsjahrperioden.",
       "paymentKind": "Sachleistungen behalten die konfigurierte steuerliche Behandlung, werden aber nicht zusätzlich als Geld ausgezahlt.",
+      "unitOfMeasure": "Was die Einheiten der Komponente zählen. Stundenzeilen fließen in jede Stundenbasis ein — Stundensätze, Stundenbasen für Zusatzleistungen, versicherungspflichtige Stunden und Stundenberichte. Mengenzeilen (Fahrten, Mahlzeiten, Anreizeinheiten) zahlen ihren Betrag, zählen aber nie als Stunden. Pro-Stunde-Komponenten verwenden immer Stunden.",
       "nonCashAccountId": "Verwenden Sie einen aktiven Rechnungsabgrenzungsposten, eine Verrechnungsverbindlichkeit gegenüber dem Anbieter oder ein Aufwandsgegenkonto. Die Lohnabrechnung belastet den Leistungsaufwand und schreibt diesem Konto gut; Einkäufe beim Anbieter müssen dasselbe Verrechnungskonto verwenden, damit der Aufwand nicht doppelt gezählt wird. Ein Aufwandsgegenkonto (abweichend vom Aufwandskonto) eignet sich für einen Vorteil, dessen Kosten bereits als Aufwand erfasst sind, etwa die private Nutzung eines Firmenwagens.",
       "zonedDateTime": "Geben Sie einen ISO-Zeitstempel mit Z oder einem expliziten Offset ein, z. B. 2026-10-01T09:00:00-04:00. Der Offset bleibt erhalten.",
       "ianaTimezone": "Geben Sie eine IANA-Zeitzone ein, z. B. Europe/Berlin."
@@ -4581,6 +4583,10 @@
       "payPaymentKind": {
         "cash": "Barvergütung",
         "nonCash": "Sachleistung"
+      },
+      "payUnitOfMeasure": {
+        "hours": "Stunden",
+        "quantity": "Menge"
       },
       "retentionRegions": {
         "all": "Alle Regionen",

@@ -1,0 +1,1 @@
+Adds a defaulted unit-of-measure column to pay components. Existing components read as hours, preserving current calculation, and no tenant rows are rewritten into a different lifecycle.

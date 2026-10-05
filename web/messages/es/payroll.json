@@ -392,6 +392,7 @@
   },
   "runType": {
     "regular": "Ordinario",
+    "supplemental": "Liquidación complementaria",
     "bonus": "Bono fuera de ciclo",
     "termination": "Finiquito"
   },
@@ -399,6 +400,7 @@
     "runType": "Tipo de ciclo",
     "runTypeHint": {
       "regular": "La nómina normal del calendario: salario, tiempo aprobado, conceptos y deducciones recurrentes.",
+      "supplemental": "Segunda liquidación periódica dentro de un período ya abierto — un pago de vacaciones o una corrección de horas tardía. Tributa con el método periódico; confirme las fechas del período, que no avanzan automáticamente.",
       "bonus": "Pago fuera de ciclo para bonos y comisiones. Sin salario, tiempo ni deducciones recurrentes; las percepciones tributan por el método de bonos.",
       "termination": "Pago final para empleados que se van. Incluye el pago del saldo vacacional acumulado."
     },
@@ -1010,6 +1012,12 @@
       "title": "Pago de festivos",
       "description": "Calcule el pago de festivos y las primas de festivo trabajado en cada ciclo, con la fórmula que prevé la jurisdicción del empleado. Los empleados de una jurisdicción sin fórmula prevista se rechazan por su nombre cuando un festivo cae en el período.",
       "enabled": "Calcular el pago de festivos"
+    },
+    "supplementalTax": {
+      "title": "Liquidaciones complementarias",
+      "description": "Cómo se calcula el impuesto sobre la renta cuando dos liquidaciones periódicas comparten un período de pago. De forma predeterminada, cada liquidación tributa como un pago periódico propio; el acumulado del período grava los ingresos del período hasta la fecha como un solo pago. Las contribuciones (CPP, EI y contrapartes) siempre usan la base acumulada del período.",
+      "periodCumulative": "Acumulado del período",
+      "perRun": "Cada liquidación como pago periódico propio (predeterminado)"
     },
     "employerFacts": {
       "loading": "Cargando datos del empleador…",

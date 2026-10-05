@@ -240,6 +240,18 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
              select 1 from pay_stubs s
               where s.org_id = r.org_id and s.pay_run_document_id = r.document_id
                 and s.employee_party_id = p.id)
+           -- An employee paid for the period through a supplemental run is
+           -- paid, even with no stub on the regular run: without this the
+           -- period reads as unpaid for them.
+           and not exists (
+             select 1 from pay_stubs s2
+              join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
+              join documents d2 on d2.id = r2.document_id and d2.org_id = r2.org_id
+              where s2.org_id = r.org_id and s2.employee_party_id = p.id
+                and r2.pay_schedule_id = r.pay_schedule_id
+                and r2.run_type = 'supplemental'
+                and r2.run_status = 'committed' and d2.status <> 'voided'
+                and r2.period_start <= r.period_end and r2.period_end >= r.period_start)
            ${scheduleFilter}
            ${omittedEmployeeFilter}
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}

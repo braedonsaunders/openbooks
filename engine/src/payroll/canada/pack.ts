@@ -104,6 +104,18 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // (factor B) path, so this declaration wires retro to that engine rather
   // than to anything new.
   retroactivePayTreatment: "non_periodic",
+  // A supplemental-period share is ordinary periodic wages paid in a second
+  // run: contributions price on the period-to-date base once per period, and
+  // income tax follows the org's method — each run taxed as its own periodic
+  // pay by default. The withheld keys are the stub-line system keys the
+  // cumulative method subtracts as already-withheld tax
+  // (federal T4127 / provincial TP-1015).
+  supplementalPayTreatment: {
+    taxMethods: ["period_cumulative", "per_run"],
+    defaultTaxMethod: "per_run",
+    federalTaxSystemKeys: ["income_tax"],
+    provincialTaxSystemKeys: ["qc_income_tax"],
+  },
   contributoryBases: {
     pensionable: "CPP/QPP pensionable earnings (T4127 factor PI)",
     insurable: "EI insurable earnings (T4127 factor IE)",
