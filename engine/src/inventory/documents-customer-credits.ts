@@ -31,6 +31,7 @@ import { postedReturnQuantity } from "./return-quantities.ts";
 import { isUuid } from "../platform/uuid.ts";
 import {
   inventoryKitComponentReturnKey,
+  kitComponentMovesStock,
   kitComponentQuantities,
   kitLabel,
   loadKitComponents,
@@ -137,12 +138,14 @@ async function loadCustomerCreditInventoryReturnLines(
 
 /**
  * Expand kit credit lines into one return pseudo-line per component. A kit
- * sale issues one movement per component, so a kit return names one source
- * issue movement per component and restores each at the cost its units left
- * at. Component quantities re-derive from the kit line exactly as the
- * shipment derived them (line quantity × quantity per), and every component
- * returns to the credit line's own stock location — the one place a credit
- * line can name, and the location the operator chose for the physical return.
+ * sale issues one movement per stocked component, so a kit return names one
+ * source issue movement per stocked component and restores each at the cost
+ * its units left at. Non-stocked recipe lines never moved, so they name no
+ * source and settle in money only. Component quantities re-derive from the
+ * kit line exactly as the shipment derived them (line quantity × quantity
+ * per), and every component returns to the credit line's own stock location
+ * — the one place a credit line can name, and the location the operator
+ * chose for the physical return.
  */
 async function expandKitCustomerCreditReturnLines(
   runner: Runner,
@@ -168,11 +171,11 @@ async function expandKitCustomerCreditReturnLines(
     }
     const sources = parseKitComponentReturnSources(line.custom, lineLabel);
     const components = await loadKitComponents(runner, orgId, line.itemId, date);
-    if (sources.length !== components.length) {
+    if (sources.length > components.length) {
       throw new InventoryError(
-        `${lineLabel} names ${sources.length} source shipment${sources.length === 1 ? "" : "s"} ` +
+        `${lineLabel} names ${sources.length} source shipments ` +
           `but kit ${await kitLabel(runner, orgId, line.itemId)} has ${components.length} components ` +
-          `effective on ${date}; return every component together`,
+          `effective on ${date}; return every component at most once`,
       );
     }
     const seenSources = new Set<string>();
@@ -209,7 +212,20 @@ async function expandKitCustomerCreditReturnLines(
       sourceByComponent.set(movement.item_id, source);
     }
     for (const component of components) {
-      const source = sourceByComponent.get(component.componentItemId)!;
+      const source = sourceByComponent.get(component.componentItemId);
+      if (!source) {
+        // The sale never moved a non-stocked recipe line, so there is no
+        // source to name and nothing to restore: it settles in money only.
+        // A stocked component without a source is a half-return — refuse by
+        // name instead of restoring its siblings and losing it.
+        if (kitComponentMovesStock(component.componentKind)) {
+          throw new InventoryError(
+            `${lineLabel} names no source shipment for stocked component ` +
+              `${await kitLabel(runner, orgId, component.componentItemId)}; return every stocked component together`,
+          );
+        }
+        continue;
+      }
       // The component's own tracking governs its return evidence: a tracked
       // component without its lot or serial is refused by the same source
       // validation as a direct return, before anything posts.

@@ -10,6 +10,7 @@ import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofile
 import { isUuid } from "../platform/uuid.ts";
 import {
   inventoryKitComponentEffectKey,
+  kitComponentMovesStock,
   kitComponentQuantities,
   kitLabel,
   loadKitComponents,
@@ -79,7 +80,8 @@ export async function assertInvoiceIssuesPostable(
   for (const line of lines) {
     if (line.itemKind !== "kit" || !date) continue;
     const kitName = await kitLabel(runner, orgId, line.itemId);
-    const components = await loadKitComponents(runner, orgId, line.itemId, date);
+    const components = (await loadKitComponents(runner, orgId, line.itemId, date))
+      .filter((component) => kitComponentMovesStock(component.componentKind));
     for (const component of components) {
       const profile = await resolveProfile(orgId, component.componentItemId, runner);
       if (profile.tracking !== "none") {
@@ -143,7 +145,11 @@ async function explodeKitLine(
 ): Promise<KitExplosion> {
   const label = movementLabel;
   const kitName = await kitLabel(runner, orgId, line.itemId);
-  const components = await loadKitComponents(runner, orgId, line.itemId, date);
+  const recipe = await loadKitComponents(runner, orgId, line.itemId, date);
+  // Non-stocked recipe lines (a service or charge bundled into the kit) are
+  // commercial-only: they never issue, so they leave the movement plan here
+  // while pick validation below still reads the full recipe.
+  const components = recipe.filter((component) => kitComponentMovesStock(component.componentKind));
   const picks = parseKitComponentPicks(line.custom, label) ?? [];
   const pickByComponent = new Map<string, KitComponentPick>();
   for (const pick of picks) {
@@ -152,7 +158,7 @@ async function explodeKitLine(
         `${label} names component ${pick.componentItemId} twice; list each kit component once`,
       );
     }
-    if (!components.some((component) => component.componentItemId === pick.componentItemId)) {
+    if (!recipe.some((component) => component.componentItemId === pick.componentItemId)) {
       throw new InventoryError(
         `${label} names component ${pick.componentItemId}, which is not in kit ${kitName}'s bill of materials effective on ${date}`,
       );
