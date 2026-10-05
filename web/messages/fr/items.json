@@ -106,12 +106,46 @@
     "featureRequired": "Activez Projets pour utiliser les catalogues et la tarification ciblée.",
     "back": "Changer de modèle tarifaire"
   },
+  "structure": {
+    "title": "Article unique ou famille ?",
+    "description": "Vendez-le comme un article unique, ou comme une famille de variantes — tailles, couleurs, matières — tarifée une fois et héritée par chaque variante.",
+    "singleTitle": "Article unique",
+    "singleDescription": "Un article avec son propre prix.",
+    "familyTitle": "Article à variantes",
+    "familyDescription": "Une famille avec des options ; les variantes héritent du prix de la famille sauf dérogation."
+  },
+  "familyCreate": {
+    "detailsTitle": "Nommer la famille",
+    "detailsDescription": "La famille porte le nom, le code, la catégorie et le prix de base partagés ; chaque variante les hérite.",
+    "familyCode": "Code famille",
+    "category": "Catégorie",
+    "unit": "Unité",
+    "basePrice": "Prix de base",
+    "basePriceHint": "Les variantes sans prix propre sont vendues à ce prix.",
+    "continue": "Continuer",
+    "optionsTitle": "Ajouter des options",
+    "optionsDescription": "Des options comme la taille ou la couleur ; chaque combinaison devient une variante.",
+    "variantCount": "{count, plural, one {# variante} other {# variantes}}",
+    "reviewVariants": "Vérifier les variantes",
+    "previewTitle": "Vérifier les variantes",
+    "previewDescription": "Décochez les combinaisons à ignorer ; codes, prix et codes-barres restent modifiables. Les codes vides sont générés depuis le modèle à la création.",
+    "previewCode": "Code",
+    "previewPrice": "Prix",
+    "previewBarcode": "Code-barres",
+    "advancedTitle": "Modèle de code et règles d'exclusion",
+    "advancedSummary": "Codes générés comme {pattern}",
+    "codePattern": "Modèle de code",
+    "codePatternHint": "{family} pour le code famille, {values} pour toutes les valeurs, {value1}, {value2}, … pour les positions.",
+    "create": "Créer {count, plural, one {# variante} other {# variantes}}",
+    "creating": "Création…",
+    "created": "Famille créée"
+  },
   "pricingMatrix": {
     "title": "Matrice tarifaire", "description": "Prix datés par devise, niveau ou client avec paliers de quantité.", "addSchedule": "Ajouter une grille", "minimumQuantity": "Quantité minimale", "unitPrice": "Prix unitaire", "scope": "Portée tarifaire",
     "scopes": { "base": "Prix de base", "level": "Niveau de prix", "customer": "Client précis" },
     "priceLevel": "Niveau de prix", "customer": "Client", "selectCustomer": "Sélectionner un client…", "currency": "Devise", "quantityBasis": "Base de quantité",
     "quantityBases": { "line": "Quantité de ligne", "overallItem": "Quantité totale de l’article" },
-    "effectiveFrom": "En vigueur dès", "effectiveTo": "En vigueur jusqu’au", "breaksTitle": "Paliers de quantité", "breaksDescription": "La plus grande quantité minimale atteinte fixe le prix de toutes les unités.", "addBreak": "Ajouter un palier", "saveFailed": "Impossible d’enregistrer la grille.", "loadFailed": "Impossible de charger les grilles tarifaires.", "saved": "Grille enregistrée", "changeReason": "Motif de la modification", "changeReasonPlaceholder": "Pourquoi ce prix change-t-il ?", "changeReasonHint": "Obligatoire lorsque les nouveaux prix couvrent des dates déjà en vigueur. La version précédente est conservée et le motif est enregistré dans l’audit.", "endDateTitle": "Terminer la grille", "endDateReasonLabel": "Motif de la fin", "ended": "Grille terminée", "confirmDelete": "Supprimer cette grille ?", "deleteFailed": "Impossible de supprimer la grille.", "deleted": "Grille supprimée", "customerTarget": "Client · {customer}", "baseTarget": "Prix de base", "empty": "Aucune tarification matricielle pour cet article.", "target": "Cible", "effective": "Dates d’effet", "breaks": "Prix par quantité"
+    "effectiveFrom": "En vigueur dès", "effectiveTo": "En vigueur jusqu’au", "breaksTitle": "Paliers de quantité", "breaksDescription": "La plus grande quantité minimale atteinte fixe le prix de toutes les unités.", "addBreak": "Ajouter un palier", "saveFailed": "Impossible d’enregistrer la grille.", "loadFailed": "Impossible de charger les grilles tarifaires.", "saved": "Grille enregistrée", "changeReason": "Motif de la modification", "changeReasonPlaceholder": "Pourquoi ce prix change-t-il ?", "changeReasonHint": "Obligatoire lorsque les nouveaux prix couvrent des dates déjà en vigueur. La version précédente est conservée et le motif est enregistré dans l’audit.", "endDateTitle": "Terminer la grille", "endDateReasonLabel": "Motif de la fin", "ended": "Grille terminée", "confirmDelete": "Supprimer cette grille ?", "deleteFailed": "Impossible de supprimer la grille.", "deleted": "Grille supprimée", "customerTarget": "Client · {customer}", "baseTarget": "Prix de base", "empty": "Aucune tarification matricielle pour cet article.", "target": "Cible", "effective": "Dates d’effet", "breaks": "Prix par quantité", "familyDescription": "Les tarifs saisis ici s'appliquent à chaque variante sans tarif propre pour le périmètre.", "inheritedTitle": "Hérité de la famille", "inheritedDescription": "Tarifs de la famille appliqués à cette variante ; remplacez-en un pour tarifer cette variante seule.", "override": "Remplacer pour cette variante", "inheritedBadge": "Hérité de {family}", "overriddenBadge": "Remplacé", "source": "Source"
   },
   "rates": {
     "title": "Tarification avancée",
@@ -334,7 +368,14 @@
       "deactivateBody": "Elles restent dans l'historique mais ne peuvent plus être vendues.",
       "bulkSaved": "{count} déclinaisons mises à jour",
       "priceFor": "Prix de {name}",
-      "barcodeFor": "Code de {name}"
+      "barcodeFor": "Code de {name}",
+        "inherited": "Hérité",
+        "overridden": "Remplacé",
+        "inheritedHint": "Vendu au prix famille {rate}",
+        "overriddenHint": "A son propre prix de base",
+        "clearOverrides": "Effacer les remplacements",
+        "clearOverridesTitle": "Effacer {count, plural, one {# remplacement} other {# remplacements}} ?",
+        "clearOverridesBody": "Ces variantes reviennent au prix famille : {sample}."
     },
     "generate": {
       "action": "Générer les déclinaisons manquantes",
@@ -381,13 +422,20 @@
       "loadFailed": "Impossible de charger les déclinaisons",
       "siblingCount": "{count} dans {family}"
     },
+    "pricing": {
+      "title": "Tarifs",
+      "description": "Un seul tarif pour chaque variante sans tarif propre."
+    },
     "convert": {
       "action": "Convertir en famille",
       "optionTitle": "Quelle option porte cet article ?",
       "optionLabel": "Nom d'option",
       "valueTitle": "Quel {option} est cet article ?",
       "valueLabel": "Valeur d'option",
-      "done": "Famille {family} créée"
+      "done": "Famille {family} créée",
+        "cardTitle": "Vendre cet article en variantes",
+        "cardDescription": "Tailles, couleurs ou matières — une famille, une liste de prix.",
+        "cardHint": "L'article devient la première variante ; la famille garde son code."
     }
   },
   "shipping": {

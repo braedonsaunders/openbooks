@@ -159,6 +159,7 @@ export interface ScheduleActor {
 
 export async function getSchedules(actor: ScheduleActor, subject: ScheduleSubject) {
   if (!isUuid(subject.id) || !(await subjectExists(actor.orgId, subject))) return null
+  const inherited = subject.kind === 'item' ? await inheritedFamilySchedules(actor, subject.id) : []
   const [levels, customers, currencies, organization, schedules] = await Promise.all([
     db.execute(sql`select id,code,name,pricing_method,percentage,cost_basis,is_base from price_levels where org_id=${actor.orgId} and is_active order by is_base desc,name`),
     db.execute(sql`select p.id,p.display_name from parties p join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active where p.org_id=${actor.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, actor.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name limit 2000`),
@@ -189,7 +190,48 @@ export async function getSchedules(actor: ScheduleActor, subject: ScheduleSubjec
     currencies: currencies.rows,
     baseCurrency: organization.rows[0]?.base_currency ?? null,
     schedules: schedules.rows,
+    inherited,
   }
+}
+
+/**
+ * Family schedules a variant inherits: the same read as a family subject,
+ * tagged with the family identity so the drawer can name the source. Only
+ * variants carry these; families and standalone items resolve their own rows.
+ */
+async function inheritedFamilySchedules(actor: ScheduleActor, itemId: string) {
+  const membership = (await db.execute<{ family_id: string | null }>(
+    sql`select family_id from items where org_id = ${actor.orgId} and id = ${itemId}`,
+  )).rows[0]
+  if (!membership?.family_id) return []
+  const family = { kind: 'family', id: membership.family_id } as ScheduleSubject
+  const rows = (await db.execute(sql`
+    select schedule.id,schedule.price_level_id,schedule.customer_id,schedule.currency,schedule.quantity_basis,
+           schedule.effective_from::text,schedule.effective_to::text,schedule.is_active,
+           schedule.revision,schedule.supersedes_id,schedule.change_reason,
+           level.name as price_level_name,customer.display_name as customer_name,
+           family.code as family_code,family.name as family_name,
+           coalesce(jsonb_agg(jsonb_build_object('id',price.id,'minimumQuantity',price.minimum_quantity::text,'unitPrice',price.unit_price::text) order by price.minimum_quantity) filter (where price.id is not null),'[]'::jsonb) as breaks
+      from item_price_schedules schedule
+      left join price_levels level on level.org_id=schedule.org_id and level.id=schedule.price_level_id
+      left join parties customer on customer.org_id=schedule.org_id and customer.id=schedule.customer_id
+      left join item_price_breaks price on price.org_id=schedule.org_id and price.schedule_id=schedule.id
+      join item_families family on family.org_id=schedule.org_id and family.id=schedule.family_id
+     where schedule.org_id=${actor.orgId} and (${subjectMatch(family)})
+       and (schedule.customer_id is null or exists (
+         select 1 from parties visible_customer
+          where visible_customer.org_id=schedule.org_id and visible_customer.id=schedule.customer_id
+            ${subsidiaryVisibleFilter(sql`visible_customer.subsidiary_id`, actor.allowedSubsidiaryIds, { orgWideNull: true })}
+       ))
+     group by schedule.id,level.name,customer.display_name,family.code,family.name
+     order by schedule.effective_from desc,level.name nulls first,customer.display_name nulls first`)).rows
+  return rows.map((row) => {
+    const entry = row as Record<string, unknown>
+    return {
+      ...entry,
+      inheritedFrom: { familyId: membership.family_id, familyCode: entry.family_code, familyName: entry.family_name },
+    }
+  })
 }
 
 export async function postSchedule(request: Request, actor: ScheduleActor, subject: ScheduleSubject, body: unknown) {

@@ -106,12 +106,46 @@
     "featureRequired": "启用项目功能后可使用费率簿和范围定价。",
     "back": "更改定价方式"
   },
+  "structure": {
+    "title": "单个商品还是系列？",
+    "description": "作为单个商品销售，或作为具有尺码、颜色、材质等变体的系列销售——只需定价一次，所有变体自动继承。",
+    "singleTitle": "单个商品",
+    "singleDescription": "拥有独立价格的一个商品。",
+    "familyTitle": "多变体商品",
+    "familyDescription": "带选项的系列；除非被覆盖，变体均继承系列价格。"
+  },
+  "familyCreate": {
+    "detailsTitle": "为系列命名",
+    "detailsDescription": "系列承载共用的名称、编码、分类和基准价，所有变体均继承。",
+    "familyCode": "系列编码",
+    "category": "分类",
+    "unit": "单位",
+    "basePrice": "基准价",
+    "basePriceHint": "没有自定价格的变体按此价格销售。",
+    "continue": "继续",
+    "optionsTitle": "添加选项",
+    "optionsDescription": "如尺码或颜色等选项；每种组合都会成为一个变体。",
+    "variantCount": "{count} 个变体",
+    "reviewVariants": "检查变体",
+    "previewTitle": "检查变体",
+    "previewDescription": "取消勾选要跳过的组合；编码、价格和条码均可编辑。空编码将在创建时按规则生成。",
+    "previewCode": "编码",
+    "previewPrice": "价格",
+    "previewBarcode": "条码",
+    "advancedTitle": "编码规则与跳过规则",
+    "advancedSummary": "编码将按 {pattern} 生成",
+    "codePattern": "编码规则",
+    "codePatternHint": "{family} 表示系列编码，{values} 表示全部取值，{value1}、{value2}……表示位置。",
+    "create": "创建 {count} 个变体",
+    "creating": "创建中…",
+    "created": "系列已创建"
+  },
   "pricingMatrix": {
     "title": "价格矩阵", "description": "按币种、价格级别或客户设置带生效日期的数量价格。", "addSchedule": "添加定价计划", "minimumQuantity": "最低数量", "unitPrice": "单价", "scope": "定价范围",
     "scopes": { "base": "基础价格", "level": "价格级别", "customer": "指定客户" },
     "priceLevel": "价格级别", "customer": "客户", "selectCustomer": "选择客户…", "currency": "币种", "quantityBasis": "数量基准",
     "quantityBases": { "line": "行数量", "overallItem": "此物料总数量" },
-    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "changeReason": "更改原因", "changeReasonPlaceholder": "此价格为何更改？", "changeReasonHint": "当新价格覆盖已生效日期时必填。先前版本将保留，原因记录在审计中。", "endDateTitle": "结束定价计划", "endDateReasonLabel": "结束原因", "ended": "定价计划已结束", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格"
+    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "changeReason": "更改原因", "changeReasonPlaceholder": "此价格为何更改？", "changeReasonHint": "当新价格覆盖已生效日期时必填。先前版本将保留，原因记录在审计中。", "endDateTitle": "结束定价计划", "endDateReasonLabel": "结束原因", "ended": "定价计划已结束", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格", "familyDescription": "此处设置的价格表适用于该范围内没有自定价格表的所有变体。", "inheritedTitle": "继承自系列", "inheritedDescription": "适用于本变体的系列价格表；如需单独定价，请覆盖其中一条。", "override": "为本变体覆盖", "inheritedBadge": "继承自 {family}", "overriddenBadge": "已覆盖", "source": "来源"
   },
   "rates": {
     "title": "高级费率定价",
@@ -324,7 +358,14 @@
       "deactivateBody": "它们保留在历史中，但不可再销售。",
       "bulkSaved": "已更新 {count} 个变体",
       "priceFor": "{name} 的价格",
-      "barcodeFor": "{name} 的条码"
+      "barcodeFor": "{name} 的条码",
+        "inherited": "继承",
+        "overridden": "已覆盖",
+        "inheritedHint": "按系列价格 {rate} 销售",
+        "overriddenHint": "有独立基准价",
+        "clearOverrides": "清除覆盖",
+        "clearOverridesTitle": "清除 {count} 条价格覆盖？",
+        "clearOverridesBody": "以下变体将恢复系列价格：{sample}。"
     },
     "generate": {
       "action": "生成缺失变体",
@@ -371,13 +412,20 @@
       "loadFailed": "无法加载变体",
       "siblingCount": "{family} 中有 {count} 个"
     },
+    "pricing": {
+      "title": "定价",
+      "description": "没有自定价格表的变体共用一张价格表。"
+    },
     "convert": {
       "action": "转为系列",
       "optionTitle": "此物料属于哪个选项？",
       "optionLabel": "选项名称",
       "valueTitle": "此物料是哪个 {option}？",
       "valueLabel": "选项值",
-      "done": "系列 {family} 已创建"
+      "done": "系列 {family} 已创建",
+        "cardTitle": "将此商品做成多变体销售",
+        "cardDescription": "尺码、颜色或材质——一个系列，一份价目表。",
+        "cardHint": "该商品将成为首个变体，系列保留其编码。"
     }
   },
   "shipping": {

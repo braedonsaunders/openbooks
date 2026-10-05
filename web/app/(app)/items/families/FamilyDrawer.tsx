@@ -8,6 +8,7 @@ import { apiJson } from '@/lib/api-error'
 import { toast } from 'sonner'
 import { FamilyOptionsEditor, type EditableOption } from './FamilyOptionsEditor'
 import { FamilyVariantsGrid, type GridVariant } from './FamilyVariantsGrid'
+import { ItemPriceMatrixEditor } from '../ItemPriceMatrixEditor'
 
 interface FamilyDetail {
   id: string
@@ -135,9 +136,18 @@ export function FamilyDrawer({ familyId, canManage }: { familyId: string; canMan
           familyId={detail.id}
           optionNames={detail.options.map((option) => option.name)}
           variants={gridVariants}
+          familyRate={detail.defaultRate}
           canManage={canManage}
           onChanged={() => void load()}
         />
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-base font-semibold">{t('pricing.title')}</h3>
+          <p className="mt-0.5 text-sm text-slate-500">{t('pricing.description')}</p>
+        </div>
+        <ItemPriceMatrixEditor familyId={detail.id} canManage={canManage} />
       </section>
 
       <section className="space-y-3">
