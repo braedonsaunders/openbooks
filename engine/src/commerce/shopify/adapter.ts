@@ -17,38 +17,62 @@ import {
 import { loadShopifyChannel, shopifySettingsSchema } from "./channel-access.ts";
 import { CommerceError } from "../errors.ts";
 import { applyLocationWebhook } from "./locations.ts";
+import { ingestChannelEvent, ingestChannelOrder } from "../orders.ts";
+import { postChannelOrder } from "../order-posting.ts";
+import { normalizeShopifyOrder, normalizeShopifyRefund } from "./orders.ts";
 import { shopifyDeliveryShop, verifyShopifyWebhook } from "./webhooks.ts";
 import { db, withOrg } from "../../platform/db.ts";
 
 /**
- * The Shopify storefront adapter: HMAC verification, catalog and location
- * webhooks, compliance deliveries, and the uninstall signal. Order,
- * refund, fulfilment and payout topics are stored but left for a later
- * change that posts them — this adapter says so per delivery instead of
- * dropping them.
+ * The Shopify storefront adapter: HMAC verification, catalog, location,
+ * order, refund and fulfilment webhooks, compliance deliveries, and the
+ * uninstall signal. Payout, dispute and gift-card topics are stored but
+ * left for a later change that posts them — this adapter says so per
+ * delivery instead of dropping them.
  */
 
-const LATER_CHANGE = "kept for the channel order surface a later change adds; the delivery stays stored and replays then";
+const LATER_CHANGE = "kept for the payout, dispute and gift-card surface a later change adds; the delivery stays stored and replays then";
 
 const DEFERRED_TOPICS = [
-  "orders/create",
-  "orders/updated",
-  "orders/cancelled",
-  "orders/delete",
-  "orders/edited",
-  "orders/fulfilled",
-  "orders/paid",
-  "orders/partially_fulfilled",
-  "refunds/create",
-  "fulfillments/create",
-  "fulfillments/update",
-  "fulfillment_orders",
   "disputes/create",
   "disputes/update",
   "shopify_payments/payouts",
   "gift_cards/create",
   "gift_cards/update",
 ];
+
+/** Order payloads that carry the full order: ingest (upsert) then post. */
+const ORDER_UPSERT_TOPICS = [
+  "orders/create",
+  "orders/updated",
+  "orders/edited",
+  "orders/paid",
+  "orders/partially_fulfilled",
+  "orders/fulfilled",
+];
+
+function orderText(value: unknown): string | null {
+  if (typeof value === "number" && Number.isInteger(value)) return String(value);
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/** The storefront order id for an event payload, refusing by name without it. */
+function eventOrderId(body: Record<string, unknown>): string {
+  const id = orderText(body.id ?? body.order_id ?? body.orderId);
+  if (!id) {
+    refuse(
+      "shopify_order_unreadable",
+      "The Shopify delivery names no order id.",
+      "Replay the delivery from Shopify so it arrives with its order id, then ingest it again.",
+      "topic",
+    );
+  }
+  return id;
+}
+
+function eventTime(body: Record<string, unknown>): string {
+  return orderText(body.created_at) ?? orderText(body.updated_at) ?? new Date().toISOString();
+}
 
 function refuse(code: string, message: string, remedy: string, field: string | null = null): never {
   throw new CommerceError(code, message, remedy, { field });
@@ -299,7 +323,71 @@ const shopifyAdapter: SalesChannelAdapter = {
       if (topic === "customers/data_request" || topic === "customers/redact" || topic === "shop/redact") {
         return handleCompliance(orgId, channelId, topic, body);
       }
-      if ((DEFERRED_TOPICS as readonly string[]).includes(topic) || topic.startsWith("orders/") || topic.startsWith("fulfillments/")) {
+      if ((ORDER_UPSERT_TOPICS as readonly string[]).includes(topic)) {
+        const normalized = normalizeShopifyOrder(body);
+        const stored = await ingestChannelOrder(orgId, null, channelId, normalized);
+        const outcome = await postChannelOrder(orgId, null, stored.id);
+        return {
+          action: "processed",
+          resultRef: {
+            order: normalized.number,
+            externalId: normalized.externalId,
+            postingStatus: outcome.status,
+            documentId: outcome.documentId,
+          },
+        };
+      }
+      if (topic === "orders/cancelled" || topic === "orders/delete") {
+        const orderExternalId = eventOrderId(body);
+        const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
+          kind: "cancellation",
+          externalId: `cancel:${orderExternalId}`,
+          occurredAt: eventTime(body),
+        });
+        return {
+          action: "processed",
+          resultRef: { orderExternalId, eventId: stored.eventId, cancelled: true },
+        };
+      }
+      if (topic === "refunds/create") {
+        const orderExternalId = eventOrderId(body);
+        const orderCurrency = (
+          await db.execute<{ shop_currency: string }>(sql`
+            select shop_currency from channel_orders
+             where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`)
+        ).rows[0]?.shop_currency;
+        const refund = normalizeShopifyRefund(body, orderExternalId, orderCurrency);
+        const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
+          kind: "refund",
+          externalId: refund.externalId,
+          refund,
+          occurredAt: refund.refundedAt,
+        });
+        return {
+          action: "processed",
+          resultRef: { orderExternalId, eventId: stored.eventId, refundId: refund.externalId },
+        };
+      }
+      if (topic === "fulfillments/create" || topic === "fulfillments/update") {
+        const orderExternalId = eventOrderId(body);
+        const fulfilmentId = orderText(body.id) ?? orderText(body.fulfillment_id) ?? eventTime(body);
+        const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
+          kind: "fulfilment",
+          externalId: `fulfilment:${fulfilmentId}`,
+          occurredAt: eventTime(body),
+        });
+        return {
+          action: "processed",
+          resultRef: { orderExternalId, eventId: stored.eventId, fulfilled: true },
+        };
+      }
+      if (
+        (DEFERRED_TOPICS as readonly string[]).includes(topic) ||
+        topic.startsWith("orders/") ||
+        topic.startsWith("refunds/") ||
+        topic.startsWith("fulfillments/") ||
+        topic.startsWith("fulfillment_orders")
+      ) {
         return { action: "ignored", resultRef: { topic, reason: LATER_CHANGE } };
       }
       return {

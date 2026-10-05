@@ -274,7 +274,7 @@ function serializeOrder(order: ChannelOrder): {
  */
 export async function ingestChannelOrder(
   orgId: string,
-  actor: string,
+  actor: string | null,
   channelId: string,
   order: ChannelOrder,
 ): Promise<ChannelOrderRow> {
@@ -393,7 +393,7 @@ export async function ingestChannelOrder(
  */
 export async function ingestChannelEvent(
   orgId: string,
-  actor: string,
+  actor: string | null,
   channelId: string,
   orderExternalId: string,
   event: ChannelEventInput,
