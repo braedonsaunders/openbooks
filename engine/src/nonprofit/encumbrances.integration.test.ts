@@ -178,7 +178,8 @@ test("commitments and budget control preserve posting policy and derived balance
             error.message.includes("5000 Cost of Goods Sold") &&
             error.message.includes("OPERATING Operating Fund") && error.message.includes("Main Co") &&
             error.message.includes("1.0000") && error.remedy.includes("approval flow") &&
-            error.remedy.includes("link this actual to the named encumbrance"),
+            error.remedy.includes("copy the approved budget to a draft") &&
+            error.remedy.includes("link this actual to the open encumbrance"),
           row.name,
         );
       } else {
@@ -238,43 +239,58 @@ test("commitments and budget control preserve posting policy and derived balance
       (error) => error instanceof NonprofitError && error.code === "encumbrance_open_balance" &&
         error.message.includes("75.0000"),
     );
-    const documentId = randomUUID();
-    const documentLineId = randomUUID();
-    await withBypassContext(async () => {
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
-           document_date, currency, subtotal, tax_total, total, created_by)
-        values (${documentId}, ${org.orgId}, 'journal', 'draft', ${"ENC-ACTUAL-" + documentId},
-          ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', 75, 0, 75, ${actorId})
-      `);
-      await db.execute(sql`
-        insert into document_lines
-          (id, org_id, document_id, line_number, account_id, subsidiary_id, amount,
-           quantity, unit_price, tax_amount, tax_input_amount, extra_dims)
-        values
-          (${documentLineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.adjustment}, ${org.subsidiaryId},
-           75, 1, 75, 0, 0, ${JSON.stringify({ fund: org.fundId })}::jsonb),
-          (${randomUUID()}, ${org.orgId}, ${documentId}, 2, ${org.accounts.bank}, ${org.subsidiaryId},
-           -75, 1, -75, 0, 0, ${JSON.stringify({ fund: org.fundId })}::jsonb)
-      `);
-      const approved = await db.execute<{ id: string }>(sql`
-        update documents set status = 'approved' where org_id = ${org.orgId} and id = ${documentId} returning id
-      `);
-      assert.equal(approved.rows.length, 1);
-    });
-    await linkEncumbranceDocumentLine({ orgId: org.orgId, encumbranceId: commitment.id, documentLineId, actorId });
-    assert.equal((await withOrgContext(org.orgId, () => encumbranceOpenBalance(db, org.orgId, commitment.id))).openBalance, "75.0000");
-    await withOrgContext(org.orgId, () => postDocument(documentId, {
+    const draftActual = async (amount: string) => {
+      const documentId = randomUUID();
+      const documentLineId = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+             document_date, currency, subtotal, tax_total, total, created_by)
+          values (${documentId}, ${org.orgId}, 'journal', 'draft', ${"ENC-ACTUAL-" + documentId},
+            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', ${amount}, 0, ${amount}, ${actorId})
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (id, org_id, document_id, line_number, account_id, subsidiary_id, amount,
+             quantity, unit_price, tax_amount, tax_input_amount, extra_dims)
+          values
+            (${documentLineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.adjustment}, ${org.subsidiaryId},
+             ${amount}, 1, ${amount}, 0, 0, ${JSON.stringify({ fund: org.fundId })}::jsonb),
+            (${randomUUID()}, ${org.orgId}, ${documentId}, 2, ${org.accounts.bank}, ${org.subsidiaryId},
+             ${"-" + amount}, 1, ${"-" + amount}, 0, 0, ${JSON.stringify({ fund: org.fundId })}::jsonb)
+        `);
+        const approved = await db.execute<{ id: string }>(sql`
+          update documents set status = 'approved' where org_id = ${org.orgId} and id = ${documentId} returning id
+        `);
+        assert.equal(approved.rows.length, 1);
+      });
+      return { documentId, documentLineId };
+    };
+    const openBalance = async () =>
+      (await withOrgContext(org.orgId, () => encumbranceOpenBalance(db, org.orgId, commitment.id))).openBalance;
+    const first = await draftActual("45.0000");
+    await linkEncumbranceDocumentLine({ orgId: org.orgId, encumbranceId: commitment.id, documentLineId: first.documentLineId, actorId });
+    assert.equal(await openBalance(), "75.0000");
+    await withOrgContext(org.orgId, () => postDocument(first.documentId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     }, { deferEffects: true }));
-    assert.equal((await withOrgContext(org.orgId, () => encumbranceOpenBalance(db, org.orgId, commitment.id))).openBalance, "0.0000");
+    assert.equal(await openBalance(), "30.0000");
+    // The posted 45.00 is counted once: the remaining 30.00 links in full,
+    // and one cent more is refused.
+    const over = await draftActual("30.0100");
+    await assert.rejects(
+      linkEncumbranceDocumentLine({ orgId: org.orgId, encumbranceId: commitment.id, documentLineId: over.documentLineId, actorId }),
+      (error) => error instanceof NonprofitError && error.code === "encumbrance_link_exceeds_balance",
+    );
+    const rest = await draftActual("30.0000");
+    await linkEncumbranceDocumentLine({ orgId: org.orgId, encumbranceId: commitment.id, documentLineId: rest.documentLineId, actorId });
     const voided = await withOrgContext(org.orgId, () => requestDocumentVoid({
-      documentId, orgId: org.orgId, actorId: actorId!, reason: "Correct the linked actual",
+      documentId: first.documentId, orgId: org.orgId, actorId: actorId!, reason: "Correct the linked actual",
       reversalDate: org.date,
     }));
     assert.equal(voided.status, "voided");
-    assert.equal((await withOrgContext(org.orgId, () => encumbranceOpenBalance(db, org.orgId, commitment.id))).openBalance, "75.0000");
+    assert.equal(await openBalance(), "75.0000");
   } finally {
     clearBalancingLegProviders();
     await dropScratchOrg(org.orgId);

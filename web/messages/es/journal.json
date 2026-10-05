@@ -83,6 +83,6 @@
       "credit": "Crédito"
     },
     "budgetaryControlWarning": "El presupuesto {scenario} supera la asignación para {account}, fondo {fund}, {subsidiary}{dimensions}: disponible {available}, exceso de {amountOver}.",
-    "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación o vincule este importe al compromiso indicado."
+    "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación: copie el presupuesto aprobado como borrador, aumente el importe de esta cuenta para el fondo en la hoja de trabajo, apruebe la copia y archive el presupuesto sustituido. O vincule este importe al compromiso abierto que lo reservó."
   }
 }

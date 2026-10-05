@@ -83,6 +83,6 @@
       "credit": "Haben"
     },
     "budgetaryControlWarning": "Budget {scenario} überschreitet die Zuweisung für {account}, Fonds {fund}, {subsidiary}{dimensions}: verfügbar {available}, überschritten um {amountOver}.",
-    "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen oder den Ist-Betrag mit der genannten Verpflichtung verknüpfen."
+    "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen: das genehmigte Budget als Entwurf kopieren, den Betrag dieses Kontos für den Fonds im Arbeitsblatt erhöhen, die Kopie genehmigen und das ersetzte Budget archivieren. Oder den Ist-Betrag mit der offenen Verpflichtung verknüpfen, die ihn reserviert hat."
   }
 }

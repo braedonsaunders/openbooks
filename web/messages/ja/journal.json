@@ -83,6 +83,6 @@
       "credit": "貸方"
     },
     "budgetaryControlWarning": "予算{scenario}は{account}、基金{fund}、{subsidiary}{dimensions}で割当超過です。利用可能額{available}、超過額{amountOver}。",
-    "budgetaryControlRemedy": "予算を承認フローで改定するか、この実績を指定の負担行為に紐付けてください。"
+    "budgetaryControlRemedy": "予算を承認フローで改定してください。承認済み予算を下書きとしてコピーし、ワークシートでこのファンドの勘定金額を増やし、コピーを承認して置き換えられた予算をアーカイブします。または、この実績を予約した未決の負担行為に紐付けてください。"
   }
 }

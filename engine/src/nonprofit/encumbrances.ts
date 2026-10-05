@@ -5,6 +5,7 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { db, type SqlExecutor, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { fundPostingRefusal, NonprofitError, type NonprofitStatus } from "./errors.ts";
+import { effectiveExtraDimsSql } from "./budget-dimensions.ts";
 import type { BalancingContext, BalancingLeg, BalancingLegProvider, BalancingLineView } from "../journal/balancing-hooks.ts";
 
 const FEATURE_KEY = "encumbrances";
@@ -382,7 +383,12 @@ export async function linkEncumbranceDocumentLine(input: {
          -- Live entries only: voided documents cannot reserve an encumbrance balance.
          and d.status in ('draft', 'pending_approval', 'approved', 'posted')
     `)).rows[0]?.amount ?? "0";
-    if (!balance || cmpMoney(addMoney(linked, line.amount), balance.openBalance) > 0) {
+    // Every live linked line — posted or not yet posted — already reserves part
+    // of the commitment, so the new line must fit in the commitment amount less
+    // all of them. The open balance cannot be the ceiling here: it has already
+    // deducted the posted links, and adding them again would count those
+    // actuals twice and refuse a line that exactly uses up the remainder.
+    if (!balance || cmpMoney(addMoney(linked, line.amount), balance.amount) > 0) {
       throw refuse(`Linking this line would exceed the open balance of commitment ${e.number}.`, "encumbrance_link_exceeds_balance", "Choose a smaller actual line or a commitment with enough open balance.", 422, "documentLineId");
     }
     const inserted = (await db.execute<{ id: string }>(sql`
@@ -572,6 +578,11 @@ async function accountTypes(
   return new Map(rows.map((row) => [row.id, row.type]));
 }
 
+/**
+ * Appropriation, actuals and open commitments of one budget cell. All three
+ * are matched on the cell's exact dimension identity, with a row that names
+ * no fund read as the default fund (see budget-dimensions.ts).
+ */
 async function cellFiguresForScenario(input: {
   runner: SqlExecutor;
   orgId: string;
@@ -622,7 +633,7 @@ async function cellFiguresForScenario(input: {
        and bl.project_id is not distinct from ${cell.projectId}::uuid
        and bl.location_id is not distinct from ${cell.locationId}::uuid
        and bl.class_id is not distinct from ${cell.classId}::uuid
-       and bl.extra_dims = ${dims}::jsonb
+       and ${effectiveExtraDimsSql(sql`bl.extra_dims`, orgId)} = ${dims}::jsonb
   `)).rows[0]?.amount ?? "0";
   const actualsRaw = (await runner.execute<{ amount: string }>(sql`
     select coalesce(sum(jl.amount), 0)::text as amount
@@ -638,7 +649,7 @@ async function cellFiguresForScenario(input: {
        and jl.project_id is not distinct from ${cell.projectId}::uuid
        and jl.location_id is not distinct from ${cell.locationId}::uuid
        and jl.class_id is not distinct from ${cell.classId}::uuid
-       and jl.extra_dims = ${dims}::jsonb
+       and ${effectiveExtraDimsSql(sql`jl.extra_dims`, orgId)} = ${dims}::jsonb
   `)).rows[0]?.amount ?? "0";
   const openEncumbrancesRaw = (await runner.execute<{ amount: string }>(sql`
     select coalesce(sum(greatest(
@@ -670,7 +681,7 @@ async function cellFiguresForScenario(input: {
        and e.project_id is not distinct from ${cell.projectId}::uuid
        and e.location_id is not distinct from ${cell.locationId}::uuid
        and e.class_id is not distinct from ${cell.classId}::uuid
-       and e.extra_dims = ${dims}::jsonb
+       and ${effectiveExtraDimsSql(sql`e.extra_dims`, orgId)} = ${dims}::jsonb
   `)).rows[0]?.amount ?? "0";
   const appropriation = parseMoney(appropriationRaw);
   const actuals = parseMoney(actualsRaw);
@@ -779,7 +790,7 @@ export const budgetaryControlProvider: BalancingLegProvider = async (
         figures.accountName + ", fund " + figures.fundCode + " " + figures.fundName +
         ", subsidiary " + figures.subsidiaryName + ".",
       code: "budget_exceeded",
-      remedy: "Revise the budget through its approval flow, or link this actual to the named encumbrance.",
+      remedy: "Revise the budget through its approval flow: copy the approved budget to a draft, raise this account's amount for the fund in the worksheet, approve the copy and archive the superseded budget. Or link this actual to the open encumbrance that reserved it.",
     });
   }
   return [];

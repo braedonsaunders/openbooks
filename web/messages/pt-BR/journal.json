@@ -83,6 +83,6 @@
       "credit": "Crédito"
     },
     "budgetaryControlWarning": "O orçamento {scenario} excede a dotação para {account}, fundo {fund}, {subsidiary}{dimensions}: disponível {available}, excesso de {amountOver}.",
-    "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação ou vincule este valor ao empenho indicado."
+    "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação: copie o orçamento aprovado como rascunho, aumente o valor desta conta para o fundo na planilha, aprove a cópia e arquive o orçamento substituído. Ou vincule este valor ao empenho aberto que o reservou."
   }
 }
