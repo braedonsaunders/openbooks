@@ -1,6 +1,15 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useId, useState, type ComponentProps, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { UrlDrawer } from '@openbooks/ui'
@@ -15,10 +24,8 @@ const DirtyDrawerContext = createContext<DirtyDrawerContextValue | null>(null)
 
 type Props = Omit<ComponentProps<typeof UrlDrawer>, 'beforeClose' | 'children'> & { children: ReactNode }
 
-/** URL drawer that collects dirty state from form children and guards every shell close path. */
-export function DirtyUrlDrawer({ children, ...props }: Props) {
-  const router = useRouter()
-  const common = useTranslations('common')
+/** Collect child-form state without creating another drawer shell. */
+export function useDirtyDrawerState() {
   const [formStates, setFormStates] = useState<ReadonlyMap<string, { dirty: boolean; busy: boolean }>>(() => new Map())
 
   const register = useCallback((id: string, dirty: boolean, busy: boolean) => {
@@ -37,25 +44,47 @@ export function DirtyUrlDrawer({ children, ...props }: Props) {
     })
   }, [])
 
+  return {
+    register,
+    dirty: [...formStates.values()].some((state) => state.dirty),
+    busy: [...formStates.values()].some((state) => state.busy),
+  }
+}
+
+/** Existing shell owners share the same child-form registration and close action. */
+export function DirtyDrawerFormScope({ children, register, close }: DirtyDrawerContextValue & { children: ReactNode }) {
+  return <DirtyDrawerContext.Provider value={{ register, close }}>{children}</DirtyDrawerContext.Provider>
+}
+
+/** URL drawer that collects dirty state from form children and guards every shell close path. */
+export function DirtyUrlDrawer({ children, ...props }: Props) {
+  const router = useRouter()
+  const common = useTranslations('common')
+  const forms = useDirtyDrawerState()
+
   const confirmClose = useCallback(async () => {
-    const states = [...formStates.values()]
-    if (states.some((state) => state.busy)) return false
-    if (!states.some((state) => state.dirty)) return true
+    if (forms.busy) return false
+    if (!forms.dirty) return true
     return confirmDialog({
       message: common('feedback.unsavedChanges'),
       confirmLabel: common('confirm.discardChanges'),
       tone: 'danger',
     })
-  }, [common, formStates])
+  }, [common, forms.busy, forms.dirty])
 
-  const close = useCallback(async (href?: string) => {
-    if (await confirmClose()) router.push((href ?? props.closeHref) as never)
-  }, [confirmClose, props.closeHref, router])
+  const close = useCallback(
+    async (href?: string) => {
+      if (await confirmClose()) router.push((href ?? props.closeHref) as never)
+    },
+    [confirmClose, props.closeHref, router],
+  )
 
   return (
-    <DirtyDrawerContext.Provider value={{ register, close }}>
-      <UrlDrawer {...props} beforeClose={confirmClose}>{children}</UrlDrawer>
-    </DirtyDrawerContext.Provider>
+    <DirtyDrawerFormScope register={forms.register} close={close}>
+      <UrlDrawer {...props} beforeClose={confirmClose}>
+        {children}
+      </UrlDrawer>
+    </DirtyDrawerFormScope>
   )
 }
 

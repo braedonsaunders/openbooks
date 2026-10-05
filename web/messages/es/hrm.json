@@ -1494,7 +1494,8 @@
       "compensation": "Retribución",
       "oneOnOnes": "1:1",
       "documents": "Documentos",
-      "openSurveys": "Encuestas abiertas"
+      "openSurveys": "Encuestas abiertas",
+      "training": "Formación"
     },
     "refusedTitle": "El autoservicio no está disponible",
     "readFailed": "No se pudo cargar esta sección. Actualice la página para reintentar; si sigue sin estar disponible, contacte al administrador.",
@@ -1835,6 +1836,12 @@
       "browser": "Abre el menú del navegador y elige Instalar OpenBooks o Instalar aplicación. Si no está disponible, usa un navegador actualizado compatible con aplicaciones web instaladas.",
       "online": "OpenBooks necesita conexión a Internet. Inicia sesión normalmente para acceder a tu información actual.",
       "failed": "El navegador no pudo abrir la instalación. Sigue las instrucciones del navegador para añadir OpenBooks a tu dispositivo."
+    },
+    "training": {
+      "title": "Tu formación",
+      "description": "Responde a invitaciones, consulta tus resultados y comparte tus comentarios sobre los cursos.",
+      "emptyTitle": "No hay invitaciones de formación",
+      "emptyDescription": "Aquí aparecerán tus invitaciones a las sesiones programadas."
     }
   },
   "options": {

@@ -102,7 +102,9 @@ test('a cycle without forms offers direct creation only to an authorized operato
   let unmount = await mount(<DirtyUrlDrawer open title="New cycle" closeHref={props.closeHref}><CycleCreateForm {...props} /></DirtyUrlDrawer>)
   try {
     assert.ok(document.querySelector('a[href="/hrm/performance/templates?template=new"]'))
-    assert.ok([...document.querySelectorAll('button')].find((button) => button.textContent === 'Create cycle')?.disabled)
+    const save = document.querySelector('form button[type=submit]') as HTMLButtonElement | null
+    assert.ok(save, 'The native cycle form exposes its draft save action')
+    assert.equal(save.disabled, true, 'A missing review form cannot create a cycle')
   } finally { await unmount() }
   unmount = await mount(<DirtyUrlDrawer open title="New cycle" closeHref={props.closeHref}><CycleCreateForm {...props} setupHref={null} /></DirtyUrlDrawer>)
   try { assert.equal(document.querySelector('a[href="/hrm/performance/templates?template=new"]'), null) } finally { await unmount() }

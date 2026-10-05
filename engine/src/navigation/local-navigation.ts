@@ -194,6 +194,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     ...['profile', 'checklists', 'reviews', 'benefits', 'team', 'compensation', 'documents'].map((tab) => ({ href: `/me/${tab}`, ns: 'hrm', key: `me.tabs.${tab}` })),
     { href: '/me/one-on-ones', ns: 'hrm', key: 'me.tabs.oneOnOnes' },
     { href: '/me/surveys', ns: 'hrm', key: 'me.tabs.openSurveys' },
+    { href: '/me/training', ns: 'hrm', key: 'me.tabs.training', feature: 'hrmCertifications', permission: 'hrm.self.read' },
   ] },
   { id: 'payroll', label: 'Payroll', feature: 'payroll', tabs: [
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview', permission: 'payroll.read' },

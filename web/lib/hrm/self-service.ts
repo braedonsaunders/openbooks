@@ -92,6 +92,7 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
     { href: '/hrm/my-leave', label: t('me.tabs.leave'), active: activeHref === '/hrm/my-leave' },
     { href: '/me/checklists', label: t('me.tabs.checklists'), active: activeHref === '/me/checklists' },
   ]
+  if (await isFeatureEnabled(authz.user.orgId, 'hrmCertifications')) tabs.push({ href: '/me/training', label: t('me.tabs.training'), active: activeHref === '/me/training' })
   if (caps.hasReviewCycles || activeHref === '/me/reviews') {
     tabs.push({ href: '/me/reviews', label: t('me.tabs.reviews'), active: activeHref === '/me/reviews' })
   }

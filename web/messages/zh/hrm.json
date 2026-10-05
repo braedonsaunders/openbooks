@@ -1494,7 +1494,8 @@
       "compensation": "薪酬",
       "oneOnOnes": "1:1",
       "documents": "文档",
-      "openSurveys": "待填调查"
+      "openSurveys": "待填调查",
+      "training": "培训"
     },
     "refusedTitle": "自助服务不可用",
     "readFailed": "无法加载此部分。请刷新页面重试；如仍不可用，请联系管理员。",
@@ -1835,6 +1836,12 @@
       "browser": "打开浏览器菜单，选择“安装OpenBooks”或“安装应用”。如果无法安装，请使用支持安装网页应用的最新浏览器。",
       "online": "OpenBooks需要互联网连接。请照常登录以查看当前员工信息。",
       "failed": "浏览器无法开始安装。请按照浏览器提示将OpenBooks添加到设备。"
+    },
+    "training": {
+      "title": "我的培训",
+      "description": "回复邀请、查看培训结果并提交课程反馈。",
+      "emptyTitle": "暂无培训邀请",
+      "emptyDescription": "已安排的培训邀请将显示在此处。"
     }
   },
   "options": {

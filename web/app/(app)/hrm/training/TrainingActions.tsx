@@ -11,6 +11,7 @@ import type {
   TrainingFeedback,
 } from '@openbooks/engine/hrm/training'
 import { InspectorPanel } from '@/components/builder/builder-kit'
+import { useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
 import { CabinetFilePicker } from '@/components/cabinet-file-picker'
 import { FieldControl } from '@/app/(app)/admin/setup/[entity]/SetupDrawer'
 import { coerceField } from '@/lib/setup/coerce'
@@ -19,22 +20,25 @@ import { dateTime } from '@/lib/format'
 import type { SetupField } from '@/lib/setup/types'
 
 /** Decision controls use the native fields inside the record's existing drawer shell. */
+type TrainingActionProps = {
+  feedback?: TrainingFeedback[]
+  canManage: boolean
+} & (
+  | { course: TrainingCourse; session?: TrainingSession; participant?: TrainingParticipant; audience?: 'staff' }
+  | { course?: never; session: TrainingSession; participant: TrainingParticipant; audience: 'self' }
+)
+
 export function TrainingActions({
   course,
   session,
   participant,
   feedback = [],
   canManage,
-}: {
-  course: TrainingCourse
-  session?: TrainingSession
-  participant?: TrainingParticipant
-  feedback?: TrainingFeedback[]
-  canManage: boolean
-}) {
+  audience = 'staff',
+}: TrainingActionProps) {
   const t = useTranslations('admin.setup'),
     router = useRouter()
-  const record = participant ?? session ?? course
+  const record = participant ?? session ?? course!
   const [values, setValues] = useState<Record<string, unknown>>({
     reason: '',
     attendanceMinutes: '',
@@ -46,13 +50,17 @@ export function TrainingActions({
   const [evidence, setEvidence] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null)
+  useDirtyUrlDrawer(Object.values(values).some((value) => value !== '') || evidence !== '', busy)
   const pending = useRef(false),
     feedbackKey = useRef<string | null>(null)
-  const base = `/api/hrm/training/${participant ? 'participants' : session ? 'sessions' : 'courses'}/${record.id}`
+  const base = `/api/${audience === 'self' ? 'me/training' : 'hrm/training'}/${participant ? 'participants' : session ? 'sessions' : 'courses'}/${record.id}`
   const locale = useLocale()
   const actions: string[] = []
   if (canManage) {
-    if (participant) {
+    if (audience === 'self' && participant) {
+      if (participant.status === 'invited') actions.push('accept', 'decline')
+      if (participant.status === 'completed' || participant.status === 'failed') actions.push('feedback')
+    } else if (participant) {
       if (participant.status === 'invited') actions.push('accept', 'decline')
       if (participant.status === 'invited' || participant.status === 'accepted') {
         actions.push('cancel')
@@ -64,13 +72,13 @@ export function TrainingActions({
       if (session.status === 'scheduled') actions.push('start', 'cancel')
       if (session.status === 'in_progress') actions.push('complete', 'cancel')
     } else {
-      if (course.status === 'draft') actions.push('approve', 'cancel')
-      if (course.status === 'approved') actions.push('retire')
+      if (course?.status === 'draft') actions.push('approve', 'cancel')
+      if (course?.status === 'approved') actions.push('retire')
     }
   }
   const resultFields: SetupField[] = [
     { key: 'attendanceMinutes', kind: 'integer', min: 0, required: true, labelKey: 'training.attendanceMinutes' },
-    ...(course.passingScore !== null
+    ...(course?.passingScore != null
       ? [{ key: 'score', kind: 'integer' as const, min: 0, max: 100, required: true, labelKey: 'training.score' }]
       : []),
     { key: 'notes', kind: 'textarea', labelKey: 'training.notes' },
@@ -99,12 +107,16 @@ export function TrainingActions({
   }
   async function act(action: string) {
     if (pending.current) return
-    const common = coerceField({ key: 'reason', kind: 'textarea', required: true }, values.reason)
+    const reasonRequired = audience === 'staff' || (action === 'feedback' && feedback.length > 0)
+    const common = coerceField({ key: 'reason', kind: 'textarea', required: reasonRequired }, values.reason)
     if ('error' in common) {
       setError(t('training.reasonHint'))
       return
     }
-    const body: Record<string, unknown> = { expectedRevision: record.revision, reason: common.value }
+    const body: Record<string, unknown> = {
+      expectedRevision: record.revision,
+      reason: common.value || t(`training.actions.${action}`),
+    }
     let suffix = ''
     if (action === 'result' || action === 'feedback') {
       for (const field of action === 'result' ? resultFields : feedbackFields) {
@@ -152,7 +164,8 @@ export function TrainingActions({
         return
       }
       feedbackKey.current = null
-      setValues((current) => ({ ...current, reason: '' }))
+      setValues({ reason: '', attendanceMinutes: '', score: '', notes: '', rating: '', comments: '' })
+      setEvidence('')
       router.refresh()
     } catch {
       setError(t('training.unconfirmed'))
@@ -173,11 +186,13 @@ export function TrainingActions({
         </p>
         {actions.length ? (
           <div className="space-y-4">
-            {fields([{ key: 'reason', kind: 'textarea', required: true, labelKey: 'training.reason' }])}
+            {audience === 'staff' || feedback.length > 0
+              ? fields([{ key: 'reason', kind: 'textarea', required: true, labelKey: 'training.reason' }])
+              : null}
             {actions.includes('result') ? (
               <InspectorPanel title={t('training.result')} description={t('training.resultHint')}>
                 <div className="grid gap-4 sm:grid-cols-2">{fields(resultFields)}</div>
-                {course.qualificationTypeId ? (
+                {course?.qualificationTypeId ? (
                   <div className="mt-4 space-y-1.5">
                     <Label>{t('training.evidence')}</Label>
                     <CabinetFilePicker

@@ -536,6 +536,7 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  me_training: { route: '/me/training', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
   me_checklists: {
     route: '/me/checklists',
     rowsField: 'rows',
