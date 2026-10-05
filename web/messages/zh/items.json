@@ -239,6 +239,7 @@
   "kit": {
     "tab": "组件",
     "loading": "正在加载套件配方…",
+    "availabilityLoading": "正在加载可用量…",
     "loadFailed": "无法加载套件配方。",
     "noRecipeSummary": "尚无配方——添加组件后才能销售该套件。",
     "recipeSummary": "{count}件组合：{parts}",

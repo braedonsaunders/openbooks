@@ -252,6 +252,7 @@
   "kit": {
     "tab": "Komponenten",
     "loading": "Kit-Rezept wird geladen…",
+    "availabilityLoading": "Verfügbarkeit wird geladen…",
     "loadFailed": "Das Kit-Rezept konnte nicht geladen werden.",
     "noRecipeSummary": "Noch kein Rezept – das Kit kann erst verkauft werden, wenn es Komponenten hat.",
     "recipeSummary": "Bündel aus {count}: {parts}",
