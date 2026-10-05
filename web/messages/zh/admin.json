@@ -2147,7 +2147,9 @@
     "confirmDelete": "删除此记录？此操作无法撤销。",
     "validation": {
       "required": "{field} 为必填项",
-      "invalidStructuredValue": "{field} 含有无法读取的已存储记录。请先修正配置再保存。"
+      "invalidStructuredValue": "{field} 含有无法读取的已存储记录。请先修正配置再保存。",
+      "moneyAmount": "请按 {currency} 的常规金额输入 {field}，例如 120.50——不要使用最小单位，且小数位数不得超过 {currency} 的精度。",
+      "moneyUnknownCurrency": "无法按 {currency} 为 {field} 定价：该货币没有受支持的最小单位精度。"
     },
     "drawer": {
       "newTitle": "新建 {name}",
@@ -4137,7 +4139,7 @@
       "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。",
       "contractCostPracticalExpedient": "启用后，受益期为十二个月或更短的成本将直接费用化，不予资本化。",
       "contractCostCommensurate": "续约佣金达到或超过初次佣金的这一比例时，即使采用客户生命周期基础，摊销也限定在合同期内。",
-      "minorAmount": "货币的最小单位整数：1000 即 10.00 美元。",
+      "majorAmount": "常规货币单位：120.50 美元。",
       "shippingDefaultPreset": "出货没有自带包裹尺寸时使用。",
       "shippingMarkup": "在承运商运费上加收的费用，以基点计。100 即百分之一。",
       "shippingCustomsDefaults": "发往国外的出货默认内容说明。"

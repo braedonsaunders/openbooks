@@ -2147,7 +2147,9 @@
     "confirmDelete": "Delete this record? This cannot be undone.",
     "validation": {
       "required": "{field} is required",
-      "invalidStructuredValue": "{field} contains an unreadable stored record. Correct the configuration before saving."
+      "invalidStructuredValue": "{field} contains an unreadable stored record. Correct the configuration before saving.",
+      "moneyAmount": "Enter {field} as a normal {currency} amount, for example 120.50 — not in minor units, and with no more fraction digits than {currency} prices.",
+      "moneyUnknownCurrency": "Cannot price {field} in {currency}: the currency has no supported minor-unit precision."
     },
     "drawer": {
       "newTitle": "New {name}",
@@ -4137,7 +4139,7 @@
       "ianaTimezone": "Enter an IANA time zone, such as America/Toronto.",
       "contractCostPracticalExpedient": "When on, costs whose benefit period is twelve months or less expense immediately instead of capitalizing.",
       "contractCostCommensurate": "A renewal commission at or above this share of the initial commission confines amortization to the contract term, even under customer-life basis.",
-      "minorAmount": "Whole minor units of the currency: 1000 means 10.00 in USD.",
+      "majorAmount": "Normal currency units: 120.50 in USD.",
       "shippingDefaultPreset": "Used when a shipment has no package size of its own.",
       "shippingMarkup": "Extra charge added to the carrier rate, in basis points. 100 is one percent.",
       "shippingCustomsDefaults": "Default contents description for shipments that leave the country."

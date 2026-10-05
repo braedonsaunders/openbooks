@@ -19,6 +19,14 @@ export type SetupFieldKind =
   | 'integer'
   | 'decimal'
   | 'percent'
+  /**
+   * A storage-minor-units amount entered as operator majors ("120.50",
+   * never "12050"). The drawer converts through the sibling
+   * `currencyField` (default `currency`) at save and display time; the
+   * stored value keeps the exact minor-unit shape every write path takes
+   * today, so commands, schemas and coercion are untouched.
+   */
+  | 'money'
   | 'boolean'
   | 'date'
   | 'select'
@@ -35,6 +43,12 @@ export type SetupColumnKind =
   | 'date'
   | 'number'
   | 'boolean'
+  /**
+   * A storage-minor-units amount rendered as operator majors. The column
+   * reads the sibling `currencyField` for the code and formats through its
+   * minor-unit precision.
+   */
+  | 'money'
 
 /**
  * Where a `ref`/`multiref`/`stringArray` field's options come from.
@@ -117,6 +131,8 @@ export interface SetupField {
   clearWhenHidden?: boolean
   /** Exact decimal scale declared by the native storage contract. */
   decimalScale?: number
+  /** Sibling field holding the 3-letter currency code for `money` fields. */
+  currencyField?: string
   /** Inclusive resource/domain bounds for integer and percent fields. */
   min?: number
   max?: number
@@ -219,6 +235,8 @@ export interface SetupColumn {
   options?: SetupOption[]
   /** Replace `options` from a runtime registry on server surfaces. */
   optionsSource?: SetupDynamicOptionsSource
+  /** Sibling field holding the 3-letter currency code for `money` columns. */
+  currencyField?: string
 }
 
 /** Enum list filter rendered above the table, bound to the `f_<key>` param. */
