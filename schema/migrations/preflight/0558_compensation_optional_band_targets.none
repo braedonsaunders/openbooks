@@ -1,0 +1,1 @@
+Additive relaxation for an undeclared pay-band target. Existing target values, range bounds, versions, tenant isolation and monetary history are preserved. The ordered and positive constraints continue to validate every configured target. No tenant data is rewritten.

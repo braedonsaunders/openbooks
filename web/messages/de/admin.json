@@ -4188,7 +4188,9 @@
       "majorAmount": "Normale Währungseinheiten: 120.50 USD.",
       "shippingDefaultPreset": "Wird verwendet, wenn eine Sendung keine eigene Paketgröße hat.",
       "shippingMarkup": "Zusätzlicher Aufschlag auf den Frachttarif, in Basispunkten. 100 entspricht einem Prozent.",
-      "shippingCustomsDefaults": "Standard-Inhaltsbeschreibung für Sendungen ins Ausland."
+      "shippingCustomsDefaults": "Standard-Inhaltsbeschreibung für Sendungen ins Ausland.",
+      "payBandTarget": "Optional. Geben Sie einen genehmigten Zielwert innerhalb der Spanne ein. Lassen Sie das Feld leer, wenn die Richtlinie nur Mindest- und Höchstwert festlegt; ein Mittelwert wird nicht abgeleitet.",
+      "compensationCriteria": "Optional, bis eine genehmigte Grundlage für die Bewertung gleichwertiger Arbeit festgelegt ist. Entgeltgleichheitsbewertungen erfordern festgelegte Kriterien und Gewichtungen."
     },
     "options": {
       "storedValueKind": {

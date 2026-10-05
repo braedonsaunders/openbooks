@@ -4143,7 +4143,9 @@
       "majorAmount": "常规货币单位：120.50 美元。",
       "shippingDefaultPreset": "出货没有自带包裹尺寸时使用。",
       "shippingMarkup": "在承运商运费上加收的费用，以基点计。100 即百分之一。",
-      "shippingCustomsDefaults": "发往国外的出货默认内容说明。"
+      "shippingCustomsDefaults": "发往国外的出货默认内容说明。",
+      "payBandTarget": "可选。请输入范围内已批准的目标薪酬。如果政策只规定最低值和最高值，请留空；系统不会推定中间值。",
+      "compensationCriteria": "在确定经批准的同等价值工作评估依据之前，此项可选。薪酬公平评估要求明确的标准和权重。"
     },
     "options": {
       "storedValueKind": {

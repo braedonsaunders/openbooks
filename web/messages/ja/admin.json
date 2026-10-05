@@ -4188,7 +4188,9 @@
       "majorAmount": "通常の通貨単位: 120.50 米ドル。",
       "shippingDefaultPreset": "出荷に梱包サイズがない場合に使用されます。",
       "shippingMarkup": "運送会社運賃への追加料金（ベーシスポイント）。100が1パーセントです。",
-      "shippingCustomsDefaults": "国外への出荷に使う内容品の既定説明。"
+      "shippingCustomsDefaults": "国外への出荷に使う内容品の既定説明。",
+      "payBandTarget": "任意です。範囲内の承認済み目標額を入力してください。方針に下限と上限のみが定められている場合は空欄にしてください。中央値は自動設定されません。",
+      "compensationCriteria": "承認済みの同一価値労働の評価基準が定められるまでは任意です。賃金公平性の評価には、明示された基準と重みが必要です。"
     },
     "options": {
       "storedValueKind": {

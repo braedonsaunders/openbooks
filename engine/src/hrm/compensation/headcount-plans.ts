@@ -347,6 +347,9 @@ async function costLine(
       args.asOf,
     );
     if (band) {
+      if (band.target === null) {
+        throw new CompensationError("REFUSED", "This pay band has no target rate — configure an approved target on a new pay-band version in Compensation → Pay bands before costing this headcount-plan line.");
+      }
       basis = "band_target";
       annualTarget = band.target;
     } else if (args.incumbentPartyId) {

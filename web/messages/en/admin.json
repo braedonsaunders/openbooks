@@ -4143,7 +4143,9 @@
       "majorAmount": "Normal currency units: 120.50 in USD.",
       "shippingDefaultPreset": "Used when a shipment has no package size of its own.",
       "shippingMarkup": "Extra charge added to the carrier rate, in basis points. 100 is one percent.",
-      "shippingCustomsDefaults": "Default contents description for shipments that leave the country."
+      "shippingCustomsDefaults": "Default contents description for shipments that leave the country.",
+      "payBandTarget": "Optional. Enter an approved target within the range. Leave blank when the policy defines only minimum and maximum; no midpoint is inferred.",
+      "compensationCriteria": "Optional until an approved equal-value assessment basis is defined. Pay-equity assessments require declared criteria and weights."
     },
     "options": {
       "storedValueKind": {

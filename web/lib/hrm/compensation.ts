@@ -785,9 +785,9 @@ export async function loadCompCycleDetail(
   // Band edges for the lines' bands: placement derives here (the lines
   // freeze the ratio at open; the edges render the bar).
   const bandIds = [...new Set(lines.map((l) => l.bandId).filter((b): b is string => b !== null))]
-  const bandEdges = new Map<string, { min: string; target: string; max: string }>()
+  const bandEdges = new Map<string, { min: string; target: string | null; max: string }>()
   if (bandIds.length > 0) {
-    const edgeRows = (await db.execute<{ id: string; min: string; target: string; max: string }>(sql`
+    const edgeRows = (await db.execute<{ id: string; min: string; target: string | null; max: string }>(sql`
       select id, min::text as min, target::text as target, max::text as max
         from hrm_pay_bands
        where org_id = ${orgId} and id = any(${`{${bandIds.join(',')}}`}::uuid[])`)).rows

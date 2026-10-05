@@ -41,7 +41,7 @@ export interface PayBandDTO {
   readonly currency: string;
   readonly basis: BandBasis;
   readonly min: string;
-  readonly target: string;
+  readonly target: string | null;
   readonly max: string;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
@@ -63,7 +63,7 @@ type BandRow = {
   currency: string;
   basis: string;
   min: string;
-  target: string;
+  target: string | null;
   max: string;
   effective_from: string;
   effective_to: string | null;
@@ -79,7 +79,7 @@ function toBandDTO(row: BandRow): PayBandDTO {
     currency: row.currency,
     basis: (row.basis === "hourly" ? "hourly" : "annual") as BandBasis,
     min: String(row.min),
-    target: String(row.target),
+    target: row.target === null ? null : String(row.target),
     max: String(row.max),
     effectiveFrom: String(row.effective_from).slice(0, 10),
     effectiveTo: row.effective_to === null ? null : String(row.effective_to).slice(0, 10),
@@ -109,7 +109,7 @@ export interface CreatePayBandQuery {
   readonly currency: string;
   readonly basis: BandBasis;
   readonly min: string;
-  readonly target: string;
+  readonly target: string | null;
   readonly max: string;
   readonly effectiveFrom: string;
   readonly reason: string;
@@ -120,11 +120,13 @@ export interface CreatePayBandQuery {
  * cannot tell 4-decimal money apart at the boundary, so the check never
  * crosses them. Pure, so the unit test names the refusal without a database.
  */
-export function assertBandOrdered(min: string, target: string, max: string): void {
-  if (!(compareDecimal(min, target) <= 0 && compareDecimal(target, max) <= 0)) {
+export function assertBandOrdered(min: string, target: string | null, max: string): void {
+  if (!(compareDecimal(min, max) <= 0 && (target === null || (compareDecimal(min, target) <= 0 && compareDecimal(target, max) <= 0)))) {
     throw new CompensationError(
       "REFUSED",
-      `band ${min} / ${target} / ${max} is not ordered min <= target <= max — reorder the three figures instead of storing a band nobody can sit in`,
+      target === null
+        ? `band ${min} / ${max} is not ordered min <= max — correct the range bounds in Compensation → Pay bands`
+        : `band ${min} / ${target} / ${max} is not ordered min <= target <= max — reorder the three figures instead of storing a band nobody can sit in`,
     );
   }
 }
@@ -137,7 +139,7 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
   void reason;
   const levelId = requireId(query.scope.levelId, "scope.levelId");
   const min = requireMoney(query.min, "band min");
-  const target = requireMoney(query.target, "band target");
+  const target = query.target === null ? null : requireMoney(query.target, "band target");
   const max = requireMoney(query.max, "band max");
   assertBandOrdered(min, target, max);
   if (typeof query.currency !== "string" || !/^[A-Z]{3}$/.test(query.currency)) {

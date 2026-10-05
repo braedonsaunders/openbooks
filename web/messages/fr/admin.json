@@ -4068,7 +4068,9 @@
       "majorAmount": "Unités monétaires normales : 120.50 USD.",
       "shippingDefaultPreset": "Utilisé quand l’envoi n’a pas son propre format de colis.",
       "shippingMarkup": "Supplément ajouté au tarif du transporteur, en points de base. 100 vaut un pour cent.",
-      "shippingCustomsDefaults": "Description de contenu par défaut pour les envois vers l’étranger."
+      "shippingCustomsDefaults": "Description de contenu par défaut pour les envois vers l’étranger.",
+      "payBandTarget": "Facultatif. Saisissez une cible approuvée comprise dans la fourchette. Laissez vide si la politique définit seulement le minimum et le maximum ; aucun point médian n’est déduit.",
+      "compensationCriteria": "Facultatif tant qu’une base approuvée d’évaluation du travail de valeur égale n’est pas définie. Les évaluations d’équité salariale exigent des critères et des pondérations déclarés."
     },
     "options": {
       "storedValueKind": {
