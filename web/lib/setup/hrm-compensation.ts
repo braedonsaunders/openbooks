@@ -5,8 +5,8 @@ import type { SetupEntity } from './types'
  *
  * Job families and levels are the org's own job architecture; pay bands
  * are the versioned SHOULD-pay rows. All three are ordinary registry
- * entities behind the hrmCompensation switch, rehomed as sections onto
- * the Compensation page (and reachable in /admin/setup).
+ * entities behind the hrmCompensation switch, rehomed as work areas in
+ * Compensation. Company-wide policy lives in Company Setup.
  *
  * The level's equal-value criteria edit as four structured weight fields
  * (skills/effort/responsibility/working_conditions; never raw JSON —
@@ -17,23 +17,28 @@ import type { SetupEntity } from './types'
  * name before the write.
  */
 
-const EQUAL_VALUE_CRITERIA = ['skills', 'effort', 'responsibility', 'working_conditions'] as const
+export const EQUAL_VALUE_CRITERIA_SLOTS = [
+  ['skills', 'skillsWeight'],
+  ['effort', 'effortWeight'],
+  ['responsibility', 'responsibilityWeight'],
+  ['working_conditions', 'workingConditionsWeight'],
+] as const
 
 export function normalizeHrmCompensationInput(
   entityKey: string,
   body: Record<string, unknown>,
 ): Record<string, unknown> {
   if (entityKey !== 'hrm-job-levels') return body
-  const slots = EQUAL_VALUE_CRITERIA.map((criterion) => ({
+  const slots = EQUAL_VALUE_CRITERIA_SLOTS.map(([criterion, slot]) => ({
     criterion,
-    weight: body[`${criterion}Weight`],
+    weight: body[slot],
   }))
   const hasSlots = slots.some(({ weight }) => weight !== undefined)
   if (!hasSlots) return body
   // The four per-criterion inputs collapse into one equalValueCriteria
   // array, so they must not also survive as loose keys on the row.
   const rest = { ...body }
-  for (const criterion of EQUAL_VALUE_CRITERIA) delete rest[`${criterion}Weight`]
+  for (const [, slot] of EQUAL_VALUE_CRITERIA_SLOTS) delete rest[slot]
   const criteria = slots
     .filter(({ weight }) => weight !== undefined && weight !== null && String(weight).trim() !== '')
     .map(({ criterion, weight }) => ({ criterion, weight: String(weight).trim() }))
@@ -42,6 +47,7 @@ export function normalizeHrmCompensationInput(
 
 export const JOB_FAMILIES_ENTITY: SetupEntity = {
   key: 'hrm-job-families',
+  singularTitleKey: 'entities.hrm-job-families.singularTitle',
   table: 'hrm_job_families',
   groupKey: 'workforce',
   featureKey: 'hrmCompensation',
@@ -67,6 +73,7 @@ export const JOB_FAMILIES_ENTITY: SetupEntity = {
 
 export const JOB_LEVELS_ENTITY: SetupEntity = {
   key: 'hrm-job-levels',
+  singularTitleKey: 'entities.hrm-job-levels.singularTitle',
   table: 'hrm_job_levels',
   groupKey: 'workforce',
   featureKey: 'hrmCompensation',
@@ -80,6 +87,7 @@ export const JOB_LEVELS_ENTITY: SetupEntity = {
   columns: [
     { key: 'code', kind: 'code' },
     { key: 'name', kind: 'text' },
+    { key: 'familyId', kind: 'ref', ref: 'hrm-job-families' },
     { key: 'rank', kind: 'number' },
     { key: 'isActive', kind: 'badge-active' },
   ],
@@ -100,6 +108,7 @@ export const JOB_LEVELS_ENTITY: SetupEntity = {
 
 export const PAY_BANDS_ENTITY: SetupEntity = {
   key: 'hrm-pay-bands',
+  singularTitleKey: 'entities.hrm-pay-bands.singularTitle',
   table: 'hrm_pay_bands',
   groupKey: 'workforce',
   featureKey: 'hrmCompensation',
@@ -123,7 +132,7 @@ export const PAY_BANDS_ENTITY: SetupEntity = {
     { key: 'levelId', kind: 'ref', ref: 'hrm-job-levels', required: true },
     { key: 'employerSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
     { key: 'locationId', kind: 'ref', ref: 'locations' },
-    { key: 'currency', kind: 'text', required: true },
+    { key: 'currency', kind: 'ref', ref: 'compensation-currencies', refScopeField: 'employerSubsidiaryId', required: true },
     {
       key: 'basis',
       kind: 'select',

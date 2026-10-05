@@ -26,7 +26,7 @@ test('server windows retain rows and source totals without client slicing', () =
 
 test('loaded lists pass only rendered cells and declared search text across the client boundary', () => {
   const result = RegisteredListTable({
-    source: 'data_import_history',
+    source: 'hrm_compensation_cycles',
     rows: [{ id: 'record', name: 'Displayed', internal: 'Undisplayed' }],
     rowKey: (row) => row.id,
     empty: 'Empty',

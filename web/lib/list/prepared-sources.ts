@@ -353,20 +353,16 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compensation_cycles: {
-    // top-10 window: the domain reader owns the displayed window; no client filtering or second pagination.
-    clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'cycles',
     rowKeyField: 'id',
-    mode: 'external',
+    mode: 'loaded',
   },
   hrm_compensation_plans: {
-    // top-10 window: the domain reader owns the displayed window; no client filtering or second pagination.
-    clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'plans',
     rowKeyField: 'id',
-    mode: 'external',
+    mode: 'loaded',
   },
   hrm_compensation_cycle_lines: {
     route: '/hrm/compensation/cycles',

@@ -25,9 +25,8 @@ import type {
  * Compensation sections (server components): the band placement bar
  * (min/target/max with the rate marker), the budget pacing bar, the
  * cycle line drawer (proposal form, decide buttons, event history), the
- * create dialogs, and the settings form. The lists render through the
- * shared `table` block and `filter-chips` widget in ./view, so they live
- * there and not here. Every string arrives loader-resolved as props —
+ * create dialogs, and the Company Setup policy form. Workspace registers
+ * compose the shared registered list tables. Every string arrives loader-resolved as props —
  * no org id, user id, or Authz crosses into render.
  */
 
@@ -230,6 +229,15 @@ export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
         <CycleCreateForm
           labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
           defaultCurrency={dialog.defaultCurrency}
+          currencyOptions={dialog.currencyOptions}
+          employerOptions={dialog.employerOptions}
+          defaultEmployer={dialog.defaultEmployer}
+          canSelectOrgWide={dialog.canSelectOrgWide}
+          orgWideLabel={dialog.orgWideLabel}
+          employerLabel={dialog.employerLabel}
+          currencyUnavailable={dialog.currencyUnavailable}
+          guidelineLabel={dialog.guidelineLabel}
+          guidelineHelp={dialog.guidelineHelp}
           kinds={dialog.kinds}
           kindLabel={dialog.kindLabel}
           nameLabel={dialog.nameLabel}
@@ -271,6 +279,7 @@ export function CompEquityDialog({ dialog }: { dialog: EquityDialogData }) {
           asOfLabel={dialog.asOfLabel}
           groupALabel={dialog.groupALabel}
           groupBLabel={dialog.groupBLabel}
+          groupOptions={dialog.groupOptions}
         />
       )}
     </DirtyUrlDrawer>

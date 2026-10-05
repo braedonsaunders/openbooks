@@ -1,125 +1,16 @@
 import 'server-only'
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import {
-  badge,
-  column,
-  grid,
-  field as item,
-  heading,
-  link,
-  page,
-  pageHeader,
-  panel,
-  statTile,
-  text,
-  widget,
-  widgetBlock,
-  type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
+import { field as f, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { compensationAuthz, loadCompensationHome } from '../../../../lib/hrm/compensation'
-
-/**
- * Compensation home: statTiles (below-min on the live round, open-cycle
- * pacing, plans awaiting approval, joint-assessment flags), the bands
- * table by level with headcount per band, the open cycles and plans
- * registers, and the rehomed job-architecture setup sections. The
- * primary action is the shared 'link-button' FIRST in the header, then
- * the 'module-home-tabs' strip. Renders only when hrmCompensation is on
- * and the actor holds hrm.compensation.read — the loader 404s otherwise.
- */
-
-const f = item
 
 export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loadCompensationHome>>>): PageSpec {
   return page({
     route: '/hrm/compensation',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col gap-4',
-    header: [
-      pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [
-          widget('link-button', { href: f('newCycleHref'), label: f('newCycleLabel'), iconKey: 'plus' }, f('canRunCycles')),
-          widget('link-button', { href: f('newPlanHref'), label: f('newPlanLabel'), iconKey: 'plus', variant: 'outline' }, f('canManage')),
-          widget('link-button', { href: f('equityHref'), label: f('equityLabel'), iconKey: 'scale', variant: 'outline' }),
-          widget('module-home-tabs', { tabs: data.tabs }),
-        ],
-      }),
-    ],
+    layout: 'bare',
     body: [
-      // A refused gap-snapshot read renders with its remedy intact — never
-      // a zero joint-flag tile pretending the read succeeded.
-      widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
-      grid('grid grid-cols-2 gap-4 xl:grid-cols-4', [
-        statTile({ iconKey: f('tiles.0.iconKey'), accent: f('tiles.0.accent'), label: f('tiles.0.label'), value: f('tiles.0.value'), tone: f('tiles.0.tone') }),
-        statTile({ iconKey: f('tiles.1.iconKey'), accent: f('tiles.1.accent'), label: f('tiles.1.label'), value: f('tiles.1.value'), tone: f('tiles.1.tone') }),
-        statTile({ iconKey: f('tiles.2.iconKey'), accent: f('tiles.2.accent'), label: f('tiles.2.label'), value: f('tiles.2.value'), tone: f('tiles.2.tone') }),
-        statTile({ iconKey: f('tiles.3.iconKey'), accent: f('tiles.3.accent'), label: f('tiles.3.label'), value: f('tiles.3.value'), tone: f('tiles.3.tone') }),
-      ]),
-      // No panel around the registers: a house heading names each
-      // surface, and a card repeating it is the same words twice with a
-      // border between them.
-      heading(2, f('bandsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-      registeredListTable('hrm_compensation_bands', {
-        variant: 'app',
-        rows: f('bands'),
-        rowKey: item('id'),
-        empty: { title: f('bandsEmpty') },
-        columns: [
-          column(f('bandsColumns.level'), text(item('levelCode'))),
-          column(f('bandsColumns.range'), text(item('range'))),
-          column(f('bandsColumns.headcount'), text(item('headcount')), { align: 'right', className: 'tabular-nums' }),
-        ],
-      }),
-      heading(2, f('cyclesTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-      registeredListTable('hrm_compensation_cycles', {
-        variant: 'app',
-        rows: f('cycles'),
-        rowKey: item('id'),
-        empty: { title: f('cyclesEmpty') },
-        columns: [
-          column(f('cyclesColumns.name'), link(item('name'), item('href'))),
-          column(f('cyclesColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-          column(f('cyclesColumns.effective'), text(item('effectiveOn'))),
-        ],
-      }),
-      heading(2, f('plansTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-      registeredListTable('hrm_compensation_plans', {
-        variant: 'app',
-        rows: f('plans'),
-        rowKey: item('id'),
-        empty: { title: f('plansEmpty') },
-        columns: [
-          column(f('plansColumns.name'), link(item('name'), item('href'))),
-          column(f('plansColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-          column(f('plansColumns.cost'), text(item('totalCost')), { align: 'right', className: 'tabular-nums' }),
-        ],
-      }),
-      widgetBlock('setup-section', { entityKey: 'hrm-job-families', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'family' }, f('canSetup')),
-      widgetBlock('setup-section', { entityKey: 'hrm-job-levels', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'level' }, f('canSetup')),
-      widgetBlock('setup-section', { entityKey: 'hrm-pay-bands', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'band' }, f('canSetup')),
-      // The compensation settings form (gap threshold, burden rate, FTE
-      // rounding): the loader arms it only for unrestricted compensation
-      // managers, so readers never see a form the PUT endpoint would
-      // refuse. This panel is the named remedy for a corrupt stored
-      // threshold — resaving here heals it.
-      {
-        ...panel({
-          title: f('settings.title'),
-          blocks: [widgetBlock('hrm-comp-settings', { settings: f('settings') })],
-        }),
-        when: f('settings'),
-      },
-      // The create dialogs (?cycle=new / ?plan=new), mirroring the
-      // change-request queue's propose/detail trio — the loader owns the
-      // open state and the return href, closing navigates the param away.
-      // A requested dialog always resolves: the form, or a named refusal
-      // with its remedy when a prerequisite is missing.
+      widgetBlock('hrm-comp-workspace', { data }),
       widgetBlock('hrm-comp-cycle-dialog', { dialog: f('cycleDialog') }, f('cycleOpen')),
       widgetBlock('hrm-comp-plan-dialog', { dialog: f('planDialog') }, f('planOpen')),
     ],
@@ -131,7 +22,7 @@ export async function compensationTitle(): Promise<string> {
   return t('compensation.title')
 }
 
-export async function loadCompensationPage(sp: Record<string, string | undefined>) {
+export async function loadCompensationPage(sp: Record<string, string | string[] | undefined>) {
   const authz = await compensationAuthz()
   if (!authz) notFound()
   const data = await loadCompensationHome(authz, sp)
