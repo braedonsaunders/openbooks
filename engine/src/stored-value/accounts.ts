@@ -73,6 +73,20 @@ export type StoredValueAccountRow = {
   liabilityAccountId: string | null;
 };
 
+/**
+ * Whether a document of one customer may move value on an account. Store
+ * credit is never bearer and a named gift card is bound to its customer, so
+ * only the account's own customer qualifies; a bearer gift card moves for
+ * any document. Documents with no customer qualify only for bearer cards.
+ */
+export function storedValueAccountOwnedByCustomer(
+  account: { kind: string; customerPartyId: string | null },
+  customerPartyId: string | null,
+): boolean {
+  if (account.kind !== "store_credit" && !account.customerPartyId) return true;
+  return !!customerPartyId && account.customerPartyId === customerPartyId;
+}
+
 /** Every public function below runs on the ambient tenant transaction (`db`). */
 
 export async function requireStoredValueFeature(runner: SqlExecutor, orgId: string): Promise<void> {
@@ -988,6 +1002,21 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
     amountMinor: -input.amountMinor,
   });
   if (prior) return { entryId: prior.entryId, balanceMinor: prior.balanceAfter };
+  if (input.documentId) {
+    const owner = (
+      await db.execute<{ partyId: string | null }>(sql`
+        select party_id as "partyId" from documents
+         where org_id = ${input.orgId} and id = ${input.documentId}`)
+    ).rows[0];
+    if (owner && !storedValueAccountOwnedByCustomer(account, owner.partyId)) {
+      throw storedValueRefusal({
+        message: `Stored-value …${account.codeLast4} belongs to another customer and cannot move on this document.`,
+        code: "stored_value_customer_mismatch",
+        status: 409,
+        remedy: "Tender a gift card or store credit issued to this document's customer instead.",
+      });
+    }
+  }
   assertRedeemable(account, input.amountMinor, `…${account.codeLast4}`);
   if (account.expiresOn) {
     const today = await businessToday(input.orgId);

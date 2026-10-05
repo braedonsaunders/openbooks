@@ -8,6 +8,7 @@ import {
   loadStoredValueProgram,
   programLiabilityAccount,
   redeemStoredValue,
+  storedValueAccountOwnedByCustomer,
 } from "../stored-value/accounts.ts";
 import { attachDocumentLoad } from "../stored-value/document-loads.ts";
 import { StoredValueError } from "../stored-value/errors.ts";
@@ -54,6 +55,7 @@ export type TenderRefusalCode =
   | "stored_value_unusable"
   | "stored_value_currency_mismatch"
   | "stored_value_insufficient_balance"
+  | "stored_value_wrong_customer"
   | "program_missing"
   | "conflicting_settlement"
   | "changed_concurrently";
@@ -199,6 +201,8 @@ export async function readDocumentTenders(
 type StoredValueAccountView = {
   id: string;
   programId: string;
+  kind: string;
+  customerPartyId: string | null;
   currency: string;
   status: string;
   codeLast4: string;
@@ -216,13 +220,15 @@ async function lockTenderStoredValueAccounts(
     const rows = (await runner.execute<{
       id: string;
       programId: string;
+      kind: string;
+      customerPartyId: string | null;
       currency: string;
       status: string;
       codeLast4: string;
       balanceMinorRaw: string;
     }>(sql`
-      select id, program_id as "programId", currency, status,
-             code_last4 as "codeLast4", balance_minor::text as "balanceMinorRaw"
+      select id, program_id as "programId", kind, customer_party_id as "customerPartyId",
+             currency, status, code_last4 as "codeLast4", balance_minor::text as "balanceMinorRaw"
         from stored_value_accounts
        where org_id = ${orgId} and id = ${accountId}
        for update
@@ -239,6 +245,8 @@ async function lockTenderStoredValueAccounts(
     byId.set(row.id, {
       id: row.id,
       programId: row.programId,
+      kind: row.kind,
+      customerPartyId: row.customerPartyId,
       currency: row.currency,
       status: row.status,
       codeLast4: row.codeLast4,
@@ -447,6 +455,14 @@ export async function replaceDocumentTenders(
           `Tender at most ${fromUnits(storedValueAccount.balanceMinor)}, or split the total across another payment method.`,
         );
       }
+      if (!storedValueAccountOwnedByCustomer(storedValueAccount, parent.partyId)) {
+        throw refusal(
+          `${label} stored value …${storedValueAccount.codeLast4} belongs to another customer — tender the same customer's account or a bearer gift card.`,
+          "stored_value_wrong_customer",
+          409,
+          "Tender a gift card or store credit issued to this document's customer instead.",
+        );
+      }
     }
     const methodLabel =
       cleanText(input.methodLabel, "method label", `${label} method label`, 120) ?? input.kind;
@@ -559,17 +575,25 @@ export async function resolveCashPostingTenders(
       });
       continue;
     }
-    const accounts = (await runner.execute<{ program_id: string }>(sql`
-      select program_id as program_id from stored_value_accounts
+    const accounts = (await runner.execute<{ program_id: string; kind: string; customerPartyId: string | null }>(sql`
+      select program_id as program_id, kind, customer_party_id as "customerPartyId" from stored_value_accounts
        where org_id = ${orgId} and id = ${row.storedValueAccountId}
     `)).rows;
     const programId = accounts[0]?.program_id;
-    if (!programId) {
+    if (!programId || !accounts[0]) {
       throw new TenderRefusal(
         `${parent.kindLabel} ${parent.documentNumber} tender ${row.position} names a stored-value account that no longer exists.`,
         "stored_value_unknown",
         409,
         "Replace the tender with a live gift card or store credit, then repost.",
+      );
+    }
+    if (!storedValueAccountOwnedByCustomer(accounts[0], parent.partyId)) {
+      throw new TenderRefusal(
+        `${parent.kindLabel} ${parent.documentNumber} tender ${row.position} names stored value of another customer — tender the same customer's account or a bearer gift card.`,
+        "stored_value_wrong_customer",
+        409,
+        "Tender a gift card or store credit issued to this document's customer instead.",
       );
     }
     const program = await loadStoredValueProgram(orgId, programId, runner);
@@ -656,14 +680,26 @@ export async function settleCashRefundTenders(
 ): Promise<{ settled: number }> {
   const parent = (await db.execute<{
     kind: string;
+    status: string;
     partyId: string | null;
     custom: unknown;
   }>(sql`
-    select kind, party_id as "partyId", custom from documents
+    select kind, status, party_id as "partyId", custom from documents
      where org_id = ${orgId} and id = ${documentId}
   `)).rows[0];
   if (!parent || parent.kind !== "cash_refund") {
     return { settled: 0 };
+  }
+  // The settle effect moves customer value, so it runs only for a posted
+  // refund: minting or topping up from a draft (or a voided refund) would
+  // create spendable value with no posted liability behind it.
+  if (parent.status !== "posted") {
+    throw new TenderRefusal(
+      `Cash refund ${documentId} is ${parent.status} — store credit settles only once the refund is posted.`,
+      "wrong_status",
+      409,
+      "Post the refund; the settle effect then records the store credit.",
+    );
   }
   const rows = (await readDocumentTenders(db, orgId, documentId)).filter(
     (tender) => tender.kind === "stored_value",
@@ -684,22 +720,37 @@ export async function settleCashRefundTenders(
         "Name the customer's store credit account on the tender, or set the store credit program on the refund.",
       );
     }
-    const loaded = await attachDocumentLoad({
-      orgId,
-      accountId: row.storedValueAccountId,
-      programId: row.storedValueAccountId ? null : programId,
-      customerPartyId: parent.partyId,
-      amountMinor: row.amountMinor,
-      currency: row.currency,
-      documentId,
-      journalEntryId: options.journalEntryId,
-      idempotencyKey: `cash-refund-tender:${documentId}:${row.id}`,
-      actorId: options.actorId ?? null,
-    });
-    if (!row.storedValueAccountId && !loaded.replayed) {
+    let loaded: Awaited<ReturnType<typeof attachDocumentLoad>>;
+    try {
+      loaded = await attachDocumentLoad({
+        orgId,
+        accountId: row.storedValueAccountId,
+        programId: row.storedValueAccountId ? null : programId,
+        customerPartyId: parent.partyId,
+        amountMinor: row.amountMinor,
+        currency: row.currency,
+        documentId,
+        journalEntryId: options.journalEntryId,
+        idempotencyKey: `cash-refund-tender:${documentId}:${row.id}`,
+        actorId: options.actorId ?? null,
+      });
+    } catch (error) {
+      if (error instanceof StoredValueError && error.code === "stored_value_customer_mismatch") {
+        throw new TenderRefusal(
+          `Cash refund tender ${row.position} names stored value …${row.storedValueAccountId} of another customer — tender the same customer's account or a bearer gift card.`,
+          "stored_value_wrong_customer",
+          409,
+          error.remedy,
+        );
+      }
+      throw error;
+    }
+    if (!row.storedValueAccountId) {
       // Mint-fill: the only post-commit tender write the lifecycle guard
-      // permits. The row count turns a raced or reordered write into a
-      // refusal instead of silent success.
+      // permits. A replayed load still fills a tender the first run never
+      // recorded (a crash between the entry and this write); the row count
+      // turns a raced or reordered write into a refusal instead of silent
+      // success.
       const filled = (await db.execute<{ id: string }>(sql`
         update document_tenders
            set stored_value_account_id = ${loaded.accountId}, updated_at = now(),
@@ -708,12 +759,17 @@ export async function settleCashRefundTenders(
         returning id
       `)).rows;
       if (filled.length !== 1) {
-        throw new TenderRefusal(
-          "The refund's store-credit account could not be recorded on its tender.",
-          "changed_concurrently",
-          409,
-          "Retry the posting effect from the posted document.",
+        const reread = (await readDocumentTenders(db, orgId, documentId)).find(
+          (tender) => tender.id === row.id,
         );
+        if (!reread?.storedValueAccountId) {
+          throw new TenderRefusal(
+            "The refund's store-credit account could not be recorded on its tender.",
+            "changed_concurrently",
+            409,
+            "Retry the posting effect from the posted document.",
+          );
+        }
       }
     }
     settled += 1;
