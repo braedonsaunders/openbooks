@@ -43,6 +43,8 @@ export interface ConfigField {
   min?: number;
   max?: number;
   step?: number;
+  /** Number only: whole numbers required — week/day/month counts refuse fractions by name. */
+  int?: boolean;
   /** Inclusive upper bound for money kinds, as an exact decimal string. */
   maxAmount?: string;
   /** Money only: "" (unset) is a valid stored value. */
@@ -77,8 +79,9 @@ export interface AnalyticsConfigSpec {
 const pct = (key: string, labelKey: string, min = 0, max = 100, step = 1): ConfigField => ({
   key, kind: "percent", labelKey: `${labelKey}.label`, helpKey: `${labelKey}.help`, min, max, step,
 });
-const num = (key: string, labelKey: string, min: number, max: number, step = 1): ConfigField => ({
+const num = (key: string, labelKey: string, min: number, max: number, step = 1, int = false): ConfigField => ({
   key, kind: "number", labelKey: `${labelKey}.label`, helpKey: `${labelKey}.help`, min, max, step,
+  ...(int ? { int: true as const } : {}),
 });
 
 export const ANALYTICS_CONFIG = {
@@ -478,21 +481,21 @@ export const ANALYTICS_CONFIG = {
     fields: [
       { key: "weeklyApCap", kind: "money", labelKey: "ap.cockpit.config.weeklyCapLabel", helpKey: "ap.cockpit.config.weeklyCapHelp", maxAmount: "100000000" },
       { key: "restrictToSafe", kind: "toggle", labelKey: "ap.cockpit.config.restrictLabel", helpKey: "ap.cockpit.config.restrictHelp" },
-      num("defaultHorizonWeeks", "analytics.cashflow.config.fields.defaultHorizonWeeks", 1, 52),
-      num("runwayCautionWeeks", "analytics.cashflow.config.fields.runwayCautionWeeks", 1, 52),
-      num("paymentHistoryMonths", "analytics.cashflow.config.fields.paymentHistoryMonths", 3, 36),
+      num("defaultHorizonWeeks", "analytics.cashflow.config.fields.defaultHorizonWeeks", 1, 52, 1, true),
+      num("runwayCautionWeeks", "analytics.cashflow.config.fields.runwayCautionWeeks", 1, 52, 1, true),
+      num("paymentHistoryMonths", "analytics.cashflow.config.fields.paymentHistoryMonths", 3, 36, 1, true),
       num("settleBufferSigma", "analytics.cashflow.config.fields.settleBufferSigma", 0, 2, 0.1),
-      num("overduePushShortDays", "analytics.cashflow.config.fields.overduePushShortDays", 0, 90),
-      num("overduePushMidDays", "analytics.cashflow.config.fields.overduePushMidDays", 0, 90),
-      num("overduePushLongDays", "analytics.cashflow.config.fields.overduePushLongDays", 0, 90),
-      num("overdueMidThresholdDays", "analytics.cashflow.config.fields.overdueMidThresholdDays", 1, 180),
-      num("overdueLongThresholdDays", "analytics.cashflow.config.fields.overdueLongThresholdDays", 1, 180),
+      num("overduePushShortDays", "analytics.cashflow.config.fields.overduePushShortDays", 0, 90, 1, true),
+      num("overduePushMidDays", "analytics.cashflow.config.fields.overduePushMidDays", 0, 90, 1, true),
+      num("overduePushLongDays", "analytics.cashflow.config.fields.overduePushLongDays", 0, 90, 1, true),
+      num("overdueMidThresholdDays", "analytics.cashflow.config.fields.overdueMidThresholdDays", 1, 180, 1, true),
+      num("overdueLongThresholdDays", "analytics.cashflow.config.fields.overdueLongThresholdDays", 1, 180, 1, true),
       num("cardTrajectoryTolerance", "analytics.cashflow.config.fields.cardTrajectoryTolerance", 0, 1, 0.05),
       num("cardMedianBlendWeight", "analytics.cashflow.config.fields.cardMedianBlendWeight", 0, 1, 0.05),
       num("vendorOutlierSigma", "analytics.cashflow.config.fields.vendorOutlierSigma", 0.5, 6, 0.1),
-      num("cardStatementCloseDays", "analytics.cashflow.config.fields.cardStatementCloseDays", 1, 60),
-      num("cardDefaultPayDay", "analytics.cashflow.config.fields.cardDefaultPayDay", 1, 31),
-      num("cardStalePaymentDays", "analytics.cashflow.config.fields.cardStalePaymentDays", 0, 365),
+      num("cardStatementCloseDays", "analytics.cashflow.config.fields.cardStatementCloseDays", 1, 60, 1, true),
+      num("cardDefaultPayDay", "analytics.cashflow.config.fields.cardDefaultPayDay", 1, 31, 1, true),
+      num("cardStalePaymentDays", "analytics.cashflow.config.fields.cardStalePaymentDays", 0, 365, 1, true),
     ],
     ordered: [
       ["overduePushShortDays", "overduePushMidDays", "overduePushLongDays"],
@@ -653,6 +656,12 @@ function cleanValue(field: ConfigField, value: unknown): AnalyticsConfigValue {
         throw new InvalidConfigValue(
           field.key,
           `threshold ${fieldName(field)} must be a number between ${field.min} and ${field.max} (received ${String(value).slice(0, 60)})`,
+        );
+      }
+      if (field.int === true && !Number.isInteger(parsed)) {
+        throw new InvalidConfigValue(
+          field.key,
+          `threshold ${fieldName(field)} must be a whole number (received ${String(value).slice(0, 60)})`,
         );
       }
       return parsed;

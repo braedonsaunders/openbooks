@@ -84,6 +84,17 @@ test("cashflow write refuses a broken overdue ladder by name", () => {
   );
 });
 
+test("cashflow write refuses a fractional week count by name", () => {
+  assert.throws(
+    () => cleanConfigValues("cashflow", fullCashflowValues({ defaultHorizonWeeks: 13.5 })),
+    /'defaultHorizonWeeks' must be a whole number/,
+  );
+  // The fractional knobs stay fractional: sigma multiples and blend weights
+  // are coefficients, not counts.
+  const cleaned = cleanConfigValues("cashflow", fullCashflowValues({ settleBufferSigma: 0.5 }));
+  assert.equal(cleaned.settleBufferSigma, 0.5);
+});
+
 test("cashflow read keeps defaults for a legacy blob without the new keys", () => {
   const read = mergeConfig("cashflow", { weeklyApCap: "100.0000", restrictToSafe: 1 });
   assert.equal(read.weeklyApCap, "100.0000");
