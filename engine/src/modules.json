@@ -607,6 +607,7 @@
       "dependsOn": [
         "composition",
         "organization",
+        "payroll",
         "platform",
         "scripting"
       ]

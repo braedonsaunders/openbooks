@@ -96,6 +96,7 @@ export * from "./hrm-recruiting-depth";
 
 
 export * from "./payroll-service-credit";
+export * from "./payroll-compensation";
 export * from "./webhooks";
 export * from "./shipping";
 export * from "./billing-import";

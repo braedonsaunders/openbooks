@@ -326,7 +326,13 @@ function generateCopySql(
   const order = t.name === "subsidiaries"
     ? ` order by (select depth from source_tree where source_tree.id = subsidiaries.id), id`
     : "";
-  return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}`;
+  // Component insertion creates an empty one-to-one classification row.
+  // Its expected conflict must copy every source classification, rather than
+  // duplicate the row or retain the empty defaults in the sandbox.
+  const conflict = t.name === "pay_component_earning_classifications"
+    ? ` on conflict (org_id, pay_component_id) do update set ${t.columns.filter((c) => c.name !== "org_id" && c.name !== "pay_component_id").map((c) => `"${c.name}" = excluded."${c.name}"`).join(", ")}`
+    : "";
+  return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}${conflict}`;
 }
 
 /**

@@ -69,6 +69,17 @@ type RuleNode = {
   dependencies: readonly string[];
 };
 
+/** Canonical policy identity, independent of mutable component availability; validation remains mandatory before use. */
+export function compensationRuleDefinitionHash(definition: CompensationRuleDefinition): string {
+  return createHash("sha256").update(canonicalJson({
+    algorithm: "compensation-rules-v1", orgId: definition.orgId, country: definition.country, currency: definition.currency,
+    inputs: definition.inputs.map((input) => ({ name: input.name, type: "currency" in input.type
+      ? { kind: input.type.kind, currency: input.type.currency } : { kind: input.type.kind } })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+    rules: definition.rules.map((rule) => ({ key: rule.key, componentId: rule.componentId, expression: rule.expression, condition: rule.condition ?? null,
+      rounding: { scale: rule.rounding.scale, mode: rule.rounding.mode, maxWholeDigits: rule.rounding.maxWholeDigits } })).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  })).digest("hex");
+}
+
 function namedRuleError(key: string, error: unknown): never {
   if (error instanceof ExpressionError) throw new PayrollError(`Compensation rule ${JSON.stringify(key)}: ${error.message}`);
   throw error;
@@ -160,12 +171,7 @@ export function compileCompensationRules(
   for (const key of [...nodes.keys()].sort()) visit(key);
   const requiredInputs = Object.freeze([...new Set([...nodes.values()].flatMap((node) => node.dependencies.filter((key) => !nodes.has(key))))].sort());
   const inputValidation = new Map(requiredInputs.map((name) => [name, compileExpression(name, definition.inputs)]));
-  const definitionHash = createHash("sha256").update(canonicalJson({
-    algorithm: "compensation-rules-v1", orgId: definition.orgId, country: definition.country, currency: definition.currency,
-    inputs: definition.inputs.map((input) => ({ name: input.name, type: "currency" in input.type
-      ? { kind: input.type.kind, currency: input.type.currency } : { kind: input.type.kind } })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
-    rules: [...rules].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
-  })).digest("hex");
+  const definitionHash = compensationRuleDefinitionHash({ ...definition, rules });
   return Object.freeze({
     definitionHash, requiredInputs, evaluationOrder: Object.freeze(order),
     evaluate(rawInputs: Readonly<Record<string, unknown>>) {
