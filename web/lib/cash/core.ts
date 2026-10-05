@@ -413,6 +413,28 @@ export function outlierVarianceFactor(sigma: number): Money {
   return multiplyMoney(exact, exact);
 }
 
+/**
+ * Exclude recurring-payment outliers beyond sigma measured standard
+ * deviations: an amount is kept while its squared relative deviation stays
+ * within variance × σ², where variance is the mean squared relative
+ * deviation of the series itself. A tight series filters a 1.5× stray; a
+ * wild one keeps it. Fewer than four samples, a non-positive mean, or zero
+ * variance cannot filter — everything is kept. Exported for unit tests.
+ */
+export function filterRecurringOutliers(amounts: Money[], sigma: number): Money[] {
+  if (amounts.length < 4) return amounts;
+  const mean = divideMoney(sumMoney(amounts), String(amounts.length));
+  if (compareMoney(mean, ZERO_MONEY) <= 0) return amounts;
+  const relativeSquare = (amount: Money): Money => {
+    const ratio = divideMoney(absMoney(subtractMoney(amount, mean)), mean);
+    return multiplyMoney(ratio, ratio);
+  };
+  const variance = divideMoney(sumMoney(amounts.map(relativeSquare)), String(amounts.length));
+  if (compareMoney(variance, ZERO_MONEY) <= 0) return amounts;
+  const threshold = multiplyMoney(variance, outlierVarianceFactor(sigma));
+  return amounts.filter((amount) => compareMoney(relativeSquare(amount), threshold) <= 0);
+}
+
 /** The trailing payment-history window, in months (one analytics-config read). */
 export async function paymentHistoryMonths(orgId: string): Promise<number> {
   const cfg = await analyticsConfig(orgId, "cashflow");
@@ -1467,21 +1489,7 @@ export async function categoryWeekly(
       if (medianInterval >= 5 && medianInterval <= 9) { frequencyLabel = "Weekly"; nextIntervalDays = 7; }
       else if (medianInterval >= 12 && medianInterval <= 16) { frequencyLabel = "Bi-Weekly"; nextIntervalDays = 14; }
       const amounts = events.map((e) => e.amount);
-      const mean = divideMoney(sumMoney(amounts), String(amounts.length));
-      const variance = compareMoney(mean, ZERO_MONEY) > 0
-        ? divideMoney(sumMoney(amounts.map((amount) => {
-            const ratio = divideMoney(subtractMoney(amount, mean), mean);
-            return multiplyMoney(ratio, ratio);
-          })), String(amounts.length))
-        : ZERO_MONEY;
-      const varianceThreshold = outlierVarianceFactor(model.vendorOutlierSigma);
-      let filtered = amounts;
-      if (amounts.length >= 4 && compareMoney(variance, ZERO_MONEY) > 0 && compareMoney(mean, ZERO_MONEY) > 0) {
-        filtered = amounts.filter((amount) => {
-          const ratio = divideMoney(absMoney(subtractMoney(amount, mean)), mean);
-          return compareMoney(multiplyMoney(ratio, ratio), varianceThreshold) <= 0;
-        });
-      }
+      const filtered = filterRecurringOutliers(amounts, model.vendorOutlierSigma);
       let avgAmount = divideMoney(sumMoney(filtered), String(filtered.length));
       if (adj !== 0) avgAmount = multiplyMoney(avgAmount, String(1 + adj));
       let nextDate = addDays(events[0]!.date, nextIntervalDays);
