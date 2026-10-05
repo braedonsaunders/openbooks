@@ -247,6 +247,7 @@ export type SetupCommandName =
   | 'upsertChannelAccountMap'
   | 'upsertChannelLocation'
   | 'savePortalSettings'
+  | 'recordChannelAdSpend'
 
 export interface SetupCommandDescriptor {
   /** Exhaustive dispatch key — one literal per domain command, dispatched in the command route. */

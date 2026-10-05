@@ -3365,6 +3365,12 @@
         "singular": "Artikelkennung",
         "description": "Exakte GTIN-, UPC-, EAN- und interne Werte zur Identifizierung von Artikeln beim Scannen."
       },
+      "channel-ad-spend": {
+        "title": "Werbeausgaben der Kanäle",
+        "singular": "Werbeausgaben eines Kanals",
+        "description": "Tägliche Marketingausgaben je Vertriebskanal; die Tagesmargen werden damit neu berechnet.",
+        "amount": "Ausgaben (kleinste Einheit)"
+      },
       "channel-account-maps": {
         "title": "Konten für Kanalbuchungen",
         "singular": "Konto für Kanalbuchungen",
@@ -4020,6 +4026,7 @@
       "defaultSignature": "Standardunterschrift",
       "customsDefaults": "Zollvorgaben",
       "channelId": "Kanal",
+      "spendDate": "Ausgabedatum",
       "externalLocationId": "Standort-ID des Storefronts",
       "externalName": "Name des Storefronts",
       "syncInventory": "Bestand synchronisieren",

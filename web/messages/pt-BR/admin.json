@@ -3320,6 +3320,12 @@
         "singular": "Identificador de item",
         "description": "Valores GTIN, UPC, EAN e internos exatos para identificar itens durante a leitura."
       },
+      "channel-ad-spend": {
+        "title": "Gasto com anúncios dos canais",
+        "singular": "Gasto com anúncios do canal",
+        "description": "Gasto diário de marketing por canal de venda; as margens do dia são recalculadas com ele.",
+        "amount": "Gasto (unidades menores)"
+      },
       "channel-account-maps": {
         "title": "Contas contábeis do canal",
         "singular": "Conta contábil do canal",
@@ -3975,6 +3981,7 @@
       "defaultSignature": "Assinatura padrão",
       "customsDefaults": "Padrões de alfândega",
       "channelId": "Canal",
+      "spendDate": "Data do gasto",
       "externalLocationId": "ID do local da loja",
       "externalName": "Nome da loja",
       "syncInventory": "Sincronizar estoque",

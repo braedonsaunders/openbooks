@@ -3320,6 +3320,12 @@
         "singular": "商品标识符",
         "description": "登记扫描时用于识别商品的精确 GTIN、UPC、EAN 和内部值。"
       },
+      "channel-ad-spend": {
+        "title": "渠道广告支出",
+        "singular": "渠道广告支出",
+        "description": "每个店面渠道的每日营销支出；当日订单毛利随之重算。",
+        "amount": "支出（最小单位）"
+      },
       "channel-account-maps": {
         "title": "渠道记账科目",
         "singular": "渠道记账科目",
@@ -3975,6 +3981,7 @@
       "defaultSignature": "默认签名",
       "customsDefaults": "报关默认值",
       "channelId": "渠道",
+      "spendDate": "支出日期",
       "externalLocationId": "网店位置ID",
       "externalName": "网店名称",
       "syncInventory": "同步库存",

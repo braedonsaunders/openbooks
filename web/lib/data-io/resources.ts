@@ -45,6 +45,11 @@ import {
   assignmentPlanResource,
   retainerBalancesResource,
 } from './resourcing-resources'
+import {
+  CHANNEL_AD_SPEND_DESCRIPTOR,
+  CHANNEL_AD_SPEND_KEY,
+  channelAdSpendResource,
+} from './commerce-resources'
 import { MASTER_ENTITIES, MASTER_BY_KEY, masterDescriptor, masterResource } from './master-data-resources'
 import { PROPERTY_DESCRIPTORS, PROPERTY_DESCRIPTOR_BY_KEY, propertyDataResource, propertyManagementEnabled } from './property-resources'
 import { recordSections, recordResource } from './record-resources'
@@ -212,8 +217,13 @@ function bindReadScope(resource: DataResource, orgId: string, scope?: Subsidiary
 /** All resources visible to this org (records enumerated dynamically). */
 export async function listResources(orgId: string): Promise<ResourceDescriptor[]> {
   const features = await resolvedFeatureState(orgId)
+  // Entities with a dedicated domain-owned resource keep that single import
+  // path: the generic setup writer would store the row without the domain
+  // effects (here, the margin restatement) the command performs.
+  const dedicatedKeys = new Set([CHANNEL_AD_SPEND_KEY])
   const setup = SETUP_ENTITIES
     .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
+    .filter((entity) => !dedicatedKeys.has(entity.key))
     .map(setupDescriptor)
   const master = MASTER_ENTITIES.map(masterDescriptor)
   const recordTypes = (await db.execute(sql`
@@ -256,7 +266,10 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
   const saasMetrics = featureEnabled(features, 'saasMetrics') ? [SAAS_METRICS_FACTS_DESCRIPTOR] : []
   const assignments = featureEnabled(features, 'resourcing') ? [ASSIGNMENTS_DESCRIPTOR] : []
   const retainerBalances = featureEnabled(features, 'retainerBilling') ? [RETAINER_BALANCES_DESCRIPTOR] : []
-  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...usage, ...saasMetrics, ...transactions, ...assignments, ...retainerBalances]
+  // Daily marketing spend carried in from each ad platform's export. See
+  // ./commerce-resources.ts.
+  const channelAdSpend = featureEnabled(features, 'salesChannels') ? [CHANNEL_AD_SPEND_DESCRIPTOR] : []
+  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...usage, ...saasMetrics, ...transactions, ...assignments, ...retainerBalances, ...channelAdSpend]
 }
 
 /** Resolve one resource bound to the org and (for export reads) its visibility scope. */
@@ -305,6 +318,10 @@ export async function getResource(
   if (key === RETAINER_BALANCES_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'retainerBilling'))) return null
     return bindReadScope(retainerBalancesResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === CHANNEL_AD_SPEND_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'salesChannels'))) return null
+    return bindReadScope(channelAdSpendResource(orgId), orgId, allowedSubsidiaryIds)
   }
   const setup = SETUP_ENTITY_BY_KEY.get(key)
   if (setup) {

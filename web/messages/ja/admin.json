@@ -3365,6 +3365,12 @@
         "singular": "商品識別子",
         "description": "スキャン時に商品を識別するためのGTIN、UPC、EAN、内部値を登録します。"
       },
+      "channel-ad-spend": {
+        "title": "チャネル広告費",
+        "singular": "チャネル広告費",
+        "description": "販売チャネルごとの日次マーケティング費用。その日の注文マージンはこの値で再計算されます。",
+        "amount": "支出額（最小単位）"
+      },
       "channel-account-maps": {
         "title": "チャネルの転記勘定",
         "singular": "チャネルの転記勘定",
@@ -4020,6 +4026,7 @@
       "defaultSignature": "既定の署名",
       "customsDefaults": "通関の初期値",
       "channelId": "チャネル",
+      "spendDate": "支出日",
       "externalLocationId": "ストアのロケーションID",
       "externalName": "ストア名",
       "syncInventory": "在庫を同期",
