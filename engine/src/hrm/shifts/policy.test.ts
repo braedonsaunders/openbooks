@@ -23,6 +23,8 @@ test("native cycles retain local clock times across daylight saving and freeze t
   const shifts = recurringShiftOccurrences({ pattern, from: "2026-03-02", through: "2026-03-09" });
   assert.deepEqual(shifts.map(value => value.startsAt), ["2026-03-02T14:00:00.000Z", "2026-03-09T13:00:00.000Z"]);
   assert.deepEqual(shifts.map(value => value.durationSeconds), [28800, 28800]);
+  const injected = recurringShiftOccurrences({ pattern, from: "2026-03-02", through: "2026-03-02", occurrences: { "2026-03-02:0": { onDate: "2030-01-01", timeZone: "UTC", slot: { ...slot, starts: "01:00" } } as never } });
+  assert.equal(injected[0]!.startsAt, shifts[0]!.startsAt, "occurrence choices cannot override the approved date, zone or slot");
   assert.throws(() => shiftPattern({ ...pattern, schedule: { ...schedule, pattern: "varies" } }), /native repeating work schedule.*individual shifts/);
 });
 

@@ -154,8 +154,9 @@ export function recurringShiftOccurrences(input: {
     for (const [index, value] of pattern.slots.entries()) {
       if (value.position === position) {
         const key = `${date}:${index}`;
+        const selected = input.occurrences?.[key];
         consumed.add(key);
-        result.push(shiftOccurrence({ onDate: date, timeZone: pattern.timeZone, slot: value, ...input.occurrences?.[key] }));
+        result.push(shiftOccurrence({ onDate: date, timeZone: pattern.timeZone, slot: value, startsAt: selected?.startsAt, endsAt: selected?.endsAt }));
       }
     }
     if (date === input.through) break;
@@ -222,7 +223,7 @@ export function observeAttendance(input: {
     if (occurred < from || occurred > through) throw new ShiftError(`Check-in ${id} is outside this shift's capture window — reconcile its shift assignment before processing attendance.`);
     const prior = unique.get(id);
     if (prior && (prior.kind !== event.kind || prior.occurredAt !== event.occurredAt)) throw new ShiftError(`Check-in identity ${id} carries different source content — preserve the original event and submit a separately identified correction.`);
-    unique.set(id, { ...event, id });
+    unique.set(id, { id, kind: event.kind, occurredAt: event.occurredAt });
   }
   const events = [...unique.values()].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id));
   const evidenceHash = createHash("sha256").update(canonicalJson({ shift: input.shift, policy, completeThrough: input.completeThrough, events })).digest("hex");
