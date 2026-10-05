@@ -2564,7 +2564,8 @@
       },
       "pay-components": {
         "title": "Verbas",
-        "description": "Proventos, descontos e contribuições patronais com tratamento fiscal, contas contábeis e fornecedores de recolhimento."
+        "description": "Proventos, descontos e contribuições patronais com tratamento fiscal, contas contábeis e fornecedores de recolhimento.",
+        "singularTitle": "Rubrica"
       },
       "union-agreements": {
         "title": "Acordos sindicais",

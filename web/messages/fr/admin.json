@@ -2784,7 +2784,8 @@
       },
       "pay-components": {
         "title": "Composantes de paie",
-        "description": "Gains, retenues et cotisations patronales avec leur traitement fiscal, leurs comptes de GL et leurs fournisseurs de versement."
+        "description": "Gains, retenues et cotisations patronales avec leur traitement fiscal, leurs comptes de GL et leurs fournisseurs de versement.",
+        "singularTitle": "Code de paie"
       },
       "union-agreements": {
         "title": "Conventions collectives",

@@ -300,6 +300,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
     iconKey: 'coins',
+    singularTitleKey: 'entities.pay-components.singularTitle',
     drawerSize: 'xl',
     // A pay code is created by first choosing what it is: the choice sets the
     // kind, how it is paid and whether it is taxable income, which decides

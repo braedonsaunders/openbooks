@@ -2777,7 +2777,8 @@
       },
       "pay-components": {
         "title": "給与項目",
-        "description": "税務処理・総勘定元帳口座・納付先を備えた支給・控除・事業主負担です。"
+        "description": "税務処理・総勘定元帳口座・納付先を備えた支給・控除・事業主負担です。",
+        "singularTitle": "給与項目"
       },
       "union-agreements": {
         "title": "労働協約",
