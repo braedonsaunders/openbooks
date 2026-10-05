@@ -56,6 +56,7 @@
     "openItems": "{side, select, ap {Factures fournisseurs ouvertes} other {Factures clients ouvertes}}",
     "amountReceived": "Montant reçu",
     "autoApply": "Application auto",
+    "reservedByRun": "Réservé par le lot de paiement {runNumber}",
     "autoApplyFailed": "Impossible de proposer une application",
     "autoApplyNone": "Aucun élément ouvert ne correspond à ce montant",
     "autoApplyDone": "Appliqué à {count, plural, one {# élément} other {# éléments}} ({strategy})",

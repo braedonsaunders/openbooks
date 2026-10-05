@@ -101,7 +101,7 @@ export async function loadPaymentFlyout({
   ])
   const initialOpenItems: OpenItemClient[] =
     openPayment && openPayment.doc.status === 'draft' && openPayment.doc.party_id
-      ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds)
+      ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds, { paymentDocumentId: String(openPayment.doc.id) })
       : []
   // Stored-value tenders (receipts only): already-saved snapshots from the
   // draft plus the receipt party's verified credit for the picker. Null

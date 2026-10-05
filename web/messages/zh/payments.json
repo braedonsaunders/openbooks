@@ -56,6 +56,7 @@
     "openItems": "{side, select, ap {未结应付账单} other {未结发票}}",
     "amountReceived": "收款金额",
     "autoApply": "自动核销",
+    "reservedByRun": "已被付款批次 {runNumber} 预留",
     "autoApplyFailed": "无法建议核销方案",
     "autoApplyNone": "没有未结项与此金额匹配",
     "autoApplyDone": "已核销至 {count, plural, one {# 项} other {# 项}}（{strategy}）",

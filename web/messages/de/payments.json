@@ -56,6 +56,7 @@
     "openItems": "{side, select, ap {Offene Eingangsrechnungen} other {Offene Ausgangsrechnungen}}",
     "amountReceived": "Erhaltener Betrag",
     "autoApply": "Automatisch zuordnen",
+    "reservedByRun": "Reserviert durch Zahlungslauf {runNumber}",
     "autoApplyFailed": "Es konnte keine Zuordnung vorgeschlagen werden",
     "autoApplyNone": "Keine offenen Posten passen zu diesem Betrag",
     "autoApplyDone": "Auf {count, plural, one {# Posten} other {# Posten}} angewendet ({strategy})",

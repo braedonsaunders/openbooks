@@ -8,6 +8,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { CreditApplicationConflictError, PaymentError } from "../payments-core/payment-errors.ts";
 import { paymentBookId } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
+import { assertNoForeignRunReservation } from "./payment-queries.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
@@ -290,6 +291,13 @@ export async function applyStandaloneCredits(
       side: input.side,
       controlAccountId,
     });
+    // A credit or open item a payment run has reserved is that run's to
+    // settle; applying it here would let the run pay the same item again.
+    await assertNoForeignRunReservation(
+      orgId,
+      input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId]),
+      null,
+    );
 
     // A settlement dated into a closed period would silently move an aged
     // balance behind a lock the close already signed off on.

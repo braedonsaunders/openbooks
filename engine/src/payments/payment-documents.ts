@@ -9,7 +9,7 @@ import { resolveDraftSubsidiary } from "../organization/subsidiary-scope.ts";
 import { persistPaymentFxRate, persistPaymentMoney, sameCurrencyAllocation, validateAllocationInputs, validateSettlementEvidence, type AllocationInput } from "./settlement-policy.ts";
 import { type PaymentKind, PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentBookId } from "./payment-accounts.ts";
-import { openItemsForParty, loadPaymentDocument } from "./payment-queries.ts";
+import { assertNoForeignRunReservation, openItemsForParty, loadPaymentDocument } from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -322,6 +322,17 @@ export async function updateDraftPayment(
       }
     }
 
+    // Refuse at save, not only at posting: an item another payment run has
+    // reserved is that run's to pay. An item with no instruction yet belongs
+    // to a run still assembling in this transaction (a collection run claims
+    // its invoices before it creates their receipts); posting re-checks
+    // every reservation strictly.
+    await assertNoForeignRunReservation(
+      doc.orgId,
+      [...allocations.map((a) => a.openLineId), ...creditAllocations.flatMap((a) => [a.fromLineId, a.toLineId])],
+      doc.id,
+      { skipUnassembled: true },
+    );
     if (creditAllocations.length) await validateCreditAllocations(creditAllocations, allocations, {
       orgId: doc.orgId, partyId, subsidiaryId: doc.subsidiaryId,
       bookId: await paymentBookId(doc.orgId), side: PAYMENT_KIND_SIDE[doc.kind], controlAccountId,

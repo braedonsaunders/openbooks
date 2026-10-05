@@ -57,6 +57,8 @@ export interface OpenItemClient {
   transactionAmount: string
   transactionApplied: string
   transactionOpen: string
+  /** A live payment run that will pay this item; it is not payable here. */
+  reservedByRun?: { runId: string; runNumber: string; runStatus: string } | null
 }
 
 interface AllocationClient {
@@ -731,7 +733,7 @@ export function PaymentDrawer({
   // across the party's open items (reference → exact → FIFO) and fill the rows.
   async function autoApply() {
     if (!partyId) return
-    const sameCurrencyItems = openItems.filter((item) => item.currency === doc.currency)
+    const sameCurrencyItems = openItems.filter((item) => item.currency === doc.currency && !item.reservedByRun)
     // The suggestion seed is an exact decimal in the document currency, not
     // hard-coded 2dp: 3-decimal currencies (KWD, BHD) would otherwise
     // under-apply by the rounded tail.
@@ -1051,6 +1053,7 @@ export function PaymentDrawer({
                               type="checkbox"
                               className="h-4 w-4 accent-teal-600"
                               checked={checked}
+                              disabled={!checked && Boolean(item.reservedByRun)}
                               onChange={() => toggle(item)}
                               aria-label={t('applyAriaLabel', { document: item.documentNumber ?? item.entryNumber })}
                             />
@@ -1063,6 +1066,11 @@ export function PaymentDrawer({
                               {kindLabel(item.documentKind)}
                               {item.referenceNumber ? ` · ${item.referenceNumber}` : ''}
                             </span>
+                            {item.reservedByRun ? (
+                              <span className="mt-0.5 block text-xs text-amber-700 dark:text-amber-400">
+                                {t('reservedByRun', { runNumber: item.reservedByRun.runNumber })}
+                              </span>
+                            ) : null}
                           </SharedTableCell>
                           <SharedTableCell className="px-3 py-2 text-slate-600 dark:text-slate-300">{item.dueDate ?? '—'}</SharedTableCell>
                           <SharedTableCell className="px-3 py-2 text-right tabular-nums">{money(item.transactionAmount, { currency: item.currency })}</SharedTableCell>
