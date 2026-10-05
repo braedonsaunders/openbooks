@@ -200,12 +200,22 @@ export function CustomerView({
       },
     })
 
+  const weightsError = data.weightsError ?? profitability.weightsError ?? null
   return (
     <div className="space-y-5">
+      {weightsError ? (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {weightsError}
+        </p>
+      ) : null}
       {/* Hero */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <Gauge value={intel.score} label={intel.label} size={132} thickness={12} showTicks={false} />
+          {intel.score === null ? (
+            <p className="px-2 text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">{intel.reason}</p>
+          ) : (
+            <Gauge value={intel.score} label={intel.label} size={132} thickness={12} showTicks={false} />
+          )}
         </div>
         <KpiCard icon={Users} accent="sky" label={t('kpi.totalCustomers')} value={String(k.totalCustomers)} sub={t('sub.newInPeriod', { count: k.newCustomers })} />
         <KpiCard icon={Crown} accent="violet" label={t('kpi.champions')} value={String(k.champions)} sub={t('sub.rfmChampions')} />

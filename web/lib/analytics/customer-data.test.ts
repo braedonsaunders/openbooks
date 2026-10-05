@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { exactMarginPercent, exactProfit } from './customer-profitability-money'
-import { compositeScoreOf, healthScoreOf, isProfitLeak, profitTierOf, ratePayment, scorePayment } from './customer-data'
+import { ANALYTICS_CONFIG } from './config-spec'
+import { englishCatalogMessage } from './catalog-strings'
+import { customerStrings } from './customer-strings'
+import { compositeScoreOf, healthScoreOf, isProfitLeak, profitTierOf, ratePayment, scorePayment, weightsRefusal } from './customer-data'
 
 const bands = {
   highDays: 60, highPenalty: 40,
@@ -42,6 +45,16 @@ test('dropping the payment term re-normalises the rest instead of awarding phant
   const withPayment = healthScoreOf({ ...terms, payment: 50 }, healthWeights, 0)
   assert.equal(withPayment.scoredWithoutPayment, false)
   assert.equal(withPayment.score, 90)
+})
+
+test('a broken weight sum refuses by name with the reachable remedy, never a throw', () => {
+  const strings = customerStrings(englishCatalogMessage, 'en')
+  assert.equal(weightsRefusal(ANALYTICS_CONFIG.customerIntelligence.defaults, strings), null)
+  const broken = { ...ANALYTICS_CONFIG.customerIntelligence.defaults, healthWeightRecency: 24 }
+  const refusal = weightsRefusal(broken, strings)
+  assert.ok(refusal, 'a hand-edited weight group that no longer sums to 100 must refuse')
+  assert.ok(refusal.includes('healthWeightRecency'), `the refusal must name the broken group, got: ${refusal}`)
+  assert.ok(refusal.includes('Configuration'), `the refusal must name the reachable remedy, got: ${refusal}`)
 })
 
 test('no term left means no score, never a 0 that grades as F', () => {
