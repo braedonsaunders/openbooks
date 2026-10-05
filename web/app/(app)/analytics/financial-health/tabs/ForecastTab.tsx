@@ -3,14 +3,14 @@
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { EmptyState, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { ForecastChart } from '../../_ui/charts'
 import { useAnalyticsMoney, toChartNumber } from '../../_ui/format'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
-import { applyForecastMethod, applyForecastAdjustment, checkSignDomain, diagnostics, type ForecastMethod, type Seasonality, type SignDomain } from '../../_ui/forecast'
+import { cmp } from '@openbooks/engine/money'
+import { applyForecastAdjustment, applyForecastMethod, checkSignDomain, diagnostics, UnknownConfidenceError, type ForecastMethod, type Seasonality, type SignDomain } from '../../_ui/forecast'
 
 type Metric = 'revenue' | 'gm' | 'opinc'
 const METRIC_KEY: Record<Metric, 'revenue' | 'grossProfit' | 'operatingIncome'> = {
@@ -35,17 +35,6 @@ const METRIC_KPI: Record<Metric, 'revenue' | 'grossProfit' | 'operatingIncome'> 
   revenue: 'revenue',
   gm: 'grossProfit',
   opinc: 'operatingIncome',
-}
-/** Display name of each model, named in the caveat so the reader knows what
- * extrapolated past the domain. (The settings options below are hardcoded
- * English like the rest of this tab's chrome.) */
-const METHOD_LABEL: Record<ForecastMethod, string> = {
-  ets: 'ETS',
-  ets_damped: 'damped-trend ETS',
-  linear: 'Linear Regression',
-  seasonal: 'Seasonal Decomposition',
-  moving_avg: 'Moving Average',
-  arima: 'ARIMA-style',
 }
 
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const
@@ -74,17 +63,42 @@ function futureLabels(
 
 const SELECT = 'h-8 w-full text-sm'
 
+const isMethod = (v: string): v is ForecastMethod =>
+  v === 'ets' || v === 'ets_damped' || v === 'linear' || v === 'seasonal' || v === 'moving_avg' || v === 'arima'
+const isSeasonality = (v: string): v is Seasonality =>
+  v === 'auto' || v === 'none' || v === 'monthly' || v === 'quarterly'
+
 export function ForecastTab({ data }: { data: HealthData }) {
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth.forecast')
   const tc = useTranslations('analytics.common')
+  const to = useTranslations('analytics.financialHealth.config.options')
   const tk = useTranslations('analytics.financialHealth.kpi')
+  const fp = data.forecast
   const [metric, setMetric] = useState<Metric>('revenue')
-  const [method, setMethod] = useState<ForecastMethod>('ets')
-  const [horizon, setHorizon] = useState(6)
-  const [confidence, setConfidence] = useState(90)
-  const [seasonality, setSeasonality] = useState<Seasonality>('auto')
-  const [adjustment, setAdjustment] = useState(0)
+  const [method, setMethod] = useState(fp.defaultMethod)
+  const [horizon, setHorizon] = useState(fp.defaultHorizon)
+  const [confidence, setConfidence] = useState(fp.defaultConfidence)
+  const [seasonality, setSeasonality] = useState(fp.defaultSeasonality)
+  const [adjustment, setAdjustment] = useState(fp.defaultAdjustment)
+
+  const fmtFloat = (n: number, digits: number) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(n)
+
+  // Every configured level is validated before it reaches the model: an
+  // unknown confidence has no band multiplier, so the tab refuses with the
+  // valid levels instead of printing a band under a false name. The server
+  // only emits declared option codes, so this fires on corrupt input alone.
+  const invalid = useMemo(() => (
+    !isMethod(method) || !fp.methods.includes(method) ? { field: t('field.method'), level: method, levels: fp.methods.map((m) => to(`forecastMethod.${m}`)).join(', ') }
+      : !fp.horizons.includes(horizon) ? { field: t('field.horizon'), level: String(horizon), levels: fp.horizons.map((h) => t('horizonMonths', { count: h })).join(', ') }
+        : !fp.confidences.includes(confidence) ? { field: t('field.confidence'), level: String(confidence), levels: fp.confidences.map((c) => t('confidencePct', { count: c })).join(', ') }
+          : !isSeasonality(seasonality) || !fp.seasonalities.includes(seasonality) ? { field: t('field.seasonality'), level: seasonality, levels: fp.seasonalities.map((s) => to(`forecastSeasonality.${s}`)).join(', ') }
+            : !fp.adjustments.some((a) => a.code === adjustment) ? { field: t('field.adjustment'), level: adjustment, levels: fp.adjustments.map((a) => to(`forecastAdjustment.${a.code}`)).join(', ') }
+              : null
+  ), [method, horizon, confidence, seasonality, adjustment, fp, t, to])
+  const adjValue = fp.adjustments.find((a) => a.code === adjustment)?.value
 
   // Memoized chain: `result` below can only be compiled when its `series`
   // dep holds a stable identity across renders.
@@ -105,11 +119,35 @@ export function ForecastTab({ data }: { data: HealthData }) {
   )
 
   const result = useMemo(() => {
-    if (series.length < 3) return null
-    const r = applyForecastMethod(series, method, horizon, seasonality, confidence)
-    r.values = applyForecastAdjustment(r.values, adjustment)
-    return r
-  }, [series, method, horizon, seasonality, confidence, adjustment])
+    if (invalid || adjValue === undefined || series.length < 3) return null
+    try {
+      const r = applyForecastMethod(
+        series,
+        method as ForecastMethod,
+        horizon,
+        seasonality as Seasonality,
+        confidence,
+        null,
+        {
+          modelParams: {
+            alpha: fp.model.alpha,
+            beta: fp.model.beta,
+            gamma: fp.model.gamma,
+            dampedPhi: fp.model.dampedPhi,
+            ma1: fp.model.ma1,
+            minCorrelation: fp.model.minCorrelation,
+            minPeriods: fp.model.minPeriods,
+          },
+          periodsPerYear: fp.periodsPerYear,
+        },
+      )
+      r.values = applyForecastAdjustment(r.values, adjValue)
+      return r
+    } catch (e) {
+      if (e instanceof UnknownConfidenceError) return null
+      throw e
+    }
+  }, [series, invalid, adjValue, method, horizon, seasonality, confidence, fp])
 
   // The caveat input: whether the DISPLAYED (post-adjustment) central
   // projection leaves the metric's sign domain, and where it first does.
@@ -118,8 +156,18 @@ export function ForecastTab({ data }: { data: HealthData }) {
     [result, metric],
   )
 
+  if (invalid || adjValue === undefined) {
+    return (
+      <Panel title={t('title')} icon={LineChart}>
+        <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+          {t('unknownLevel', { field: invalid?.field ?? t('field.adjustment'), level: invalid?.level ?? adjustment, levels: invalid?.levels ?? '' })}
+        </p>
+      </Panel>
+    )
+  }
+
   if (series.length < 3 || !result) {
-    return <EmptyState icon={<LineChart size={28} />} title="Not enough history" description="Forecasting needs at least 3 months of activity in the selected period." />
+    return <EmptyState icon={<LineChart size={28} />} title={t('emptyTitle')} description={t('emptyDescription')} />
   }
 
   const diag = diagnostics(series, result)
@@ -140,22 +188,22 @@ export function ForecastTab({ data }: { data: HealthData }) {
   // and the translated metric name for the caveat copy.
   const breachMonth = breach.breached ? futLabels[breach.firstIndex]! : ''
   const metricName = tk(METRIC_KPI[metric])
-  const modelName = METHOD_LABEL[method]
+  const modelName = to(`forecastMethod.${method}`)
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
       <div className="space-y-5 lg:col-span-3">
         <Panel
-          title="Multi-Metric Forecast"
+          title={t('title')}
           icon={LineChart}
           actions={
             <SegToggle
               value={metric}
               onChange={setMetric}
               options={[
-                { value: 'revenue', label: 'Revenue' },
-                { value: 'gm', label: 'Gross Margin' },
-                { value: 'opinc', label: 'Op Income' },
+                { value: 'revenue', label: tk('revenue') },
+                { value: 'gm', label: tk('grossProfit') },
+                { value: 'opinc', label: tk('operatingIncome') },
               ]}
             />
           }
@@ -171,9 +219,9 @@ export function ForecastTab({ data }: { data: HealthData }) {
           ) : null}
           <ForecastChart labels={labels} history={history} forecast={forecast} low={low} high={high} height={320} />
           <div className="mt-3 grid grid-cols-3 gap-3 text-center">
-            <Stat label={`${horizon}-mo Total`} value={fmtMoney(totalForecast, { compact: true })} />
-            <Stat label={`Month ${horizon}`} value={fmtMoney(endValue, { compact: true })} />
-            <Stat label="Projected Growth" value={breach.breached ? `${(growth * 100).toFixed(1)}% *` : `${(growth * 100).toFixed(1)}%`} tone={growth >= 0 ? 'pos' : 'neg'} />
+            <Stat label={t('total', { count: horizon })} value={fmtMoney(totalForecast, { compact: true })} />
+            <Stat label={t('monthN', { count: horizon })} value={fmtMoney(endValue, { compact: true })} />
+            <Stat label={t('growth')} value={breach.breached ? `${fmtFloat(growth * 100, 1)}% *` : `${fmtFloat(growth * 100, 1)}%`} tone={growth >= 0 ? 'pos' : 'neg'} />
           </div>
           {breach.breached ? (
             <p className="mt-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">
@@ -182,16 +230,16 @@ export function ForecastTab({ data }: { data: HealthData }) {
           ) : null}
         </Panel>
 
-        <Panel title="Monthly Forecast Detail" icon={Table2} bodyClassName="p-0">
+        <Panel title={t('detail')} icon={Table2} bodyClassName="p-0">
           <div className="max-h-72 overflow-y-auto">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
                 <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <SharedTableHead className="px-4 py-2 text-left font-medium">Month</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">Forecast</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">Low</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">High</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">Conf.</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.month')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.forecast')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.low')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.high')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.conf')}</SharedTableHead>
                 </SharedTableRow>
               </SharedTableHeader>
               <SharedTableBody>
@@ -203,7 +251,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
                       <SharedTableCell className={`px-4 py-2 text-right font-medium tabular-nums ${outOfDomain ? 'text-amber-700 dark:text-amber-300' : 'text-slate-800 dark:text-slate-200'}`}>{fmtMoney(v)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{confidence}%</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{t('confidencePct', { count: confidence })}</SharedTableCell>
                     </SharedTableRow>
                   )
                 })}
@@ -219,55 +267,43 @@ export function ForecastTab({ data }: { data: HealthData }) {
       </div>
 
       <div className="space-y-5">
-        <Panel title="Forecast Settings" icon={Cog}>
+        <Panel title={t('settings')} icon={Cog}>
           <div className="space-y-3">
-            <Field label="Method">
-              <Select value={method} onChange={(e) => setMethod(e.target.value as ForecastMethod)} triggerClassName={SELECT}>
-                <option value="ets">Exponential Smoothing (ETS)</option>
-                <option value="ets_damped">ETS, damped trend</option>
-                <option value="linear">Linear Regression</option>
-                <option value="seasonal">Seasonal Decomposition</option>
-                <option value="moving_avg">Moving Average</option>
-                <option value="arima">ARIMA-style</option>
+            <Field label={t('field.method')}>
+              <Select value={method} onChange={(e) => setMethod(e.target.value)} triggerClassName={SELECT}>
+                {fp.methods.filter(isMethod).map((m) => <option key={m} value={m}>{to(`forecastMethod.${m}`)}</option>)}
               </Select>
             </Field>
-            <Field label="Horizon">
+            <Field label={t('field.horizon')}>
               <Select value={String(horizon)} onChange={(e) => setHorizon(Number(e.target.value))} triggerClassName={SELECT}>
-                {[3, 6, 12, 24].map((h) => <option key={h} value={String(h)}>{h} Months</option>)}
+                {fp.horizons.map((h) => <option key={h} value={String(h)}>{t('horizonMonths', { count: h })}</option>)}
               </Select>
             </Field>
-            <Field label="Confidence">
+            <Field label={t('field.confidence')}>
               <Select value={String(confidence)} onChange={(e) => setConfidence(Number(e.target.value))} triggerClassName={SELECT}>
-                {[80, 90, 95, 99].map((c) => <option key={c} value={String(c)}>{c}%</option>)}
+                {fp.confidences.map((c) => <option key={c} value={String(c)}>{t('confidencePct', { count: c })}</option>)}
               </Select>
             </Field>
-            <Field label="Seasonality">
-              <Select value={seasonality} onChange={(e) => setSeasonality(e.target.value as Seasonality)} triggerClassName={SELECT}>
-                <option value="auto">Auto-detect</option>
-                <option value="none">None</option>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
+            <Field label={t('field.seasonality')}>
+              <Select value={seasonality} onChange={(e) => setSeasonality(e.target.value)} triggerClassName={SELECT}>
+                {fp.seasonalities.filter(isSeasonality).map((s) => <option key={s} value={s}>{to(`forecastSeasonality.${s}`)}</option>)}
               </Select>
             </Field>
-            <Field label="Adjustment">
-              <Select value={String(adjustment)} onChange={(e) => setAdjustment(Number(e.target.value))} triggerClassName={SELECT}>
-                <option value="0">None</option>
-                <option value="-0.05">Pessimistic (−5%)</option>
-                <option value="-0.1">Recession (−10%)</option>
-                <option value="0.05">Optimistic (+5%)</option>
-                <option value="0.1">High Growth (+10%)</option>
+            <Field label={t('field.adjustment')}>
+              <Select value={adjustment} onChange={(e) => setAdjustment(e.target.value)} triggerClassName={SELECT}>
+                {fp.adjustments.map((a) => <option key={a.code} value={a.code}>{to(`forecastAdjustment.${a.code}`)}</option>)}
               </Select>
             </Field>
           </div>
         </Panel>
 
-        <Panel title="Model Diagnostics" icon={Stethoscope} bodyClassName="p-0">
+        <Panel title={t('diagnostics')} icon={Stethoscope} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-            <Diag label="MAPE" value={`${diag.mape.toFixed(1)}%`} />
+            <Diag label="MAPE" value={`${fmtFloat(diag.mape, 1)}%`} />
             <Diag label="RMSE" value={fmtMoney(diag.rmse, { compact: true })} />
-            <Diag label="R²" value={diag.r2.toFixed(3)} />
-            <Diag label="Trend" value={diag.trendDir} />
-            <Diag label="Seasonality" value={diag.seasonLabel} />
+            <Diag label="R²" value={fmtFloat(diag.r2, 3)} />
+            <Diag label={t('diag.trend')} value={t(`trend.${diag.trendDir === 'Upward' ? 'up' : diag.trendDir === 'Downward' ? 'down' : 'flat'}`)} />
+            <Diag label={t('diag.seasonality')} value={result.seasonal ? t('seasonDetected', { period: result.seasonalPeriod }) : t('seasonNone')} />
           </ul>
         </Panel>
       </div>

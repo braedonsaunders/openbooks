@@ -129,7 +129,44 @@
       "domainCaveatTitle": "La projection sort de la plage de l'indicateur",
       "domainCaveat": "{metric} ne peut pas être négatif, mais la projection {model} passe sous zéro à partir de {month}, car le modèle prolonge la baisse récente. Les mois suivants montrent ce qu'implique la tendance, pas des {metric} atteignables ; la variante ETS à tendance amortie atténue la baisse au lieu de la prolonger.",
       "domainTableNote": "Les mois à partir de {month} se projettent sous zéro, hors de la plage de cet indicateur.",
-      "domainGrowthNote": "La croissance projetée est calculée à partir de valeurs hors de la plage de {metric} — voir l'avertissement ci-dessus."
+      "domainGrowthNote": "La croissance projetée est calculée à partir de valeurs hors de la plage de {metric} — voir l'avertissement ci-dessus.",
+      "title": "Prévision multi-métriques",
+      "total": "Total sur {count} mois",
+      "monthN": "Mois {count}",
+      "growth": "Croissance projetée",
+      "detail": "Détail mensuel de la prévision",
+      "table": {
+        "month": "Mois",
+        "forecast": "Prévision",
+        "low": "Bas",
+        "high": "Haut",
+        "conf": "Confiance"
+      },
+      "settings": "Réglages de la prévision",
+      "field": {
+        "method": "Méthode",
+        "horizon": "Durée",
+        "confidence": "Confiance",
+        "seasonality": "Saisonnalité",
+        "adjustment": "Ajustement"
+      },
+      "horizonMonths": "{count} mois",
+      "confidencePct": "{count} %",
+      "diagnostics": "Diagnostic du modèle",
+      "diag": {
+        "trend": "Tendance",
+        "seasonality": "Saisonnalité"
+      },
+      "trend": {
+        "up": "Hausse",
+        "down": "Baisse",
+        "flat": "Stable"
+      },
+      "seasonDetected": "Détectée ({period} m.)",
+      "seasonNone": "Aucune",
+      "emptyTitle": "Historique insuffisant",
+      "emptyDescription": "La prévision exige au moins 3 mois d’activité sur la période choisie.",
+      "unknownLevel": "Valeur inconnue pour {field} : « {level} » — valeurs possibles : {levels}."
     },
     "scenarios": {
       "kpi": {
@@ -147,8 +184,8 @@
       "fields": {
         "growth": "Croissance %",
         "price": "Prix Δ %",
-        "cogs": "COGS Δ %",
-        "opex": "OpEx Δ %"
+        "cogs": "Coût des ventes Δ %",
+        "opex": "Charges d’expl. Δ %"
       },
       "reset": "Revenir à la base",
       "impact": "Impact projeté",
@@ -180,8 +217,8 @@
         "growth": "Poussée de croissance",
         "cost_cut": "Réduction des coûts",
         "price_war": "Guerre des prix",
-        "expansion": "Expansion",
-        "stagflation": "Stagflation"
+        "expansion": "Forte expansion",
+        "stagflation": "Inflation sans croissance"
       }
     },
     "margin": {
@@ -211,7 +248,7 @@
       },
       "allocation": "Répartition du chiffre d’affaires",
       "allocationNames": {
-        "cogs": "COGS",
+        "cogs": "Coût des ventes",
         "opex": "Charges d’exploitation",
         "other": "Autre charge",
         "net": "Résultat net"
@@ -688,6 +725,54 @@
           "label": "Marge de sécurité confortable (%)",
           "help": "Un chiffre d’affaires aussi loin au-dessus du seuil de rentabilité est un matelas confortable"
         },
+        "forecastMethod": {
+          "label": "Méthode de prévision",
+          "help": "Modèle statistique de la projection du chiffre d’affaires"
+        },
+        "forecastHorizon": {
+          "label": "Horizon de prévision",
+          "help": "Mois projetés à l’ouverture de l’onglet"
+        },
+        "forecastConfidence": {
+          "label": "Confiance de la prévision",
+          "help": "Niveau de confiance de la bande"
+        },
+        "forecastSeasonality": {
+          "label": "Saisonnalité de la prévision",
+          "help": "Cycle saisonnier recherché par le modèle"
+        },
+        "forecastAdjustment": {
+          "label": "Ajustement de la prévision",
+          "help": "Ajustement macro de chaque mois projeté"
+        },
+        "forecastEtsAlpha": {
+          "label": "Lissage ETS (α)",
+          "help": "Poids de la dernière observation"
+        },
+        "forecastEtsBeta": {
+          "label": "Tendance ETS (β)",
+          "help": "Poids du dernier changement de tendance"
+        },
+        "forecastEtsGamma": {
+          "label": "Saisonnalité ETS (γ)",
+          "help": "Poids du dernier changement saisonnier"
+        },
+        "forecastDampedPhi": {
+          "label": "Tendance amortie (φ)",
+          "help": "Amortissement mensuel ; 1 signifie sans amortissement"
+        },
+        "forecastMa1": {
+          "label": "Persistance du choc ARIMA",
+          "help": "Part du dernier choc qui se prolonge"
+        },
+        "forecastSeasonalityMinCorr": {
+          "label": "Seuil de saisonnalité",
+          "help": "Corrélation minimale comptant comme saisonnière"
+        },
+        "forecastSeasonalityMinPeriods": {
+          "label": "Historique de saisonnalité",
+          "help": "Points d’historique minimum avant l’autodétection"
+        },
         "budgetOnTrackPercent": {
           "label": "Tolérance budgétaire « conforme » (%)",
           "help": "Un écart dans cette part du budget est considéré comme conforme"
@@ -715,6 +800,41 @@
         "efficiencyOperating": "Objectifs d’efficacité et d’exploitation",
         "grading": "Notes et seuils de score",
         "findings": "Seuils des constats"
+      },
+      "options": {
+        "forecastMethod": {
+          "ets": "Lissage exponentiel (ETS)",
+          "ets_damped": "ETS, tendance amortie",
+          "linear": "Régression linéaire",
+          "seasonal": "Décomposition saisonnière",
+          "moving_avg": "Moyenne mobile",
+          "arima": "Style ARIMA"
+        },
+        "forecastHorizon": {
+          "3": "3 mois",
+          "6": "6 mois",
+          "12": "12 mois",
+          "24": "24 mois"
+        },
+        "forecastConfidence": {
+          "80": "80 %",
+          "90": "90 %",
+          "95": "95 %",
+          "99": "99 %"
+        },
+        "forecastSeasonality": {
+          "auto": "Autodétection",
+          "none": "Aucune",
+          "monthly": "Mensuelle",
+          "quarterly": "Trimestrielle"
+        },
+        "forecastAdjustment": {
+          "neg10": "Récession (−10 %)",
+          "neg05": "Pessimiste (−5 %)",
+          "zero": "Aucun",
+          "pos05": "Optimiste (+5 %)",
+          "pos10": "Forte croissance (+10 %)"
+        }
       }
     },
     "ratioCard": {

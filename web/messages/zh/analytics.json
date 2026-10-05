@@ -129,7 +129,44 @@
       "domainCaveatTitle": "预测超出指标取值范围",
       "domainCaveat": "{metric}不能为负，但{model}预测自{month}起跌破零，因为模型将近期的下降延续下去。请将之后的月份视为趋势含义，而非可达到的{metric}；阻尼趋势ETS变体使下降趋平，而非延续。",
       "domainTableNote": "自{month}起的月份预测为负，超出本指标的取值范围。",
-      "domainGrowthNote": "预测增长率基于超出{metric}范围的值计算——见上文警示。"
+      "domainGrowthNote": "预测增长率基于超出{metric}范围的值计算——见上文警示。",
+      "title": "多指标预测",
+      "total": "{count}个月合计",
+      "monthN": "第{count}个月",
+      "growth": "预计增长",
+      "detail": "月度预测明细",
+      "table": {
+        "month": "月份",
+        "forecast": "预测",
+        "low": "下限",
+        "high": "上限",
+        "conf": "置信度"
+      },
+      "settings": "预测设置",
+      "field": {
+        "method": "方法",
+        "horizon": "期限",
+        "confidence": "置信度",
+        "seasonality": "季节性",
+        "adjustment": "调整"
+      },
+      "horizonMonths": "{count}个月",
+      "confidencePct": "{count}%",
+      "diagnostics": "模型诊断",
+      "diag": {
+        "trend": "趋势",
+        "seasonality": "季节性"
+      },
+      "trend": {
+        "up": "上升",
+        "down": "下降",
+        "flat": "持平"
+      },
+      "seasonDetected": "已检测（{period}个月）",
+      "seasonNone": "无",
+      "emptyTitle": "历史数据不足",
+      "emptyDescription": "预测需要在所选期间至少3个月的业务活动。",
+      "unknownLevel": "未知的{field}“{level}”——有效值：{levels}。"
     },
     "scenarios": {
       "kpi": {
@@ -688,6 +725,54 @@
           "label": "舒适安全边际（％）",
           "help": "收入高出盈亏平衡点这么多即为舒适边际"
         },
+        "forecastMethod": {
+          "label": "预测方法",
+          "help": "收入预测背后的统计模型"
+        },
+        "forecastHorizon": {
+          "label": "预测期限",
+          "help": "打开选项卡时显示的预测月数"
+        },
+        "forecastConfidence": {
+          "label": "预测置信度",
+          "help": "预测区间的置信水平"
+        },
+        "forecastSeasonality": {
+          "label": "预测季节性",
+          "help": "模型寻找的季节周期"
+        },
+        "forecastAdjustment": {
+          "label": "预测调整",
+          "help": "应用于每个预测月份的宏观调整"
+        },
+        "forecastEtsAlpha": {
+          "label": "ETS平滑（α）",
+          "help": "最新观测值的权重"
+        },
+        "forecastEtsBeta": {
+          "label": "ETS趋势（β）",
+          "help": "最新趋势变化的权重"
+        },
+        "forecastEtsGamma": {
+          "label": "ETS季节性（γ）",
+          "help": "最新季节变化的权重"
+        },
+        "forecastDampedPhi": {
+          "label": "阻尼趋势（φ）",
+          "help": "每月衰减率；1为无阻尼"
+        },
+        "forecastMa1": {
+          "label": "ARIMA冲击持续",
+          "help": "上次冲击的延续程度"
+        },
+        "forecastSeasonalityMinCorr": {
+          "label": "季节性阈值",
+          "help": "视为季节性的最小滞后相关"
+        },
+        "forecastSeasonalityMinPeriods": {
+          "label": "季节性历史",
+          "help": "自动检测前所需的最少历史点数"
+        },
         "budgetOnTrackPercent": {
           "label": "预算正常容忍度（％）",
           "help": "差异在此预算比例以内即为正常"
@@ -715,6 +800,41 @@
         "efficiencyOperating": "效率与经营目标",
         "grading": "等级与分数区间",
         "findings": "发现阈值"
+      },
+      "options": {
+        "forecastMethod": {
+          "ets": "指数平滑（ETS）",
+          "ets_damped": "ETS阻尼趋势",
+          "linear": "线性回归",
+          "seasonal": "季节分解",
+          "moving_avg": "移动平均",
+          "arima": "ARIMA式"
+        },
+        "forecastHorizon": {
+          "3": "3个月",
+          "6": "6个月",
+          "12": "12个月",
+          "24": "24个月"
+        },
+        "forecastConfidence": {
+          "80": "80%",
+          "90": "90%",
+          "95": "95%",
+          "99": "99%"
+        },
+        "forecastSeasonality": {
+          "auto": "自动检测",
+          "none": "无",
+          "monthly": "月度",
+          "quarterly": "季度"
+        },
+        "forecastAdjustment": {
+          "neg10": "衰退（−10%）",
+          "neg05": "悲观（−5%）",
+          "zero": "无",
+          "pos05": "乐观（＋5%）",
+          "pos10": "高增长（＋10%）"
+        }
       }
     },
     "ratioCard": {

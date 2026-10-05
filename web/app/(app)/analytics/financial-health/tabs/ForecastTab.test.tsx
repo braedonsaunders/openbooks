@@ -44,9 +44,33 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 // Six months of revenue falling ~0.7M a month: default ETS carries the
 // decline through zero inside the 6-month horizon.
+function forecastParams(): Record<string, unknown> {
+  return {
+    periodsPerYear: 12,
+    defaultMethod: 'ets',
+    methods: ['ets', 'ets_damped', 'linear', 'seasonal', 'moving_avg', 'arima'],
+    defaultHorizon: 6,
+    defaultConfidence: 90,
+    defaultSeasonality: 'auto',
+    seasonalities: ['auto', 'none', 'monthly', 'quarterly'],
+    horizons: [3, 6, 12, 24],
+    confidences: [80, 90, 95, 99],
+    adjustments: [
+      { code: 'neg10', value: -0.1 },
+      { code: 'neg05', value: -0.05 },
+      { code: 'zero', value: 0 },
+      { code: 'pos05', value: 0.05 },
+      { code: 'pos10', value: 0.1 },
+    ],
+    defaultAdjustment: 'zero',
+    model: { alpha: 0.3, beta: 0.1, gamma: 0.2, dampedPhi: 0.9, ma1: 0.3, minCorrelation: 0.3, minPeriods: 24 },
+  };
+}
+
 function decliningData(): Record<string, unknown> {
   const revenues = [4_000_000, 3_300_000, 2_600_000, 1_900_000, 1_200_000, 500_000];
   return {
+    forecast: forecastParams(),
     monthly: revenues.map((revenue, i) => ({
       month: `2026-0${i + 1}`,
       label: `M${i + 1}`,
@@ -103,6 +127,24 @@ test("an out-of-domain revenue projection carries the caveat on chart, table, an
     // Projected growth is not a plain number: it carries the star and note.
     assert.match(text, /% \*/);
     assert.match(text, /outside.*range.*see the caveat above/);
+  } finally {
+    await unmount();
+  }
+});
+
+test("an unknown confidence level refuses with the valid levels", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  const data = decliningData();
+  (data.forecast as { defaultConfidence: number }).defaultConfidence = 97;
+  const { host, unmount } = await mount(data);
+  try {
+    const text = host.textContent ?? "";
+    // Names the offending level and the levels that would work — never a
+    // band printed under a false name.
+    assert.match(text, /Unknown Confidence/);
+    assert.match(text, /97/);
+    assert.match(text, /80%, 90%, 95%, 99%/);
+    assert.doesNotMatch(text, /Projected Growth/);
   } finally {
     await unmount();
   }

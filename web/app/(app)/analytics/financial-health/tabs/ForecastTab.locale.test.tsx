@@ -43,6 +43,26 @@ function month(revenue: string, month: string, label: string) {
 }
 
 const data = {
+  forecast: {
+    periodsPerYear: 12,
+    defaultMethod: 'ets',
+    methods: ['ets', 'ets_damped', 'linear', 'seasonal', 'moving_avg', 'arima'],
+    defaultHorizon: 6,
+    defaultConfidence: 90,
+    defaultSeasonality: 'auto',
+    seasonalities: ['auto', 'none', 'monthly', 'quarterly'],
+    horizons: [3, 6, 12, 24],
+    confidences: [80, 90, 95, 99],
+    adjustments: [
+      { code: 'neg10', value: -0.1 },
+      { code: 'neg05', value: -0.05 },
+      { code: 'zero', value: 0 },
+      { code: 'pos05', value: 0.05 },
+      { code: 'pos10', value: 0.1 },
+    ],
+    defaultAdjustment: 'zero',
+    model: { alpha: 0.3, beta: 0.1, gamma: 0.2, dampedPhi: 0.9, ma1: 0.3, minCorrelation: 0.3, minPeriods: 24 },
+  },
   monthly: [
     month('100', '2025-10', "Oct '25"),
     month('110', '2025-11', "Nov '25"),
