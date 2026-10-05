@@ -3,12 +3,12 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/database";
 import {
   PspAutomationError,
   approveDisputeReview,
   rejectDisputeReview,
-} from "@openbooks/engine/src/payments/psp-refund-automation.ts";
+} from "@openbooks/engine/payments/refund-automation";
 import { can } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
