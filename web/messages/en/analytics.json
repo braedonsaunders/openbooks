@@ -3533,7 +3533,7 @@
       "stats": "{docs} documents · {amount} · {days} days · in {seconds}s — no caps or date-range limits."
     },
     "basis": {
-      "note": "Detection runs per transaction currency — a USD 100 bill is never compared with a CAD 100 bill. Consolidated amounts are in {currency}, each translated at its own document rate."
+      "note": "Detection runs per transaction currency — a USD 100 bill is never compared with a CAD 100 bill. Consolidated amounts are in {currency}, each translated at its document-date rate."
     },
     "kpi": {
       "flagged": "Flagged",
@@ -3564,15 +3564,15 @@
       "twoD": "2D: {value}",
       "ghostsSequential": "{ghosts} ghosts · {sequential} sequential",
       "everyDocument": "every document, no caps",
-      "offExpected25": ">25% off expected",
+      "offExpected25": "Z-test outliers",
       "expected301": "expected 30.1%",
       "twoDigitPairs": "first-two-digit pairs",
-      "offExpected50": ">50% off expected, n≥5",
+      "offExpected50": "Z-test outliers, n≥5",
       "seeThresholdTrap": "see Threshold Trap",
       "ending99": "ending 99 / 999 / 9999",
       "limitGaming": "potential limit-gaming",
       "allMatchingPairs": "one finding per group",
-      "sumPairAmounts": "excess copies at document rates",
+      "sumPairAmounts": "excess copies at translated value",
       "documents": "documents",
       "higherRiskWeighting": "higher risk weighting",
       "inPeriod": "in period",
@@ -3655,7 +3655,8 @@
       "change": "Change"
     },
     "csv": {
-      "kind": "Kind"
+      "kind": "Kind",
+      "label": "CSV"
     },
     "drill": {
       "firstTwoDigits": "First two digits",
@@ -3667,9 +3668,9 @@
     "analysis": {
       "rsfFull": "Relative Size Factor",
       "calendar": "Calendar",
-      "rsfNote": " = amount ÷ the vendor's historical 2nd-largest transaction in the same currency (36-month baseline, computed in one window-function pass). RSF ≥ 10 means a transaction wildly out of scale for that vendor — a classic error/fraud signal.",
+      "rsfNote": " = amount ÷ the vendor's historical 2nd-largest transaction in the same currency ({months}-month baseline, computed in one window-function pass). RSF ≥ {threshold} means a transaction wildly out of scale for that vendor — a classic error/fraud signal.",
       "zscoreWord": "Z-score",
-      "zscoreNote": " measures how many standard deviations a transaction sits from that vendor's own average in the same currency (per-vendor, per-currency baselines over 36 months, one aggregate pass). |z| ≥ 3 flags entity-specific outliers that global thresholds miss."
+      "zscoreNote": " measures how many standard deviations a transaction sits from that vendor's own average in the same currency (per-vendor, per-currency baselines over {months} months, one aggregate pass). |z| ≥ {threshold} flags entity-specific outliers that global thresholds miss."
     },
     "duplicates": {
       "ruleValue": "≤{days} days",
@@ -3707,7 +3708,7 @@
       "noAuditEvents": "No high-risk audit events in this period"
     },
     "auditNote": "Native audit log. Most records in this ledger were bulk-migrated, so change history begins at go-live — the trail grows as users work in openbooks.",
-    "trapNote": "Amounts just below round thresholds (ending in 99, 999, or 9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review. Traps always read the document amount: a USD 99 flags as a 99-trap even when its converted value is nowhere near a threshold.",
+    "trapNote": "Amounts just below a real approval limit (ending in 99, 999, or 9999) can indicate purchases engineered to stay under that limit. Limits come from the approval Flows; with no amount condition in Flows this check reports unavailable instead of risk. Traps always read the document amount in its own currency.",
     "vendors": {
       "drillSub": "{flags} flags · {amount} flagged"
     },
@@ -3771,21 +3772,21 @@
     "config": {
       "duplicatesNote": "Same vendor, kind, currency, amount and reference within the window; credits excluded; one finding per group",
       "benfordConformity": "Benford conformity",
-      "benfordNote": "1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0022/0.0033",
-      "rsfNote": "Amount ÷ vendor 2nd-largest over a 36-month baseline ({floor} baseline floor)",
-      "zscoreNote": "Per-vendor mean/σ baseline, ≥5 transactions and σ > {sigma}",
+      "benfordNote": "1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0018/0.0022",
+      "rsfNote": "Amount ÷ vendor 2nd-largest over a {months}-month baseline ({floor} baseline floor)",
+      "zscoreNote": "Per-vendor mean/σ baseline, ≥{minTxns} transactions and σ > {sigma}",
       "sequentialRuns": "Sequential runs",
-      "sequentialNote": "Gap-free vendor reference numbers; 30+ day spans rank high risk",
-      "trapNote": "Whole-dollar endings (.00 or .99 cents) just under round limits",
+      "sequentialNote": "Gap-free vendor reference numbers; {days}+ day spans rank high risk",
+      "trapNote": "Just-below-round endings near a real approval limit from Flows, read per document currency",
       "weekendNote": "Accounting document date (migrated data carries import timestamps, so system created-time is not meaningful here)",
       "fields": {
         "duplicateDays": {
           "label": "Duplicate window (days)",
-          "help": "Same vendor, kind and amount within this many days flags a pair"
+          "help": "Same vendor, kind and amount within this many days flags a group"
         },
         "duplicateMinAmount": {
-          "label": "Duplicate minimum ($)",
-          "help": "Pairs below this amount are ignored"
+          "label": "Duplicate minimum ({currency})",
+          "help": "Pairs below this translated amount are ignored"
         },
         "sequentialMinCount": {
           "label": "Sequential run minimum",
@@ -3794,8 +3795,76 @@
         "sequentialMinDays": {
           "label": "Sequential span (days)",
           "help": "Runs spread over fewer days are treated as batch entry, not a flag"
+        },
+        "moderateRiskAmount": {
+          "label": "Moderate-risk amount ({currency})",
+          "help": "Translated document amounts at or above this score extra risk points"
+        },
+        "highRiskAmount": {
+          "label": "High-risk amount ({currency})",
+          "help": "Translated document amounts at or above this score high-risk points"
+        },
+        "criticalRiskAmount": {
+          "label": "Critical-risk amount ({currency})",
+          "help": "Translated document amounts at or above this score critical-risk points"
+        },
+        "aggregateHighAmount": {
+          "label": "High multi-document total ({currency})",
+          "help": "Translated multi-document totals at or above this score high-risk points"
+        },
+        "aggregateCriticalAmount": {
+          "label": "Critical multi-document total ({currency})",
+          "help": "Translated multi-document totals at or above this score critical-risk points"
+        },
+        "rsfBaselineFloor": {
+          "label": "Relative-size baseline floor ({currency})",
+          "help": "Vendors whose historical second-largest bill translates below this are skipped by the relative-size check"
+        },
+        "zscoreSigmaFloor": {
+          "label": "Z-score noise floor ({currency})",
+          "help": "Vendor histories whose spread translates below this are skipped by the z-score check"
+        },
+        "zscoreThreshold": {
+          "label": "Z-score threshold",
+          "help": "A bill flags when it stands this many standard deviations from its vendor average"
+        },
+        "zscoreMinBaseline": {
+          "label": "Z-score minimum history",
+          "help": "Vendors with fewer past bills than this are skipped by the z-score check"
+        },
+        "rsfThreshold": {
+          "label": "Relative-size threshold",
+          "help": "A bill flags when it reaches this multiple of its vendor’s historical second-largest bill"
+        },
+        "baselineMonths": {
+          "label": "Vendor history window (months)",
+          "help": "Past months the relative-size and z-score checks compare each bill against"
+        },
+        "sequentialHighRiskDays": {
+          "label": "Sequential high-risk span (days)",
+          "help": "Gap-free invoice runs spanning at least this long rank high risk"
+        },
+        "benfordMinSample": {
+          "label": "Benford minimum sample",
+          "help": "Currency slices with fewer bills than this report insufficient data and never score"
+        },
+        "trapBandPercent": {
+          "label": "Approval-limit band (%)",
+          "help": "A just-below-round amount flags only within this share under a real approval limit from Flows"
+        },
+        "duplicateAreaMin": {
+          "label": "Duplicate area minimum",
+          "help": "Duplicate findings below this count do not raise a top-risk area"
+        },
+        "ghostNameMinLength": {
+          "label": "Ghost-name minimum length",
+          "help": "Employee names shorter than this never match a vendor name"
         }
-      }
+      },
+      "rsfValue": "at least {threshold}×",
+      "zscoreValue": "|z| at least {threshold}",
+      "trapValue": "{band}% under a Flows limit",
+      "sequentialValue": "{count} refs · {days}+ days"
     },
     "coverage": {
       "intro": "Every check runs across your ",
