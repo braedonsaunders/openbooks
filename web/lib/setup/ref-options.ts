@@ -94,6 +94,14 @@ export async function loadEntityOptions(
     return rows.rows
   }
   if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
+  if (source === 'sales-channels') {
+    // Storefront connections are module records, not setup entities — a bare
+    // reference list like `trades`: the channel picker in map/location forms.
+    const channels = (await db.execute(sql`
+      select id as value, name as label from sales_channels
+       where org_id = ${orgId} order by name`))
+    return channels.rows as RefOption[]
+  }
   // `vendors` names the parties+vendor_roles picker, not a registry entity:
   // without this branch the generic lookup below finds no entry and every
   // remittance-vendor listbox renders only None.

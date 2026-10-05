@@ -69,6 +69,7 @@ const DEDICATED = new Set([
   "trades",
   "projects",
   "number-sequence-kinds",
+  "sales-channels",
 ]);
 
 test("every ref target resolves its generic picker columns", () => {

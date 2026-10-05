@@ -3280,6 +3280,21 @@
         "singular": "商品标识符",
         "description": "登记扫描时用于识别商品的精确 GTIN、UPC、EAN 和内部值。"
       },
+            "channel-account-maps": {
+        "title": "渠道记账科目",
+        "singular": "渠道记账科目",
+        "description": "各渠道记账至哪个总账科目，按网关与税务辖区，附生效日期。"
+      },
+      "channel-locations": {
+        "title": "渠道地点",
+        "singular": "渠道地点",
+        "description": "哪个库存地点履约各网店地点，以及是否同步库存。"
+      },
+      "external-links": {
+        "title": "外部 ID",
+        "singular": "外部 ID",
+        "description": "与物料和客户关联的网店与供应商标识。"
+      },
       "customer-item-refs": {
         "title": "客户商品编号",
         "singular": "客户商品编号",
@@ -3898,7 +3913,18 @@
       "markupBps": "加价",
       "defaultInsurance": "默认保险",
       "defaultSignature": "默认签名",
-      "customsDefaults": "报关默认值"
+      "customsDefaults": "报关默认值",
+      "channelId": "渠道",
+      "externalLocationId": "网店位置ID",
+      "externalName": "网店名称",
+      "syncInventory": "同步库存",
+      "fulfilsOrders": "履行订单",
+      "provider": "提供商",
+      "objectType": "记录类型",
+      "externalId": "外部ID",
+      "externalAccount": "外部账户",
+      "lastSyncedAt": "上次同步",
+      "nativeId": "OpenBooks记录"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "发行时贷记、兑换时借记的资产负债表科目。",
@@ -4053,6 +4079,16 @@
         "max": "最大值",
         "last": "最后一个值",
         "uniqueCount": "不同值数量"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "网关清算",
+        "revenue": "收入",
+        "discount": "折扣",
+        "shipping_income": "运费收入",
+        "gift_card_liability": "礼品卡负债",
+        "sales_tax_liability": "销售税负债",
+        "rounding": "尾差",
+        "refund_clearing": "退款清算"
       },
       "usageRatingPlanStatus": {
         "active": "有效",

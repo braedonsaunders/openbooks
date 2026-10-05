@@ -3235,6 +3235,21 @@
         "singular": "Identifiant d’article",
         "description": "Valeurs GTIN, UPC, EAN et internes exactes pour identifier les articles par scan."
       },
+            "channel-account-maps": {
+        "title": "Comptes comptables du canal",
+        "singular": "Compte comptable du canal",
+        "description": "Sur quel compte comptable chaque canal comptabilise, par passerelle et juridiction fiscale, avec dates d'effet."
+      },
+      "channel-locations": {
+        "title": "Emplacements du canal",
+        "singular": "Emplacement du canal",
+        "description": "Quel emplacement de stock exécute chaque emplacement de boutique, et s'il synchronise les stocks."
+      },
+      "external-links": {
+        "title": "Identifiants externes",
+        "singular": "Identifiant externe",
+        "description": "Identités de boutique et de prestataire rattachées aux articles et clients."
+      },
       "customer-item-refs": {
         "title": "Références client",
         "singular": "Référence client",
@@ -3853,7 +3868,18 @@
       "markupBps": "Majoration",
       "defaultInsurance": "Assurance par défaut",
       "defaultSignature": "Signature par défaut",
-      "customsDefaults": "Réglages de douane"
+      "customsDefaults": "Réglages de douane",
+      "channelId": "Canal",
+      "externalLocationId": "ID d'emplacement de la boutique",
+      "externalName": "Nom de la boutique",
+      "syncInventory": "Synchroniser le stock",
+      "fulfilsOrders": "Prépare les commandes",
+      "provider": "Fournisseur",
+      "objectType": "Type d'enregistrement",
+      "externalId": "ID externe",
+      "externalAccount": "Compte externe",
+      "lastSyncedAt": "Dernière synchronisation",
+      "nativeId": "Enregistrement OpenBooks"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "Le compte de bilan crédité à l’émission et débité au rachat.",
@@ -4008,6 +4034,16 @@
         "max": "Valeur la plus élevée",
         "last": "Dernière valeur",
         "uniqueCount": "Valeurs distinctes"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "Compensation passerelle",
+        "revenue": "Chiffre d'affaires",
+        "discount": "Remises",
+        "shipping_income": "Produits de livraison",
+        "gift_card_liability": "Dette cartes cadeaux",
+        "sales_tax_liability": "Dette de taxe de vente",
+        "rounding": "Arrondi",
+        "refund_clearing": "Compensation des remboursements"
       },
       "usageRatingPlanStatus": {
         "active": "Actif",
