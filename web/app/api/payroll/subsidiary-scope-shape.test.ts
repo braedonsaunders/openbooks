@@ -20,6 +20,7 @@ const mockSources = new Map<string, string>([
   `],
   ['mock:yearend', `
     export async function roeSourceScope() { throw new Error('roeSourceScope must not be reached for a shape refusal') }
+    export async function periodicReturnAccountResolver() { throw new Error('the return-account resolver must not be reached for a shape refusal') }
   `],
   ['mock:authz', `
     export function guardSubsidiaryScope() { return null }

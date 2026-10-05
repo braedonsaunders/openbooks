@@ -6,6 +6,11 @@ import { add, cmp, mulRate, neg, normalizeMoney } from "../money/money.ts";
 import { ratesForPayDate } from "./us/rates.ts";
 import { US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE } from "./us/opening-ytd.ts";
 import {
+  loadUsFilingAccounts,
+  resolveUsFederalFilingAccount,
+  resolveUsW2StateAccount,
+} from "./us/employer-scope.ts";
+import {
   effectiveFilingAccountSql,
   assertPayrollFilingAccountKnown,
   filingAccountRef,
@@ -432,12 +437,15 @@ async function openingEmployeeProfiles(
   orgId: string,
   employeeIds: readonly string[],
   country: string,
-): Promise<Map<string, { name: string; province: string; filingAccountId: string | null }>> {
+): Promise<Map<string, {
+  name: string; province: string; filingAccountId: string | null; subsidiaryId: string | null;
+}>> {
   if (employeeIds.length === 0) return new Map();
   const rows = (await db.execute<{
     employee_party_id: string; display_name: string; province: string | null; filing_account_id: string | null;
+    subsidiary_id: string | null;
   }>(sql`
-    select p.id as employee_party_id, p.display_name,
+    select p.id as employee_party_id, p.display_name, p.subsidiary_id,
            coalesce(prof.province, '') as province,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
       from parties p
@@ -450,6 +458,7 @@ async function openingEmployeeProfiles(
     name: row.display_name,
     province: row.province ?? "",
     filingAccountId: row.filing_account_id,
+    subsidiaryId: row.subsidiary_id,
   }]));
 }
 
@@ -1207,6 +1216,24 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
   }));
 }
 
+/**
+ * The account a committed stub's wages are filed under on a country's
+ * account-grouped periodic return. For the US that is the legal employer's
+ * EIN (see us/employer-scope.ts) — the stub may name a state SUI account —
+ * so the 941 builder and the subsidiary-scope guard that authorizes its rows
+ * resolve a row's source stubs through this one function. Every other
+ * country files under the account the stub records.
+ */
+export async function periodicReturnAccountResolver(
+  orgId: string,
+  country: string,
+): Promise<(stubAccountId: string | null, employeeSubsidiaryId: string | null) => string | null> {
+  if (country !== "US") return (stubAccountId) => stubAccountId;
+  const accounts = await loadUsFilingAccounts(db, orgId);
+  return (stubAccountId, employeeSubsidiaryId) =>
+    resolveUsFederalFilingAccount(accounts, stubAccountId, employeeSubsidiaryId);
+}
+
 export interface Form941Quarter {
   quarter: 1 | 2 | 3 | 4;
   /** EIN the quarter's return is filed under; null = unassigned. */
@@ -1230,6 +1257,10 @@ export interface Form941Quarter {
  * to file it as, understating one return and overstating the other. `t4Returns`
  * and `w2Slips` both scope per account; this is the same scoping, and
  * `form941Returns` below is the same per-account assembly `t4Returns` does.
+ *
+ * The account is the legal employer's EIN, not the account the stub names: a
+ * profile assigned to a state SUI account still has its federal wages and
+ * FICA reported on its employer's 941 (see us/employer-scope.ts).
  */
 export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
@@ -1237,6 +1268,7 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select extract(quarter from s.pay_date)::int as quarter,
            s.filing_account_id as filing_account_id,
+           p.subsidiary_id as employee_subsidiary_id,
            -- 941 line 2 is FIT-able wages: taxable earnings less the pack's
            -- income-reducing pre-tax deferrals (us/pack.ts deductionTreatments).
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -1263,21 +1295,40 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
                 where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'medicare_addl')) as additional_medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
-     group by 1, 2 order by 2 nulls first, 1
+     group by 1, 2, 3
   `));
-  return rows.rows.map((row) => ({
-    quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
-    filingAccountId: (row.filing_account_id as string | null) ?? null,
-    wages: num(row.wages),
-    federalIncomeTax: num(row.fit),
-    ssWages: num(row.ss_wages),
-    ssTax: num(row.ss_tax),
-    medicareWages: num(row.medicare_wages),
-    medicareTax: num(row.medicare_tax),
-    additionalMedicareWages: num(row.additional_medicare_wages),
-    additionalMedicareTax: num(row.additional_medicare_tax),
-  }));
+  const returnAccountOf = await periodicReturnAccountResolver(orgId, "US");
+  const byReturn = new Map<string, Form941Quarter>();
+  for (const row of rows.rows) {
+    const quarter = Number(row.quarter) as 1 | 2 | 3 | 4;
+    const filingAccountId = returnAccountOf(
+      (row.filing_account_id as string | null) ?? null,
+      (row.employee_subsidiary_id as string | null) ?? null,
+    );
+    const key = `${filingAccountId ?? ""}:${quarter}`;
+    const prior = byReturn.get(key);
+    const sum = (field: keyof Omit<Form941Quarter, "quarter" | "filingAccountId">, value: unknown) =>
+      prior ? add(prior[field], num(value)) : num(value);
+    byReturn.set(key, {
+      quarter,
+      filingAccountId,
+      wages: sum("wages", row.wages),
+      federalIncomeTax: sum("federalIncomeTax", row.fit),
+      ssWages: sum("ssWages", row.ss_wages),
+      ssTax: sum("ssTax", row.ss_tax),
+      medicareWages: sum("medicareWages", row.medicare_wages),
+      medicareTax: sum("medicareTax", row.medicare_tax),
+      additionalMedicareWages: sum("additionalMedicareWages", row.additional_medicare_wages),
+      additionalMedicareTax: sum("additionalMedicareTax", row.additional_medicare_tax),
+    });
+  }
+  // Unassigned first, then by account, then by quarter — the previous order.
+  return [...byReturn.values()].sort((a, b) =>
+    (a.filingAccountId === null ? 0 : 1) - (b.filingAccountId === null ? 0 : 1)
+    || (a.filingAccountId ?? "").localeCompare(b.filingAccountId ?? "")
+    || a.quarter - b.quarter);
 }
 
 /** One filed Form 941 set: the quarters of a single EIN. */
@@ -1509,50 +1560,38 @@ export function openingAccountYtdIntoW2Slip(
  * entry (never zeros pretending to be filed). Entries keep their own wages
  * and withholding — two states are never totalled into one row.
  */
-export function buildW2StateLines(
-  groups: readonly { province: string; wages: string; stateTax: string }[],
-  localsOf: (province: string) => W2LocalLine[],
-  stateIdOf: (province: string) => string | null,
+export function buildW2StateLines<G extends { province: string; wages: string; stateTax: string }>(
+  groups: readonly G[],
+  localsOf: (group: G) => W2LocalLine[],
+  stateIdOf: (group: G) => string | null,
 ): W2StateLine[] {
   return groups
     // A group with no work-state code names no revenue department: its wages
     // stay in the federal boxes and it earns no state entry.
     .filter((group) => group.province !== "")
-    .filter((group) => cmp(group.stateTax, "0") !== 0 || localsOf(group.province).length > 0)
+    .filter((group) => cmp(group.stateTax, "0") !== 0 || localsOf(group).length > 0)
     .map((group) => ({
       state: group.province,
-      employerStateId: stateIdOf(group.province),
+      employerStateId: stateIdOf(group),
       box16StateWages: group.wages,
       box17StateIncomeTax: group.stateTax,
-      localLines: localsOf(group.province),
+      localLines: localsOf(group),
     }));
-}
-
-/**
- * The employer's state-assigned ID numbers for W-2 box 15: the org's active
- * SUI filing accounts (`us_state_sui`, which requires a region) keyed by
- * state code. A state with no SUI account on file has no ID to print — the
- * slip names the state with no ID rather than inventing one.
- */
-async function usEmployerStateIds(orgId: string): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ state_code: string | null; account_number: string }>(sql`
-    select state_code, account_number
-      from payroll_filing_accounts
-     where org_id = ${orgId} and country = 'US' and program_type = 'us_state_sui'
-       and is_active and state_code is not null
-  `));
-  return new Map(rows.rows.map((row) => [row.state_code!, row.account_number]));
 }
 
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  // Per (employee, EIN account, work state): the federal boxes aggregate up to
-  // the slip, while boxes 15–17 stay per state — the paper W-2's own shape is
-  // a repeating state group on the one copy, so grouping here is what keeps a
-  // mid-year mover's two states from being smashed into one row.
+  // Per (employee, stub filing account, work state), then folded per
+  // (employee, EIN): a W-2 is filed by the legal employer's EIN, so stubs
+  // under the EIN and under each of its state SUI accounts make ONE slip —
+  // the slip the per-EIN carry-ins land on. Boxes 15–17 stay per (work
+  // state, state account) — the paper W-2's own shape is a repeating state
+  // group on the one copy, so a mid-year mover's two states are never
+  // smashed into one row.
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
+           p.subsidiary_id as employee_subsidiary_id,
            s.province as province,
            s.filing_account_id as filing_account_id,
            min(s.pay_date) as first_pay_date,
@@ -1589,7 +1628,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
-      group by s.employee_party_id, p.display_name, s.filing_account_id, s.province
+      group by s.employee_party_id, p.display_name, p.subsidiary_id, s.filing_account_id, s.province
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date), s.province
@@ -1636,14 +1675,26 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
               l.statutory_reporting_code->>'label'
      order by l.statutory_reporting_code->>'code'
   `));
+  const usAccounts = await loadUsFilingAccounts(db, orgId);
+  const accountNumbers = new Map(usAccounts.map((account) => [account.id, account.accountNumber]));
+  const subsidiaryOf = new Map(rows.rows.map((row) =>
+    [String(row.employee_party_id), (row.employee_subsidiary_id as string | null) ?? null]));
+  const federalOf = (employeePartyId: string, stubAccountId: string | null) =>
+    resolveUsFederalFilingAccount(usAccounts, stubAccountId, subsidiaryOf.get(employeePartyId) ?? null);
+  const stateAccountOf = (employeePartyId: string, stubAccountId: string | null, province: string) =>
+    resolveUsW2StateAccount(usAccounts, stubAccountId, subsidiaryOf.get(employeePartyId) ?? null, province);
   const box12BySlip = new Map<string, { boxCode: string; code: string; label: string; value: string }[]>();
   for (const row of reportingRows.rows) {
-    const key = `${row.employee_party_id}:${row.filing_account_id ?? ""}`;
+    const key = `${row.employee_party_id}:${federalOf(row.employee_party_id, row.filing_account_id) ?? ""}`;
     const entries = box12BySlip.get(key) ?? [];
-    entries.push({ boxCode: row.box_code, code: row.code, label: row.label, value: num(row.amount) });
+    // Two stub accounts of one EIN report one box 12 amount per code.
+    const same = entries.find((entry) =>
+      entry.boxCode === row.box_code && entry.code === row.code && entry.label === row.label);
+    if (same) same.value = add(same.value, num(row.amount));
+    else entries.push({ boxCode: row.box_code, code: row.code, label: row.label, value: num(row.amount) });
     box12BySlip.set(key, entries);
   }
-  // Boxes 18–20, one row per (employee, EIN account, work state, locality):
+  // Boxes 18–20, per (employee, EIN, work state, state account, locality):
   // the locality is the withheld line's own description and the wages are the
   // taxable earnings of the stubs in this state carrying that locality's line.
   const localRows = (await db.execute<Record<string, unknown>>(sql`
@@ -1679,7 +1730,9 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
      group by w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description
      order by l.description
    `));
-  const stateIds = await usEmployerStateIds(orgId);
+  const stateGroupKey = (employeePartyId: string, stubAccountId: string | null, province: string) =>
+    `${employeePartyId}:${federalOf(employeePartyId, stubAccountId) ?? ""}:${province}:`
+    + (stateAccountOf(employeePartyId, stubAccountId, province) ?? "");
   const localByGroup = new Map<string, W2LocalLine[]>();
   for (const row of localRows.rows) {
     const tax = num(row.local_tax);
@@ -1688,13 +1741,20 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       row.local_wages_unknown === true ? null : num(row.local_wages),
       String(row.employee_name), String(row.province), String(row.description),
     );
-    const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}:${String(row.province ?? "")}`;
+    const key = stateGroupKey(
+      String(row.employee_party_id), (row.filing_account_id as string | null) ?? null, String(row.province ?? ""));
     const list = localByGroup.get(key) ?? [];
-    list.push({
-      locality: String(row.description),
-      box18LocalWages: localWages,
-      box19LocalIncomeTax: tax,
-    });
+    const same = list.find((line) => line.locality === String(row.description));
+    if (same) {
+      same.box18LocalWages = add(same.box18LocalWages, localWages);
+      same.box19LocalIncomeTax = add(same.box19LocalIncomeTax, tax);
+    } else {
+      list.push({
+        locality: String(row.description),
+        box18LocalWages: localWages,
+        box19LocalIncomeTax: tax,
+      });
+    }
     localByGroup.set(key, list);
   }
   // The carry-in lands on boxes 1 / 2 / 3 / 5. The SS and Medicare wage bases
@@ -1714,7 +1774,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     ? usFicaSplitRates(taxYear)
     : null;
   type StateGroup = {
-    province: string; wages: string; fit: string; ssWages: string; ssTax: string;
+    province: string; stateKey: string; stateAccountId: string | null;
+    wages: string; fit: string; ssWages: string; ssTax: string;
     medicareWages: string; medicareTax: string; stateTax: string; stubIds: string[];
   };
   const groupsBySlip = new Map<string, {
@@ -1722,15 +1783,21 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     groups: StateGroup[];
   }>();
   for (const row of rows.rows) {
-    const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}`;
+    const employeePartyId = String(row.employee_party_id);
+    const stubAccountId = (row.filing_account_id as string | null) ?? null;
+    const province = String(row.province ?? "");
+    const filingAccountId = federalOf(employeePartyId, stubAccountId);
+    const key = `${employeePartyId}:${filingAccountId ?? ""}`;
     const slip = groupsBySlip.get(key) ?? {
-      employeePartyId: String(row.employee_party_id),
+      employeePartyId,
       employeeName: String(row.display_name),
-      filingAccountId: (row.filing_account_id as string | null) ?? null,
+      filingAccountId,
       groups: [],
     };
     slip.groups.push({
-      province: String(row.province ?? ""),
+      province,
+      stateKey: stateGroupKey(employeePartyId, stubAccountId, province),
+      stateAccountId: stateAccountOf(employeePartyId, stubAccountId, province),
       wages: num(row.wages),
       fit: num(row.fit),
       ssWages: num(row.ss_wages),
@@ -1760,7 +1827,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     slip.groups
       .filter((group) => group.province === ""
         && (cmp(group.stateTax, "0") !== 0
-          || (localByGroup.get(`${slip.employeePartyId}:${slip.filingAccountId ?? ""}:`) ?? []).length > 0))
+          || (localByGroup.get(group.stateKey) ?? []).length > 0))
       .map((group) => ({ slip, group })),
   );
   if (unattributed.length > 0) {
@@ -1775,12 +1842,23 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   }
   const total = (groups: StateGroup[], pick: (group: StateGroup) => string) =>
     groups.reduce((acc, group) => add(acc, pick(group)), "0");
-  const toStateLines = (employeePartyId: string, filingAccountId: string | null, groups: StateGroup[]): W2StateLine[] =>
-    buildW2StateLines(
-      groups,
-      (province) => localByGroup.get(`${employeePartyId}:${filingAccountId ?? ""}:${province}`) ?? [],
-      (province) => stateIds.get(province) ?? null,
+  // One state line per (work state, state account): stubs filed under the EIN
+  // and under the state's own SUI account fold together, while two state
+  // accounts for one state each print their own box 15 ID.
+  const toStateLines = (groups: StateGroup[]): W2StateLine[] => {
+    const merged = new Map<string, StateGroup>();
+    for (const group of groups) {
+      const prior = merged.get(group.stateKey);
+      merged.set(group.stateKey, prior
+        ? { ...prior, wages: add(prior.wages, group.wages), stateTax: add(prior.stateTax, group.stateTax) }
+        : group);
+    }
+    return buildW2StateLines(
+      [...merged.values()],
+      (group) => localByGroup.get(group.stateKey) ?? [],
+      (group) => (group.stateAccountId ? accountNumbers.get(group.stateAccountId) ?? null : null),
     );
+  };
   const stubSlips: W2Slip[] = [...groupsBySlip.values()].map((slip) => {
     // Sorted, like the previous `array_agg(distinct s.province order by
     // s.province)` — the display string must not move for multi-state slips.
@@ -1798,7 +1876,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       box5MedicareWages: total(slip.groups, (group) => group.medicareWages),
       box6MedicareTax: total(slip.groups, (group) => group.medicareTax),
       box12Lines: box12BySlip.get(`${slip.employeePartyId}:${slip.filingAccountId ?? ""}`) ?? [],
-      stateLines: toStateLines(slip.employeePartyId, slip.filingAccountId, slip.groups),
+      stateLines: toStateLines(slip.groups),
     };
   });
   const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "US");
@@ -1810,7 +1888,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       employeeName: profile?.name ?? employeePartyId,
       states,
       state: states.join(" / "),
-      filingAccountId: profile?.filingAccountId ?? null,
+      filingAccountId: resolveUsFederalFilingAccount(
+        usAccounts, profile?.filingAccountId ?? null, profile?.subsidiaryId ?? null),
       box1Wages: "0",
       box2FederalIncomeTax: "0",
       box3SsWages: "0",
