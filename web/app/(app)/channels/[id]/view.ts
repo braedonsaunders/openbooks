@@ -6,12 +6,20 @@ import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
-export type ChannelWorkspaceData = Record<string, never>
+export type ChannelWorkspaceData = {
+  channelId: string
+  tab: ChannelWorkspaceTab
+  sp: Record<string, string | string[] | undefined>
+}
 
-export async function loadChannelWorkspace(): Promise<ChannelWorkspaceData> {
+export async function loadChannelWorkspace(
+  id: string,
+  sp: Record<string, string | string[] | undefined>,
+): Promise<ChannelWorkspaceData> {
+  await assertWorkspaceChannel(id)
   const authz = await requirePermission('channels.read')
   await requireFeatureEnabled(authz.user.orgId, 'salesChannels')
-  return {}
+  return { channelId: id, tab: resolveWorkspaceTab(sp.tab), sp }
 }
 
 // Connector-contributed tabs ride the same `?tab=` slot under an
@@ -20,16 +28,12 @@ export async function loadChannelWorkspace(): Promise<ChannelWorkspaceData> {
 const WORKSPACE_TABS = ['overview', 'activity', 'settings', 'adapter:products', 'adapter:locations'] as const
 export type ChannelWorkspaceTab = (typeof WORKSPACE_TABS)[number]
 
-export function channelWorkspaceSpec(
-  channelId: string,
-  tab: string,
-  sp: Record<string, string | string[] | undefined>,
-): PageSpec {
+export function channelWorkspaceSpec(data: ChannelWorkspaceData): PageSpec {
   return page({
     route: '/channels/[id]',
     layout: 'bare',
     header: [],
-    body: [widgetBlock('channel-workspace', { channelId, tab, sp })],
+    body: [widgetBlock('channel-workspace', { channelId: data.channelId, tab: data.tab, sp: data.sp })],
   })
 }
 
