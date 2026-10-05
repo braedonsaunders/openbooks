@@ -13,6 +13,7 @@ import {
   recordPaymentSettlement,
   rollbackPaymentRun,
   sepaOriginator,
+  spreadsheetRegisterCsv,
 } from "./operations.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -901,6 +902,15 @@ const NACHA_ORIGINATOR = {
   companyName: "EXAMPLE CONST",
   companyId: "1123456789",
 };
+
+test("payment registers neutralise payee text a spreadsheet would execute", () => {
+  const csv = spreadsheetRegisterCsv([
+    ["payee", "amount"],
+    ['=HYPERLINK("https://evil.example","Pay")', "-12.50"],
+    ["@SUM(A1)", "100.00"],
+  ]);
+  assert.equal(csv, `payee,amount\r\n"'=HYPERLINK(""https://evil.example"",""Pay"")",-12.50\r\n'@SUM(A1),100.00\r\n`);
+});
 
 test("a complete NACHA debit originator parses, trimmed, with the corporate SEC default", () => {
   const settings = nachaOriginator({ ...NACHA_ORIGINATOR, companyName: "  EXAMPLE CONST  " });

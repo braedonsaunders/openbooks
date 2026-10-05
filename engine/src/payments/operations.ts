@@ -32,6 +32,7 @@ import { createPaymentRun } from "./run-creation.ts";
 import { runRecordFlows } from "../flows/run.ts";
 import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
 import { paymentRunSubjectKind } from "../flows/payment-runs-adapter.ts";
+import { guardCsvCell } from "@openbooks/reports";
 export { PAYMENT_FILE_STATUSES } from "./file-statuses.ts";
 
 export type BuiltInPaymentRail =
@@ -608,6 +609,18 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/**
+ * Render a register an operator opens in a spreadsheet. Payee names and
+ * references are user-authored, so every text cell passes the shared
+ * formula-injection guard: a payee named `=HYPERLINK(...)` must never reach
+ * a spreadsheet as a live formula. Positive Pay files are not rendered here:
+ * they are bank input whose payee text is compared with the presented
+ * cheque, so they carry the payee exactly as issued.
+ */
+export function spreadsheetRegisterCsv(rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
+  return rows.map((r) => r.map((cell) => csvCell(guardCsvCell(String(cell ?? "")))).join(",")).join("\r\n") + "\r\n";
+}
+
 function bankCents(amount: string): bigint {
   const units = toUnits(amount);
   if (units <= 0n) throw new PaymentError("bank-file amounts must be positive");
@@ -633,7 +646,7 @@ function genericRegister(ctx: FormatContext): { filename: string; content: strin
   const runNumber = String(ctx.run.run_number);
   return {
     filename: `${ctx.format.code}-${runNumber}.${ctx.format.extension}`,
-    content: [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n",
+    content: spreadsheetRegisterCsv([header, ...rows]),
     contentType: ctx.format.contentType,
   };
 }
@@ -644,7 +657,7 @@ function chequeRegister(ctx: FormatContext): { filename: string; content: string
   const rows = ctx.payments.map((p) => [p.reference, p.partyName, p.amount, p.currency, paymentDate]);
   return {
     filename: `CHEQUE-${String(ctx.run.run_number)}.${ctx.format.extension}`,
-    content: [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n",
+    content: spreadsheetRegisterCsv([header, ...rows]),
     contentType: ctx.format.contentType,
   };
 }
