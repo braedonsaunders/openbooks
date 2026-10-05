@@ -3709,7 +3709,7 @@
       "benefitFrequency": "Frecuencia de medición: mensual, trimestral, anual, fin de proyecto o manual.",
       "benefitPeriodBasis": "Los programas trimestrales y anuales nombran períodos de calendario o de ejercicio.",
       "paymentKind": "Los beneficios en especie conservan el tratamiento fiscal configurado, pero su valor no se paga en efectivo.",
-      "nonCashAccountId": "Use un activo prepagado o un pasivo de compensación del proveedor. Las compras al proveedor deben utilizar la misma cuenta para evitar contabilizar el gasto dos veces.",
+      "nonCashAccountId": "Use un activo prepagado, un pasivo de compensación con el proveedor o una cuenta de contrapartida de gasto. La nómina carga el gasto de la prestación y abona esta cuenta; las compras al proveedor deben usar la misma cuenta de compensación para no contar el gasto dos veces. Una contrapartida de gasto (distinta de la cuenta de gasto) sirve para una prestación cuyo coste ya está contabilizado como gasto, como el uso personal de un vehículo de empresa.",
       "zonedDateTime": "Introduzca una fecha y hora ISO con Z o un desplazamiento explícito, como 2026-10-01T09:00:00-04:00. Se conserva el desplazamiento.",
       "ianaTimezone": "Introduzca una zona horaria IANA, como Europe/Madrid."
     },

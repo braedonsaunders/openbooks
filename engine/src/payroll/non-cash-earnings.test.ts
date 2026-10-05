@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseMoney } from "../money/brands.ts";
 import { protectedBase } from "./limits.ts";
-import { cashGrossEarnings, nonCashEarnings } from "./non-cash-earnings.ts";
+import { cashGrossEarnings, nonCashEarnings, nonCashOffsetProblem } from "./non-cash-earnings.ts";
 
 const lines = [
   { kind: "earning" as const, amount: parseMoney("2400"), paymentKind: "cash" as const },
@@ -36,4 +36,13 @@ test("take-home protection cannot treat non-cash benefits as available cash", ()
 
 test("a configured gross protection basis keeps its independent reported-gross meaning", () => {
   assert.equal(protectedBase("gross", lines), "2500.0000");
+});
+
+test("a non-cash offset may be a prepaid asset, a provider clearing liability or a distinct contra-expense", () => {
+  assert.equal(nonCashOffsetProblem({ id: "prepaid", type: "asset_current_other" }, "wages"), null);
+  assert.equal(nonCashOffsetProblem({ id: "premiums-payable", type: "liability_current_other" }, "wages"), null);
+  assert.equal(nonCashOffsetProblem({ id: "vehicle-contra", type: "expense" }, "vehicle-benefit"), null);
+  assert.match(String(nonCashOffsetProblem({ id: "bank", type: "asset_bank" }, "wages")), /prepaid asset, a provider clearing liability, or a contra-expense/);
+  assert.match(String(nonCashOffsetProblem(undefined, "wages")), /prepaid asset/);
+  assert.match(String(nonCashOffsetProblem({ id: "vehicle-benefit", type: "expense" }, "vehicle-benefit")), /different account from the earning's expense account/);
 });

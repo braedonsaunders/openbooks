@@ -3754,7 +3754,7 @@
       "benefitFrequency": "How often the program measures: monthly, quarterly, annual, project complete, or manual.",
       "benefitPeriodBasis": "Quarterly and annual programs name calendar or fiscal periods so settlement and payroll agree.",
       "paymentKind": "Non-cash earnings retain the configured statutory treatment but do not pay their value as cash.",
-      "nonCashAccountId": "Use a prepaid asset or provider clearing liability. Payroll debits benefit expense and credits this account; provider purchases must use the same clearing account to avoid counting expense twice.",
+      "nonCashAccountId": "Use a prepaid asset, a provider clearing liability, or a contra-expense account. Payroll debits benefit expense and credits this account; provider purchases must use the same clearing account to avoid counting expense twice. A contra-expense (different from the expense account) suits a benefit whose cost is already expensed, such as personal use of a company vehicle.",
       "zonedDateTime": "Enter an ISO timestamp with Z or an explicit offset, such as 2026-10-01T09:00:00-04:00. The offset is preserved.",
       "ianaTimezone": "Enter an IANA time zone, such as America/Toronto."
     },

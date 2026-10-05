@@ -4,6 +4,34 @@ import { add, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import type { Line } from "./run-stub-records.ts";
 
+/**
+ * Where the credit side of a non-cash earning may post. A prepaid asset
+ * (the benefit was paid for in advance), a provider clearing liability (a
+ * premium owed to an insurer or plan) or a contra-expense account (a benefit
+ * whose cost the employer already expensed elsewhere, such as personal use
+ * of a company vehicle, so the payroll entry nets to nothing).
+ */
+const NON_CASH_OFFSET_ACCOUNT_TYPES = new Set([
+  "asset_current_other", "asset_other", "liability_current_other", "liability_long_term",
+  "cogs", "expense", "expense_other",
+]);
+const CONTRA_EXPENSE_TYPES = new Set(["cogs", "expense", "expense_other"]);
+
+/**
+ * Why a non-cash earning's offset account cannot be used, or null. A
+ * contra-expense offset must differ from the earning's expense account:
+ * posting both sides to one account would record nothing.
+ */
+export function nonCashOffsetProblem(offset: { id: string; type: string } | undefined, expenseAccountId: string | null): string | null {
+  if (!offset || !NON_CASH_OFFSET_ACCOUNT_TYPES.has(offset.type)) {
+    return "the non-cash offset account must be an active posting prepaid asset, a provider clearing liability, or a contra-expense account";
+  }
+  if (CONTRA_EXPENSE_TYPES.has(offset.type) && expenseAccountId !== null && offset.id === expenseAccountId) {
+    return "a contra-expense offset must be a different account from the earning's expense account — posting both sides to one account records nothing";
+  }
+  return null;
+}
+
 /** Earnings paid by another instrument are reported and taxed by the same pack as wages. */
 export function nonCashEarnings(lines: readonly Pick<Line, "kind" | "amount" | "paymentKind" | "accrualOnly">[]): string {
   return sum(lines.filter((line) => line.kind === "earning" && !line.accrualOnly && line.paymentKind === "non_cash").map((line) => line.amount));
@@ -47,8 +75,10 @@ export async function applyEarningPaymentKinds(
                 or (a.subsidiary_include_children and a.subsidiary_id in (select id from ancestors))) as in_scope
           from accounts a where a.org_id = ${args.orgId} and a.id = ${accountId} and a.is_active and not a.is_summary
       `)).rows[0];
-      if (!account || !["asset_current_other", "asset_other", "liability_current_other", "liability_long_term"].includes(account.type)) {
-        throw new PayrollError(`non-cash component "${String(component.name)}" requires an active posting prepaid asset or provider clearing liability — configure its non-cash account in Payroll components; an expense account would count the benefit twice`);
+      const expenseAccountId = component.expense_account_id ?? args.wageExpenseAccountId;
+      const problem = nonCashOffsetProblem(account ? { id: accountId, type: account.type } : undefined, expenseAccountId == null ? null : String(expenseAccountId));
+      if (problem) {
+        throw new PayrollError(`non-cash component "${String(component.name)}": ${problem} — configure its non-cash account in Payroll components`);
       }
       if (!account.in_scope || (account.currency_restriction !== null && account.currency_restriction !== args.currency)) {
         throw new PayrollError(`non-cash component "${String(component.name)}" has a clearing account outside the pay run's entity or currency — select an account available to this entity and ${args.currency}`);

@@ -16,6 +16,7 @@ import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-regis
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
+import { nonCashOffsetProblem } from '@openbooks/engine/src/payroll/non-cash-earnings.ts'
 import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { recognitionRulePolicyProblem } from '@openbooks/engine/src/revenue/recognition-limits.ts'
 import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
@@ -809,17 +810,26 @@ export async function validateEntityIntegrity(
       ? (body.statutoryExemptionCategory ? String(body.statutoryExemptionCategory) : null)
       : ((currentComponent?.statutory_exemption_category as string | null) ?? null)
     const componentKind = String(body.kind ?? currentComponent?.kind ?? '')
-    const paymentKind = String(body.paymentKind ?? currentComponent?.payment_kind ?? 'cash')
+    // A blank payment representation is unspecified, not invalid: it only
+    // applies to earnings, so a deduction or employer contribution imported
+    // or saved without one keeps the stored value or the cash default.
+    const paymentKind = body.paymentKind === undefined || body.paymentKind === null || body.paymentKind === ''
+      ? String(currentComponent?.payment_kind ?? 'cash')
+      : String(body.paymentKind)
     const nonCashAccount = body.nonCashAccountId === undefined
       ? currentComponent?.non_cash_account_id ?? null : body.nonCashAccountId || null
     if (!['cash', 'non_cash'].includes(paymentKind)) return 'Choose cash or non-cash as the earning payment representation'
     if (paymentKind === 'non_cash') {
       if (componentKind !== 'earning' || currentComponent?.system_key != null) return 'Non-cash representation requires a user earning component; statutory contributions and deductions cannot create non-cash earnings'
-      if (!nonCashAccount || !isUuid(String(nonCashAccount))) return 'Choose a prepaid asset or provider clearing liability for the non-cash earning'
+      if (!nonCashAccount || !isUuid(String(nonCashAccount))) return 'Choose a prepaid asset, a provider clearing liability, or a contra-expense account for the non-cash earning'
       const account = (await executor.execute<{ type: string }>(sql`
         select type from accounts where org_id = ${orgId} and id = ${String(nonCashAccount)} and is_active and not is_summary
       `)).rows[0]
-      if (!account || !['asset_current_other', 'asset_other', 'liability_current_other', 'liability_long_term'].includes(account.type)) return 'The non-cash account must be an active posting prepaid asset or provider clearing liability; an expense account would count the benefit twice'
+      const expenseAccount = body.expenseAccountId === undefined
+        ? (currentComponent?.expense_account_id as string | null | undefined) ?? null
+        : (body.expenseAccountId ? String(body.expenseAccountId) : null)
+      const offsetProblem = nonCashOffsetProblem(account ? { id: String(nonCashAccount), type: account.type } : undefined, expenseAccount)
+      if (offsetProblem) return offsetProblem.charAt(0).toUpperCase() + offsetProblem.slice(1)
     } else if (nonCashAccount !== null) {
       return 'Cash earnings must have no non-cash clearing account; clear the account before saving cash representation'
     }

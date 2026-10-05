@@ -3709,7 +3709,7 @@
       "benefitFrequency": "Fréquence de mesure : mensuelle, trimestrielle, annuelle, fin de projet ou manuelle.",
       "benefitPeriodBasis": "Les programmes trimestriels et annuels nomment périodes de calendrier ou d’exercice.",
       "paymentKind": "Les avantages en nature conservent le traitement fiscal configuré sans verser leur valeur en espèces.",
-      "nonCashAccountId": "Utilisez un actif payé d’avance ou un passif de compensation du fournisseur. Les achats auprès du fournisseur doivent utiliser le même compte afin de ne pas comptabiliser la charge deux fois.",
+      "nonCashAccountId": "Utilisez un actif payé d’avance, un passif de compensation du fournisseur ou un compte de contrepartie de charge. La paie débite la charge d’avantage et crédite ce compte; les achats auprès du fournisseur doivent utiliser le même compte de compensation pour éviter de compter la charge deux fois. Une contrepartie de charge (distincte du compte de charge) convient à un avantage dont le coût est déjà passé en charge, comme l’usage personnel d’un véhicule de l’entreprise.",
       "zonedDateTime": "Saisissez un horodatage ISO avec Z ou un décalage explicite, par exemple 2026-10-01T09:00:00-04:00. Le décalage est conservé.",
       "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris."
     },
