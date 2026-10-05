@@ -127,6 +127,12 @@ export const EXCLUDE = new Set([
   "hrm_survey_invitations",
   "hrm_document_signers",
   "time_kiosks",
+  // Outbound webhook transport is never copied: endpoints carry sealed
+  // signing secrets and production subscriber URLs a sandbox must never
+  // deliver to, and events plus deliveries are in-flight operational rows.
+  "webhook_endpoints",
+  "webhook_events",
+  "webhook_deliveries",
 ]);
 
 /**
