@@ -619,3 +619,42 @@ test("a standard issue spanning layers relieves the GL by exactly what the layer
     await dropScratchOrgReporting(org.orgId);
   }
 });
+
+test("landed cost for a receipt lands on that receipt's layers, and its sold share goes to COGS", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const item = org.items.fifo, loc = org.stockLocationId;
+    const documentId = randomUUID(), lineId = randomUUID();
+    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
+      values (${documentId}, ${org.orgId}, 'journal', 'draft', ${"RCV-" + documentId.slice(0, 8)}, ${org.subsidiaryId}, ${org.date}, 'CAD', '100', '0', '100')`);
+    await db.execute(sql`insert into document_lines (id, org_id, document_id, line_number, account_id, subsidiary_id, amount, quantity, unit_price, tax_amount, tax_input_amount)
+      values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.invAsset}, ${org.subsidiaryId}, '100', '10', '10', '0', '0')`);
+    const receive = (documentLineId: string | null) => receiveInventory(org.orgId, null, {
+      itemId: item, stockLocationId: loc, quantity: "10", unitCost: "10", subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing, date: org.date, documentLineId,
+    });
+    const first = await receive(null);
+    const second = await receive(lineId);
+    const layer = async (movementId: string) => (await db.execute<{ remaining: string; unit_cost: string }>(sql`
+      select remaining_quantity::text remaining, unit_cost::text from cost_layers where org_id=${org.orgId} and source_movement_id=${movementId}`)).rows;
+    const voucher = (amount: string) => postLandedCostVoucher(org.orgId, null, {
+      amount, basis: "value", freightAccountId: org.accounts.freight, subsidiaryId: org.subsidiaryId,
+      voucherDate: org.date, sourceDocumentLineId: lineId, targets: [{ itemId: item, stockLocationId: loc }],
+    });
+    await issueInventory(org.orgId, null, { itemId: item, stockLocationId: loc, quantity: "5", subsidiaryId: org.subsidiaryId, date: org.date });
+    // Freight on the second receipt: the first receipt's open units keep their cost.
+    await voucher("20");
+    assert.deepEqual(await layer(first.movementId), [{ remaining: "5.0000", unit_cost: "10.0000" }]);
+    assert.deepEqual(await layer(second.movementId), [{ remaining: "10.0000", unit_cost: "12.0000" }]);
+    // Half of the second receipt is sold; half of a later freight bill is COGS.
+    await issueInventory(org.orgId, null, { itemId: item, stockLocationId: loc, quantity: "10", subsidiaryId: org.subsidiaryId, date: org.date });
+    const late = await voucher("10");
+    const cogs = (await db.execute<{ amount: string }>(sql`select coalesce(sum(amount),0)::text amount from journal_lines
+      where org_id=${org.orgId} and entry_id=${late.entryId} and account_id=${org.accounts.cogs}`)).rows[0]!.amount;
+    assert.equal(cogs, "5.0000");
+    assert.equal((await getOnHand(org.orgId, item, loc)).value, "65.0000"); // 5 x 12 + 5
+    await assertGlEqualsLayers(org);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
