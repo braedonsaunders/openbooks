@@ -194,7 +194,7 @@ async function receiptPieces(
       if (!selection.lotNumber?.trim()) refuse("Lot-tracked item " + itemName + " requires a lot number.", "receipt_lot_required", "Enter a lot number for the receipt.");
       lotId = await ensureLot(orgId, itemId, selection.lotNumber, selection.expiresOn ?? null, actorId);
     } else {
-      if (q !== "1" || !selection.serialNumber?.trim()) refuse("Serial-tracked item " + itemName + " requires one serial number per unit.", "receipt_serial_required", "Enter a serial number for each finished unit.");
+      if (cmp(q, "1") !== 0 || !selection.serialNumber?.trim()) refuse("Serial-tracked item " + itemName + " requires one serial number per unit.", "receipt_serial_required", "Enter a serial number for each finished unit.");
       serialId = await ensureSerial(orgId, itemId, selection.serialNumber, locationId, actorId);
     }
     await validateTrackingSelection(tx as Runner, orgId, itemId, locationId, profile,
