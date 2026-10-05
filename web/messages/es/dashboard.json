@@ -102,7 +102,9 @@
     "forensicRiskHint": "{flagged} marcados · {value} en riesgo · {period}",
     "forensicRiskExcluded": "Excluye los elementos sin configurar: {detectors}",
     "duplicatePayments": "Pagos duplicados",
-    "duplicatePaymentsHint": "{value} en riesgo · {period}"
+    "duplicatePaymentsHint": "{value} en riesgo · {period}",
+    "utilization": "Utilización",
+    "overheadAbsorption": "Absorción de gastos generales"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -220,7 +222,9 @@
     "kpiVendorPayment": "Tasa de pago puntual y gasto pagado tarde del desempeño de proveedores.",
     "kpiSpendVelocity": "Alertas de gasto abiertas y ahorro potencial de la velocidad del gasto.",
     "forensicRisk": "Puntuación global de riesgo de Sentinel, con el recuento marcado y el valor en riesgo.",
-    "duplicatePayments": "Grupos de pagos duplicados y su valor en riesgo."
+    "duplicatePayments": "Grupos de pagos duplicados y su valor en riesgo.",
+    "utilization": "% facturable de la empresa desde Utilización, con su recuento de anomalías.",
+    "overheadAbsorption": "Carga absorbida frente a la total desde True Cost, con la brecha."
   },
   "grid": {
     "customizing": "Personalizando tu panel",
@@ -374,5 +378,11 @@
     "actual": "Real",
     "variance": "Desviación",
     "offTrack": "Desviadas"
+  },
+  "projectWidgets": {
+    "target": "objetivo {target} %",
+    "anomalies": "{count} anomalías",
+    "unscheduled": "{count} sin horarios",
+    "gap": "brecha {amount}"
   }
 }

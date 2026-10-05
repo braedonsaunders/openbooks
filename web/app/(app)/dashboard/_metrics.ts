@@ -1042,6 +1042,8 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-spend-velocity': ['spendOpenAlerts', 'spendSavingsPotential', 'vendorPeriodLabel'],
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
+  'kpi-utilization': ['utilizationSummary'],
+  'kpi-overhead-absorption': ['trueCostSummary'],
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
   'kpi-forensic-risk': ['forensicRisk'],

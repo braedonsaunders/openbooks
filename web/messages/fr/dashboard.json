@@ -102,7 +102,9 @@
     "forensicRiskHint": "{flagged} signalés · {value} à risque · {period}",
     "forensicRiskExcluded": "Exclut les éléments non configurés : {detectors}",
     "duplicatePayments": "Paiements en double",
-    "duplicatePaymentsHint": "{value} à risque · {period}"
+    "duplicatePaymentsHint": "{value} à risque · {period}",
+    "utilization": "Utilisation",
+    "overheadAbsorption": "Absorption des frais généraux"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -220,7 +222,9 @@
     "kpiVendorPayment": "Taux de paiement ponctuel et dépenses payées en retard du rendement fournisseurs.",
     "kpiSpendVelocity": "Alertes de dépenses ouvertes et économies potentielles de la vélocité.",
     "forensicRisk": "Score de risque global Sentinel, avec le nombre de cas signalés et le montant à risque.",
-    "duplicatePayments": "Groupes de paiements en double et leur montant à risque."
+    "duplicatePayments": "Groupes de paiements en double et leur montant à risque.",
+    "utilization": "% facturable de l’entreprise depuis Utilisation, avec son nombre d’anomalies.",
+    "overheadAbsorption": "Charges absorbées face au total depuis True Cost, avec l’écart."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",
@@ -374,5 +378,11 @@
     "actual": "Réel",
     "variance": "Écart",
     "offTrack": "Hors trajectoire"
+  },
+  "projectWidgets": {
+    "target": "objectif {target} %",
+    "anomalies": "{count} anomalies",
+    "unscheduled": "{count} sans horaires",
+    "gap": "écart {amount}"
   }
 }

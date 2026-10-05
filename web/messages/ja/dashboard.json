@@ -102,7 +102,9 @@
     "forensicRiskHint": "{flagged} 件のフラグ · {value} のリスク額 · {period}",
     "forensicRiskExcluded": "未設定を除外: {detectors}",
     "duplicatePayments": "重複支払",
-    "duplicatePaymentsHint": "{value} のリスク額 · {period}"
+    "duplicatePaymentsHint": "{value} のリスク額 · {period}",
+    "utilization": "稼働率",
+    "overheadAbsorption": "間接費吸収"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -220,7 +222,9 @@
     "kpiVendorPayment": "仕入先実績の期日遵守率と遅延支払支出。",
     "kpiSpendVelocity": "支出速度の未対応アラートと節約余地。",
     "forensicRisk": "Sentinelの総合リスクスコア。フラグ件数とリスク額付き。",
-    "duplicatePayments": "重複支払グループとそのリスク額。"
+    "duplicatePayments": "重複支払グループとそのリスク額。",
+    "utilization": "稼働率ダッシュボードの全社請求可能率と異常件数。",
+    "overheadAbsorption": "True Costの吸収間接費と総額、および差額。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",
@@ -374,5 +378,11 @@
     "actual": "実績",
     "variance": "差異",
     "offTrack": "乖離"
+  },
+  "projectWidgets": {
+    "target": "目標 {target}%",
+    "anomalies": "異常 {count}件",
+    "unscheduled": "スケジュールなし {count}名",
+    "gap": "差額 {amount}"
   }
 }

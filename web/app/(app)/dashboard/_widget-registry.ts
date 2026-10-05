@@ -712,6 +712,26 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   },
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
+  'kpi-utilization': {
+    id: 'kpi-utilization',
+    category: 'kpi',
+    labelKey: 'widgets.utilization',
+    descriptionKey: 'catalog.utilization',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    analyticsSource: 'utilization',
+  },
+  'kpi-overhead-absorption': {
+    id: 'kpi-overhead-absorption',
+    category: 'kpi',
+    labelKey: 'widgets.overheadAbsorption',
+    descriptionKey: 'catalog.overheadAbsorption',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    analyticsSource: 'true-cost',
+  },
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
   'kpi-forensic-risk': {
