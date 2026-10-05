@@ -295,6 +295,20 @@ test("adapter counts a pensionable one-off contribution once in annual COTIZACIO
   assert.equal(result["ES_TIPO_IRPF"], irpf("2015"));
 });
 
+test("household IRPF prices the certified calendar year, not twelve copies of the month", async () => {
+  // A July household starter on 1.500 a month certifies 9.000 over six periods: below the
+  // TABLA 1 situación 3 exempt limit (15.876), so nothing is withheld. Twelve copies of
+  // the month (18.000) would have withheld IRPF on pay the employee will never earn here.
+  const hogar = { es_regimen: "hogar", es_hogar_retribucion_mensual: "1500.00", es_hogar_horas_mes: "160",
+    es_hogar_retribucion_por_horas: "false", es_hogar_beneficio_cc: "ninguno", es_hogar_at_ep_rate: "1.50" };
+  const starter = esAdapterContext({ payDate: "2026-07-15", annual: "9000.00", periods: "6", emp: hogar, ctx: pay("1500.00") });
+  const result = await computeEsStatutory(starter.ctx);
+  assert.deepEqual([result["ES_IMPORTE_ANUAL"], result["ES_IRPF_MES"]], ["0.0000", "0.0000"]);
+  const fullYear = esAdapterContext({ payDate: "2026-07-15", annual: "18000.00", periods: "12", emp: hogar, ctx: pay("1500.00") });
+  // Control: the same month certified as a full 18.000 year prices a 5,07 % tipo (76,05).
+  assert.equal((await computeEsStatutory(fullYear.ctx))["ES_IRPF_MES"], "76.0500");
+});
+
 test("adapter refuses when committed same-year ordinary pay changed without Article 87 inputs", async () => {
   const { ctx, lines } = esAdapterContext({ payDate: "2026-07-15", priorChanged: true });
   await assert.rejects(
