@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ReactElement } from 'react'
 import type { VendorData } from '../../../../lib/analytics/vendor-data'
+import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
 
 // Vendor CSVs must carry exact spend and average-bill values: the export
 // passes the ledger amounts straight through instead of rounding them.
@@ -37,24 +38,26 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 function fixture(): VendorData {
   return {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
+    config: { ...ANALYTICS_CONFIG.vendorPerformance.defaults },
     rows: [
       {
         id: 'v-acme',
         name: 'Acme Supplies',
-        spend: 9876.543,
-        priorSpend: 9000,
+        spend: '9876.5430',
+        priorSpend: '9000.0000',
         yoyPct: 0.097,
         sharePct: 0.42,
         bills: 80,
-        avgBill: 123.456,
+        avgBill: '123.4560',
         lastBill: '2026-07-28',
         recencyDays: 3,
         tier: 'strategic',
         paidBills: 78,
+        undatedBills: 0,
         avgDaysToPay: 21,
         onTimePct: 0.95,
         latePct: 0.05,
-        lateSpend: 100,
+        lateSpend: '100.0000',
         score: 82.4,
         grade: 'A',
         performance: 88,
@@ -64,11 +67,11 @@ function fixture(): VendorData {
     monthly: [],
     totals: {
       vendors: 1,
-      spend: 9876.543,
-      priorSpend: 9000,
+      spend: '9876.5430',
+      priorSpend: '9000.0000',
       yoyPct: 0.097,
       bills: 80,
-      avgBill: 123.456,
+      avgBill: '123.4560',
       top5SharePct: 42,
       top10SharePct: 42,
       hhi: 0.2,
@@ -76,10 +79,12 @@ function fixture(): VendorData {
       strategic: 1,
       onTimePct: 0.95,
       avgDaysToPay: 21,
-      lateSpend: 100,
+      lateSpend: '100.0000',
+      undatedBills: 0,
     },
-    tierBreakdown: [{ tier: 'strategic', count: 1, spend: 9876.543 }],
-    gradeBreakdown: [{ grade: 'A', count: 1, spend: 9876.543 }],
+    tierBreakdown: [{ tier: 'strategic', count: 1, spend: '9876.5430' }],
+    gradeBreakdown: [{ grade: 'A', count: 1, spend: '9876.5430' }],
+    quadrantBreakdown: [{ quadrant: 'strategic', count: 1, spend: '9876.5430' }],
   } as unknown as VendorData
 }
 
@@ -158,5 +163,54 @@ test('vendor CSV exports retain spend and average bill decimals', async () => {
     host.remove()
     URL.createObjectURL = realCreateObjectURL
     URL.revokeObjectURL = realRevokeObjectURL
+  }
+})
+
+test('vendors without payment history read Unrated, never a neutral score', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    const data = fixture()
+    data.rows.push({
+      id: 'v-new',
+      name: 'Brand New Co',
+      spend: '500.0000',
+      priorSpend: '0',
+      yoyPct: null,
+      sharePct: 0.05,
+      bills: 2,
+      avgBill: '250.0000',
+      lastBill: '2026-07-20',
+      recencyDays: 11,
+      tier: 'tail',
+      paidBills: 0,
+      undatedBills: 0,
+      avgDaysToPay: null,
+      onTimePct: null,
+      latePct: null,
+      lateSpend: '0',
+      score: 20,
+      grade: 'D',
+      performance: null,
+      quadrant: 'unrated',
+    })
+    await act(async () => {
+      root.render(providers(<VendorView data={data} />))
+      await tick()
+    })
+    await tick()
+    const scorecardTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Scorecard')
+    assert.ok(scorecardTab, 'the scorecard tab must exist')
+    await click(scorecardTab)
+    assert.ok(
+      host.textContent?.includes('Unrated'),
+      `an unrated vendor must be named as Unrated, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
   }
 })
