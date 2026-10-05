@@ -2390,7 +2390,7 @@
       "expenseInDept": "Gasto del departamento",
       "deptBilledHours": "Horas facturadas del departamento",
       "rate": "Tasa",
-      "expenseMath": "{direct} contabilizado directamente en {dept} + {allocated} asignado del gasto sin etiquetar ({share} de participación en las horas facturadas), ÷ {billed, plural, one {# hora facturada} other {# horas facturadas}}.",
+      "expenseMath": "{direct} contabilizado directamente en {dept} + {allocated} asignado del gasto sin etiquetar ({share} de participación según {base}), ÷ {billed, plural, one {# hora facturada} other {# horas facturadas}}.",
       "colAccount": "Cuenta",
       "colDeptTagged": "Etiquetado por departamento",
       "colAllocated": "Asignado",

@@ -140,6 +140,14 @@ export interface BurdenCategory {
    * this department scope refuses. */
   byDept: Record<string, { amount: number; rate: number | null }>;
   /**
+   * Exact per-department share of the category's own allocation base
+   * (decimal string, same values the loader splits untagged expense by).
+   * The cell drawer renders this share instead of re-deriving one, so the
+   * drawer reconciles to the cell for every base — never billed hours by
+   * default.
+   */
+  deptShare: Record<string, string>;
+  /**
    * Non-billable hours with no cost rate excluded from this category's cost
    * (exact string, set only on the native time category when greater than
    * zero) — unknown cost, never zero cost.
@@ -1239,6 +1247,14 @@ export async function trueCostData(
         (total, value) => add(total, value),
         "0.0000",
       );
+    // The drawer's untagged split, computed here from the same exact base
+    // values splitUntaggedExact uses: share = base ÷ base total, one exact
+    // quotient (no base → every share is zero, never a fallback base).
+    const baseTotalExact = sumExact(baseExact);
+    const deptShare: Record<string, string> = {};
+    for (const d of departmentsBase) {
+      deptShare[d.id] = cmp(baseTotalExact, "0") === 0 ? "0" : div(baseExact[d.id] ?? "0.0000", baseTotalExact);
+    }
     const laborBase = baseExactFor("labor_dollars");
     const costBase = baseExactFor("direct_cost");
     const unitBase = baseExactFor("units");
@@ -1294,7 +1310,7 @@ export async function trueCostData(
         id, key, name, color, categoryType, match,
         totalAmount: total, rawRate: null, rate: null, rateDisplay: refusal?.message ?? "",
         allocationBase, allocationMethod, rateFormat, includeInComposite,
-        accounts, byDept,
+        accounts, byDept, deptShare,
         ...(unratedHours !== undefined && cmp(unratedHours, "0") > 0 ? { unratedHours } : {}),
       };
     }
@@ -1311,7 +1327,7 @@ export async function trueCostData(
       id, key, name, color, categoryType, match,
       totalAmount: total, rawRate, rate: formatted.value, rateDisplay: formatted.display,
       allocationBase, allocationMethod, rateFormat, includeInComposite,
-      accounts, byDept,
+      accounts, byDept, deptShare,
       ...(unratedHours !== undefined && cmp(unratedHours, "0") > 0 ? { unratedHours } : {}),
     };
   }

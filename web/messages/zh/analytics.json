@@ -2390,7 +2390,7 @@
       "expenseInDept": "部门内费用",
       "deptBilledHours": "部门可计费工时",
       "rate": "费率",
-      "expenseMath": "直接记入 {dept} 的 {direct} + 从未标记费用中分摊的 {allocated}（可计费工时占比 {share}），再除以{billed, plural, one {# 个可计费工时} other {# 个可计费工时}}。",
+      "expenseMath": "直接记入 {dept} 的 {direct} + 从未标记费用中分摊的 {allocated}（按 {base} 分摊占比 {share}），再除以{billed, plural, one {# 个可计费工时} other {# 个可计费工时}}。",
       "colAccount": "科目",
       "colDeptTagged": "已标记部门",
       "colAllocated": "已分摊",

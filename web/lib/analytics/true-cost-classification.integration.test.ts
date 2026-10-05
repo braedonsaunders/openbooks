@@ -723,6 +723,62 @@ test('true cost splits untagged expense by the category allocation base', { skip
 })
 
 /**
+ * The loader sends its exact per-department untagged split on the category
+ * (deptShare) so the cell drawer renders it instead of re-deriving a
+ * billed-hours share. Square footage here splits 100:300 (25/75) while
+ * billed hours run 8:1 — a drawer that defaulted to billed hours would show
+ * the wrong share and the wrong allocated rows.
+ */
+test('true cost sends the loader split for the drawer on non-hours bases', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const deptA = randomUUID()
+  const deptB = randomUUID()
+  const empA = randomUUID()
+  const empB = randomUUID()
+  const groupId = randomUUID()
+  const rentAccount = randomUUID()
+  await withBypass(async () => {
+    for (const [dept, name] of [[deptA, 'Field A'], [deptB, 'Field B']] as const) {
+      await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+        values (${dept}, ${org.orgId}, ${name}, true, '{}'::jsonb)`)
+    }
+    for (const [emp, name, dept, hours] of [[empA, 'Split A', deptA, '8.0000'], [empB, 'Split B', deptB, '1.0000']] as const) {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${emp}, ${org.orgId}, 'employee', ${name}, ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+        values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, ${hours}, 'approved', true, ${dept}, '50.0000', 'CAD', null, '{}'::jsonb)`)
+    }
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
+    const entry = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'SPLIT-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${entry}, 1, ${rentAccount}, ${org.subsidiaryId}, null, '900', 'CAD', '900', '1'),
+             (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, null, '-900', 'CAD', '-900', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+    await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ analytics: { trueCost: { activeProfileId: 'p1', profiles: [{ id: 'p1', name: 'Split', color: null, compositeMethod: 'sum', baseLaborRate: '', fringeRate: '0.25', categorySettings: { [groupId]: { allocationBase: 'square_feet' } }, customCategories: [], baseOverrides: { squareFeet: { [deptA]: 100, [deptB]: 300 } } }] } } })}::jsonb
+      where id = ${org.orgId}`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      const rent = data.categories.find((c) => c.key === 'rent')!
+      assert.ok(rent, 'rent category present')
+      assert.equal(rent.byDept[deptA]?.amount, 225)
+      assert.equal(rent.byDept[deptB]?.amount, 675)
+      // The drawer's split: square footage, not the 8:1 billed-hours ratio.
+      assert.equal(rent.deptShare[deptA], '0.2500')
+      assert.equal(rent.deptShare[deptB], '0.7500')
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
  * Labour dollars are the configured cost_pool / direct_labor account set
  * (rule plus pin) — the same classification that excludes direct labour from
  * burden. The 1000 on the name-matching `Wages and Salaries` account is

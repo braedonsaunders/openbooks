@@ -66,6 +66,7 @@ function fixture(): TrueCostData {
         rateDisplay: '$9.00/hr',
         accounts: [],
         byDept: {},
+        deptShare: {},
       },
     ],
     unassigned: [{ id: 'a-clean', number: '6100', name: 'Cleaning', amount: 50, pinned: false, deptAmounts: {}, untaggedAmount: 50 }],
