@@ -80,9 +80,9 @@ function obligationNeedsAttention(
  * Billings and schedules are separate concepts, so they never share a body:
  * the shared drawer strip switches between them and both stay mounted
  * (hidden) so in-flight work survives the switch. Inside the obligations
- * body the parent-child workflow applies: one selector list names every
- * obligation, and selecting one shows only its schedule in the focused
- * pane below — never one schedule table per obligation. Recognition is
+ * body the parent-child workflow applies: the shared drawer strip names
+ * every obligation once, and selecting one shows only its schedule in the
+ * focused pane below — never one schedule table per obligation. Recognition is
  * driven by invoices + the Run action. Contract changes prepare a separate,
  * independently approved proposal; this drawer never edits recognized
  * history in place.
@@ -263,56 +263,19 @@ export function ContractDrawer({
         ) : null}
         </div>
         <div hidden={section !== "obligations"} className="space-y-4">
-        {/* -- parent: one obligation selector. A list of buttons, never a
-            table, so the body holds exactly one concept table at a time. */}
-        <section aria-label={t("drawer.obligations")} className="space-y-2">
-          <ul className="space-y-2">
-            {payload.obligations.map((o) => {
-              const selected = selectedObligation?.id === o.id;
-              return (
-                <li key={o.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedObligationId(o.id)}
-                    aria-current={selected ? "true" : undefined}
-                    className={`flex w-full flex-wrap items-center gap-2 rounded-lg border p-3 text-left ${
-                      selected
-                        ? "border-teal-600 dark:border-teal-400"
-                        : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    <span className="font-semibold">{o.description}</span>
-                    <Badge variant={STATUS_VARIANT[o.status] ?? "secondary"}>
-                      {t(`obligationStatus.${o.status}`)}
-                    </Badge>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {t(`method.${o.method}`)} · {money(o.allocated_price)}
-                    </span>
-                    {o.legacy_unverified ? (
-                      <Badge variant="warning">
-                        {t("drawer.legacyUnverified")}
-                      </Badge>
-                    ) : null}
-                    {o.fair_value_flag ? (
-                      <Badge variant="warning">
-                        {t("drawer.fairValueOutOfRange", {
-                          low:
-                            o.fair_value_low != null
-                              ? money(o.fair_value_low)
-                              : "—",
-                          high:
-                            o.fair_value_high != null
-                              ? money(o.fair_value_high)
-                              : "—",
-                        })}
-                      </Badge>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        {/* -- parent: the shared drawer strip names each obligation once, so
+            the body holds exactly one concept table at a time. Period counts
+            ride on the tabs; the focused pane below names the selection. */}
+        <DrawerTabStrip
+          tabs={payload.obligations.map((o) => ({
+            key: o.id,
+            label: o.description,
+            count: o.lines.length,
+          }))}
+          activeKey={selectedObligation?.id ?? ""}
+          onSelect={(key) => setSelectedObligationId(key)}
+          ariaLabel={t("drawer.obligations")}
+        />
         {/* -- focused child: only the selected obligation's schedule ------- */}
         {selectedObligation ? (
           <section

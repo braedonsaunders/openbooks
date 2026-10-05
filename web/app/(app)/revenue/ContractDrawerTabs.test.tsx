@@ -150,8 +150,8 @@ function stripTab(label: string): HTMLButtonElement {
 }
 
 function selectorButton(description: string): HTMLButtonElement {
-  const selector = document.querySelector("section[aria-label='Obligations']");
-  assert.ok(selector, "the obligations body must offer the selector list");
+  const selector = document.querySelector("nav[aria-label='Obligations']");
+  assert.ok(selector, "the obligations body must offer the selector strip");
   const option = Array.from(selector.querySelectorAll("button")).find((button) =>
     button.textContent?.includes(description),
   );

@@ -27,9 +27,11 @@ interface QuoteLine {
     tcv: string
   }>
   tcv: string
-  /** Null only when the view fails to resolve — open, signed, declined,
-   *  voided and expired requests all resolve their status, so the form
-   *  refuses with a named remedy instead of rendering a missing request. */
+  /** Always present on a resolved view: invalid, expired, and consentless
+   *  links refuse before resolving, so null only guards a malformed payload
+   *  reaching the client. Open (sent, viewed) requests render the form;
+   *  signed, declined, voided and consumed requests resolve their status
+   *  and refuse with a named remedy instead. */
   signature: {
     status: string
     signerName: string
