@@ -3550,7 +3550,7 @@
     },
     "forensics": {
       "unknownParty": "Unbekannt",
-      "benfordInsufficient": "Unzureichende Daten ({total, plural, one {# Transaktion} other {# Transaktionen}}). Mindestens 50 erforderlich.",
+      "benfordInsufficient": "Unzureichende Daten ({total, plural, one {# Transaktion} other {# Transaktionen}}). Mindestens {minimum} erforderlich.",
       "benfordClose": "Beträge folgen eng dem Benford-Gesetz — geringes Manipulationsrisiko.",
       "benfordReasonable": "Beträge folgen dem Benford-Gesetz weitgehend.",
       "benfordSomeDeviation": "Abweichung erkannt — Prüfung empfohlen.",
@@ -3593,7 +3593,9 @@
       "riskBenford": {
         "area": "Benford-Abweichung",
         "message": "Erste-Ziffer-Verteilung weicht erheblich ab"
-      }
+      },
+      "trapUnavailable": "Keine Genehmigungs-Betragsgrenzen in Flows — lege eine an oder passe das Band unter Sentinel → Konfiguration an.",
+      "duplicateFloorUnset": "Lege das Duplikatminimum unter Sentinel → Konfiguration fest."
     },
     "analysis": {
       "calendar": "Kalender",

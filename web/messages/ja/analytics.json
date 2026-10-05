@@ -3550,7 +3550,7 @@
     },
     "forensics": {
       "unknownParty": "不明",
-      "benfordInsufficient": "データ不足（{total, plural, one {# 件} other {# 件}}）。50件以上が必要です。",
+      "benfordInsufficient": "データ不足（{total, plural, one {# 件} other {# 件}}）。{minimum}件以上が必要です。",
       "benfordClose": "金額はベンフォードの法則に良く従っています — 改ざんリスクは低いです。",
       "benfordReasonable": "金額はベンフォードの法則におおむね従っています。",
       "benfordSomeDeviation": "乖離を検出 — 確認が必要です。",
@@ -3593,7 +3593,9 @@
       "riskBenford": {
         "area": "ベンフォード乖離",
         "message": "第一位の分布が大きく乖離しています"
-      }
+      },
+      "trapUnavailable": "Flowsに承認金額の条件がありません — 条件を追加するか、Sentinel → 設定でバンドを調整してください。",
+      "duplicateFloorUnset": "Sentinel → 設定で重複下限を設定してください。"
     },
     "analysis": {
       "calendar": "カレンダー",
