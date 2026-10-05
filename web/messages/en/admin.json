@@ -3321,6 +3321,10 @@
         "title": "Restocking fees",
         "singular": "Restocking fee",
         "description": "Fee rules charged on inspected returns, by item, category, or default."
+      },
+      "contract-cost-policy": {
+        "title": "Contract Cost Policy",
+        "description": "Which acquisition costs capitalize, over what benefit period, and into which accounts (ASC 340-40)."
       }
     },
     "fields": {
@@ -3814,7 +3818,16 @@
       "legalEmployer": "Legal employer",
       "clearingAccountId": "Clearing account",
       "collectionMode": "Collection mode",
-      "states": "States"
+      "states": "States",
+      "practicalExpedient": "Practical expedient (12 months or less)",
+      "amortizationExpenseAccountId": "Amortization expense account",
+      "capitalizeCommissions": "Capitalize sales commissions",
+      "capitalizeFulfilment": "Capitalize fulfilment costs",
+      "customerLifeSource": "Customer life source",
+      "customerLifeMonths": "Expected customer life (months)",
+      "renewalCommensurateThresholdPercent": "Renewal commensurate threshold",
+      "contractCostBasisLabel": "Amortization basis",
+      "contractCostAssetAccount": "Contract cost asset account"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -3939,7 +3952,9 @@
       "unitOfMeasure": "What the component's units count. Hours lines feed every hours basis — per-hour rates, benefit hours bases, insurable hours and wage-hour reports. Quantity lines (trips, meals, incentive units) pay their amount but never count as hours. Per-hour components always use hours.",
       "nonCashAccountId": "Use a prepaid asset, a provider clearing liability, or a contra-expense account. Payroll debits benefit expense and credits this account; provider purchases must use the same clearing account to avoid counting expense twice. A contra-expense (different from the expense account) suits a benefit whose cost is already expensed, such as personal use of a company vehicle.",
       "zonedDateTime": "Enter an ISO timestamp with Z or an explicit offset, such as 2026-10-01T09:00:00-04:00. The offset is preserved.",
-      "ianaTimezone": "Enter an IANA time zone, such as America/Toronto."
+      "ianaTimezone": "Enter an IANA time zone, such as America/Toronto.",
+      "contractCostPracticalExpedient": "When on, costs whose benefit period is twelve months or less expense immediately instead of capitalizing.",
+      "contractCostCommensurate": "A renewal commission at or above this share of the initial commission confines amortization to the contract term, even under customer-life basis."
     },
     "options": {
       "usageAggregation": {
@@ -4536,6 +4551,14 @@
         "none": "Keep billing (no final action)",
         "suspend": "Suspend the subscription",
         "cancel": "Cancel the subscription"
+      },
+      "contractCostBasis": {
+        "contractTerm": "Contract term",
+        "customerLife": "Expected customer life"
+      },
+      "contractCostLifeSource": {
+        "manual": "Manual",
+        "derived": "Derived from SaaS metrics"
       }
     },
     "payroll": {

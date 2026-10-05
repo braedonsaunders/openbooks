@@ -11,6 +11,11 @@ import { AttemptDrawer } from '../../app/(app)/collections/AttemptDrawer'
 import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
 import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
+import { ContractCostDrawer } from '../../app/(app)/revenue/contract-costs/ContractCostDrawer'
+import { ContractCostWorkspace } from '../../app/(app)/revenue/contract-costs/ContractCostWorkspace'
+import { CapitalizeButton } from '../../app/(app)/revenue/contract-costs/CapitalizeButton'
+import { ImportCommissionsButton } from '../../app/(app)/revenue/contract-costs/ImportCommissionsButton'
+import { RunAmortizationButton } from '../../app/(app)/revenue/contract-costs/RunAmortizationButton'
 import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
 import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
 import { CaptureList } from '../../app/(app)/ap/capture/sections'
@@ -281,6 +286,58 @@ export const COMMERCE_WIDGETS = {
     />
   ),
   'order-drawer': (props) => <NativeListDrawer widget="order-drawer" drawer={props.drawer} />,
+
+  /* --- contract costs (ASC 340-40) ------------------------------------------------ */
+  /** No remount key: the native page renders `<ContractCostDrawer>` keyless
+   *  (its state resets via closeHref navigation), like the contract drawer. */
+  'contract-cost-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ContractCostDrawer> | null
+    if (!drawer) return null
+    return <ContractCostDrawer {...drawer} />
+  },
+  'contract-costs-workspace': (props) => {
+    const p = props as unknown as ComponentProps<typeof ContractCostWorkspace>['data'] & {
+      assetBalance?: unknown;
+      periodAmortized?: unknown;
+      baseCurrency?: unknown;
+      attention?: unknown;
+      canManage?: unknown;
+      policy?: unknown;
+    }
+    return (
+      <ContractCostWorkspace
+        data={{
+          assetBalance: String(p.assetBalance ?? ''),
+          periodAmortized: String(p.periodAmortized ?? ''),
+          baseCurrency: String(p.baseCurrency ?? ''),
+          attention: (p.attention as ComponentProps<typeof ContractCostWorkspace>['data']['attention']) ?? [],
+          canManage: p.canManage === true,
+          policy: (p.policy as ComponentProps<typeof ContractCostWorkspace>['data']['policy']) ?? null,
+        }}
+      />
+    )
+  },
+  'run-amortization': (props) => (
+    <RunAmortizationButton
+      periods={(props.periods as ComponentProps<typeof RunAmortizationButton>['periods']) ?? []}
+      selectedPeriodId={(props.selectedPeriodId as string | null) ?? null}
+      activeAssets={Number((props as { activeAssets?: unknown }).activeAssets ?? 0)}
+    />
+  ),
+  'capitalize-cost': (props) => (
+    <CapitalizeButton
+      contracts={(props.contracts as ComponentProps<typeof CapitalizeButton>['contracts']) ?? []}
+      expenseAccounts={(props.expenseAccounts as ComponentProps<typeof CapitalizeButton>['expenseAccounts']) ?? []}
+      policy={(props.policy as ComponentProps<typeof CapitalizeButton>['policy']) ?? null}
+      baseCurrency={String((props as { baseCurrency?: unknown }).baseCurrency ?? '')}
+    />
+  ),
+  'import-commissions': (props) => (
+    <ImportCommissionsButton
+      expenseAccounts={(props.expenseAccounts as ComponentProps<typeof ImportCommissionsButton>['expenseAccounts']) ?? []}
+      baseCurrency={String((props as { baseCurrency?: unknown }).baseCurrency ?? '')}
+    />
+  ),
 
   /* --- projects ----------------------------------------------------------- */
   'new-project': () => <NewProjectButton />,

@@ -23,6 +23,7 @@ import close from './close.json'
 import common from './common.json'
 import compliance from './compliance.json'
 import continuousClose from './continuous-close.json'
+import contractCosts from './contractCosts.json'
 import crm from './crm.json'
 import customers from './customers.json'
 import customization from './customization.json'
@@ -93,6 +94,7 @@ export default {
   common,
   compliance,
   continuousClose,
+  contractCosts,
   crm,
   customers,
   customization,

@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "剩余履约义务",
         "description": "主账簿中按义务和月份列示的尚待确认交易价格及预计时间 (ASC 606-10-50-13)。"
+      },
+      "contract_cost_rollforward": {
+        "label": "合同成本调节表",
+        "description": "每项合同成本资产的已资本化、已摊销、已减值金额与期末余额。"
+      },
+      "contract_cost_postings": {
+        "label": "合同成本过账",
+        "description": "来自带标记总账的按期间列示的资本化、摊销与减值分录。"
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "计划状态",
         "obligation_status": "义务状态",
         "journal_entry_id": "分录 (ID)"
+      },
+      "contract_cost_rollforward": {
+        "id": "资产键",
+        "contract_number": "合同",
+        "customer": "客户",
+        "sales_rep": "销售员",
+        "cost_type": "成本类型",
+        "status": "状态",
+        "capitalized_on": "资本化日期",
+        "amort_start_on": "摊销起始",
+        "amort_end_on": "摊销截止",
+        "currency": "币种",
+        "capitalized": "已资本化",
+        "amortized": "已摊销",
+        "impaired": "已减值",
+        "closing": "期末余额"
+      },
+      "contract_cost_postings": {
+        "id": "资产键",
+        "period": "期间",
+        "posting_date": "过账日期",
+        "event": "事项",
+        "account": "科目",
+        "contract_number": "合同",
+        "currency": "币种",
+        "amount": "金额",
+        "entry_id": "日记账分录",
+        "asset_id": "资产键"
       }
     },
     "enumValues": {

@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "Obrigações de desempenho restantes",
         "description": "Preço de transação ainda por reconhecer por obrigação e mês no livro principal, com prazo esperado (ASC 606-10-50-13)."
+      },
+      "contract_cost_rollforward": {
+        "label": "Evolução de custos de contrato",
+        "description": "Saldos capitalizados, amortizados, com impairment e finais por ativo de custo de contrato."
+      },
+      "contract_cost_postings": {
+        "label": "Lançamentos de custos de contrato",
+        "description": "Linhas de capitalização, amortização e impairment por período a partir do razão marcado."
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "Status do plano",
         "obligation_status": "Status da obrigação",
         "journal_entry_id": "Lançamento (id)"
+      },
+      "contract_cost_rollforward": {
+        "id": "Chave do ativo",
+        "contract_number": "Contrato",
+        "customer": "Cliente",
+        "sales_rep": "Vendedor",
+        "cost_type": "Tipo de custo",
+        "status": "Status",
+        "capitalized_on": "Capitalizado em",
+        "amort_start_on": "Amortizar de",
+        "amort_end_on": "Amortizar até",
+        "currency": "Moeda",
+        "capitalized": "Capitalizado",
+        "amortized": "Amortizado",
+        "impaired": "Impairment",
+        "closing": "Saldo final"
+      },
+      "contract_cost_postings": {
+        "id": "Chave do ativo",
+        "period": "Período",
+        "posting_date": "Data de lançamento",
+        "event": "Evento",
+        "account": "Conta",
+        "contract_number": "Contrato",
+        "currency": "Moeda",
+        "amount": "Valor",
+        "entry_id": "Lançamento",
+        "asset_id": "Chave do ativo"
       }
     },
     "enumValues": {

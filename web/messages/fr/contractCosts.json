@@ -1,0 +1,149 @@
+{
+  "common": {
+    "cancel": "Annuler",
+    "on": "activée",
+    "off": "désactivée",
+    "derived": "dérivé des métriques SaaS"
+  },
+  "workspace": {
+    "title": "Coûts de contrat",
+    "description": "Commissions de vente capitalisées amorties sur la durée du contrat ou de vie client.",
+    "assetBalance": "Solde de l’actif",
+    "periodAmortization": "Amorti sur la période",
+    "unlinked": "Non lié",
+    "churned": "Résilié",
+    "policyTitle": "Méthode de capitalisation",
+    "policySummary": "Comment les coûts sont capitalisés et amortis",
+    "policyDetail": "Amortir sur {basis} ; mesure de simplification {expedient} ; durée de vie client {life}.",
+    "noPolicy": "Aucune méthode en vigueur. Créez-en une dans Paramètres avant de capitaliser.",
+    "openPolicy": "Ouvrir la méthode"
+  },
+  "policy": {
+    "basis": {
+      "contract_term": "la durée du contrat",
+      "customer_life": "la durée de vie client attendue"
+    }
+  },
+  "queue": {
+    "title": "À traiter",
+    "emptyTitle": "Rien à traiter",
+    "emptyDescription": "Chaque commission est liée et chaque contrat actif a un solde sain. Capitalisez une commission pour augmenter l’actif.",
+    "kind": {
+      "unlinked": "Non lié",
+      "churned": "Résilié"
+    },
+    "unlinkedHint": "La commission du {date} n’est pas encore liée à un contrat.",
+    "churnedHint": "Le contrat {contract} a été résilié avec {amount} non amortis.",
+    "linkNow": "Lier maintenant",
+    "reviewNow": "Examiner maintenant"
+  },
+  "status": {
+    "active": "Actif",
+    "fully_amortized": "Entièrement amorti",
+    "impaired": "Déprécié",
+    "expensed": "Passé en charges"
+  },
+  "method": {
+    "straight_line": "Linéaire",
+    "pattern": "Rythme des revenus"
+  },
+  "costType": {
+    "commission": "Commission",
+    "fulfilment": "Exécution"
+  },
+  "event": {
+    "contract_cost_capitalize": "Capitalisé",
+    "contract_cost_amortization": "Amortissement",
+    "contract_cost_impairment": "Dépréciation"
+  },
+  "labels": {
+    "contract": "Contrat",
+    "customer": "Client",
+    "salesRep": "Commercial",
+    "costType": "Nature du coût",
+    "capitalized": "Capitalisé",
+    "carrying": "Valeur comptable",
+    "capitalizedOn": "Capitalisé le"
+  },
+  "drawer": {
+    "unlinked": "Commission non liée",
+    "capitalized": "Capitalisé",
+    "carrying": "Valeur comptable",
+    "window": "Fenêtre",
+    "method": "Méthode",
+    "linkHint": "Cette commission n’a pas encore de contrat, donc rien ne s’amortit. Liez-la pour planifier l’amortissement.",
+    "impairHint": "Le contrat a été résilié ou réduit. Constatez une dépréciation pour réduire l’actif.",
+    "scheduleTitle": "Plan d’amortissement",
+    "month": "Mois",
+    "period": "Période",
+    "planned": "Prévu",
+    "posted": "Comptabilisé",
+    "viewEntry": "Écriture",
+    "entriesTitle": "Piste comptable",
+    "advancedTitle": "Détails",
+    "advancedSummary": "Commercial, dates, base de la méthode",
+    "salesRep": "Commercial",
+    "capitalizedOn": "Capitalisé le",
+    "policyBasis": "Base de la méthode",
+    "baseCurrency": "Devise"
+  },
+  "capitalize": {
+    "open": "Capitaliser",
+    "title": "Capitaliser une commission",
+    "description": "Enregistrez le coût à l’actif. Les coûts exclus par la méthode, ou couverts par la mesure d’un an, sont passés en charges aussitôt.",
+    "contract": "Contrat de revenus",
+    "costType": "Nature du coût",
+    "amount": "Montant ({currency})",
+    "date": "Date de capitalisation",
+    "expenseAccount": "Compte de charges d’origine",
+    "preview": "Aperçu : débitez l’actif de coûts de contrat et créditez les charges d’origine pour {amount} {currency}.",
+    "failed": "Impossible de capitaliser la commission.",
+    "saved": "Commission enregistrée ({status}).",
+    "submit": "Capitaliser"
+  },
+  "run": {
+    "open": "Exécuter l’amortissement",
+    "title": "Exécuter l’amortissement",
+    "description": "Comptabilise une ligne d’amortissement par actif échu sur la période. Le déjà comptabilisé est ignoré ; les périodes clôturées sont refusées.",
+    "period": "Période",
+    "failed": "Impossible d’exécuter l’amortissement.",
+    "saved": "{posted} comptabilisés, {skipped} ignorés.",
+    "submit": "Exécuter"
+  },
+  "link": {
+    "open": "Lier le contrat",
+    "title": "Lier à un contrat",
+    "description": "Planifie l’amortissement selon la méthode en vigueur et comptabilise l’écriture de capitalisation.",
+    "contract": "Contrat de revenus",
+    "failed": "Impossible de lier la commission.",
+    "saved": "Commission liée.",
+    "submit": "Lier"
+  },
+  "impair": {
+    "open": "Déprécier",
+    "title": "Constater une dépréciation",
+    "description": "Valeur comptable {carrying}. Tout ce qui dépasse la contrepartie restante moins les coûts non reconnus est déprécié.",
+    "remaining": "Contrepartie restante ({currency})",
+    "costs": "Coûts non encore reconnus ({currency})",
+    "reason": "Motif",
+    "reasonHint": "Client résilié après le premier mois",
+    "date": "Date d’évaluation",
+    "failed": "Impossible de constater la dépréciation.",
+    "saved": "Dépréciation comptabilisée.",
+    "clean": "Aucune dépréciation : l’actif est recouvrable.",
+    "submit": "Constater"
+  },
+  "import": {
+    "open": "Importer",
+    "title": "Importer des commissions",
+    "description": "Une commission par ligne : {columns}. Les montants sont comptabilisés en {currency}. Les contrats inconnus restent non liés.",
+    "expenseAccount": "Compte de charges d’origine",
+    "rows": "Lignes de commissions",
+    "failed": "Impossible d’importer les lignes de commissions.",
+    "saved": "{count} commissions importées.",
+    "badShape": "Chaque ligne doit contenir {columns}, séparés par des virgules.",
+    "rowRef": "ligne d’import {index}",
+    "report": "{ok} capitalisées ou en file ; {refused} refusées.",
+    "submit": "Importer"
+  }
+}

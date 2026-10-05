@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "Remaining performance obligations",
         "description": "Transaction price still to recognize per obligation and month on the primary book, with expected timing (ASC 606-10-50-13)."
+      },
+      "contract_cost_rollforward": {
+        "label": "Contract cost roll-forward",
+        "description": "Capitalized, amortized, impaired and closing balances per contract cost asset."
+      },
+      "contract_cost_postings": {
+        "label": "Contract cost postings",
+        "description": "Capitalization, amortization and impairment lines by period from the tagged general ledger."
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "Schedule status",
         "obligation_status": "Obligation status",
         "journal_entry_id": "Journal entry (id)"
+      },
+      "contract_cost_rollforward": {
+        "id": "Asset key",
+        "contract_number": "Contract",
+        "customer": "Customer",
+        "sales_rep": "Sales rep",
+        "cost_type": "Cost type",
+        "status": "Status",
+        "capitalized_on": "Capitalized on",
+        "amort_start_on": "Amortize from",
+        "amort_end_on": "Amortize through",
+        "currency": "Currency",
+        "capitalized": "Capitalized",
+        "amortized": "Amortized",
+        "impaired": "Impaired",
+        "closing": "Closing balance"
+      },
+      "contract_cost_postings": {
+        "id": "Asset key",
+        "period": "Period",
+        "posting_date": "Posting date",
+        "event": "Event",
+        "account": "Account",
+        "contract_number": "Contract",
+        "currency": "Currency",
+        "amount": "Amount",
+        "entry_id": "Journal entry",
+        "asset_id": "Asset key"
       }
     },
     "enumValues": {

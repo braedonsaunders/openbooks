@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "Obligations de prestation restantes",
         "description": "Prix de transaction restant à comptabiliser par obligation et par mois dans le livre principal, avec échéance attendue (ASC 606-10-50-13)."
+      },
+      "contract_cost_rollforward": {
+        "label": "Variation des coûts de contrat",
+        "description": "Soldes capitalisés, amortis, dépréciés et de clôture par actif de coûts de contrat."
+      },
+      "contract_cost_postings": {
+        "label": "Écritures de coûts de contrat",
+        "description": "Lignes de capitalisation, d’amortissement et de dépréciation par période depuis le grand livre marqué."
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "Statut du plan",
         "obligation_status": "Statut de l'obligation",
         "journal_entry_id": "Écriture (id)"
+      },
+      "contract_cost_rollforward": {
+        "id": "Clé d’actif",
+        "contract_number": "Contrat",
+        "customer": "Client",
+        "sales_rep": "Commercial",
+        "cost_type": "Nature du coût",
+        "status": "Statut",
+        "capitalized_on": "Capitalisé le",
+        "amort_start_on": "Amortir à partir du",
+        "amort_end_on": "Amortir jusqu’au",
+        "currency": "Devise",
+        "capitalized": "Capitalisé",
+        "amortized": "Amorti",
+        "impaired": "Déprécié",
+        "closing": "Solde de clôture"
+      },
+      "contract_cost_postings": {
+        "id": "Clé d’actif",
+        "period": "Période",
+        "posting_date": "Date comptable",
+        "event": "Événement",
+        "account": "Compte",
+        "contract_number": "Contrat",
+        "currency": "Devise",
+        "amount": "Montant",
+        "entry_id": "Écriture",
+        "asset_id": "Clé d’actif"
       }
     },
     "enumValues": {

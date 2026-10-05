@@ -257,6 +257,16 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: 'revenue-accounting',
     requiredPermission: 'ar.read',
   },
+  {
+    key: 'contract-costs',
+    href: '/revenue/contract-costs',
+    label: 'Contract Costs',
+    iconKey: 'trending-up',
+    group: 'accounting',
+    subgroup: 'revenue-accounting',
+    requiredPermission: 'contract_costs.read',
+    featureKey: 'contractCosts',
+  },
 
   // Purchasing — vendor records and the buy-to-pay workflow.
   {

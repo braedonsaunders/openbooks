@@ -2632,6 +2632,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/revenue/contract-costs': {
+    route: '/revenue/contract-costs',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/revenue/contract-costs/view')
+      return {
+        load: (input) => m.loadContractCosts(input.searchParams ?? {}),
+        spec: (data) => m.contractCostsSpec(data as never),
+      }
+    },
+  },
   '/sales-orders': {
     route: '/sales-orders',
     segments: [],

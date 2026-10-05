@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "残りの履行義務",
         "description": "元帳（主簿）における義務・月ごとの未認識取引価格と予想時期 (ASC 606-10-50-13)。"
+      },
+      "contract_cost_rollforward": {
+        "label": "契約コストロールフォワード",
+        "description": "契約コスト資産ごとの資産化・償却・減損・期末残高。"
+      },
+      "contract_cost_postings": {
+        "label": "契約コスト記帳",
+        "description": "タグ付き総勘定元帳からの期間別資産化・償却・減損明細。"
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "スケジュールステータス",
         "obligation_status": "義務ステータス",
         "journal_entry_id": "仕訳 (ID)"
+      },
+      "contract_cost_rollforward": {
+        "id": "資産キー",
+        "contract_number": "契約",
+        "customer": "顧客",
+        "sales_rep": "営業担当",
+        "cost_type": "コスト種別",
+        "status": "ステータス",
+        "capitalized_on": "資産化日",
+        "amort_start_on": "償却開始",
+        "amort_end_on": "償却終了",
+        "currency": "通貨",
+        "capitalized": "資産化額",
+        "amortized": "償却額",
+        "impaired": "減損額",
+        "closing": "期末残高"
+      },
+      "contract_cost_postings": {
+        "id": "資産キー",
+        "period": "会計期間",
+        "posting_date": "記帳日",
+        "event": "事象",
+        "account": "科目",
+        "contract_number": "契約",
+        "currency": "通貨",
+        "amount": "金額",
+        "entry_id": "仕訳",
+        "asset_id": "資産キー"
       }
     },
     "enumValues": {

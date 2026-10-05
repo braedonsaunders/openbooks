@@ -3396,6 +3396,10 @@
         "title": "再入庫手数料",
         "singular": "再入庫手数料",
         "description": "検品済み返品に適用する手数料ルール。商品・カテゴリ・標準の順で適用します。"
+      },
+      "contract-cost-policy": {
+        "title": "契約コストポリシー",
+        "description": "どの獲得コストを資産化し、どの受益期間で、どの科目に計上するか(ASC 340-40)。"
       }
     },
     "fields": {
@@ -3889,7 +3893,16 @@
       "legalEmployer": "雇用主（法人）",
       "clearingAccountId": "清算勘定",
       "collectionMode": "徴収方式",
-      "states": "州"
+      "states": "州",
+      "practicalExpedient": "実務上の簡便法（12か月以下）",
+      "amortizationExpenseAccountId": "償却費勘定",
+      "capitalizeCommissions": "販売手数料を資産計上する",
+      "capitalizeFulfilment": "履行コストを資産計上する",
+      "customerLifeSource": "顧客ライフの算定方法",
+      "customerLifeMonths": "想定顧客ライフ（月数）",
+      "renewalCommensurateThresholdPercent": "更新手数料の相当性しきい値",
+      "contractCostBasisLabel": "償却基準",
+      "contractCostAssetAccount": "契約コスト資産勘定"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -4014,7 +4027,9 @@
       "unitOfMeasure": "項目の単位が数える内容。時間行はすべての時間基準（時間単価、給付の時間基準、保険対象時間、時間報告）に反映されます。数量行（輸送回数、食事、奨励単位）は金額を支払いますが、時間としては数えません。時間単価の項目は常に時間を使用します。",
       "nonCashAccountId": "前払資産、提供者への清算用負債、または費用の相殺勘定を使用してください。給与計算は福利厚生費を借方に、この勘定を貸方に計上します。提供者からの購入は費用の二重計上を避けるため同じ清算勘定を使用してください。費用の相殺勘定（費用勘定とは別の勘定）は、社用車の私的利用のように費用がすでに計上済みの給付に適しています。",
       "zonedDateTime": "Z または明示的なオフセットを含む ISO 日時を入力してください（例：2026-10-01T09:00:00-04:00）。オフセットは保持されます。",
-      "ianaTimezone": "Asia/Tokyo などの IANA タイムゾーンを入力してください。"
+      "ianaTimezone": "Asia/Tokyo などの IANA タイムゾーンを入力してください。",
+      "contractCostPracticalExpedient": "オンの場合、受益期間が12か月以下のコストは資産化せず即時費用処理されます。",
+      "contractCostCommensurate": "初回手数料に対するこの割合以上の更新手数料は、顧客ライフ基準でも償却を契約期間に限定します。"
     },
     "options": {
       "usageAggregation": {
@@ -4611,6 +4626,14 @@
         "none": "請求を続ける（最終処理なし）",
         "suspend": "サブスクリプションを利用停止",
         "cancel": "サブスクリプションを解約"
+      },
+      "contractCostBasis": {
+        "contractTerm": "契約期間",
+        "customerLife": "見込み顧客ライフ"
+      },
+      "contractCostLifeSource": {
+        "manual": "手動",
+        "derived": "SaaS指標から導出"
       }
     },
     "invoicing": {

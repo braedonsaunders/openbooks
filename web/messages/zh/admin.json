@@ -3321,6 +3321,10 @@
         "title": "重新入库费用",
         "singular": "重新入库费用",
         "description": "按商品、类别或默认规则对已检验退货收取的费用规则。"
+      },
+      "contract-cost-policy": {
+        "title": "合同成本政策",
+        "description": "哪些获客成本予以资本化、在哪个受益期间、计入哪些科目(ASC 340-40)。"
       }
     },
     "fields": {
@@ -3814,7 +3818,16 @@
       "legalEmployer": "法定雇主",
       "clearingAccountId": "清算账户",
       "collectionMode": "代收方式",
-      "states": "州"
+      "states": "州",
+      "practicalExpedient": "实务简化方法（12个月或更短）",
+      "amortizationExpenseAccountId": "摊销费用科目",
+      "capitalizeCommissions": "资本化销售佣金",
+      "capitalizeFulfilment": "资本化履约成本",
+      "customerLifeSource": "客户存续期来源",
+      "customerLifeMonths": "预计客户存续期（月）",
+      "renewalCommensurateThresholdPercent": "续约相称性阈值",
+      "contractCostBasisLabel": "摊销基准",
+      "contractCostAssetAccount": "合同成本资产科目"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -3939,7 +3952,9 @@
       "unitOfMeasure": "该项目单位的计量内容。工时行计入所有工时基数——小时费率、福利工时基数、可保险工时和工时报告。数量行（趟次、餐补、激励单位）支付其金额，但永不计为工时。按小时计费的项目始终使用工时。",
       "nonCashAccountId": "请使用预付资产、供应商清算负债或费用备抵科目。工资核算借记福利费用并贷记此科目；向供应商的采购必须使用同一清算科目，以免重复计算费用。费用备抵科目（与费用科目不同）适用于成本已计入费用的福利，例如公司车辆的私人使用。",
       "zonedDateTime": "输入包含 Z 或明确时区偏移的 ISO 时间戳，例如 2026-10-01T09:00:00-04:00。偏移将原样保留。",
-      "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。"
+      "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。",
+      "contractCostPracticalExpedient": "启用后，受益期为十二个月或更短的成本将直接费用化，不予资本化。",
+      "contractCostCommensurate": "续约佣金达到或超过初次佣金的这一比例时，即使采用客户生命周期基础，摊销也限定在合同期内。"
     },
     "options": {
       "usageAggregation": {
@@ -4536,6 +4551,14 @@
         "none": "继续开票（无最终处理）",
         "suspend": "暂停订阅",
         "cancel": "取消订阅"
+      },
+      "contractCostBasis": {
+        "contractTerm": "合同期",
+        "customerLife": "预计客户生命周期"
+      },
+      "contractCostLifeSource": {
+        "manual": "手动",
+        "derived": "源自SaaS指标"
       }
     },
     "payroll": {

@@ -1,0 +1,149 @@
+{
+  "common": {
+    "cancel": "キャンセル",
+    "on": "有効",
+    "off": "無効",
+    "derived": "SaaS指標から導出"
+  },
+  "workspace": {
+    "title": "契約コスト",
+    "description": "契約または顧客ライフにわたり償却する資産化された販売手数料。",
+    "assetBalance": "資産残高",
+    "periodAmortization": "当期償却額",
+    "unlinked": "未リンク",
+    "churned": "解約済み",
+    "policyTitle": "資産化ポリシー",
+    "policySummary": "コストの資産化と償却方法",
+    "policyDetail": "{basis}で償却、1年実務簡便法{expedient}、顧客ライフ{life}。",
+    "noPolicy": "有効なポリシーがありません。資産化の前に設定で作成してください。",
+    "openPolicy": "ポリシーを開く"
+  },
+  "policy": {
+    "basis": {
+      "contract_term": "契約期間",
+      "customer_life": "見込み顧客ライフ"
+    }
+  },
+  "queue": {
+    "title": "要対応",
+    "emptyTitle": "対応事項はありません",
+    "emptyDescription": "すべての手数料がリンクされ、有効な契約の残高は健全です。手数料を資産化して資産を増やしてください。",
+    "kind": {
+      "unlinked": "未リンク",
+      "churned": "解約済み"
+    },
+    "unlinkedHint": "{date}の手数料はまだ契約にリンクされていません。",
+    "churnedHint": "契約{contract}が{amount}の未償却残高で解約されました。",
+    "linkNow": "今すぐリンク",
+    "reviewNow": "今すぐ確認"
+  },
+  "status": {
+    "active": "有効",
+    "fully_amortized": "償却完了",
+    "impaired": "減損済み",
+    "expensed": "費用処理済み"
+  },
+  "method": {
+    "straight_line": "定額",
+    "pattern": "収益パターン"
+  },
+  "costType": {
+    "commission": "手数料",
+    "fulfilment": "履行"
+  },
+  "event": {
+    "contract_cost_capitalize": "資産化",
+    "contract_cost_amortization": "償却",
+    "contract_cost_impairment": "減損"
+  },
+  "labels": {
+    "contract": "契約",
+    "customer": "顧客",
+    "salesRep": "営業担当",
+    "costType": "コスト種別",
+    "capitalized": "資産化額",
+    "carrying": "帳簿価額",
+    "capitalizedOn": "資産化日"
+  },
+  "drawer": {
+    "unlinked": "未リンクの手数料",
+    "capitalized": "資産化額",
+    "carrying": "帳簿価額",
+    "window": "期間",
+    "method": "方法",
+    "linkHint": "この手数料にはまだ契約がないため償却されません。リンクして償却を計画してください。",
+    "impairHint": "契約が解約または縮小されました。減損を認識して資産を減額してください。",
+    "scheduleTitle": "償却スケジュール",
+    "month": "月",
+    "period": "会計期間",
+    "planned": "予定",
+    "posted": "記帳済み",
+    "viewEntry": "仕訳",
+    "entriesTitle": "仕訳履歴",
+    "advancedTitle": "詳細",
+    "advancedSummary": "担当、日付、ポリシー基準",
+    "salesRep": "営業担当",
+    "capitalizedOn": "資産化日",
+    "policyBasis": "ポリシー基準",
+    "baseCurrency": "通貨"
+  },
+  "capitalize": {
+    "open": "資産化",
+    "title": "手数料を資産化",
+    "description": "コストを資産として計上します。ポリシーで除外されたコストや1年実務簡便法の対象は即時費用処理されます。",
+    "contract": "収益契約",
+    "costType": "コスト種別",
+    "amount": "金額({currency})",
+    "date": "資産化日",
+    "expenseAccount": "元の費用科目",
+    "preview": "プレビュー: 契約コスト資産を借方、元の費用を貸方に{amount} {currency}計上します。",
+    "failed": "手数料を資産化できませんでした。",
+    "saved": "手数料を計上しました({status})。",
+    "submit": "資産化"
+  },
+  "run": {
+    "open": "償却を実行",
+    "title": "償却を実行",
+    "description": "期間内の到期資産ごとに償却明細を1行ずつ記帳します。記帳済みはスキップし、締済期間は拒否されます。",
+    "period": "会計期間",
+    "failed": "償却を実行できませんでした。",
+    "saved": "{posted}件記帳、{skipped}件スキップ。",
+    "submit": "実行"
+  },
+  "link": {
+    "open": "契約をリンク",
+    "title": "契約にリンク",
+    "description": "有効なポリシーから償却を計画し、資産化仕訳を記帳します。",
+    "contract": "収益契約",
+    "failed": "手数料をリンクできませんでした。",
+    "saved": "手数料をリンクしました。",
+    "submit": "リンク"
+  },
+  "impair": {
+    "open": "減損",
+    "title": "減損を認識",
+    "description": "帳簿価額{carrying}。残存対価から未認識コストを引いた額を上回る分を減損します。",
+    "remaining": "残存対価({currency})",
+    "costs": "未認識コスト({currency})",
+    "reason": "理由",
+    "reasonHint": "初月後に顧客が解約",
+    "date": "評価日",
+    "failed": "減損を認識できませんでした。",
+    "saved": "減損を記帳しました。",
+    "clean": "減損なし: 資産は回収可能です。",
+    "submit": "認識"
+  },
+  "import": {
+    "open": "インポート",
+    "title": "手数料をインポート",
+    "description": "1行1手数料: {columns}。金額は{currency}で記帳されます。不明な契約は未リンクのまま待機します。",
+    "expenseAccount": "元の費用科目",
+    "rows": "手数料の行",
+    "failed": "手数料の行をインポートできませんでした。",
+    "saved": "{count}件の手数料をインポートしました。",
+    "badShape": "各行に{columns}が必要です(カンマ区切り)。",
+    "rowRef": "インポート行{index}",
+    "report": "{ok}件資産化または待機、{refused}件拒否。",
+    "submit": "インポート"
+  }
+}

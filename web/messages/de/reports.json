@@ -986,6 +986,14 @@
       "remaining_performance_obligations": {
         "label": "Verbleibende Leistungsverpflichtungen",
         "description": "Noch zu realisierender Transaktionspreis je Verpflichtung und Monat im Hauptbuch, mit erwartetem Zeitraum (ASC 606-10-50-13)."
+      },
+      "contract_cost_rollforward": {
+        "label": "Vertragskosten-Rollforward",
+        "description": "Aktivierte, abgeschriebene, wertgeminderte und Schlusssalden je Vertragskostenanlage."
+      },
+      "contract_cost_postings": {
+        "label": "Vertragskostenbuchungen",
+        "description": "Aktivierungs-, Abschreibungs- und Wertminderungszeilen je Periode aus dem markierten Hauptbuch."
       }
     },
     "columns": {
@@ -2365,6 +2373,34 @@
         "schedule_status": "Planstatus",
         "obligation_status": "Verpflichtungsstatus",
         "journal_entry_id": "Journaleintrag (ID)"
+      },
+      "contract_cost_rollforward": {
+        "id": "Anlagenschlüssel",
+        "contract_number": "Vertrag",
+        "customer": "Kunde",
+        "sales_rep": "Verkäufer",
+        "cost_type": "Kostenart",
+        "status": "Status",
+        "capitalized_on": "Aktiviert am",
+        "amort_start_on": "Abschreiben ab",
+        "amort_end_on": "Abschreiben bis",
+        "currency": "Währung",
+        "capitalized": "Aktiviert",
+        "amortized": "Abgeschrieben",
+        "impaired": "Wertgemindert",
+        "closing": "Schlusssaldo"
+      },
+      "contract_cost_postings": {
+        "id": "Anlagenschlüssel",
+        "period": "Periode",
+        "posting_date": "Buchungsdatum",
+        "event": "Ereignis",
+        "account": "Konto",
+        "contract_number": "Vertrag",
+        "currency": "Währung",
+        "amount": "Betrag",
+        "entry_id": "Buchung",
+        "asset_id": "Anlagenschlüssel"
       }
     },
     "enumValues": {

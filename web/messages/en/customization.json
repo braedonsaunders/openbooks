@@ -32,6 +32,7 @@
     "webhook_endpoint": "Webhook endpoint",
     "budget_scenario": "Budget",
     "revenue_contract": "Revenue contract",
+    "contract_cost_asset": "Contract cost asset",
     "equipment_unit": "Equipment unit",
     "resourcing_assignment": "Resource assignment",
     "resourcing_request": "Resource request",

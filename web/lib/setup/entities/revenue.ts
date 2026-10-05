@@ -78,4 +78,60 @@ export const REVENUE_ENTITIES: SetupEntity[] = [
       { key: 'isActive', kind: 'boolean' },
     ],
   },
+  {
+    // Contract cost policy — which acquisition costs capitalize, over what
+    // benefit period, and into which accounts (ASC 340-40). Effective-dated:
+    // a new row supersedes the old one, so a policy change never
+    // reinterprets history.
+    key: 'contract-cost-policy',
+    table: 'contract_cost_policies',
+    actorCols: true,
+    groupKey: 'revenue',
+    featureKey: 'contractCosts',
+    iconKey: 'trending-up',
+    orgScoped: true,
+    orderBy: 'effective_from desc',
+    columns: [
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'basis', kind: 'text', labelKey: 'fields.contractCostBasisLabel' },
+      { key: 'practicalExpedient', kind: 'boolean' },
+      { key: 'assetAccountId', kind: 'ref', ref: 'accounts', labelKey: 'fields.contractCostAssetAccount' },
+      { key: 'amortizationExpenseAccountId', kind: 'ref', ref: 'accounts' },
+    ],
+    fields: [
+      { key: 'effectiveFrom', kind: 'date', required: true },
+      { key: 'capitalizeCommissions', kind: 'boolean', defaultValue: true },
+      { key: 'capitalizeFulfilment', kind: 'boolean' },
+      {
+        key: 'practicalExpedient', kind: 'boolean', defaultValue: true,
+        helpTextKey: 'fieldHelp.contractCostPracticalExpedient',
+      },
+      {
+        key: 'basis', kind: 'select', required: true, labelKey: 'fields.contractCostBasisLabel',
+        options: [
+          { value: 'contract_term', labelKey: 'options.contractCostBasis.contractTerm' },
+          { value: 'customer_life', labelKey: 'options.contractCostBasis.customerLife' },
+        ],
+      },
+      {
+        key: 'customerLifeSource', kind: 'select',
+        showWhen: { field: 'basis', in: ['customer_life'] },
+        options: [
+          { value: 'manual', labelKey: 'options.contractCostLifeSource.manual' },
+          { value: 'derived', labelKey: 'options.contractCostLifeSource.derived' },
+        ],
+      },
+      {
+        key: 'customerLifeMonths', kind: 'integer', min: 1,
+        showWhen: { field: 'customerLifeSource', in: ['manual'] },
+      },
+      {
+        key: 'renewalCommensurateThresholdPercent', kind: 'percent',
+        showWhen: { field: 'basis', in: ['customer_life'] },
+        helpTextKey: 'fieldHelp.contractCostCommensurate',
+      },
+      { key: 'assetAccountId', kind: 'ref', ref: 'accounts', required: true, labelKey: 'fields.contractCostAssetAccount' },
+      { key: 'amortizationExpenseAccountId', kind: 'ref', ref: 'accounts', required: true },
+    ],
+  },
 ]
