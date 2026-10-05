@@ -14,6 +14,7 @@ export {
   bulkEditVariants,
   detachVariant,
   convertItemToFamily,
+  createFamilyWithVariants,
   getItemFamily,
   renderVariantCode,
   slugifyCodeSegment,
@@ -42,6 +43,8 @@ export {
   type BulkBarcodeInput,
   type BulkEditVariantsInput,
   type ConvertItemInput,
+  type CreateFamilyWithVariantsInput,
+  type CreateVariantChoice,
 } from './item-families.ts'
 /** Stable demand forecasting and replenishment planning operations for the planning UI. */
 export {

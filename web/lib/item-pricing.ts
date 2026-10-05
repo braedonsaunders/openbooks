@@ -6,7 +6,15 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 export interface ResolvedItemPrice {
   unitPrice: string
   currency: string
-  source: 'customer_item' | 'customer_level' | 'base_level' | 'simple'
+  source:
+    | 'customer_item'
+    | 'customer_family'
+    | 'customer_level'
+    | 'family_level'
+    | 'base_level'
+    | 'family_base_level'
+    | 'simple'
+    | 'family_base'
   scheduleId: string | null
   priceLevelId: string | null
   priceLevelName: string | null
@@ -14,17 +22,29 @@ export interface ResolvedItemPrice {
   quantityBasis: 'line_quantity' | 'overall_item_quantity'
   /**
    * Lineage for the priced line's recorded basis (0336): the assignment row
-   * this price resolved from (customer_level only), and the instant the
+   * this price resolved from (either level source), and the instant the
    * resolution ran. Replay reads the recorded basis, never a re-resolution.
    */
   assignmentId: string | null
   resolvedAt: string
+  /**
+   * The family a family-scoped price was inherited from, so the drawer can
+   * name it ("Inherited from family T-Shirt"). Null for item-own prices.
+   */
+  familyId: string | null
+  familyCode: string | null
+  familyName: string | null
 }
 
 /**
  * Resolve one exact selling price. Precedence is intentionally encoded in the
- * query and returned as evidence: customer/item absolute schedule, customer's
- * effective level, base level, then the simple item price in org base currency.
+ * query and returned as evidence: customer/variant absolute schedule,
+ * customer/family absolute schedule, the variant's effective level, the
+ * family's effective level, the variant's base level, the family's base
+ * level, then the variant's simple price and finally the family base price,
+ * both in org base currency. A variant's own schedule always outranks its
+ * family's at the same tier; an item with no family never matches a family
+ * row, so non-variant resolution is unchanged.
  */
 export async function resolveItemPrice(input: {
   orgId: string
@@ -51,10 +71,23 @@ export async function resolveItemPrice(input: {
     unit_price: string
     minimum_quantity: string
     quantity_basis: 'line_quantity' | 'overall_item_quantity'
-    source: 'customer_item' | 'customer_level' | 'base_level'
+    source:
+      | 'customer_item'
+      | 'customer_family'
+      | 'customer_level'
+      | 'family_level'
+      | 'base_level'
+      | 'family_base_level'
     assignment_id: string | null
+    family_id: string | null
+    family_code: string | null
+    family_name: string | null
   }>(sql`
-    with assigned_level as (
+    with subject as (
+      -- The variant's family, if any. A NULL family makes every family_id
+      -- comparison below fail, so standalone items resolve exactly as before.
+      select family_id from items where org_id = ${input.orgId} and id = ${input.itemId}
+    ), assigned_level as (
       -- Membership is the effective-dated window, never current activation:
       -- deactivating an assignment end-dates it (0327), so a late transaction
       -- inside the old window still finds its level. But an inactive row with
@@ -79,17 +112,20 @@ export async function resolveItemPrice(input: {
        limit 1
     ), candidates as (
       select schedule.id, schedule.price_level_id, level.name as price_level_name,
-             schedule.quantity_basis,
+             schedule.quantity_basis, schedule.family_id,
              case
-               when schedule.customer_id = ${input.customerId ?? null} then 1
+               when schedule.item_id is not null and schedule.customer_id = ${input.customerId ?? null} then 1
+               when schedule.family_id is not null and schedule.customer_id = ${input.customerId ?? null} then 2
                -- The customer's level only prices when the level itself is
                -- live as of onDate: the join above already encodes the
                -- activation-history predicate, so a deactivated level joins
-               -- NULL and must not keep precedence 2 on the schedule's bare
+               -- NULL and must not keep precedence on the schedule's bare
                -- foreign key (PRC15b). level.id is NULL exactly then, and
                -- NULL never equals the assignment.
-               when schedule.customer_id is null and level.id = (select price_level_id from assigned_level) then 2
-               when schedule.customer_id is null and level.is_base then 3
+               when schedule.item_id is not null and schedule.customer_id is null and level.id = (select price_level_id from assigned_level) then 3
+               when schedule.family_id is not null and schedule.customer_id is null and level.id = (select price_level_id from assigned_level) then 4
+               when schedule.item_id is not null and schedule.customer_id is null and level.is_base then 5
+               when schedule.family_id is not null and schedule.customer_id is null and level.is_base then 6
                else 99
              end as precedence
         from item_price_schedules schedule
@@ -109,22 +145,41 @@ export async function resolveItemPrice(input: {
                    )
                    else level.is_active end)
        where schedule.org_id = ${input.orgId}
-         and schedule.item_id = ${input.itemId}
          and schedule.currency = ${currency}
          and schedule.is_active
          and schedule.effective_from <= ${input.onDate}::date
          and (schedule.effective_to is null or schedule.effective_to >= ${input.onDate}::date)
          and (
-           schedule.customer_id = ${input.customerId ?? null}
-           or (schedule.customer_id is null and level.id = (select price_level_id from assigned_level))
-           or (schedule.customer_id is null and level.is_base)
+           (schedule.item_id = ${input.itemId}
+           and (
+             schedule.customer_id = ${input.customerId ?? null}
+             or (schedule.customer_id is null and level.id = (select price_level_id from assigned_level))
+             or (schedule.customer_id is null and level.is_base)
+           ))
+           or (schedule.family_id = (select family_id from subject)
+           and (select family_id from subject) is not null
+           and (
+             schedule.customer_id = ${input.customerId ?? null}
+             or (schedule.customer_id is null and level.id = (select price_level_id from assigned_level))
+             or (schedule.customer_id is null and level.is_base)
+           ))
          )
     )
     select candidate.id as schedule_id, candidate.price_level_id, candidate.price_level_name,
            price.unit_price::text, price.minimum_quantity::text, candidate.quantity_basis,
-           case candidate.precedence when 1 then 'customer_item' when 2 then 'customer_level' else 'base_level' end as source,
-           (select id from assigned_level) as assignment_id
+           case candidate.precedence
+             when 1 then 'customer_item'
+             when 2 then 'customer_family'
+             when 3 then 'customer_level'
+             when 4 then 'family_level'
+             when 5 then 'base_level'
+             else 'family_base_level'
+           end as source,
+           (select id from assigned_level) as assignment_id,
+           candidate.family_id, family.code as family_code, family.name as family_name
       from candidates candidate
+      left join item_families family
+        on family.org_id = ${input.orgId} and family.id = candidate.family_id
       join lateral (
         select item_price_breaks.unit_price, item_price_breaks.minimum_quantity
           from item_price_breaks
@@ -153,22 +208,41 @@ export async function resolveItemPrice(input: {
       priceLevelName: winner.price_level_name,
       minimumQuantity: winner.minimum_quantity,
       quantityBasis: winner.quantity_basis,
-      assignmentId: winner.source === 'customer_level' ? winner.assignment_id : null,
+      assignmentId: winner.source === 'customer_level' || winner.source === 'family_level' ? winner.assignment_id : null,
       resolvedAt,
+      familyId: winner.family_id,
+      familyCode: winner.family_code,
+      familyName: winner.family_name,
     }
   }
 
-  const fallback = await db.execute<{ default_rate: string | null; base_currency: string }>(sql`
-    select item.default_rate::text, org.base_currency
-      from items item join orgs org on org.id = item.org_id
+  const fallback = await db.execute<{
+    default_rate: string | null
+    base_currency: string
+    family_rate: string | null
+    family_id: string | null
+    family_code: string | null
+    family_name: string | null
+  }>(sql`
+    select item.default_rate::text, org.base_currency,
+           family.default_rate::text as family_rate,
+           family.id as family_id, family.code as family_code, family.name as family_name
+      from items item
+      join orgs org on org.id = item.org_id
+      left join item_families family on family.org_id = item.org_id and family.id = item.family_id
      where item.org_id = ${input.orgId} and item.id = ${input.itemId}
   `)
   const simple = fallback.rows[0]
-  if (!simple?.default_rate || simple.base_currency !== currency) return null
+  if (!simple || simple.base_currency !== currency) return null
+  // The variant's own base price wins; the family base price (the family
+  // row's default rate) prices variants that carry no rate of their own.
+  const familyPrice = !simple.default_rate ? simple.family_rate : null
+  if (!simple.default_rate && !familyPrice) return null
+  const inherited = familyPrice !== null
   return {
-    unitPrice: simple.default_rate,
+    unitPrice: (inherited ? familyPrice : simple.default_rate) as string,
     currency,
-    source: 'simple',
+    source: inherited ? 'family_base' : 'simple',
     scheduleId: null,
     priceLevelId: null,
     priceLevelName: null,
@@ -176,5 +250,8 @@ export async function resolveItemPrice(input: {
     quantityBasis: 'line_quantity',
     assignmentId: null,
     resolvedAt,
+    familyId: inherited ? simple.family_id : null,
+    familyCode: inherited ? simple.family_code : null,
+    familyName: inherited ? simple.family_name : null,
   }
 }

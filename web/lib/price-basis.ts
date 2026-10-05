@@ -10,7 +10,15 @@ import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
  * stored unit price, as before.
  */
 export interface PriceBasis {
-  kind: 'customer_item' | 'customer_level' | 'base_level' | 'simple'
+  kind:
+    | 'customer_item'
+    | 'customer_family'
+    | 'customer_level'
+    | 'family_level'
+    | 'base_level'
+    | 'family_base_level'
+    | 'simple'
+    | 'family_base'
   scheduleId: string | null
   levelId: string | null
   assignmentId: string | null
@@ -18,7 +26,29 @@ export interface PriceBasis {
   resolvedAt: string
 }
 
-const KINDS = new Set(['customer_item', 'customer_level', 'base_level', 'simple'])
+const KINDS = new Set([
+  'customer_item',
+  'customer_family',
+  'customer_level',
+  'family_level',
+  'base_level',
+  'family_base_level',
+  'simple',
+  'family_base',
+])
+
+/** Lineage kinds that resolve from a price schedule carry its id. */
+const SCHEDULE_KINDS = new Set([
+  'customer_item',
+  'customer_family',
+  'customer_level',
+  'family_level',
+  'base_level',
+  'family_base_level',
+])
+
+/** Lineage kinds that resolve through a customer's level carry its ids. */
+const LEVEL_KINDS = new Set(['customer_level', 'family_level'])
 
 function uuidOrNull(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return null
@@ -37,7 +67,7 @@ export function parsePriceBasis(raw: unknown): PriceBasis | null | { error: stri
   }
   const basis = raw as Record<string, unknown>
   if (!KINDS.has(basis.kind as string)) {
-    return { error: 'Line price basis kind must be customer_item, customer_level, base_level or simple' }
+    return { error: 'Line price basis kind must be customer_item, customer_family, customer_level, family_level, base_level, family_base_level, simple or family_base' }
   }
   const scheduleId = uuidOrNull(basis.scheduleId)
   const levelId = uuidOrNull(basis.levelId)
@@ -45,8 +75,8 @@ export function parsePriceBasis(raw: unknown): PriceBasis | null | { error: stri
   if (scheduleId === undefined || levelId === undefined || assignmentId === undefined) {
     return { error: 'Line price basis ids must be UUIDs or null' }
   }
-  if ((basis.kind === 'customer_level' && (levelId === null || assignmentId === null)) ||
-      ((basis.kind === 'customer_item' || basis.kind === 'base_level') && scheduleId === null)) {
+  if ((LEVEL_KINDS.has(basis.kind as string) && (levelId === null || assignmentId === null)) ||
+      (SCHEDULE_KINDS.has(basis.kind as string) && !LEVEL_KINDS.has(basis.kind as string) && scheduleId === null)) {
     return { error: 'Line price basis is missing the id its kind resolves from' }
   }
   const unitPrice = canonicalDecimal(basis.unitPrice, 8)
