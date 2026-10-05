@@ -192,6 +192,39 @@ test("horizon normalizer accepts the cap range and fails closed to the fallback"
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
+test("monthly spreads use the week's actual calendar month, quarter flags the fiscal calendar", () => {
+  // The forecast priced every month at 4.345 weeks and every quarter on the
+  // calendar: January collected like February, and a July-start org's Q1 read
+  // Q3. Run under React's server condition like the other core checks.
+  const source = `
+    import assert from "node:assert/strict";
+    import { spreadMonthlyOverWeek, fiscalFormulaFlags } from "./web/lib/cash/core.ts";
+
+    // 4345 a month spreads to 4345 * 31 / 7 in a January week and
+    // 4345 * 28 / 7 in a February week — never 4345 in both.
+    assert.equal(spreadMonthlyOverWeek("4345.0000", "2026-01-04"), "19242.1429");
+    assert.equal(spreadMonthlyOverWeek("4345.0000", "2026-02-01"), "17380.0000");
+    assert.notEqual(
+      spreadMonthlyOverWeek("4345.0000", "2026-01-04"),
+      spreadMonthlyOverWeek("4345.0000", "2026-02-01"),
+    );
+
+    // A July-start org: the week of July 5 opens fiscal Q1, not calendar Q3.
+    assert.deepEqual(fiscalFormulaFlags("2026-07-05", 7, 1, 0), { quarter: 1, isQStart: 1, isQEnd: 0, isYearEnd: 0 });
+    // ... its fiscal year-end week straddles June into July, not December.
+    assert.deepEqual(fiscalFormulaFlags("2026-06-28", 7, 0, 1), { quarter: 4, isQStart: 0, isQEnd: 1, isYearEnd: 1 });
+    // A January-start org keeps calendar quarters: July opens Q3.
+    assert.deepEqual(fiscalFormulaFlags("2026-07-05", 1, 1, 0), { quarter: 3, isQStart: 1, isQEnd: 0, isYearEnd: 0 });
+    console.log("cash calendar behavior passed: actual month lengths spread months, fiscal start quarters years");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test("cashflow horizon control offers shared presets and preserves other query filters", async () => {
   document.body.innerHTML = "";
   navigation.replacements.length = 0;

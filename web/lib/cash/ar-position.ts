@@ -27,6 +27,7 @@ import {
 import { buildTimeline, type ApSettings } from "./cash-position";
 import { agingBasisDate } from "../aging-basis";
 import { isCategoryVisibleInScope } from "./core";
+import { fiscalStartMonth } from "../fiscal";
 
 export interface ArWeek {
   weekStart: string;
@@ -127,7 +128,7 @@ export async function arPosition(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, model] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, model, fiscalStart] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds, orgId),
@@ -135,6 +136,7 @@ export async function arPosition(
     bankBalances(asOfIso, subIds, orgId),
     loadCategories(orgId),
     cashflowModel(orgId),
+    fiscalStartMonth(orgId),
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
@@ -142,7 +144,7 @@ export async function arPosition(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart };
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
   const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
   const timeline = buildTimeline({
