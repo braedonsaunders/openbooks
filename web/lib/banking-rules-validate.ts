@@ -55,12 +55,21 @@ function exactDecimalParts(raw: string): { digits: bigint; scale: number } {
 }
 
 /** True when the exact decimal sum of `values` exceeds `limit` — no binary-float rounding. */
-function exactDecimalSumExceeds(values: (number | string)[], limit: number): boolean {
+function exactDecimalSumCompare(values: (number | string)[], limit: number): number {
   const parts = values.map((v) => exactDecimalParts(String(v)))
   const limitPart = exactDecimalParts(String(limit))
   const maxScale = Math.max(limitPart.scale, 0, ...parts.map((p) => p.scale))
   const at = (p: { digits: bigint; scale: number }) => p.digits * 10n ** BigInt(maxScale - p.scale)
-  return parts.reduce((acc, p) => acc + at(p), 0n) > at(limitPart)
+  const total = parts.reduce((acc, p) => acc + at(p), 0n)
+  return total === at(limitPart) ? 0 : total > at(limitPart) ? 1 : -1
+}
+
+function exactDecimalSumExceeds(values: (number | string)[], limit: number): boolean {
+  return exactDecimalSumCompare(values, limit) > 0
+}
+
+function exactDecimalSumEquals(values: (number | string)[], limit: number): boolean {
+  return exactDecimalSumCompare(values, limit) === 0
 }
 
 // The UUID shape lives in lib/list-params (single source of truth); this
@@ -248,6 +257,13 @@ export function validateOutcome(raw: unknown): ValidationResult<RuleOutcome> {
   const percents = lines.flatMap((line) => (line.portion.kind === 'percent' ? [line.portion.value] : []))
   if (exactDecimalSumExceeds(percents, 100)) {
     return { ok: false, error: 'percent portions cannot total more than 100' }
+  }
+  // Without a remainder line nothing absorbs an unallocated share, so a
+  // percent-only split must cover the whole line exactly. (Fixed portions are
+  // judged against the actual line amount when the rule applies.)
+  const hasFixed = lines.some((line) => line.portion.kind === 'fixed')
+  if (remainderCount === 0 && !hasFixed && !exactDecimalSumEquals(percents, 100)) {
+    return { ok: false, error: 'percent portions must total exactly 100 unless one line is the remainder' }
   }
 
   const outcome: Extract<RuleOutcome, { action: 'categorize' }> = { action: 'categorize', version: 2, mode: o.mode, lines }
