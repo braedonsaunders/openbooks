@@ -1183,13 +1183,13 @@
       "insights": "Intelligente Einblicke",
       "keyMetrics": "Kernkennzahlen",
       "monthlyDetails": "Monatsdetails",
-      "monthlyDetailsHint": "MoM-Wachstum gedeckelt +200/−80 %; „—“ markiert Hochlauf aus unreifem Monat",
+      "monthlyDetailsHint": "MoM-Wachstum gedeckelt +{up}/−{down} %; „—“ markiert Hochlauf aus unreifem Monat",
       "monthlyRevenueTrend": "Monatsumsatz-Trend",
       "overdueHint": "Tage über den eigenen Ø-Bestellzyklus jedes Kunden hinaus",
       "overdueOrders": "Überfällige Aufträge",
       "profitabilityHint": "Klicken Sie auf einen Kunden für Aufträge · ⚠️ markiert Margenlecks (≥{share} % Umsatzanteil, <{margin} % Marge)",
       "revenueByTier": "Umsatz nach CLV-Stufe",
-      "rfmHint": "R/F/M-Werte: 5 bestens, 1 schwächste — Aktualität aus festen Tagesschwellen, Häufigkeit/Volumen aus 33./66. Perzentil",
+      "rfmHint": "R/F/M-Werte: 5 bestens, 1 schwächste — Aktualität {good}/{warning}/{critical} Tage, Häufigkeit/Volumen aus 33./66. Perzentil",
       "rfmSegments": "RFM-Segmente",
       "scoringModel": "Bewertungsmodell",
       "scoringModelHint": "Wie die Gesamtwerte gebildet werden",
@@ -1235,27 +1235,27 @@
     "scoring": {
       "clvRetention": {
         "label": "CLV-Bindung",
-        "value": "Bindung 0,95·e^(−Tage/120), begrenzt auf 10–95 %"
+        "value": "Bindung {base}·e^(−Tage/{decay}), begrenzt auf {min}–{max} %"
       },
       "clvTiers": {
         "label": "CLV-Stufen",
-        "value": "Top 10 % Platin · nächste 20 % Gold · nächste 30 % Silber · Rest Bronze"
+        "value": "Top {platinum} % Platin · Top {gold} % Gold · Top {silver} % Silber · Rest Bronze"
       },
       "frictionPenalty": {
         "label": "Friktionsabschlag",
-        "value": "Kritisch −25 · Hoch −15 · Mittel −8"
+        "value": "Kritisch −{critical} · Hoch −{high} · Mittel −{medium}"
       },
       "healthGrades": {
         "label": "Gesundheitsnoten",
-        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F darunter"
+        "value": "A+ ≥{aPlus} · A ≥{a} · B ≥{b} · C ≥{c} · D ≥{d} · F darunter"
       },
       "healthWeights": {
         "label": "Gesundheitsgewichte",
-        "value": "Aktualität 25 % · Häufigkeit 25 % · Volumen 30 % · Zahlung 20 %"
+        "value": "Aktualität {recency} % · Häufigkeit {frequency} % · Umsatz {monetary} % · Zahlung {payment} %"
       },
       "paymentScore": {
         "label": "Zahlungswert",
-        "value": "100 − 40/20/10 bei DSO >60/>30/>15 T − min(40, Überfällige×10)"
+        "value": "100 − {highPenalty} (DSO >{highDays} T) − {medPenalty} (>{medDays} T) − {lowPenalty} (>{lowDays} T) − min({cap}, Überfällige×{per})"
       },
       "rfmFrequency": {
         "label": "RFM-Häufigkeit / -Volumen",
@@ -1263,7 +1263,7 @@
       },
       "rfmRecency": {
         "label": "RFM-Aktualitätsschwellen",
-        "value": "≤30 T → 5 · ≤90 T → 3 · ≤180 T → 2 · sonst 1"
+        "value": "≤{good} T → 5 · ≤{warning} T → 3 · ≤{critical} T → 2 · sonst 1"
       }
     },
     "segment": {
@@ -1322,12 +1322,13 @@
       "revenue": "Umsatz",
       "invoiced": "Bruttorechnungen im Zeitraum",
       "rfmChampions": "RFM-Top-Segment",
-      "threeYearProjection": "3-Jahres-Prognose",
+      "threeYearProjection": "{years}-Jahres-Prognose",
       "trend": "Trend: {trend}",
       "weightedRfm": "gewichtet R/F/M/Zahlung",
       "scoreHigh": "Wert ≥ {cutoff}",
       "scoreMid": "Wert {low}–{high}",
-      "scoreLow": "Wert < {cutoff}"
+      "scoreLow": "Wert < {cutoff}",
+      "daysShort": "{days} T"
     },
     "table": {
       "active": "Aktiv",
@@ -1394,6 +1395,25 @@
     "errors": {
       "paymentStatsUnavailable": "Die Kundenzahlungsstatistik wurde nicht geladen. Laden Sie dieses Dashboard erneut.",
       "scoringWeightsInvalid": "Die Gewichtungen {keys} ergeben {actual} statt {total} — bitte in der Konfiguration dieses Dashboards korrigieren."
+    },
+    "rating": {
+      "excellent": "exzellent",
+      "good": "gut",
+      "fair": "mäßig",
+      "poor": "schwach",
+      "unknown": "unbekannt"
+    },
+    "urgency": {
+      "critical": "kritisch",
+      "high": "hoch",
+      "medium": "mittel",
+      "due-soon": "bald fällig",
+      "on-track": "im Plan"
+    },
+    "trend": {
+      "growing": "wachsend",
+      "declining": "rückläufig",
+      "stable": "stabil"
     }
   },
   "vendor": {

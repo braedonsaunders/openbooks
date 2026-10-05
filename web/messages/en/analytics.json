@@ -704,7 +704,7 @@
     "sub": {
       "newInPeriod": "{count} new in period",
       "rfmChampions": "RFM champions segment",
-      "threeYearProjection": "3-year projection",
+      "threeYearProjection": "{years}-year projection",
       "weightedRfm": "weighted R/F/M/payment",
       "avgPerCustomer": "avg {amount} / customer",
       "clvBase": "historical CLV base",
@@ -724,7 +724,8 @@
       "jobsCount": "{count} jobs",
       "scoreHigh": "score ≥ {cutoff}",
       "scoreMid": "score {low}–{high}",
-      "scoreLow": "score < {cutoff}"
+      "scoreLow": "score < {cutoff}",
+      "daysShort": "{days}d"
     },
     "drill": {
       "invoicesRevenue": "{invoices} invoices · {revenue}"
@@ -757,7 +758,7 @@
       "segmentMix": "Segment Mix",
       "customersBySegment": "Customers by Segment ({count})",
       "segmentCustomers": "{segment} ({count})",
-      "rfmHint": "R/F/M scores: 5 best, 1 worst — recency from fixed day thresholds, frequency/monetary from 33rd/66th percentiles",
+      "rfmHint": "R/F/M scores: 5 best, 1 worst — recency bands {good}/{warning}/{critical} days, frequency/monetary from 33rd/66th percentiles",
       "tierDistribution": "CLV Tier Distribution",
       "howClvProjected": "How CLV is projected",
       "clvRanking": "Lifetime Value Ranking",
@@ -771,7 +772,7 @@
       "cohortRetention": "Cohort Retention",
       "cohortHint": "By first-order year · active = ordered in the last 6 months",
       "monthlyDetails": "Monthly Details",
-      "monthlyDetailsHint": "MoM growth capped +200/−80%; '—' marks ramp-up from an immature month",
+      "monthlyDetailsHint": "MoM growth capped +{up}/−{down}%; '—' marks ramp-up from an immature month",
       "customerProfitability": "Customer Profitability",
       "profitabilityHint": "Click a customer to expand jobs · ⚠️ marks profit leaks (≥{share}% of revenue, <{margin}% margin)",
       "scoringModel": "Scoring Model",
@@ -1285,15 +1286,15 @@
     "scoring": {
       "healthWeights": {
         "label": "Health weights",
-        "value": "Recency 25% · Frequency 25% · Monetary 30% · Payment 20%"
+        "value": "Recency {recency}% · Frequency {frequency}% · Monetary {monetary}% · Payment {payment}%"
       },
       "frictionPenalty": {
         "label": "Friction penalty",
-        "value": "Critical −25 · High −15 · Medium −8"
+        "value": "Critical −{critical} · High −{high} · Medium −{medium}"
       },
       "rfmRecency": {
         "label": "RFM recency thresholds",
-        "value": "≤30d → 5 · ≤90d → 3 · ≤180d → 2 · else 1"
+        "value": "≤{good}d → 5 · ≤{warning}d → 3 · ≤{critical}d → 2 · else 1"
       },
       "rfmFrequency": {
         "label": "RFM frequency / monetary",
@@ -1301,19 +1302,19 @@
       },
       "clvRetention": {
         "label": "CLV retention",
-        "value": "retention 0.95·e^(−days/120), clamped 10–95%"
+        "value": "retention {base}·e^(−days/{decay}), clamped {min}–{max}%"
       },
       "clvTiers": {
         "label": "CLV tiers",
-        "value": "Top 10% Platinum · next 20% Gold · next 30% Silver · rest Bronze"
+        "value": "Top {platinum}% Platinum · top {gold}% Gold · top {silver}% Silver · rest Bronze"
       },
       "paymentScore": {
         "label": "Payment score",
-        "value": "100 − 40/20/10 by DSO >60/>30/>15d − min(40, overdue×10)"
+        "value": "100 − {highPenalty} (DSO >{highDays}d) − {medPenalty} (>{medDays}d) − {lowPenalty} (>{lowDays}d) − min({cap}, overdue×{per})"
       },
       "healthGrades": {
         "label": "Health grades",
-        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F below"
+        "value": "A+ ≥{aPlus} · A ≥{a} · B ≥{b} · C ≥{c} · D ≥{d} · F below"
       }
     },
     "sources": {
@@ -1394,6 +1395,25 @@
     "errors": {
       "paymentStatsUnavailable": "Customer payment statistics did not load. Reload this dashboard to retry.",
       "scoringWeightsInvalid": "Score weights {keys} sum to {actual}, not {total} — open Configuration on this dashboard and correct them."
+    },
+    "rating": {
+      "excellent": "excellent",
+      "good": "good",
+      "fair": "fair",
+      "poor": "poor",
+      "unknown": "unknown"
+    },
+    "urgency": {
+      "critical": "critical",
+      "high": "high",
+      "medium": "medium",
+      "due-soon": "due soon",
+      "on-track": "on track"
+    },
+    "trend": {
+      "growing": "growing",
+      "declining": "declining",
+      "stable": "stable"
     }
   },
   "vendor": {
