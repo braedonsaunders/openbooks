@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listAvailableToPromise } from '@openbooks/engine/src/inventory/availability.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { listAvailableToPromise } from '@openbooks/engine/inventory'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
+import { availabilityEntityScope } from '@/lib/availability-report'
 
 const itemParams = z.object({ id: z.string() })
 
@@ -49,10 +50,16 @@ export const GET = defineRoute({
         components: recipe.map((row) => byId.get(row.component_item_id) ?? null),
       }
     }
-    const all = await listAvailableToPromise(db, orgId, { itemIds })
+    // Availability nets reservations inside one legal entity: read the kit
+    // through the operator's entity scope, the same scope the availability
+    // report renders, so the drawer never promises another entity's stock.
+    const entity = await availabilityEntityScope(gate, undefined)
+    if (!entity.selectedId) return NextResponse.json(empty)
+    const subsidiaryId = entity.selectedId
+    const all = await listAvailableToPromise(db, orgId, { subsidiaryId, itemIds })
     const perWarehouse = []
     for (const warehouse of warehouses) {
-      const rows = await listAvailableToPromise(db, orgId, { itemIds, warehouseId: warehouse.id })
+      const rows = await listAvailableToPromise(db, orgId, { subsidiaryId, itemIds, warehouseId: warehouse.id })
       perWarehouse.push({ warehouseId: warehouse.id, warehouseCode: warehouse.code, ...shape(rows) })
     }
     return NextResponse.json({ itemId: id, allLocations: shape(all), warehouses: perWarehouse })

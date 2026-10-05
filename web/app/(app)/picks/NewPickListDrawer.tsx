@@ -110,6 +110,10 @@ const blankRow = (): PickRow => ({
   bins: [],
   binId: '',
   quantity: '',
+  // A blank row is never a kit line: no component, no header, no kit label.
+  kitComponentItemId: null,
+  isKitHeader: false,
+  kitLabel: null,
 })
 
 /**
