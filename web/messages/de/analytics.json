@@ -1627,7 +1627,8 @@
       "logic": "Prognoselogik",
       "perWeek": "Pro Woche (Ø)",
       "horizonTotal": "Horizont gesamt",
-      "unavailable": "Kategorie nicht verfügbar: {detail}"
+      "unavailableCardThreshold": "Kreditkartenkategorie „{name}“ hat keine Zahlungshistorie und keine Schwelle für wesentliche Zahlungen — lege eine im Kategorie-Editor fest, damit die Prognose weiß, welche Zahlungen als letzte Zahlung zählen",
+      "unavailableMissingRate": "Kein Kassakurs für {func}→{base} am oder vor dem {date} — lege einen unter Setup → Wechselkurse an, damit Historien umgerechnet werden"
     },
     "toggle": {
       "outflowsAp": "Abflüsse (AP)",

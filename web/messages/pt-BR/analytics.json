@@ -1627,7 +1627,8 @@
       "logic": "Lógica de previsão",
       "perWeek": "Por semana (méd.)",
       "horizonTotal": "Total do horizonte",
-      "unavailable": "Categoria indisponível: {detail}"
+      "unavailableCardThreshold": "A categoria de cartão de crédito \"{name}\" não tem histórico de pagamentos nem limite de pagamento relevante — defina um no editor de categorias para que a previsão saiba quais pagamentos contam como o último pagamento",
+      "unavailableMissingRate": "Sem taxa de câmbio de {func}→{base} vigente em {date} ou antes — adicione uma em Setup → Taxas de Câmbio para converter o histórico"
     },
     "toggle": {
       "outflowsAp": "Saídas (AP)",

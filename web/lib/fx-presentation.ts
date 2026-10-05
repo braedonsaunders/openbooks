@@ -122,10 +122,16 @@ export interface FlowRates {
 
 export class MissingExchangeRateError extends Error {
   readonly status = 422
+  readonly func: string
+  readonly base: string
+  readonly date: string
 
   constructor(func: string, base: string, date: string) {
     super(`no spot rate for ${func}→${base} on or before ${date}`)
     this.name = 'MissingExchangeRateError'
+    this.func = func
+    this.base = base
+    this.date = date
   }
 }
 

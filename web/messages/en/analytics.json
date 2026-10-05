@@ -1627,7 +1627,8 @@
       "logic": "Forecast Logic",
       "perWeek": "Per Week (avg)",
       "horizonTotal": "Horizon Total",
-      "unavailable": "Category unavailable: {detail}"
+      "unavailableCardThreshold": "Credit card category \"{name}\" has no payment history and no significant payment threshold — set one in the category editor so the forecast knows which payments count as the last payment",
+      "unavailableMissingRate": "No spot rate for {func}→{base} on or before {date} — add one in Setup → Exchange Rates so history translates"
     },
     "toggle": {
       "outflowsAp": "Outflows (AP)",

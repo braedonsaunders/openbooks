@@ -257,13 +257,16 @@ test("declared category refusals map to an unavailable state, anything else reth
   // unknown failure maps to null so the caller rethrows it.
   const source = `
     import assert from "node:assert/strict";
-    import { CategoryForecastRefusal, toUnavailableCategory } from "./web/lib/cash/core.ts";
+    import { CategoryForecastRefusal, refusedCategories, toUnavailableCategory } from "./web/lib/cash/core.ts";
     import { MissingExchangeRateError } from "./web/lib/fx-presentation.ts";
 
     const cat = { id: "c1", name: "Card", direction: "outflow", method: "credit_card_cycle" };
     const refused = toUnavailableCategory(cat, 4, new CategoryForecastRefusal("c1", "Card"));
     assert.equal(refused.unavailable.code, "card-threshold-missing");
     assert.match(refused.unavailable.message, /category editor/);
+    // The client renders the catalog message selected by code, so the
+    // refusal must carry the message's parameters, not just English text.
+    assert.deepEqual(refused.unavailable.params, { name: "Card" });
     assert.deepEqual(refused.weekly, ["0.0000", "0.0000", "0.0000", "0.0000"]);
     assert.equal(refused.total, "0.0000");
     assert.equal(refused.breakdown.length, 0);
@@ -271,6 +274,14 @@ test("declared category refusals map to an unavailable state, anything else reth
     const blocked = toUnavailableCategory(cat, 4, new MissingExchangeRateError("USD", "CAD", "2026-09-01"));
     assert.equal(blocked.unavailable.code, "missing-exchange-rate");
     assert.match(blocked.unavailable.message, /no spot rate for USD→CAD/);
+    assert.deepEqual(blocked.unavailable.params, { func: "USD", base: "CAD", date: "2026-09-01" });
+
+    // The banner/tile reader lists every refusing category with the params
+    // its catalog message needs — a dropped key renders a broken sentence.
+    assert.deepEqual(refusedCategories([refused, blocked]).map((r) => [r.id, r.code, r.params]), [
+      ["c1", "card-threshold-missing", { name: "Card" }],
+      ["c1", "missing-exchange-rate", { func: "USD", base: "CAD", date: "2026-09-01" }],
+    ]);
 
     assert.equal(toUnavailableCategory(cat, 4, new Error("boom")), null);
     assert.equal(toUnavailableCategory(cat, 4, "boom"), null);
