@@ -645,12 +645,26 @@ function assertRedeemable(
   }
 }
 
+/**
+ * Which request fields the caller stated explicitly versus left to
+ * clock/config defaults. Stamped into the journal's custom evidence on
+ * issuance replays read back, so a later retry can tell a changed intent
+ * from an unchanged one without reinterpreting history.
+ */
+export interface StoredValueIssueEvidence {
+  expiresOnStated: boolean;
+  postingDateStated: boolean;
+  memoStated: boolean;
+}
+
 export async function postStoredValueJournal(input: {
   orgId: string;
   postingDate: string;
   subsidiaryId?: string | null;
   memo: string;
   origin: string;
+  /** Original-request evidence, stamped into journal custom on issuance only. */
+  requestEvidence?: StoredValueIssueEvidence;
   idempotencyKey: string;
   accountId: string;
   /** Signed functional-currency decimal: positive = debit, negative = credit. */
@@ -687,6 +701,7 @@ export async function postStoredValueJournal(input: {
     actorId: input.actorId ?? null,
     currency: input.currency,
     idempotencyKey: input.idempotencyKey,
+    custom: input.requestEvidence ? { storedValueIssue: input.requestEvidence } : undefined,
     auditAction: "create",
     auditChanges: input.auditChanges,
     lines: [
@@ -847,17 +862,22 @@ export interface IssueResult {
 /**
  * Replay identity for an issuance: the retried request must agree with the
  * recorded effect on every material input — issuing entity, program,
- * currency, customer, source document and line, and debit account (kind and
- * amount are fingerprinted by priorStoredValueEntry before this runs). The
- * expiry and posting dates compare only when the retry states them
- * explicitly: both default from the business clock, so pinning an omitted
- * date against a recorded one would refuse a byte-identical retry made on a
- * later day. A changed body is a reused key, refused by name instead of
- * answered with another effect's receipt; an unchanged retry replays without
- * re-checking the program's live config, so a later deactivation cannot turn
- * a completed issue into a refusal. Every comparison reads persisted rows —
- * the issue entry, its account, and its journal — never a shadow copy of
- * the request and never the caller's word for what was recorded.
+ * currency, customer, source document and line, debit account, memo, and the
+ * expiry and posting dates (kind and amount are fingerprinted by
+ * priorStoredValueEntry before this runs). Whether the original request
+ * stated a date or memo or left it to clock/config defaults is historical
+ * evidence, read back from the issue journal's custom block — never inferred
+ * from today's program or calendar: an omitted retry replays only an
+ * originally-omitted field, while a dropped explicit value is a changed
+ * intent and refuses. Journals minted before the evidence block keep the
+ * supported legacy rule (explicit retry values compare against recorded
+ * ones; omitted retry values replay). A changed body is a reused key,
+ * refused by name instead of answered with another effect's receipt; an
+ * unchanged retry replays without re-checking live config, so a later
+ * deactivation or rename cannot turn a completed issue into a refusal. Every
+ * comparison reads persisted rows — the issue entry, its account, and its
+ * journal — never a shadow copy of the request and never the caller's word
+ * for what was recorded.
  */
 async function assertIssueReplayIntent(
   input: IssueInput,
@@ -873,11 +893,12 @@ async function assertIssueReplayIntent(
        limit 1 for share
     `)).rows[0]?.id ?? null;
   }
-  // The issue journal carries the funding leg (debit-positive) and the date
-  // the value actually posted on: both are read back, never assumed.
+  // The issue journal carries the funding leg (debit-positive), the date the
+  // value actually posted on, the memo text, and the stated-or-defaulted
+  // evidence block: all four are read back, never assumed.
   const journal = priorEntry.journalEntryId
-    ? (await db.execute<{ postingDate: string; debitAccountId: string | null }>(sql`
-        select je.posting_date::text as "postingDate",
+    ? (await db.execute<{ postingDate: string; memo: string | null; debitAccountId: string | null; journalCustom: unknown }>(sql`
+        select je.posting_date::text as "postingDate", je.memo as "memo", je.custom as "journalCustom",
                (select account_id from journal_lines
                  where org_id = ${input.orgId} and entry_id = je.id and amount > 0
                  order by line_number limit 1) as "debitAccountId"
@@ -885,6 +906,37 @@ async function assertIssueReplayIntent(
          where je.org_id = ${input.orgId} and je.id = ${priorEntry.journalEntryId}
       `)).rows[0] ?? null
     : null;
+  const evidence = (journal?.journalCustom as { storedValueIssue?: {
+    expiresOnStated?: unknown; postingDateStated?: unknown; memoStated?: unknown;
+  } } | null)?.storedValueIssue ?? null;
+  const stated = (name: "expiresOnStated" | "postingDateStated" | "memoStated"): boolean | null =>
+    evidence ? evidence[name] === true : null;
+  // One rule per defaultable field: with evidence, omitted replays only an
+  // originally-omitted field; without it (legacy journals), an explicit
+  // retry value compares against the recorded one and an omitted one replays.
+  const dateMismatch = (
+    field: "expiresOnStated" | "postingDateStated",
+    retryValue: string | null | undefined,
+    recordedValue: string | null,
+    label: string,
+  ): string | null => {
+    const wasStated = stated(field);
+    if (wasStated === null) {
+      return retryValue != null && recordedValue !== retryValue ? label : null;
+    }
+    if (retryValue != null) {
+      return !wasStated || recordedValue !== retryValue ? label : null;
+    }
+    return wasStated ? label : null;
+  };
+  const retryMemo = input.memo ?? null;
+  const memoWasStated = stated("memoStated");
+  const memoMismatch =
+    memoWasStated === null
+      ? null
+      : retryMemo != null
+        ? (!memoWasStated || (journal?.memo ?? null) !== retryMemo ? "memo" : null)
+        : (memoWasStated ? "memo" : null);
   const mismatches = [
     priorAccount.subsidiaryId !== expectedSubsidiary ? "issuing entity" : null,
     priorAccount.programId !== input.programId ? "program" : null,
@@ -893,8 +945,9 @@ async function assertIssueReplayIntent(
     (priorEntry.documentId ?? null) !== (input.sourceDocumentId ?? null) ? "source document" : null,
     (priorEntry.documentLineId ?? null) !== (input.sourceLineId ?? null) ? "source line" : null,
     !journal || (journal.debitAccountId ?? null) !== (input.debitAccountId ?? null) ? "debit account" : null,
-    input.expiresOn != null && (priorAccount.expiresOn ?? null) !== input.expiresOn ? "expiry date" : null,
-    input.postingDate != null && (journal?.postingDate ?? null) !== input.postingDate ? "posting date" : null,
+    dateMismatch("expiresOnStated", input.expiresOn, priorAccount.expiresOn ?? null, "expiry date"),
+    dateMismatch("postingDateStated", input.postingDate, journal?.postingDate ?? null, "posting date"),
+    memoMismatch,
   ].filter((value): value is string => value !== null);
   if (mismatches.length > 0) {
     throw storedValueRefusal({
@@ -1064,6 +1117,13 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
       subsidiaryId: context.subsidiaryId,
       memo: input.memo ?? `Stored-value issue — ${program.name}`,
       origin: "issue",
+      // Evidence of what this request stated: the replay reads it back to
+      // distinguish a changed intent from an unchanged default.
+      requestEvidence: {
+        expiresOnStated: input.expiresOn != null,
+        postingDateStated: input.postingDate != null,
+        memoStated: input.memo != null,
+      },
       idempotencyKey: `stored-value:issue:${input.idempotencyKey}`,
       accountId: input.debitAccountId,
       amount: fromUnits(functional),
