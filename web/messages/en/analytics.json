@@ -743,6 +743,7 @@
       "retentionProb": "avg retention probability",
       "paidInFull": "invoices paid in full",
       "daysToPay": "days to pay",
+      "noHistory": "no payment history yet",
       "ofRevenue": "of revenue",
       "avgMoM": "avg MoM (mature months)",
       "noPaymentHistory": "No payment history yet",

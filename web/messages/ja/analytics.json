@@ -1191,6 +1191,7 @@
     "metricsSub": {
       "avgMoM": "平均前月比（成熟月）",
       "daysToPay": "入金日数",
+      "noHistory": "支払い履歴なし",
       "ofRevenue": "売上比",
       "paidInFull": "全額支払済請求書",
       "perCustomer": "社あたり",

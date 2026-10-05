@@ -1191,6 +1191,7 @@
     "metricsSub": {
       "avgMoM": "Ø MoM (reife Monate)",
       "daysToPay": "Tage bis Zahlung",
+      "noHistory": "noch keine Zahlungshistorie",
       "ofRevenue": "des Umsatzes",
       "paidInFull": "vollständig bezahlte Rechnungen",
       "perCustomer": "pro Kunde",

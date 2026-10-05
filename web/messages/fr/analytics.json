@@ -1191,6 +1191,7 @@
     "metricsSub": {
       "avgMoM": "M/M moy. (mois matures)",
       "daysToPay": "jours de paiement",
+      "noHistory": "aucun historique de paiement",
       "ofRevenue": "du chiffre d’affaires",
       "paidInFull": "factures intégralement payées",
       "perCustomer": "par client",
