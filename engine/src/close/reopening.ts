@@ -1,7 +1,7 @@
 import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
-import { assertCloseScope, upsertLock, periodScopeAdvisoryLock } from "../periods/period-locks.ts";
+import { assertCloseScope, upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
 /** One row of close_reopen_requests as read by the approve/re-close paths. */
 interface CloseReopenRequestRow extends Record<string, unknown> {
   id: string;
@@ -324,26 +324,16 @@ async function recloseApprovedReopenRow(args: {
     // Only the re-closed modules' rows move; a live window owned by another
     // request covers different modules by construction of the overlap check.
     for (const module of modulesToClose) {
-      const children = (await args.tx.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from period_locks
-         where org_id = ${args.row.org_id}
-           and period_id = ${args.row.period_id}
-           and book_id = ${args.row.book_id}
-           and module = ${module} and subsidiary_id is not null and state <> 'closed'
-         for update`));
-      for (const child of children.rows) {
-        await upsertLock({
-          tx: args.tx,
-          orgId: args.row.org_id,
-          periodId: args.row.period_id,
-          bookId: args.row.book_id,
-          subsidiaryId: child.subsidiary_id,
-          module,
-          state: "closed",
-          actorId: args.actorId,
-          reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
-        });
-      }
+      await tightenNarrowerLocks({
+        tx: args.tx,
+        orgId: args.row.org_id,
+        periodId: args.row.period_id,
+        bookId: args.row.book_id,
+        module,
+        state: "closed",
+        actorId: args.actorId,
+        reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
+      });
     }
   }
   const finalStatus =
