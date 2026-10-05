@@ -21,13 +21,14 @@ export async function loadOrgFilingCalendar(
     jurisdiction_code: string
     country: string
     filing_frequency: FilingFrequency
+    filing_period_start_month: number
     return_form_code: string | null
     registration_number: string | null
     effective_from: string | null
     effective_to: string | null
   }>(sql`
     select r.id, r.subsidiary_id, s.name as subsidiary_name, r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
-           j.country, r.filing_frequency, r.return_form_code, r.registration_number,
+           j.country, r.filing_frequency, r.filing_period_start_month, r.return_form_code, r.registration_number,
            r.effective_from::text, r.effective_to::text
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
@@ -44,6 +45,7 @@ export async function loadOrgFilingCalendar(
       jurisdictionCode: r.jurisdiction_code,
       country: r.country,
       filingFrequency: r.filing_frequency,
+      filingPeriodStartMonth: r.filing_period_start_month,
       returnFormCode: r.return_form_code,
       registrationNumber: r.registration_number,
       effectiveFrom: r.effective_from,

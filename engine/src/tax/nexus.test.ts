@@ -138,3 +138,20 @@ test("filing calendar expands registrations and honors effective windows", () =>
   assert.equal(gb.length, 2);
   assert.equal(gb[0]!.periodStart, "2026-07-01");
 });
+
+test("a stagger start month aligns periods off the calendar quarter", () => {
+  // UK VAT stagger 2: Feb–Apr, May–Jul, Aug–Oct, Nov–Jan. The Nov–Jan
+  // period crosses the year and still overlaps a range starting in January.
+  assert.deepEqual(filingPeriods("quarterly", "2026-01-01", "2026-12-31", 2), [
+    { periodStart: "2025-11-01", periodEnd: "2026-01-31" },
+    { periodStart: "2026-02-01", periodEnd: "2026-04-30" },
+    { periodStart: "2026-05-01", periodEnd: "2026-07-31" },
+    { periodStart: "2026-08-01", periodEnd: "2026-10-31" },
+    { periodStart: "2026-11-01", periodEnd: "2027-01-31" },
+  ]);
+  // A fiscal-year annual filer starting in April.
+  assert.deepEqual(filingPeriods("annual", "2026-05-01", "2026-05-31", 4), [
+    { periodStart: "2026-04-01", periodEnd: "2027-03-31" },
+  ]);
+  assert.throws(() => filingPeriods("monthly", "2026-01-01", "2026-01-31", 13), /start month must be 1–12/);
+});

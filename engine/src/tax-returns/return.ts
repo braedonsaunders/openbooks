@@ -831,13 +831,14 @@ async function clampTaxReturnWindowInSnapshot(
     jurisdiction_code: string;
     country: string;
     filing_frequency: FilingFrequency;
+    filing_period_start_month: number;
     return_form_code: string | null;
     registration_number: string | null;
     effective_from: string | null;
     effective_to: string | null;
   }>(sql`
     select r.id, r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
-           j.country, r.filing_frequency, r.return_form_code, r.registration_number,
+           j.country, r.filing_frequency, r.filing_period_start_month, r.return_form_code, r.registration_number,
            r.effective_from::text, r.effective_to::text
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
@@ -851,15 +852,30 @@ async function clampTaxReturnWindowInSnapshot(
     jurisdictionCode: r.jurisdiction_code,
     country: r.country,
     filingFrequency: r.filing_frequency,
+      filingPeriodStartMonth: r.filing_period_start_month,
     returnFormCode: r.return_form_code,
     registrationNumber: r.registration_number,
     effectiveFrom: r.effective_from,
     effectiveTo: r.effective_to,
   }));
-  const overlapping = (reg: (typeof regs)[number]) =>
-    buildFilingCalendar([reg], from, to).find(
+  // A return covers exactly one filing period. A window that overlaps two of
+  // a registration's periods (a calendar quarter asked of a Feb–Apr stagger,
+  // or a whole year asked of a quarterly filer) cannot be represented by one
+  // return, so it refuses by name instead of silently narrowing to the first
+  // period — narrowing left the rest of the window on no return at all.
+  const overlapping = (reg: (typeof regs)[number]) => {
+    const periods = buildFilingCalendar([reg], from, to).filter(
       (o) => o.periodStart <= to && o.periodEnd >= from,
     );
+    if (periods.length > 1) {
+      throw new TaxReturnError(
+        `tax return "${formCode}" window ${from} to ${to} spans ${periods.length} filing periods of registration ` +
+        `${labelFor(reg)} (${periods.map((o) => `${o.periodStart} to ${o.periodEnd}`).join(", ")}) — ` +
+        `prepare one return per filing period`,
+      );
+    }
+    return periods[0];
+  };
   // A pinned registration resolves FIRST: the window clamps to ITS filing
   // obligation, never to a sibling registration's. An unknown, inactive or
   // malformed pin is left for resolveReturnRegistration, which owns the named

@@ -3468,6 +3468,7 @@
       "level": "级别",
       "taxType": "税种",
       "filingFrequency": "申报频率",
+      "filingPeriodStartMonth": "申报期起始月份（1–12）",
       "registrationNumber": "登记号",
       "returnFormCode": "申报表",
       "classAttribute": "资产类别属性",

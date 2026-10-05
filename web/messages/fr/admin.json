@@ -3599,6 +3599,7 @@
       "fairValueAdjustmentAccountId": "Compte d’ajustement de juste valeur",
       "fairValueNetAssets": "Juste valeur de l’actif net",
       "filingFrequency": "Fréquence de déclaration",
+      "filingPeriodStartMonth": "Mois de début de la période de déclaration (1–12)",
       "frequency": "Fréquence",
       "goodwillAccountId": "Compte d’écart d’acquisition",
       "includeInDisposableEarnings": "Compte dans l’assiette protégée",

@@ -3690,6 +3690,7 @@
       "fairValueAdjustmentAccountId": "公正価値調整口座",
       "fairValueNetAssets": "純資産の公正価値",
       "filingFrequency": "申告頻度",
+      "filingPeriodStartMonth": "申告期間の開始月（1〜12）",
       "frequency": "頻度",
       "goodwillAccountId": "のれん口座",
       "graceDays": "猶予日数",
