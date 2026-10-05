@@ -197,6 +197,7 @@
     "overdueCol": "延滞",
     "openCol": "未払",
     "noPayables": "未払いの買掛金はありません。すべて精算済みです。",
+    "refusedAlert": "予測が不完全 — {names} の予測がないため、支払予定額から除外されています。",
     "stats": {
       "openPayables": "未払買掛金",
       "overdue": "延滞",

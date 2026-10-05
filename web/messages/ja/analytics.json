@@ -2073,7 +2073,8 @@
       "runway": "資金繰り余裕",
       "runwayCritical": "危険",
       "runwayCaution": "注意",
-      "runwayHealthy": "健全"
+      "runwayHealthy": "健全",
+      "refusedNote": "予測は {names} を除外しています — 予測がないため、指標は支出を過小評価します。",
     },
     "panels": {
       "bridge": "資金ブリッジ",
@@ -4190,6 +4191,7 @@
     },
     "tabs": {
       "apOutflows": "AP出金",
+      "unavailable": "予測なし",
       "arInflows": "AR入金"
     },
     "breakdownTypes": {

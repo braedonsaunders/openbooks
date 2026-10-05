@@ -130,6 +130,7 @@
     "dpo": "DPO {days}",
     "weekOf": "week of {date}",
     "noBurn": "No net burn",
+    "excludesCategories": "excludes {names}",
     "cashShortfall": "Cash shortfall",
     "runwayWeeks": "{weeks, plural, one {# week of runway} other {# weeks of runway}}",
     "resourcingPulse": "Bench {bench} · rolling off {rolloffs} · {overallocated} overallocated weeks"

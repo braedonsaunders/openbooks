@@ -260,6 +260,13 @@ export function CashCockpit({
         </div>
       ) : null}
 
+      {data.unavailableCategories.length > 0 ? (
+        <p className="flex shrink-0 items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+          <span>{t('refusedAlert', { names: data.unavailableCategories.map((r) => r.name).join(', ') })}</span>
+        </p>
+      ) : null}
+
       {compareMoney(data.lowestCash, '0.0000') < 0 ? (
         <p className="flex shrink-0 items-start gap-2 rounded-lg bg-red-50 p-3 text-xs leading-relaxed text-red-800 dark:bg-red-950/30 dark:text-red-300">
           <TriangleAlert size={14} className="mt-0.5 shrink-0" />

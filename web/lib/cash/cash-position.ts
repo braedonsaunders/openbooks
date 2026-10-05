@@ -26,8 +26,10 @@ import {
   toISO,
   ZERO_MONEY,
   weekLabel,
+  refusedCategories,
   type CategoryWeekly,
   type ForecastEntry,
+  type RefusedCategory,
   type WeekRow,
 } from "./core";
 
@@ -183,6 +185,12 @@ export interface CashPosition {
   arCoverage: string | null;
   /** Configured recurring forecast flows, per-week — powers the drill + config. */
   categories: CategoryWeekly[];
+  /**
+   * Categories that refused to forecast (they read as zeros above) — every
+   * surface names them instead of presenting a healthy figure. Empty when
+   * every category forecasted.
+   */
+  unavailableCategories: RefusedCategory[];
   apSettings: ApSettings;
   /** Vendors with open AP or payment history — the category editor's picker. */
   vendorOptions: { id: string; name: string }[];
@@ -337,8 +345,11 @@ export async function cashPosition(
   const cautionWeeks = String(
     apSettings.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
   );
+  const refused = refusedCategories(categories);
+  // A refused category contributes zeros, so outflows understate — the
+  // position never reads healthy while any category is refused.
   const runwayStatus: CashPosition["runwayStatus"] =
-    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0 ? "caution" : "healthy";
+    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : refused.length > 0 ? "caution" : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0 ? "caution" : "healthy";
   const projectedEnd = timeline.weeks.length ? timeline.weeks[timeline.weeks.length - 1]!.endingCash : startingCash;
 
   return {
@@ -364,6 +375,7 @@ export async function cashPosition(
     // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
     arCoverage: compareMoney(apOutstanding, ZERO_MONEY) > 0 ? divideMoney(addMoney(startingCash, arOutstanding), apOutstanding) : null,
     categories,
+    unavailableCategories: refused,
     apSettings: { ...apSettings, weeklyCap: normalizeMoneyValue(apSettings.weeklyCap) },
     vendorOptions: vendorRows.rows.map((v) => ({ id: v.id, name: v.name })),
     accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),

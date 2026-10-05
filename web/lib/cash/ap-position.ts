@@ -19,9 +19,11 @@ import {
   sumMoney,
   toISO,
   ZERO_MONEY,
+  refusedCategories,
   type CategoryWeekly,
   type ForecastEntry,
   type OpenItem,
+  type RefusedCategory,
   type SideSummary,
   type WeekRow,
 } from "./core";
@@ -87,6 +89,11 @@ export interface ApPosition {
   payPlan: PayRunPlan;
   /** Recurring category flows per week — feeds the schedule drill's chips. */
   categories: CategoryWeekly[];
+  /**
+   * Categories that refused to forecast (they read as zeros above) — the
+   * cockpit names them instead of presenting a healthy figure.
+   */
+  unavailableCategories: RefusedCategory[];
   /** Full shared-engine weekly rows — the per-week transaction drill. */
   timeline: WeekRow[];
 }
@@ -236,6 +243,7 @@ export async function apPosition(
     worklist,
     payPlan,
     categories,
+    unavailableCategories: refusedCategories(categories),
     timeline: timeline.weeks,
   };
 }

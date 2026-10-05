@@ -127,6 +127,7 @@
     "customerSearch": "Search customers…",
     "customerStatus": "Customer status",
     "customerOverdueOnly": "Has overdue balance",
+    "refusedAlert": "Collections forecast incomplete — no forecast for {names}, so expected figures exclude them.",
     "configure": "How it works",
     "configTitle": "Collections model",
     "configDescription": "How the worklist is ordered and collection dates are predicted. Read-only — collections have no cap; the engine predicts when customers pay.",

@@ -195,6 +195,7 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
         return {
           runwayWeeks: "40", runwayStatus: "healthy", projectedEnd: "4300", lowestCash: "4300", lowestWeek: "2026-07-20",
           horizonWeeks: 13, burnRate: "0", netChange: "0", arCoverage: null, dso: null, dpo: null, weeks: [],
+          unavailableCategories: [],
         };
       }) as unknown as DashboardMoneyReaders["cashPosition"],
       cashflowConfig: (async () => {

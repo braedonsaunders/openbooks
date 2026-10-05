@@ -32,6 +32,7 @@ import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart, cashBridgeOption } from '../_ui/charts'
 import { Vital } from '../_ui/Vital'
 import { formatExactPercent, formatExactRatio, toChartNumber, useAnalyticsMoney } from '../_ui/format'
+import { categoryRefusalText } from '../_ui/category-refusal-text'
 
 // Analysis only — the interactive surfaces this view used to carry moved to
 // their operational homes at full fidelity: the weekly timeline + forecast
@@ -121,9 +122,13 @@ function OverviewTab({ data }: { data: CashflowData }) {
     projectedEnd: tCharts('bridge.projectedEnd'),
   }), [tCharts])
   const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd, money, bridgeLabels), [s, money, bridgeLabels])
+  const refusedNames = data.categories.filter((c) => c.unavailable !== undefined).map((c) => c.name)
 
   return (
     <div className="space-y-5">
+      {refusedNames.length > 0 ? (
+        <p className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{t('vitals.refusedNote', { names: refusedNames.join(', ') })}</p>
+      ) : null}
       {/* Vitals hero */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <Vital icon={Flame} ring="from-violet-500 to-fuchsia-500" label={t('vitals.burnRate')} value={money(s.burnRate)} hint={t('vitals.burnHint')} badge={t('vitals.burnBadge')} />
@@ -197,13 +202,9 @@ export function CategoryTab({ data }: { data: CashflowData }) {
   // transactions just so this tab can total them by counterparty.
   const entries = data.partyTotals[side]
   const total = sumMoney(entries.map((e) => e.amount))
-  // The refusal renders the catalog message selected by its code — the
-  // server's English message stays in logs, never on screen.
-  const refusalText = (c: (typeof data.categories)[number]): string | null => {
-    if (!c.unavailable) return null
-    if (c.unavailable.code === 'card-threshold-missing') return t('catTable.unavailableCardThreshold', { name: c.name })
-    return t('catTable.unavailableMissingRate', c.unavailable.params)
-  }
+  // Refusals render through the shared code-selected catalog message (same
+  // helper as the week flyout) — the server's English stays in logs.
+  const refusalText = (c: (typeof data.categories)[number]): string | null => categoryRefusalText(t, c)
 
   return (
     <div className="space-y-4">

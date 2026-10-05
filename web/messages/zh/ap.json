@@ -197,6 +197,7 @@
     "overdueCol": "逾期",
     "openCol": "未结",
     "noPayables": "没有未结应付款，已全部结清。",
+    "refusedAlert": "预测不完整 — {names} 没有预测，因此应付数据不含这些类别。",
     "stats": {
       "openPayables": "未结应付款",
       "overdue": "逾期",

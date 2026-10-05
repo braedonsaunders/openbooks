@@ -57,11 +57,19 @@ test("subsidiary cash views attribute manual and formula categories", { skip: !p
       const restricted = await cashPosition(
         org.orgId, 4, SETTINGS, org.date, [branchId], new Set([branchId]), false,
       );
-      assert.deepEqual([
-        ids(restricted),
-        ids(await apPosition(org.orgId, 4, SETTINGS, org.date, new Set([branchId]))),
-        ids(await arPosition(org.orgId, 4, SETTINGS, org.date, new Set([branchId]))),
-      ], [["cat-branch"], ["cat-branch"], ["cat-branch"]]);
+      const ap = await apPosition(org.orgId, 4, SETTINGS, org.date, new Set([branchId]));
+      const ar = await arPosition(org.orgId, 4, SETTINGS, org.date, new Set([branchId]));
+      assert.deepEqual(
+        [ids(restricted), ids(ap), ids(ar)],
+        [["cat-branch"], ["cat-branch"], ["cat-branch"]],
+      );
+      // Refused-category carry-through: nothing refuses here, so every
+      // position reports an empty refused list (never undefined) — the
+      // banners and tile hints read this field, not the categories.
+      assert.deepEqual(
+        [consolidated.unavailableCategories, restricted.unavailableCategories, ap.unavailableCategories, ar.unavailableCategories],
+        [[], [], [], []],
+      );
       const branchCat = restricted.categories.find((c) => c.id === "cat-branch")!;
       assert.ok(branchCat.total !== "0.0000", "the attributed category keeps its full value");
       // An unrestricted admin narrowing to one subsidiary keeps today's

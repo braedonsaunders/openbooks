@@ -130,6 +130,7 @@
     "dpo": "DPO {days}",
     "weekOf": "{date} 当周",
     "noBurn": "无净流出",
+    "excludesCategories": "不含 {names}",
     "cashShortfall": "现金短缺",
     "runwayWeeks": "{weeks, plural, one {# 周现金可维持} other {# 周现金可维持}}",
     "resourcingPulse": "待命{bench}人·即将结束{rolloffs}人·超配{overallocated}周"

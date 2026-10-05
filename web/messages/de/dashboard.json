@@ -130,6 +130,7 @@
     "dpo": "DPO {days}",
     "weekOf": "Woche vom {date}",
     "noBurn": "Kein Nettoabfluss",
+    "excludesCategories": "ohne {names}",
     "cashShortfall": "Liquiditätsengpass",
     "runwayWeeks": "{weeks, plural, one {# Woche Liquiditätsreichweite} other {# Wochen Liquiditätsreichweite}}",
     "resourcingPulse": "Verfügbar {bench} · Einsatz endet {rolloffs} · {overallocated} überbuchte Wochen"

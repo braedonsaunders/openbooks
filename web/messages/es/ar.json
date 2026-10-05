@@ -127,6 +127,7 @@
     "customerSearch": "Buscar clientes…",
     "customerStatus": "Estado del cliente",
     "customerOverdueOnly": "Con saldo vencido",
+    "refusedAlert": "Previsión incompleta — sin previsión para {names}; las cifras previstas los excluyen.",
     "configure": "Cómo funciona",
     "configTitle": "Modelo de cobros",
     "configDescription": "Cómo se ordena la lista de trabajo y se predicen las fechas de cobro. Solo lectura: los cobros no tienen límite; el motor predice cuándo pagan los clientes.",

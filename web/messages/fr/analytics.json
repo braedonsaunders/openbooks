@@ -2073,7 +2073,8 @@
       "runway": "Autonomie de trésorerie",
       "runwayCritical": "Critique",
       "runwayCaution": "Vigilance",
-      "runwayHealthy": "Saine"
+      "runwayHealthy": "Saine",
+      "refusedNote": "La prévision exclut {names} — aucune prévision disponible, les indicateurs sous-estiment les sorties."
     },
     "panels": {
       "bridge": "Pont de trésorerie",
@@ -4190,6 +4191,7 @@
     },
     "tabs": {
       "apOutflows": "Sorties AP",
+      "unavailable": "Sans prévision",
       "arInflows": "Entrées AR"
     },
     "breakdownTypes": {

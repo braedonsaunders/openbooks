@@ -130,6 +130,7 @@
     "dpo": "DPO {days}",
     "weekOf": "semana del {date}",
     "noBurn": "Sin consumo neto",
+    "excludesCategories": "excluye {names}",
     "cashShortfall": "Déficit de caja",
     "runwayWeeks": "{weeks, plural, one {# semana de autonomía} other {# semanas de autonomía}}",
     "resourcingPulse": "Disponibles {bench} · finalizan {rolloffs} · {overallocated} semanas sobreasignadas"

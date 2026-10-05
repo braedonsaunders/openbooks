@@ -127,6 +127,7 @@
     "customerSearch": "顧客を検索…",
     "customerStatus": "顧客の状態",
     "customerOverdueOnly": "延滞残高あり",
+    "refusedAlert": "予測が不完全 — {names} の予測がないため、予測値から除外されています。",
     "configure": "仕組み",
     "configTitle": "回収予測モデル",
     "configDescription": "作業リストの順序と回収日の予測方法です。読み取り専用 — 回収には上限がなく、顧客の支払時期をエンジンが予測します。",

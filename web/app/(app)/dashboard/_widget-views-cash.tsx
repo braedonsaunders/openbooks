@@ -25,6 +25,10 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
   // Noon-anchored like the dashboard tiles: a bare YYYY-MM-DD parses as UTC
   // midnight and would render a day early west of Greenwich.
   const fmtDay = (iso: string) => date(new Date(`${iso}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
+  // A partial forecast names its refused categories on the hint — the figure
+  // above understates outflows, so it never stands alone as a healthy fact.
+  const refusedSuffix = (refused: string[]): string =>
+    refused.length > 0 ? ` · ${t('metricContext.excludesCategories', { names: refused.join(', ') })}` : ''
 
   switch (widgetId) {
     case 'kpi-cash-lowest-point': {
@@ -51,7 +55,7 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
           value={money(lowest.value.amount, { currency: data.baseCurrency })}
           href={HREF}
           tone={tone}
-          hint={t('metricContext.weekOf', { date: fmtDay(lowest.value.week) })}
+          hint={`${t('metricContext.weekOf', { date: fmtDay(lowest.value.week) })}${refusedSuffix(lowest.value.refused)}`}
         />
       )
     }
@@ -76,7 +80,7 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
           value={money(burn.value.weeklyOutflow, { currency: data.baseCurrency })}
           href={HREF}
           tone="amber"
-          hint={t('widgets.cashBurnNet', { net: money(burn.value.netChange, { currency: data.baseCurrency }) })}
+          hint={`${t('widgets.cashBurnNet', { net: money(burn.value.netChange, { currency: data.baseCurrency }) })}${refusedSuffix(burn.value.refused)}`}
         />
       )
     }
@@ -224,7 +228,7 @@ function ForecastChart({ forecast, currency, title }: { forecast: CashForecast; 
       icon={<AreaChart size={14} />}
       href={HREF}
       headline={money(forecast.projectedEnd, { currency })}
-      context={t('widgets.cashForecastContext', { weeks: forecast.horizonWeeks })}
+      context={`${t('widgets.cashForecastContext', { weeks: forecast.horizonWeeks })}${forecast.refused.length > 0 ? ` · ${t('metricContext.excludesCategories', { names: forecast.refused.join(', ') })}` : ''}`}
     >
       <Chart option={option} height="fill" />
     </ChartTile>
