@@ -982,9 +982,9 @@ test("an unrestricted caller keeps unknown and foreign order answers apart", { s
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
-    const { subB } = await seed(org, actor);
-    // Explicit null hides nothing: a foreign-entity order reads unavailable
-    // while a reference nothing claims keeps the ingest remedy.
+    await seed(org, actor);
+    // Explicit null hides nothing: the home payout cannot use the western
+    // order, while a reference nothing claims keeps the ingest remedy.
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-null-oracle-1", currency: "CAD", issuedAt: "2026-07-10" },
       [
@@ -994,7 +994,7 @@ test("an unrestricted caller keeps unknown and foreign order answers apart", { s
     );
     const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
       bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
-      clearingAccountId: org.accounts.clearing, subsidiaryId: subB,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
     }, null)).batchId;
     const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
       select id, external_ref as ref from psp_settlement_lines
