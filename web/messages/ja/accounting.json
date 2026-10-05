@@ -25,6 +25,7 @@
       "netIncome": "当期純利益",
       "close": "決算進捗",
       "closeSub": "{period}",
+      "closeUnavailable": "利用不可",
       "noClose": "—",
       "noCloseSub": "決算未開始",
       "draftJournals": "下書き仕訳",
