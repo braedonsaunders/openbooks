@@ -183,16 +183,13 @@ test("a tax journal in a secondary book does not leak into the return", { skip: 
   }
 });
 
-test("a voided invoice's out-of-window reversal does not leak into the return", { skip: !DB }, async () => {
-  // Live-Postgres regression: the journal-backed boxes (tax_collected /
-  // tax_paid / tax_amount) summed posted lines by tax code with no
-  // source-document check, so a July invoice voided with an August reversal
-  // still contributed its July originals — the entry status flips to
-  // 'reversed', which the box window admits, while the August reversal falls
-  // outside the window and nets nothing. The return now excludes lines whose
-  // source document is voided, like the CAM cards; manual tax adjustments
-  // carry no document and still net inside. The document-line taxable-base
-  // box needs no change: it only reads status 'posted'.
+test("a void after the period reports its reversal in the void's period, not nowhere", { skip: !DB }, async () => {
+  // Returns report posted ledger activity by posting date. A July invoice
+  // voided in August stays on the July return (which may already be filed)
+  // and its reversal corrects the August return. Excluding every line of a
+  // voided document instead dropped the August correction from every return,
+  // so tax already remitted in July was never recovered. When the original
+  // and its reversal share one window they net to zero.
   const org = await createScratchOrg();
   try {
     const codeId = randomUUID();
@@ -242,13 +239,22 @@ test("a voided invoice's out-of-window reversal does not leak into the return", 
         (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Tax collected', ${codeId}, 'tax_collected', -1, 10),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '6', 'Sales base', ${codeId}, 'taxable_base', 1, 60)`);
 
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
-    // The kept invoice only: 12 collected on a 120 base. Before the fix the
-    // voided July originals leaked into the collected box (32.0000); the base
-    // box already excludes non-posted documents and stays 120 either way.
-    assert.equal(values.get("1"), "12.0000");
-    assert.equal(values.get("6"), "120.0000");
+    const boxes = async (from: string, to: string) => {
+      const result = await computeTaxReturn(org.orgId, formCode, from, to);
+      return new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+    };
+    // July: both invoices posted then — 32 collected on a 320 base.
+    const july = await boxes(org.date, org.date);
+    assert.equal(july.get("1"), "32.0000");
+    assert.equal(july.get("6"), "320.0000");
+    // August: the void's reversal corrects by the voided invoice's figures.
+    const august = await boxes("2026-08-01", "2026-08-31");
+    assert.equal(august.get("1"), "-20.0000");
+    assert.equal(august.get("6"), "-200.0000");
+    // One window covering both legs nets the voided invoice to zero.
+    const both = await boxes(org.date, "2026-08-31");
+    assert.equal(both.get("1"), "12.0000");
+    assert.equal(both.get("6"), "120.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
