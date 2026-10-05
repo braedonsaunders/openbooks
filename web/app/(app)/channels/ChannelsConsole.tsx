@@ -20,6 +20,7 @@ import {
 } from "@openbooks/ui";
 import { ListPageLayout } from "../../../components/page-layout";
 import { CockpitPanel, StatTile } from "../../../components/cockpit/ui";
+import { CommerceCloseTile } from "./CommerceCloseTile";
 import { NewMenuButton } from "../../../components/new-menu-button";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
@@ -241,6 +242,7 @@ export function ChannelsConsole() {
             />
             <StatTile label={t("home.tiles.lastDelivery")} value={fmt(lastDelivery)} icon={Layers} />
           </div>
+          <CommerceCloseTile />
           {attention.length > 0 ? (
             <CockpitPanel title={t("home.attentionTitle")} hint={t("home.attentionHint")}>
               <ul className="divide-y divide-slate-100 dark:divide-slate-800">

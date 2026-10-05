@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fetchChannelDayTotals } from "../commerce/shopify/day-totals.ts";
+import { addCloseEvidence } from "./tasks.ts";
 
 /**
  * Commerce close completeness: the proof that every storefront sale reached
@@ -718,6 +719,74 @@ const defaultStorefrontTotals: StorefrontTotalsProvider = (orgId, channelId, day
     grossMinor: totals.grossMinor,
     currency: totals.currency,
   }));
+
+/**
+ * The month-end evidence snapshot: the eight proofs with their counts and
+ * drill details, frozen onto the commerce task with the run fingerprint it
+ * proves. Idempotent per fingerprint — a refresh that changes nothing
+ * attaches nothing new, and evidence from an older fingerprint stays as the
+ * history of what the operator actually signed. Returns the evidence id, or
+ * null when the task is not complete (nothing proven yet).
+ */
+export async function snapshotCommerceCloseEvidence(
+  orgId: string,
+  runId: string,
+  actorId: string | undefined,
+): Promise<string | null> {
+  const run = (
+    await db.execute<{
+      period_id: string;
+      book_id: string;
+      data_fingerprint: string | null;
+      scope: { subsidiaryIds?: string[] };
+      starts_on: string;
+      ends_on: string;
+      task_id: string | null;
+      task_status: string | null;
+    }>(sql`
+      select r.period_id, r.book_id, r.data_fingerprint, r.scope,
+             p.starts_on::text, p.ends_on::text,
+             t.id as task_id, t.status as task_status
+        from close_runs r
+        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+        left join close_run_tasks t on t.run_id = r.id and t.org_id = r.org_id and t.key = 'commerce-complete'
+       where r.id = ${runId} and r.org_id = ${orgId}`)
+  ).rows[0];
+  // Evidence is signed work: a refresh with no actor cannot sign it.
+  if (!run?.task_id || run.task_status !== "complete" || !run.data_fingerprint || !actorId) return null;
+  const existing = (
+    await db.execute<{ id: string }>(sql`
+      select id from close_task_evidence
+       where org_id = ${orgId} and run_id = ${runId} and task_id = ${run.task_id}
+         and evidence_type = 'report' and snapshot->>'fingerprint' = ${run.data_fingerprint}
+       limit 1`)
+  ).rows[0];
+  if (existing) return existing.id;
+  const checks = await commerceCloseChecks(orgId, {
+    startsOn: run.starts_on,
+    endsOn: run.ends_on,
+    bookId: run.book_id,
+    subsidiaryIds: run.scope?.subsidiaryIds ?? [],
+  });
+  return addCloseEvidence({
+    orgId,
+    runId,
+    taskId: run.task_id,
+    actorId,
+    evidenceType: "report",
+    label: "Commerce completeness evidence",
+    snapshot: {
+      fingerprint: run.data_fingerprint,
+      scope: { startsOn: run.starts_on, endsOn: run.ends_on },
+      checks: checks.map((check) => ({
+        code: check.code,
+        severity: check.severity,
+        count: check.count,
+        details: check.details ?? {},
+      })),
+    },
+  });
+}
 
 /**
  * Every commerce completeness check for one scope, in checklist order. The

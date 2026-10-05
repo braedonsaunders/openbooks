@@ -1,4 +1,5 @@
 import { ShopifyClient } from "../../connectors/shopify.ts";
+import { addCalendarDays } from "../../platform/civil-date.ts";
 import { CommerceError } from "../errors.ts";
 import { loadShopifyChannel } from "./channel-access.ts";
 import { shopMinorUnits } from "./orders.ts";
@@ -117,7 +118,5 @@ export async function readShopDayTotals(
 }
 
 function nextDay(day: string): string {
-  const [year, month, date] = day.split("-").map(Number);
-  const next = new Date(Date.UTC(year!, month! - 1, date!) + 86_400_000);
-  return next.toISOString().slice(0, 10);
+  return addCalendarDays(day, 1);
 }

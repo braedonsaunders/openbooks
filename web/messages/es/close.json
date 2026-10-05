@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "Efectos de contabilización incompletos",
       "message": "Hay documentos contabilizados con proyecciones de inventario o ingresos incompletas. Resuelva los errores, reintente los fallos definitivos desde el documento con un motivo de revisión y espere a que finalicen antes de cerrar el libro mayor."
+    },
+    "commerce-orders-incomplete": {
+      "title": "Faltan ventas de la tienda en los libros",
+      "message": "{count, plural, one {Falta # pedido del canal o está sin contabilizar y necesita su solución antes del cierre.} other {Faltan # pedidos del canal o están sin contabilizar y necesitan su solución antes del cierre.}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "No se pudo contactar una tienda",
+      "message": "{count, plural, one {No se pudo verificar # día del canal contra su tienda.} other {No se pudieron verificar # días del canal contra sus tiendas.}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "Quedan pagos por contabilizar",
+      "message": "{count, plural, one {# lote de liquidación sigue en borrador.} other {# lotes de liquidación siguen en borrador.}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "Las cuentas de compensación tienen saldo",
+      "message": "{count, plural, one {# cuenta de compensación no queda en cero.} other {# cuentas de compensación no quedan en cero.}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "El pasivo de tarjetas regalo no cuadra",
+      "message": "{count, plural, one {# cuenta de pasivo difiere de sus tarjetas y créditos pendientes.} other {# cuentas de pasivo difieren de sus tarjetas y créditos pendientes.}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "Los ingresos diferidos no cuadran",
+      "message": "{count, plural, one {# cuenta de diferidos difiere de su plan no reconocido.} other {# cuentas de diferidos difieren de sus planes no reconocidos.}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "Los costes de contrato capitalizados no cuadran",
+      "message": "{count, plural, one {# activo de coste difiere de sus asientos.} other {# activos de coste difieren de sus asientos.}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "Hay excepciones del canal en espera",
+      "message": "{count, plural, one {Queda # pedido o evento en espera sin solución.} other {Quedan # pedidos o eventos en espera sin solución.}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "Publicar el paquete de cierre",
       "description": "Congele la carpeta de cierre y publique el paquete configurado."
+    },
+    "commerce-complete": {
+      "title": "Probar la integridad del comercio",
+      "description": "Cada venta de la tienda está en el mayor: los pedidos coinciden con la tienda, los pagos están contabilizados, la compensación queda en cero y los pasivos cuadran."
     }
   },
   "setup": {

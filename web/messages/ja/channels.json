@@ -66,7 +66,15 @@
     "marginReport": "マージンレポート",
     "marginMeta": "受注{orders}件・売上{revenue}・広告費{adSpend}",
     "marginEstimated": "見積もり{count}件",
-    "marginPct": "{pct}%"
+    "marginPct": "{pct}%",
+    "completeness": {
+      "title": "今日の完全性",
+      "hint": "今日の店舗売上が元帳に届いたか。未完了の証明に対応策付きで表示します。",
+      "clear": "今日の店舗売上はすべて帳簿にあります。",
+      "loadFailed": "完全性を読み込めませんでした（状態 {status}）。",
+      "proofsSummary": "{count, plural, one {完全性の証明方法 · # 件} other {完全性の証明方法 · # 件}}",
+      "proven": "証明済み"
+    }
   },
   "workspace": {
     "back": "チャネル",

@@ -7,6 +7,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { periodFingerprint, readinessChecks } from "./readiness.ts";
+import { snapshotCommerceCloseEvidence } from "./commerce-close.ts";
 import { resolveTaskDependenciesTx } from "./task-dependencies.ts";
 export async function refreshCloseRun(
   orgId: string,
@@ -183,6 +184,11 @@ export async function refreshCloseRun(
       openExceptions: Number(open.rows[0]?.count ?? 0),
     };
   });
+  // A clean commerce proof freezes onto the task as report evidence, one
+  // snapshot per data fingerprint. Post-commit in its own transaction: a
+  // snapshot failure surfaces without undoing the committed refresh, and a
+  // retry attaches the same fingerprint exactly once.
+  await snapshotCommerceCloseEvidence(orgId, runId, actorId);
   const automationSubjects = (await db.execute<{
       task_id: string;
       task_key: string;

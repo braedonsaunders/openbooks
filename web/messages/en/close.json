@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "Posting effects incomplete",
       "message": "Posted documents have incomplete inventory or revenue projections. Resolve failures, retry terminal failures from the document with a review reason, and wait for completion before closing GL."
+    },
+    "commerce-orders-incomplete": {
+      "title": "Storefront sales are missing from the books",
+      "message": "{count, plural, one {# missing or unposted channel order needs its remedy before close.} other {# missing or unposted channel orders need their remedy before close.}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "A storefront could not be reached",
+      "message": "{count, plural, one {# channel day could not be verified against its storefront.} other {# channel days could not be verified against their storefronts.}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "Payouts remain unposted",
+      "message": "{count, plural, one {# settlement batch is still a draft.} other {# settlement batches are still drafts.}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "Clearing accounts hold a residual",
+      "message": "{count, plural, one {# clearing account does not clear to zero.} other {# clearing accounts do not clear to zero.}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "Gift card liability does not tie",
+      "message": "{count, plural, one {# liability account differs from its outstanding cards and credits.} other {# liability accounts differ from their outstanding cards and credits.}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "Deferred revenue does not tie",
+      "message": "{count, plural, one {# deferred account differs from its unrecognized plan.} other {# deferred accounts differ from their unrecognized plans.}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "Capitalized contract costs do not tie",
+      "message": "{count, plural, one {# cost asset differs from its ledger legs.} other {# cost assets differ from their ledger legs.}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "Channel exceptions are parked",
+      "message": "{count, plural, one {# parked order or event still needs a remedy.} other {# parked orders or events still need a remedy.}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "Publish the close package",
       "description": "Freeze the close binder and publish the configured reporting package."
+    },
+    "commerce-complete": {
+      "title": "Prove commerce complete",
+      "description": "Every storefront sale is in the ledger: orders match the storefront, payouts are posted, clearing is zero, and liability roll-forwards tie."
     }
   },
   "setup": {

@@ -1,0 +1,172 @@
+'use client'
+
+import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { Badge, Button, DisclosureSection } from "@openbooks/ui";
+import { CockpitPanel } from "../../../components/cockpit/ui";
+import { readApiErrorMessage } from "../../../lib/api-error";
+
+interface CompletenessCheck {
+  code: string;
+  severity: "warning" | "error" | "critical";
+  count: number;
+  title: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+interface CompletenessPayload {
+  day: string;
+  checks: CompletenessCheck[];
+}
+
+const FALLBACK_HREF: Record<string, string> = {
+  "commerce-orders-incomplete": "/channels/orders",
+  "commerce-storefront-unreachable": "/channels",
+  "commerce-payouts-unposted": "/banking/psp-settlements",
+  "commerce-clearing-residual": "/channels",
+  "commerce-stored-value-gap": "/stored-value",
+  "commerce-deferred-gap": "/revenue",
+  "commerce-contract-cost-gap": "/revenue/contract-costs",
+  "commerce-exceptions-open": "/channels/exceptions",
+};
+
+const SEVERITY_VARIANT = {
+  critical: "destructive",
+  error: "warning",
+  warning: "secondary",
+} as const;
+
+/** First drill link buried in a check's evidence details, if any. */
+function drillHref(check: CompletenessCheck): string {
+  const details = check.details;
+  for (const key of ["gaps", "batches", "accounts", "ties", "parked", "days"]) {
+    const items = details[key];
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (typeof item === "object" && item !== null && typeof (item as { remedyHref?: unknown }).remedyHref === "string") {
+          return (item as { remedyHref: string }).remedyHref;
+        }
+      }
+    }
+  }
+  return FALLBACK_HREF[check.code] ?? "/channels";
+}
+
+/**
+ * Today's completeness on the channels home: everyday state plus the next
+ * action, in plain words. A clean day reads as one line; anything open
+ * becomes a work queue with the reason and a drill link on each row. The
+ * collapsed section names every proof and its count for the operator who
+ * wants the whole picture before month-end.
+ */
+export function CommerceCloseTile() {
+  const t = useTranslations("channels");
+  const tClose = useTranslations("close");
+  const tCommon = useTranslations("common");
+  const [data, setData] = useState<CompletenessPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // State only settles in the fetch continuations, never synchronously in
+  // the effect below: the initial useState(true) covers the first load and
+  // the retry button re-arms it from its own handler.
+  const load = useCallback(() => {
+    return fetch("/api/channels/completeness", { cache: "no-store" })
+      .then(async (res) => {
+        // The status is checked before the body is parsed: a refusal names
+        // its cause and remedy instead of becoming a parse error.
+        if (!res.ok) {
+          setLoadError(await readApiErrorMessage(res, t("home.completeness.loadFailed", { status: res.status })));
+          setLoading(false);
+          return;
+        }
+        setData((await res.json()) as CompletenessPayload);
+        setLoadError(null);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoadError(t("home.completeness.loadFailed", { status: "network" }));
+        setLoading(false);
+      });
+  }, [t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading && !data) return null;
+  if (loadError && !data) {
+    return (
+      <CockpitPanel title={t("home.completeness.title")} hint={t("home.completeness.hint")}>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">{loadError}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setLoadError(null);
+              setLoading(true);
+              void load();
+            }}
+          >
+            {tCommon("actions.retry")}
+          </Button>
+        </div>
+      </CockpitPanel>
+    );
+  }
+  const checks = data?.checks ?? [];
+  const open = checks.filter((check) => check.count > 0);
+  return (
+    <CockpitPanel title={t("home.completeness.title")} hint={t("home.completeness.hint")}>
+      {open.length === 0 ? (
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("home.completeness.clear")}</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {open.map((check) => (
+            <li key={check.code} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Badge variant={SEVERITY_VARIANT[check.severity]}>{check.count}</Badge>
+                  <span className="truncate">
+                    {tClose.has(`diagnostics.${check.code}.title`)
+                      ? tClose(`diagnostics.${check.code}.title`)
+                      : check.code}
+                  </span>
+                </p>
+                <p className="text-sm text-slate-500">
+                  {tClose.has(`diagnostics.${check.code}.message`)
+                    ? tClose(`diagnostics.${check.code}.message`, { count: check.count })
+                    : null}
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link href={drillHref(check) as never}>{t("home.review")}</Link>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2">
+        <DisclosureSection summary={t("home.completeness.proofsSummary", { count: checks.length })}>
+          <ul className="space-y-1">
+            {checks.map((check) => (
+              <li key={check.code} className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-slate-600 dark:text-slate-300">
+                  {tClose.has(`diagnostics.${check.code}.title`)
+                    ? tClose(`diagnostics.${check.code}.title`)
+                    : check.code}
+                </span>
+                <Badge variant={check.count > 0 ? SEVERITY_VARIANT[check.severity] : "success"}>
+                  {check.count > 0 ? check.count : t("home.completeness.proven")}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </DisclosureSection>
+      </div>
+    </CockpitPanel>
+  );
+}
