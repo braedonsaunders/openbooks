@@ -2118,7 +2118,8 @@
         "title": "購買・販売速度の不均衡",
         "message": "購買発注速度（月{po}%）が販売受注速度（月{so}%）を{gap}%上回っています — 発注/受注比率：{ratio}倍",
         "actionWithMonths": "約{months}か月後に資金圧迫のリスク。購買コミットメントを見直してください。",
-        "actionMonitor": "購買速度を監視し販売パイプラインと整合させてください。"
+        "actionMonitor": "購買速度を監視し販売パイプラインと整合させてください。",
+        "messageNoVelocity": "発注/受注比率は{ratio}倍ですが、測定可能な速度がありません"
       },
       "seasonalHigh": "支出が増加しやすい時期：{months}",
       "seasonalLow": "支出が減少しやすい時期：{months}",
@@ -2527,7 +2528,8 @@
       "fragmentation": "月{txns}件、平均{avg}",
       "frog": "{months}か月間+{rate}%/月",
       "seasonal": "平均月比{deviation}%",
-      "zombie": "{months}か月間{amount}/月で不変"
+      "zombie": "{months}か月間{amount}/月で不変",
+      "cliffNoVelocity": "比率{ratio}倍 — 速度測定不可"
     },
     "detectors": {
       "anomaly": {
@@ -2538,7 +2540,8 @@
       "cliff": {
         "desc": "発注・受注の速度差",
         "label": "コミットメントクリフ",
-        "sub": "発注速度"
+        "sub": "発注速度",
+        "insufficientHistory": "速度測定不可"
       },
       "concentration": {
         "desc": "カテゴリ依存",
