@@ -125,6 +125,77 @@ test("subsidiary attribution round-trips through the category editor", async () 
   }
 });
 
+test("a new draft names its frequency explicitly instead of showing one and saving another", async () => {
+  // The select shows Weekly for an unset frequency while the engine used to
+  // assume monthly: a new draft must carry the displayed cadence, so what
+  // the operator sees is what the save persists.
+  globalThis.__cmRouter = { push() {}, refresh() {} };
+  capturedPut = undefined as typeof capturedPut;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === "/api/analytics/cashflow/categories" && (!init?.method || init.method === "GET")) {
+      return Response.json({ categories: [], revision: 3 });
+    }
+    if (url === "/api/analytics/cashflow/categories" && init?.method === "PUT") {
+      capturedPut = JSON.parse(String(init.body));
+      return Response.json({ ok: true, categories: capturedPut!.categories, revision: 4 });
+    }
+    return null;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const setNativeValue = (el: HTMLInputElement | HTMLSelectElement, value: string, event: string) => {
+    const proto = el instanceof window.HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+    el.dispatchEvent(new window.Event(event, { bubbles: true }));
+  };
+  try {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+        </NextIntlClientProvider>,
+      );
+      await tick();
+    });
+    await tick();
+    await click(buttonNamed("New category"));
+    const nameInput = host.querySelector('input[placeholder="Category name"]') as HTMLInputElement;
+    assert.ok(nameInput, "the new draft must offer a name field");
+    await act(async () => {
+      setNativeValue(nameInput, "Weekly cleaner", "input");
+      await tick();
+    });
+    const selects = [...host.querySelectorAll("select")] as HTMLSelectElement[];
+    // Direction, then method: switching to manual_recurring reveals amount.
+    assert.ok(selects.length >= 2, "the draft must offer direction and method selects");
+    await act(async () => {
+      setNativeValue(selects[1]!, "manual_recurring", "change");
+      await tick();
+    });
+    const amountInput = host.querySelector('input[type="number"]') as HTMLInputElement;
+    assert.ok(amountInput, "a manual draft must offer an amount field");
+    await act(async () => {
+      setNativeValue(amountInput, "200", "input");
+      await tick();
+    });
+    await click(buttonNamed("Add category"));
+    assert.equal(capturedPut?.categories[0]?.method, "manual_recurring");
+    assert.equal(
+      capturedPut?.categories[0]?.frequency,
+      "weekly",
+      "the saved draft must carry the cadence the select displayed",
+    );
+    assert.equal(capturedPut?.expectedRevision, 3, "the save must carry the revision it read");
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    restoreFetch();
+  }
+});
+
 test("no subsidiary UI without visible subsidiaries", async () => {
   globalThis.__cmRouter = { push() {}, refresh() {} };
   const restoreFetch = scriptFetch((url, init) => {

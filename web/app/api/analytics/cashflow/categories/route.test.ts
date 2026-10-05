@@ -565,3 +565,26 @@ test('manual schedules keep an explicit anchor and refuse a malformed one', asyn
     assert.equal(state.transactions, 0, 'a malformed anchor never opens a transaction')
   }
 })
+
+test('a manual schedule without a frequency refuses by name instead of assuming monthly', async () => {
+  // The editor used to show Weekly while the engine assumed monthly: a save
+  // that never names a cadence must refuse (422, naming the remedy), never
+  // forecast at a cadence nobody picked.
+  reset()
+  const response = await put([
+    {
+      id: '99999999-9999-4999-8999-999999999999',
+      name: 'Unscheduled rent',
+      direction: 'outflow',
+      method: 'manual_recurring',
+      amount: '1000.0000',
+    },
+  ])
+  assert.equal(response.status, 422)
+  const refusal = (await response.json()) as { error: string; message: string }
+  assert.equal(refusal.error, 'invalid category at index 0')
+  assert.match(refusal.message, /needs a frequency/)
+  assert.match(refusal.message, /weekly, biweekly or monthly/)
+  assert.equal(state.transactions, 0, 'a frequency-less replacement never opens a transaction')
+  assert.deepEqual(state.committedQueries, [], 'a frequency-less replacement writes nothing')
+})

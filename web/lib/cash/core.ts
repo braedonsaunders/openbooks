@@ -741,6 +741,8 @@ export async function categoryWeekly(
 
   if (cat.method === "manual_recurring") {
     const amount = absMoney(normalizeMoneyValue(cat.amount ?? ZERO_MONEY));
+    // Legacy rows saved before the frequency refusal carry none: they keep
+    // forecasting monthly, exactly as before. Every save since names one.
     const freqRaw = cat.frequency ?? "monthly";
     const freq = freqRaw === "bi_weekly" ? "biweekly" : freqRaw;
     // A persisted anchor pins the phase: monthly/biweekly occurrences step
