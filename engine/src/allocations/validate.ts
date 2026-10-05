@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fixedDecimal } from "../money/exact-decimal.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import type { AllocationMode, AllocationRuleTarget, AllocationRuleVersion } from "./types.ts";
 
@@ -502,14 +503,10 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-/** 4dp-canonical form for numeric target columns (DB numeric pads on read). */
-function canonicalDecimal(value: string | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
-  try {
-    return fromUnits(toUnits(value));
-  } catch {
-    return value;
-  }
+/** Fixed-scale hash representation matches numeric columns on read. Invalid
+ * stored values must refuse hashing rather than receive a publishable digest. */
+function hashDecimal(value: string | null | undefined): string | null {
+  return value == null ? null : fixedDecimal(value, 4);
 }
 
 function sortedStrings(value: unknown): unknown {
@@ -579,8 +576,8 @@ export function definitionHash(version: AllocationRuleVersion, targets: Allocati
         projectId: t.projectId ?? null,
         subsidiaryId: t.subsidiaryId ?? null,
         extraDims: t.extraDims ?? {},
-        fixedPercent: canonicalDecimal(t.fixedPercent),
-        weight: canonicalDecimal(t.weight),
+        fixedPercent: hashDecimal(t.fixedPercent),
+        weight: hashDecimal(t.weight),
         isRemainder: t.isRemainder ?? false,
         label: t.label ?? null,
       })),

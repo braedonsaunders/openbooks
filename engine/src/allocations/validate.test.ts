@@ -312,3 +312,10 @@ test("malformed dates report effective_window without a boundary echo", () => {
   assert.ok(problems.some((p) => p.code === "effective_window"), JSON.stringify(problems));
   assert.ok(!problems.some((p) => p.code === "effective_boundary"), JSON.stringify(problems));
 });
+
+
+test("definitionHash refuses unreadable or over-precision amounts instead of fingerprinting them", () => {
+  for (const value of ["1,234", "12,34", "1.00001", "invalid"]) {
+    assert.throws(() => definitionHash(version(), [tgt({ fixedPercent: value })]), /invalid decimal/);
+  }
+});
