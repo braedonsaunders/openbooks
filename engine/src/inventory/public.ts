@@ -107,3 +107,6 @@ export {
   type ReturnableSourcePage,
   type ReturnableSourceQuery,
 } from './returnable-sources.ts'
+/** Return pricing reads which shipments posted return evidence already covers. */
+export { postedReturnEvidenceScope } from './return-quantities.ts'
+export { SALES_FULFILLMENT_DOCUMENT_KIND } from './documents-customer-credits.ts'
