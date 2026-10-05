@@ -48,7 +48,7 @@ import { presentationCurrency } from '@/lib/fx-presentation'
 import { approvalRecordHref } from '@/lib/approvals-links'
 import { WIDGETS } from './_widget-registry'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { resolvePeriod, type ResolvedPeriod } from '@/lib/periods'
+import { MissingAccountingPeriodError, resolvePeriod, type ResolvedPeriod } from '@/lib/periods'
 import type { DashboardWidgetContext } from './_metrics-context'
 import { EMPTY_FINANCIAL_WIDGET_METRICS, loadFinancialWidgetMetrics, type FinancialWidgetMetrics } from './_metrics-financial'
 import { EMPTY_CASH_WIDGET_METRICS, loadCashWidgetMetrics, type CashWidgetMetrics } from './_metrics-cash'
@@ -67,19 +67,6 @@ export type DashboardPlScope = {
   allowed: Set<string> | null
 }
 
-/** Suffix periods.ts appends to this preset's window label, in English for every locale. */
-const PERIOD_TO_DATE_SUFFIX = ' to date'
-
-/**
- * The accounting-period misconfiguration: today precedes the first
- * configured period, so no period-to-date window exists. Thrown as a plain
- * Error from periods.ts — match its one producing phrase, quoted, so any
- * other failure still throws instead of masquerading as an empty period.
- */
-function isMissingAccountingPeriodError(e: unknown): e is Error {
-  return e instanceof Error && e.message.includes('precedes the first configured accounting period')
-}
-
 export type DashboardPl = {
   revenue: string
   grossProfit: string
@@ -90,12 +77,15 @@ export type DashboardPl = {
   /** The currency the consolidated read returned — the tile labels this, never the org base. */
   currency: string
   /**
-   * The subsidiary scope the figures cover (the consolidated node's name) —
-   * the tile hint shows it, so a restricted caller scoped to one subtree
-   * never reads a partial figure as the whole company. Null for a
+   * The subsidiary scope the figures cover: the consolidated node's bare
+   * name plus whether it is a subtree view, so the loader can render the
+   * consolidated qualifier through the catalog. The tile hint shows the
+   * rendered scope, so a restricted caller scoped to one subtree never
+   * reads a partial figure as the whole company. Null name for a
    * single-subsidiary org, where the scope needs no naming.
    */
-  scopeLabel: string | null
+  scopeName: string | null
+  scopeConsolidated: boolean
 }
 
 /**
@@ -139,7 +129,8 @@ export async function dashboardConsolidatedProfitAndLoss(
     netIncome: first(netTotals),
     margin: decimalRatio(grossProfit, revenue),
     currency: resolved.currency ?? await presentationCurrency(orgId),
-    scopeLabel: resolved.label ?? null,
+    scopeName: resolved.nodeName ?? null,
+    scopeConsolidated: resolved.consolidated,
   }
 }
 
@@ -434,7 +425,7 @@ interface RecentEntryRow extends Record<string, unknown> {
   status: string
   line_count: string | number
   total_debits: string
-  /** The entry entity's functional currency (null for root-owned entries of a baseless org). */
+  /** The entry entity's functional currency (null when the entry names no subsidiary — the left join misses — never a missing base currency, which is NOT NULL). */
   currency: string | null
 }
 
@@ -586,9 +577,15 @@ export async function loadDashboardMetrics(
           margin: null as string | null,
           currency: null as string | null,
           periodLabel,
-          scopeLabel: null as string | null,
+          scopeName: null as string | null,
+          scopeConsolidated: false,
           unavailable,
         })
+        // The subsidiary scope the figures cover, qualifier rendered
+        // through the catalog — never the English "(consolidated)" suffix
+        // the resolver keeps for its other (report) consumers.
+        const scopeLabel = (name: string | null, consolidated: boolean): string | null =>
+          name === null ? null : consolidated ? t('metricContext.consolidatedScope', { name }) : name
         // The org's current fiscal period to date (declared calendars
         // honoured), resolved beside the read so the tiles can label the
         // exact window they cover. The resolution sits inside the try: when
@@ -598,13 +595,11 @@ export async function loadDashboardMetrics(
         let periodLabel: string | null = null
         try {
           const period = await resolvePeriod('this_period_to_date', { orgId, today })
-          // periods.ts builds this preset's label as `${window} to date` in
-          // English for every locale; strip that suffix and re-render it
-          // through the catalog so the tile hint translates.
-          const windowLabel = period.label.endsWith(PERIOD_TO_DATE_SUFFIX)
-            ? period.label.slice(0, -PERIOD_TO_DATE_SUFFIX.length)
+          // The qualifier renders through the catalog off the structured
+          // label — never parsed out of English — so the hint translates.
+          periodLabel = period.toDate && period.windowName
+            ? t('metricContext.periodToDate', { label: period.windowName })
             : period.label
-          periodLabel = t('metricContext.periodToDate', { label: windowLabel })
           const r = await readers.profitAndLoss(period.from, period.to, period.label, { allowed: authz.allowedSubsidiaryIds }, orgId)
           return {
             revenue: r.revenue,
@@ -614,12 +609,20 @@ export async function loadDashboardMetrics(
             margin: r.margin,
             currency: r.currency,
             periodLabel,
-            scopeLabel: r.scopeLabel,
+            scopeLabel: scopeLabel(r.scopeName, r.scopeConsolidated),
             unavailable: null as string | null,
           }
         } catch (e: unknown) {
           if (e instanceof MissingRatesError) return none(e.message, periodLabel)
-          if (isMissingAccountingPeriodError(e)) return none(e.message, null)
+          // The misconfiguration refuses by type, with its date and first
+          // period carried on the error — the tile renders the catalogued
+          // refusal naming the Close Setup remedy, never the raw message.
+          if (e instanceof MissingAccountingPeriodError) {
+            return none(
+              t('metricContext.noAccountingPeriod', { date: e.businessDate, period: e.firstPeriodName }),
+              null,
+            )
+          }
           throw e
         }
       })()
