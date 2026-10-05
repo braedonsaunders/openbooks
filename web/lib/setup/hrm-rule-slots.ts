@@ -1,12 +1,13 @@
 /**
  * HRM rule-slot persistence (pure — no server imports).
  *
- * Three workforce entities edit jsonb rule columns through structured slot
+ * Workforce entities edit jsonb rule columns through structured slot
  * fields: hrm-process-templates (applies_to) and leave-policies (applies_to,
  * accrual_rule, carryover_rule) read their slots back through STORED
  * GENERATED projections, while hrm-review-templates (rating_scale) has no
  * generated projections by design — cycles read the scale through the
- * template row itself, never a slot column. All three share the write
+ * template row itself, never a slot column. Job-level criteria and document
+ * templates also fold structured inputs into arrays. These share the write
  * contract: slots are readable prefills, never written; the normalizers
  * fold them back into the rule objects before buildRow. buildRow only
  * emits declared fields, so without this step the folded objects were
@@ -18,6 +19,7 @@
  */
 import type { Coerced } from './coerce'
 import { toSnake } from './registry'
+import { EQUAL_VALUE_CRITERIA_SLOTS } from './hrm-compensation'
 
 interface RuleSlotEntity {
   /** Generated slot columns: readable, never written. */
@@ -40,6 +42,11 @@ interface RuleSlotEntity {
 }
 
 export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
+  'hrm-job-levels': {
+    // The weight inputs edit one criteria array; there are no weight columns.
+    generated: [],
+    folded: [{ key: 'equalValueCriteria', column: 'equal_value_criteria', kind: 'array', slots: EQUAL_VALUE_CRITERIA_SLOTS.map(([, slot]) => slot) }],
+  },
   'hrm-process-templates': {
     generated: ['applies_employer_subsidiary_id', 'applies_department_id'],
     folded: [{ key: 'appliesTo', column: 'applies_to' }],

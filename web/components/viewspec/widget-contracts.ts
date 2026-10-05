@@ -219,6 +219,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-comp-equity-dialog': { props: ['dialog'] },
   'hrm-comp-line-drawer': { props: ['drawer'] },
   'hrm-comp-plan-dialog': { props: ['dialog'] },
+  'hrm-comp-workspace': { props: ['data'] },
+  'hrm-comp-equity-workspace': { props: ['data'] },
   'hrm-comp-settings': { props: ['settings'] },
   'hrm-compliance-actions': { props: ['acknowledgeLabel', 'actionKind', 'approveLabel', 'canManage', 'entryKind', 'failedLabel', 'resolveLabel', 'rowId', 'rowStatus', 'submitLabel', 'voidLabel'] },
   'hrm-compliance-generate': { props: ['cancelLabel', 'closeHref', 'emptyMessage', 'formatLabel', 'formats', 'formatsEmpty', 'generateLabel', 'projectLabel', 'projects', 'title', 'weekLabel'] },

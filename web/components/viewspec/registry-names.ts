@@ -237,6 +237,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-comp-equity-dialog',
   'hrm-comp-line-drawer',
   'hrm-comp-plan-dialog',
+  'hrm-comp-workspace',
+  'hrm-comp-equity-workspace',
   'hrm-comp-settings',
   'hrm-plan-line-approve',
   'hrm-cycle-dialog',

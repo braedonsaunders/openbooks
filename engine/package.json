@@ -55,6 +55,8 @@
     "./organization/segments": "./src/organization/segments.ts",
     "./organization/feature-state": "./src/organization/feature-state.ts",
     "./organization/scope": "./src/organization/subsidiary-scope.ts",
+    "./organization/currencies": "./src/organization/currency-options.ts",
+    "./hrm/compensation": "./src/hrm/public-compensation.ts",
     "./inventory/stock-locations": "./src/inventory/stock-locations.ts",
     "./journal/contracts": "./src/journal/posting-contracts.ts",
     "./documents/billing": "./src/ledger/billing-invoice.ts",

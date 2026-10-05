@@ -96,7 +96,11 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/surveys', iconKey: 'message', ns: 'hrm', key: 'home.tabs.surveys', secondary: true, permission: 'hrm.surveys.manage', feature: 'hrmSurveys', menuParent: 'hrm-performance' },
   ],
   compensation: [
-    { href: '/hrm/compensation', iconKey: 'coins', ns: 'hrm', key: 'home.tabs.compensation', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
+    { href: '/hrm/compensation', iconKey: 'coins', ns: 'hrm', key: 'compensation.workspace.overview', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
+    ...(['cycles', 'plans', 'families', 'levels', 'bands'] as const).map((view) => ({
+      href: `/hrm/compensation?view=${view}`, iconKey: 'coins', menuKey: `hrm-compensation-${view}`,
+      ns: 'hrm', key: `compensation.workspace.${view}`, permission: 'hrm.compensation.read', feature: 'hrmCompensation' as const,
+    })),
     { href: '/hrm/compensation/equity', iconKey: 'scale', ns: 'hrm', key: 'equity.title', permission: 'hrm.compensation.read', feature: 'hrmCompensation' },
   ],
   benefits: [

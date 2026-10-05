@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Button, Input, Label, Select, SearchSelect, Textarea } from '@openbooks/ui'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { useAppAction } from '@/lib/use-app-action'
 import { useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
 
@@ -26,6 +27,15 @@ export interface CompLabels {
 export function CycleCreateForm({
   labels,
   defaultCurrency,
+  currencyOptions,
+  employerOptions,
+  defaultEmployer,
+  canSelectOrgWide,
+  orgWideLabel,
+  employerLabel,
+  currencyUnavailable,
+  guidelineLabel,
+  guidelineHelp,
   kinds,
   kindLabel,
   nameLabel,
@@ -34,6 +44,15 @@ export function CycleCreateForm({
 }: {
   labels: CompLabels
   defaultCurrency: string
+  currencyOptions: { value: string; label: string; scopeValue: string | null }[]
+  employerOptions: { value: string; label: string }[]
+  defaultEmployer: string
+  canSelectOrgWide: boolean
+  orgWideLabel: string
+  employerLabel: string
+  currencyUnavailable: string
+  guidelineLabel: string
+  guidelineHelp: string
   kinds: { value: string; label: string }[]
   kindLabel: string
   nameLabel: string
@@ -44,16 +63,32 @@ export function CycleCreateForm({
   const [name, setName] = useState('')
   const [kind, setKind] = useState(kinds[0]?.value ?? 'merit')
   const [effectiveOn, setEffectiveOn] = useState('')
-  const [currency, setCurrency] = useState(defaultCurrency)
+  const [employer, setEmployer] = useState(defaultEmployer)
+  const availableCurrencies = (entity: string) => currencyOptions.filter((option) => option.scopeValue === null || option.scopeValue === entity)
+  const initialOptions = availableCurrencies(defaultEmployer)
+  const initialCurrency = initialOptions.some((option) => option.value === defaultCurrency)
+    ? defaultCurrency : initialOptions.length === 1 ? initialOptions[0]!.value : ''
+  const [currency, setCurrency] = useState(initialCurrency)
+  const [guidelinePercentage, setGuidelinePercentage] = useState('')
+  const enabledCurrencies = availableCurrencies(employer)
   const [error, setError] = useState<string | null>(null)
   // Shared action path: the refusal pins and toasts through the hook, and
   // busy always releases — a dead network can never wedge the button.
   const { busy, execute } = useAppAction()
-  const close = useDirtyUrlDrawer(name !== '' || kind !== (kinds[0]?.value ?? 'merit') || effectiveOn !== '' || currency !== defaultCurrency, busy)
+  const close = useDirtyUrlDrawer(name !== '' || kind !== (kinds[0]?.value ?? 'merit') || effectiveOn !== '' || currency !== initialCurrency || employer !== defaultEmployer || guidelinePercentage !== '', busy)
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    if ((!employer && !canSelectOrgWide) || !enabledCurrencies.some((option) => option.value === currency)) {
+      setError(currencyUnavailable)
+      return
+    }
+    const percentage = canonicalDecimal(guidelinePercentage, 6)
+    if (percentage === null) {
+      setError(decimalNullRefusal('guidelinePercentage', guidelineLabel, guidelinePercentage, 6))
+      return
+    }
     await execute(
       () =>
         fetchAction<{ cycle?: { id?: unknown } }>('/api/hrm/comp-cycles', {
@@ -63,9 +98,10 @@ export function CycleCreateForm({
             name: name.trim(),
             kind,
             effectiveOn: effectiveOn || null,
-            currency: currency.trim().toUpperCase(),
-            guidelineKind: 'matrix',
-            guideline: { rows: [], cols: ['q1', 'q2', 'q3', 'q4'], cells: {}, unratedRow: null },
+            currency,
+            scope: { employerSubsidiaryId: employer || null },
+            guidelineKind: 'formula',
+            guideline: { expr: percentage },
           }),
         }),
       {
@@ -101,12 +137,29 @@ export function CycleCreateForm({
         <Input id="comp-cycle-effective" type="date" value={effectiveOn} onChange={(e) => setEffectiveOn(e.target.value)} required />
       </div>
       <div>
+        <Label htmlFor="comp-cycle-employer">{employerLabel}</Label>
+        <SearchSelect id="comp-cycle-employer" value={employer}
+          options={canSelectOrgWide ? [{ value: '', label: orgWideLabel }, ...employerOptions] : employerOptions}
+          onChange={(value) => {
+            setEmployer(value)
+            const next = availableCurrencies(value)
+            if (!next.some((option) => option.value === currency)) setCurrency(next.length === 1 ? next[0]!.value : '')
+          }} disabled={busy} />
+      </div>
+      <div>
         <Label htmlFor="comp-cycle-currency">{currencyLabel}</Label>
-        <Input id="comp-cycle-currency" value={currency} onChange={(e) => setCurrency(e.target.value)} required maxLength={3} />
+        <SearchSelect id="comp-cycle-currency" value={currency} onChange={setCurrency}
+          options={enabledCurrencies} disabled={busy || enabledCurrencies.length === 0} />
+        {enabledCurrencies.length === 0 ? <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{currencyUnavailable}</p> : null}
+      </div>
+      <div>
+        <Label htmlFor="comp-cycle-guideline">{guidelineLabel}</Label>
+        <Input id="comp-cycle-guideline" value={guidelinePercentage} onChange={(event) => setGuidelinePercentage(event.target.value)} inputMode="decimal" required disabled={busy} aria-describedby="comp-cycle-guideline-help" />
+        <p id="comp-cycle-guideline-help" className="mt-1 text-sm text-slate-500 dark:text-slate-400">{guidelineHelp}</p>
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || !currency || !guidelinePercentage || (!employer && !canSelectOrgWide)}>
           {labels.submit}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>
@@ -486,11 +539,13 @@ export function EquityGenerateForm({
   asOfLabel,
   groupALabel,
   groupBLabel,
+  groupOptions,
 }: {
   labels: CompLabels
   asOfLabel: string
   groupALabel: string
   groupBLabel: string
+  groupOptions: { value: string; label: string }[]
 }) {
   const router = useRouter()
   const [asOf, setAsOf] = useState('')
@@ -533,15 +588,15 @@ export function EquityGenerateForm({
       </div>
       <div>
         <Label htmlFor="comp-gap-a">{groupALabel}</Label>
-        <Input id="comp-gap-a" value={groupA} onChange={(e) => setGroupA(e.target.value)} required maxLength={160} />
+        <SearchSelect id="comp-gap-a" value={groupA} onChange={setGroupA} options={groupOptions.filter((option) => option.value !== groupB)} disabled={busy} />
       </div>
       <div>
         <Label htmlFor="comp-gap-b">{groupBLabel}</Label>
-        <Input id="comp-gap-b" value={groupB} onChange={(e) => setGroupB(e.target.value)} required maxLength={160} />
+        <SearchSelect id="comp-gap-b" value={groupB} onChange={setGroupB} options={groupOptions.filter((option) => option.value !== groupA)} disabled={busy} />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || !groupA || !groupB || groupA === groupB}>
           {labels.submit}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>
@@ -596,6 +651,7 @@ export function CompensationSettingsForm({
   labels,
   initial,
   attributeLabel,
+  attributeOptions = [],
   thresholdLabel,
   responseDaysLabel,
   roundingLabel,
@@ -605,6 +661,7 @@ export function CompensationSettingsForm({
   labels: CompLabels
   initial: { comparisonAttributeKey: string; gapThresholdPct: string; responseDays: string; fteRounding: string; burdenRate: string }
   attributeLabel: string
+  attributeOptions?: { value: string; label: string }[]
   thresholdLabel: string
   roundingOptions: { value: string; label: string }[]
   responseDaysLabel: string
@@ -648,7 +705,7 @@ export function CompensationSettingsForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-set-attr">{attributeLabel}</Label>
-        <Input id="comp-set-attr" value={attributeKey} onChange={(e) => setAttributeKey(e.target.value)} maxLength={120} />
+        <SearchSelect id="comp-set-attr" value={attributeKey} onChange={setAttributeKey} options={attributeOptions} clearable disabled={busy} />
       </div>
       <div>
         <Label htmlFor="comp-set-threshold">{thresholdLabel}</Label>

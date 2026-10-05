@@ -144,7 +144,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listJobLevels() { return []; } export async function compensationSettings() { return { comparisonAttributeKey: null, gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
+        url: "data:text/javascript,export async function listJobLevels() { return []; } export async function compensationSettings() { return { comparisonAttributeKey: 'group', gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/headcount-plans.ts") {
@@ -169,11 +169,22 @@ registerHooks({
         url: "data:text/javascript,export async function latestGapSnapshot() { return null; }",
       };
     }
+    if (owned && specifier === "@openbooks/engine/organization/currencies") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(`
+        export async function organizationCurrencyOptions() {
+          const currency = globalThis.__compDlgBaseCurrency || 'USD';
+          return [{ value: currency, label: currency, scopeValue: null }];
+        }
+      `) };
+    }
+    if (owned && specifier === "../setup/ref-options") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function loadEntityOptions() { return []; }" };
+    }
     if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript," + encodeURIComponent(`export const db = { execute: async () => ({ rows: globalThis.__compDlgBaseCurrency ? [{ base_currency: globalThis.__compDlgBaseCurrency }] : [] }) };`),
+        url: "data:text/javascript," + encodeURIComponent(`export const db = { execute: async (query) => ({ rows: JSON.stringify(query).includes('select distinct p.custom') ? [{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }] : globalThis.__compDlgBaseCurrency ? [{ base_currency: globalThis.__compDlgBaseCurrency }] : [] }) };`),
       };
     }
     return nextResolve(specifier, context);
@@ -427,15 +438,18 @@ test("home tables head their columns from the resolved catalog, never literals",
     ["Name", "Status", "Cost"],
     "the plan headers resolve from the en catalog",
   );
-  const { compensationSpec } = await import("./view.ts");
+  const { CompensationCycleRegister, CompensationPlanRegister } = await import("./CompensationRegisters.tsx");
+  const cycle = CompensationCycleRegister({ data });
+  const plan = CompensationPlanRegister({ data });
   assert.deepEqual(
-    tableHeaders(compensationSpec(data!)),
-    [
-      [{ $: "bandsColumns.level" }, { $: "bandsColumns.range" }, { $: "bandsColumns.headcount" }],
-      [{ $: "cyclesColumns.name" }, { $: "cyclesColumns.status" }, { $: "cyclesColumns.effective" }],
-      [{ $: "plansColumns.name" }, { $: "plansColumns.status" }, { $: "plansColumns.cost" }],
-    ],
-    "the three home tables head their columns from the loader-resolved fields",
+    cycle.props.columns.map((column: { header: string }) => column.header),
+    [data.cyclesColumns.name, data.kindLabel, data.cyclesColumns.status, data.cyclesColumns.effective],
+    "the native cycle register uses translated headers",
+  );
+  assert.deepEqual(
+    plan.props.columns.map((column: { header: string }) => column.header),
+    [data.plansColumns.name, data.periodLabel, data.plansColumns.status, data.plansColumns.cost],
+    "the native plan register uses translated headers",
   );
 });
 

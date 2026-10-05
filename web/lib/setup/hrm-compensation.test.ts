@@ -1,6 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeHrmCompensationInput } from "./hrm-compensation.ts";
+import { applyRuleSlotColumns } from "./hrm-rule-slots.ts";
+import { buildRow } from "./coerce.ts";
+import { JOB_LEVELS_ENTITY } from "./hrm-compensation.ts";
 
 describe("normalizeHrmCompensationInput", () => {
   test("other entities pass through untouched", () => {
@@ -14,15 +17,24 @@ describe("normalizeHrmCompensationInput", () => {
         code: "IC3",
         skillsWeight: "3",
         responsibilityWeight: "2.5",
+        workingConditionsWeight: "1.5",
       }),
       {
         code: "IC3",
         equalValueCriteria: [
           { criterion: "skills", weight: "3" },
           { criterion: "responsibility", weight: "2.5" },
+          { criterion: "working_conditions", weight: "1.5" },
         ],
       },
     );
+    const normalized = normalizeHrmCompensationInput('hrm-job-levels', { code: 'IC3', name: 'Level three', rank: '3', skillsWeight: '3', workingConditionsWeight: '1.5' });
+    const built = buildRow(JOB_LEVELS_ENTITY, normalized, { forCreate: true, coverFoldedSlots: true });
+    assert.ok(!('error' in built));
+    const persisted = applyRuleSlotColumns('hrm-job-levels', normalized, built.cols);
+    assert.ok(!('error' in persisted));
+    assert.deepEqual(persisted.cols.find((col) => col.column === 'equal_value_criteria')?.value, normalized.equalValueCriteria);
+    assert.ok(persisted.cols.every((col) => !col.column.endsWith('_weight')));
   });
 
   test("empty slots fold to an empty criteria list (the write refuses it by name)", () => {

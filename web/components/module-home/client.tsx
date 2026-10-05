@@ -14,6 +14,10 @@ import {
   ClipboardCheck,
   ClipboardList,
   CreditCard,
+  Coins,
+  Flag,
+  Scale,
+  TrendingDown,
   Gauge,
   Landmark,
   ListChecks,
@@ -60,6 +64,10 @@ const HOME_ICONS: Record<string, LucideIcon> = {
   'calendar-clock': CalendarClock,
   'heart-pulse': HeartPulse,
   gauge: Gauge,
+  coins: Coins,
+  flag: Flag,
+  scale: Scale,
+  'trending-down': TrendingDown,
 }
 
 export function HomeStatTile({

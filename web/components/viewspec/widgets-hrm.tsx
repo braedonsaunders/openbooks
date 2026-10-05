@@ -1,3 +1,5 @@
+import { CompensationWorkspace } from '../../app/(app)/hrm/compensation/CompensationWorkspace'
+import { EquityWorkspace } from '../../app/(app)/hrm/compensation/equity/EquityWorkspace'
 import {ConversationCreate} from '../../app/(app)/hrm/performance/conversations/ConversationCreate'
 import {GoalEditor} from '../../app/(app)/hrm/performance/goals/GoalEditor'
 import {ApplicationReview} from '../../app/(app)/hrm/recruiting/ApplicationReview'
@@ -74,6 +76,8 @@ import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
+  'hrm-comp-workspace': (props) => <CompensationWorkspace data={props.data as ComponentProps<typeof CompensationWorkspace>['data']} />,
+  'hrm-comp-equity-workspace': (props) => <EquityWorkspace data={props.data as ComponentProps<typeof EquityWorkspace>['data']} />,
   'hrm-conversation-create':(props)=><ConversationCreate employees={props.employees as ComponentProps<typeof ConversationCreate>['employees']} closeHref={str(props,'closeHref')??'/hrm/performance/conversations'}/>,
   'hrm-goal-editor':(props)=><GoalEditor initial={props.initial as ComponentProps<typeof GoalEditor>['initial']} employees={props.employees as ComponentProps<typeof GoalEditor>['employees']} canWrite={props.canWrite===true} closeHref={str(props,'closeHref')??'/hrm/performance/goals'}/>,
   'hrm-application-review': (props) => <ApplicationReview selection={props.selection as ComponentProps<typeof ApplicationReview>['selection']} queue={props.queue as ComponentProps<typeof ApplicationReview>['queue']} closeHref={str(props,'closeHref')??'/hrm/recruiting'} canManage={props.canManage===true}/>,
@@ -732,6 +736,7 @@ export const HRM_WIDGETS = {
     const settings = props.settings as {
       initial: ComponentProps<typeof CompensationSettingsForm>['initial']
       attributeLabel: string
+      attributeOptions: ComponentProps<typeof CompensationSettingsForm>['attributeOptions']
       thresholdLabel: string
       responseDaysLabel: string
       roundingLabel: string
@@ -747,6 +752,7 @@ export const HRM_WIDGETS = {
         labels={{ failed: settings.failed, submit: settings.submit, cancel: settings.cancel }}
         initial={settings.initial}
         attributeLabel={settings.attributeLabel}
+        attributeOptions={settings.attributeOptions}
         thresholdLabel={settings.thresholdLabel}
         responseDaysLabel={settings.responseDaysLabel}
         roundingLabel={settings.roundingLabel}

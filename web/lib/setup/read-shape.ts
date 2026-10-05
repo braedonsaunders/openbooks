@@ -1,8 +1,17 @@
 import { sql } from 'drizzle-orm'
 import type { SetupEntity } from './types'
+import { EQUAL_VALUE_CRITERIA_SLOTS } from './hrm-compensation'
+import { toSnake } from './registry'
 
 /** Read-side projection/source for registry fields stored in a child relation. */
 export function setupReadProjection(entity: SetupEntity, columns?: readonly string[]) {
+  if (entity.key === 'hrm-job-levels') {
+    const base = sql.raw(columns?.length ? columns.join(', ') : '*')
+    const weights = EQUAL_VALUE_CRITERIA_SLOTS.map(([criterion, slot]) => sql`
+      (select item->>'weight' from jsonb_array_elements(equal_value_criteria) item
+        where item->>'criterion' = ${criterion} limit 1) as ${sql.raw(toSnake(slot))}`)
+    return sql`${base}, ${sql.join(weights, sql`, `)}`
+  }
   if (entity.key !== 'pay-components') {
     return sql.raw(columns?.length ? columns.join(', ') : '*')
   }

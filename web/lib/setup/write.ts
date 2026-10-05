@@ -1849,6 +1849,19 @@ export async function validateEntityIntegrity(
     }
   }
   if (entity.key === 'hrm-pay-bands') {
+    let currencyValues = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select currency, employer_subsidiary_id as "employerSubsidiaryId"
+          from hrm_pay_bands where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Pay band not found'
+      currencyValues = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const { organizationCurrencyAvailable } = await import('@openbooks/engine/organization/currencies')
+    if (!(await organizationCurrencyAvailable(executor, orgId, String(currencyValues.currency ?? ''), currencyValues.employerSubsidiaryId ? String(currencyValues.employerSubsidiaryId) : null))) {
+      return 'Choose an enabled currency for the pay band employer. Foreign currencies require Multi-currency in Company Settings → Features.'
+    }
     const min = body.min !== undefined ? Number(body.min) : null
     const target = body.target !== undefined ? Number(body.target) : null
     const max = body.max !== undefined ? Number(body.max) : null

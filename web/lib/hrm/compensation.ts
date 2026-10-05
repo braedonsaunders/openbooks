@@ -14,12 +14,10 @@ import {
   listPayBands,
   compaRatioFor,
 } from '@openbooks/engine/src/hrm/compensation/bands.ts'
+import { countBandHolders } from '@openbooks/engine/src/hrm/compensation/band-headcounts.ts'
 import {
-  countBandHolders,
-} from '@openbooks/engine/src/hrm/compensation/band-headcounts.ts'
-import {
-  compensationSettings,
   listJobLevels,
+  compensationSettings,
 } from '@openbooks/engine/src/hrm/compensation/architecture.ts'
 import {
   listPlans,
@@ -34,7 +32,7 @@ import {
 import { CompensationError } from '@openbooks/engine/src/hrm/compensation/errors.ts'
 import { HrmAuthorizationError, loadApprovalPerson, loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
 import { can, getAuthz, type Authz } from '../authz'
-import { setupSectionParams } from '../list-params'
+import { mergeHref } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../features'
 import { requireFeatureEnabled } from '../feature-gates'
@@ -115,6 +113,15 @@ export interface CompCycleDialogState {
   open: boolean
   closeHref: string
   defaultCurrency: string
+  currencyOptions: { value: string; label: string; scopeValue: string | null }[]
+  employerOptions: { value: string; label: string }[]
+  defaultEmployer: string
+  canSelectOrgWide: boolean
+  orgWideLabel: string
+  employerLabel: string
+  currencyUnavailable: string
+  guidelineLabel: string
+  guidelineHelp: string
   title: string
   kinds: { value: string; label: string }[]
   kindLabel: string
@@ -155,6 +162,7 @@ export interface CompEquityDialogState {
   asOfLabel: string
   groupALabel: string
   groupBLabel: string
+  groupOptions: { value: string; label: string }[]
   failed: string
   submit: string
   cancel: string
@@ -163,7 +171,16 @@ export interface CompEquityDialogState {
   remedyLabel: string | null
 }
 
+export type CompensationView = 'overview' | 'cycles' | 'plans' | 'families' | 'levels' | 'bands'
+
 export interface CompHomeData {
+  activeView: CompensationView
+  workspaceTabs: { href: string; label: string; active: boolean }[]
+  currentParams: Record<string, string | string[] | undefined>
+  newItems: { key: string; label: string; href: string }[]
+  workspaceDescription: string
+  kindLabel: string
+  periodLabel: string
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
@@ -180,6 +197,7 @@ export interface CompHomeData {
   plansColumns: { name: string; status: string; cost: string }
   plans: CompPlanRow[]
   plansEmpty: string
+  plansAwaitingEmpty: string
   canManage: boolean
   canRunCycles: boolean
   newCycleHref: string
@@ -207,8 +225,7 @@ export interface CompHomeData {
   /**
    * The search params the rehomed job-architecture sections
    * read (namespaced drawer keys open each section's New/edit drawer in
-   * SetupEntitySection). The home page carries no other list state, so
-   * this is the section's own list params verbatim.
+   * SetupEntitySection), including the current workspace view.
    */
   setupParams: Record<string, string | string[] | undefined>
   /**
@@ -220,15 +237,15 @@ export interface CompHomeData {
   refusal: { title: string; message: string } | null
   /**
    * The compensation settings form payload (gap threshold, burden rate,
-   * FTE rounding, comparison attribute, response days). Present only for
-   * unrestricted compensation managers — the PUT endpoint requires
-   * hrm.compensation.manage on the whole org, so scoped managers never
-   * get a form that can only refuse. Readers get null.
+   * FTE rounding, comparison attribute, response days). The workspace
+   * leaves this null; Company Setup loads the policy form separately.
    */
   settings: {
+    refusal: string | null
     initial: { comparisonAttributeKey: string; gapThresholdPct: string; responseDays: string; fteRounding: string; burdenRate: string }
     title: string
     attributeLabel: string
+    attributeOptions: { value: string; label: string }[]
     thresholdLabel: string
     responseDaysLabel: string
     roundingLabel: string
@@ -274,91 +291,115 @@ export async function loadCompensationHome(
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const today = await businessToday(orgId)
   const canManage = can(authz, 'hrm.compensation.manage')
-  // Merit cycles ride Compensation (this page's gate) and additionally
-  // need Payroll: a round reads current pay and pushes new rates.
+  const canSetup = can(authz, 'admin.setup.manage') && authz.allowedSubsidiaryIds === null
   const meritOn = await isFeatureEnabled(orgId, 'payroll')
   const canRunCycles = canManage && meritOn
-  const [bands, levels, cycles, plans] = await Promise.all([
-    listPayBands({ orgId, actorId: authz.user.id, asOf: today }),
-    listJobLevels({ orgId, actorId: authz.user.id }),
-    (meritOn ? listCycles({ orgId, actorId: authz.user.id }) : []),
-    listPlans({ orgId, actorId: authz.user.id }),
-  ])
-  const levelById = new Map(levels.map((l) => [l.id, l]))
-  // Headcount per band scope: employments whose position level the band
-  // prices, resolved read-only through the fenced engine counter so the
-  // count matches the caller lens (empty scope sees zero, never the
-  // whole org). Band configuration itself stays visible; placement stays
-  // the band service's job.
-  const bandRows: CompBandRow[] = []
-  for (const band of bands) {
-    const level = levelById.get(band.levelId)
-    const holders = await countBandHolders({ orgId, actorId: authz.user.id, levelId: band.levelId, asOf: today })
-    bandRows.push({
-      id: band.id,
-      levelCode: level?.code ?? band.levelId.slice(0, 8),
-      levelName: level?.name ?? '',
-      range: `${band.min} – ${band.max} ${band.currency}`,
-      currency: band.currency,
-      headcount: String(holders),
-      belowMin: '',
-      inRange: '',
-      aboveMax: '',
-      noBand: '',
-    })
-  }
-  const openCycles = cycles.filter((c) => c.status === 'open' || c.status === 'in_review')
-  let pacingNote = ''
-  let belowMinRound = '—'
-  if (openCycles[0]) {
-    const pacing = await cyclePacing(orgId, authz.user.id, openCycles[0].id)
-    if (pacing?.totalPct !== null && pacing?.totalPct !== undefined) {
-      pacingNote = `${Math.round(pacing.totalPct)}%`
-    }
-    // Below-min on the live round: lines whose frozen rate sits under
-    // their band's min edge (read back, never stored).
-    const roundLines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId: openCycles[0].id })
-    const roundBandIds = [...new Set(roundLines.map((l) => l.bandId).filter((b): b is string => b !== null))]
-    const roundEdges = new Map<string, string>()
-    if (roundBandIds.length > 0) {
-      const edgeRows = (await db.execute<{ id: string; min: string }>(sql`
-        select id, min::text as min from hrm_pay_bands
-         where org_id = ${orgId} and id = any(${`{${roundBandIds.join(',')}}`}::uuid[])`)).rows
-      for (const row of edgeRows) roundEdges.set(row.id, row.min)
-    }
-    belowMinRound = String(
-      roundLines.filter((l) => l.bandId !== null && cmp(l.currentRate, roundEdges.get(l.bandId) ?? '0') < 0).length,
-    )
-  }
-  const awaitingPlans = plans.filter((p) => p.status === 'submitted').length
-  // A refused snapshot read (a scoped reader cannot read org-wide frozen
-  // aggregates) travels as data with its remedy intact: the tile shows
-  // unavailable, never a zero that reads as "no flags". A genuinely
-  // absent snapshot still counts zero. Unexpected DB/system failures
-  // propagate — never an empty tile.
-  let jointFlags: number | null = 0
-  let gapRefusal: CompHomeData['refusal'] = null
-  try {
-    const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
-    jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
-  } catch (error) {
-    if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
-      gapRefusal = { title: t('compensation.title'), message: error.message }
-      jointFlags = null
-    } else {
-      throw error
-    }
-  }
-  const tiles: CompStatTile[] = [
-    { iconKey: 'trending-down', accent: 'amber', label: t('compensation.tiles.belowMin'), value: belowMinRound, tone: 'default' },
-    { iconKey: 'gauge', accent: 'blue', label: t('compensation.tiles.openCyclePacing'), value: pacingNote || '—', tone: 'default' },
-    { iconKey: 'users', accent: 'violet', label: t('compensation.tiles.awaitingPlans'), value: String(awaitingPlans), tone: awaitingPlans > 0 ? 'warning' : 'default' },
-    { iconKey: 'scale', accent: 'rose', label: t('compensation.tiles.jointFlags'), value: jointFlags === null ? '—' : String(jointFlags), tone: jointFlags !== null && jointFlags > 0 ? 'warning' : 'default' },
+  const views = ['overview', 'cycles', 'plans', 'families', 'levels', 'bands'] as const
+  const requestedView = firstParam(sp.view) ?? (firstParam(sp.family) ? 'families' : firstParam(sp.level) ? 'levels' : firstParam(sp.band) ? 'bands' : firstParam(sp.plan) ? 'plans' : firstParam(sp.cycle) ? 'cycles' : 'overview')
+  const activeView: CompensationView = views.includes(requestedView as CompensationView)
+    ? requestedView as CompensationView : 'overview'
+  // Each work area loads only its own authorized register. Architecture
+  // lists use the shared registry reader and its server pagination.
+  const cycles = (activeView === 'cycles' || activeView === 'overview') && meritOn
+    ? await listCycles({ orgId, actorId: authz.user.id }) : []
+  const plans = activeView === 'plans' || activeView === 'overview'
+    ? await listPlans({ orgId, actorId: authz.user.id }) : []
+  const workspaceTabs = views.map((view) => ({
+    href: view === 'overview' ? '/hrm/compensation' : `/hrm/compensation?view=${view}`,
+    label: t(`compensation.workspace.${view}`),
+    active: view === activeView,
+  }))
+  const newItems = [
+    ...(canRunCycles ? [{ key: 'cycle', label: t('compensation.newCycle'), href: '/hrm/compensation?view=cycles&cycle=new' }] : []),
+    ...(canManage ? [{ key: 'plan', label: t('compensation.newPlan'), href: '/hrm/compensation?view=plans&plan=new' }] : []),
+    ...(canSetup ? [
+      { key: 'family', label: t('compensation.workspace.newFamily'), href: '/hrm/compensation?view=families&family=new' },
+      { key: 'level', label: t('compensation.workspace.newLevel'), href: '/hrm/compensation?view=levels&level=new' },
+      { key: 'band', label: t('compensation.workspace.newBand'), href: '/hrm/compensation?view=bands&band=new' },
+    ] : []),
   ]
+  let tiles: CompStatTile[] = []
+  const bandRows: CompBandRow[] = []
+  let gapRefusal: CompHomeData['refusal'] = null
+  if (activeView === 'overview') {
+    const today = await businessToday(orgId)
+    const [bands, levels] = await Promise.all([
+      listPayBands({ orgId, actorId: authz.user.id, asOf: today }),
+      listJobLevels({ orgId, actorId: authz.user.id }),
+    ])
+    const levelById = new Map(levels.map((l) => [l.id, l]))
+    // Headcount per band scope: employments whose position level the band
+    // prices, resolved read-only through the fenced engine counter so the
+    // count matches the caller lens (empty scope sees zero, never the
+    // whole org). Band configuration itself stays visible; placement stays
+    // the band service's job.
+    for (const band of bands) {
+      const level = levelById.get(band.levelId)
+      const holders = await countBandHolders({ orgId, actorId: authz.user.id, levelId: band.levelId, asOf: today })
+      bandRows.push({
+        id: band.id,
+        levelCode: level?.code ?? band.levelId.slice(0, 8),
+        levelName: level?.name ?? '',
+        range: `${band.min} – ${band.max} ${band.currency}`,
+        currency: band.currency,
+        headcount: String(holders),
+        belowMin: '',
+        inRange: '',
+        aboveMax: '',
+        noBand: '',
+      })
+    }
+    const openCycles = cycles.filter((c) => c.status === 'open' || c.status === 'in_review')
+    let pacingNote = ''
+    let belowMinRound = '—'
+    if (openCycles[0]) {
+      const pacing = await cyclePacing(orgId, authz.user.id, openCycles[0].id)
+      if (pacing?.totalPct !== null && pacing?.totalPct !== undefined) {
+        pacingNote = `${Math.round(pacing.totalPct)}%`
+      }
+      // Below-min on the live round: lines whose frozen rate sits under
+      // their band's min edge (read back, never stored).
+      const roundLines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId: openCycles[0].id })
+      const roundBandIds = [...new Set(roundLines.map((l) => l.bandId).filter((b): b is string => b !== null))]
+      const roundEdges = new Map<string, string>()
+      if (roundBandIds.length > 0) {
+        const edgeRows = (await db.execute<{ id: string; min: string }>(sql`
+          select id, min::text as min from hrm_pay_bands
+           where org_id = ${orgId} and id = any(${`{${roundBandIds.join(',')}}`}::uuid[])`)).rows
+        for (const row of edgeRows) roundEdges.set(row.id, row.min)
+      }
+      belowMinRound = String(
+        roundLines.filter((l) => l.bandId !== null && cmp(l.currentRate, roundEdges.get(l.bandId) ?? '0') < 0).length,
+      )
+    }
+    const awaitingPlans = plans.filter((p) => p.status === 'submitted').length
+    // A refused snapshot read (a scoped reader cannot read org-wide frozen
+    // aggregates) travels as data with its remedy intact: the tile shows
+    // unavailable, never a zero that reads as "no flags". A genuinely
+    // absent snapshot still counts zero. Unexpected DB/system failures
+    // propagate — never an empty tile.
+    let jointFlags: number | null = 0
+    try {
+      const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
+      jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
+    } catch (error) {
+      if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
+        gapRefusal = { title: t('compensation.title'), message: error.message }
+        jointFlags = null
+      } else {
+        throw error
+      }
+    }
+    tiles = [
+      { iconKey: 'trending-down', accent: 'amber', label: t('compensation.tiles.belowMin'), value: belowMinRound, tone: 'default' },
+      { iconKey: 'gauge', accent: 'blue', label: t('compensation.tiles.openCyclePacing'), value: pacingNote || '—', tone: 'default' },
+      { iconKey: 'users', accent: 'violet', label: t('compensation.tiles.awaitingPlans'), value: String(awaitingPlans), tone: awaitingPlans > 0 ? 'warning' : 'default' },
+      { iconKey: 'scale', accent: 'rose', label: t('compensation.tiles.jointFlags'), value: jointFlags === null ? '—' : String(jointFlags), tone: jointFlags !== null && jointFlags > 0 ? 'warning' : 'default' },
+    ]
+  }
   const planRows: CompPlanRow[] = []
-  for (const plan of plans.slice(0, 10)) {
+  for (const plan of plans) {
     const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId: plan.id })
     const total = planTotalCost(lines)
     planRows.push({
@@ -381,7 +422,7 @@ export async function loadCompensationHome(
   // The gate-explanation copy is shared with the feature-required and
   // access-denied pages (shell.routeState), and the feature display names
   // with the Features switchboard (admin.features) — no second source.
-  const dialogCloseHref = '/hrm/compensation'
+  const dialogCloseHref = mergeHref('/hrm/compensation', sp, { cycle: null, plan: null })
   const cycleOpen = firstParam(sp.cycle) === 'new'
   const planOpen = firstParam(sp.plan) === 'new'
   let cycleDialog: CompCycleDialogState | null = null
@@ -391,6 +432,16 @@ export async function loadCompensationHome(
         select base_currency from orgs where id = ${orgId}
       `)).rows[0]?.base_currency ?? ''
     : ''
+  let currencyOptions: CompCycleDialogState['currencyOptions'] = []
+  let employerOptions: CompCycleDialogState['employerOptions'] = []
+  if (cycleOpen && canRunCycles) {
+    const { organizationCurrencyOptions } = await import('@openbooks/engine/organization/currencies')
+    const { loadEntityOptions } = await import('../setup/ref-options')
+    ;[currencyOptions, employerOptions] = await Promise.all([
+      organizationCurrencyOptions(db, orgId, authz.allowedSubsidiaryIds),
+      loadEntityOptions('subsidiaries', orgId, authz.allowedSubsidiaryIds),
+    ])
+  }
   if (cycleOpen || planOpen) {
     const g = await getTranslations('shell.routeState')
     const adminT = await getTranslations('admin')
@@ -423,6 +474,15 @@ export async function loadCompensationHome(
         open: true,
         closeHref: dialogCloseHref,
         defaultCurrency: cycleCurrency,
+        currencyOptions,
+        employerOptions,
+        defaultEmployer: authz.allowedSubsidiaryIds !== null && employerOptions.length === 1 ? employerOptions[0]!.value : '',
+        canSelectOrgWide: authz.allowedSubsidiaryIds === null,
+        orgWideLabel: t('compensation.workspace.organizationScope'),
+        employerLabel: t('compensation.workspace.employer'),
+        currencyUnavailable: t('compensation.workspace.currencyUnavailable'),
+        guidelineLabel: t('compensation.workspace.guidelinePercentage'),
+        guidelineHelp: t('compensation.workspace.guidelineHelp'),
         title: t('compensation.newCycle'),
         kinds: (['merit', 'promotion', 'adjustment', 'cola'] as const).map((kind) => ({
           value: kind,
@@ -458,6 +518,10 @@ export async function loadCompensationHome(
     }
   }
   return {
+    activeView, workspaceTabs, currentParams: sp, newItems,
+    kindLabel: t('compensation.columns.kind'),
+    periodLabel: t('compensation.workspace.period'),
+    workspaceDescription: t(`compensation.workspace.${activeView}Description`),
     title: t('compensation.title'),
     description: t('compensation.description'),
     tabs,
@@ -473,7 +537,7 @@ export async function loadCompensationHome(
     bandsEmpty: t('compensation.bandsEmpty'),
     cyclesTitle: t('compensation.cyclesTitle'),
     cyclesColumns: { name: t('compensation.columns.name'), status: t('compensation.columns.status'), effective: t('compensation.columns.effective') },
-    cycles: cycles.slice(0, 10).map((c) => ({
+    cycles: cycles.map((c) => ({
       id: c.id,
       name: c.name,
       kindLabel: t.has(`compensation.cycleKind.${c.kind}`) ? t(`compensation.cycleKind.${c.kind}`) : c.kind,
@@ -488,11 +552,12 @@ export async function loadCompensationHome(
     plansColumns: { name: t('compensation.columns.name'), status: t('compensation.columns.status'), cost: t('compensation.columns.cost') },
     plans: planRows,
     plansEmpty: t('compensation.plansEmpty'),
+    plansAwaitingEmpty: t('compensation.workspace.noPlansAwaiting'),
     canManage,
     canRunCycles,
-    newCycleHref: '/hrm/compensation?cycle=new',
+    newCycleHref: '/hrm/compensation?view=cycles&cycle=new',
     newCycleLabel: t('compensation.newCycle'),
-    newPlanHref: '/hrm/compensation?plan=new',
+    newPlanHref: '/hrm/compensation?view=plans&plan=new',
     newPlanLabel: t('compensation.newPlan'),
     dialogCloseHref,
     cycleOpen,
@@ -502,29 +567,24 @@ export async function loadCompensationHome(
     equityHref: '/hrm/compensation/equity',
     equityLabel: t('compensation.equity'),
     architectureTitle: t('compensation.architectureTitle'),
-    canSetup: can(authz, 'admin.setup.manage'),
-    // The three job-architecture sections read their New/edit
-    // drawers from namespaced keys — one URL opens exactly one drawer.
-    setupParams: setupSectionParams(sp, ['family', 'level', 'band']),
+    canSetup,
+    setupParams: sp,
     refusal: gapRefusal,
-    settings: await loadCompensationSettingsBlock(orgId, canManage && authz.allowedSubsidiaryIds === null, t),
+    settings: null,
   }
 }
 
-/**
- * The settings form payload for unrestricted compensation managers. A
- * stored-but-unparseable threshold throws INVALID_INPUT naming the
- * Compensation settings remedy — this panel IS that remedy, so the
- * failure surfaces here as data with the stored values blanked rather
- * than failing the whole home page.
- */
-async function loadCompensationSettingsBlock(
+/** Load the single Company Setup policy form for unrestricted managers.
+ * Invalid stored policy is surfaced by name; it is never displayed as a
+ * successful read of replacement values. */
+export async function loadCompensationSettingsBlock(
   orgId: string,
   editable: boolean,
   t: Awaited<ReturnType<typeof getTranslations>>,
 ): Promise<CompHomeData['settings']> {
   if (!editable) return null
-  let initial = { comparisonAttributeKey: '', gapThresholdPct: '5', responseDays: '', fteRounding: 'up_to_whole', burdenRate: '' }
+  let refusal: string | null = null
+  let initial = { comparisonAttributeKey: '', gapThresholdPct: '', responseDays: '', fteRounding: 'up_to_whole', burdenRate: '' }
   try {
     const current = await compensationSettings(orgId)
     initial = {
@@ -535,16 +595,22 @@ async function loadCompensationSettingsBlock(
       burdenRate: current.burdenRate ?? '',
     }
   } catch (error) {
-    // A corrupt stored document keeps its defaults above: the panel IS
-    // the named remedy, so the operator can resave and heal it. Only the
-    // typed settings refusal is absorbed here — unexpected failures
-    // propagate, never a blanked form pretending the read succeeded.
+    // Preserve the refusal beside the repair form. Unexpected failures
+    // propagate rather than becoming an apparently valid policy.
     if (!(error instanceof CompensationError)) throw error
+    refusal = error.message
   }
   return {
+    refusal,
     initial,
     title: t('compensation.settings.title'),
     attributeLabel: t('compensation.settings.attribute'),
+    attributeOptions: (await db.execute<{ value: string; label: string }>(sql`
+      select key as value, label from custom_field_defs
+       where org_id = ${orgId} and target_table = 'parties' and is_active
+         and (target_kind is null or target_kind = 'employee')
+         and field_type in ('text', 'select', 'boolean') order by sort_order, label
+    `)).rows,
     thresholdLabel: t('compensation.settings.threshold'),
     responseDaysLabel: t('compensation.settings.responseDays'),
     roundingLabel: t('compensation.settings.roundingLabel'),
@@ -803,7 +869,7 @@ export async function loadCompCycleDetail(
     currentParams: { department: sp.department },
     canManage: can(authz, 'hrm.compensation.manage'),
     canDecide: can(authz, 'hrm.compensation.approve'),
-    backHref: '/hrm/compensation',
+    backHref: '/hrm/compensation?view=cycles',
     backLabel: t('compensation.back'),
     cycleHref: `/hrm/compensation/cycles/${cycleId}`,
     openLineId,
@@ -948,7 +1014,7 @@ export async function loadHeadcountPlanDetail(
     })),
     linesEmpty: t('compensation.planLinesEmpty'),
     canManage: can(authz, 'hrm.compensation.manage'),
-    backHref: '/hrm/compensation',
+    backHref: '/hrm/compensation?view=plans',
     backLabel: t('compensation.back'),
     approveLabel: t('compensation.approveLine'),
     lineApprove: can(authz, 'hrm.compensation.manage')
@@ -963,6 +1029,9 @@ export async function loadHeadcountPlanDetail(
 }
 
 export interface EquityData {
+  reportHref: string | null
+  reportLabel: string
+  snapshotLabel: string
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
@@ -1006,7 +1075,8 @@ export async function loadEquity(
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
-  const canManage = can(authz, 'hrm.compensation.manage')
+  const hasManagePermission = can(authz, 'hrm.compensation.manage')
+  const canManage = hasManagePermission && authz.allowedSubsidiaryIds === null
   // The generate dialog (?generate=1): the loader owns the open state and
   // the return href, like the home create dialogs. A requested dialog ALWAYS
   // resolves — the form for managers, a NAMED permission refusal otherwise.
@@ -1016,6 +1086,38 @@ export async function loadEquity(
   let generateDialog: CompEquityDialogState | null = null
   if (generateOpen) {
     const g = await getTranslations('shell.routeState')
+    let groupOptions: CompEquityDialogState['groupOptions'] = []
+    let groupRefusal: CompDialogRefusal | null = null
+    let groupRemedyHref: string | null = null
+    let groupRemedyLabel: string | null = null
+    if (canManage) {
+      try {
+        const settings = await compensationSettings(orgId)
+        if (!settings.comparisonAttributeKey) {
+          groupRefusal = { title: t('equity.generate'), message: t('compensation.workspace.comparisonRequired') }
+          groupRemedyHref = '/admin/setup/compensation'
+          groupRemedyLabel = t('compensation.settings.title')
+        } else {
+          groupOptions = (await db.execute<{ value: string; label: string }>(sql`
+            select distinct p.custom->>${settings.comparisonAttributeKey} as value,
+              p.custom->>${settings.comparisonAttributeKey} as label
+              from parties p join worker_employments e on e.org_id = p.org_id and e.worker_party_id = p.id
+             where p.org_id = ${orgId} and coalesce(p.custom->>${settings.comparisonAttributeKey}, '') <> ''
+             order by value
+          `)).rows
+          if (groupOptions.length < 2) {
+            groupRefusal = { title: t('equity.generate'), message: t('compensation.workspace.comparisonGroupsRequired') }
+            groupRemedyHref = '/entities/employees'
+            groupRemedyLabel = t('compensation.workspace.employeeRecords')
+          }
+        }
+      } catch (error) {
+        if (!(error instanceof CompensationError)) throw error
+        groupRefusal = { title: t('compensation.settings.title'), message: error.message }
+        groupRemedyHref = '/admin/setup/compensation'
+        groupRemedyLabel = t('compensation.settings.title')
+      }
+    }
     generateDialog = {
       open: true,
       closeHref: '/hrm/compensation/equity',
@@ -1023,17 +1125,20 @@ export async function loadEquity(
       asOfLabel: t('orgChart.asOf'),
       groupALabel: t('equity.groupA'),
       groupBLabel: t('equity.groupB'),
+      groupOptions,
       failed: t('compensation.drawer.failed'),
       submit: t('compensation.drawer.submit'),
       cancel: t('compensation.drawer.cancel'),
       refusal: canManage
-        ? null
+        ? groupRefusal
         : {
             title: g('deniedTitle'),
-            message: `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
+            message: hasManagePermission
+              ? t('compensation.workspace.unrestrictedRequired')
+              : `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
           },
-      remedyHref: null,
-      remedyLabel: null,
+      remedyHref: groupRemedyHref,
+      remedyLabel: groupRemedyLabel,
     }
   }
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
@@ -1061,7 +1166,18 @@ export async function loadEquity(
         { iconKey: 'flag', accent: 'rose', label: t('equity.jointFlags'), value: String(flags), tone: flags > 0 ? 'warning' : 'default' },
       ]
     : []
+  let reportId: string | null = null
+  if (authz.allowedSubsidiaryIds === null && can(authz, 'reports.read')) {
+    const { canRunReportEntity } = await import('../report-authz')
+    if (await canRunReportEntity(authz, { entity: 'hrm_pay_gap_snapshots' })) {
+      const { builtInReportDefinitionId } = await import('../custom-reports')
+      reportId = await builtInReportDefinitionId(orgId, 'workforce-pay-gap-snapshots')
+    }
+  }
   return {
+    reportHref: reportId ? `/reports/custom/run/${reportId}` : null,
+    reportLabel: t('compensation.workspace.snapshotReport'),
+    snapshotLabel: t('compensation.workspace.latestSnapshot'),
     title: t('equity.title'),
     description: t('equity.description'),
     tabs,

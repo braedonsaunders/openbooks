@@ -164,7 +164,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       // not a uuid — the picker offers it via loadEntityOptions, so the
       // writer must accept what the picker offered.
       const target = field.ref ? SETUP_ENTITY_BY_KEY.get(field.ref) : undefined
-      const naturalKeyed = field.ref === 'number-sequence-kinds' || field.ref === 'benefit-currencies'
+      const naturalKeyed = field.ref === 'number-sequence-kinds' || field.ref === 'benefit-currencies' || field.ref === 'compensation-currencies'
         || (target != null && (target.idColumn ?? 'id') !== 'id')
         || (target != null && target.refValue != null)
       if (!naturalKeyed && !isUuid(s)) return { error: `${field.key} must reference a valid record` }

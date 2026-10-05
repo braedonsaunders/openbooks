@@ -60,6 +60,10 @@ export async function loadEntityOptions(
       ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`)
     return employers.rows
   }
+  if (source === 'compensation-currencies') {
+    const { organizationCurrencyOptions } = await import('@openbooks/engine/organization/currencies')
+    return organizationCurrencyOptions(db, orgId, allowedSubsidiaryIds)
+  }
   if (source === 'benefit-currencies') {
     const { getAuthz } = await import('../authz')
     const { benefitCurrencyOptions } = await import('@openbooks/engine/hrm/benefits')
