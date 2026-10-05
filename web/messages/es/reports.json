@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "Premios y pagos de beneficios",
         "description": "Premios de empleados, pruebas de aprobación, referencias de entrega y trazabilidad de nómina."
+      },
+      "contract_balances": {
+        "label": "Saldos de contratos",
+        "description": "Facturado, reconocido y posición neta por contrato de ingresos en el libro principal — activos y pasivos contractuales."
+      },
+      "remaining_performance_obligations": {
+        "label": "Obligaciones de desempeño restantes",
+        "description": "Precio de transacción aún por reconocer por obligación y mes en el libro principal, con plazo esperado (ASC 606-10-50-13)."
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "ID del premio",
         "pay_run_document_id": "Ejecución de nómina",
         "pay_run_adjustment_id": "Ajuste de nómina"
+      },
+      "contract_balances": {
+        "contract_number": "Contrato",
+        "customer": "Cliente",
+        "scope": "Cobertura",
+        "status": "Estado",
+        "currency": "Moneda",
+        "billed": "Facturado",
+        "recognized": "Reconocido",
+        "remaining": "Restante",
+        "net": "Posición neta",
+        "position": "Posición",
+        "starts_on": "Inicio",
+        "ends_on": "Fin"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "Contrato",
+        "obligation": "Obligación",
+        "scope": "Cobertura",
+        "month": "Mes",
+        "timing_band": "Plazo",
+        "remaining": "Restante",
+        "currency": "Moneda",
+        "schedule_status": "Estado del plan",
+        "obligation_status": "Estado de la obligación",
+        "journal_entry_id": "Asiento (id)"
       }
     },
     "enumValues": {

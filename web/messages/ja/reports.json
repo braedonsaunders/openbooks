@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "福利厚生の報奨と支払い",
         "description": "従業員の報奨、承認証跡、交付参照および給与入力の追跡。"
+      },
+      "contract_balances": {
+        "label": "契約残高",
+        "description": "元帳（主簿）における契約ごとの請求済み・認識済み・ネットポジション——契約資産と契約負債。"
+      },
+      "remaining_performance_obligations": {
+        "label": "残りの履行義務",
+        "description": "元帳（主簿）における義務・月ごとの未認識取引価格と予想時期 (ASC 606-10-50-13)。"
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "報奨ID",
         "pay_run_document_id": "給与計算実行",
         "pay_run_adjustment_id": "給与調整"
+      },
+      "contract_balances": {
+        "contract_number": "契約",
+        "customer": "顧客",
+        "scope": "対象範囲",
+        "status": "ステータス",
+        "currency": "通貨",
+        "billed": "請求済み",
+        "recognized": "認識済み",
+        "remaining": "残額",
+        "net": "ネットポジション",
+        "position": "ポジション",
+        "starts_on": "開始日",
+        "ends_on": "終了日"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "契約",
+        "obligation": "履行義務",
+        "scope": "対象範囲",
+        "month": "月",
+        "timing_band": "時期",
+        "remaining": "残額",
+        "currency": "通貨",
+        "schedule_status": "スケジュールステータス",
+        "obligation_status": "義務ステータス",
+        "journal_entry_id": "仕訳 (ID)"
       }
     },
     "enumValues": {

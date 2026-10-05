@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "Prämien und Auszahlungen",
         "description": "Mitarbeiterprämien, Genehmigungsnachweise, Zustellungsreferenzen und Verknüpfungen zur Lohnabrechnung."
+      },
+      "contract_balances": {
+        "label": "Vertragssalden",
+        "description": "Abgerechnete, realisierte und Nettoposition je Umsatzvertrag im Hauptbuch — Vertragsvermögenswerte und -schulden."
+      },
+      "remaining_performance_obligations": {
+        "label": "Verbleibende Leistungsverpflichtungen",
+        "description": "Noch zu realisierender Transaktionspreis je Verpflichtung und Monat im Hauptbuch, mit erwartetem Zeitraum (ASC 606-10-50-13)."
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "Prämien-ID",
         "pay_run_document_id": "Gehaltslauf",
         "pay_run_adjustment_id": "Gehaltsanpassung"
+      },
+      "contract_balances": {
+        "contract_number": "Vertrag",
+        "customer": "Kunde",
+        "scope": "Abdeckung",
+        "status": "Status",
+        "currency": "Währung",
+        "billed": "Abgerechnet",
+        "recognized": "Realisiert",
+        "remaining": "Rest",
+        "net": "Nettoposition",
+        "position": "Position",
+        "starts_on": "Beginn",
+        "ends_on": "Ende"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "Vertrag",
+        "obligation": "Verpflichtung",
+        "scope": "Abdeckung",
+        "month": "Monat",
+        "timing_band": "Zeitraum",
+        "remaining": "Rest",
+        "currency": "Währung",
+        "schedule_status": "Planstatus",
+        "obligation_status": "Verpflichtungsstatus",
+        "journal_entry_id": "Journaleintrag (ID)"
       }
     },
     "enumValues": {

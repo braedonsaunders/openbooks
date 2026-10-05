@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "Benefit awards and payouts",
         "description": "Employee program awards, approval evidence, delivery references and payroll input lineage."
+      },
+      "contract_balances": {
+        "label": "Contract balances",
+        "description": "Billed, recognized and net position per revenue contract on the primary book — contract assets and liabilities."
+      },
+      "remaining_performance_obligations": {
+        "label": "Remaining performance obligations",
+        "description": "Transaction price still to recognize per obligation and month on the primary book, with expected timing (ASC 606-10-50-13)."
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "Award ID",
         "pay_run_document_id": "Payroll run",
         "pay_run_adjustment_id": "Pay-run adjustment"
+      },
+      "contract_balances": {
+        "contract_number": "Contract",
+        "customer": "Customer",
+        "scope": "Coverage",
+        "status": "Status",
+        "currency": "Currency",
+        "billed": "Billed",
+        "recognized": "Recognized",
+        "remaining": "Remaining",
+        "net": "Net position",
+        "position": "Position",
+        "starts_on": "Starts on",
+        "ends_on": "Ends on"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "Contract",
+        "obligation": "Obligation",
+        "scope": "Coverage",
+        "month": "Month",
+        "timing_band": "Timing",
+        "remaining": "Remaining",
+        "currency": "Currency",
+        "schedule_status": "Schedule status",
+        "obligation_status": "Obligation status",
+        "journal_entry_id": "Journal entry (id)"
       }
     },
     "enumValues": {

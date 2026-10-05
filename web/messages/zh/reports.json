@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "福利奖励与支付",
         "description": "员工计划奖励、审批证据、交付凭据及工资输入追溯。"
+      },
+      "contract_balances": {
+        "label": "合同余额",
+        "description": "主账簿中各收入合同的已开票、已确认与净头寸——合同资产与合同负债。"
+      },
+      "remaining_performance_obligations": {
+        "label": "剩余履约义务",
+        "description": "主账簿中按义务和月份列示的尚待确认交易价格及预计时间 (ASC 606-10-50-13)。"
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "奖励编号",
         "pay_run_document_id": "工资运行",
         "pay_run_adjustment_id": "工资调整"
+      },
+      "contract_balances": {
+        "contract_number": "合同",
+        "customer": "客户",
+        "scope": "涵盖范围",
+        "status": "状态",
+        "currency": "币种",
+        "billed": "已开票",
+        "recognized": "已确认",
+        "remaining": "剩余",
+        "net": "净头寸",
+        "position": "头寸",
+        "starts_on": "开始日期",
+        "ends_on": "结束日期"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "合同",
+        "obligation": "履约义务",
+        "scope": "涵盖范围",
+        "month": "月份",
+        "timing_band": "时间",
+        "remaining": "剩余",
+        "currency": "币种",
+        "schedule_status": "计划状态",
+        "obligation_status": "义务状态",
+        "journal_entry_id": "分录 (ID)"
       }
     },
     "enumValues": {
