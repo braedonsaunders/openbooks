@@ -1065,7 +1065,7 @@
   "web/lib/application/records.ts": {"engine/src/platform/db.ts":1,"engine/src/records/document-edit-policy.ts":2},
   "web/lib/application/reports.ts": {"engine/src/platform/db.ts":1},
   "web/lib/application/setup-read.ts": {"engine/src/platform/db.ts":1},
-  "web/lib/application/stored-value.ts": {"engine/src/flows/index.ts":1,"engine/src/journal/posting-contracts.ts":1,"engine/src/money/money.ts":1,"engine/src/organization/ledger-setup-fence.ts":1,"engine/src/organization/subsidiary-scope.ts":1,"engine/src/payments/payment-documents.ts":1,"engine/src/payments/payment-posting.ts":1,"engine/src/payments-core/payment-errors.ts":1,"engine/src/platform/db.ts":1,"engine/src/stored-value/accounts.ts":1,"engine/src/stored-value/errors.ts":1},
+  "web/lib/application/stored-value.ts": {"engine/src/flows/index.ts":1,"engine/src/journal/posting-contracts.ts":1,"engine/src/money/money.ts":1,"engine/src/organization/ledger-setup-fence.ts":1,"engine/src/organization/subsidiary-scope.ts":1,"engine/src/payments/payment-documents.ts":1,"engine/src/payments/payment-posting.ts":1,"engine/src/payments/payment-queries.ts":1,"engine/src/payments/settlement-policy.ts":1,"engine/src/payments-core/payment-errors.ts":1,"engine/src/platform/db.ts":1,"engine/src/stored-value/accounts.ts":1,"engine/src/stored-value/errors.ts":1},
   "web/lib/application/tax-read.ts": {"engine/src/platform/db.ts":1,"engine/src/tax-returns/return.ts":1},
   "web/lib/application/tool-catalog.ts": {"engine/src/platform/db.ts":1,"engine/src/platform/uuid.ts":1},
   "web/lib/application/vitals.ts": {"engine/src/platform/business-date.ts":1},

@@ -7,8 +7,8 @@ import { toast } from 'sonner'
 import {
   Badge, Button, DisclosureSection, EmptyState, Input, Label, SearchSelect, UrlDrawer,
 } from '@openbooks/ui'
-import { DrawerTabStrip } from '../../drawer-tab-strip'
-import { PagedTable } from '../../paged-table'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
+import { PagedTable } from '../../../components/paged-table'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import type { StoredValueDrawerData, StoredValueIssueData } from './view'

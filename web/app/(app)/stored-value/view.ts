@@ -1,14 +1,14 @@
 import 'server-only'
 
-import { getMoneyFormatter } from '../../../../lib/money-server'
-import { orgInfo } from '../../../../lib/data'
+import { getMoneyFormatter } from '../../../lib/money-server'
+import { orgInfo } from '../../../lib/data'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
+import { can, requirePermission } from '../../../lib/authz'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 
 /**
  * The stored-value register, split into a loader and a spec.

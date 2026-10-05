@@ -236,6 +236,7 @@ export function PaymentDrawer({
   createMode = false,
   closeHref,
   createTitle,
+  storedValue,
 }: {
   payment: PaymentPayload
   initialMode?: DrawerMode
