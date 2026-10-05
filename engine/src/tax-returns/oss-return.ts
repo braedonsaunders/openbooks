@@ -200,9 +200,12 @@ export async function computeOssReturn(
   const registration = registrations[0]!;
 
   // Current-period supplies: posted invoices and credits whose frozen verdict
-  // prices them in the customer's state. A credit naming an older corrected
+  // prices them in the customer's state. A credit correcting an older
   // document attributes to that document's quarter below; every other credit
-  // nets in its own period as a negative supply.
+  // nets in its own period as a negative supply. The corrected document
+  // resolves through the credit's `corrects` relationship; the legacy
+  // custom pointer is honored only while no relationship exists, until its
+  // values are backfilled into relationships.
   const current = (
     await runner.execute<
       AttributedLine & { currency: string }
@@ -221,12 +224,19 @@ export async function computeOssReturn(
           on line.org_id = d.org_id and line.document_id = d.id
         join document_line_tax_components component
           on component.org_id = d.org_id and component.document_line_id = line.id
+        left join document_links correction_edge
+          on correction_edge.org_id = d.org_id
+         and correction_edge.from_document_id = d.id
+         and correction_edge.link_type = 'corrects'
         left join documents corrected
           on corrected.org_id = d.org_id
-         and corrected.id = case
-           when d.custom -> 'crossBorder' ->> 'correctsDocument' ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-           then (d.custom -> 'crossBorder' ->> 'correctsDocument')::uuid
-         end
+         and corrected.id = coalesce(
+           correction_edge.to_document_id,
+           case
+             when d.custom -> 'crossBorder' ->> 'correctsDocument' ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+             then (d.custom -> 'crossBorder' ->> 'correctsDocument')::uuid
+           end
+         )
        where d.org_id = ${orgId}
          and d.kind in ('customer_invoice', 'customer_credit')
          and d.status = 'posted'

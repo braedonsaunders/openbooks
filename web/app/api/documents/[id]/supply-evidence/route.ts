@@ -18,6 +18,9 @@ const PUTBodySchema = z.object({
   election: z.object({
     supplyKind: z.enum(['digital_service', 'goods']),
     customerKind: z.enum(['consumer', 'business']),
+    // A credit memo names the posted invoice it corrects (null clears it);
+    // absent leaves the relationship untouched.
+    correctsDocumentId: z.string().uuid().nullable().optional(),
   }),
   evidence: z.array(EvidenceSchema).max(6),
 });
@@ -50,7 +53,16 @@ export const GET = defineRoute({
           from document_supply_evidence
          where org_id = ${gate.user.orgId} and document_id = ${params.id}
          order by kind, source`)).rows
-      return NextResponse.json({ election: doc.custom?.crossBorder ?? null, verdict: doc.custom?.crossBorderSupply ?? null, evidence: rows })
+      const corrected = (await db.execute<{ id: string; number: string }>(sql`
+        select corrected.id, corrected.document_number as number
+          from document_links link
+          join documents corrected
+            on corrected.org_id = link.org_id and corrected.id = link.to_document_id
+         where link.org_id = ${gate.user.orgId}
+           and link.from_document_id = ${params.id}
+           and link.link_type = 'corrects'
+         limit 1`)).rows[0] ?? null
+      return NextResponse.json({ election: doc.custom?.crossBorder ?? null, verdict: doc.custom?.crossBorderSupply ?? null, evidence: rows, correctedDocument: corrected })
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 })
     }
@@ -65,7 +77,7 @@ export const PUT = defineRoute({
   handler: async ({ authz: routeAuthz, params, body: routeBody }) => {
     const gate = routeAuthz;
     const { election, evidence } = routeBody as {
-      election: { supplyKind: 'digital_service' | 'goods'; customerKind: 'consumer' | 'business' }
+      election: { supplyKind: 'digital_service' | 'goods'; customerKind: 'consumer' | 'business'; correctsDocumentId?: string | null }
       evidence: { kind: 'billing_address' | 'ip_country' | 'card_bin_country' | 'bank_country' | 'sim_country' | 'ship_to'; country: string; source: string }[]
     }
     try {

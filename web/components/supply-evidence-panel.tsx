@@ -27,6 +27,7 @@ interface EvidencePayload {
   election: { supplyKind: string; customerKind: string } | null
   verdict: Verdict | null
   evidence: EvidenceRow[]
+  correctedDocument: { id: string; number: string } | null
 }
 
 const OUTCOME_VARIANT: Record<string, 'success' | 'secondary' | 'outline' | 'warning'> = {
@@ -221,6 +222,9 @@ export function SupplyEvidencePanel({
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('pending')}</p>
           )}
           <div className="flex flex-wrap gap-1.5">
+            {payload.correctedDocument ? (
+              <Badge variant="secondary">{t('correctsInvoice', { number: payload.correctedDocument.number })}</Badge>
+            ) : null}
             {payload.evidence.map((row) => (
               <Badge key={`${row.kind}-${row.source}`} variant="outline">
                 {t(`kinds.${row.kind}`)} · {row.countryCode}

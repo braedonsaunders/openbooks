@@ -675,6 +675,7 @@
       "seller_country": "National — {country}",
       "export": "Hors champ — {country}"
     },
-    "vatId": "N° TVA {id}"
+    "vatId": "N° TVA {id}",
+    "correctsInvoice": "Corrige la facture {number}"
   }
 }

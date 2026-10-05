@@ -675,6 +675,7 @@
       "seller_country": "国内 — {country}",
       "export": "范围外 — {country}"
     },
-    "vatId": "增值税号 {id}"
+    "vatId": "增值税号 {id}",
+    "correctsInvoice": "冲销发票 {number}"
   }
 }

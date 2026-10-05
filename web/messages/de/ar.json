@@ -675,6 +675,7 @@
       "seller_country": "Inland — {country}",
       "export": "Außerhalb — {country}"
     },
-    "vatId": "USt-IdNr. {id}"
+    "vatId": "USt-IdNr. {id}",
+    "correctsInvoice": "Korrigiert Rechnung {number}"
   }
 }

@@ -678,9 +678,11 @@ export const documentTenders = pgTable(
 
 /**
  * Document relationship chains (SO → fulfillment → invoice, SO → PO,
- * bill → payment run):
+ * bill → payment run, credit memo → corrected invoice):
  * explicit and queryable, replacing source platform's tangle of createdfrom +
- * link tables + custbody "SO Created From" workarounds.
+ * link tables + custbody "SO Created From" workarounds. A `corrects` edge is
+ * the only record of which invoice a credit memo corrects; `reverses` stays
+ * reserved for same-kind posted corrections.
  */
 export const documentLinks = pgTable(
   "document_links",
@@ -690,7 +692,7 @@ export const documentLinks = pgTable(
     fromDocumentId: uuid("from_document_id").notNull(),
     toDocumentId: uuid("to_document_id").notNull(),
     linkType: text("link_type", {
-      enum: ["created_from", "fulfills", "bills", "pays", "reverses", "renews", "reserves", "ships"],
+      enum: ["created_from", "fulfills", "bills", "pays", "reverses", "renews", "reserves", "ships", "corrects"],
     }).notNull(),
     /** Mandatory, immutable controller evidence for a correction edge. */
     reason: text("reason"),

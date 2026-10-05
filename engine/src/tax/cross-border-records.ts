@@ -86,15 +86,107 @@ export interface SupplyEvidenceInput {
 }
 
 export interface RecordSupplyEvidenceInput {
-  election: { supplyKind: "digital_service" | "goods"; customerKind: "consumer" | "business" };
+  election: {
+    supplyKind: "digital_service" | "goods";
+    customerKind: "consumer" | "business";
+    /**
+     * A credit memo names the posted invoice it corrects (null clears it);
+     * absent leaves the relationship untouched, so evidence re-saves never
+     * wipe a correction the operator did not change.
+     */
+    correctsDocumentId?: string | null;
+  };
   evidence: SupplyEvidenceInput[];
+}
+
+const DOCUMENT_ID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * Replace a draft credit memo's correction relationship in the same unit as
+ * its election: the corrected invoice is validated (posted customer invoice
+ * of the same customer in this organization) and the single `corrects`
+ * document_links edge is rewritten. A null pointer clears the relationship.
+ * Every refusal names the remedy; no refusal leaves a half-written edge.
+ */
+async function replaceCorrectionLink(
+  tx: SqlExecutor,
+  orgId: string,
+  creditId: string,
+  creditPartyId: string | null,
+  correctsDocumentId: string | null,
+  actorId: string | null,
+): Promise<void> {
+  if (correctsDocumentId === null) {
+    await tx.execute(sql`
+      delete from document_links
+       where org_id = ${orgId} and from_document_id = ${creditId} and link_type = 'corrects'`);
+    return;
+  }
+  if (!DOCUMENT_ID_PATTERN.test(correctsDocumentId)) {
+    throw new CrossBorderTaxError(
+      "name the corrected invoice by choosing it from this organization's posted invoices — a typed identifier cannot be verified",
+    );
+  }
+  if (correctsDocumentId === creditId) {
+    throw new CrossBorderTaxError("a credit memo cannot correct itself — choose the posted invoice it corrects");
+  }
+  const target = (
+    await tx.execute<{ kind: string; status: string; partyId: string | null }>(sql`
+      select kind, status, party_id as "partyId" from documents
+       where org_id = ${orgId} and id = ${correctsDocumentId}`)
+  ).rows[0];
+  if (!target) {
+    throw new CrossBorderTaxError(
+      "the corrected invoice belongs to another organization; choose a posted customer invoice from this organization",
+    );
+  }
+  if (target.kind !== "customer_invoice") {
+    throw new CrossBorderTaxError(
+      "only correct a customer invoice with a credit memo — choose the posted invoice this credit corrects",
+    );
+  }
+  if (target.status !== "posted") {
+    throw new CrossBorderTaxError(
+      "post the corrected invoice first; a correction attributes to its filed quarter, which a draft does not have yet",
+    );
+  }
+  if (creditPartyId && target.partyId !== creditPartyId) {
+    throw new CrossBorderTaxError(
+      "correct an invoice for the same customer as the credit memo — choose the customer's own posted invoice",
+    );
+  }
+  await tx.execute(sql`
+    delete from document_links
+     where org_id = ${orgId} and from_document_id = ${creditId} and link_type = 'corrects'`);
+  const edge = (
+    await tx.execute<{ id: string }>(sql`
+      insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
+      values (${orgId}, ${creditId}, ${correctsDocumentId}, 'corrects', ${actorId}, ${actorId})
+      returning id`)
+  ).rows[0];
+  if (!edge) {
+    throw new CrossBorderTaxError("the correction could not be recorded — reload the credit memo before retrying");
+  }
+  await tx.execute(sql`
+    insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'document_links', ${edge.id}, 'insert',
+      ${JSON.stringify({
+        event: "correction_recorded",
+        linkType: "corrects",
+        fromDocumentId: creditId,
+        toDocumentId: correctsDocumentId,
+        reason: "operator named the corrected invoice on the credit memo",
+      })}::jsonb, ${actorId})`);
 }
 
 /**
  * Replace a draft document's cross-border election and evidence signals in
  * one unit: the election is validated, existing draft evidence is recollected
- * (the guard permits draft rewrites), and the new signals are stored. Posted
- * documents refuse through the evidence guard itself.
+ * (the guard permits draft rewrites), and the new signals are stored. A
+ * credit memo's corrected invoice is recorded as a `corrects` document
+ * relationship beside the election, never as an identifier string in custom
+ * JSON. Posted documents refuse through the evidence guard itself.
  */
 export async function recordSupplyEvidence(
   tx: SqlExecutor,
@@ -115,8 +207,8 @@ export async function recordSupplyEvidence(
     );
   }
   const doc = (
-    await tx.execute<{ kind: string; status: string }>(sql`
-      select kind, status from documents where org_id = ${orgId} and id = ${documentId}`)
+    await tx.execute<{ kind: string; status: string; partyId: string | null }>(sql`
+      select kind, status, party_id as "partyId" from documents where org_id = ${orgId} and id = ${documentId}`)
   ).rows[0];
   if (!doc) throw new CrossBorderTaxError("this document belongs to another organization; reload it before recording evidence");
   if (doc.kind !== "customer_invoice" && doc.kind !== "customer_credit") {
@@ -126,6 +218,14 @@ export async function recordSupplyEvidence(
     throw new CrossBorderTaxError(
       "supply evidence is collected while the document is a draft; return the document to draft to recollect it",
     );
+  }
+  if (doc.kind !== "customer_credit" && election.correctsDocumentId !== undefined) {
+    throw new CrossBorderTaxError(
+      "only a credit memo names a corrected document; an invoice carries its own supply and corrects nothing",
+    );
+  }
+  if (doc.kind === "customer_credit" && election.correctsDocumentId !== undefined) {
+    await replaceCorrectionLink(tx, orgId, documentId, doc.partyId, election.correctsDocumentId, actorId);
   }
   const seen = new Set<string>();
   for (const piece of input.evidence) {
