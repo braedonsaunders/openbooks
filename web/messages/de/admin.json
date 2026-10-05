@@ -2954,6 +2954,11 @@
         "description": "Wo das Unternehmen für Erhebung und Abführung registriert ist, seine Meldehäufigkeit und die Erklärung, die es einreicht.",
         "singularTitle": "Steuerregistrierung"
       },
+      "tax-oss-registrations": {
+        "title": "OSS-Registrierungen",
+        "singularTitle": "OSS-Registrierung",
+        "description": "One-Stop-Shop-Registrierungen: Mitgliedstaat der Identifizierung, Verfahren und Nummer, unter denen das Unternehmen seine EU-Umsätze meldet."
+      },
       "tax-regimes": {
         "title": "Steuerregime",
         "description": "Konfigurierbare gepoolte Regime für steuerliche Abschreibung. Integriert für Kanada (CCA), Großbritannien, Australien und Neuseeland; fügen Sie eigene hinzu oder überschreiben Sie ein integriertes.",
@@ -4170,6 +4175,11 @@
       "marketplaceCollectionMode": {
         "gross": "Der Marktplatz zieht die Steuer ein und begleicht sie",
         "net": "Das Dokument ist bereits netto der Marktplatz-Steuer"
+      },
+      "ossScheme": {
+        "union": "Union-OSS (vierteljährliche EU-Umsätze)",
+        "nonUnion": "Nicht-Unions-OSS (vierteljährlich)",
+        "ioss": "Import-OSS (monatliche Niedrigwertimporte)"
       },
       "sign": {
         "positive": "Addieren (+)",

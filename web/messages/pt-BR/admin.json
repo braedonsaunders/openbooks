@@ -2673,6 +2673,11 @@
         "singularTitle": "Inscrição fiscal",
         "description": "Onde a empresa está inscrita para recolher e repassar, sua periodicidade e a declaração que entrega."
       },
+      "tax-oss-registrations": {
+        "title": "Inscrições OSS",
+        "singularTitle": "Inscrição OSS",
+        "description": "Inscrições no Balcão Único: Estado-Membro de identificação, regime e número sob os quais a empresa declara suas vendas transfronteiriças na UE."
+      },
       "tax-codes": {
         "title": "Códigos de Imposto",
         "singularTitle": "Código de Imposto",
@@ -4147,6 +4152,11 @@
       "marketplaceCollectionMode": {
         "gross": "O marketplace arrecada o imposto e o liquida",
         "net": "O documento já é líquido do imposto do marketplace"
+      },
+      "ossScheme": {
+        "union": "OSS da União (vendas trimestrais na UE)",
+        "nonUnion": "OSS não-União (trimestral)",
+        "ioss": "OSS de Importação (importações mensais de baixo valor)"
       },
       "sign": {
         "positive": "Somar (+)",

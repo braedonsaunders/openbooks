@@ -1,6 +1,6 @@
 /** Setup-registry taxes entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
-import { APPLIES_TO, TAX_CALCULATION_TYPES, TAX_BASIS, MARKETPLACE_COLLECTION_MODES, SUBMISSION_CHANNELS, GOVERNMENT_FORMATS, TAX_SIGN, JURISDICTION_LEVELS, TAX_TYPES, FILING_FREQUENCIES } from '../options'
+import { APPLIES_TO, TAX_CALCULATION_TYPES, TAX_BASIS, MARKETPLACE_COLLECTION_MODES, OSS_SCHEMES, SUBMISSION_CHANNELS, GOVERNMENT_FORMATS, TAX_SIGN, JURISDICTION_LEVELS, TAX_TYPES, FILING_FREQUENCIES } from '../options'
 
 export const TAX_ENTITIES: SetupEntity[] = [
   // --- Taxes ---------------------------------------------------------------
@@ -245,6 +245,34 @@ export const TAX_ENTITIES: SetupEntity[] = [
       { key: 'sign', kind: 'select', options: TAX_SIGN },
       { key: 'formula', kind: 'text' },
       { key: 'pdfField', kind: 'text' },
+    ],
+  },
+  {
+    key: 'tax-oss-registrations',
+    table: 'tax_oss_registrations',
+    singularTitleKey: 'entities.tax-oss-registrations.singularTitle',
+    actorCols: true,
+    groupKey: 'taxes',
+    iconKey: 'landmark',
+    orgScoped: true,
+    hasActive: true,
+    featureKey: 'crossBorderTax',
+    docSlug: 'cross-border-tax',
+    columns: [
+      { key: 'scheme', kind: 'text' },
+      { key: 'identificationState', kind: 'text' },
+      { key: 'registrationNumber', kind: 'text' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'scheme', kind: 'select', options: OSS_SCHEMES, required: true },
+      { key: 'identificationState', kind: 'country', required: true },
+      { key: 'registrationNumber', kind: 'text', required: true },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'boolean' },
     ],
   },
   {

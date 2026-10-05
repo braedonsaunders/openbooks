@@ -2954,6 +2954,11 @@
         "description": "徴収・納付のために事業者が登録されている地域、申告頻度、提出する申告書です。",
         "singularTitle": "税務登録"
       },
+      "tax-oss-registrations": {
+        "title": "OSS登録",
+        "singularTitle": "OSS登録",
+        "description": "ワンストップショップ登録: EU域内売上を申告する識別加盟国・制度・登録番号。"
+      },
       "tax-regimes": {
         "title": "税務減価償却制度",
         "description": "設定可能なプール型税務減価償却制度です。カナダ（CCA）・英国・オーストラリア・ニュージーランド用を組込済み。自作や組込の上書きが可能です。",
@@ -4170,6 +4175,11 @@
       "marketplaceCollectionMode": {
         "gross": "マーケットプレイスが税金を徴収・精算する",
         "net": "文書はすでにマーケットプレイス税控除後の金額"
+      },
+      "ossScheme": {
+        "union": "ユニオンOSS（四半期のEU売上）",
+        "nonUnion": "非ユニオンOSS（四半期）",
+        "ioss": "輸入OSS（月次の低額輸入）"
       },
       "sign": {
         "positive": "加算（+）",
