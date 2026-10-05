@@ -307,6 +307,11 @@
   "description": "Every storefront order with its posting status and document link.",
   "exceptionsTitle": "Order exceptions",
   "exceptionsDescription": "Orders that cannot post, with the fix for each. Nothing here posts until it is fixed.",
+  "exceptionsKind": {
+    "orders": "Orders",
+    "events": "Events",
+    "ariaLabel": "Exception kind"
+  },
   "postingTitle": "Channel posting",
   "postingDescription": "How each channel turns storefront orders into accounting, and from which date.",
   "orderStatus": {

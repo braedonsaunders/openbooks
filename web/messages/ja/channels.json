@@ -307,6 +307,11 @@
   "description": "各店舗注文の転記状況と伝票へのリンク。",
   "exceptionsTitle": "注文の例外",
   "exceptionsDescription": "転記できない注文と、それぞれの対処法。修正されるまで転記されません。",
+  "exceptionsKind": {
+    "orders": "注文",
+    "events": "イベント",
+    "ariaLabel": "例外の種類"
+  },
   "postingTitle": "チャネル転記設定",
   "postingDescription": "各チャネルが店舗注文を会計に変換する方法と、その適用日。",
   "orderStatus": {

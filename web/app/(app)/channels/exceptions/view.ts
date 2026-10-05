@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid } from '../../../../lib/list-params'
+import { isUuid, mergeHref } from '../../../../lib/list-params'
 import { loadChannelOrderDrawer } from '../order-detail'
 import { guardChannelOrderScope } from '../../../../lib/channel-scope'
 import { channelTabs, countChannelExceptions } from '../orders/view'
@@ -23,6 +23,10 @@ export interface ChannelExceptionsData {
   emptyDescription: string
   eventEmptyTitle: string
   eventEmptyDescription: string
+  kindTabs: { key: string; href: string; label: string; active: boolean }[]
+  kindTabsAriaLabel: string
+  onOrders: boolean
+  onEvents: boolean
   canManage: boolean
   drawer: { widget: string; props: { drawer: unknown; closeHref: string } } | null
 }
@@ -38,7 +42,15 @@ export async function loadChannelExceptions(
 
   const exceptionCount = await countChannelExceptions(orgId, authz.allowedSubsidiaryIds)
 
-  const orderId = typeof sp.order === 'string' && isUuid(sp.order) ? sp.order : null
+  const kind = sp.kind === 'events' ? 'events' : 'orders'
+  const kindTabs = (['orders', 'events'] as const).map((key) => ({
+    key,
+    href: mergeHref('/channels/exceptions', sp, { kind: key === 'orders' ? undefined : key, order: undefined }),
+    label: t(`exceptionsKind.${key}`),
+    active: kind === key,
+  }))
+
+  const orderId = kind === 'orders' && typeof sp.order === 'string' && isUuid(sp.order) ? sp.order : null
   const drawer = orderId && !(await guardChannelOrderScope(authz, orderId))
     ? await loadChannelOrderDrawer(orgId, orderId, canManage)
     : null
@@ -48,6 +60,10 @@ export async function loadChannelExceptions(
     description: t('exceptionsDescription'),
     tabs: channelTabs(t, 'exceptions', exceptionCount),
     currentParams: sp,
+    kindTabs,
+    kindTabsAriaLabel: t('exceptionsKind.ariaLabel'),
+    onOrders: kind === 'orders',
+    onEvents: kind === 'events',
     emptyTitle: t('empty.exceptionsTitle'),
     emptyDescription: t('empty.exceptionsDescription'),
     eventEmptyTitle: t('empty.eventExceptionsTitle'),
@@ -56,6 +72,8 @@ export async function loadChannelExceptions(
     drawer: drawer ? { widget: 'channel-order-drawer', props: { drawer, closeHref: '/channels/exceptions' } } : null,
   }
 }
+
+const f = ref<ChannelExceptionsData>()
 
 export function channelExceptionsSpec(data: ChannelExceptionsData): PageSpec {
   return page({
@@ -67,25 +85,34 @@ export function channelExceptionsSpec(data: ChannelExceptionsData): PageSpec {
         description: data.description,
         actions: [
           widget('module-home-tabs', { tabs: data.tabs }),
-          ...(data.canManage ? [widget('channel-replay-all', {}), widget('channel-replay-all', { scope: 'events' })] : []),
+          ...(data.canManage
+            ? [widget('channel-replay-all', data.onEvents ? { scope: 'events' } : {})]
+            : []),
         ],
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'channel_exception',
-        sp: data.currentParams,
-        emptyTitle: data.emptyTitle,
-        emptyDescription: data.emptyDescription,
-        drawer: data.drawer,
-      }),
-      widgetBlock('entity-list-view', {
-        recordType: 'channel_event_exception',
-        sp: data.currentParams,
-        emptyTitle: data.eventEmptyTitle,
-        emptyDescription: data.eventEmptyDescription,
-        drawer: null,
-      }),
+      widgetBlock('tab-nav', { ariaLabel: data.kindTabsAriaLabel, tabs: data.kindTabs }),
+      {
+        ...widgetBlock('entity-list-view', {
+          recordType: 'channel_exception',
+          sp: data.currentParams,
+          emptyTitle: data.emptyTitle,
+          emptyDescription: data.emptyDescription,
+          drawer: data.drawer,
+        }),
+        when: f('onOrders'),
+      },
+      {
+        ...widgetBlock('entity-list-view', {
+          recordType: 'channel_event_exception',
+          sp: data.currentParams,
+          emptyTitle: data.eventEmptyTitle,
+          emptyDescription: data.eventEmptyDescription,
+          drawer: null,
+        }),
+        when: f('onEvents'),
+      },
     ],
   })
 }

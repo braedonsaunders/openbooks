@@ -307,6 +307,11 @@
   "description": "每个网店订单的过账状态及凭证链接。",
   "exceptionsTitle": "订单异常",
   "exceptionsDescription": "无法过账的订单及其处理办法。修复之前不会过账。",
+  "exceptionsKind": {
+    "orders": "订单",
+    "events": "事件",
+    "ariaLabel": "异常类型"
+  },
   "postingTitle": "渠道过账",
   "postingDescription": "各渠道如何将网店订单转为会计分录，以及自何日起生效。",
   "orderStatus": {
