@@ -1,6 +1,6 @@
 import { type ComponentProps } from 'react'
 import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciation/sections'
-import { TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
+import { TaxAuthorityConnectionsSlot, TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
 import { ProvisionRunsTable } from '../../app/(app)/tax/provisions/sections'
 import { ProvisionComputeButton } from '../../app/(app)/tax/provisions/ProvisionComputeButton'
@@ -78,6 +78,12 @@ export const ASSETS_TAX_WIDGETS = {
    *  locale), so the loader passes raw country codes and formats nothing. */
   'tax-setup-guide': (props) => (
     <TaxSetupGuideSlot guide={props.guide as ComponentProps<typeof TaxSetupGuideSlot>['guide']} />
+  ),
+  /** Connection states are loader-resolved data; the slot owns the forms. */
+  'tax-authority-connections': (props) => (
+    <TaxAuthorityConnectionsSlot
+      connections={props.connections as ComponentProps<typeof TaxAuthorityConnectionsSlot>['connections']}
+    />
   ),
 
   /* --- book depreciation setup ------------------------------------------------------ */

@@ -564,6 +564,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'tax-provider-activity-drawer',
   'tax-pools',
   'tax-return-library',
+  'tax-authority-connections',
   'tax-setup-guide',
   'tax-setup-header',
   'timesheet-drawer',

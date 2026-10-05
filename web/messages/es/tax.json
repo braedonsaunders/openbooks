@@ -270,9 +270,52 @@
     },
     "current": "Corriente",
     "correction": "Corrección {quarter}",
-    "exportCsv": "Exportar CSV",
-    "exportNote": "Diseño OSS genérico de la UE para carga manual en el portal. Los formatos de archivo de los portales nacionales no están implementados.",
     "noLinesTitle": "Sin ventas transfronterizas",
-    "noLinesDescription": "Nada contabilizado con veredicto de país del cliente cae en este período."
+    "noLinesDescription": "Nada contabilizado con veredicto de país del cliente cae en este período.",
+    "format": "Formato de archivo",
+    "export": "Exportar declaración",
+    "formats": {
+      "generic": "CSV genérico de la UE",
+      "DE": "Alemania (CSV del portal BOP)",
+      "FR": "Francia (CSV del portal)",
+      "NL": "Países Bajos (CSV del portal)",
+      "IE": "Irlanda (XML de ROS)"
+    },
+    "exportNotes": {
+      "generic": "Diseño genérico OSS de la UE para carga manual en el portal.",
+      "DE": "Diseño del portal alemán: las mismas cifras declaradas, agrupadas para la carga BOP. Confirme la plantilla del portal antes de subir.",
+      "FR": "Diseño del portal francés: las mismas cifras declaradas, agrupadas para la carga del portal. Confirme la plantilla del portal antes de subir.",
+      "NL": "Diseño del portal neerlandés: las mismas cifras declaradas, agrupadas para la carga del portal. Confirme la plantilla del portal antes de subir.",
+      "IE": "XML de ROS irlandés: las mismas cifras declaradas en el diseño de carga de Revenue. Confirme la plantilla de ROS antes de subir."
+    },
+    "conflicts": {
+      "badge": "{count, plural, one {# documento necesita atención} other {# documentos necesitan atención}}",
+      "title": "Corrija los conflictos de evidencia antes de contabilizar",
+      "description": "Estos documentos sin contabilizar declaran tratamiento transfronterizo, pero sus señales de ubicación nombran más de un país. La contabilización seguirá denegada hasta que la evidencia concuerde — corrija cada documento donde reside.",
+      "countries": "las señales nombran {countries}",
+      "fix": "Abrir documento"
+    },
+    "advanced": {
+      "title": "Evidencia y umbral de declaración",
+      "summary": "Evidencia de conversión del BCE y el umbral de ventas a distancia"
+    },
+    "fx": {
+      "title": "Evidencia de conversión del BCE",
+      "pending": "Aún no hay evidencia guardada para este período — se guarda al exportar la declaración, para que las cifras en euros declaradas sigan siendo reproducibles.",
+      "columns": {
+        "currency": "Moneda",
+        "rate": "Euros por unidad",
+        "asOf": "Fecha del tipo",
+        "source": "Fuente"
+      }
+    },
+    "threshold": {
+      "title": "Umbral de ventas a distancia (EUR 10.000)",
+      "crossed": "Umbral superado",
+      "within": "Dentro del umbral",
+      "status": "€{total} de €{threshold} de volumen B2C contabilizado en {year}, IVA excluido.",
+      "translated": "base en {currency} {base} a {rate} el {asOf}",
+      "uncovered": "Sin tipo del BCE para {currencies} — el total las excluye. Añada los tipos antes de confiar en esta cifra."
+    }
   }
 }

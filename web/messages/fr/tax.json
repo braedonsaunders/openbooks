@@ -270,9 +270,52 @@
     },
     "current": "Courante",
     "correction": "Correction {quarter}",
-    "exportCsv": "Exporter le CSV",
-    "exportNote": "Présentation OSS générique de l'UE pour saisie manuelle au portail. Les formats de fichier des portails nationaux ne sont pas implémentés.",
     "noLinesTitle": "Aucune vente transfrontalière",
-    "noLinesDescription": "Rien de comptabilisé avec un lieu de prestation à l'étranger dans cette période."
+    "noLinesDescription": "Rien de comptabilisé avec un lieu de prestation à l'étranger dans cette période.",
+    "format": "Format de fichier",
+    "export": "Exporter la déclaration",
+    "formats": {
+      "generic": "CSV UE générique",
+      "DE": "Allemagne (CSV du portail BOP)",
+      "FR": "France (CSV du portail)",
+      "NL": "Pays-Bas (CSV du portail)",
+      "IE": "Irlande (XML ROS)"
+    },
+    "exportNotes": {
+      "generic": "Disposition OSS générique de l’UE pour saisie manuelle dans le portail.",
+      "DE": "Disposition du portail allemand : les mêmes chiffres déclarés, regroupés pour le téléversement BOP. Vérifiez le modèle du portail avant de téléverser.",
+      "FR": "Disposition du portail français : les mêmes chiffres déclarés, regroupés pour le téléversement. Vérifiez le modèle du portail avant de téléverser.",
+      "NL": "Disposition du portail néerlandais : les mêmes chiffres déclarés, regroupés pour le téléversement. Vérifiez le modèle du portail avant de téléverser.",
+      "IE": "XML ROS irlandais : les mêmes chiffres déclarés dans la disposition de Revenue. Vérifiez le modèle ROS avant de téléverser."
+    },
+    "conflicts": {
+      "badge": "{count, plural, one {# document nécessite une attention} other {# documents nécessitent une attention}}",
+      "title": "Corriger les conflits de preuves avant comptabilisation",
+      "description": "Ces documents non comptabilisés revendiquent un traitement transfrontalier, mais leurs signaux de localisation nomment plus d’un pays. La comptabilisation reste refusée tant que les preuves divergent — corrigez chaque document là où il se trouve.",
+      "countries": "les signaux nomment {countries}",
+      "fix": "Ouvrir le document"
+    },
+    "advanced": {
+      "title": "Preuves et seuil de déclaration",
+      "summary": "Preuves de conversion BCE et seuil des ventes à distance"
+    },
+    "fx": {
+      "title": "Preuves de conversion BCE",
+      "pending": "Aucune preuve enregistrée pour cette période — elle est enregistrée à l’export de la déclaration, pour que les chiffres en euros déclarés restent reproductibles.",
+      "columns": {
+        "currency": "Devise",
+        "rate": "Euros par unité",
+        "asOf": "Date du taux",
+        "source": "Source"
+      }
+    },
+    "threshold": {
+      "title": "Seuil des ventes à distance (10 000 EUR)",
+      "crossed": "Seuil dépassé",
+      "within": "Sous le seuil",
+      "status": "€{total} sur €{threshold} de chiffre B2C comptabilisé en {year}, TVA exclue.",
+      "translated": "base {currency} {base} à {rate} le {asOf}",
+      "uncovered": "Aucun taux BCE pour {currencies} — le total les exclut. Ajoutez les taux avant de vous fier à ce chiffre."
+    }
   }
 }

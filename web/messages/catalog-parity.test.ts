@@ -335,6 +335,16 @@ const COGNATES = new Set<string>([
   'fr:channels.columns.document|Document',
   'fr:channels.columns.code|Cause',
   'fr:channels.drawer.document|Document',
+  // French spells the rate-evidence column “Source” identically.
+  'fr:tax.oss.fx.columns.source|Source',
+  // The carrier-adjustment paste example is machine JSON (fixed provider
+  // field names), identical in every locale; braces are ICU-quoted.
+  'de:admin.setup.shipping.adjustments.pastePlaceholder|[\'{\' "providerAdjustmentId": "adj_1", "providerShipmentId": "shp_1", "kind": "weight_correction", "amount": "2.50", "currency": "USD" \'}\']',
+  'es:admin.setup.shipping.adjustments.pastePlaceholder|[\'{\' "providerAdjustmentId": "adj_1", "providerShipmentId": "shp_1", "kind": "weight_correction", "amount": "2.50", "currency": "USD" \'}\']',
+  'fr:admin.setup.shipping.adjustments.pastePlaceholder|[\'{\' "providerAdjustmentId": "adj_1", "providerShipmentId": "shp_1", "kind": "weight_correction", "amount": "2.50", "currency": "USD" \'}\']',
+  'ja:admin.setup.shipping.adjustments.pastePlaceholder|[\'{\' "providerAdjustmentId": "adj_1", "providerShipmentId": "shp_1", "kind": "weight_correction", "amount": "2.50", "currency": "USD" \'}\']',
+  'pt-BR:admin.setup.shipping.adjustments.pastePlaceholder|[\'{\' "providerAdjustmentId": "adj_1", "providerShipmentId": "shp_1", "kind": "weight_correction", "amount": "2.50", "currency": "USD" \'}\']',
+  'zh:admin.setup.shipping.adjustments.pastePlaceholder|[\'{\' "providerAdjustmentId": "adj_1", "providerShipmentId": "shp_1", "kind": "weight_correction", "amount": "2.50", "currency": "USD" \'}\']',
   'ja:admin.features.apiAccess.title|REST API',
   'pt-BR:admin.features.scripts.title|Scripts',
   'pt-BR:admin.sandboxes.changeSets.tables.user_scripts|Scripts',

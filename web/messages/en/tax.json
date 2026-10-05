@@ -270,9 +270,52 @@
     },
     "current": "Current",
     "correction": "Correction {quarter}",
-    "exportCsv": "Export CSV",
-    "exportNote": "Generic EU OSS layout for portal hand-keying. Member-state portal file formats are not implemented.",
     "noLinesTitle": "No cross-border supplies",
-    "noLinesDescription": "Nothing posted with a customer-country verdict falls in this period."
+    "noLinesDescription": "Nothing posted with a customer-country verdict falls in this period.",
+    "format": "File layout",
+    "export": "Export return",
+    "formats": {
+      "generic": "Generic EU CSV",
+      "DE": "Germany (BOP portal CSV)",
+      "FR": "France (portal CSV)",
+      "NL": "Netherlands (portal CSV)",
+      "IE": "Ireland (ROS XML)"
+    },
+    "exportNotes": {
+      "generic": "Generic EU OSS layout for portal hand-keying.",
+      "DE": "German portal layout: same filed figures grouped for the BOP upload. Confirm the portal template before uploading.",
+      "FR": "French portal layout: same filed figures grouped for the portal upload. Confirm the portal template before uploading.",
+      "NL": "Dutch portal layout: same filed figures grouped for the portal upload. Confirm the portal template before uploading.",
+      "IE": "Irish ROS XML: same filed figures in the Revenue upload layout. Confirm the ROS template before uploading."
+    },
+    "conflicts": {
+      "badge": "{count, plural, one {# document needs attention} other {# documents need attention}}",
+      "title": "Evidence conflicts to fix before posting",
+      "description": "These unposted documents claim cross-border treatment but their location signals name more than one country. Posting stays refused until the evidence agrees — fix each document where it lives.",
+      "countries": "signals name {countries}",
+      "fix": "Open document"
+    },
+    "advanced": {
+      "title": "Filing evidence and threshold",
+      "summary": "ECB translation evidence and the distance-sales threshold"
+    },
+    "fx": {
+      "title": "ECB translation evidence",
+      "pending": "No evidence stored for this period yet — it is stored when you export the return, then the filed euro figures stay reproducible.",
+      "columns": {
+        "currency": "Currency",
+        "rate": "Euro per unit",
+        "asOf": "Rate date",
+        "source": "Source"
+      }
+    },
+    "threshold": {
+      "title": "Distance-sales threshold (EUR 10,000)",
+      "crossed": "Threshold crossed",
+      "within": "Within threshold",
+      "status": "€{total} of €{threshold} posted B2C turnover in {year}, VAT excluded.",
+      "translated": "{currency} base {base} at {rate} on {asOf}",
+      "uncovered": "No ECB rate for {currencies} — the total excludes them. Add the rates before relying on this figure."
+    }
   }
 }

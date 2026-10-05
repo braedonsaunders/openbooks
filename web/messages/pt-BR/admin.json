@@ -1997,6 +1997,36 @@
         "description": "Abra uma jurisdição e use a aba Nexo fiscal para informar o número de registro, a frequência de declaração, o formulário e as datas de vigência.",
         "stat": "{count, plural, =0 {Nenhum registro ainda} one {# registro} other {# registros}}",
         "cta": "Configurar nexo"
+      },
+      "authorities": {
+        "title": "Conexões com autoridades fiscais",
+        "description": "Conecte as autoridades que verificam inscrições ao vivo: a API de IVA da HMRC para números britânicos e o ABN Lookup para números australianos. Os segredos são lacrados e nunca exibidos de volta.",
+        "hmrcTitle": "API de IVA da HMRC (Reino Unido)",
+        "hmrcDescription": "Cliente OAuth do hub de desenvolvedores da HMRC. Verifica números de IVA britânicos e renova o token de acesso.",
+        "abnTitle": "ABN Lookup (Austrália)",
+        "abnDescription": "GUID dos serviços web do ABN Lookup. Verifica números de empresa australianos.",
+        "status": {
+          "missing": "Não conectado",
+          "ready": "Conectado",
+          "error": "Precisa de atenção",
+          "expired": "Token expirado"
+        },
+        "clientId": "ID do cliente",
+        "clientSecret": "Segredo do cliente",
+        "scope": "Escopo",
+        "guid": "GUID do ABN Lookup",
+        "save": "Salvar conexão",
+        "saving": "Salvando…",
+        "verify": "Verificar agora",
+        "verifying": "Verificando…",
+        "refresh": "Renovar token",
+        "refreshing": "Renovando…",
+        "saved": "Conexão salva. Verifique-a antes de confiar nas verificações ao vivo.",
+        "verified": "Verificado junto à autoridade.",
+        "actionFailed": "A ação junto à autoridade não pôde ser concluída.",
+        "lastError": "Última falha: {error}",
+        "lastVerified": "Verificado por último em {at}",
+        "neverVerified": "Nunca verificado junto à autoridade."
       }
     },
     "taxOfficial": {
@@ -5957,7 +5987,7 @@
         "account": "Conta de transportadora",
         "accountPlaceholder": "Escolher uma conta",
         "paste": "Exportação de faturamento da transportadora",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "Prévia",
         "import": "{count, plural, one {Importar # ajuste} other {Importar # ajustes}}",
         "columns": {

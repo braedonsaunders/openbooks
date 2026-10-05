@@ -1997,6 +1997,36 @@
         "description": "打开一个税务管辖区，在其税务登记选项卡中填写登记号码、申报频率、申报表和生效日期。",
         "stat": "{count, plural, =0 {尚无登记} one {# 项登记} other {# 项登记}}",
         "cta": "设置纳税联结"
+      },
+      "authorities": {
+        "title": "税务机关连接",
+        "description": "连接可实时验证税号的机关: 英国号码用HMRC增值税API, 澳大利亚号码用ABN Lookup。密钥经封存, 永不回显。",
+        "hmrcTitle": "HMRC增值税API (英国)",
+        "hmrcDescription": "来自HMRC开发者中心的OAuth客户端。验证英国增值税号并刷新访问令牌。",
+        "abnTitle": "ABN Lookup (澳大利亚)",
+        "abnDescription": "来自ABN Lookup网络服务的GUID。验证澳大利亚企业编号。",
+        "status": {
+          "missing": "未连接",
+          "ready": "已连接",
+          "error": "需要注意",
+          "expired": "令牌已过期"
+        },
+        "clientId": "客户端ID",
+        "clientSecret": "客户端密钥",
+        "scope": "范围",
+        "guid": "ABN Lookup GUID",
+        "save": "保存连接",
+        "saving": "保存中…",
+        "verify": "立即验证",
+        "verifying": "验证中…",
+        "refresh": "刷新令牌",
+        "refreshing": "刷新中…",
+        "saved": "连接已保存。在依赖实时校验之前请先验证。",
+        "verified": "已通过机关验证。",
+        "actionFailed": "机关操作未能完成。",
+        "lastError": "上次失败: {error}",
+        "lastVerified": "上次验证于{at}",
+        "neverVerified": "从未通过机关验证。"
       }
     },
     "taxOfficial": {
@@ -5957,7 +5987,7 @@
         "account": "承运商账户",
         "accountPlaceholder": "选择账户",
         "paste": "承运商账单导出",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "预览",
         "import": "导入{count}条调整",
         "columns": {

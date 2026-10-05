@@ -5286,7 +5286,37 @@
       },
       "subtitle": "Choisissez chaque pays, province, territoire, État ou district où des obligations fiscales peuvent naître. Le Canada et les États-Unis incluent une couverture complète des juridictions de premier niveau.",
       "title": "Configuration fiscale",
-      "toggleStates": "Afficher les juridictions pour {country}"
+      "toggleStates": "Afficher les juridictions pour {country}",
+      "authorities": {
+        "title": "Connexions aux autorités fiscales",
+        "description": "Connectez les autorités qui vérifient les numéros en direct : l’API TVA de HMRC pour les numéros britanniques et ABN Lookup pour les numéros australiens. Les secrets sont scellés et ne sont jamais réaffichés.",
+        "hmrcTitle": "API TVA de HMRC (Royaume-Uni)",
+        "hmrcDescription": "Client OAuth du hub développeur HMRC. Vérifie les numéros de TVA britanniques et renouvelle le jeton d’accès.",
+        "abnTitle": "ABN Lookup (Australie)",
+        "abnDescription": "GUID des services web ABN Lookup. Vérifie les numéros d’entreprise australiens.",
+        "status": {
+          "missing": "Non connecté",
+          "ready": "Connecté",
+          "error": "Attention requise",
+          "expired": "Jeton expiré"
+        },
+        "clientId": "ID client",
+        "clientSecret": "Secret client",
+        "scope": "Portée",
+        "guid": "GUID ABN Lookup",
+        "save": "Enregistrer la connexion",
+        "saving": "Enregistrement…",
+        "verify": "Vérifier maintenant",
+        "verifying": "Vérification…",
+        "refresh": "Renouveler le jeton",
+        "refreshing": "Renouvellement…",
+        "saved": "Connexion enregistrée. Vérifiez-la avant de vous fier aux contrôles en direct.",
+        "verified": "Vérifié auprès de l’autorité.",
+        "actionFailed": "L’action auprès de l’autorité n’a pas pu aboutir.",
+        "lastError": "Dernier échec : {error}",
+        "lastVerified": "Dernière vérification {at}",
+        "neverVerified": "Jamais vérifié auprès de l’autorité."
+      }
     },
     "payroll": {
       "navTitle": "Paie"
@@ -5957,7 +5987,7 @@
         "account": "Compte transporteur",
         "accountPlaceholder": "Choisir un compte",
         "paste": "Export de facturation du transporteur",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "Aperçu",
         "import": "{count, plural, one {Importer # ajustement} other {Importer # ajustements}}",
         "columns": {

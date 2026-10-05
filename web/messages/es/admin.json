@@ -5286,7 +5286,37 @@
       },
       "subtitle": "Elija cada país, provincia, territorio, estado o distrito donde puedan surgir obligaciones fiscales. Canadá y Estados Unidos incluyen cobertura completa de jurisdicciones de primer nivel.",
       "title": "Configuración fiscal",
-      "toggleStates": "Mostrar jurisdicciones de {country}"
+      "toggleStates": "Mostrar jurisdicciones de {country}",
+      "authorities": {
+        "title": "Conexiones con autoridades fiscales",
+        "description": "Conecte las autoridades que verifican NIF en vivo: la API de IVA de HMRC para números británicos y ABN Lookup para números australianos. Los secretos se sellan y nunca se muestran.",
+        "hmrcTitle": "API de IVA de HMRC (Reino Unido)",
+        "hmrcDescription": "Cliente OAuth del centro de desarrolladores de HMRC. Verifica números de IVA británicos y renueva el token de acceso.",
+        "abnTitle": "ABN Lookup (Australia)",
+        "abnDescription": "GUID de los servicios web de ABN Lookup. Verifica números de empresa australianos.",
+        "status": {
+          "missing": "Sin conectar",
+          "ready": "Conectado",
+          "error": "Necesita atención",
+          "expired": "Token caducado"
+        },
+        "clientId": "ID de cliente",
+        "clientSecret": "Secreto de cliente",
+        "scope": "Alcance",
+        "guid": "GUID de ABN Lookup",
+        "save": "Guardar conexión",
+        "saving": "Guardando…",
+        "verify": "Verificar ahora",
+        "verifying": "Verificando…",
+        "refresh": "Renovar token",
+        "refreshing": "Renovando…",
+        "saved": "Conexión guardada. Verifíquela antes de confiar en comprobaciones en vivo.",
+        "verified": "Verificado ante la autoridad.",
+        "actionFailed": "La acción de la autoridad no pudo completarse.",
+        "lastError": "Último fallo: {error}",
+        "lastVerified": "Verificado por última vez {at}",
+        "neverVerified": "Nunca verificado ante la autoridad."
+      }
     },
     "payroll": {
       "navTitle": "Nómina"
@@ -5957,7 +5987,7 @@
         "account": "Cuenta de transportista",
         "accountPlaceholder": "Elegir una cuenta",
         "paste": "Exportación de facturación del transportista",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "Vista previa",
         "import": "{count, plural, one {Importar # ajuste} other {Importar # ajustes}}",
         "columns": {
