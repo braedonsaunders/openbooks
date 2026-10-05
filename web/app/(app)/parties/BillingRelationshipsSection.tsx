@@ -15,9 +15,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  DisclosureSection,
 } from '@openbooks/ui'
 import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 import { toast } from 'sonner'
@@ -96,10 +96,10 @@ const GROUPING_KEYS = {
 /**
  * Customer drawer Billing tab: who the invoices go to, who owns the
  * receivable, and the effective-dated edges between them. Everyday state is
- * the summary line plus the child accounts when this customer pays for
- * others; configuration is the relationship rows and form; the
- * consolidation mechanics (grouping, cut-off, billing entity) sit inside
- * the shared DisclosureSection.
+ * the summary line; the child accounts, the relationship rows with their
+ * form, and the consolidation mechanics each ride their own sub-tab, so no
+ * two concept tables share a body. Every body stays mounted, so an open
+ * draft survives switching.
  */
 export function BillingRelationshipsSection({
   partyId,
@@ -116,6 +116,7 @@ export function BillingRelationshipsSection({
   const [loadError, setLoadError] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [panel, setPanel] = useState<'children' | 'relationships' | 'groups'>('relationships')
   const { busy, execute } = useAppAction()
   const loadGeneration = useRef(0)
 
@@ -180,6 +181,10 @@ export function BillingRelationshipsSection({
   // A read-only viewer must never hold the form open. Adjusted during render
   // (same committed value, no extra render).
   if (!canManage && draft !== null) setDraft(null)
+  // A panel whose rows just emptied falls back to relationships, so the
+  // strip never strands the reader on a hollow body.
+  if (payload && panel === 'children' && payload.children.length === 0) setPanel('relationships')
+  if (payload && panel === 'groups' && payload.groups.length === 0) setPanel('relationships')
 
   // A refused read hides the panel rather than rendering another
   // customer's billing; any other load failure says so in plain language.
@@ -268,6 +273,34 @@ export function BillingRelationshipsSection({
         )}
       </div>
 
+      <DrawerTabStrip
+        tabs={[
+          ...(payload.children.length > 0
+            ? [{
+                key: 'children' as const,
+                label: t('childrenHeading'),
+                count: payload.children.length,
+              }]
+            : []),
+          {
+            key: 'relationships' as const,
+            label: t('relationshipsHeading'),
+            count: payload.relationships.length,
+          },
+          ...(payload.groups.length > 0
+            ? [{
+                key: 'groups' as const,
+                label: t('advancedHeading'),
+                count: payload.groups.length,
+              }]
+            : []),
+        ]}
+        activeKey={panel}
+        onSelect={(key) => setPanel(key)}
+        ariaLabel={t('heading')}
+      />
+
+      <div hidden={panel !== 'children'} className="space-y-2">
       {payload.children.length > 0 ? (
         <div>
           <h4 className="text-sm font-semibold">{t('childrenHeading')}</h4>
@@ -293,7 +326,9 @@ export function BillingRelationshipsSection({
           </SharedTable>
         </div>
       ) : null}
+      </div>
 
+      <div hidden={panel !== 'relationships'} className="space-y-2">
       <div>
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">{t('relationshipsHeading')}</h4>
@@ -429,9 +464,14 @@ export function BillingRelationshipsSection({
         </Card>
       ) : null}
 
+      </div>
+
+      <div hidden={panel !== 'groups'} className="space-y-2">
       {payload.groups.length > 0 ? (
-        <DisclosureSection title={t('advancedHeading')} summary={t('advancedSummary')}>
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <h4 className="text-sm font-semibold">{t('advancedHeading')}</h4>
+          <p className="text-sm text-muted-foreground">{t('advancedSummary')}</p>
+          <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 text-sm">
             {payload.groups.map((group) => (
               <div key={group.id}>
                 <dt className="font-medium">
@@ -447,8 +487,9 @@ export function BillingRelationshipsSection({
               </div>
             ))}
           </dl>
-        </DisclosureSection>
+        </div>
       ) : null}
+      </div>
     </div>
   )
 }
