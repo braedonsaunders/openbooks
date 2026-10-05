@@ -127,16 +127,16 @@
     },
     "forecast": {
       "domainCaveatTitle": "Projection leaves the metric's range",
-      "domainCaveat": "{metric} can't be negative, but the {model} projection crosses below zero starting {month} because the model carries the recent decline forward. Treat later months as what the trend implies, not as attainable {metric}; the damped-trend ETS variant levels the decline off instead of extending it.",
-      "domainTableNote": "Months from {month} onward project below zero, outside the range this metric can take.",
+      "domainCaveat": "{metric} can't be negative, but the {model} projection crosses below zero starting {month} because the model carries the recent decline forward. Treat later periods as what the trend implies, not as attainable {metric}; the damped-trend ETS variant levels the decline off instead of extending it.",
+      "domainTableNote": "Periods from {month} onward project below zero, outside the range this metric can take.",
       "domainGrowthNote": "Projected growth is computed from values outside {metric}'s range — see the caveat above.",
       "title": "Multi-Metric Forecast",
-      "total": "{count}-month Total",
-      "monthN": "Month {count}",
+      "total": "{count}-period Total",
+      "monthN": "Period {count}",
       "growth": "Projected Growth",
-      "detail": "Monthly Forecast Detail",
+      "detail": "Forecast Detail",
       "table": {
-        "month": "Month",
+        "month": "Period",
         "forecast": "Forecast",
         "low": "Low",
         "high": "High",
@@ -150,23 +150,29 @@
         "seasonality": "Seasonality",
         "adjustment": "Adjustment"
       },
-      "horizonMonths": "{count} months",
+      "horizonMonths": "{count} periods",
       "confidencePct": "{count}%",
       "diagnostics": "Model Diagnostics",
       "diag": {
         "trend": "Trend",
-        "seasonality": "Seasonality"
+        "seasonality": "Seasonality",
+        "mape": "MAPE",
+        "rmse": "RMSE",
+        "r2": "R²"
       },
       "trend": {
         "up": "Upward",
         "down": "Downward",
         "flat": "Flat"
       },
-      "seasonDetected": "Detected ({period}mo)",
+      "seasonDetected": "Detected ({period} periods)",
       "seasonNone": "None",
       "emptyTitle": "Not enough history",
-      "emptyDescription": "Forecasting needs at least 3 months of activity in the selected period.",
-      "unknownLevel": "Unknown {field} “{level}” — valid values: {levels}."
+      "emptyDescription": "Forecasting needs at least 3 periods of activity in the selected period.",
+      "unknownLevel": "Unknown {field} “{level}” — valid values: {levels}.",
+      "noFuturePeriods": "The fiscal calendar declares no future periods, so the projection has no period names to show. Declare future periods in the fiscal calendar, then reopen the forecast.",
+      "shortFuturePeriods": "The fiscal calendar declares only {have} future periods, but the {need}-period horizon needs {need} names. Declare more future periods in the fiscal calendar.",
+      "declarePeriods": "Declare periods"
     },
     "scenarios": {
       "kpi": {
@@ -211,7 +217,7 @@
         "baseline": "Baseline",
         "scenario": "Scenario"
       },
-      "invalidInput": "{field} must be a plain number — the scenario is held at the baseline until it is fixed.",
+      "invalidInput": "{field} must be a plain number — the scenario is unavailable until it is fixed.",
       "templates": {
         "recession": "Recession",
         "growth": "Growth Push",
@@ -241,7 +247,7 @@
         "current": "Current GM",
         "residual": "Rounding residual"
       },
-      "trends": "Margin Trends (12mo)",
+      "trends": "Margin Trends (12 periods)",
       "series": {
         "gross": "Gross",
         "operating": "Operating"
@@ -392,19 +398,19 @@
       },
       "revTrendingDown": {
         "title": "Revenue trending down",
-        "detail": "Revenue fell {pct}% across the last three active months."
+        "detail": "Revenue fell {pct}% across the last three active periods."
       },
       "marginCompression": {
         "title": "Margin compression",
-        "detail": "Gross margin slid {pp}pp over the last three active months."
+        "detail": "Gross margin slid {pp}pp over the last three active periods."
       },
       "belowBreakeven": {
         "title": "Below breakeven",
-        "detail": "Average monthly revenue is under the approximately {amount} breakeven."
+        "detail": "Average period revenue is under the approximately {amount} breakeven."
       },
       "thinMargin": {
         "title": "Thin safety margin",
-        "detail": "Only {pct}% of monthly revenue separates you from breakeven."
+        "detail": "Only {pct}% of period revenue separates you from breakeven."
       },
       "heavyOverhead": {
         "title": "Heavy overhead",
@@ -709,12 +715,12 @@
           "help": "A fall against the same period last year beyond this is reported as falling revenue"
         },
         "revenueTrendAlertPercent": {
-          "label": "Three-month revenue trend alert (%)",
-          "help": "A fall across the last three months with revenue beyond this is reported as trending down"
+          "label": "Three-period revenue trend alert (%)",
+          "help": "A fall across the last three periods with revenue beyond this is reported as trending down"
         },
         "marginCompressionPoints": {
           "label": "Margin compression alert (points)",
-          "help": "A gross-margin drop across the last three months beyond this many percentage points"
+          "help": "A gross-margin drop across the last three periods beyond this many percentage points"
         },
         "breakevenSafetyPercent": {
           "label": "Breakeven safety margin (%)",
@@ -730,7 +736,7 @@
         },
         "forecastHorizon": {
           "label": "Forecast horizon",
-          "help": "Projected months shown on opening the tab"
+          "help": "Projected periods shown on opening the tab"
         },
         "forecastConfidence": {
           "label": "Forecast confidence",
@@ -742,7 +748,7 @@
         },
         "forecastAdjustment": {
           "label": "Forecast adjustment",
-          "help": "Macro adjustment applied to every forecast month"
+          "help": "Macro adjustment applied to every forecast period"
         },
         "forecastEtsAlpha": {
           "label": "ETS smoothing (α)",
@@ -758,7 +764,7 @@
         },
         "forecastDampedPhi": {
           "label": "Damped trend (φ)",
-          "help": "Trend decay per month; 1 is undamped"
+          "help": "Trend decay per period; 1 is undamped"
         },
         "forecastMa1": {
           "label": "ARIMA shock persistence",
@@ -790,7 +796,7 @@
         },
         "anomalySigma": {
           "label": "Anomaly threshold (σ)",
-          "help": "Months beyond this many standard deviations from the mean are reported as anomalies"
+          "help": "Periods beyond this many standard deviations from the mean are reported as anomalies"
         }
       },
       "groups": {
@@ -813,10 +819,10 @@
           "arima": "ARIMA-style"
         },
         "forecastHorizon": {
-          "3": "3 months",
-          "6": "6 months",
-          "12": "12 months",
-          "24": "24 months"
+          "3": "3 periods",
+          "6": "6 periods",
+          "12": "12 periods",
+          "24": "24 periods"
         },
         "forecastConfidence": {
           "80": "80%",
@@ -939,6 +945,7 @@
         "mid": "Moderate",
         "low": "Unconcentrated"
       },
+      "hhiValue": "HHI {value}",
       "title": "Segment Performance",
       "dim": {
         "department": "By Department",

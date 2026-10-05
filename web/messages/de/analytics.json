@@ -127,16 +127,16 @@
     },
     "forecast": {
       "domainCaveatTitle": "Prognose verlässt den Wertebereich der Kennzahl",
-      "domainCaveat": "{metric} kann nicht negativ sein, aber die {model}-Projektion fällt ab {month} unter null, weil das Modell den jüngsten Rückgang fortschreibt. Spätere Monate zeigen, was der Trend bedeutet — keine erreichbaren {metric}; die ETS-Variante mit gedämpftem Trend lässt den Rückgang auslaufen, statt ihn zu verlängern.",
-      "domainTableNote": "Monate ab {month} projizieren unter null — außerhalb des Bereichs dieser Kennzahl.",
+      "domainCaveat": "{metric} kann nicht negativ sein, aber die {model}-Projektion fällt ab {month} unter null, weil das Modell den jüngsten Rückgang fortschreibt. Spätere Perioden zeigen, was der Trend bedeutet — keine erreichbaren {metric}; die ETS-Variante mit gedämpftem Trend lässt den Rückgang auslaufen, statt ihn zu verlängern.",
+      "domainTableNote": "Perioden ab {month} projizieren unter null — außerhalb des Bereichs dieser Kennzahl.",
       "domainGrowthNote": "Das projizierte Wachstum beruht auf Werten außerhalb des Bereichs von {metric} — siehe Hinweis oben.",
       "title": "Multi-Metrik-Prognose",
-      "total": "{count}-Monats-Summe",
-      "monthN": "Monat {count}",
+      "total": "{count}-Perioden-Summe",
+      "monthN": "Periode {count}",
       "growth": "Projiziertes Wachstum",
-      "detail": "Monatliche Prognosedetails",
+      "detail": "Prognosedetails",
       "table": {
-        "month": "Monat",
+        "month": "Periode",
         "forecast": "Prognose",
         "low": "Tief",
         "high": "Hoch",
@@ -150,23 +150,29 @@
         "seasonality": "Saisonalität",
         "adjustment": "Anpassung"
       },
-      "horizonMonths": "{count} Monate",
+      "horizonMonths": "{count} Perioden",
       "confidencePct": "{count} %",
       "diagnostics": "Modelldiagnose",
       "diag": {
         "trend": "Tendenz",
-        "seasonality": "Saisonalität"
+        "seasonality": "Saisonalität",
+        "mape": "MAPE",
+        "rmse": "RMSE",
+        "r2": "R²"
       },
       "trend": {
         "up": "Aufwärts",
         "down": "Abwärts",
         "flat": "Flach"
       },
-      "seasonDetected": "Erkannt ({period} Mo.)",
+      "seasonDetected": "Erkannt ({period} Perioden)",
       "seasonNone": "Keine",
       "emptyTitle": "Nicht genug Historie",
-      "emptyDescription": "Für Prognosen braucht es mindestens 3 Monate Aktivität im gewählten Zeitraum.",
-      "unknownLevel": "Unbekannte {field} „{level}“ — gültige Werte: {levels}."
+      "emptyDescription": "Für Prognosen braucht es mindestens 3 Perioden Aktivität im gewählten Zeitraum.",
+      "unknownLevel": "Unbekannte {field} „{level}“ — gültige Werte: {levels}.",
+      "noFuturePeriods": "Der Geschäftskalender enthält keine künftigen Perioden, daher hat die Prognose keine Periodennamen. Legen Sie künftige Perioden im Geschäftskalender an und öffnen Sie die Prognose erneut.",
+      "shortFuturePeriods": "Der Geschäftskalender enthält nur {have} künftige Perioden, der {need}-Perioden-Horizont braucht aber {need} Namen. Legen Sie weitere künftige Perioden im Geschäftskalender an.",
+      "declarePeriods": "Perioden anlegen"
     },
     "scenarios": {
       "kpi": {
@@ -211,7 +217,7 @@
         "baseline": "Basis",
         "scenario": "Szenario"
       },
-      "invalidInput": "{field} muss eine einfache Zahl sein — bis dahin bleibt das Szenario auf den Ausgangswerten.",
+      "invalidInput": "{field} muss eine einfache Zahl sein — bis dahin ist das Szenario nicht verfügbar.",
       "templates": {
         "recession": "Rezession",
         "growth": "Wachstumsschub",
@@ -241,7 +247,7 @@
         "current": "Aktuelles Bruttoergebnis",
         "residual": "Rundungsrest"
       },
-      "trends": "Margentrends (12 Mo.)",
+      "trends": "Margentrends (12 Perioden)",
       "series": {
         "gross": "Brutto",
         "operating": "Betrieb"
@@ -392,19 +398,19 @@
       },
       "revTrendingDown": {
         "title": "Umsatztrend abwärts",
-        "detail": "Der Umsatz fiel in den letzten drei aktiven Monaten um {pct} %."
+        "detail": "Der Umsatz fiel in den letzten drei aktiven Perioden um {pct} %."
       },
       "marginCompression": {
         "title": "Margenkompression",
-        "detail": "Die Bruttomarge gab in den letzten drei aktiven Monaten um {pp}pp nach."
+        "detail": "Die Bruttomarge gab in den letzten drei aktiven Perioden um {pp}pp nach."
       },
       "belowBreakeven": {
         "title": "Unter der Gewinnschwelle",
-        "detail": "Der durchschnittliche Monatsumsatz liegt unter der Gewinnschwelle von ca. {amount}."
+        "detail": "Der durchschnittliche Periodenumsatz liegt unter der Gewinnschwelle von ca. {amount}."
       },
       "thinMargin": {
         "title": "Dünne Sicherheitsmarge",
-        "detail": "Nur {pct} % des Monatsumsatzes trennen Sie von der Gewinnschwelle."
+        "detail": "Nur {pct} % des Periodenumsatzes trennen Sie von der Gewinnschwelle."
       },
       "heavyOverhead": {
         "title": "Hoher Overhead",
@@ -709,12 +715,12 @@
           "help": "Ein Rückgang gegenüber dem Vorjahreszeitraum über diesem Wert wird als fallender Umsatz gemeldet"
         },
         "revenueTrendAlertPercent": {
-          "label": "Warnung bei Dreimonats-Umsatztrend (%)",
-          "help": "Ein Rückgang über die letzten drei Umsatzmonate über diesem Wert wird als Abwärtstrend gemeldet"
+          "label": "Warnung bei Dreiperioden-Umsatztrend (%)",
+          "help": "Ein Rückgang über die letzten drei Umsatzperioden über diesem Wert wird als Abwärtstrend gemeldet"
         },
         "marginCompressionPoints": {
           "label": "Warnung bei Margenrückgang (Punkte)",
-          "help": "Ein Rückgang der Bruttomarge über die letzten drei Monate um mehr als so viele Prozentpunkte"
+          "help": "Ein Rückgang der Bruttomarge über die letzten drei Perioden um mehr als so viele Prozentpunkte"
         },
         "breakevenSafetyPercent": {
           "label": "Sicherheitsabstand zum Break-even (%)",
@@ -730,7 +736,7 @@
         },
         "forecastHorizon": {
           "label": "Prognosehorizont",
-          "help": "Projizierte Monate beim Öffnen des Tabs"
+          "help": "Projizierte Perioden beim Öffnen des Tabs"
         },
         "forecastConfidence": {
           "label": "Prognosekonfidenz",
@@ -742,7 +748,7 @@
         },
         "forecastAdjustment": {
           "label": "Prognoseanpassung",
-          "help": "Makroanpassung für jeden Prognosemonat"
+          "help": "Makroanpassung für jede Prognoseperiode"
         },
         "forecastEtsAlpha": {
           "label": "ETS-Glättung (α)",
@@ -758,7 +764,7 @@
         },
         "forecastDampedPhi": {
           "label": "Gedämpfter Trend (φ)",
-          "help": "Trenddämpfung pro Monat; 1 ist ungedämpft"
+          "help": "Trenddämpfung pro Periode; 1 ist ungedämpft"
         },
         "forecastMa1": {
           "label": "ARIMA-Schockfortschreibung",
@@ -790,7 +796,7 @@
         },
         "anomalySigma": {
           "label": "Anomalie-Schwelle (σ)",
-          "help": "Monate, die um mehr als so viele Standardabweichungen vom Mittel abweichen, werden als Anomalien gemeldet"
+          "help": "Perioden, die um mehr als so viele Standardabweichungen vom Mittel abweichen, werden als Anomalien gemeldet"
         }
       },
       "groups": {
@@ -813,10 +819,10 @@
           "arima": "ARIMA-Stil"
         },
         "forecastHorizon": {
-          "3": "3 Monate",
-          "6": "6 Monate",
-          "12": "12 Monate",
-          "24": "24 Monate"
+          "3": "3 Perioden",
+          "6": "6 Perioden",
+          "12": "12 Perioden",
+          "24": "24 Perioden"
         },
         "forecastConfidence": {
           "80": "80 %",
@@ -939,6 +945,7 @@
         "mid": "Mäßig",
         "low": "Unkonzentriert"
       },
+      "hhiValue": "HHI {value}",
       "title": "Segmentleistung",
       "dim": {
         "department": "Nach Abteilung",

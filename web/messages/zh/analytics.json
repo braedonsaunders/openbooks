@@ -127,16 +127,16 @@
     },
     "forecast": {
       "domainCaveatTitle": "预测超出指标取值范围",
-      "domainCaveat": "{metric}不能为负，但{model}预测自{month}起跌破零，因为模型将近期的下降延续下去。请将之后的月份视为趋势含义，而非可达到的{metric}；阻尼趋势ETS变体使下降趋平，而非延续。",
-      "domainTableNote": "自{month}起的月份预测为负，超出本指标的取值范围。",
+      "domainCaveat": "{metric}不能为负，但{model}预测自{month}起跌破零，因为模型将近期的下降延续下去。请将之后的期间视为趋势含义，而非可达到的{metric}；阻尼趋势ETS变体使下降趋平，而非延续。",
+      "domainTableNote": "自{month}起的期间预测为负，超出本指标的取值范围。",
       "domainGrowthNote": "预测增长率基于超出{metric}范围的值计算——见上文警示。",
       "title": "多指标预测",
-      "total": "{count}个月合计",
-      "monthN": "第{count}个月",
+      "total": "{count}个期间合计",
+      "monthN": "第{count}个期间",
       "growth": "预计增长",
-      "detail": "月度预测明细",
+      "detail": "预测明细",
       "table": {
-        "month": "月份",
+        "month": "期间",
         "forecast": "预测",
         "low": "下限",
         "high": "上限",
@@ -150,23 +150,29 @@
         "seasonality": "季节性",
         "adjustment": "调整"
       },
-      "horizonMonths": "{count}个月",
+      "horizonMonths": "{count}个期间",
       "confidencePct": "{count}%",
       "diagnostics": "模型诊断",
       "diag": {
         "trend": "趋势",
-        "seasonality": "季节性"
+        "seasonality": "季节性",
+        "mape": "MAPE",
+        "rmse": "RMSE",
+        "r2": "R²"
       },
       "trend": {
         "up": "上升",
         "down": "下降",
         "flat": "持平"
       },
-      "seasonDetected": "已检测（{period}个月）",
+      "seasonDetected": "已检测（{period}个期间）",
       "seasonNone": "无",
       "emptyTitle": "历史数据不足",
-      "emptyDescription": "预测需要在所选期间至少3个月的业务活动。",
-      "unknownLevel": "未知的{field}“{level}”——有效值：{levels}。"
+      "emptyDescription": "预测需要在所选期间至少3个期间的业务活动。",
+      "unknownLevel": "未知的{field}“{level}”——有效值：{levels}。",
+      "noFuturePeriods": "会计日历未声明未来期间，预测没有期间名称可显示。请在会计日历中声明未来期间，然后重新打开预测。",
+      "shortFuturePeriods": "会计日历仅声明了{have}个未来期间，但{need}个期间的预测跨度需要{need}个名称。请在会计日历中声明更多未来期间。",
+      "declarePeriods": "声明期间"
     },
     "scenarios": {
       "kpi": {
@@ -211,7 +217,7 @@
         "baseline": "基准",
         "scenario": "情景"
       },
-      "invalidInput": "{field}必须是简单数字——修正之前情景保持在基准值。",
+      "invalidInput": "{field}必须是简单数字——修正之前情景不可用。",
       "templates": {
         "recession": "衰退",
         "growth": "增长推动",
@@ -241,7 +247,7 @@
         "current": "当期毛利",
         "residual": "舍入残差"
       },
-      "trends": "利润趋势（12个月）",
+      "trends": "利润趋势（12个期间）",
       "series": {
         "gross": "毛利",
         "operating": "营业"
@@ -392,19 +398,19 @@
       },
       "revTrendingDown": {
         "title": "营收呈下降趋势",
-        "detail": "过去三个活跃月份营收下降{pct}%。"
+        "detail": "过去三个活跃期间营收下降{pct}%。"
       },
       "marginCompression": {
         "title": "利润率被压缩",
-        "detail": "过去三个活跃月份毛利率下滑{pp}pp。"
+        "detail": "过去三个活跃期间毛利率下滑{pp}pp。"
       },
       "belowBreakeven": {
         "title": "低于盈亏平衡点",
-        "detail": "月均营收低于约{amount}的盈亏平衡点。"
+        "detail": "期间平均营收低于约{amount}的盈亏平衡点。"
       },
       "thinMargin": {
         "title": "安全边际过薄",
-        "detail": "距离盈亏平衡点仅剩月营收的{pct}%。"
+        "detail": "距离盈亏平衡点仅剩期间营收的{pct}%。"
       },
       "heavyOverhead": {
         "title": "间接费用过重",
@@ -709,12 +715,12 @@
           "help": "较上年同期下降超过此值时报告为收入下滑"
         },
         "revenueTrendAlertPercent": {
-          "label": "三个月收入趋势警报（%）",
-          "help": "最近三个月下降超过此值时报告为下降趋势"
+          "label": "三个期间收入趋势警报（%）",
+          "help": "最近三个期间下降超过此值时报告为下降趋势"
         },
         "marginCompressionPoints": {
           "label": "利润率压缩警报（百分点）",
-          "help": "最近三个月毛利率下降超过此百分点数"
+          "help": "最近三个期间毛利率下降超过此百分点数"
         },
         "breakevenSafetyPercent": {
           "label": "盈亏平衡安全边际（%）",
@@ -730,7 +736,7 @@
         },
         "forecastHorizon": {
           "label": "预测期限",
-          "help": "打开选项卡时显示的预测月数"
+          "help": "打开选项卡时显示的预测期间数"
         },
         "forecastConfidence": {
           "label": "预测置信度",
@@ -742,7 +748,7 @@
         },
         "forecastAdjustment": {
           "label": "预测调整",
-          "help": "应用于每个预测月份的宏观调整"
+          "help": "应用于每个预测期间的宏观调整"
         },
         "forecastEtsAlpha": {
           "label": "ETS平滑（α）",
@@ -758,7 +764,7 @@
         },
         "forecastDampedPhi": {
           "label": "阻尼趋势（φ）",
-          "help": "每月衰减率；1为无阻尼"
+          "help": "每期间衰减率；1为无阻尼"
         },
         "forecastMa1": {
           "label": "ARIMA冲击持续",
@@ -790,7 +796,7 @@
         },
         "anomalySigma": {
           "label": "异常阈值（σ）",
-          "help": "偏离均值超过此标准差数的月份报告为异常"
+          "help": "偏离均值超过此标准差数的期间报告为异常"
         }
       },
       "groups": {
@@ -813,10 +819,10 @@
           "arima": "ARIMA式"
         },
         "forecastHorizon": {
-          "3": "3个月",
-          "6": "6个月",
-          "12": "12个月",
-          "24": "24个月"
+          "3": "3个期间",
+          "6": "6个期间",
+          "12": "12个期间",
+          "24": "24个期间"
         },
         "forecastConfidence": {
           "80": "80%",
@@ -939,6 +945,7 @@
         "mid": "中度",
         "low": "分散"
       },
+      "hhiValue": "HHI {value}",
       "title": "分部业绩",
       "dim": {
         "department": "按部门",

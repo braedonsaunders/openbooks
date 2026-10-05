@@ -127,16 +127,16 @@
     },
     "forecast": {
       "domainCaveatTitle": "La proyección sale del rango de la métrica",
-      "domainCaveat": "{metric} no puede ser negativo, pero la proyección {model} cae por debajo de cero desde {month} porque el modelo prolonga la caída reciente. Los meses posteriores muestran lo que implica la tendencia, no {metric} alcanzables; la variante ETS de tendencia amortiguada suaviza la caída en lugar de prolongarla.",
-      "domainTableNote": "Los meses desde {month} proyectan bajo cero, fuera del rango de esta métrica.",
+      "domainCaveat": "{metric} no puede ser negativo, pero la proyección {model} cae por debajo de cero desde {month} porque el modelo prolonga la caída reciente. Los períodos posteriores muestran lo que implica la tendencia, no {metric} alcanzables; la variante ETS de tendencia amortiguada suaviza la caída en lugar de prolongarla.",
+      "domainTableNote": "Los períodos desde {month} proyectan bajo cero, fuera del rango de esta métrica.",
       "domainGrowthNote": "El crecimiento proyectado se calcula con valores fuera del rango de {metric}; consulta la advertencia anterior.",
       "title": "Pronóstico multimétrico",
-      "total": "Total de {count} meses",
-      "monthN": "Mes {count}",
+      "total": "Total de {count} períodos",
+      "monthN": "Período {count}",
       "growth": "Crecimiento proyectado",
-      "detail": "Detalle mensual del pronóstico",
+      "detail": "Detalle del pronóstico",
       "table": {
-        "month": "Mes",
+        "month": "Período",
         "forecast": "Pronóstico",
         "low": "Bajo",
         "high": "Alto",
@@ -150,23 +150,29 @@
         "seasonality": "Estacionalidad",
         "adjustment": "Ajuste"
       },
-      "horizonMonths": "{count} meses",
+      "horizonMonths": "{count} períodos",
       "confidencePct": "{count} %",
       "diagnostics": "Diagnóstico del modelo",
       "diag": {
         "trend": "Tendencia",
-        "seasonality": "Estacionalidad"
+        "seasonality": "Estacionalidad",
+        "mape": "MAPE",
+        "rmse": "RMSE",
+        "r2": "R²"
       },
       "trend": {
         "up": "Ascendente",
         "down": "Descendente",
         "flat": "Plana"
       },
-      "seasonDetected": "Detectada ({period} m.)",
+      "seasonDetected": "Detectada ({period} períodos)",
       "seasonNone": "Ninguna",
       "emptyTitle": "Historial insuficiente",
-      "emptyDescription": "El pronóstico necesita al menos 3 meses de actividad en el periodo elegido.",
-      "unknownLevel": "Valor no válido para {field}: „{level}“ — valores válidos: {levels}."
+      "emptyDescription": "El pronóstico necesita al menos 3 períodos de actividad en el periodo elegido.",
+      "unknownLevel": "Valor no válido para {field}: „{level}“ — valores válidos: {levels}.",
+      "noFuturePeriods": "El calendario fiscal no declara períodos futuros, así que la proyección no tiene nombres de período. Declare períodos futuros en el calendario fiscal y vuelva a abrir el pronóstico.",
+      "shortFuturePeriods": "El calendario fiscal declara solo {have} períodos futuros, pero el horizonte de {need} períodos necesita {need} nombres. Declare más períodos futuros en el calendario fiscal.",
+      "declarePeriods": "Declarar períodos"
     },
     "scenarios": {
       "kpi": {
@@ -211,7 +217,7 @@
         "baseline": "Base",
         "scenario": "Escenario"
       },
-      "invalidInput": "{field} debe ser un número simple — el escenario se mantiene en la base hasta corregirlo.",
+      "invalidInput": "{field} debe ser un número simple — el escenario no está disponible hasta corregirlo.",
       "templates": {
         "recession": "Recesión",
         "growth": "Impulso de crecimiento",
@@ -241,7 +247,7 @@
         "current": "MB actual",
         "residual": "Residuo de redondeo"
       },
-      "trends": "Tendencias de margen (12 m.)",
+      "trends": "Tendencias de margen (12 períodos)",
       "series": {
         "gross": "Bruto",
         "operating": "Operativo"
@@ -392,19 +398,19 @@
       },
       "revTrendingDown": {
         "title": "Tendencia de ingresos a la baja",
-        "detail": "Los ingresos cayeron un {pct} % en los últimos tres meses activos."
+        "detail": "Los ingresos cayeron un {pct} % en los últimos tres períodos activos."
       },
       "marginCompression": {
         "title": "Compresión de márgenes",
-        "detail": "El margen bruto cedió {pp}pp en los últimos tres meses activos."
+        "detail": "El margen bruto cedió {pp}pp en los últimos tres períodos activos."
       },
       "belowBreakeven": {
         "title": "Por debajo del punto de equilibrio",
-        "detail": "El ingreso mensual medio está por debajo del punto de equilibrio de aproximadamente {amount}."
+        "detail": "El ingreso medio del período está por debajo del punto de equilibrio de aproximadamente {amount}."
       },
       "thinMargin": {
         "title": "Margen de seguridad estrecho",
-        "detail": "Solo el {pct} % del ingreso mensual lo separa del punto de equilibrio."
+        "detail": "Solo el {pct} % del ingreso del período lo separa del punto de equilibrio."
       },
       "heavyOverhead": {
         "title": "Estructura pesada",
@@ -709,12 +715,12 @@
           "help": "Una caída frente al mismo período del año anterior superior a esto se informa como ingresos en descenso"
         },
         "revenueTrendAlertPercent": {
-          "label": "Alerta de tendencia de ingresos a tres meses (%)",
-          "help": "Una caída en los últimos tres meses con ingresos superior a esto se informa como tendencia a la baja"
+          "label": "Alerta de tendencia de ingresos a tres períodos (%)",
+          "help": "Una caída en los últimos tres períodos con ingresos superior a esto se informa como tendencia a la baja"
         },
         "marginCompressionPoints": {
           "label": "Alerta de compresión del margen (puntos)",
-          "help": "Una caída del margen bruto en los últimos tres meses superior a estos puntos porcentuales"
+          "help": "Una caída del margen bruto en los últimos tres períodos superior a estos puntos porcentuales"
         },
         "breakevenSafetyPercent": {
           "label": "Margen de seguridad sobre el punto de equilibrio (%)",
@@ -730,7 +736,7 @@
         },
         "forecastHorizon": {
           "label": "Horizonte del pronóstico",
-          "help": "Meses proyectados al abrir la pestaña"
+          "help": "Períodos proyectados al abrir la pestaña"
         },
         "forecastConfidence": {
           "label": "Confianza del pronóstico",
@@ -742,7 +748,7 @@
         },
         "forecastAdjustment": {
           "label": "Ajuste del pronóstico",
-          "help": "Ajuste macro de cada mes proyectado"
+          "help": "Ajuste macro de cada período proyectado"
         },
         "forecastEtsAlpha": {
           "label": "Suavizado ETS (α)",
@@ -758,7 +764,7 @@
         },
         "forecastDampedPhi": {
           "label": "Tendencia amortiguada (φ)",
-          "help": "Decaimiento mensual; 1 es sin amortiguar"
+          "help": "Decaimiento por período; 1 es sin amortiguar"
         },
         "forecastMa1": {
           "label": "Persistencia del choque ARIMA",
@@ -790,7 +796,7 @@
         },
         "anomalySigma": {
           "label": "Umbral de anomalía (σ)",
-          "help": "Los meses que se alejan de la media más de estas desviaciones típicas se informan como anomalías"
+          "help": "Los períodos que se alejan de la media más de estas desviaciones típicas se informan como anomalías"
         }
       },
       "groups": {
@@ -813,10 +819,10 @@
           "arima": "Estilo ARIMA"
         },
         "forecastHorizon": {
-          "3": "3 meses",
-          "6": "6 meses",
-          "12": "12 meses",
-          "24": "24 meses"
+          "3": "3 períodos",
+          "6": "6 períodos",
+          "12": "12 períodos",
+          "24": "24 períodos"
         },
         "forecastConfidence": {
           "80": "80 %",
@@ -939,6 +945,7 @@
         "mid": "Moderada",
         "low": "No concentrada"
       },
+      "hhiValue": "HHI {value}",
       "title": "Rendimiento por segmento",
       "dim": {
         "department": "Por departamento",
