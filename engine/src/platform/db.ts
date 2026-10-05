@@ -822,8 +822,14 @@ export const db = new Proxy(poolDb, {
     // second BEGIN/COMMIT, prematurely commit the outer unit, and clear its
     // SET LOCAL tenant scope. Treat nested transaction helpers as participation
     // in the existing atomic unit; any thrown error reaches the outer rollback.
+    // A requested isolation level or access mode cannot be applied mid-
+    // transaction, so it is verified against the enclosing transaction and
+    // refused by name when the enclosing one is weaker, never silently dropped.
     if (prop === "transaction" && current) {
-      return async (fn: (tx: typeof current) => Promise<unknown>) => fn(current);
+      return async (fn: (tx: typeof current) => Promise<unknown>, config?: NestedTransactionConfig) => {
+        await assertAmbientTransactionSatisfies(current, config);
+        return fn(current);
+      };
     }
     const active = current ?? target;
     const value = Reflect.get(active as object, prop, receiver);
@@ -832,6 +838,56 @@ export const db = new Proxy(poolDb, {
 }) as typeof poolDb;
 
 type DbTransaction = Parameters<Parameters<typeof poolDb.transaction>[0]>[0];
+
+/** The options drizzle's `transaction()` accepts that a nested call can ask for. */
+interface NestedTransactionConfig {
+  isolationLevel?: "read uncommitted" | "read committed" | "repeatable read" | "serializable";
+  accessMode?: "read only" | "read write";
+  deferrable?: boolean;
+}
+
+const ISOLATION_RANK: Record<string, number> = {
+  "read uncommitted": 0,
+  "read committed": 1,
+  "repeatable read": 2,
+  serializable: 3,
+};
+
+/**
+ * A nested `db.transaction(fn, config)` joins the enclosing transaction, whose
+ * isolation and access mode were fixed at BEGIN. Verify the enclosing
+ * transaction gives at least the requested guarantees: an isolation level at
+ * least as strong, and read-only when read-only was requested (a read-only
+ * request exists so a stray write fails loudly). Anything weaker is refused by
+ * name so the caller's snapshot promise is never silently downgraded.
+ */
+async function assertAmbientTransactionSatisfies(
+  ambient: { execute: (query: ReturnType<typeof sql>) => Promise<unknown> },
+  config: NestedTransactionConfig | undefined,
+): Promise<void> {
+  if (!config || (config.isolationLevel === undefined && config.accessMode !== "read only")) return;
+  const result = (await ambient.execute(sql`
+    select current_setting('transaction_isolation') as isolation,
+           current_setting('transaction_read_only') as read_only
+  `)) as { rows: Array<{ isolation: string; read_only: string }> };
+  const row = result.rows[0];
+  if (!row) throw new Error("cannot verify the enclosing transaction's isolation level");
+  if (config.isolationLevel !== undefined) {
+    const requested = ISOLATION_RANK[config.isolationLevel];
+    const actual = ISOLATION_RANK[row.isolation.toLowerCase()];
+    if (requested === undefined || actual === undefined || actual < requested) {
+      throw new Error(
+        `cannot raise isolation to ${config.isolationLevel} inside an active transaction running at ${row.isolation}; ` +
+          "open the outermost transaction at the required isolation level",
+      );
+    }
+  }
+  if (config.accessMode === "read only" && row.read_only !== "on") {
+    throw new Error(
+      "cannot make an active read-write transaction read only; open the outermost transaction read only",
+    );
+  }
+}
 
 /**
  * Anything a raw statement can run on: the pooled `db`, a transaction handed
