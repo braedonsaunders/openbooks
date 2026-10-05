@@ -14,6 +14,7 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
+import { departments } from "./core";
 import { parties } from "./parties";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
@@ -482,6 +483,48 @@ export const employeePayComponents = pgTable(
   ],
 );
 
+/**
+ * Per-component department override of the payroll expense (debit) account:
+ * one active expense account per component, department and date. Resolution
+ * at calculate prefers the line's department mapping over the component
+ * default; the liability side is unchanged.
+ */
+export const payComponentDepartmentExpenses = pgTable(
+  "pay_component_department_expenses",
+  {
+    id: id(),
+    orgId: orgRef(),
+    payComponentId: uuid("pay_component_id").notNull(),
+    departmentId: uuid("department_id").notNull(),
+    expenseAccountId: uuid("expense_account_id").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "pay_component_department_expenses_component_fkey",
+      columns: [t.orgId, t.payComponentId],
+      foreignColumns: [payComponents.orgId, payComponents.id],
+    }),
+    foreignKey({
+      name: "pay_component_department_expenses_department_fkey",
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
+    }),
+    foreignKey({
+      name: "pay_component_department_expenses_account_tenant_fkey",
+      columns: [t.orgId, t.expenseAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    index("pay_component_department_expenses_component").on(t.orgId, t.payComponentId),
+    index("pay_component_department_expenses_lookup").on(t.orgId, t.payComponentId, t.departmentId),
+    check("pay_component_department_expenses_effective_pair",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+  ],
+);
+
 /** One employee's pay for one run, with the full T4127 explainability trace. */
 export const payStubs = pgTable(
   "pay_stubs",
@@ -597,10 +640,11 @@ export const payStubLines = pgTable(
     sequence: integer("sequence").notNull().default(100),
     /** Snapshot at calculate: the account this earning line was costed to.
      * Posting debits this, never the component's or item's current setup.
-     * Resolution is item > component > org default; see migration 0180. */
+     * Resolution is item > department mapping > component > org default;
+     * see migrations 0180 and 0485. */
     expenseAccountId: uuid("expense_account_id"),
     expenseAccountSource: text("expense_account_source", {
-      enum: ["unknown", "item", "component", "org_default"],
+      enum: ["unknown", "item", "component", "department", "org_default"],
     }).notNull().default("unknown"),
     expenseAccountEvidence: jsonb("expense_account_evidence").$type<{ reason: string; reference: string }>(),
     /** Effective-date-resolved pack reporting code, snapshotted at payroll calculation. */

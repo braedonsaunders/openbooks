@@ -7,7 +7,9 @@ import {
 import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
+  defaultLevyExclusionsForNewComponent,
   eiColumnSystemKeys,
+  employerLevyProgramKeys,
   employmentJurisdictionsOf,
   employeeSocialInsuranceSystemKeys,
   incomeTaxWithholdingSystemKeys,
@@ -485,4 +487,70 @@ test("the CA pack declares the QPIP program base under its own stub factor (C-12
   assert.ok(qpip, "the CA pack declares a qpip contribution program");
   assert.equal(qpip.stubFactorKey, "IE_QPIP");
   assert.deepEqual(payrollPack("US").contributionPrograms ?? [], []);
+});
+
+test("the CA pack declares its earnings-assessed employer levies", () => {
+  // The exclusion picker, the creation default and the levy assessable
+  // bases all read these keys: a levy missing here is priced off gross.
+  const keys = (payrollPack("CA").employerLevyPrograms ?? []).map((program) => program.key);
+  assert.deepEqual(keys, ["wcb", "eht", "hsf", "cnt"]);
+});
+
+test("employer-levy program keys answer the component's own scope", () => {
+  assert.deepEqual(employerLevyProgramKeys("CA"), ["cnt", "eht", "hsf", "wcb"]);
+  assert.deepEqual(employerLevyProgramKeys("US"), []);
+  assert.deepEqual(employerLevyProgramKeys("XX"), [], "unknown countries answer nothing");
+  const shared = employerLevyProgramKeys(null);
+  assert.ok(shared.includes("wcb"), "the shared scope includes the CA levies");
+  assert.deepEqual(shared, [...shared].sort(), "stored deterministically");
+});
+
+test("new-component levy defaults exclude only non-taxable earnings", () => {
+  assert.deepEqual(
+    defaultLevyExclusionsForNewComponent({
+      kind: "earning", taxable: false, country: "CA", programExclusions: undefined,
+    }),
+    ["cnt", "eht", "hsf", "wcb"],
+  );
+  // Taxable (or unstated) taxability defaults to assessable.
+  assert.equal(
+    defaultLevyExclusionsForNewComponent({
+      kind: "earning", taxable: true, country: "CA", programExclusions: undefined,
+    }),
+    undefined,
+  );
+  assert.equal(
+    defaultLevyExclusionsForNewComponent({
+      kind: "earning", country: "CA", programExclusions: undefined,
+    }),
+    undefined,
+  );
+  // An explicit list — even an empty one — is an operator's choice.
+  assert.equal(
+    defaultLevyExclusionsForNewComponent({
+      kind: "earning", taxable: false, country: "CA", programExclusions: [],
+    }),
+    undefined,
+  );
+  assert.equal(
+    defaultLevyExclusionsForNewComponent({
+      kind: "earning", taxable: false, country: "CA", programExclusions: ["qpip"],
+    }),
+    undefined,
+  );
+  // Levies are an earning concept; packs without levies default nothing.
+  for (const kind of ["deduction", "employer_contribution"]) {
+    assert.equal(
+      defaultLevyExclusionsForNewComponent({
+        kind, taxable: false, country: "CA", programExclusions: undefined,
+      }),
+      undefined,
+    );
+  }
+  assert.equal(
+    defaultLevyExclusionsForNewComponent({
+      kind: "earning", taxable: false, country: "US", programExclusions: undefined,
+    }),
+    undefined,
+  );
 });

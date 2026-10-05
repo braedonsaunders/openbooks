@@ -1,0 +1,1 @@
+Creates the per-component department expense mapping table with a range-exclusion backstop against overlapping active windows, and widens the stub-line evidence check with the department source. No existing rows are rewritten: the widened check admits every row the old one did. No preflight probe is needed.

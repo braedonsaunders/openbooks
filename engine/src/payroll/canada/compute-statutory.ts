@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
+import type { db } from "../../platform/db.ts";
 import { add, cmp, div, fromUnits, mulDecimal, mulPercent, neg, sum, toUnits } from "../../money/money.ts";
 import { certificateCount, type ResolvedCertificate } from "../certificates.ts";
 import { empFact } from "../employee-facts.ts";
+import { findStoredEmployerFactValue } from "../employer-fact-store.ts";
+import { resolveEmployerFact } from "../employer-facts.ts";
+import { PayrollError } from "../error.ts";
 // Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -134,15 +138,71 @@ export async function employeeYtd(
   return r.rows[0]!;
 }
 
+/**
+ * The employer EI multiple for one employee's payroll program account.
+ *
+ * An employee with no filing account prices the statutory 1.4 — no
+ * reduced-rate program is in play. An employee on a CRA payroll program
+ * (RP) account prices that account's multiple effective on the pay date. An
+ * account that never recorded a multiple prices the statutory 1.4; an
+ * account whose multiples leave the pay date uncovered refuses by name,
+ * because the configured rate history cannot price this stub and guessing
+ * the standard rate past an approval would understate the liability.
+ */
+export async function resolveEiEmployerMultiple(input: {
+  tx: Pick<typeof db, "execute">;
+  orgId: string;
+  filingAccountId: string | null;
+  employeeName: string;
+  payDate: string;
+}): Promise<string> {
+  const { tx, orgId, filingAccountId, employeeName, payDate } = input;
+  if (filingAccountId == null) return "1.4";
+  const account = (await tx.execute<{ country: string; program_type: string }>(sql`
+    select country, program_type from payroll_filing_accounts
+     where org_id = ${orgId} and id = ${filingAccountId} and is_active
+  `)).rows[0];
+  if (!account || account.country !== "CA" || account.program_type !== "ca_rp") return "1.4";
+  const stored = await findStoredEmployerFactValue({
+    tx, orgId, filingAccountId, country: "CA",
+    factKey: "ei_employer_multiplier", asOf: payDate,
+  });
+  if (stored != null) {
+    return resolveEmployerFact("CA", "ei_employer_multiplier", stored)!;
+  }
+  const configured = (await tx.execute<{ configured: boolean }>(sql`
+    select exists (
+      select 1 from payroll_employer_facts
+       where org_id = ${orgId} and filing_account_id = ${filingAccountId}::uuid
+         and country = 'CA' and fact_key = 'ei_employer_multiplier'
+    ) as configured
+  `)).rows[0]!.configured;
+  if (!configured) return "1.4";
+  throw new PayrollError(
+    `${employeeName} is on a payroll program account with no employer EI multiple effective on ${payDate} `
+    + "— record the CRA-approved rate (or the standard 1.4) in Payroll Setup → Employer facts before calculating",
+  );
+}
+
 /** Phase 9 — CA pack statutory pass (T4127 + Québec TP-1015). */
 export async function computeCaStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    tx, orgId, documentId, employeePartyId, taxYear, region, run, emp,
+    tx, orgId, documentId, employeePartyId, employeeName, taxYear, region, run, emp,
     periodsPerYear: P, income, nonPeriodic, pensionable, insurable, deduction,
     pushStatutory, bool, assertRegionSupported, employerLevies,
   } = ctx;
+  // The employee's payroll program account prices the employer share: the
+  // statutory 1.4 by default, the CRA-approved reduced rate where one is
+  // recorded, or a named refusal when the account's rate history leaves
+  // the pay date uncovered.
+  const eiEmployerMultiple = await resolveEiEmployerMultiple({
+    tx, orgId,
+    filingAccountId: ctx.filingAccountId ?? null,
+    employeeName,
+    payDate: run.pay_date!,
+  });
   // The QPIP program's own insurable base — never the EI leg. Absent only on
   // unit-constructed contexts, where it reads the `insurable` leg (legacy
   // math, bit-identical); the engine always provides it via the pack's
@@ -251,7 +311,7 @@ export async function computeCaStatutory(
     qpipNonPeriodic: foldBonus ? "0" : ctx.programNonPeriodicBases?.qpip,
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
     income: taxIncome, nonPeriodic: taxNonPeriodic,
-    pensionable: periodPensionable, insurable: periodInsurable, qpipInsurable: periodQpipInsurable,
+    pensionable: periodPensionable, insurable: periodInsurable, qpipInsurable: periodQpipInsurable, eiEmployerMultiple,
     pensionDeductions: taxPensionDeductions,
     alimonyDeductions: taxAlimony,
     nonPeriodicPensionDeductions: taxNonPeriodicPension,

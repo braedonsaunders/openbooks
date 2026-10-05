@@ -2749,6 +2749,10 @@
         "title": "Grupos de Seguro Acidentário",
         "description": "Grupos de alíquota de seguro acidentário para custeio de mão de obra."
       },
+      "pay-component-department-expenses": {
+        "title": "Contas de despesa por departamento",
+        "description": "Contas de despesa por componente e departamento: o mesmo vencimento é lançado em contas diferentes conforme o departamento do funcionário."
+      },
       "asset-categories": {
         "title": "Categorias de Ativo",
         "description": "Método de depreciação e contas padrão para ativos imobilizados."

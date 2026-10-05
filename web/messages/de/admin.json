@@ -2786,6 +2786,10 @@
         "title": "Unfallversicherungsgruppen",
         "description": "Beitragsgruppen der Arbeiterunfallversicherung für die Personalkostenrechnung."
       },
+      "pay-component-department-expenses": {
+        "title": "Abteilungskonten",
+        "description": "Aufwandskonten je Komponente und Abteilung: derselbe Verdienst wird je nach Abteilung des Mitarbeiters auf verschiedene Konten gebucht."
+      },
       "overhead-rates": {
         "title": "Gemeinkostensätze",
         "description": "Datierte Gemeinkostensätze, die auf Arbeitskosten angewendet werden.",

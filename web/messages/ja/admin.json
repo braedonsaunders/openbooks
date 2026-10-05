@@ -2786,6 +2786,10 @@
         "title": "労災保険グループ",
         "description": "労務原価計算用の労災補償料率グループ。"
       },
+      "pay-component-department-expenses": {
+        "title": "部門別費用勘定",
+        "description": "コンポーネント・部門別の費用勘定：同じ賃金が従業員の部門に応じて異なる勘定に計上されます。"
+      },
       "overhead-rates": {
         "title": "間接費率",
         "description": "労務コストに適用される発効日付きの間接費率。",

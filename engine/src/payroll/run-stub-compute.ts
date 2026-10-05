@@ -30,7 +30,7 @@ import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
 import { resolveWorkSchedule, scheduledHoursPerWeek } from "./work-schedules.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate } from "./run-calculation-support.ts";
-import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction } from "./run-stub-records.ts";
+import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
@@ -759,6 +759,12 @@ export async function calculateStub(
     hasApprovedBankDetails: bool(emp.has_approved_bank),
     fallbackToCheque: ctx.eftFallbackToCheque,
   }).method;
+
+  // Department expense mapping answers after every phase has pushed its
+  // lines (earnings, statutory burdens, union fringes, vacation): the
+  // mapping is per component and department, so it can only resolve once
+  // the lines carry both. Item-routed lines keep their item account.
+  await stampDepartmentExpenseAccounts({ tx, orgId, lines, payDate: run.pay_date! });
 
   const stubId = await insertPayStubRow(tx, {
     orgId, actorId, documentId, employeePartyId, employmentId,

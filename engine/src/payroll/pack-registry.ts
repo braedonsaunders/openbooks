@@ -321,6 +321,55 @@ export function payrollPack(country: string): PayrollCountryPack {
   return pack;
 }
 
+/**
+ * Employer-levy program keys assessable by default for a component scope.
+ *
+ * A component scoped to one country answers its own pack's declared levies;
+ * a shared (country-less) component answers every installable pack's, so a
+ * non-taxable allowance never leaks into a levy it was never declared for.
+ * Sorted for deterministic storage. Unknown countries answer nothing rather
+ * than refusing: setup validates the country itself, and a default must
+ * never be the thing that breaks a save.
+ */
+export function employerLevyProgramKeys(country: string | null): string[] {
+  const codes = country
+    ? [country]
+    : installablePayrollPacks().map((pack) => pack.country);
+  const keys = new Set<string>();
+  for (const code of codes) {
+    const pack = PAYROLL_COUNTRY_PACKS[code];
+    if (!pack) continue;
+    for (const program of pack.employerLevyPrograms ?? []) keys.add(program.key);
+  }
+  return [...keys].sort();
+}
+
+/**
+ * Create-time program-exclusion default for a new pay component.
+ *
+ * Taxable earnings are assessable for every levy, so an omitted exclusion
+ * list already says the right thing and nothing is filled. A NON-taxable
+ * earning defaults to excluded from every levy in its scope — a meal
+ * per-diem or an insurance premium is not assessable — and the operator
+ * overrides per levy by editing the exclusions afterwards. Only an omitted
+ * list is defaulted: an explicitly empty list is an operator's choice to
+ * assess, and edits never rewrite stored exclusions.
+ *
+ * Returns the exclusions to store, or undefined to leave the input alone.
+ */
+export function defaultLevyExclusionsForNewComponent(input: {
+  kind: string;
+  taxable?: boolean | null;
+  country?: string | null;
+  programExclusions?: readonly string[] | null;
+}): string[] | undefined {
+  if (input.kind !== "earning") return undefined;
+  if (input.programExclusions !== undefined && input.programExclusions !== null) return undefined;
+  if (input.taxable !== false) return undefined;
+  const keys = employerLevyProgramKeys(input.country ?? null);
+  return keys.length > 0 ? keys : undefined;
+}
+
 /** Resolve a component reporting category on its pay date; no current-year fallback. */
 export function resolvePayrollStatutoryReportingCode(
   country: string,

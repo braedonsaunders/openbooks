@@ -2749,6 +2749,10 @@
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
       },
+      "pay-component-department-expenses": {
+        "title": "Department Expenses",
+        "description": "Per-component expense accounts by department: the same earning posts to different accounts by worker department."
+      },
       "asset-categories": {
         "title": "Asset Categories",
         "description": "Default depreciation method and accounts for fixed assets."

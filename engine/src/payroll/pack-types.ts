@@ -469,6 +469,36 @@ export interface PayrollContributionProgram {
  * SUI accounts in one state cannot file either until the history is
  * attributed to the exact account.
  */
+/**
+ * One employer levy assessed on its OWN earnings base — a levy the pack
+ * prices per pay stub off the earning lines that are assessable for it
+ * (workers' compensation premiums, a provincial employer health tax), never
+ * off gross pay.
+ *
+ * The base accumulates from the same per-earning-type applicability the
+ * contribution programs use: each earning line carries the levy key when the
+ * type is assessable for it, and the component's `program_exclusions`
+ * lists the keys it does NOT feed. Absent means assessable, matching the
+ * sibling flags' default-true.
+ *
+ * Unlike a contribution program this declares no stub factor key, no opening
+ * carry-in and no slip box: the levy prices, caps and reports through its
+ * own factors. The declaration exists so setup can offer the levy keys with
+ * operator-readable labels, and so a new component can default its
+ * exclusions from the pack instead of naming another country's levies.
+ *
+ * OPTIONAL: a pack whose employer levies all assess gross pay declares
+ * nothing. No pack is required to itemize what it does not exclude.
+ */
+export interface PayrollEmployerLevyProgram {
+  /** Levy code, e.g. `wcb`. Keys earning-line applicability and exclusions. */
+  key: string;
+  /** Operator label, e.g. `WCB/WSIB assessable earnings`. */
+  label: string;
+  /** What the base is, in the levy's own statutory words. */
+  help: string;
+}
+
 export interface PayrollAccountOpeningBase {
   /** Program code, e.g. `us_sui`, `us_w2_state`. Keys the carry-in. */
   key: string;
@@ -731,6 +761,11 @@ export interface PayrollCountryPack {
    * the pack's every program rides the two classic flags.
    */
   contributionPrograms?: readonly PayrollContributionProgram[];
+  /**
+   * Employer levies assessed on their own earnings bases (see the type).
+   * Absent means the pack's levies all assess the stub's gross earnings.
+   */
+  employerLevyPrograms?: readonly PayrollEmployerLevyProgram[];
   /**
    * Filing-account-scoped opening wage-base carry-ins (see the type).
    * Absent means the pack's openings need no per-account attribution.

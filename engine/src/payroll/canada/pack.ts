@@ -123,6 +123,31 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       stubFactorKey: "IE_QPIP",
     },
   ],
+  // Employer levies assessed on their own earnings bases, never on gross
+  // pay: a non-taxable allowance is not assessable, a taxable benefit is,
+  // and each component declares its exclusions in program_exclusions.
+  employerLevyPrograms: [
+    {
+      key: "wcb",
+      label: "WCB/WSIB assessable earnings",
+      help: "Earnings assessable for workers' compensation premiums at the employee's class rate, to the class annual maximum.",
+    },
+    {
+      key: "eht",
+      label: "Employer health tax assessable earnings",
+      help: "Remuneration assessable for provincial employer health tax (Ontario EHT past the annual exemption).",
+    },
+    {
+      key: "hsf",
+      label: "Health Services Fund assessable earnings",
+      help: "Remuneration subject to the Québec Health Services Fund contribution (TP-1015.F-V s. 5).",
+    },
+    {
+      key: "cnt",
+      label: "Labour standards contribution assessable earnings",
+      help: "Remuneration subject to the Québec contribution related to labour standards (LE-39.0.2-V).",
+    },
+  ],
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
   deductionTreatments: [

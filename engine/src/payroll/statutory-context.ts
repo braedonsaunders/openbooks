@@ -32,6 +32,17 @@ export interface StubLine {
   taxTreatment?: string;
   accrualOnly?: boolean;
   assessedOn?: PayrollAssessedOn;
+  /**
+   * Per-program applicability for programs the pack declares (contribution
+   * programs and employer-levy programs alike): the earning type feeds the
+   * program's base when its key is present and true. Absent key means
+   * assessable, matching the sibling flags' default-true; an absent map
+   * means every declared program assesses the line. Stamped from the
+   * component's `program_exclusions` beside `taxable`/`pensionable`/
+   * `insurable`; lines built without a component row default-assess, exactly
+   * like the sibling flags.
+   */
+  programApplicability?: Record<string, boolean>;
   classification?: string;
   protectionBase?: string;
   protectionMaxPercent?: string | null;

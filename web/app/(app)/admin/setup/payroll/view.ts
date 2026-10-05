@@ -106,6 +106,7 @@ export interface PayrollSetupData {
   onEmployerFacts: boolean
   onWorkSchedules: boolean
   onEntityTab: boolean
+  onComponents: boolean
   entityKey: string | null
   onDerived: boolean
   onDerivedPreview: boolean
@@ -201,6 +202,7 @@ export async function loadPayrollSetup(
     onEmployerFacts: tab === 'employerFacts',
     onWorkSchedules: tab === 'workSchedules',
     onEntityTab: isEntityTab(tab),
+    onComponents: tab === 'components',
     entityKey: entityKeyFor(tab),
     onDerived: tab === 'derived',
     onDerivedPreview: tab === 'derivedPreview',
@@ -285,6 +287,17 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
             basePath,
           }),
           when: f('onEntityTab'),
+        },
+        // The Components tab also carries the department expense child
+        // list: same slot, the mapping entity's own key. The section
+        // renders under its own title beneath the components table.
+        {
+          ...widgetBlock('setup-section', {
+            entityKey: 'pay-component-department-expenses',
+            sp: data.currentParams,
+            basePath,
+          }),
+          when: f('onComponents'),
         },
         // The derived tab's entity is not yet in the registry: same slot,
         // same session-derived lookup, key resolved by the loader.

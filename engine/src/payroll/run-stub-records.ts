@@ -24,7 +24,7 @@ import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
  * carries no behavior, only shape.
  */
 /** Which rung of the expense-account resolution answered for a stub line. */
-export type ExpenseAccountSource = "item" | "component" | "org_default";
+export type ExpenseAccountSource = "item" | "component" | "department" | "org_default";
 
 /**
  * Per-program applicability stamped from a component row's
@@ -530,4 +530,62 @@ export function resolveEarningExpenseAccount(args: {
     };
   }
   return null;
+}
+
+/**
+ * Department expense mapping (one pass over the finished stub, before
+ * persistence): for every line carrying a department, the component's
+ * mapping for that department effective on the pay date answers first —
+ * except item-routed lines, whose item account stays the most specific
+ * rung. Component and org-default stamps are overwritten in memory (the
+ * recalculate path deletes and reinserts, so no frozen stamp is ever
+ * rewritten); the liability side is untouched.
+ */
+export async function stampDepartmentExpenseAccounts(args: {
+  tx: Pick<typeof db, "execute">;
+  orgId: string;
+  lines: Line[];
+  payDate: string;
+}): Promise<void> {
+  const { tx, orgId, lines, payDate } = args;
+  const targets = lines.filter((line) =>
+    line.departmentId != null && line.componentId != null
+    && line.expenseAccountSource !== "item");
+  if (targets.length === 0) return;
+  const pairs = [...new Map(targets.map((line) => [
+    `${line.componentId}|${line.departmentId}`,
+    { componentId: line.componentId!, departmentId: line.departmentId! },
+  ])).values()];
+  const mappings = (await tx.execute<{
+    pay_component_id: string; department_id: string; expense_account_id: string;
+  }>(sql`
+    select distinct on (m.pay_component_id, m.department_id)
+           m.pay_component_id, m.department_id, m.expense_account_id
+      from pay_component_department_expenses m
+     where m.org_id = ${orgId} and m.is_active
+       and (m.pay_component_id, m.department_id) in (${sql.join(
+         pairs.map((pair) => sql`(${pair.componentId}::uuid, ${pair.departmentId}::uuid)`),
+         sql`, `,
+       )})
+       and m.effective_from <= ${payDate}::date
+       and (m.effective_to is null or ${payDate}::date <= m.effective_to)
+     order by m.pay_component_id, m.department_id, m.effective_from desc
+  `)).rows;
+  // The exclusion constraint admits one active window per component,
+  // department and date, so at most one row answers per pair; the
+  // effective_from ordering is a belt-and-braces tiebreak that can only
+  // fire on rows written around the constraint.
+  const byPair = new Map(mappings.map((row) => [
+    `${row.pay_component_id}|${row.department_id}`, row.expense_account_id,
+  ]));
+  for (const line of targets) {
+    const accountId = byPair.get(`${line.componentId}|${line.departmentId}`);
+    if (!accountId) continue;
+    line.expenseAccountId = accountId;
+    line.expenseAccountSource = "department";
+    line.expenseAccountEvidence = {
+      reason: `department mapping for this line's department answers before the component default`,
+      reference: `pay_component_department_expenses:${line.componentId}:${line.departmentId}`,
+    };
+  }
 }
