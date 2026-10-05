@@ -163,7 +163,7 @@ async function buildPayload(
   asOf: string,
 ): Promise<Record<string, unknown>> {
   const settings = await laborCostingSettings(orgId);
-  const wage = await resolveWage(orgId, workerPartyId, asOf, {});
+  const wage = await resolveWage(orgId, workerPartyId, asOf, { annualHoursDefault: settings.annualHours });
   // Annual truth without a round-trip (see bands.ts): an annual native
   // row prices directly; otherwise annualise the hourly wage.
   const native = wage

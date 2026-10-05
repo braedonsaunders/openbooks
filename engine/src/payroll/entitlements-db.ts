@@ -275,8 +275,9 @@ export async function entitlementBalances(
   const byPlan = new Map(sums.rows.map((row) => [row.plan_id, row]));
 
   // One wage lookup serves every plan's hours view.
-  const { resolveWage } = await import("../projects/labor-costing.ts");
-  const resolved = await resolveWage(orgId, employeePartyId, onDate);
+  const { resolveWage, laborCostingSettings } = await import("../projects/labor-costing.ts");
+  const wageSettings = await laborCostingSettings(orgId);
+  const resolved = await resolveWage(orgId, employeePartyId, onDate, { annualHoursDefault: wageSettings.annualHours });
   const wage = resolved && cmp(resolved.wage, "0") > 0 ? resolved.wage : null;
   const scope = await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId: opts.employmentId });
 

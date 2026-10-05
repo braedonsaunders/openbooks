@@ -409,10 +409,14 @@ export async function compaRatioFor(
   const level = (await db.execute<{ family_id: string | null }>(sql`
     select family_id from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`)).rows[0];
   // The payroll-side effective wage at the date, through the
-  // labor-costing wage rate service — never a typed number.
+  // labor-costing wage rate service — never a typed number. The org's
+  // annual-hours divisor loads before the wage: year-basis rows annualize
+  // through it, and resolveWage takes no literal fallback.
+  const settings = await laborCostingSettings(orgId);
   const wage = await resolveWage(orgId, employment.worker_party_id, asOf, {
     departmentId: position.department_id ?? primary.department_id,
     subsidiaryId: position.employer_subsidiary_id,
+    annualHoursDefault: settings.annualHours,
   });
   if (!wage) {
     throw new CompensationError(
@@ -420,7 +424,6 @@ export async function compaRatioFor(
       "no payroll-side wage covers this employment at this date — placement needs a priced line; set the wage in Labor Costing first",
     );
   }
-  const settings = await laborCostingSettings(orgId);
   const basis: BandBasis = "annual";
   // Annual truth without a round-trip: an annual native row prices
   // directly (dividing by annual hours and back would shed dust);

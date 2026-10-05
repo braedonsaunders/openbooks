@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
-import { laborFxQuote, resolveWage, type LaborFxQuote } from "../../projects/labor-costing.ts";
+import { laborCostingSettings, laborFxQuote, resolveWage, type LaborFxQuote } from "../../projects/labor-costing.ts";
 import { mul, mulRate } from "../../money/money.ts";
 import { compareDecimal } from "../../money/exact-decimal.ts";
 import {
@@ -298,6 +298,9 @@ export async function computeGapSnapshot(query: {
     // a partial-org snapshot and present it as whole-org.
     await requireUnrestrictedGapScope(orgId, actorId, "compute");
     const settings = await compensationSettings(orgId);
+    // The org's annual-hours divisor for year-basis wage rows, read once for
+    // the snapshot — resolveWage takes no literal fallback.
+    const laborSettings = await laborCostingSettings(orgId);
     const attributeKey = settings.comparisonAttributeKey;
     if (attributeKey === null) {
       throw new CompensationError(
@@ -373,6 +376,7 @@ export async function computeGapSnapshot(query: {
       // Payroll truth: the effective wage through the wage rate service.
       const wage = await resolveWage(orgId, employment.worker_party_id, query.asOf, {
         subsidiaryId: employment.employer_subsidiary_id,
+        annualHoursDefault: laborSettings.annualHours,
       });
       if (!wage) continue;
       const group = await comparisonGroupFor(orgId, attributeKey, employment.worker_party_id);

@@ -731,8 +731,9 @@ export async function applyEntitlementPlanMovements(
     // One wage lookup serves every plan's hours valuation for this stub, the
     // same way entitlementBalances values its hours view. Dynamic import, the
     // way entitlements-db.ts reaches labor-costing.
-    const { resolveWage } = await import("../projects/labor-costing.ts");
-    const resolvedWage = await resolveWage(orgId, employeePartyId, payDate);
+    const { resolveWage, laborCostingSettings } = await import("../projects/labor-costing.ts");
+    const wageSettings = await laborCostingSettings(orgId);
+    const resolvedWage = await resolveWage(orgId, employeePartyId, payDate, { annualHoursDefault: wageSettings.annualHours });
     const wage = resolvedWage && cmp(resolvedWage.wage, "0") > 0 ? resolvedWage.wage : null;
     for (const movement of movements) {
       if (!movement.componentId) continue;

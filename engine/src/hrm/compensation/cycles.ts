@@ -594,10 +594,14 @@ async function resolveLineGuideline(
   asOf: string,
   review: ReviewRating | null,
 ): Promise<ResolvedLineGuideline & { currentRate: string; currency: string; basis: BandBasis; annualHours: string | null }> {
-  // The payroll-side effective wage, through the wage rate service.
+  // The payroll-side effective wage, through the wage rate service. The
+  // org's annual-hours divisor loads before the wage: year-basis rows
+  // annualize through it, and resolveWage takes no literal fallback.
+  const settings = await laborCostingSettings(orgId);
   const wage = await resolveWage(orgId, employment.workerPartyId, asOf, {
     departmentId: employment.departmentId,
     subsidiaryId: employment.employerSubsidiaryId,
+    annualHoursDefault: settings.annualHours,
   });
   if (!wage) {
     throw new CompensationError(
@@ -605,7 +609,6 @@ async function resolveLineGuideline(
       "a line has no current rate — every in-service employment in scope needs a payroll-side wage before the cycle can open; set the missing wages in Labor Costing first",
     );
   }
-  const settings = await laborCostingSettings(orgId);
   // Native basis when the employee-scope row carries it, otherwise
   // annualised (resolveWage always returns hourly).
   const native = (await db.execute<{ rate: string; basis: string; currency: string; annual_hours: string }>(sql`
