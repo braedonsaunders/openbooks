@@ -514,13 +514,13 @@ export function QuoteCashSection(props: {
 
       {openSignature && preview.signature ? (
         <div className="space-y-1 rounded-lg border p-3 text-sm">
-          <p>
+          <div>
             <Badge variant="secondary">{t(statusKey(preview.signature.status))}</Badge>{' '}
             {t('quoteCash.sentTo', {
               name: preview.signature.signerName,
               email: preview.signature.signerEmail,
             })}
-          </p>
+          </div>
           <p className="text-slate-500 dark:text-slate-400">
             {t('quoteCash.expiresOn', {
               date: preview.signature.expiresAt.slice(0, 10),
@@ -536,10 +536,10 @@ export function QuoteCashSection(props: {
 
       {signed && !activated ? (
         <div className="space-y-2 rounded-lg border p-3 text-sm">
-          <p>
+          <div>
             <Badge variant="success">{t('quoteCash.signed')}</Badge>{' '}
             {t('quoteCash.signedHint')}
-          </p>
+          </div>
           {canEdit ? (
             <Button size="sm" disabled={busy || preview.terms.length === 0} onClick={() => void activate()}>
               {t('quoteCash.activate')}
@@ -549,9 +549,9 @@ export function QuoteCashSection(props: {
       ) : null}
 
       {activated ? (
-        <p className="text-sm">
+        <div className="text-sm">
           <Badge variant="success">{t('quoteCash.activatedCount', { count: activated.length })}</Badge>
-        </p>
+        </div>
       ) : null}
     </div>
   )
