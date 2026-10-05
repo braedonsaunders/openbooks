@@ -31,7 +31,7 @@ export async function CompensationWorkspace({ data }: { data: CompHomeData }) {
           <Button asChild><Link href={activeAction.href as never}><Plus size={15} />{activeAction.label}</Link></Button>
         ) : null} />
     } className="gap-4">
-      {data.activeView === 'overview' ? <CompensationOverview data={data} /> : (
+      {data.activeView === 'overview' ? <CompensationOverview data={data} orgId={authz.user.orgId} actorId={authz.user.id} allowedSubsidiaryIds={authz.allowedSubsidiaryIds} canSetup={canSetup} /> : (
       <div className="min-h-0 flex-1 overflow-hidden">
         {architecture ? (
           <SetupEntitySection

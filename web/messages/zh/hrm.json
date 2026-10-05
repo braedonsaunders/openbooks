@@ -2058,7 +2058,8 @@
       "approved": "已批准",
       "pushed": "已推送",
       "closed": "已关闭",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "historical": "历史来源"
     },
     "lineStatus": {
       "pending": "待处理",
@@ -2187,6 +2188,41 @@
       "bandHistory": "历史记录",
       "bandVersions": "查看 {count} 个版本",
       "bandsEmptyFiltered": "没有符合此筛选条件的薪酬范围。"
+    },
+    "dashboard": {
+      "activeWorkers": "在职员工",
+      "activeBands": "当前薪酬区间",
+      "bandHistoryCount": "{count} 个区间版本",
+      "averageHourly": "平均时薪",
+      "averageAnnual": "平均年薪",
+      "wageGroupCount": "{count} 名员工 · 截至 {date}",
+      "actualWages": "员工当前薪酬",
+      "wageCoverage": "{total} 名在职员工中，{covered} 名有唯一的有效薪酬。",
+      "missingWages": "{count} 名员工没有有效薪酬。",
+      "ambiguousWages": "{count} 名员工的薪酬设置重叠，已排除。",
+      "averageHelp": "平均值按币种和薪酬周期汇总员工个人的有效薪酬。缺失或重叠的薪酬不计入平均值。",
+      "reviewWages": "查看员工薪酬",
+      "cyclesCount": "{count} 个薪酬周期",
+      "historicalCount": "{count} 份历史来源审查记录",
+      "reviewCycles": "查看薪酬周期"
+    },
+    "sourceCycle": {
+      "description": "原始薪酬审查证据。提案不代表系统中的批准或工资变更。",
+      "back": "返回薪酬周期",
+      "status": "历史来源",
+      "effectiveDate": "生效日期",
+      "unknownDate": "来源未明确",
+      "recordedDate": "审查记录日期",
+      "hourly": "时薪",
+      "annual": "年薪",
+      "empty": "没有可用的来源行",
+      "division": "部门",
+      "employee": "员工",
+      "sourceKey": "来源标识",
+      "role": "职位",
+      "current": "来源中的当前薪酬",
+      "proposed": "来源中的拟议薪酬",
+      "notes": "来源备注"
     }
   },
   "equity": {

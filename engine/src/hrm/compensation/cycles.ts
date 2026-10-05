@@ -59,7 +59,7 @@ import { requireActorId, requireId, requireOrgId, requireReason } from "../recru
  */
 
 export type CycleKind = "merit" | "promotion" | "adjustment" | "cola";
-export type CycleStatus = "draft" | "open" | "in_review" | "approved" | "pushed" | "closed" | "cancelled";
+export type CycleStatus = "draft" | "open" | "in_review" | "approved" | "pushed" | "closed" | "cancelled" | "historical";
 export type LineStatus = "pending" | "proposed" | "approved" | "rejected" | "pushed";
 
 export interface CycleScope {
@@ -72,7 +72,7 @@ export interface CompCycleDTO {
   readonly name: string;
   readonly kind: CycleKind;
   readonly status: CycleStatus;
-  readonly effectiveOn: string;
+  readonly effectiveOn: string | null;
   readonly budgetBasis: string;
   readonly budgetTotal: string | null;
   readonly currency: string;
@@ -108,7 +108,7 @@ type CycleRow = {
   name: string;
   kind: string;
   status: string;
-  effective_on: string;
+  effective_on: string | null;
   budget_basis: string;
   budget_total: string | null;
   currency: string;
@@ -129,7 +129,7 @@ function toCycleDTO(row: CycleRow): CompCycleDTO {
     name: row.name,
     kind: row.kind as CycleKind,
     status: row.status as CycleStatus,
-    effectiveOn: String(row.effective_on).slice(0, 10),
+    effectiveOn: row.effective_on === null ? null : String(row.effective_on).slice(0, 10),
     budgetBasis: row.budget_basis,
     budgetTotal: row.budget_total === null ? null : String(row.budget_total),
     currency: row.currency,
@@ -441,7 +441,7 @@ export async function listCycles(query: { orgId: string; actorId: string }): Pro
   const actorId = requireActorId(query.actorId);
   const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
   const rows = (await db.execute<CycleRow>(sql`
-    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} order by effective_on desc`)).rows;
+    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} order by effective_on desc nulls last, id`)).rows;
   return rows
     .filter((row) => {
       if (allowed === null) return true;
@@ -1697,7 +1697,7 @@ export async function cancelCycle(query: {
     // Cancelling voids the round for every line: same recheck, or an
     // A-scoped actor cancels B's live round.
     await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
-    if (cycle.status === "pushed" || cycle.status === "closed" || cycle.status === "cancelled") {
+    if (cycle.status === "historical" || cycle.status === "pushed" || cycle.status === "closed" || cycle.status === "cancelled") {
       throw new CompensationError(
         "BAD_STATE",
         `a ${cycle.status} cycle cannot cancel — cancellation belongs to the live round, never to moved payroll`,

@@ -1,3 +1,4 @@
+import { SourceCycleWorkspace } from './SourceCycleWorkspace'
 import { ModuleView } from '../../../../../../components/viewspec/module-view'
 import { compCycleSpec, compCycleTitle, loadCompCyclePage } from './view'
 
@@ -24,5 +25,6 @@ export default async function CompCyclePage({
   const { id } = await params
   const sp = await searchParams
   const data = await loadCompCyclePage(id, sp)
-  return <ModuleView spec={compCycleSpec(data)} data={data} searchParams={sp} trusted />
+  if (data.historical) return <SourceCycleWorkspace cycle={data.cycle} authz={data.authz} searchParams={data.sp} />
+  return <ModuleView spec={compCycleSpec(data.data)} data={data.data} searchParams={sp} trusted />
 }

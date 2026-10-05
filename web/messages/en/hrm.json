@@ -2058,7 +2058,8 @@
       "approved": "Approved",
       "pushed": "Pushed",
       "closed": "Closed",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "historical": "Historical source"
     },
     "lineStatus": {
       "pending": "Pending",
@@ -2187,6 +2188,41 @@
       "bandHistory": "History",
       "bandVersions": "{count, plural, one {View # version} other {View # versions}}",
       "bandsEmptyFiltered": "No pay bands match this filter."
+    },
+    "dashboard": {
+      "activeWorkers": "Active employees",
+      "activeBands": "Current pay bands",
+      "bandHistoryCount": "{count, plural, one {# range version} other {# range versions}}",
+      "averageHourly": "Average hourly wage",
+      "averageAnnual": "Average annual salary",
+      "wageGroupCount": "{count, plural, one {# employee} other {# employees}} · as of {date}",
+      "actualWages": "Current employee wages",
+      "wageCoverage": "{covered} of {total} active employees have one effective wage.",
+      "missingWages": "{count, plural, one {# employee has no effective wage.} other {# employees have no effective wage.}}",
+      "ambiguousWages": "{count, plural, one {# employee has overlapping wages and is excluded.} other {# employees have overlapping wages and are excluded.}}",
+      "averageHelp": "Averages use individual effective wages, grouped by currency and pay basis. Missing and overlapping rates are excluded.",
+      "reviewWages": "Review employee wages",
+      "cyclesCount": "{count, plural, one {# pay cycle} other {# pay cycles}}",
+      "historicalCount": "{count, plural, one {# historical source review} other {# historical source reviews}}",
+      "reviewCycles": "Review pay cycles"
+    },
+    "sourceCycle": {
+      "description": "Original wage-review evidence. Proposals do not represent native approvals or payroll changes.",
+      "back": "Back to pay cycles",
+      "status": "Historical source",
+      "effectiveDate": "Effective date",
+      "unknownDate": "Not established by source",
+      "recordedDate": "Review recorded",
+      "hourly": "Hourly",
+      "annual": "Annual",
+      "empty": "No source rows available",
+      "division": "Division",
+      "employee": "Employee",
+      "sourceKey": "Source identifier",
+      "role": "Role",
+      "current": "Source current wage",
+      "proposed": "Source proposed wage",
+      "notes": "Source notes"
     }
   },
   "equity": {

@@ -2058,7 +2058,8 @@
       "approved": "Aprobado",
       "pushed": "Trasladado",
       "closed": "Cerrado",
-      "cancelled": "Cancelado"
+      "cancelled": "Cancelado",
+      "historical": "Fuente histórica"
     },
     "lineStatus": {
       "pending": "Pendiente",
@@ -2187,6 +2188,41 @@
       "bandHistory": "Historial",
       "bandVersions": "{count, plural, one {Ver # versión} other {Ver # versiones}}",
       "bandsEmptyFiltered": "Ninguna banda salarial coincide con este filtro."
+    },
+    "dashboard": {
+      "activeWorkers": "Empleados activos",
+      "activeBands": "Bandas salariales vigentes",
+      "bandHistoryCount": "{count, plural, one {# versión de rango} many {# versiones de rango} other {# versiones de rango}}",
+      "averageHourly": "Salario medio por hora",
+      "averageAnnual": "Salario anual medio",
+      "wageGroupCount": "{count, plural, one {# empleado} many {# empleados} other {# empleados}} · al {date}",
+      "actualWages": "Salarios actuales de los empleados",
+      "wageCoverage": "{covered} de {total} empleados activos tienen un único salario vigente.",
+      "missingWages": "{count, plural, one {# empleado no tiene un salario vigente.} many {# empleados no tienen un salario vigente.} other {# empleados no tienen un salario vigente.}}",
+      "ambiguousWages": "{count, plural, one {# empleado tiene salarios superpuestos y se excluye.} many {# empleados tienen salarios superpuestos y se excluyen.} other {# empleados tienen salarios superpuestos y se excluyen.}}",
+      "averageHelp": "Los promedios usan salarios individuales vigentes, agrupados por moneda y base salarial. Se excluyen las tarifas ausentes o superpuestas.",
+      "reviewWages": "Revisar salarios",
+      "cyclesCount": "{count, plural, one {# ciclo de compensación} many {# ciclos de compensación} other {# ciclos de compensación}}",
+      "historicalCount": "{count, plural, one {# revisión histórica de las fuentes} many {# revisiones históricas de las fuentes} other {# revisiones históricas de las fuentes}}",
+      "reviewCycles": "Revisar ciclos"
+    },
+    "sourceCycle": {
+      "description": "Evidencia original de la revisión salarial. Las propuestas no representan aprobaciones ni cambios de nómina en el sistema.",
+      "back": "Volver a ciclos",
+      "status": "Fuente histórica",
+      "effectiveDate": "Fecha de vigencia",
+      "unknownDate": "No establecida por la fuente",
+      "recordedDate": "Revisión registrada",
+      "hourly": "Por hora",
+      "annual": "Anual",
+      "empty": "No hay filas de la fuente disponibles",
+      "division": "División",
+      "employee": "Empleado",
+      "sourceKey": "Identificador de origen",
+      "role": "Puesto",
+      "current": "Salario actual en la fuente",
+      "proposed": "Salario propuesto en la fuente",
+      "notes": "Notas de la fuente"
     }
   },
   "equity": {

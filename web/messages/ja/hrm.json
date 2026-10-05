@@ -2058,7 +2058,8 @@
       "approved": "承認済み",
       "pushed": "反映済み",
       "closed": "終了",
-      "cancelled": "取消"
+      "cancelled": "取消",
+      "historical": "過去の原資料"
     },
     "lineStatus": {
       "pending": "未処理",
@@ -2187,6 +2188,41 @@
       "bandHistory": "履歴",
       "bandVersions": "{count} 件の履歴を表示",
       "bandsEmptyFiltered": "このフィルターに一致する給与帯はありません。"
+    },
+    "dashboard": {
+      "activeWorkers": "在籍従業員",
+      "activeBands": "現在の給与帯",
+      "bandHistoryCount": "給与範囲の履歴 {count} 件",
+      "averageHourly": "平均時給",
+      "averageAnnual": "平均年俸",
+      "wageGroupCount": "従業員 {count} 人 · {date} 時点",
+      "actualWages": "従業員の現在の給与",
+      "wageCoverage": "在籍従業員 {total} 人のうち {covered} 人に有効な給与が一意に設定されています。",
+      "missingWages": "{count} 人に有効な給与がありません。",
+      "ambiguousWages": "{count} 人の給与設定が重複しているため、平均から除外しています。",
+      "averageHelp": "平均は従業員ごとの有効な給与を通貨と支給単位別に集計します。未設定および重複する給与は除外します。",
+      "reviewWages": "従業員の給与を確認",
+      "cyclesCount": "給与改定サイクル {count} 件",
+      "historicalCount": "元資料の過去の給与見直し {count} 件",
+      "reviewCycles": "給与改定サイクルを確認"
+    },
+    "sourceCycle": {
+      "description": "給与見直しの原資料です。提案はシステム内の承認や給与変更を意味しません。",
+      "back": "給与改定サイクルに戻る",
+      "status": "過去の原資料",
+      "effectiveDate": "適用開始日",
+      "unknownDate": "原資料で未確定",
+      "recordedDate": "見直し記録日",
+      "hourly": "時給",
+      "annual": "年俸",
+      "empty": "原資料の行がありません",
+      "division": "部門",
+      "employee": "従業員",
+      "sourceKey": "原資料の識別子",
+      "role": "職務",
+      "current": "原資料の現行給与",
+      "proposed": "原資料の提案給与",
+      "notes": "原資料の注記"
     }
   },
   "equity": {

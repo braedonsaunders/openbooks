@@ -1,7 +1,9 @@
 import 'server-only'
 
 import { registeredListTable } from '../../../../../../lib/list/prepared-spec'
+import { getCycle, CompensationError } from '@openbooks/engine/hrm/compensation'
 import { notFound } from 'next/navigation'
+import { requireFeatureEnabled } from '../../../../../../lib/feature-gates'
 import {
   badge,
   column,
@@ -129,15 +131,20 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
 export async function compCycleTitle(cycleId: string): Promise<string> {
   const authz = await compensationAuthz()
   if (!authz) notFound()
-  const data = await loadCompCycleDetail(authz, cycleId, {})
-  if (!data) notFound()
-  return data.title
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
+  try { return (await getCycle({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId })).name }
+  catch (error) { if (error instanceof CompensationError && error.code === 'NOT_FOUND') notFound(); throw error }
 }
 
 export async function loadCompCyclePage(cycleId: string, sp: Record<string, string | undefined>) {
   const authz = await compensationAuthz()
   if (!authz) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
+  let cycle
+  try { cycle = await getCycle({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId }) }
+  catch (error) { if (error instanceof CompensationError && error.code === 'NOT_FOUND') notFound(); throw error }
+  if (cycle.status === 'historical') return { historical: true as const, cycle, authz, sp }
   const data = await loadCompCycleDetail(authz, cycleId, sp)
   if (!data) notFound()
-  return data
+  return { historical: false as const, data }
 }
