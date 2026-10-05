@@ -14,6 +14,16 @@ registerHooks({
         url: 'data:text/javascript,export const db = globalThis.__resolveSeedDb',
       }
     }
+    // Feature state is database-backed too; these cases run a
+    // multi-subsidiary organization, where every registered column keeps its
+    // static default.
+    if (specifier === '../features') {
+      return {
+        shortCircuit: true,
+        format: 'module',
+        url: 'data:text/javascript,export async function subsidiaryFeatureEnabled() { return true }',
+      }
+    }
     return nextResolve(specifier, context)
   },
 })
