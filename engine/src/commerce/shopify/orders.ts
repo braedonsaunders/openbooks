@@ -230,12 +230,15 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
 }
 
 /** Normalize one documented Shopify refund payload against its order. */
-export function normalizeShopifyRefund(payload: unknown, orderExternalId: string): ChannelRefund {
+export function normalizeShopifyRefund(payload: unknown, orderExternalId: string, orderCurrency?: string): ChannelRefund {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     fail("The Shopify refund payload is not an object.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
   }
   const refund = payload as Record<string, unknown>;
-  const currency = (text(refund.currency) ?? "USD").toUpperCase();
+  // Refund deliveries carry no currency of their own: the amounts are in
+  // the order's shop currency, so the caller passes it and only a truly
+  // unknown order falls back to USD (ingest refuses that case by name).
+  const currency = (text(refund.currency) ?? text(orderCurrency) ?? "USD").toUpperCase();
   const refundLineItems = Array.isArray(refund.refund_line_items)
     ? (refund.refund_line_items as Array<Record<string, unknown>>)
     : [];
