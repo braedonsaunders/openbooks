@@ -3722,7 +3722,13 @@
       "sequentialValue": "{count}个单号 · {days}+天",
       "duplicatesValue": "≤{days}天 · ≥{floor}",
       "duplicatesValueUnset": "≤{days}天 · {unset}",
-      "unsetValue": "未设置"
+      "unsetValue": "未设置",
+      "groups": {
+        "detection": "检测阈值",
+        "moneyFloors": "金额下限",
+        "scoringBands": "分数区间",
+        "modelParameters": "模型参数"
+      }
     },
     "coverage": {
       "benfordBold": "本福德",

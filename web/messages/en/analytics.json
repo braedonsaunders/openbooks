@@ -3882,7 +3882,13 @@
       "sequentialValue": "{count} refs · {days}+ days",
       "duplicatesValue": "≤{days} days · ≥{floor}",
       "duplicatesValueUnset": "≤{days} days · {unset}",
-      "unsetValue": "Not set"
+      "unsetValue": "Not set",
+      "groups": {
+        "detection": "Detection thresholds",
+        "moneyFloors": "Money floors",
+        "scoringBands": "Scoring bands",
+        "modelParameters": "Model parameters"
+      }
     },
     "coverage": {
       "intro": "Every check runs across your ",

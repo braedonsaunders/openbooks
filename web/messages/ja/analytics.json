@@ -3722,7 +3722,13 @@
       "sequentialValue": "{count}件 · {days}日以上",
       "duplicatesValue": "{days}日以内 · {floor}以上",
       "duplicatesValueUnset": "{days}日以内 · {unset}",
-      "unsetValue": "未設定"
+      "unsetValue": "未設定",
+      "groups": {
+        "detection": "検出のしきい値",
+        "moneyFloors": "金額の下限",
+        "scoringBands": "スコア帯",
+        "modelParameters": "モデルパラメータ"
+      }
     },
     "coverage": {
       "benfordBold": "ベンフォード",
