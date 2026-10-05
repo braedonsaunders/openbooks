@@ -206,6 +206,16 @@ export async function accruePayoutsInTransit(
         continue;
       }
       const subsidiaryId: string = batch.subsidiary_id ?? ctx.rootId;
+      const functional = ctx.byId.get(subsidiaryId)?.baseCurrency;
+      if (batch.currency !== functional) {
+        // The accrual reclasses the payout amount as booked; a payout in a
+        // foreign currency would be booked as if it were functional currency.
+        result.skipped.push({
+          batchId: batch.id,
+          reason: `payout currency ${batch.currency} differs from the subsidiary's functional currency ${functional ?? "(unknown)"}; the in-transit reclass covers functional-currency payouts only, and the settlement posting books this deposit at its evidenced payout rate`,
+        });
+        continue;
+      }
       await validateSettlementPostingAccounts(
         orgId,
         [

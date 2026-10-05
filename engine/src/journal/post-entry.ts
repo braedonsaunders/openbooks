@@ -119,6 +119,8 @@ type PreparedLine = PostEntryLineInput & {
   txnAmount: string;
   fxRate: string;
   lineNumber: number;
+  /** Whether the caller stated the transaction amount and rate itself. */
+  fxStated: boolean;
 };
 
 const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
@@ -224,6 +226,7 @@ export async function postEntry(
       txnAmount: line.txnAmount ?? line.amount,
       fxRate: line.fxRate ?? "1",
       lineNumber,
+      fxStated: line.txnAmount != null && line.fxRate != null,
     };
   });
 
@@ -396,6 +399,7 @@ async function writeEntry(
       memo: leg.memo,
       extraDims: leg.extraDims,
       lineNumber: nextLineNumber,
+      fxStated: true,
     });
   }
 
@@ -410,13 +414,25 @@ async function writeEntry(
 
   // Entity guards: the entry and every leg reference subsidiaries of this org.
   const subsidiaryIds = [...new Set([input.subsidiaryId, ...lines.map((line) => line.subsidiaryId!)])];
-  const foundSubs = (await executor.execute<{ id: string }>(sql`
-    select id from subsidiaries
+  const foundSubs = (await executor.execute<{ id: string; base_currency: string }>(sql`
+    select id, base_currency from subsidiaries
      where org_id = ${orgId} and id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`)).rows;
   if (foundSubs.length !== subsidiaryIds.length) {
     const found = new Set(foundSubs.map((row) => row.id));
     const missing = subsidiaryIds.find((id) => !found.has(id));
     fail(`journal entry ${input.entryNumber}: subsidiary ${missing} does not exist in this organization`);
+  }
+  // A line in a currency other than its subsidiary's functional currency must
+  // state its transaction amount and rate. Defaulting them to the base amount
+  // at rate 1 would record a foreign-currency balance equal to the functional
+  // amount — a fabricated exposure that revaluation would then remeasure.
+  const functionalBySub = new Map(foundSubs.map((row) => [row.id, row.base_currency]));
+  for (const line of lines) {
+    const functional = functionalBySub.get(line.subsidiaryId);
+    if (functional && line.currency !== functional && !line.fxStated)
+      fail(
+        `journal entry ${input.entryNumber} line ${line.lineNumber}: ${line.currency} differs from the subsidiary's functional currency ${functional} — supply the transaction amount and the exchange rate for this line`,
+      );
   }
 
   // Account guards: every leg posts to an existing, active, non-summary
