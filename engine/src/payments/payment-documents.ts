@@ -13,11 +13,27 @@ import { openItemsForParty, loadPaymentDocument } from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
 export { isPaymentKind, lockEditablePaymentDocument };
 const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
   customer_payment: "RCPT-",
 };
+
+/**
+ * A stored-value tender resolved at draft time. The code itself is never
+ * persisted — only the account it resolved to — and posting re-locks the
+ * account and re-verifies the balance, so a draft snapshot can never
+ * overspend a balance that moved since.
+ */
+export interface StoredValueTenderSnapshot {
+  accountId: string;
+  liabilityAccountId: string;
+  amount: string;
+  codeLast4: string;
+  kind: "gift_card" | "store_credit";
+}
 
 
 export async function nextNumber(orgId: string, kind: string, prefix: string): Promise<string> {
@@ -115,6 +131,12 @@ export async function updateDraftPayment(
     /** Collected cash above the applications, held as an on-account AR credit
      *  on the receipt (customer receipts only). */
     onAccountAmount?: string;
+    /** Stored-value tenders (customer receipts only): gift card codes or the
+     * customer's store credit applied against the receipt. Each tender debits
+     * the stored-value liability instead of bank; the amounts split the
+     * receipt total. Codes resolve to accounts here and re-verify at posting.
+     */
+    storedValueTenders?: Array<{ code: string; amount: string }>;
   },
   userId: string | null,
   orgId: string,
@@ -147,6 +169,7 @@ export async function updateDraftPayment(
       feeAmount?: string;
       feeIncomeAccountId?: string;
       onAccountAmount?: string;
+      storedValueTenders?: StoredValueTenderSnapshot[];
     };
     const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
     const bankAccountId =
@@ -197,6 +220,54 @@ export async function updateDraftPayment(
     const onAccountUnits = persistPaymentMoney(onAccountAmount, "on-account amount");
     if (onAccountUnits < 0n) throw new PaymentError("on-account amount cannot be negative");
     if (onAccountUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("on-account residuals only apply to customer receipts");
+
+    // Stored-value tenders split the receipt total between bank and the
+    // liability: codes resolve to accounts here for early, named refusals,
+    // and posting re-locks each account and re-verifies the balance, so this
+    // snapshot can never overspend money that moved since.
+    let storedValueTenders: StoredValueTenderSnapshot[] = custom.storedValueTenders ?? [];
+    if (patch.storedValueTenders !== undefined) {
+      storedValueTenders = [];
+      if (patch.storedValueTenders.length > 0 && doc.kind !== "customer_payment") {
+        throw new PaymentError("stored-value tenders only apply to customer receipts");
+      }
+      if (patch.storedValueTenders.length > 0 && !(await lockAndCheckOrgFeature(db, doc.orgId, "storedValue"))) {
+        throw new PaymentError("Stored value is disabled; enable storedValue in Company Settings → Features.");
+      }
+      for (const tender of patch.storedValueTenders) {
+        const tenderUnits = persistPaymentMoney(tender.amount, "stored-value tender amount");
+        if (tenderUnits <= 0n) throw new PaymentError("stored-value tender amount must be positive");
+        const resolved = await resolveStoredValueTender(doc.orgId, tender.code);
+        if (!resolved) throw new PaymentError("stored-value code not found; check the code and retry");
+        if (resolved.status !== "active") {
+          throw new PaymentError(
+            `stored-value …${resolved.codeLast4} is ${resolved.status} and cannot be redeemed` +
+            (resolved.status === "frozen" ? "; unfreeze the account before applying it" : ""),
+          );
+        }
+        if (resolved.currency !== doc.currency) {
+          throw new PaymentError(
+            `stored-value …${resolved.codeLast4} is in ${resolved.currency}, but the receipt is in ${doc.currency}`,
+          );
+        }
+        if (resolved.kind === "store_credit" && resolved.customerPartyId !== partyId) {
+          throw new PaymentError("store credit belongs to its customer; select that customer on the receipt before applying it");
+        }
+        if (tenderUnits > resolved.balanceMinor) {
+          throw new PaymentError(
+            `stored-value …${resolved.codeLast4} holds ${fromUnits(resolved.balanceMinor)}; redeem at most that amount`,
+          );
+        }
+        const liabilityAccountId = resolved.liabilityAccountId ?? (await storedValueLiabilityControlAccount(doc.orgId));
+        storedValueTenders.push({
+          accountId: resolved.accountId,
+          liabilityAccountId,
+          amount: fromUnits(tenderUnits),
+          codeLast4: resolved.codeLast4,
+          kind: resolved.kind,
+        });
+      }
+    }
 
     if (bankAccountId) {
       const bank = (await db.execute<{ id: string }>(sql`
@@ -266,6 +337,18 @@ export async function updateDraftPayment(
     // and applications. Do not "fix" total to the gross: cash forecasting
     // depends on it.
     const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits + onAccountUnits);
+    // Stored-value tenders split the receipt total: the bank line carries
+    // the cash remainder, one line per tender debits the liability. Tenders
+    // past the total would drive the bank leg negative, so they are refused
+    // here instead of posting a negative cash receipt.
+    const svTotal = sum(storedValueTenders.map((tender) => tender.amount));
+    if (cmp(svTotal, total) > 0) {
+      throw new PaymentError(`stored-value tenders ${svTotal} exceed the receipt total ${total}`);
+    }
+    const bankPortion = fromUnits(toUnits(total) - toUnits(svTotal));
+    if (!isZero(bankPortion) && !bankAccountId && storedValueTenders.length > 0) {
+      throw new PaymentError("select a bank account for the cash remainder of a split-tender receipt");
+    }
 
     await db.transaction(async (tx) => {
       // The header was locked before reading the fields merged above. Check
@@ -286,15 +369,28 @@ export async function updateDraftPayment(
         throw new PaymentRevisionConflictError();
       }
       await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`);
-      if (bankAccountId && !isZero(total)) {
+      let lineNumber = 1;
+      if (bankAccountId && !isZero(bankPortion)) {
         await tx.insert(schema.documentLines).values({
           orgId: doc.orgId,
           documentId: id,
-          lineNumber: 1,
+          lineNumber: lineNumber++,
           accountId: bankAccountId,
           quantity: "1",
-          unitPrice: total,
-          amount: total,
+          unitPrice: bankPortion,
+          amount: bankPortion,
+          taxAmount: "0",
+        });
+      }
+      for (const tender of storedValueTenders) {
+        await tx.insert(schema.documentLines).values({
+          orgId: doc.orgId,
+          documentId: id,
+          lineNumber: lineNumber++,
+          accountId: tender.liabilityAccountId,
+          quantity: "1",
+          unitPrice: tender.amount,
+          amount: tender.amount,
           taxAmount: "0",
         });
       }
@@ -304,7 +400,7 @@ export async function updateDraftPayment(
           document_date = coalesce(${patch.documentDate ?? null}, document_date),
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount })}::jsonb,
+          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}

@@ -182,6 +182,8 @@ const RECEIPT_EXEMPT_ITEM_KINDS: ReadonlySet<string> = new Set([
   "labor",
   "absence",
   "discount",
+  // A gift card is a liability sale, never stocked goods.
+  "gift_card",
 ]);
 
 const receiptExemptItemKindsSql = sql.join(

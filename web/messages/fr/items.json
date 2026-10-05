@@ -35,7 +35,8 @@
     "labor": "Main-d’œuvre",
     "absence": "Absence",
     "discount": "Remise",
-    "equipment_charge": "Frais d’équipement"
+    "equipment_charge": "Frais d’équipement",
+    "gift_card": "Carte cadeau"
   },
   "kindDescriptions": {
     "service": "Travail ou expertise vendu sans suivi de stock physique.",
@@ -47,7 +48,8 @@
     "equipment_charge": "Utilisation facturable d’équipement possédé ou loué.",
     "labor": "Temps travaillé avec tarification et coûts de paie.",
     "absence": "Absence payée ou non payée enregistrée dans le temps.",
-    "discount": "Réduction appliquée à une ligne ou au total."
+    "discount": "Réduction appliquée à une ligne ou au total.",
+    "gift_card": "Une vente de valeur stockée : comptabilisée au passif, jamais en produits, et émet un code utilisable à la comptabilisation."
   },
   "drawer": {
     "tabs": { "overview": "Vue d’ensemble", "pricing": "Tarification", "accounting": "Comptabilité", "costing": "Inventaire", "revenue": "Comptabilisation des produits" },

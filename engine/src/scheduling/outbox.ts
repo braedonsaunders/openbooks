@@ -82,10 +82,11 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "property_billing",
   "fx_providers",
   "saas_metrics",
-  "usage_rating",
+  "stored_value_breakage",
   "stripe_billing_import",
   "autopay_collection",
   "webhook_delivery",
+  "usage_rating",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -631,6 +632,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "webhook_delivery") {
     const { runWebhookDeliveryScan } = await import("../webhooks/deliver.ts");
     await runWebhookDeliveryScan();
+    return;
+  }
+  if (row.kind === "stored_value_breakage") {
+    const { runStoredValueBreakage } = await import("../stored-value/breakage.ts");
+    const result = await runStoredValueBreakage();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "stored value",
+      noticeKind: "stored_value_breakage_scan_failed",
+      href: "/stored-value",
+      remedy: "Review stored-value programs and account configuration in Stored value; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === ALLOCATION_RUN_OUTBOX_KIND) {

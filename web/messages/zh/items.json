@@ -35,7 +35,8 @@
     "labor": "人工",
     "absence": "缺勤",
     "discount": "折扣",
-    "equipment_charge": "设备收费"
+    "equipment_charge": "设备收费",
+    "gift_card": "礼品卡"
   },
   "kindDescriptions": {
     "service": "不跟踪实物库存的工作或专业服务。",
@@ -47,7 +48,8 @@
     "equipment_charge": "自有或租用设备的可计费使用。",
     "labor": "具有人工定价和工资成本行为的工作时间。",
     "absence": "在工时中记录的带薪或无薪离岗时间。",
-    "discount": "应用于其他行或交易总额的减免。"
+    "discount": "应用于其他行或交易总额的减免。",
+    "gift_card": "储值销售：记入负债而非收入，过账时生成可兑换代码。"
   },
   "drawer": {
     "tabs": { "overview": "概览", "pricing": "定价", "accounting": "会计", "costing": "库存", "revenue": "收入确认" },

@@ -35,7 +35,8 @@
     "labor": "Mano de obra",
     "absence": "Ausencia",
     "discount": "Descuento",
-    "equipment_charge": "Cargo de equipo"
+    "equipment_charge": "Cargo de equipo",
+    "gift_card": "Tarjeta regalo"
   },
   "kindDescriptions": {
     "service": "Trabajo o experiencia vendidos sin controlar existencias físicas.",
@@ -47,7 +48,8 @@
     "equipment_charge": "Uso facturable de equipos propios o alquilados.",
     "labor": "Tiempo trabajado con precios de mano de obra y costos de nómina.",
     "absence": "Tiempo libre pagado o no pagado registrado en horas.",
-    "discount": "Una reducción aplicada a otra línea o al total."
+    "discount": "Una reducción aplicada a otra línea o al total.",
+    "gift_card": "Una venta de saldo prepago: se registra en el pasivo, nunca en ingresos, y al contabilizar emite un código canjeable."
   },
   "drawer": {
     "tabs": { "overview": "Resumen", "pricing": "Precios", "accounting": "Contabilidad", "costing": "Inventario", "revenue": "Reconocimiento de ingresos" },

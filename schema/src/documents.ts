@@ -646,7 +646,7 @@ export const items = pgTable(
     id: id(),
     orgId: orgRef(),
     kind: text("kind", {
-      enum: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount"],
+      enum: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount", "gift_card"],
     }).notNull(),
     code: text("code"),
     name: text("name").notNull(),

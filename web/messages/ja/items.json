@@ -35,7 +35,8 @@
     "labor": "労務",
     "absence": "欠勤",
     "discount": "値引き",
-    "equipment_charge": "設備使用料"
+    "equipment_charge": "設備使用料",
+    "gift_card": "ギフトカード"
   },
   "kindDescriptions": {
     "service": "物理在庫を追跡せずに販売する作業または専門知識。",
@@ -47,7 +48,8 @@
     "equipment_charge": "所有またはレンタル設備の請求可能な利用。",
     "labor": "労務料金と給与原価を持つ実労時間。",
     "absence": "勤怠に記録する有給または無給の休暇。",
-    "discount": "他の行または取引合計に適用する値引き。"
+    "discount": "他の行または取引合計に適用する値引き。",
+    "gift_card": "ストアドバリュー販売：収益ではなく負債に計上し、計上時に利用可能なコードを発行する。"
   },
   "drawer": {
     "tabs": { "overview": "概要", "pricing": "価格", "accounting": "会計", "costing": "在庫", "revenue": "収益認識" },

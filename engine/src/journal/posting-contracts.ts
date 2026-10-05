@@ -115,6 +115,20 @@ export interface PostingDeps {
    * return journal debits carried cost here, leaving only policy variance.
    */
   inventoryReturnOffsetByLine?: Map<string, string>;
+  /**
+   * document_line id → stored-value liability account, for customer_invoice
+   * lines whose item is a gift card. Such lines credit the liability instead
+   * of income; engine/src/stored-value mints the redeemable account in the
+   * post-commit effect. Resolved lazily by postDocument for customer_invoice
+   * documents.
+   */
+  storedValueLiabilityByLine?: Map<string, string>;
+  /**
+   * Liability account for a "refund to store credit" customer_credit, which
+   * credits store-credit liability instead of AR. Resolved lazily by
+   * postDocument when the memo carries a store-credit program.
+   */
+  storeCreditLiabilityAccountId?: string;
 }
 
 export interface TaxPostingComponent {

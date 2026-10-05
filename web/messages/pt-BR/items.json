@@ -35,7 +35,8 @@
     "labor": "Mão de obra",
     "absence": "Ausência",
     "discount": "Desconto",
-    "equipment_charge": "Cobrança de equipamento"
+    "equipment_charge": "Cobrança de equipamento",
+    "gift_card": "Cartão-presente"
   },
   "kindDescriptions": {
     "service": "Trabalho ou conhecimento vendido sem controle de estoque físico.",
@@ -47,7 +48,8 @@
     "equipment_charge": "Uso faturável de equipamento próprio ou alugado.",
     "labor": "Tempo trabalhado com preços de mão de obra e custos de folha.",
     "absence": "Tempo de ausência pago ou não pago registrado nas horas.",
-    "discount": "Redução aplicada a outra linha ou ao total."
+    "discount": "Redução aplicada a outra linha ou ao total.",
+    "gift_card": "Uma venda de valor armazenado: registra no passivo, nunca na receita, e emite um código resgatável ao contabilizar."
   },
   "drawer": {
     "tabs": { "overview": "Visão geral", "pricing": "Preços", "accounting": "Contabilidade", "costing": "Estoque", "revenue": "Reconhecimento de receita" },

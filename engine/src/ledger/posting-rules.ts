@@ -323,10 +323,13 @@ export const RULES: Record<string, RuleFn> = {
         {accountId:agency.accountId,amount:negMoney(agency.vendorAmount),memo:"Vendor pass-through consideration",partyId:l.partyId ?? doc.partyId,...dims(doc,l)}];
       return [{
       // Rev-rec lines credit deferred revenue; recognition drains it over the
-      // term. All other lines credit income directly.
+      // term. Gift card lines credit the stored-value liability instead of
+      // revenue or deferred revenue: the consideration is owed back to the
+      // customer, so it must never read as earned. All other lines credit
+      // income directly.
       accountId: resolvedLineAccount(
         l,
-        deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
+        deps.storedValueLiabilityByLine?.get(l.id) ?? deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
       ),
       amount: negMoney(l.amount), // credit income / deferred revenue
       memo: l.description,
@@ -418,12 +421,22 @@ export const RULES: Record<string, RuleFn> = {
     if (!isZero(fee) && !feeAccountId)
       throw new PostingError("customer payment fee income account is required");
     const receivable = addMoney(total, negMoney(fee));
+    // One debit leg per tender account: the bank/cash lines debit bank, and
+    // stored-value tender lines debit the liability (a redemption, not a cash
+    // receipt). Single-tender payments keep exactly one leg on the first
+    // line's account, as before.
+    const debitByAccount = new Map<string, ReturnType<typeof lineTotal>[]>();
+    for (const line of lines) {
+      const accountId = line.accountId ?? deps.control.bank;
+      debitByAccount.set(accountId, [...(debitByAccount.get(accountId) ?? []), lineTotal(line)]);
+    }
+    const debits: KernelLine[] = [...debitByAccount].map(([accountId, amounts]) => ({
+      accountId,
+      amount: sumMoney(amounts),
+      ...dims(doc),
+    }));
     return [
-      {
-        accountId: lines[0]?.accountId ?? deps.control.bank,
-        amount: total,
-        ...dims(doc),
-      }, // debit bank
+      ...debits,
       // The AR leg is an OPEN ITEM: it settles the invoices it paid (from_line).
       {
         accountId: controlOverride(doc) ?? deps.control.ar,
@@ -758,15 +771,26 @@ export const RULES: Record<string, RuleFn> = {
     }));
     const tax = salesTaxLines(doc, lines, deps, -1);
     const total = sumMoney([...income, ...tax].map((l) => l.amount));
-    return [
-      {
+    // A "refund to store credit" memo credits the store-credit liability
+    // instead of AR: no open item is created, and the stored-value effect
+    // mints the customer account against this journal.
+    const creditLeg: KernelLine = deps.storeCreditLiabilityAccountId
+      ? {
+        accountId: deps.storeCreditLiabilityAccountId,
+        amount: negMoney(total), // credit store-credit liability
+        partyId: doc.partyId,
+        ...dims(doc),
+      }
+      : {
         accountId: controlOverride(doc) ?? deps.control.ar,
         amount: negMoney(total), // credit AR (total is positive)
         partyId: doc.partyId,
         dueDate: doc.dueDate,
         isOpenItem: true,
         ...dims(doc),
-      },
+      };
+    return [
+      creditLeg,
       ...income,
       ...tax,
     ];
