@@ -198,3 +198,34 @@ test('channel-scoped promotion refuses the wrong channel', { skip: !DB }, async 
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('buy X get Y frees units only from complete buy-plus-get groups', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    for (const [code, buyQuantity, getQuantity] of [['BOGO', 1, 1], ['B2G1', 2, 1]] as const) {
+      const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+        code, name: code, kind: 'buy_x_get_y', buyQuantity, getQuantity, discountAccountId: org.accounts.revenue,
+      })))
+      await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
+    }
+    const apply = async (code: string, quantity: string) => {
+      const documentId = await withOrg(org.orgId, () => draftSale(org, [
+        { itemId: org.items.fifo, quantity, unitPrice: '10', amount: String(BigInt(quantity) * 10n) },
+      ]))
+      return withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+        documentId, code, allowedSubsidiaryIds: null,
+      })))
+    }
+    // One unit is the qualifying purchase itself: nothing is free yet.
+    await assert.rejects(apply('BOGO', '1'), (error: unknown) => error instanceof PromotionRefusal
+      && error.code === 'below_threshold' && /BOGO needs at least 2 units/.test(error.message) && /2 or more/.test(error.remedy ?? ''))
+    for (const [quantity, freeMinor] of [['2', '1000'], ['3', '1000'], ['4', '2000']]) {
+      assert.equal((await apply('BOGO', quantity)).discountMinor, freeMinor, `buy 1 get 1 on ${quantity} units`)
+    }
+    assert.equal((await apply('B2G1', '3')).discountMinor, '1000')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

@@ -592,15 +592,17 @@ function buyXGetYShares(promotion: Promotion, lines: EligibleLine[]): bigint[] {
   const get = promotion.getQuantity!;
   const wholeUnits = lines.map((line) => line.quantity_units / 10_000n);
   const totalUnits = wholeUnits.reduce((sum, units) => sum + units, 0n);
-  const freeUnits = (totalUnits / BigInt(buy)) * BigInt(get) > totalUnits
-    ? totalUnits
-    : (totalUnits / BigInt(buy)) * BigInt(get);
+  // Each free unit is earned by units the customer pays for, so a complete
+  // group is buy + get units: buy 1 get 1 frees one of two units, never the
+  // single unit that qualified for the offer.
+  const groupSize = buy + get;
+  const freeUnits = (totalUnits / BigInt(groupSize)) * BigInt(get);
   if (freeUnits <= 0n) {
     throw refusal(
-      `The document needs at least ${buy} units for this promotion`,
+      `Promotion ${promotion.code} needs at least ${groupSize} units on the document (buy ${buy}, get ${get} free)`,
       "below_threshold",
       422,
-      `Add ${buy} or more units before applying the promotion`,
+      `Add units until the document has ${groupSize} or more before applying the promotion`,
     );
   }
   // Cheapest whole units go free first: deterministic across postings.
