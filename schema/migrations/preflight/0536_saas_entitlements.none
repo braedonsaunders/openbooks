@@ -1,0 +1,1 @@
+Creates four new empty tables (saas_features, subscription_plan_version_entitlements, subscription_entitlement_overrides, subscription_entitlement_snapshots) with foreign keys to existing tables. No existing row is read, rewritten, or deleted, so there is nothing to probe before install.
