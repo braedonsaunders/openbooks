@@ -69,7 +69,7 @@ export interface PayRunCalculation {
   net: string;
   employerCost: string;
   /**
-   * The stubs the calculation produced, present ONLY for a `simulate` run.
+   * The stubs the calculation produced, present for dry runs and simulations.
    * Read back inside the transaction that is about to be rolled back, which is
    * the whole point: the caller gets the calculation's real output without any
    * of it surviving.
@@ -627,12 +627,12 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       refusalAcknowledgement: null, refusalsAcknowledged: true,
     };
     // A dry run has done all the real work; throwing here discards the stubs
-    // it wrote so the operator's preview costs the run nothing. A simulation is
-    // a dry run whose OUTPUT is the point, so the stubs are read back first —
+    // it wrote so the operator's preview costs the run nothing. Preview stubs
+    // are read back first so individual pay and deductions can be reviewed —
     // inside this transaction, immediately before it is thrown away. Neither
     // persists anything, so the acknowledgement state they report is the
     // stored one, bound to the stored refusal set.
-    if (input.simulate) {
+    if (input.simulate || input.dryRun) {
       result.stubs = await captureCalculatedStubs(
         tx,
         orgId,
