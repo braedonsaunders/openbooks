@@ -21,7 +21,7 @@ export function ImportCommissionsButton({
   expenseAccounts,
   baseCurrency,
 }: {
-  expenseAccounts: { id: string; code: string; name: string }[];
+  expenseAccounts: { value: string; label: string }[];
   baseCurrency: string;
 }) {
   const t = useTranslations("contractCosts");
@@ -92,7 +92,7 @@ export function ImportCommissionsButton({
               <label className="text-sm font-medium">{t("import.expenseAccount")}</label>
               <SearchSelect
                 value={expenseAccountId}
-                options={expenseAccounts.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                options={expenseAccounts}
                 onChange={(v) => setExpenseAccountId(v ?? "")}
                 ariaLabel={t("import.expenseAccount")}
               />

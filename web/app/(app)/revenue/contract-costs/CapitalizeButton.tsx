@@ -18,7 +18,7 @@ export function CapitalizeButton({
   baseCurrency,
 }: {
   contracts: { id: string; number: string; customer: string }[];
-  expenseAccounts: { id: string; code: string; name: string }[];
+  expenseAccounts: { value: string; label: string }[];
   policy: { assetAccountId: string | null } | null;
   baseCurrency: string;
 }) {
@@ -99,7 +99,7 @@ export function CapitalizeButton({
               <label className="text-sm font-medium">{t("capitalize.expenseAccount")}</label>
               <SearchSelect
                 value={expenseAccountId}
-                options={expenseAccounts.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                options={expenseAccounts}
                 onChange={(v) => setExpenseAccountId(v ?? "")}
                 ariaLabel={t("capitalize.expenseAccount")}
               />

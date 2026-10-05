@@ -20,6 +20,7 @@ import { db } from "@openbooks/engine/platform/database";
 import { isUuid, pickString } from "../../../../lib/list-params";
 import { can, requirePermission } from "../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadAccounts } from "../../../../lib/setup/ref-options";
 import type { ContractCostDrawer } from "./ContractCostDrawer";
 
 type ContractCostDrawerProps = Parameters<typeof ContractCostDrawer>[0];
@@ -77,7 +78,7 @@ export interface ContractCostsData {
   activeAssets: number;
   attention: ContractCostAttentionRow[];
   contracts: { id: string; number: string; customer: string }[];
-  expenseAccounts: { id: string; code: string; name: string }[];
+  expenseAccounts: { value: string; label: string }[];
   policy: {
     basis: string;
     practicalExpedient: boolean;
@@ -236,12 +237,12 @@ export async function loadContractCosts(
      where c.org_id = ${orgId} and c.status = 'active'
      order by c.contract_number`)).rows;
 
-  const expenseAccounts = (await db.execute<{ id: string; code: string; name: string }>(sql`
-    select a.id, a.code, a.name
-      from accounts a
-      join account_types t on t.code = a.type
-     where a.org_id = ${orgId} and a.is_posting and t.category in ('expense', 'liability')
-     order by a.code`)).rows;
+  // The capitalize and import pickers offer the same postable accounts every
+  // company-settings picker offers, narrowed to the expense and liability
+  // types an original commission expense can sit in.
+  const expenseAccounts = (await loadAccounts(orgId))
+    .filter((a) => a.accountType?.startsWith("expense") || a.accountType?.startsWith("liability"))
+    .map((a) => ({ value: a.value, label: a.label }));
 
   const policy = (await db.execute<{
     basis: string;
