@@ -269,6 +269,8 @@ export interface VariantRecord {
   defaultCost: string | null;
   isActive: boolean;
   onHand: string | null;
+  /** Most recently updated identifier, for the grid's barcode cell. */
+  barcode: { value: string; kind: string } | null;
 }
 
 export interface ItemFamilyDetail extends ItemFamilyRecord {
@@ -851,6 +853,60 @@ export interface GenerateVariantsInput {
   codePattern?: string | null;
 }
 
+export interface MissingCombination {
+  optionValues: OptionCombination;
+  code: string;
+  name: string;
+  exists: boolean;
+}
+
+/**
+ * Consequence before commit: the missing combinations with the exact codes
+ * and names generation would create, so the drawer previews them before the
+ * operator confirms. Read-only; generation still locks and rechecks.
+ */
+export async function previewGenerateVariants(
+  orgId: string,
+  familyId: string,
+  pattern: string | null = null,
+): Promise<{ familyId: string; familyCode: string; familyName: string; missing: MissingCombination[]; existing: number }> {
+  return db.transaction(async (tx) => {
+    await assertItemVariantsReadable(tx, orgId);
+    const row = (await tx.execute<FamilyRow>(sql`
+      select id, code, name, description, category, kind, default_unit, default_rate, status
+        from item_families
+       where org_id = ${orgId} and id = ${familyId}`)).rows[0];
+    if (!row) {
+      throw new ItemFamilyError(
+        "the product family is not in this organization",
+        "family_not_found",
+        "choose a family from the item catalog of this organization",
+        422,
+      );
+    }
+    const options = await loadOptions(tx, orgId, familyId);
+    if (options.length === 0) return { familyId, familyCode: row.code, familyName: row.name, missing: [], existing: 0 };
+    const codePattern = pattern ?? DEFAULT_VARIANT_CODE_PATTERN;
+    const optionNames = options.map((option) => option.name);
+    const existing = await loadVariants(tx, orgId, familyId);
+    const existingKeys = new Set(
+      existing.map((variant) => combinationKey((variant.option_values ?? {}) as OptionCombination, optionNames)),
+    );
+    const missing = cartesianCombinations(options)
+      .filter((combination) => !existingKeys.has(combinationKey(combination, optionNames)))
+      .map((combination) => {
+        const valuesInOrder = optionNames.map((name) => combination[name]!);
+        return {
+          optionValues: combination,
+          code: renderVariantCode(codePattern, row.code, valuesInOrder),
+          name: variantDisplayName(row.name, valuesInOrder),
+          exists: false,
+        };
+      });
+    return { familyId, familyCode: row.code, familyName: row.name, missing, existing: existing.length };
+  });
+}
+
 export interface GeneratedVariant {
   id: string;
   code: string;
@@ -1352,6 +1408,13 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
          where org_id = ${orgId} and item_id = any(${uuidArray(variants.map((variant) => variant.id))}::uuid[])
          group by item_id`)).rows.map((entry) => [entry.item_id, entry.quantity] as [string, string]),
     );
+    const barcodes = variants.length === 0 ? new Map<string, { value: string; kind: string }>() : new Map(
+      (await tx.execute<{ item_id: string; value: string; kind: string }>(sql`
+        select distinct on (item_id) item_id, value, kind
+          from item_identifiers
+         where org_id = ${orgId} and item_id = any(${uuidArray(variants.map((variant) => variant.id))}::uuid[])
+         order by item_id, updated_at desc`)).rows.map((entry) => [entry.item_id, { value: entry.value, kind: entry.kind }] as [string, { value: string; kind: string }]),
+    );
     return {
       ...toFamilyRecord(row),
       options,
@@ -1366,6 +1429,7 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
         defaultCost: variant.default_cost,
         isActive: variant.is_active,
         onHand: onHand.get(variant.id) ?? "0",
+        barcode: barcodes.get(variant.id) ?? null,
       })),
     };
   });
