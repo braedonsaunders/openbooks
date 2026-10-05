@@ -90,7 +90,8 @@ export function TrendChart({
 }: {
   labels: string[]
   series: { name: string; data: number[]; color?: string; pct?: boolean }[]
-  height?: number
+  /** Pixel height, or 'fill' to fill a sized parent (dashboard widgets). */
+  height?: ChartHeight
   area?: boolean
   pctAxis?: boolean
   /** Cap x-axis ticks to a data-fixed stride; unset keeps ECharts auto. */

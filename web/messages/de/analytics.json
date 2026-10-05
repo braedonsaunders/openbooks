@@ -334,6 +334,46 @@
       "noInterestExpense": "Kein Zinsaufwand",
       "unavailable": "Keine Daten verfügbar",
       "perEmployees": "{revenue} / {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "Ziel Bruttomarge (%)",
+          "help": "Richtwert für die Bewertung der Bruttomarge"
+        },
+        "operatingMarginTarget": {
+          "label": "Ziel operative Marge (%)",
+          "help": "Richtwert für die Bewertung der operativen Marge"
+        },
+        "ebitdaMarginTarget": {
+          "label": "Ziel EBITDA-Marge (%)",
+          "help": "Richtwert für die Bewertung der EBITDA-Marge"
+        },
+        "netMarginTarget": {
+          "label": "Ziel Nettomarge (%)",
+          "help": "Richtwert für die Rentabilität nach allen Kosten"
+        },
+        "roaTarget": {
+          "label": "Ziel Gesamtkapitalrendite (%)",
+          "help": "Richtwert für die ROA-Bewertung (erfordert Bilanzdaten)"
+        },
+        "roeTarget": {
+          "label": "Ziel Eigenkapitalrendite (%)",
+          "help": "Richtwert für die ROE-Bewertung (erfordert Bilanzdaten)"
+        },
+        "roicTarget": {
+          "label": "Ziel Rendite auf das investierte Kapital (%)",
+          "help": "Richtwert für die ROIC-Bewertung (erfordert Bilanzdaten)"
+        },
+        "revenuePerEmployee": {
+          "label": "Umsatz pro Mitarbeiter ({currency})",
+          "help": "Richtwert für die Produktivität der Belegschaft"
+        },
+        "gpPerEmployee": {
+          "label": "Bruttogewinn pro Mitarbeiter ({currency})",
+          "help": "Richtwert für die Produktivität der Belegschaft"
+        }
+      }
     }
   },
   "customer": {
@@ -2580,5 +2620,21 @@
       "4thWeek": "4. Woche",
       "distributed": "Verteilt"
     }
+  },
+  "configEditor": {
+    "title": "Schwellenwerte",
+    "hint": "Pro Organisation – alle Registerkarten werden beim Speichern neu berechnet",
+    "default": "Standard {value}",
+    "notSet": "Nicht festgelegt",
+    "on": "An",
+    "off": "Aus",
+    "save": "Konfiguration speichern",
+    "reset": "Auf Standardwerte zurücksetzen",
+    "readOnly": "Schreibgeschützt – Änderungen erfordern die Einrichtungsberechtigung mit vollem Unternehmensumfang.",
+    "saved": "Gespeichert – wird neu berechnet…",
+    "conflict": "Diese Konfiguration wurde geändert, nachdem Sie sie geöffnet haben – die aktuellen Werte werden angezeigt; nehmen Sie Ihre Änderung erneut vor und speichern Sie.",
+    "forbidden": "Zum Speichern ist die Einrichtungsberechtigung erforderlich.",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "loadFailed": "Die Schwellenwerte konnten nicht geladen werden."
   }
 }

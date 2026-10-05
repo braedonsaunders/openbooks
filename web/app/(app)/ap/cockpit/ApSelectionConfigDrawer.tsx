@@ -17,27 +17,21 @@ import { useDirtyClose } from '../../../../lib/use-dirty-close'
  * forecast model (recurring categories, prediction settings) lives on the
  * Cash cockpit — linked below, not duplicated here.
  *
- * All copy renders from the ap.cockpit.config catalog; the cap label carries
- * the organization's base-currency code from the MoneyProvider (via the
- * cockpit), never a hardcoded currency symbol.
+ * All copy renders from the ap.cockpit.config catalog. The editor loads the
+ * shared cashflow threshold spec itself, so the cap label carries the
+ * presentation currency the amount is stored in, never a hardcoded symbol.
  */
 export function ApSelectionConfigDrawer({
   onClose,
   title,
   description,
-  weeklyCap,
-  restrictToSafe,
   dpo,
-  currencyCode,
   canEdit,
 }: {
   onClose: () => void
   title: string
   description: string
-  weeklyCap: string
-  restrictToSafe: boolean
   dpo: number
-  currencyCode: string
   /** Setup permission with unrestricted scope — the drawer only opens behind
    * the gated gear, and the editor must never assume it. */
   canEdit: boolean
@@ -65,17 +59,7 @@ export function ApSelectionConfigDrawer({
   return (
     <Drawer open onClose={() => void closeGuard.close()} size="lg" title={title} description={description} bodyClassName="overflow-y-auto">
       <div className="space-y-5">
-        <ConfigEditor
-          dashboard="cashflow"
-          canEdit={canEdit}
-          onDirtyChange={setEditorDirty}
-          fields={[
-            { key: 'weeklyApCap', label: t('weeklyCapLabel', { currency: currencyCode }), help: t('weeklyCapHelp'), min: 0, max: 100_000_000, step: 1000 },
-            { key: 'restrictToSafe', label: t('restrictLabel'), help: t('restrictHelp'), min: 0, max: 1, step: 1 },
-          ]}
-          values={{ weeklyApCap: weeklyCap, restrictToSafe: restrictToSafe ? 1 : 0 }}
-          defaults={{ weeklyApCap: '0.0000', restrictToSafe: 0 }}
-        />
+        <ConfigEditor dashboard="cashflow" canEdit={canEdit} onDirtyChange={setEditorDirty} />
 
         <Panel title={t('scheduleTitle')} icon={ListOrdered} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">

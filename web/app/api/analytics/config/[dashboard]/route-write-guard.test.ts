@@ -51,7 +51,10 @@ const mockSources = new Map<string, string>([
         const text = sqlText(query)
         state.executed.push(text)
         if (text.includes('for update')) {
-          return { rows: [{ cfg: null, rev: 0 }], rowCount: 1 }
+          return { rows: [{ cfg: null, rev: 0, currency: null }], rowCount: 1 }
+        }
+        if (text.includes('base_currency')) {
+          return { rows: [{ baseCurrency: 'EUR' }], rowCount: 1 }
         }
         if (text.includes('update orgs')) {
           return { rows: [], rowCount: state.updateRowCount }
@@ -75,6 +78,7 @@ const mockSources = new Map<string, string>([
 // green untested.
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/features", "mock:features"],
+  ["../features", "mock:features"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
 ]);
 let dbRealUrl = ''
@@ -83,7 +87,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       const real = nextResolve(specifier, context).url;
-      return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
+      return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1', roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
     }
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
       dbRealUrl = nextResolve(specifier, context).url

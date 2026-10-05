@@ -94,7 +94,7 @@ export function FinancialHealthView({
         {tab === 'budget' && budgetsEnabled ? <BudgetTab data={data} /> : null}
         {tab === 'drivers' ? <DriversTab data={data} onDrill={openAccount} /> : null}
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
-        {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
+        {tab === 'configuration' ? <ConfigurationTab canEdit={canConfigure ?? false} /> : null}
       </div>
       </RecordTabs>
 

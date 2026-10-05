@@ -150,8 +150,8 @@
     "config": {
       "weeklyCapLabel": "Límite semanal de pagos a proveedores ({currency})",
       "weeklyCapHelp": "0 = ilimitado. Con límite, las cuentas por pagar se eligen por vencimiento más antiguo hasta este importe cada semana y el resto se difiere.",
-      "restrictLabel": "Restringir a capacidad segura (0/1)",
-      "restrictHelp": "1 = nunca recomendar pagar más allá del efectivo disponible esa semana (entradas proyectadas − salidas). El excedente se difiere.",
+      "restrictLabel": "Restringir a capacidad segura",
+      "restrictHelp": "Si está activado, nunca recomendar pagar más allá del efectivo disponible esa semana (entradas proyectadas − salidas). El excedente se difiere.",
       "scheduleTitle": "Cómo se programan las facturas",
       "orderLabel": "Orden de selección",
       "orderValue": "Vencimiento más antiguo primero",

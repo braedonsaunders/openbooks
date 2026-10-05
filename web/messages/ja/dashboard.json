@@ -91,7 +91,10 @@
     "ap": "買掛金",
     "ar": "売掛金",
     "personal": "個人",
-    "admin": "管理"
+    "admin": "管理",
+    "ratios": "財務比率",
+    "cash": "資金",
+    "analytics": "分析"
   },
   "catalog": {
     "operatingExpenses": "損益計算書に基づく当月の営業費用。売上原価は含みません。",
@@ -153,7 +156,8 @@
     "closePalette": "閉じる",
     "remove": "ウィジェットを削除",
     "cardMissing": "カードは利用できません",
-    "unknownWidget": "不明なウィジェット: {id}"
+    "unknownWidget": "不明なウィジェット: {id}",
+    "analyticsPreview": "レイアウトを保存すると、ここに最新の数値が表示されます。"
   },
   "palette": {
     "title": "ウィジェット",

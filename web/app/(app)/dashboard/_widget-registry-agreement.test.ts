@@ -1,6 +1,6 @@
 // source-pin-contract: dashboard registry agreement — the widget, render-case, permission and metric-field registries name the same widget set and every widget's copy key exists in English; sets read from the four registry sources, never hand-listed.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import test from 'node:test'
 
 /**
@@ -73,7 +73,13 @@ const metrics = read('./_metrics.ts')
 const widgetIds = literalKeys(registry, 'export const WIDGETS')
 const permissionIds = literalKeys(access, 'const WIDGET_PERMISSIONS')
 const metricFieldIds = literalKeys(metrics, 'const WIDGET_METRIC_FIELDS')
-const renderCases = [...views.matchAll(/^\s*case '([^']+)'/gm)].map((m) => m[1]!)
+// Widgets extracted from an Analytics dashboard render in that dashboard's
+// own widget module (_widget-views-<domain>.tsx), which WidgetCard delegates
+// to — their cases count exactly like WidgetCard's own.
+const domainViews = readdirSync(new URL('.', import.meta.url))
+  .filter((name) => /^_widget-views-[a-z]+\.tsx$/.test(name))
+  .map((name) => read(`./${name}`))
+const renderCases = [views, ...domainViews].flatMap((source) => [...source.matchAll(/^\s*case '([^']+)'/gm)].map((m) => m[1]!))
 
 /**
  * Tiles the grid renders itself instead of through `WidgetCard`.
