@@ -80,6 +80,8 @@ async function mount(
     })
   }
   const doc = dom.window.document
+  const runtimeErrors: string[] = []
+  dom.window.addEventListener('error', (event) => runtimeErrors.push(event.message))
   const { createRoot } = await import('react-dom/client')
   const root = createRoot(doc.getElementById('root')!)
   const calls: FetchCall[] = []
@@ -96,7 +98,7 @@ async function mount(
   }
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages, ui: uiMessages }}>
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ hrm: hrmMessages, common: commonMessages, ui: uiMessages }}>
         <BusinessDateProvider today="2026-09-24">
           <PromptRoot />
           <QualificationDrawer
@@ -143,6 +145,7 @@ async function mount(
       globalThis.requestAnimationFrame = priorFrame
       globalThis.cancelAnimationFrame = priorCancel
       dom.window.close()
+      assert.deepEqual(runtimeErrors, [], 'Qualification controls must handle browser events without runtime errors')
     },
   }
 }
