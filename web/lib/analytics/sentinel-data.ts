@@ -969,7 +969,9 @@ export async function sentinelData(
         having count(*) >= ${SEQUENTIAL_MIN} and count(*) = count(distinct ref_num)
       )
       select 'detail' as src, i.*, coalesce(p.display_name, 'Unknown') as party_name,
-        (select count(*) from islands) as full_count
+        -- The group count applies the same span gate as the display leg:
+        -- islands below the minimum span are not sequential runs.
+        (select count(*) from islands where span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}) as full_count
       from islands i
       left join parties p on p.id = i.party_id and p.org_id = ${orgId}
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
