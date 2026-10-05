@@ -981,17 +981,17 @@ test("employee Benefits owns program assignments, credited service and entitleme
 
 
 test("employee Benefits presents native program and assignment destinations for every relationship", async t => {
-  const assignments = employeeBenefitAssignments([{ id: 'rrsp', name: 'Rassaun RRSP', type: 'retirement' }, { id: 'vac', name: 'Vacation', type: 'time_off' }, { id: 'recognition', name: 'Recognition', type: 'reward' }],
+  const assignments = employeeBenefitAssignments([{ id: 'rrsp', name: 'Retirement savings', type: 'retirement' }, { id: 'vac', name: 'Vacation', type: 'time_off' }, { id: 'recognition', name: 'Recognition', type: 'reward' }],
     ['enrollment', 'vacation_terms', 'membership'].map((nativeKind, index) => ({ id: `assignment-${index}`, nativeKind: nativeKind as 'enrollment' | 'vacation_terms' | 'membership', programId: ['rrsp', 'vac', 'recognition'][index]!, employmentId: 'employment', employeePartyId: EMPLOYEE_ID, employeeName: 'Nadia', status: 'active', effectiveFrom: '2026-01-01', effectiveTo: null })), { type: value => value, status: () => 'Active' });
   const routes = employeeRoutes(); routes['/api/hrm/employee-benefits'] = () => Response.json({ assignments, programs: [], employments: [], enrollments: [], vacation: [], service: [], payroll: false, canManage: false, canReadBanks: false });
   const ui = await renderEmployeeDrawer({ initialTab: 'benefits', grants: { canReadBenefits: true }, fetchHandler: routeFetch(routes) }); t.after(ui.done);
   const navigation: string[] = []; globalThis.__partyRouter!.push = href => navigation.push(href);
   const rows = [...document.querySelectorAll('tbody tr')]; assert.equal(rows.length, 3);
   assert.deepEqual(new Set([...document.querySelectorAll('a[href^="/hrm/benefits?view=programs&program="]')].map(link => link.getAttribute('href'))), new Set(assignments.map(row => row.programHref)));
-  for (const name of ['Rassaun RRSP', 'Recognition', 'Vacation']) assert.ok(document.body.textContent?.includes(name));
+  for (const name of ['Retirement savings', 'Recognition', 'Vacation']) assert.ok(document.body.textContent?.includes(name));
   const programsRail = [...document.querySelectorAll('nav')].find(nav => nav.querySelector('button')?.textContent === en('hrm.employeeBenefits.programs'));
   assert.equal(programsRail?.querySelectorAll('button[aria-pressed]').length, 1, 'only Programs is available without Payroll and bank permissions');
-  for (const [name, expected] of [['Rassaun RRSP', '/parties?benefitPolicyKind=coverage&benefitPolicyRow=assignment-0'], ['Recognition', '/hrm/benefits?view=programs&program=recognition&transactionTab=participants']]) {
+  for (const [name, expected] of [['Retirement savings', '/parties?benefitPolicyKind=coverage&benefitPolicyRow=assignment-0'], ['Recognition', '/hrm/benefits?view=programs&program=recognition&transactionTab=participants']]) {
     await act(async () => rows.find(row => row.textContent?.includes(name!))!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
     assert.equal(navigation.at(-1), expected);
   }

@@ -1,1 +1,1 @@
-Records the explicit standard employer EI multiple (1.4) for existing RP accounts; inserts only, keyed to accounts that have no multiple. No rows are deleted or re-priced, and no new constraints are introduced. No preflight probe is needed.
+Retains the migration ordinal without changing tenant rows or constraints. Country-owned setup defaults are applied by the installed payroll pack in an audited transaction. No data-dependent preflight is needed.

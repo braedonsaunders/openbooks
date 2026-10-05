@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm"
 import { precreatedRolesEnabled, verifyPrecreatedRoles, verifyPrecreatedObjectAccess, verifyRuntimeOwnership } from "./bootstrap-roles.ts"
 import { db, env, longPool, pool, withBypassContext } from "../engine/src/platform/db.ts"
 import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts"
+import { provisionPayrollPackDefaults } from "../engine/src/payroll/run-setup.ts"
 
 async function main(): Promise<void> {
   const historicalMigrations = process.argv.includes("--historical-migrations");
@@ -88,6 +89,8 @@ async function main(): Promise<void> {
         await requireRuntimeLoginRole(runtimeConfig);
         if (bypassConfig) await requireBypassLoginRole(bypassConfig);
         await migrate(historicalMigrations);
+        const payrollOrganizations = await pool.query<{ id: string }>("select id from orgs order by created_at");
+        for (const { id } of payrollOrganizations.rows) await provisionPayrollPackDefaults(id);
         await ensureRuntimeDatabaseRole(runtimeConfig, true);
         // The constrained login owns the schema, so it can converge the
         // host-created bypass login's object grants for tables this run
@@ -168,6 +171,7 @@ async function main(): Promise<void> {
         await ensureRootSubsidiary(orgId);
         await seedRoles(orgId);
         await provisionOrganizationDefaults(orgId);
+        await provisionPayrollPackDefaults(orgId);
       }
       await seedAdmin(primaryOrgId);
       await ensureFirstPlatformAdmin();

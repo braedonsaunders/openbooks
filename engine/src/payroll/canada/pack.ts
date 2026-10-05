@@ -16,6 +16,7 @@ import { RQ_REMITTANCE_SCHEDULE } from "./quebec/remittance.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./rates.ts";
 import { CA_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import { CA_EMPLOYER_FACTS } from "./employer-facts.ts";
+import { provisionCaPayrollDefaults } from "./provision-defaults.ts";
 // HR-13: the CA pack's construction carve-outs (data, beside the pack).
 import { CA_CONSTRUCTION } from "./construction.ts";
 
@@ -57,6 +58,7 @@ const CA_REGIONS: PayrollRegionCoverage = {
 
 export const CA_PAYROLL_PACK: PayrollCountryPack = {
   country: "CA",
+  provisionDefaults: provisionCaPayrollDefaults,
   name: "Canada",
   // CRA (canada.ca, payroll: "Get the social insurance number (SIN) from
   // the individual"): "Employees must obtain and provide to their employer

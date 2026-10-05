@@ -920,7 +920,7 @@ export async function payRunReadiness(
   // payroll_opening_balances is the ONLY carrier of statutory year-to-date
   // accumulated before OpenBooks (see engine/src/payroll/opening-balances.ts).
   // Without it the engine restarts every ceiling at zero, so an employer
-  // adopting mid-year re-withholds up to a second full annual CPP/EI maximum
+  // adopting mid-year re-withholds up to a second full annual contribution maximum
   // and every T4/W-2 box understates the year.
   //
   // WARNING, never a blocker: a genuinely new employer's first payroll has no
@@ -1369,7 +1369,7 @@ export async function payRunStaleness(
            -- read them fresh on every statutory pass, so an edit after
            -- Calculate restates the levies. Scoped to the countries on the
            -- run's schedule: a US rate edit is not a Canadian run's news.
-           -- Pack-declared employer facts ride the same arm: the EI employer
+           -- Pack-declared employer facts ride the same arm: an account-scoped employer
            -- multiple, the CNT exemption class and every other effective-dated
            -- fact are read fresh on every pass, so an edit after Calculate
            -- restates the stub exactly like a rate edit does.
@@ -1470,7 +1470,7 @@ export async function payRunStaleness(
                         where al.org_id = r.org_id and al.table_name in ('payroll_service_credits','payroll_vacation_terms','entitlement_service_tiers')
                           and al.at > r.calculated_at))
              as entitlements_changed,
-           -- WCB/WSIB class rates and assessable maximums. calculatePayRun
+           -- Pack-declared class rates and assessable maximums. calculatePayRun
            -- multiplies assessable earnings by worker_comp_groups.rate_percent
            -- to produce the employer premium, so a rate edited after Calculate
            -- commits a stale premium. The audit_log arm is belt AND braces on
@@ -1513,7 +1513,7 @@ export async function payRunStaleness(
            -- Another run consumed this employee's statutory room. A run
            -- calculated before an off-cycle run commits carries the YTD the
            -- off-cycle run has already used, and over-deducts the employee past
-           -- the CPP/EI maximum (or under-deducts if that run was voided).
+           -- the contribution maximum (or under-deducts if that run was voided).
            exists (
              select 1 from pay_runs other
               where other.org_id = r.org_id and other.document_id <> r.document_id
@@ -1557,7 +1557,7 @@ export async function payRunStaleness(
            -- Statutory carry-ins are the ONLY input for this year's annual
            -- ceilings (payroll-opening-balances.ts). A carry-in saved, changed
            -- or deleted for someone on the run after it was calculated makes
-           -- the stub's CPP/EI/FICA deductions a fiction; deletes leave no row
+           -- the stub's social contributions a fiction; deletes leave no row
            -- to timestamp, so the save's audit evidence is watched as well.
            (exists (
              select 1 from payroll_opening_balances b
