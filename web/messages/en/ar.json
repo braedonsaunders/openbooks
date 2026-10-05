@@ -344,7 +344,16 @@
         "renewalAuto": "Auto-renew",
         "renewalManual": "Manual renewal",
         "renewalNone": "No renewal"
-      }
+      },
+      "retentionArr": "Annual recurring revenue",
+      "retentionNrr": "Net revenue retention",
+      "retentionGrr": "Gross revenue retention",
+      "retentionRevenueChurn": "Revenue churn",
+      "retentionLogoChurn": "Logo churn",
+      "retentionArpa": "Avg revenue per account",
+      "retentionQuickRatio": "Quick ratio",
+      "retentionUnavailable": "Retention metrics appear after the first SaaS metrics computation.",
+      "retentionForMonth": "For {month}"
     },
     "recurring": {
       "newSchedule": "New recurring schedule",

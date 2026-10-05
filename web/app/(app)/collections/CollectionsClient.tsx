@@ -10,6 +10,7 @@ import { Field } from "@/components/field";
 import { InspectorPanel } from "@/components/builder/builder-kit";
 import { SwitchField } from "@/components/switch";
 import { CollectionsQueue } from "./CollectionsQueue";
+import { KpiStrip } from "@/components/kpi-strip";
 import { useMoney } from "@/components/money-provider";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -242,6 +243,10 @@ function SubscriptionsPanel({
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [mrr, setMrr] = useState("0.0000");
+  const [retention, setRetention] = useState<{
+    month: string | null;
+    rows: Array<{ currency: string; values: Record<string, string | null> }>;
+  } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -287,7 +292,16 @@ function SubscriptionsPanel({
     setSubs(data.subscriptions ?? []);
     setMrr(data.mrr ?? "0.0000");
     setLoaded(true);
-  }, [tErrors]);
+    if (view === "subscriptions") {
+      // Supplementary surface: operators without usage.read never see the
+      // strip, so a refusal here hides it instead of failing the page.
+      const retentionResult = await fetchAction<{
+        month: string | null;
+        rows: Array<{ currency: string; values: Record<string, string | null> }>;
+      }>("/api/metrics/retention");
+      setRetention(retentionResult.ok ? retentionResult.data : null);
+    }
+  }, [tErrors, view]);
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
@@ -352,6 +366,27 @@ function SubscriptionsPanel({
             })}
           </div>
         </Card>
+      )}
+      {loaded && view === "subscriptions" && retention?.month && retention.rows.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground">
+            {t("retentionForMonth", { month: retention.month.slice(0, 7) })}
+          </div>
+          <KpiStrip
+            items={[
+              { label: t("retentionArr"), value: retention.rows[0]!.values.arr ?? "—", suffix: retention.rows[0]!.currency },
+              { label: t("retentionNrr"), value: retention.rows[0]!.values.nrr ?? "—", suffix: "%" },
+              { label: t("retentionGrr"), value: retention.rows[0]!.values.grr ?? "—", suffix: "%" },
+              { label: t("retentionRevenueChurn"), value: retention.rows[0]!.values.revenue_churn ?? "—", suffix: "%" },
+              { label: t("retentionLogoChurn"), value: retention.rows[0]!.values.logo_churn ?? "—", suffix: "%" },
+              { label: t("retentionArpa"), value: retention.rows[0]!.values.arpa ?? "—", suffix: retention.rows[0]!.currency },
+              { label: t("retentionQuickRatio"), value: retention.rows[0]!.values.quick_ratio ?? "—" },
+            ]}
+          />
+        </div>
+      )}
+      {loaded && view === "subscriptions" && retention && !retention.month && (
+        <p className="text-xs text-muted-foreground">{t("retentionUnavailable")}</p>
       )}
 
       {error && !creating && !changing && (

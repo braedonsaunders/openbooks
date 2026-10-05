@@ -344,7 +344,16 @@
         "renewalAuto": "自動更新",
         "renewalManual": "手動更新",
         "renewalNone": "更新なし"
-      }
+      },
+      "retentionArr": "年間経常収益",
+      "retentionNrr": "レベニューリテンション(純額)",
+      "retentionGrr": "レベニューリテンション(総額)",
+      "retentionRevenueChurn": "レベニューチャーン",
+      "retentionLogoChurn": "ロゴチャーン",
+      "retentionArpa": "アカウント当たり平均収益",
+      "retentionQuickRatio": "クイックレシオ",
+      "retentionUnavailable": "SaaS指標の初回計算後にリテンション指標が表示されます。",
+      "retentionForMonth": "{month}時点"
     },
     "recurring": {
       "newSchedule": "新しい定期スケジュール",

@@ -344,7 +344,16 @@
         "renewalAuto": "Renovação automática",
         "renewalManual": "Renovação manual",
         "renewalNone": "Sem renovação"
-      }
+      },
+      "retentionArr": "Receita recorrente anual",
+      "retentionNrr": "Retenção líquida de receita",
+      "retentionGrr": "Retenção bruta de receita",
+      "retentionRevenueChurn": "Perda de receita",
+      "retentionLogoChurn": "Perda de clientes",
+      "retentionArpa": "Receita média por conta",
+      "retentionQuickRatio": "Índice de crescimento",
+      "retentionUnavailable": "As métricas de retenção aparecem após o primeiro cálculo de métricas SaaS.",
+      "retentionForMonth": "De {month}"
     },
     "recurring": {
       "newSchedule": "Nova programação recorrente",
