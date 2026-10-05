@@ -111,9 +111,10 @@ export interface FiscalMonthBox {
 /**
  * One box per declared fiscal period overlapping the window, plus one
  * fallback box per calendar-month key the data holds outside declared
- * coverage. Fallback keys are "YYYY-MM" and never collide with period
- * starts, so the two sets partition the series: a partially provisioned
- * calendar degrades box by box, never by dropping spend.
+ * coverage, all in chronological order. Fallback keys are "YYYY-MM" and
+ * never collide with period starts, so the two sets partition the series:
+ * a partially provisioned calendar degrades box by box, never by dropping
+ * spend.
  */
 export function fiscalMonthlyBoxes(
   periods: FiscalPeriod[],
@@ -131,12 +132,12 @@ export function fiscalMonthlyBoxes(
     label: labels.get(p.from) ?? p.name,
     spend: spendByBucket.get(p.from) ?? zero,
   }));
-  for (const key of [...spendByBucket.keys()].sort()) {
+  for (const key of spendByBucket.keys()) {
     if (/^\d{4}-\d{2}$/.test(key) && !declaredKeys.has(key)) {
       boxes.push({ month: key, label: monthLabel(key), spend: spendByBucket.get(key) ?? zero });
     }
   }
-  return boxes;
+  return boxes.sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
 }
 
 /** Display label: the period's own name, or null when the view should render the calendar month. */

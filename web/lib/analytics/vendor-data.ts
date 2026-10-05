@@ -152,9 +152,21 @@ export async function vendorData(
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
   // onto 1900-1999.
   const start = utcDateFromParts(end.getUTCFullYear(), end.getUTCMonth() - 11, 1);
-  const startIso = start.toISOString().slice(0, 10);
   const config = await analyticsConfig(orgId, "vendorPerformance");
   const buckets = await fiscalBucketScope(orgId);
+  // The trend window opens twelve calendar months back — but a fiscal
+  // series names whole declared periods, so a straddling first period
+  // would read as one partial box under a full-period name. Open at the
+  // first overlapping period's start instead (extending only, so gap days
+  // ahead of declared coverage still render as fallback boxes).
+  let startIso = start.toISOString().slice(0, 10);
+  if (buckets.useFiscal) {
+    const first = buckets.periods
+      .filter((p) => p.to >= startIso && p.from <= to)
+      .map((p) => p.from)
+      .sort()[0];
+    if (first && first < startIso) startIso = first;
+  }
 
   const [spendRows, billRows, monthRows, payRows] = await Promise.all([
     // Entry window first: joined inline the planner drives from accounts and
