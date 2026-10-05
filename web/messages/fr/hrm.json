@@ -3375,6 +3375,7 @@
     "date": "Date",
     "payRun": "Cycle de paie",
     "recovery": "Recouvrement des primes",
+    "recoveryBanks": "Banques de recouvrement",
     "recoveryHint": "Ces banques suivent les primes impayées et leur recouvrement en paie selon les règles de cotisation du programme.",
     "ready": "Prêt à exécuter",
     "units": {

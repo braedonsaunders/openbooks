@@ -168,12 +168,17 @@ export async function SetupEntitySection({
   recordTitle,
   additionalRecordTabs = [],
   groupRuleTabs = false,
+  ruleDetailsLabel,
+  childTabIntroductions,
 }: {
   entity: SetupEntity;
   /** Host program work areas share the persisted native record's drawer shell. */
   additionalRecordTabs?: { key: string; label: string; content: React.ReactNode }[]
   detailsLabel?: string
   groupRuleTabs?: boolean
+  ruleDetailsLabel?: string
+  /** Context remains inside the owning child tab alongside its native editor. */
+  childTabIntroductions?: Record<string, React.ReactNode>
   recordTitle?: string
   /** Server-side presentation slot; list querying and drawers remain shared. */
   renderColumn?: (
@@ -331,7 +336,10 @@ export async function SetupEntitySection({
     navigationPrefix: paramPrefix,
     entity, row: open?.row ?? null, orgId, actorId, sp, basePath,
     canManage, allowedSubsidiaryIds, features, t, mutationBasePath,
-  })
+  }).map(tab => childTabIntroductions?.[tab.key] && tab.content ? {
+    ...tab,
+    content: <div className="space-y-6">{childTabIntroductions[tab.key]}{tab.content}</div>,
+  } : tab)
 
   const rateBookDrawerData = open && entity.key === 'item-rate-books'
     ? await (async () => {
@@ -567,6 +575,7 @@ export async function SetupEntitySection({
           stacked={stacked}
           nestedTabs={groupRuleTabs ? additionalRecordTabs : [...childTabs, ...additionalRecordTabs]}
           ruleTabs={groupRuleTabs ? childTabs : undefined}
+          ruleDetailsLabel={ruleDetailsLabel}
           detailsLabel={detailsLabel}
           recordTitle={recordTitle}
           mutationBasePath={mutationBasePath}

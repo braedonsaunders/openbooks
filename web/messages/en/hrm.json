@@ -3375,6 +3375,7 @@
     "date": "Date",
     "payRun": "Pay run",
     "recovery": "Premium recovery",
+    "recoveryBanks": "Recovery banks",
     "recoveryHint": "These recovery banks track unpaid premiums and later payroll recovery under this program’s contribution rules.",
     "ready": "Ready for release",
     "units": {

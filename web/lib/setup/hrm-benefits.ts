@@ -101,7 +101,8 @@ export function benefitPlanPresentation(kind: 'health' | 'retirement', creating 
       { titleKey: 'benefitBuilder.offer', fields: identity },
       { titleKey: 'benefitBuilder.eligibility', descriptionKey: 'benefitBuilder.eligibilityHint', fields: eligibility },
     ],
-    recordChildren: BENEFIT_CONTRIBUTION_ENTITIES.filter((child) => child.parentRecords?.some((owner) => owner.entityKey === 'benefit-plans') && (retirement || child.key !== 'benefit-contribution-tiers')).map((child) => ({
+    recordChildren: BENEFIT_CONTRIBUTION_ENTITIES.filter((child) => child.parentRecords?.some((owner) => owner.entityKey === 'benefit-plans') && (retirement || child.key !== 'benefit-contribution-tiers'))
+      .sort((left, right) => Number(left.key === 'benefit-recovery-sources') - Number(right.key === 'benefit-recovery-sources')).map((child) => ({
       ...child,
       titleKey: child.key === 'benefit-contribution-rules' ? `benefitBuilder.${kind}.contribution` : !retirement && child.key === 'benefit-contribution-classes' ? 'benefitBuilder.health.classes' : undefined,
       singularTitleKey: child.key === 'benefit-contribution-rules' ? `benefitBuilder.${kind}.contributionSingular` : undefined,

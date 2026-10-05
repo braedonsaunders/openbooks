@@ -3375,6 +3375,7 @@
     "date": "Data",
     "payRun": "Ciclo da folha",
     "recovery": "Recuperação de prêmios",
+    "recoveryBanks": "Bancos de recuperação",
     "recoveryHint": "Esses bancos registram prêmios pendentes e sua recuperação posterior conforme as regras de contribuição do programa.",
     "ready": "Pronto para liberação",
     "units": {

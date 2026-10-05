@@ -3375,6 +3375,7 @@
     "date": "Datum",
     "payRun": "Abrechnungslauf",
     "recovery": "Prämienrückforderung",
+    "recoveryBanks": "Rückforderungskonten",
     "recoveryHint": "Diese Konten erfassen offene Prämien und ihre spätere Rückforderung gemäß den Beitragsregeln des Programms.",
     "ready": "Bereit zur Freigabe",
     "units": {

@@ -1,5 +1,6 @@
 import 'server-only'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Badge, Button } from '@openbooks/ui'
 import { db } from '@openbooks/engine/platform/database'
@@ -19,7 +20,13 @@ export async function ProgramWorkspace({ authz, workspace, sp }: {
   authz: Authz; workspace: BenefitsProgramWorkspace; sp: Record<string, string | undefined>
 }) {
   const t = await getTranslations('hrm')
+  const ta = await getTranslations('admin.setup')
   const program = workspace.program
+  if (program.nativeKind === 'insured' && sp.setupTab === 'recovery') {
+    const params = new URLSearchParams(Object.entries(sp).filter((entry): entry is [string, string] => entry[1] !== undefined))
+    params.set('setupTab', 'benefit-recovery-sources')
+    redirect(`/hrm/benefits?${params}`)
+  }
   const canManage = can(authz, 'hrm.benefits.manage')
   const { money } = await getMoneyFormatter(authz.user.orgId)
   const catalog = []
@@ -65,10 +72,15 @@ export async function ProgramWorkspace({ authz, workspace, sp }: {
     {key:'delivery',label:t('programWorkspace.delivery'),content:activity(true)},
     {key:'history',label:t('programWorkspace.history'),content:<AuditTrailPanel table={program.nativeKind === 'insured' ? 'hrm_benefit_plans' : 'entitlement_plans'} recordId={program.id} />},
   ]
-  if (children.length) tabs.unshift({key:'recovery',label:t('programWorkspace.recovery'),content:<div className="space-y-3"><p className="text-sm text-slate-500">{t('programWorkspace.recoveryHint')}</p>{children.map(child=><p key={child.id}><Link href={`/hrm/benefits?view=programs&program=${child.id}`} className="font-medium text-teal-700 hover:underline">{child.name}</Link></p>)}</div>})
-  return <SetupEntitySection entity={{...nativeEntity,recordChildren:(nativeEntity.recordChildren ?? setupChildEntities(nativeEntity.key)).filter(child => child.key !== 'payroll-vacation-terms'),creationSteps:undefined,readOnly:!canManage}} orgId={authz.user.orgId} actorId={authz.user.id}
+  const recoveryBanks = children.length ? <section className="space-y-3" aria-label={t('programWorkspace.recoveryBanks')}>
+    <h2 className="text-sm font-semibold">{t('programWorkspace.recoveryBanks')}</h2>
+    <p className="text-sm text-slate-500">{t('programWorkspace.recoveryHint')}</p>
+    {children.map(child => <p key={child.id}><Link href={`/hrm/benefits?view=programs&program=${child.id}`} className="font-medium text-teal-700 hover:underline">{child.name}</Link></p>)}
+  </section> : undefined
+  return <SetupEntitySection entity={{...nativeEntity,formDescriptionKey:undefined,recordChildren:(nativeEntity.recordChildren ?? setupChildEntities(nativeEntity.key)).filter(child => child.key !== 'payroll-vacation-terms'),creationSteps:undefined,readOnly:!canManage}} orgId={authz.user.orgId} actorId={authz.user.id}
     searchParams={sp} basePath="/hrm/benefits" rowParam="program" drawerOnly hideHeader canManage
     visibleRowIds={new Set([program.id])} allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
     groupRuleTabs detailsLabel={t('programWorkspace.rules')} recordTitle={program.name} additionalRecordTabs={tabs}
+    ruleDetailsLabel={ta('benefitBuilder.offer')} childTabIntroductions={{'benefit-recovery-sources':recoveryBanks}}
     mutationBasePath="/api/hrm/benefit-plan-configuration" />
 }

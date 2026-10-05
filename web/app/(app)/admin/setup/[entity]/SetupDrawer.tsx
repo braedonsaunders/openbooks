@@ -126,6 +126,7 @@ export function SetupDrawer({
   nestedTabs = [],
   ruleTabs = [],
   detailsLabel,
+  ruleDetailsLabel,
   recordTitle,
   stacked = false,
   mutationBasePath = '/api/admin/setup',
@@ -143,6 +144,7 @@ export function SetupDrawer({
   nestedTabs?: { key: string; label: string; content: ReactNode }[]
   /** A rehomed record names its native configuration section. */
   detailsLabel?: string
+  ruleDetailsLabel?: string
   ruleTabs?: { key: string; label: string; content: ReactNode }[]
   recordTitle?: string
   stacked?: boolean
@@ -478,7 +480,7 @@ export function SetupDrawer({
           onChoose={choose}
         />
       ) : nestedTabActive ? activeNestedTab?.content : <>
-      {!creating && ruleTabs.length ? <div className="mb-4"><RecordTabs label={detailsLabel ?? t('drawer.tabs.ariaLabel')} tabs={[{key:'details',label:t('drawer.tabs.details')}, ...ruleTabs]} active={activeRuleTab?.key ?? 'details'} onChange={selectTab} /></div> : null}
+      {!creating && ruleTabs.length ? <div className="mb-4"><RecordTabs label={detailsLabel ?? t('drawer.tabs.ariaLabel')} tabs={[{key:'details',label:ruleDetailsLabel ?? t('drawer.tabs.details')}, ...ruleTabs]} active={activeRuleTab?.key ?? 'details'} onChange={selectTab} /></div> : null}
       {activeRuleTab ? activeRuleTab.content : <>
       {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /><NetInvestmentButton interestId={String(row.id)} /></div> : null}
       {fieldError ? (
