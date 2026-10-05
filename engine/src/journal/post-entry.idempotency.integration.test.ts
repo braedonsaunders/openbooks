@@ -147,3 +147,27 @@ test(
     }
   },
 );
+
+test(
+  "a foreign-currency line without its transaction amount and rate is refused by name",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await assert.rejects(
+        () => withOrgContext(org.orgId, () => postEntry(db, {
+          orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+          entryNumber: `FX-${randomUUID().slice(0, 8)}`, postingDate: org.date, periodId: org.periodId,
+          origin: "manual", currency: "CAD", closeModules: ["gl"],
+          lines: [
+            { accountId: org.accounts.bank, amount: "-10", currency: "USD" },
+            { accountId: org.accounts.cogs, amount: "10" },
+          ],
+        })),
+        /line 1: USD differs from the subsidiary's functional currency CAD — supply the transaction amount and the exchange rate/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -2037,8 +2037,10 @@ export async function postSettlementBatch(
       modules: ["banking"],
     });
 
-    // Build balanced lines in base/settlement currency (txn = amount, rate 1).
-    type JL = { accountId: string; amount: string; memo: string };
+    // Build balanced lines in the subsidiary's functional currency. Legs paid
+    // in a foreign payout currency carry that currency's amount and the
+    // evidenced payout rate, so the ledger records the real foreign balance.
+    type JL = { accountId: string; amount: string; memo: string; currency?: string; txnAmount?: string; fxRate?: string };
     const jlines: JL[] = [];
 
     // A cross-currency batch converts every leg to base at evidenced rates and
@@ -2054,11 +2056,14 @@ export async function postSettlementBatch(
           "realized FX gain/loss account is not configured",
         );
       }
+      const payoutDetail = (txnAmount: string) => b.currency === baseCurrency
+        ? {}
+        : { currency: b.currency, txnAmount, fxRate: fxPlan!.payoutRate };
       if (!isZero(fxLegs.bank)) {
-        jlines.push({ accountId: b.bank_account_id!, amount: fxLegs.bank, memo: "PSP net deposit" });
+        jlines.push({ accountId: b.bank_account_id!, amount: fxLegs.bank, memo: "PSP net deposit", ...payoutDetail(b.net_amount) });
       }
       if (!isZero(fxLegs.fee)) {
-        jlines.push({ accountId: b.fee_account_id!, amount: fxLegs.fee, memo: "PSP processing fees" });
+        jlines.push({ accountId: b.fee_account_id!, amount: fxLegs.fee, memo: "PSP processing fees", ...payoutDetail(b.fee_amount) });
       }
       if (!isZero(fxLegs.refund)) {
         jlines.push({ accountId: b.clearing_account_id!, amount: fxLegs.refund, memo: "PSP refunds" });
@@ -2214,11 +2219,13 @@ export async function postSettlementBatch(
       memo: b.memo ?? `PSP ${b.provider} ${b.external_ref}`,
       origin: "document",
       actorId,
-      currency: b.currency,
+      // A cross-currency batch's legs are converted to the functional currency.
+      currency: fxPlan ? baseCurrency : b.currency,
       lines: jlines.map((l) => ({
         accountId: l.accountId,
         amount: l.amount,
         memo: l.memo,
+        ...(l.currency ? { currency: l.currency, txnAmount: l.txnAmount, fxRate: l.fxRate } : {}),
       })),
     });
     if (postedEntry.entryId !== entryId)
