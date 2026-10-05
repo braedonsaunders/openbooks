@@ -199,6 +199,17 @@ export const PUT = defineRoute({
         select id from items
          where id = ${assemblyItemId} and org_id = ${gate.user.orgId}
          for no key update`)
+      // Kits ship exactly the quantities named: manufacturing recipe
+      // features (operations, by-products, scrap) have no meaning for a
+      // virtual bundle and every engine reader excludes them.
+      const parent = (await tx.execute<{ kind: string }>(sql`
+        select kind from items
+         where id = ${assemblyItemId} and org_id = ${gate.user.orgId}`)).rows[0]
+      if (parent?.kind === 'kit' && components.some((line) =>
+        line.operationSeq !== null || line.isByproduct ||
+        (line.scrapPct !== null && compareDecimal(line.scrapPct, '0') !== 0))) {
+        return { kitManufacturing: true as const }
+      }
 
       const versionResult = await tx.execute<{ version: string | null }>(sql`
         select md5(string_agg(
@@ -322,6 +333,9 @@ export const PUT = defineRoute({
     }
     if ('invalidItems' in result) {
       return refusal('Every assembly and component must be an active inventory item in this organization.')
+    }
+    if ('kitManufacturing' in result) {
+      return refusal('A kit ships exactly the quantities named: remove the operation, by-product or scrap rate from its recipe.')
     }
     return NextResponse.json(result)
   } catch (error) {

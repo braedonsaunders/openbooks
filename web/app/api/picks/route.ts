@@ -20,6 +20,7 @@ const createBody = z.object({
     quantity: z.string().max(40),
     lotId: uuidId.nullable().optional(),
     serialId: uuidId.nullable().optional(),
+    kitComponentItemId: uuidId.nullable().optional(),
   })).min(1).max(500),
   /** Header custom-field values; validated against the record type's definitions. */
   custom: z.record(z.string(), z.json()).optional(),

@@ -16,7 +16,10 @@ import {
 } from '@openbooks/engine/src/delivery/email-config.ts'
 import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail } from '@openbooks/emails'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
-import { fulfillSalesOrderInTx } from './order-cycle'
+import { FulfillmentRefusal } from '@openbooks/engine/src/sales/fulfillment.ts'
+import { loadKitComponents } from '@openbooks/engine/src/inventory/kits.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { fulfillSalesOrderInTx, type SalesFulfillmentLineInput } from './order-cycle'
 
 type Scope = ReadonlySet<string> | null
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -88,6 +91,121 @@ export interface CompletedShipment {
 }
 
 /**
+ * Map shipment rows onto fulfillment requests. Ordinary rows pass through;
+ * kit component rows group by order line into one kit request carrying the
+ * per-component picks. Every component of the recipe must be on the shipment
+ * — a kit ships whole — and the rows must agree on one kit quantity exact to
+ * stock precision, so the issue drain re-derives exactly what was picked.
+ */
+async function shipmentFulfillmentLines(
+  tx: Tx,
+  orgId: string,
+  locked: {
+    salesOrderId: string
+    shipment: { document_date: string }
+    lines: {
+      salesOrderLineId: string
+      orderItemId: string | null
+      itemId: string | null
+      quantity: string
+      binId: string
+      lotId: string | null
+      serialId: string | null
+    }[]
+  },
+): Promise<SalesFulfillmentLineInput[]> {
+  const groups = new Map<string, typeof locked.lines>()
+  for (const line of locked.lines) {
+    groups.set(line.salesOrderLineId, [...(groups.get(line.salesOrderLineId) ?? []), line])
+  }
+  const requests: SalesFulfillmentLineInput[] = []
+  for (const rows of groups.values()) {
+    const first = rows[0]!
+    const componentRows = rows.filter((row) => row.itemId !== row.orderItemId)
+    if (componentRows.length === 0) {
+      for (const row of rows) {
+        requests.push({
+          sourceLineId: row.salesOrderLineId,
+          quantity: row.quantity,
+          lotId: row.lotId,
+          serialId: row.serialId,
+          stockLocationId: row.binId,
+        })
+      }
+      continue
+    }
+    if (componentRows.length !== rows.length) {
+      throw new FulfillmentRefusal(
+        'A shipment mixes kit components with the kit itself; pick the kit by component or void the shipment',
+        'invalid_input',
+        422,
+        'Void the shipment and pick the kit line by component',
+      )
+    }
+    if (!first.orderItemId) {
+      throw new FulfillmentRefusal(
+        'A shipment names kit components for an order line with no item; void the shipment',
+        'invalid_input',
+        422,
+        'Void the shipment and pick the order line again',
+      )
+    }
+    const components = await loadKitComponents(tx, orgId, first.orderItemId, locked.shipment.document_date)
+    const missing = components.filter(
+      (component) => !componentRows.some((row) => row.itemId === component.componentItemId),
+    )
+    if (missing.length > 0) {
+      throw new FulfillmentRefusal(
+        `The shipment is missing ${missing.length === 1 ? 'a kit component' : `${missing.length} kit components`}; every component ships for the kit to ship`,
+        'exceeds_open_quantity',
+        422,
+        'Pick the missing components before completing the shipment',
+      )
+    }
+    // One kit quantity shared by every row: q1/p1 == q2/p2 compared without
+    // division, then exact to stock precision so the drain re-derives the
+    // picked quantities bit-for-bit.
+    const perByComponent = new Map(components.map((component) => [component.componentItemId, toUnits(component.quantityPer)]))
+    const firstPer = perByComponent.get(componentRows[0]!.itemId!)!
+    const firstQty = toUnits(componentRows[0]!.quantity)
+    for (const row of componentRows.slice(1)) {
+      const qty = toUnits(row.quantity)
+      if (qty * firstPer !== firstQty * perByComponent.get(row.itemId!)!) {
+        throw new FulfillmentRefusal(
+          'The kit components on this shipment cover different kit quantities; ship whole kits',
+          'exceeds_open_quantity',
+          422,
+          'Pick component quantities that cover the same number of kits',
+        )
+      }
+    }
+    const scaled = firstQty * 10000n
+    if (scaled % firstPer !== 0n) {
+      throw new FulfillmentRefusal(
+        'The kit components on this shipment cover a fractional kit quantity; ship whole kits',
+        'exceeds_open_quantity',
+        422,
+        'Pick component quantities that cover whole kits',
+      )
+    }
+    requests.push({
+      sourceLineId: first.salesOrderLineId,
+      quantity: fromUnits(scaled / firstPer),
+      lotId: null,
+      serialId: null,
+      stockLocationId: componentRows[0]!.binId,
+      kitComponents: componentRows.map((row) => ({
+        componentItemId: row.itemId!,
+        lotId: row.lotId,
+        serialId: row.serialId,
+        stockLocationId: row.binId,
+      })),
+    })
+  }
+  return requests
+}
+
+/**
  * Complete a draft shipment in one transaction: record its sales fulfilment
  * through the existing fulfilment path — issuing each line from its picked
  * bin and relieving COGS — then mark the shipment and its pick list done,
@@ -120,13 +238,7 @@ export async function completeShipment(
     const fulfillment = await fulfillSalesOrderInTx(tx, orgId, userId, locked.salesOrderId, {
       fulfillmentDate: locked.shipment.document_date,
       idempotencyKey: `shipment:${locked.shipment.id}`,
-      lines: locked.lines.map((line) => ({
-        sourceLineId: line.salesOrderLineId,
-        quantity: line.quantity,
-        lotId: line.lotId,
-        serialId: line.serialId,
-        stockLocationId: line.binId,
-      })),
+      lines: await shipmentFulfillmentLines(tx, orgId, locked),
     }, { inventory: 'apply' })
     await markShipmentComplete(tx, orgId, userId, {
       shipment: { id: locked.shipment.id, documentNumber: shipmentNumber },
