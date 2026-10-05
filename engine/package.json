@@ -101,6 +101,7 @@
     "./billing": "./src/billing/public.ts",
     "./commerce": "./src/commerce/public.ts",
     "./commerce/contracts": "./src/commerce/public-contracts.ts",
+    "./close/commerce": "./src/close/public.ts",
     "./flows": "./src/flows/public.ts",
     "./sales/shipping-labels": "./src/sales/public-shipping-labels.ts",
     "./sync": "./src/sync/public.ts",
