@@ -31,9 +31,10 @@ import { toChartNumber } from "../chart-number";
  * (small monotonic creep), zombie subscriptions (identical recurring vendor
  * totals), category fragmentation (many small txns), concentration risk
  * (HHI), seasonal patterns, commitment cliff. Health score = 100 −
- * severity-weighted deductions. Every threshold below reads from the
- * organization's own spendVelocity analytics config — no cutoff, weight,
- * horizon or band is constant.
+ * severity-weighted deductions. Detection cut-offs, money floors, bands and
+ * grade cut-offs below read from the organization's own spendVelocity
+ * analytics config; the health-score point weights and deduction caps are
+ * the fixed severity model below, not configuration.
  *
  * Money travels as exact decimal strings in the presentation currency from
  * translation to the last sum (single exact→Number crossings feed only the
@@ -92,8 +93,8 @@ export interface VelocityRow {
   expensePct: number;
   transactionCount: number;
   monthCount: number;
-  velocity: number;
-  acceleration: number;
+  velocity: number | null;
+  acceleration: number | null;
   trend: "accelerating" | "high" | "rising" | "declining" | "stable" | "new";
   latestSpend: string;
   previousSpend: string;
@@ -128,8 +129,8 @@ export interface SpendVelocityData {
   summary: {
     totalSpend: string;
     accountCount: number;
-    avgVelocity: number;
-    avgAcceleration: number;
+    avgVelocity: number | null;
+    avgAcceleration: number | null;
     acceleratingCount: number;
     deceleratingCount: number;
     highVelocityCount: number;
@@ -137,8 +138,8 @@ export interface SpendVelocityData {
     healthGrade: string;
     billsTotal: string;
     expensesTotal: string;
-    billsVelocity: number;
-    expensesVelocity: number;
+    billsVelocity: number | null;
+    expensesVelocity: number | null;
     savingsPotential: string;
     totalAlerts: number;
     /** Detectors the score and alert count silently omit (unconfigured). */
@@ -167,7 +168,7 @@ export interface SpendVelocityData {
     summary: { count: number; criticalCount: number; totalAnnualizedCreep: string };
     accounts: {
       accountId: string; accountName: string; monotonicRatio: number; avgMonthlyIncrease: number; totalCreep: number;
-      startAmount: string; endAmount: string; monthCount: number; annualizedCreep: string; monthlyAmounts: number[];
+      startAmount: string; endAmount: string; monthCount: number; annualizedCreep: string | null; monthlyAmounts: number[];
       severity: "critical" | "warning" | "info";
     }[];
   };
@@ -177,7 +178,7 @@ export interface SpendVelocityData {
   };
   zombies: {
     summary: { count: number; criticalCount: number; totalAnnualCost: string };
-    subscriptions: { vendorId: string; vendorName: string; amount: string; monthCount: number; annualCost: string; firstMonth: string; lastMonth: string; severity: "critical" | "warning" }[];
+    subscriptions: { vendorId: string; vendorName: string; amount: string; monthCount: number; annualCost: string | null; firstMonth: string; lastMonth: string; severity: "critical" | "warning" }[];
   };
   fragmentation: {
     summary: { fragmentedCategories: number; totalFragmentedSpend: string; configured: boolean; reason: string };
@@ -185,14 +186,14 @@ export interface SpendVelocityData {
   };
   shadowIT: { available: false; reason: string };
   commitmentCliff: {
-    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string; configured: boolean; reason: string };
+    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number | null; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string; configured: boolean; reason: string };
     months: { month: string; poAmount: string; soAmount: string }[];
   };
   revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
   insights: SVInsight[];
   periodComparison: {
     summary: { currentTotal: string; priorTotal: string; twoBackTotal: string; projectedTotal: string; changePct: number | null; priorLabel: string; twoBackLabel: string };
-    accounts: { accountId: string; accountName: string; currentAmount: string; priorAmount: string; twoBackAmount: string; changePct: number | null; projectedAmount: string; isNew: boolean; monthlyTrend: number[]; velocity: number; acceleration: number; trend: string }[];
+    accounts: { accountId: string; accountName: string; currentAmount: string; priorAmount: string; twoBackAmount: string; changePct: number | null; projectedAmount: string; isNew: boolean; monthlyTrend: number[]; velocity: number | null; acceleration: number | null; trend: string }[];
   };
   expenseAnalysis: {
     summary: { expenseReportTotal: string; vendorBillTotal: string; topSpenderCount: number; categoryIncreaseTotal: string };
@@ -222,13 +223,15 @@ const DEFAULT_VELOCITY_ENGINE: VelocityEngine = {
 /** Growth from a zero base is undefined: leading non-positive buckets are never
  * a start point, so a zero first month no longer fabricates a flat 0 velocity.
  * An empty minimum base means no floor beyond that: every positive series
- * scores from its first month. */
-function velocityCAGR(monthlyAmounts: number[], minBase: string): number {
-  if (!monthlyAmounts || monthlyAmounts.length < 2) return 0;
+ * scores from its first month. Too little history to measure — fewer than
+ * two buckets, fewer than two positive buckets, or nothing above the floor —
+ * yields null so callers render "—" instead of a fabricated 0. */
+function velocityCAGR(monthlyAmounts: number[], minBase: string): number | null {
+  if (!monthlyAmounts || monthlyAmounts.length < 2) return null;
   let first = 0;
   while (first < monthlyAmounts.length && monthlyAmounts[first]! <= 0) first++;
   const scored = monthlyAmounts.slice(first);
-  if (scored.length < 2) return 0;
+  if (scored.length < 2) return null;
   let start = scored[0]!;
   let periods = scored.length - 1;
   const end = scored[scored.length - 1]!;
@@ -239,28 +242,37 @@ function velocityCAGR(monthlyAmounts: number[], minBase: string): number {
       for (let i = 0; i < scored.length - 1; i++) {
         if (scored[i]! >= floor) { start = scored[i]!; periods = scored.length - 1 - i; found = true; break; }
       }
-      if (!found) return 0;
+      if (!found) return null;
     }
   }
   return calculateCAGR(start, end, periods);
 }
 
-export function velocityAndAcceleration(amounts: number[], C: VelocityEngine = DEFAULT_VELOCITY_ENGINE): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
-  let velocity = 0, acceleration = 0;
+export function velocityAndAcceleration(amounts: number[], C: VelocityEngine = DEFAULT_VELOCITY_ENGINE): { velocity: number | null; acceleration: number | null; trend: VelocityRow["trend"] } {
+  let velocity: number | null = null, acceleration: number | null = null;
   let trend: VelocityRow["trend"] = "stable";
   if (amounts.length >= 2) {
-    velocity = velocityCAGR(amounts, C.minBaseAmount);
-    if (amounts.length >= 4) {
-      const mid = Math.floor(amounts.length / 2);
-      acceleration = velocityCAGR(amounts.slice(mid), C.minBaseAmount) - velocityCAGR(amounts.slice(0, mid), C.minBaseAmount);
+    const measured = velocityCAGR(amounts, C.minBaseAmount);
+    if (measured !== null) {
+      velocity = measured;
+      if (amounts.length >= 4) {
+        const mid = Math.floor(amounts.length / 2);
+        const later = velocityCAGR(amounts.slice(mid), C.minBaseAmount);
+        const earlier = velocityCAGR(amounts.slice(0, mid), C.minBaseAmount);
+        acceleration = later === null || earlier === null ? null : later - earlier;
+      }
+      if (velocity > C.velocityHighThreshold) trend = (acceleration ?? 0) > 0 ? "accelerating" : "high";
+      else if (velocity > C.velocityMediumThreshold) trend = "rising";
+      else if (velocity < -C.velocityMediumThreshold) trend = "declining";
     }
-    if (velocity > C.velocityHighThreshold) trend = acceleration > 0 ? "accelerating" : "high";
-    else if (velocity > C.velocityMediumThreshold) trend = "rising";
-    else if (velocity < -C.velocityMediumThreshold) trend = "declining";
   } else if (amounts.length === 1) {
     trend = "new";
   }
-  return { velocity: Math.round(velocity * 10) / 10, acceleration: Math.round(acceleration * 10) / 10, trend };
+  return {
+    velocity: velocity === null ? null : Math.round(velocity * 10) / 10,
+    acceleration: acceleration === null ? null : Math.round(acceleration * 10) / 10,
+    trend,
+  };
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -271,20 +283,6 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  * series, and fewer than two measurable buckets — or no bucket above the
  * floor — yields null so the detector renders its named reason instead of a
  * fabricated 0. A measured collapse to zero still reads −100. */
-/**
- * Periods until purchase commitments outrun sales coverage at the measured
- * pace. PO growing `gap` points faster per period compounds the PO/SO ratio
- * by (1 + gap/100) each period, so reaching `target` from `ratio` takes
- * ln(target/ratio) / ln(1 + gap/100) periods — a horizon derived from the
- * two figures shown, not a configured guess. Null when there is no positive
- * pace or no sales base to compound against.
- */
-export function monthsToCliffFor(gap: number, ratio: number, target: number): number | null {
-  if (!(gap > 0) || !(ratio > 0) || !(target > 0)) return null;
-  if (ratio >= target) return 1;
-  return Math.max(1, Math.round(Math.log(target / ratio) / Math.log(1 + gap / 100)));
-}
-
 export function moneyCagr(amounts: string[], minimum: string): number | null {
   let first = 0;
   while (first < amounts.length && cmp(amounts[first]!, "0") <= 0) first++;
@@ -305,6 +303,21 @@ export function moneyCagr(amounts: string[], minimum: string): number | null {
   if (cmp(end, "0") <= 0) return -100;
   const ratio = toChartNumber(div(end, start));
   return Math.max(-100, Math.min(200, (Math.pow(ratio, 1 / periods) - 1) * 100));
+}
+
+/**
+ * Periods until purchase commitments outrun sales coverage at the measured
+ * pace. PO growing `gap` points faster per period compounds the PO/SO ratio
+ * by (1 + gap/100) each period, so reaching `target` from `ratio` takes
+ * ln(target/ratio) / ln(1 + gap/100) periods — a horizon derived from the
+ * two figures shown, not a configured guess. Zero when the ratio already
+ * reaches the target (the pressure is now); null when there is no positive
+ * pace or no sales base to compound against.
+ */
+export function monthsToCliffFor(gap: number, ratio: number, target: number): number | null {
+  if (!(gap > 0) || !(ratio > 0) || !(target > 0)) return null;
+  if (ratio >= target) return 0;
+  return Math.max(1, Math.round(Math.log(target / ratio) / Math.log(1 + gap / 100)));
 }
 
 export interface SpendVelocityComparisonWindows {
@@ -619,7 +632,7 @@ export async function spendVelocityData(
   const unionIds = (...sets: (readonly string[] | null | undefined)[]): number =>
     new Set(sets.flatMap((s) => [...(s ?? [])])).size;
   const bucketLabelOf = (bucket: string, label: string | null): string =>
-    label ?? (buckets.useFiscal ? bucket : strings.monthLabel(bucket.slice(0, 7)));
+    label ?? (buckets.useFiscal && !/^\d{4}-\d{2}$/.test(bucket) ? bucket : strings.monthLabel(bucket.slice(0, 7)));
   const acctCtx = await flowRates(orgId, acctRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
   const acctMerged = new Map<string, AccountSpendRow>();
   for (const r of acctRows.rows) {
@@ -790,8 +803,10 @@ export async function spendVelocityData(
   const expSeries = typeBuckets.map((b) => toChartNumber(typeMonthly.get(b)!.expense));
   const billsTotal = [...typeMonthly.values()].reduce((s, t) => add(s, t.bill), ZERO);
   const expensesTotal = [...typeMonthly.values()].reduce((s, t) => add(s, t.expense), ZERO);
-  const billsVelocity = r1(velocityCAGR(billsSeries, C.minBaseAmount));
-  const expensesVelocity = r1(velocityCAGR(expSeries, C.minBaseAmount));
+  const billsCagr = velocityCAGR(billsSeries, C.minBaseAmount);
+  const expensesCagr = velocityCAGR(expSeries, C.minBaseAmount);
+  const billsVelocity = billsCagr === null ? null : r1(billsCagr);
+  const expensesVelocity = expensesCagr === null ? null : r1(expensesCagr);
 
   // ---- anomalies (z-score, verbatim) -----------------------------------------
   const anomalyCritical = C.anomalyStdDevThreshold + C.anomalyCriticalOffset;
@@ -911,7 +926,9 @@ export async function spendVelocityData(
         avgMonthlyIncrease: increases > 0 ? r1(totalCreep / increases) : 0,
         totalCreep: Math.round(totalCreep),
         startAmount, endAmount, monthCount,
-        annualizedCreep: div(mulDecimal(add(endAmount, neg(startAmount)), String(periodsPerYear)), String(monthCount)),
+        annualizedCreep: periodsPerYear === null
+          ? null
+          : div(mulDecimal(add(endAmount, neg(startAmount)), String(periodsPerYear)), String(monthCount)),
         monthlyAmounts: amounts,
         severity: totalCreep > C.boilingFrogCriticalCreep ? "critical" : totalCreep > C.boilingFrogWarningCreep ? "warning" : "info",
       });
@@ -922,7 +939,7 @@ export async function spendVelocityData(
     summary: {
       count: frogAccounts.length,
       criticalCount: frogAccounts.filter((x) => x.severity === "critical").length,
-      totalAnnualizedCreep: frogAccounts.reduce((s, x) => add(s, x.annualizedCreep), ZERO),
+      totalAnnualizedCreep: frogAccounts.reduce((s, x) => (x.annualizedCreep === null ? s : add(s, x.annualizedCreep)), ZERO),
     },
     accounts: frogAccounts.slice(0, 20),
   };
@@ -960,7 +977,8 @@ export async function spendVelocityData(
     if (isZombie && cmp(first, ZERO) > 0) {
       zombieList.push({
         vendorId: v.id, vendorName: v.name, amount: first, monthCount: v.buckets.length,
-        annualCost: mulDecimal(first, String(periodsPerYear)), firstMonth: v.buckets[0]!.bucket, lastMonth: v.buckets[v.buckets.length - 1]!.bucket,
+        annualCost: periodsPerYear === null ? null : mulDecimal(first, String(periodsPerYear)),
+        firstMonth: v.buckets[0]!.bucket, lastMonth: v.buckets[v.buckets.length - 1]!.bucket,
         severity: v.buckets.length >= C.zombieCriticalMonths ? "critical" : "warning",
       });
     }
@@ -970,7 +988,7 @@ export async function spendVelocityData(
     summary: {
       count: zombieList.length,
       criticalCount: zombieList.filter((z) => z.severity === "critical").length,
-      totalAnnualCost: zombieList.reduce((s, z) => add(s, z.annualCost), ZERO),
+      totalAnnualCost: zombieList.reduce((s, z) => (z.annualCost === null ? s : add(s, z.annualCost)), ZERO),
     },
     subscriptions: zombieList.slice(0, 20),
   };
@@ -1039,16 +1057,18 @@ export async function spendVelocityData(
   const totalPO = cliffSeries.reduce((s, m) => add(s, m.poAmount), "0.0000");
   const totalSO = cliffSeries.reduce((s, m) => add(s, m.soAmount), "0.0000");
   const hasSales = cmp(totalSO, ZERO) > 0;
-  const ratio = hasSales ? Math.round(toChartNumber(div(totalPO, totalSO)) * 100) / 100 : 0;
+  // No sales-order base means the coverage ratio is unknown, never a
+  // healthy-looking zero.
+  const ratio = hasSales ? Math.round(toChartNumber(div(totalPO, totalSO)) * 100) / 100 : null;
   let status: "healthy" | "warning" | "critical" = "healthy";
   let monthsToCliff: number | null = null;
   const gap = velocityGap;
-  if ((gap !== null && gap > C.cliffCriticalGap) || ratio > C.cliffCriticalRatio) {
+  if ((gap !== null && gap > C.cliffCriticalGap) || (ratio !== null && ratio > C.cliffCriticalRatio)) {
     status = "critical";
-    if (gap !== null && hasSales) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffCriticalRatio);
-  } else if ((gap !== null && gap > C.cliffWarningGap) || ratio > C.cliffWarningRatio) {
+    if (gap !== null && ratio !== null) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffCriticalRatio);
+  } else if ((gap !== null && gap > C.cliffWarningGap) || (ratio !== null && ratio > C.cliffWarningRatio)) {
     status = "warning";
-    if (gap !== null && hasSales) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffWarningRatio);
+    if (gap !== null && ratio !== null) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffWarningRatio);
   }
   const commitmentCliff: SpendVelocityData["commitmentCliff"] = {
     summary: {
@@ -1119,8 +1139,8 @@ export async function spendVelocityData(
       projectedAmount: add(current, mulDecimal(current, clamped.toFixed(4))),
       isNew: !priorPositive && cmp(current, ZERO) > 0,
       monthlyTrend: vel?.monthlyAmounts ?? [],
-      velocity: vel?.velocity ?? 0,
-      acceleration: vel?.acceleration ?? 0,
+      velocity: vel?.velocity ?? null,
+      acceleration: vel?.acceleration ?? null,
       trend: vel?.trend ?? "stable",
     };
   }).filter((a) => cmp(a.currentAmount, ZERO) > 0 || cmp(a.priorAmount, ZERO) > 0 || cmp(a.twoBackAmount, ZERO) > 0)
@@ -1222,10 +1242,14 @@ export async function spendVelocityData(
   };
 
   // ---- summary + health score ---------------------------------------------------
-  const avgVelocity = accountVelocity.length ? accountVelocity.reduce((s, a) => s + a.velocity, 0) / accountVelocity.length : 0;
-  const avgAcceleration = accountVelocity.length ? accountVelocity.reduce((s, a) => s + a.acceleration, 0) / accountVelocity.length : 0;
+  // Averages run over measurable accounts only: unmeasurable histories
+  // contribute no figure, never a zero that would drag the mean down.
+  const measuredVelocities = accountVelocity.map((a) => a.velocity).filter((v): v is number => v !== null);
+  const measuredAccelerations = accountVelocity.map((a) => a.acceleration).filter((a): a is number => a !== null);
+  const avgVelocity = measuredVelocities.length ? measuredVelocities.reduce((s, v) => s + v, 0) / measuredVelocities.length : null;
+  const avgAcceleration = measuredAccelerations.length ? measuredAccelerations.reduce((s, a) => s + a, 0) / measuredAccelerations.length : null;
   const acceleratingCount = accountVelocity.filter((a) => a.trend === "accelerating").length;
-  const highVelocityCount = accountVelocity.filter((a) => a.velocity > C.velocityHighThreshold).length;
+  const highVelocityCount = accountVelocity.filter((a) => a.velocity !== null && a.velocity > C.velocityHighThreshold).length;
 
   // The health score reads its point weights and caps from the fixed
   // severity model above; the organization's config holds only detection
@@ -1282,9 +1306,9 @@ export async function spendVelocityData(
   // ---- insights ---------------------------------------------------------------------------------
   const insights: SVInsight[] = [];
   const fmtK = (n: string) => money(n, { maximumFractionDigits: 0 });
-  const highVelAlerts = accountVelocity.filter((a) => a.velocity > C.highVelocityAlert);
+  const highVelAlerts = accountVelocity.filter((a) => a.velocity !== null && a.velocity > C.highVelocityAlert);
   if (highVelAlerts.length) insights.push({ type: "alert", ...strings.highGrowth(highVelAlerts.length, C.highVelocityAlert) });
-  if (Math.abs(billsVelocity - expensesVelocity) > C.typeImbalanceGap) {
+  if (billsVelocity !== null && expensesVelocity !== null && Math.abs(billsVelocity - expensesVelocity) > C.typeImbalanceGap) {
     insights.push({
       type: "warning",
       ...strings.typeImbalance(
@@ -1316,7 +1340,8 @@ export async function spendVelocityData(
     severityModel: SPEND_VELOCITY_SEVERITY_MODEL,
     summary: {
       totalSpend, accountCount: accountVelocity.length,
-      avgVelocity: r1(avgVelocity), avgAcceleration: r1(avgAcceleration),
+      avgVelocity: avgVelocity === null ? null : r1(avgVelocity),
+      avgAcceleration: avgAcceleration === null ? null : r1(avgAcceleration),
       acceleratingCount, deceleratingCount: accountVelocity.filter((a) => a.trend === "declining").length,
       highVelocityCount, healthScore, healthGrade,
       billsTotal, expensesTotal, billsVelocity, expensesVelocity,

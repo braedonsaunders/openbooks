@@ -57,11 +57,18 @@ const unavailable = (reason: string): { available: false; reason: string } => ({
  * English catalog rather than throwing.
  */
 async function analyticsReason(): Promise<CatalogMessageFn> {
+  // Only the declared scope refusal falls back to English: outside a
+  // dashboard request (tests, scripts) there is no request scope for
+  // translations to resolve in. Anything else — a broken messages import,
+  // a bug — throws instead of silently rendering the wrong language.
   try {
     const t = await getTranslations('analytics')
     return (key, values) => t(key, values as Record<string, string | number>)
-  } catch {
-    return englishCatalogMessage
+  } catch (e) {
+    if (e instanceof Error && /request scope|request context|app router|server component|client component/i.test(e.message)) {
+      return englishCatalogMessage
+    }
+    throw e
   }
 }
 

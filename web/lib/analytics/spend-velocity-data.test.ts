@@ -118,9 +118,10 @@ test("falling spend retains the acceleration signal from disjoint halves", () =>
 test("a zero first bucket measures from the first positive month, not zero", () => {
   const thresholds = { velocityHighThreshold: 15, velocityMediumThreshold: 5, minBaseAmount: "" };
   // 0 → 100 → 200 scores the measurable 100 → 200 leg instead of a flat 0.
+  // Three buckets hold no acceleration halves, so acceleration is unmeasured.
   assert.deepEqual(velocityAndAcceleration([0, 100, 200], thresholds), {
     velocity: 100,
-    acceleration: 0,
+    acceleration: null,
     trend: "high",
   });
   // Exact-string twin: a zero first bucket divides nothing and measures 100%.
@@ -141,11 +142,18 @@ test("months to cliff compounds the measured gap to the breached ratio", () => {
   // PO growing 10 points faster per period carries a 1.0 ratio past 1.5 in ~4 periods.
   assert.equal(monthsToCliffFor(10, 1.0, 1.5), 4);
   // An already-breached ratio is pressure now, not months out.
-  assert.equal(monthsToCliffFor(10, 1.6, 1.5), 1);
+  assert.equal(monthsToCliffFor(10, 1.6, 1.5), 0);
   // No pace or no sales base compounds nothing.
   assert.equal(monthsToCliffFor(0, 1.0, 1.5), null);
   assert.equal(monthsToCliffFor(-5, 1.0, 1.5), null);
   assert.equal(monthsToCliffFor(10, 0, 1.5), null);
+});
+
+test("too little history measures nothing instead of a flat zero", () => {
+  const engine = { velocityHighThreshold: 15, velocityMediumThreshold: 5, minBaseAmount: "" };
+  assert.deepEqual(velocityAndAcceleration([], engine), { velocity: null, acceleration: null, trend: "stable" });
+  assert.deepEqual(velocityAndAcceleration([0, 0], engine), { velocity: null, acceleration: null, trend: "stable" });
+  assert.deepEqual(velocityAndAcceleration([5], engine), { velocity: null, acceleration: null, trend: "new" });
 });
 
 test("an unset minimum base scores dust series from their first month", () => {

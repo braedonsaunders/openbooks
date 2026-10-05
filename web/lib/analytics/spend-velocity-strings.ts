@@ -47,7 +47,8 @@ export interface SpendVelocityStrings {
   zombies(count: number, annualCost: string): SpendVelocityInsightText;
   fragmentation(categories: number): SpendVelocityInsightText;
   opexRatio(pct: number): SpendVelocityInsightText;
-  cliff(po: number | null, so: number | null, gap: number | null, ratio: number): SpendVelocityInsightText;
+  cliff(po: number | null, so: number | null, gap: number | null, ratio: number | null): SpendVelocityInsightText;
+  /** `monthsToCliff` 0 means the ratio already breaches the target. */
   cliffAction(monthsToCliff: number | null): string;
   seasonalHigh(monthNames: string[]): string;
   seasonalLow(monthNames: string[]): string;
@@ -124,14 +125,16 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
       title: t("spendVelocity.insights.cliff.title"),
       message:
         po === null || so === null || gap === null
-          ? t("spendVelocity.insights.cliff.messageNoVelocity", { ratio })
-          : t("spendVelocity.insights.cliff.message", { po, so, gap, ratio }),
+          ? t("spendVelocity.insights.cliff.messageNoVelocity", { ratio: ratio === null ? "—" : ratio })
+          : t("spendVelocity.insights.cliff.message", { po, so, gap, ratio: ratio === null ? "—" : ratio }),
       action: "",
     }),
     cliffAction: (monthsToCliff) =>
-      monthsToCliff
-        ? t("spendVelocity.insights.cliff.actionWithMonths", { months: monthsToCliff })
-        : t("spendVelocity.insights.cliff.actionMonitor"),
+      monthsToCliff === null
+        ? t("spendVelocity.insights.cliff.actionMonitor")
+        : monthsToCliff === 0
+          ? t("spendVelocity.insights.cliff.actionBreached")
+          : t("spendVelocity.insights.cliff.actionWithMonths", { months: monthsToCliff }),
     seasonalHigh: (monthNames) => t("spendVelocity.insights.seasonalHigh", { months: list(monthNames) }),
     seasonalLow: (monthNames) => t("spendVelocity.insights.seasonalLow", { months: list(monthNames) }),
     shadowItReason: t("spendVelocity.insights.shadowItReason"),

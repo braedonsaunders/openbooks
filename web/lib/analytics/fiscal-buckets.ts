@@ -90,16 +90,17 @@ export function priorYearWindow(
 
 /**
  * Periods per fiscal year around a date, for annualising per-period figures
- * (13 for a thirteen-period year, 12 for 4-4-5 or monthly calendars).
- * Unknown coverage annualises by calendar months.
+ * (13 for a thirteen-period year, 12 for 4-4-5 or monthly calendars). Null
+ * outside declared coverage: annualising against an unknown cadence would
+ * invent a year, so callers leave those figures unmeasurable instead.
  */
-export function fiscalPeriodsPerYear(periods: FiscalPeriod[], asOf: string): number {
+export function fiscalPeriodsPerYear(periods: FiscalPeriod[], asOf: string): number | null {
   const perYear = new Map<number, number>();
   for (const p of periods) perYear.set(p.fiscalYear, (perYear.get(p.fiscalYear) ?? 0) + 1);
   for (const p of periods) {
-    if (p.from <= asOf && asOf <= p.to) return perYear.get(p.fiscalYear) ?? 12;
+    if (p.from <= asOf && asOf <= p.to) return perYear.get(p.fiscalYear) ?? null;
   }
-  return 12;
+  return null;
 }
 
 export interface FiscalMonthBox {
