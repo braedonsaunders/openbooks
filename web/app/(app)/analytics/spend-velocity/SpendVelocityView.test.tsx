@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { ReactElement } from 'react'
 import type { SpendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
 import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
+import { SPEND_VELOCITY_SEVERITY_MODEL } from '../../../../lib/analytics/spend-velocity-data'
 
 // Spend account CSVs must carry exact ledger amounts: current, prior,
 // two-back and projected pass through instead of being rounded.
@@ -17,6 +18,15 @@ registerHooks({
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export function InsightChart(){return null}export function InsightResultView(){return null}',
+      }
+    }
+    // The configuration tab hosts the shared threshold editor, which reads
+    // the Next app router: outside a mounted router it gets a no-op stub, so
+    // the tab's read-only rubric panel stays testable here.
+    if (specifier === 'next/navigation') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function useRouter(){return{refresh(){},push(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return"/"}export function useSearchParams(){return new URLSearchParams()}',
       }
     }
     return next(specifier, context)
@@ -39,6 +49,7 @@ function fixture(): SpendVelocityData {
   return {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
     config: { ...ANALYTICS_CONFIG.spendVelocity.defaults },
+    severityModel: SPEND_VELOCITY_SEVERITY_MODEL,
     summary: {
       totalSpend: '5432.1090',
       accountCount: 1,
@@ -61,7 +72,8 @@ function fixture(): SpendVelocityData {
     fragmentation: { summary: { fragmentedCategories: 0, totalFragmentedSpend: '0', configured: false, reason: 'Set the fragmentation size cap in Spend Velocity → Configuration' }, categories: [] },
     concentration: { summary: { top1Share: 10, top5Share: 40 }, accounts: [] },
     shadowIT: { available: false, reason: 'Expense lines carry no payee vendor' },
-    commitmentCliff: { summary: { velocityGap: 0, status: 'healthy', poVelocity: 0 } },
+    revenue: { hasData: false, totalRevenue: '0', opexRatio: 0 },
+    commitmentCliff: { summary: { velocityGap: null, status: 'healthy', poVelocity: null, soVelocity: null, ratio: 0, monthsToCliff: null, totalPO: '0', totalSO: '0', configured: false, reason: 'Set the minimum base in Spend Velocity → Configuration' }, months: [] },
     seasonal: { insights: [], patterns: [] },
     accountVelocity: [],
     monthlyTrends: [],
@@ -171,6 +183,60 @@ test('spend velocity CSV exports retain account amount decimals', async () => {
     host.remove()
     URL.createObjectURL = realCreateObjectURL
     URL.revokeObjectURL = realRevokeObjectURL
+  }
+})
+
+test('an unconfigured cliff names its remedy instead of scoring without a floor', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    await act(async () => {
+      root.render(providers(<SpendVelocityView data={fixture()} />))
+      await tick()
+    })
+    await tick()
+    const detectorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Detectors'))
+    assert.ok(detectorsTab, 'the detectors tab must exist')
+    await click(detectorsTab)
+    assert.ok(
+      host.textContent?.includes('Set the minimum base in Spend Velocity → Configuration'),
+      `the cliff tile must name its remedy, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  }
+})
+
+test('the configuration tab renders the fixed scoring rubric read-only', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    await act(async () => {
+      root.render(providers(<SpendVelocityView data={fixture()} />))
+      await tick()
+    })
+    await tick()
+    const configTab = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Configuration')
+    assert.ok(configTab, 'the configuration tab must exist')
+    await click(configTab)
+    assert.ok(
+      host.textContent?.includes('Scoring model'),
+      `the rubric panel must render, got:\n${host.textContent}`,
+    )
+    assert.ok(
+      host.textContent?.includes('Deduction cap'),
+      `the rubric rows must name their weights, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
   }
 })
 

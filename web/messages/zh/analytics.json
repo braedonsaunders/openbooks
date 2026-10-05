@@ -1285,6 +1285,13 @@
           "label": "战术层（%）",
           "help": "排名在该占比以内的为战术层"
         }
+      },
+      "groups": {
+        "grading": "评级",
+        "tiers": "层级",
+        "scorecard": "评分卡",
+        "concentration": "集中度",
+        "paymentMarks": "付款标准"
       }
     },
     "payment": {
@@ -2242,10 +2249,6 @@
           "label": "悬崖严重差（pp）",
           "help": "采购/销售增速差超过该值即为严重"
         },
-        "cliffCriticalPoints": {
-          "label": "悬崖严重扣分",
-          "help": "严重悬崖的健康扣分"
-        },
         "cliffCriticalRatio": {
           "label": "悬崖严重比",
           "help": "采购/销售比超过该值即为严重"
@@ -2253,10 +2256,6 @@
         "cliffWarningGap": {
           "label": "悬崖预警差（pp）",
           "help": "采购/销售增速差超过该值即为预警"
-        },
-        "cliffWarningPoints": {
-          "label": "悬崖预警扣分",
-          "help": "预警悬崖的健康扣分"
         },
         "cliffWarningRatio": {
           "label": "悬崖预警比",
@@ -2278,42 +2277,6 @@
           "label": "碎片化重度（笔/月）",
           "help": "月交易数超过该值即为重度"
         },
-        "fragmentationUnitCap": {
-          "label": "碎片化上限",
-          "help": "碎片化的结构分上限"
-        },
-        "fragmentationUnitWeight": {
-          "label": "碎片化权重",
-          "help": "每个碎片化品类的结构分"
-        },
-        "healthCriticalAnomalyCap": {
-          "label": "严重异常上限",
-          "help": "严重异常的扣分上限"
-        },
-        "healthCriticalAnomalyUnit": {
-          "label": "严重异常单项",
-          "help": "每个严重异常的扣分"
-        },
-        "healthCriticalCap": {
-          "label": "严重扣分上限",
-          "help": "严重问题的扣分上限"
-        },
-        "healthCriticalFrogCap": {
-          "label": "严重隐性增长上限",
-          "help": "严重隐性增长的扣分上限"
-        },
-        "healthCriticalFrogUnit": {
-          "label": "严重隐性增长单项",
-          "help": "每个严重隐性增长的扣分"
-        },
-        "healthCriticalZombieCap": {
-          "label": "严重僵尸上限",
-          "help": "严重僵尸的扣分上限"
-        },
-        "healthCriticalZombieUnit": {
-          "label": "严重僵尸单项",
-          "help": "每个严重僵尸订阅的扣分"
-        },
         "healthGradeA": {
           "label": "健康A",
           "help": "健康分达到该值即为A"
@@ -2329,50 +2292,6 @@
         "healthGradeD": {
           "label": "健康D",
           "help": "健康分达到该值即为D"
-        },
-        "healthStructuralCap": {
-          "label": "结构扣分上限",
-          "help": "结构性风险的扣分上限"
-        },
-        "healthVelocityCap": {
-          "label": "增速扣分上限",
-          "help": "高速增速的健康扣分上限"
-        },
-        "healthVelocityUnit": {
-          "label": "增速单位扣分",
-          "help": "每个高速科目的扣分"
-        },
-        "healthVelocityUnitCap": {
-          "label": "增速分组上限",
-          "help": "每组增速扣分上限"
-        },
-        "healthWarningAnomalyCap": {
-          "label": "预警异常上限",
-          "help": "非严重异常的扣分上限"
-        },
-        "healthWarningAnomalyUnit": {
-          "label": "预警异常单项",
-          "help": "每个非严重异常的扣分"
-        },
-        "healthWarningCap": {
-          "label": "预警扣分上限",
-          "help": "预警的扣分上限"
-        },
-        "healthWarningFrogCap": {
-          "label": "预警隐性增长上限",
-          "help": "非严重隐性增长的扣分上限"
-        },
-        "healthWarningFrogUnit": {
-          "label": "预警隐性增长单项",
-          "help": "每个非严重煮青蛙的扣分"
-        },
-        "healthWarningZombieCap": {
-          "label": "预警僵尸上限",
-          "help": "非严重僵尸的扣分上限"
-        },
-        "healthWarningZombieUnit": {
-          "label": "预警僵尸单项",
-          "help": "每个非严重僵尸订阅的扣分"
         },
         "hhiCritical": {
           "label": "HHI严重线",
@@ -2402,22 +2321,6 @@
           "label": "预测上限（合计）（%）",
           "help": "合计预测变动以该值为限"
         },
-        "savingsCriticalPoints": {
-          "label": "节约分（严重）",
-          "help": "超过严重线时的扣分"
-        },
-        "savingsHighPoints": {
-          "label": "节约分（高）",
-          "help": "超过高线时的扣分"
-        },
-        "savingsLowPoints": {
-          "label": "节约分（低）",
-          "help": "超过低线时的扣分"
-        },
-        "savingsMediumPoints": {
-          "label": "节约分（中）",
-          "help": "超过中线时的扣分"
-        },
         "savingsRatioCritical": {
           "label": "节约率（严重）（%）",
           "help": "节约/支出比超过该值扣严重分"
@@ -2438,10 +2341,6 @@
           "label": "节约率（关注）（%）",
           "help": "节约/支出比超过该值扣关注分"
         },
-        "savingsWatchPoints": {
-          "label": "节约分（关注）",
-          "help": "超过关注线时的扣分"
-        },
         "seasonalBand": {
           "label": "季节带（%）",
           "help": "月度偏离超过该值即为旺季或淡季"
@@ -2458,25 +2357,13 @@
           "label": "首位占比高（%）",
           "help": "首位科目超过该值加高结构分"
         },
-        "structuralTop1HighPoints": {
-          "label": "首位分数（高）",
-          "help": "超过高线时的结构分"
-        },
         "structuralTop1Low": {
           "label": "首位占比低（%）",
           "help": "首位科目超过该值加低结构分"
         },
-        "structuralTop1LowPoints": {
-          "label": "首位分数（低）",
-          "help": "超过低线时的结构分"
-        },
         "structuralTop1Medium": {
           "label": "首位占比中（%）",
           "help": "首位科目超过该值加中结构分"
-        },
-        "structuralTop1MediumPoints": {
-          "label": "首位分数（中）",
-          "help": "超过中线时的结构分"
         },
         "topVendorsCount": {
           "label": "头部供应商数",
@@ -2512,7 +2399,21 @@
         "label": "僵尸窗口",
         "note": "相同的周期性供应商合计（偏差<1%）"
       },
-      "unsetMinimum": "无下限 — 每个序列均从首月开始评分"
+      "unsetMinimum": "无下限 — 每个序列均从首月开始评分",
+      "groups": {
+        "growth": "增长",
+        "anomalyDetection": "异常检测",
+        "creepAndZombies": "煮青蛙和僵尸",
+        "fragmentation": "碎片化",
+        "seasonal": "季节性",
+        "concentration": "集中度",
+        "cliff": "承诺断崖",
+        "projections": "预测",
+        "insightTriggers": "洞察触发器",
+        "grading": "评级",
+        "structuralBands": "结构区间",
+        "savingsBands": "节约区间"
+      }
     },
     "csv": {
       "changePct": "变动%",
@@ -2607,6 +2508,7 @@
       "highestVelocity": "速率最高的科目",
       "insights": "洞察",
       "modelThresholds": "模型与阈值",
+      "severityModel": "评分模型",
       "monthlySpendVelocity": "月度支出速率",
       "monthlySpendVelocityHint": "当月与去年同月对比",
       "monthlySummary": "月度汇总",
@@ -2720,6 +2622,53 @@
     "labels": {
       "unknownParty": "未知",
       "accountFallback": "科目{id}"
+    },
+    "model": {
+      "velocity": {
+        "label": "增速扣分",
+        "cap": "扣分上限",
+        "unit": "每账户分数",
+        "unitCap": "每账户上限"
+      },
+      "critical": {
+        "label": "严重问题扣分",
+        "cap": "扣分上限",
+        "anomalyUnit": "每个严重异常分数",
+        "anomalyCap": "异常上限",
+        "frogUnit": "每个煮青蛙账户分数（严重）",
+        "frogCap": "煮青蛙上限",
+        "zombieUnit": "每个严重僵尸分数",
+        "zombieCap": "僵尸上限"
+      },
+      "warning": {
+        "label": "警告扣分",
+        "cap": "扣分上限",
+        "anomalyUnit": "每个警告异常分数",
+        "anomalyCap": "异常上限",
+        "frogUnit": "每个煮青蛙账户分数（警告）",
+        "frogCap": "煮青蛙上限",
+        "zombieUnit": "每个警告僵尸分数",
+        "zombieCap": "僵尸上限"
+      },
+      "structural": {
+        "label": "结构风险扣分",
+        "cap": "扣分上限",
+        "top1HighPoints": "头部占比高分",
+        "top1MediumPoints": "头部占比中分",
+        "top1LowPoints": "头部占比低分",
+        "fragmentationUnitWeight": "每个碎片化类别分数",
+        "fragmentationUnitCap": "碎片化上限",
+        "cliffCriticalPoints": "严重断崖分数",
+        "cliffWarningPoints": "警告断崖分数"
+      },
+      "savings": {
+        "label": "节约影响扣分",
+        "watchPoints": "观察分数",
+        "lowPoints": "低分数",
+        "mediumPoints": "中分数",
+        "highPoints": "高分数",
+        "criticalPoints": "严重分数"
+      }
     }
   },
   "sentinel": {
