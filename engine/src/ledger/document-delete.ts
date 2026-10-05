@@ -95,12 +95,16 @@ export async function deleteDocument(
 
     // Drafts that already feed another record are still evidence in that
     // record's provenance chain. Delete the downstream draft first.
+    // 'reverses' and 'corrects' edges point from the downstream record at
+    // its source (a draft replacement at its posted source, a draft credit
+    // at the invoice it corrects), so the draft on the from side stays
+    // deletable; the link rows are removed with the document below.
     const downstream = (await tx.execute<{ document_number: string }>(sql`
       select d2.document_number
         from document_links dl
         join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
        where dl.from_document_id = ${documentId} and dl.org_id = ${doc.orgId}
-         and dl.link_type <> 'reverses'
+         and dl.link_type not in ('reverses', 'corrects')
        limit 1
     `));
     if (downstream.rows[0]) {

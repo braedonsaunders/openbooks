@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { recordSupplyEvidence } from "./cross-border-records.ts";
+import { deleteDocument } from "../ledger/document-delete.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 // A credit memo naming the invoice it corrects must be a first-class
@@ -237,6 +238,30 @@ test("clearing a correction removes the relationship while re-saves preserve it"
       actorId,
     );
     assert.deepEqual(await correctionEdge(org.orgId, creditId), [], "clearing the pointer removes the relationship");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a draft credit naming its corrected invoice stays deletable", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+    await enableCrossBorderTax(org);
+    const invoiceId = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-DEL" });
+    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-DEL" });
+    await recordCorrection(org, actorId, creditId, invoiceId);
+    // The 'corrects' edge points from the draft credit at its posted source,
+    // like a 'reverses' edge: deleting the credit must succeed and take the
+    // edge with it, never name the posted invoice as downstream to remove.
+    await deleteDocument(creditId, actorId, org.orgId, {
+      reason: "entered in error",
+      allowedSubsidiaryIds: null,
+    });
+    const gone = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from documents where id = ${creditId} and org_id = ${org.orgId}`)).rows[0]!.n;
+    assert.equal(gone, 0, "the draft credit deletes instead of refusing on its correction edge");
+    assert.deepEqual(await correctionEdge(org.orgId, creditId), [], "the edge is removed with its credit");
   } finally {
     await dropScratchOrg(org.orgId);
   }
