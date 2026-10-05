@@ -92,7 +92,7 @@ const profileSchema = z.strictObject({
   name: z.string().trim().min(1).max(60),
   color: z.string().max(40).nullable().optional(),
   compositeMethod: enumKeys(COMPOSITE_KEYS, 'compositeMethod'),
-  baseLaborRate: exactAmount('baseLaborRate'),
+  baseLaborRate: z.union([z.literal(''), exactAmount('baseLaborRate')]),
   fringeRate: boundedRate('fringeRate', '1'),
   categorySettings: z.record(z.string(), categorySettingSchema),
   customCategories: z.array(customCategorySchema).max(30),
@@ -306,7 +306,9 @@ function cleanProfile(raw: unknown): TrueCostProfile {
     name,
     color: typeof p.color === "string" ? p.color : "#3b82f6",
     compositeMethod: (COMPOSITE_KEYS.has(String(p.compositeMethod)) ? p.compositeMethod : "sum") as CompositeMethod,
-    baseLaborRate: persistMoney(p.baseLaborRate, "50.0000"),
+    // No assumed labor rate: empty persists as unset, and the dashboard
+    // derives from costed time or refuses when cascading needs one.
+    baseLaborRate: p.baseLaborRate == null || p.baseLaborRate === "" ? "" : persistMoney(p.baseLaborRate, "0.0000"),
     fringeRate: persistBoundedDecimal(p.fringeRate, "0.25", "1"),
     categorySettings,
       customCategories: Array.isArray(p.customCategories) ? p.customCategories.map(cleanCustomCategory) : [],

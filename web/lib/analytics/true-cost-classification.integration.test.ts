@@ -149,6 +149,56 @@ test('true cost refuses absorption by name with no applied postings', { skip: !e
 })
 
 /**
+ * Cascading with no costed labor and no explicit base rate refuses by name
+ * instead of pricing every cascade at an assumed 50/hr: the profile sets
+ * cascading with an empty base, the period's billed time carries no cost
+ * rate, and a real burden category forces the composite to resolve.
+ */
+test('true cost cascading refuses by name with no costed labor and no base rate', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const dept = randomUUID()
+  const emp = randomUUID()
+  const groupId = randomUUID()
+  const rentAccount = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'Cascade Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${rentAccount}, ${org.orgId}, '7000', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
+    const entry = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'CASC-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${entry}, 1, ${rentAccount}, ${org.subsidiaryId}, ${dept}, '800', 'CAD', '800', '1'),
+             (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${dept}, '-800', 'CAD', '-800', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+    await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ analytics: { trueCost: { activeProfileId: 'p1', profiles: [{ id: 'p1', name: 'Cascading', color: null, compositeMethod: 'cascading', baseLaborRate: '', fringeRate: '0.25', categorySettings: {}, customCategories: [], baseOverrides: {} }] } } })}::jsonb
+      where id = ${org.orgId}`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      await assert.rejects(
+        trueCostData(org.orgId, JULY, null),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /needs a labor rate/);
+          assert.match(error.message, /base labor rate/);
+          return true;
+        },
+      )
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
  * Labour dollars are the configured cost_pool / direct_labor account set
  * (rule plus pin) — the same classification that excludes direct labour from
  * burden. The 1000 on the name-matching `Wages and Salaries` account is
