@@ -25,12 +25,14 @@ interface QuoteLine {
     tcv: string
   }>
   tcv: string
+  /** Null when no signing request remains open — the form refuses instead. */
   signature: {
+    status: string
     signerName: string
     signerEmail: string
     expiresAt: string
     consentText: string
-  }
+  } | null
 }
 
 function money(amount: string, currency: string): string {
@@ -56,7 +58,7 @@ export function QuoteSignForm({ token }: { token: string }) {
     }
     const body = (await res.json()) as QuoteLine
     setQuote(body)
-    setName((current) => current || body.signature.signerName)
+    setName((current) => current || body.signature?.signerName || '')
   }, [token])
 
   useEffect(() => {
@@ -79,7 +81,7 @@ export function QuoteSignForm({ token }: { token: string }) {
         return
       }
       if (action === 'decline') {
-        setRefusal('You declined this quote. The sender has been notified and can re-issue it.')
+        setRefusal('You declined this quote. Your decline is recorded — ask the sender for a new link if anything changes.')
         return
       }
       setDone(true)
@@ -112,6 +114,46 @@ export function QuoteSignForm({ token }: { token: string }) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <p className="text-sm text-slate-500">Loading your quote…</p>
+      </div>
+    )
+  }
+
+  if (!quote.signature) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p className="font-medium text-slate-900 dark:text-slate-100">This link has no active signing request</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Ask the sender to re-send the signing link.</p>
+      </div>
+    )
+  }
+
+  if (quote.signature.status === 'signed') {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Signed — thank you</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+          This link already recorded a signature. The sender will activate your subscription and confirm the start date.
+        </p>
+      </div>
+    )
+  }
+
+  if (quote.signature.status === 'declined') {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p className="font-medium text-slate-900 dark:text-slate-100">You declined this quote</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+          Your decline is recorded. Ask the sender for a new link if anything changes.
+        </p>
+      </div>
+    )
+  }
+
+  if (quote.signature.status !== 'sent' && quote.signature.status !== 'viewed') {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p className="font-medium text-slate-900 dark:text-slate-100">This link is no longer open</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Ask the sender to re-send the signing link.</p>
       </div>
     )
   }

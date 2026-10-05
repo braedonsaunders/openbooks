@@ -4,8 +4,8 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import {
   declineQuoteSignature,
+  publicQuoteSignView,
   signQuoteSignature,
-  viewQuoteSignature,
 } from "@openbooks/engine/billing/quote-to-cash";
 
 const signBody = z.object({
@@ -26,7 +26,7 @@ export const GET = defineRoute({
   handler: async ({ params: routeParams }) => {
     try {
       const { token } = routeParams as { token: string };
-      return NextResponse.json(await viewQuoteSignature(token));
+      return NextResponse.json(await publicQuoteSignView(token));
     } catch (e) {
       return apiErrorResponse(e);
     }

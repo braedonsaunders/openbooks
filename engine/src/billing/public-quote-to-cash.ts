@@ -9,6 +9,7 @@ export {
   QUOTE_SUBJECT_TABLE,
   quoteCashPreview,
   QuoteToCashError,
+  publicQuoteSignView,
   requestQuoteSignature,
   saveQuoteTerm,
   saveQuoteToCashSettings,
@@ -19,6 +20,8 @@ export {
 export type {
   ActivateQuoteOptions,
   ActivateQuoteResult,
+  PublicQuoteSignTerm,
+  PublicQuoteSignView,
   QuoteCashPreview,
   QuoteToCashSettings,
   SaveQuoteToCashSettingsInput,
