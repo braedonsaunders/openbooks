@@ -9,7 +9,7 @@ import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/appli
 import { loadPersonaMetrics, type PersonaMetrics } from './_persona'
 import { randomUUID } from 'node:crypto'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
-import { bankingHome } from '@/lib/module-home/banking'
+import { bankingReconCount } from '@/lib/module-home/banking'
 import { resourcingHome } from '@/lib/module-home/resourcing'
 import { widgetFeatureOn } from './widget-features'
 import { expensesDashboard } from '@/lib/expenses-dashboard'
@@ -27,6 +27,7 @@ import { groupByVendor, type VendorPayable } from '@/lib/cash/ap-position'
 import { cashPosition, type ApSettings } from '@/lib/cash/cash-position'
 import { analyticsConfig } from '@/lib/analytics/config'
 import { ANALYTICS_CONFIG } from '@/lib/analytics/config-spec'
+import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopePredicate } from '@/lib/agents/work-item-subsidiary-scope'
 import {
   addDays,
@@ -374,15 +375,15 @@ export type DashboardMetrics = {
 /**
  * Bank-reconciliation queue for the dashboard tile. Returns null for a
  * caller without `banking.read` BEFORE any query runs — denial must skip
- * the reader, not merely hide its result. Reads `bankingHome`, the same
- * reader as the /banking cockpit and its Match-button count, so the tile
- * and the cockpit tie by construction.
+ * the reader, not merely hide its result. Counts off the same roster rows
+ * the /banking workspace sums (so the tile and the cockpit tie by
+ * construction) but never translates money — a missing exchange rate
+ * cannot refuse a tile that shows no currency.
  */
 export async function loadReconSummary(authz: Authz): Promise<{ unreconciledItems: number } | null> {
   if (!can(authz, 'banking.read')) return null
   const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
-  const home = await bankingHome(authz.user.orgId, subIds)
-  return { unreconciledItems: home.unmatchedLines }
+  return { unreconciledItems: await bankingReconCount(authz.user.orgId, subIds) }
 }
 
 /**
@@ -645,9 +646,10 @@ export async function loadDashboardMetrics(
     // default horizon, the same AP capacity settings, the same caution
     // threshold, the same subsidiary doorway (unrestricted callers also match
     // root-owned rows, exactly as the
-    // page's includeNullSubsidiary). A blocked FX-rate pipeline refuses
-    // inside with MissingRatesError — the page answers with its rates
-    // banner, the tile with no-data; anything else throws.
+    // page's includeNullSubsidiary). A missing exchange rate refuses inside
+    // as MissingExchangeRateError — the tile maps exactly that to no-data
+    // (the page answers the same condition with its rates banner);
+    // anything else still throws.
     wantRunway
       ? readers
         .cashflowConfig(orgId)
@@ -670,7 +672,7 @@ export async function loadDashboardMetrics(
           lowestWeek: p.lowestWeek,
         }))
         .catch((e: unknown) => {
-          if (e instanceof MissingRatesError) return null
+          if (e instanceof MissingExchangeRateError) return null
           throw e
         })
       : Promise.resolve(null),
