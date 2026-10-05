@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { DirtyUrlDrawer, useDirtyUrlDrawer } from '../../../../../components/dirty-url-drawer'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
@@ -29,7 +29,8 @@ function ScheduleForm({ employees, closeHref }: { employees: Employee[]; closeHr
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null)
   const close = useDirtyUrlDrawer(when !== '' || manager !== '' || report !== '', busy)
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const locale = useLocale()
+  const zone = Intl.DateTimeFormat(locale).resolvedOptions().timeZone
   async function submit() {
     setBusy(true)
     setError(null)
