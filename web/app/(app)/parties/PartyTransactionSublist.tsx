@@ -26,6 +26,10 @@ interface TransactionRow {
   total: string
   open_balance: string | null
   memo: string | null
+  /** The party's role on the document: billed (header), service (a line's
+   *  service party), or bill_to (consolidated bill-to). Absent on older
+   *  payloads, which read as billed. */
+  party_role?: 'billed' | 'service' | 'bill_to' | null
 }
 
 interface TransactionResponse {
@@ -175,7 +179,7 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
             <TableBody>
               {visibleData.rows.map((row) => (
                 <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
-                  <TableCell><div className="flex items-center gap-2"><DocTypeBadge kind={row.kind} /><Link href={transactionHref(row) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.document_number}</Link></div></TableCell>
+                  <TableCell><div className="flex items-center gap-2"><DocTypeBadge kind={row.kind} /><Link href={transactionHref(row) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.document_number}</Link>{row.party_role && row.party_role !== 'billed' ? <Badge variant="secondary">{t(`role.${row.party_role}`)}</Badge> : null}</div></TableCell>
                   <TableCell>{date(new Date(`${row.document_date}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{row.reference_number || '—'}</TableCell>
                   <TableCell><Badge variant={row.status === 'posted' ? 'success' : row.status === 'pending_approval' ? 'warning' : 'secondary'}>{statusLabel(row.status)}</Badge></TableCell>

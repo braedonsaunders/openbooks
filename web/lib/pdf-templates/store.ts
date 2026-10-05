@@ -137,14 +137,37 @@ export function printDesignHash(design: PdfPrintDesign): string {
 }
 
 /**
+ * A document's designated template name (for example the consolidation
+ * group's template recorded on its invoices). Null for non-document record
+ * types and for documents without a designation.
+ */
+export async function loadRecordDesignatedTemplateName(
+  orgId: string,
+  docKind: string | null,
+  id: string,
+): Promise<string | null> {
+  if (!docKind) return null
+  const rows = (await db.execute<{ name: string | null }>(sql`
+    select custom ->> 'template' as name from documents
+     where org_id = ${orgId} and id = ${id} and kind = ${docKind}
+     limit 1
+  `)).rows
+  const name = (rows[0]?.name ?? '').trim()
+  return name ? name : null
+}
+
+/**
  * Resolve the template to print a record with: an explicit template id, else
- * the org default for the record type, else the built-in starter design (so
- * every record prints beautifully with zero setup).
+ * the record's designated template name (for example a consolidation group's
+ * template recorded on its invoices), else the org default for the record
+ * type, else the built-in starter design (so every record prints beautifully
+ * with zero setup).
  */
 export async function resolvePdfTemplate(
   orgId: string,
   recordType: string,
   templateId?: string | null,
+  designatedName?: string | null,
 ): Promise<ResolvedPdfTemplate | null> {
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
@@ -159,6 +182,25 @@ export async function resolvePdfTemplate(
       }
     }
     return null
+  }
+
+  // A record-level designation (for example the consolidation group's
+  // template recorded on its invoices) wins over the org default: the group
+  // chose its own face for its own invoices. An unknown or inactive name
+  // falls through to the default rather than refusing the print.
+  const designation = (designatedName ?? '').trim()
+  if (designation) {
+    const named = (await db.execute<PdfTemplateRow>(sql`
+      select ${COLS} from pdf_templates
+       where org_id = ${orgId} and record_type = ${recordType} and is_active and name = ${designation}
+       limit 1
+    `)).rows[0]
+    if (named) {
+      return {
+        ...named,
+        provenance: { templateId: named.id, revision: named.revision, contentHash: printDesignHash(named) },
+      }
+    }
   }
 
   const r = (await db.execute<PdfTemplateRow>(sql`
