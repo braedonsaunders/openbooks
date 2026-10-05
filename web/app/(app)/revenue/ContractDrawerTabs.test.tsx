@@ -72,7 +72,7 @@ function payload(): Payload {
         recognition_starts_on: "2026-01-01",
         recognition_ends_on: "2026-12-31",
         status: "open",
-        method: "straight_line",
+        method: "straight_line_even",
         rule_name: "straight-line",
         legacy_unverified: false,
         fair_value_flag: null,
@@ -107,6 +107,58 @@ function payload(): Payload {
 function textOf(text: string): Element | null {
   const all = Array.from(document.querySelectorAll("span, h3, button"));
   return all.find((element) => element.textContent === text) ?? null;
+}
+
+function twoObligationPayload(): Payload {
+  const base = payload();
+  const second = {
+    ...base.obligations[0],
+    id: "ob-2",
+    description: "Annual plan B",
+    allocated_price: "600.0000",
+    planned: "600.0000",
+    recognized: "50.0000",
+    lines: [
+      {
+        period_name: "2026-02",
+        period_ends_on: "2026-02-28",
+        planned_amount: "50.0000",
+        recognized_amount: "50.0000",
+        journal_entry_id: "je-2",
+      },
+    ],
+  };
+  return {
+    ...base,
+    obligations: [
+      { ...base.obligations[0], id: "ob-1", description: "Annual plan A" },
+      second,
+    ],
+  };
+}
+
+function stripTab(label: string): HTMLButtonElement {
+  const strip = document.querySelector("nav[aria-label='Contract sections']");
+  assert.ok(strip, "the drawer must offer the Overview/Obligations strip");
+  const tab = Array.from(strip.querySelectorAll("button")).find(
+    (button) => button.textContent === label,
+  );
+  assert.ok(tab, `the strip must offer the ${label} sub-tab`);
+  return tab as HTMLButtonElement;
+}
+
+function selectorButton(description: string): HTMLButtonElement {
+  const selector = document.querySelector("section[aria-label='Obligations']");
+  assert.ok(selector, "the obligations body must offer the selector list");
+  const option = Array.from(selector.querySelectorAll("button")).find((button) =>
+    button.textContent?.includes(description),
+  );
+  assert.ok(option, `the selector must name ${description}`);
+  return option as HTMLButtonElement;
+}
+
+function click(button: HTMLButtonElement) {
+  button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 }
 
 /**
@@ -154,5 +206,85 @@ test("billings and obligation schedules render in separate sub-tab bodies", asyn
   assert.ok(
     scheduleHeading.closest("div[hidden]"),
     "the schedule body starts hidden behind the Obligations sub-tab",
+  );
+});
+
+/**
+ * Obligations follow the parent-child workflow: the selector names each
+ * obligation once, and selecting one shows only its recognition schedule
+ * in the focused pane — the sibling obligation's periods never render.
+ */
+test("selecting an obligation shows only its recognition schedule", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <MoneyProvider currency="USD">
+          <ContractDrawer payload={twoObligationPayload()} canRun={false} />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+    await tick();
+  });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  await act(async () => {
+    click(stripTab("Obligations"));
+    await tick();
+  });
+
+  assert.ok(
+    selectorButton("Annual plan A"),
+    "the selector names the first obligation",
+  );
+  assert.ok(
+    selectorButton("Annual plan B"),
+    "the selector names the second obligation",
+  );
+
+  // The focused pane is the single detail section named for the selection:
+  // the sibling obligation's pane never renders beside it.
+  let pane = document.querySelector("section[aria-label='Annual plan A']");
+  assert.ok(pane, "the default selection focuses the first obligation");
+  assert.equal(
+    document.querySelector("section[aria-label='Annual plan B']"),
+    null,
+    "the sibling obligation renders no schedule pane",
+  );
+  assert.match(
+    pane.textContent ?? "",
+    /2026-01/,
+    "the focused pane shows the selected obligation's period",
+  );
+
+  await act(async () => {
+    click(selectorButton("Annual plan B"));
+    await tick();
+  });
+
+  pane = document.querySelector("section[aria-label='Annual plan B']");
+  assert.ok(pane, "selecting the second obligation focuses its pane");
+  assert.equal(
+    document.querySelector("section[aria-label='Annual plan A']"),
+    null,
+    "the first obligation's pane leaves with its selection",
+  );
+  assert.match(
+    pane.textContent ?? "",
+    /2026-02/,
+    "the focused pane shows the newly selected obligation's period",
+  );
+  assert.doesNotMatch(
+    pane.textContent ?? "",
+    /2026-01/,
+    "the previously selected period leaves the focused pane",
   );
 });
