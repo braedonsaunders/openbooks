@@ -41,6 +41,10 @@ export const POST = defineRoute({
   permission: "channels.manage",
   feature: "salesChannels",
   body: createBodySchema,
+  opaque: {
+    secrets: "connector credentials are sealed on write; their shape is the connector's, not the route's",
+    settings: "validated against the adapter's describeSettings schema in the engine, never as route JSON",
+  },
   handler: async ({ authz: gate, body }) => {
     const { channel, webhookSecret } = await createChannel(gate.user.orgId, gate.user.id, {
       kind: body.kind,

@@ -47,6 +47,10 @@ export const PATCH = defineRoute({
   feature: "salesChannels",
   params: z.object({ id: z.string() }),
   body: updateBodySchema,
+  opaque: {
+    secrets: "connector credentials are sealed on write; their shape is the connector's, not the route's",
+    settings: "validated against the adapter's describeSettings schema in the engine, never as route JSON",
+  },
   handler: async ({ authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
