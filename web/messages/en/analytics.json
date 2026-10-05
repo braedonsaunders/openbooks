@@ -1145,6 +1145,10 @@
       "transactional": {
         "label": "Transactional",
         "desc": "Low spend, low engagement — automate / consolidate"
+      },
+      "unrated": {
+        "label": "Unrated",
+        "desc": "No payment history yet — settle bills to rate"
       }
     },
     "chart": {
@@ -2706,6 +2710,10 @@
       "seasonalLow": "Lower spending typically occurs in {months}",
       "shadowItReason": "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
       "fragmentationUnconfigured": "Set the fragmentation size cap in Spend Velocity → Configuration"
+    },
+    "labels": {
+      "unknownParty": "Unknown",
+      "accountFallback": "Account {id}"
     }
   },
   "sentinel": {

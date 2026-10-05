@@ -2,10 +2,12 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { analyticsConfig, type ConfigValuesOf } from "./config";
+import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope } from "./fiscal-buckets";
 import { vendorStrings, type VendorStrings } from "./vendor-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 
@@ -21,57 +23,68 @@ import { englishCatalogMessage } from "./catalog-strings";
  * bill lines carry no item_id): OTIF, Lead Time, Purchase Price Variance, and
  * Maverick spend. Those need receipt/fulfillment + PO-matching data that isn't
  * captured here — surfaced honestly in the UI rather than faked.
+ *
+ * Money travels as exact decimal strings in the presentation currency from
+ * translation to the last sum; only ratios and counts cross into numbers.
+ * Every threshold below the loader reads from the organization's own
+ * vendorPerformance analytics config — no rate, band or cutoff is constant.
  */
 
 export type SpendTier = "strategic" | "core" | "tactical" | "tail";
 export type Grade = "A" | "B" | "C" | "D" | "F";
 // Leverage matrix: spend (financial impact) × performance. We proxy
 // "performance" with payment-relationship health (on-time %), the only vendor-
-// performance signal this ledger supports.
-export type Quadrant = "strategic" | "commodity" | "niche" | "transactional";
+// performance signal this ledger supports. Vendors with no payment history
+// are "unrated": they keep their spend position but are never plotted, and
+// the UI counts them by name instead of scoring them a neutral 50.
+export type Quadrant = "strategic" | "commodity" | "niche" | "transactional" | "unrated";
+
+export type VendorPerformanceConfig = ConfigValuesOf<"vendorPerformance">;
 
 export interface VendorRow {
   id: string;
   name: string;
-  spend: number;
-  priorSpend: number;
+  spend: string;
+  priorSpend: string;
   yoyPct: number | null;
   sharePct: number;
   bills: number;
-  avgBill: number;
+  avgBill: string;
   lastBill: string | null;
   recencyDays: number | null;
   tier: SpendTier;
   // payment behaviour (how we pay this vendor)
   paidBills: number;
+  undatedBills: number; // settled lines with no due date or payment terms
   avgDaysToPay: number | null;
   onTimePct: number | null;
   latePct: number | null;
-  lateSpend: number;
+  lateSpend: string;
   // derived scores
   score: number; // 0–100 relationship scorecard
   grade: Grade;
-  performance: number; // 0–100 payment-relationship health (matrix Y axis)
+  performance: number | null; // 0–100 payment-relationship health (matrix Y axis), null when unrated
   quadrant: Quadrant;
 }
 
 export interface MonthSpend {
   month: string;
   label: string;
-  spend: number;
+  spend: string;
 }
 
 export interface VendorData {
   period: { from: string; to: string; label: string };
+  config: VendorPerformanceConfig;
   rows: VendorRow[];
   monthly: MonthSpend[];
   totals: {
     vendors: number;
-    spend: number;
-    priorSpend: number;
+    spend: string;
+    priorSpend: string;
     yoyPct: number | null;
     bills: number;
-    avgBill: number;
+    avgBill: string;
     top5SharePct: number;
     top10SharePct: number;
     hhi: number;
@@ -79,11 +92,12 @@ export interface VendorData {
     strategic: number;
     onTimePct: number | null;
     avgDaysToPay: number | null;
-    lateSpend: number;
+    lateSpend: string;
+    undatedBills: number; // settled bill lines with no due date or payment terms, excluded from on-time figures
   };
-  tierBreakdown: { tier: SpendTier; count: number; spend: number }[];
-  gradeBreakdown: { grade: Grade; count: number; spend: number }[];
-  quadrantBreakdown: { quadrant: Quadrant; count: number; spend: number }[];
+  tierBreakdown: { tier: SpendTier; count: number; spend: string }[];
+  gradeBreakdown: { grade: Grade; count: number; spend: string }[];
+  quadrantBreakdown: { quadrant: Quadrant; count: number; spend: string }[];
 }
 
 interface VendorSpendRow extends Record<string, unknown> {
@@ -94,12 +108,12 @@ interface VendorBillRow extends Record<string, unknown> {
   id: string; bills: string | number; last_bill: string | null;
 }
 interface MonthSpendRow extends Record<string, unknown> {
-  month: string; spend: string | number; func: string | null; late: string | null;
+  bucket: string; bucket_label: string | null; spend: string | number; func: string | null; late: string | null;
 }
 interface VendorPaymentRow extends Record<string, unknown> {
   id: string; func: string | null; paid_lines: string | number;
   on_time: string | number; days_sum: string | number | null;
-  late_amount: string | number; late_dt: string | null;
+  late_amount: string | number; late_dt: string | null; undated: string | number;
 }
 
 function priorYear(iso: string): string {
@@ -108,11 +122,11 @@ function priorYear(iso: string): string {
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
 }
-function gradeOf(score: number): Grade {
-  if (score >= 85) return "A";
-  if (score >= 70) return "B";
-  if (score >= 55) return "C";
-  if (score >= 40) return "D";
+function gradeOf(score: number, c: VendorPerformanceConfig): Grade {
+  if (score >= c.gradeA) return "A";
+  if (score >= c.gradeB) return "B";
+  if (score >= c.gradeC) return "C";
+  if (score >= c.gradeD) return "D";
   return "F";
 }
 
@@ -132,10 +146,14 @@ export async function vendorData(
   // onto 1900-1999.
   const start = utcDateFromParts(end.getUTCFullYear(), end.getUTCMonth() - 11, 1);
   const startIso = start.toISOString().slice(0, 10);
+  const config = await analyticsConfig(orgId, "vendorPerformance");
+  const buckets = await fiscalBucketScope(orgId);
 
   const [spendRows, billRows, monthRows, payRows] = await Promise.all([
     // Entry window first: joined inline the planner drives from accounts and
     // probes the entry primary key once per journal line in the tenant.
+    // The vendor universe is parties holding a vendor role — expense lines
+    // posted against employees or customers are not vendor spend.
     db.execute<VendorSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
@@ -152,6 +170,7 @@ export async function vendorData(
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join parties p on p.id = l.party_id and p.org_id = l.org_id
+      join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
@@ -162,12 +181,14 @@ export async function vendorData(
       with bill_movements as (
         select d.party_id, d.posting_date::date as movement_date, 1::int as direction
           from documents d
+          join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.party_id is not null
            and d.status in ('posted', 'voided') and d.posting_date::date between ${from}::date and ${ref}::date
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         union all
         select d.party_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as movement_date, -1::int as direction
           from documents d
+          join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
           left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.party_id is not null
            and d.status = 'voided' and d.voided_at is not null
@@ -185,34 +206,46 @@ export async function vendorData(
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
            and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
       )
-      select to_char(e.posting_date, 'YYYY-MM') as month, sub.base_currency as func,
+      select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
+        ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
+        sub.base_currency as func,
         sum(l.amount) as spend, max(e.posting_date)::text as late
       from ew e
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join parties p on p.id = l.party_id and p.org_id = l.org_id
+      join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-      where l.org_id = ${orgId} and a.org_id = ${orgId}
+      ${fiscalBucketJoin(orgId, sql`e.posting_date`, buckets.useFiscal)}
+      where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-        and a.type in ('cogs','expense','expense_deferred')
-      group by 1, 2
+        and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
+      group by 1, 2, sub.base_currency
     `),
     // Payment behaviour: collapse applications to one row per AP open-item
     // line before rolling up by vendor. A bill paid in installments must still
     // contribute one paid bill, one on-time decision, and one days-to-pay
-    // observation only after full settlement. Days run from the bill date;
-    // due dates determine timeliness. Late spend also includes partial payments
+    // observation only after full settlement. Timeliness runs from the bill's
+    // own due date, else the vendor's payment terms counted from the bill
+    // date; settled lines with neither are excluded from the on-time rate
+    // and late spend and counted as undated. Days-to-pay needs no due date
+    // and keeps every settled line. Late spend also includes partial payments
     // actually made after due, within the report cutoff.
     db.execute<VendorPaymentRow>(sql`
       with bill_applications as (
         select bl.id as bill_line_id, bl.party_id, be.posting_date as bill_date,
           abs(bl.txn_amount) as bill_total, a.target_transaction_amount as applied_amount,
-          coalesce(bl.due_date, be.posting_date) as due_date,
+          coalesce(bill.due_date, case when pt.net_days is not null then (be.posting_date + pt.net_days)::date end) as due_date,
           pe.posting_date as payment_date,
           sub.base_currency as func,
           a.amount
         from applications a
         join journal_lines bl on bl.id = a.to_line_id and bl.org_id = a.org_id
         join journal_entries be on be.id = bl.entry_id and be.org_id = bl.org_id
+        left join documents bill on bill.id = be.source_document_id and bill.org_id = be.org_id
+          and bill.kind = 'vendor_bill'
+        join vendor_roles vr on vr.party_id = bl.party_id and vr.org_id = bl.org_id
+        left join payment_terms pt on pt.id = vr.payment_terms_id and pt.org_id = vr.org_id
         join journal_lines pl on pl.id = a.from_line_id and pl.org_id = a.org_id
         join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
         join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
@@ -230,16 +263,17 @@ export async function vendorData(
         select bill_line_id, party_id, bill_date, due_date, bill_total, func,
           sum(applied_amount) as applied,
           max(payment_date) as last_payment,
-          coalesce(sum(amount) filter (where payment_date > due_date), 0) as late_amount
+          coalesce(sum(amount) filter (where due_date is not null and payment_date > due_date), 0) as late_amount
         from bill_applications
         group by bill_line_id, party_id, bill_date, due_date, bill_total, func
       )
       select party_id as id, func,
         count(*) filter (where applied >= bill_total)::int as paid_lines,
-        count(*) filter (where applied >= bill_total and last_payment <= due_date)::int as on_time,
+        count(*) filter (where applied >= bill_total and due_date is not null and last_payment <= due_date)::int as on_time,
         coalesce(sum(last_payment - bill_date) filter (where applied >= bill_total), 0) as days_sum,
         coalesce(sum(late_amount), 0) as late_amount,
-        max(last_payment)::text as late_dt
+        max(last_payment)::text as late_dt,
+        count(*) filter (where applied >= bill_total and due_date is null)::int as undated
       from bill_payments
       group by party_id, func
     `),
@@ -266,145 +300,183 @@ export async function vendorData(
   const payCtx = await flowRates(orgId, payRows.rows.map((r) => ({
     func: r.func ?? null, date: String(r.late_dt ?? to).slice(0, 10),
   })));
-  const paidByParty = new Map<string, { paidBills: number; onTime: number; daysSum: number; lateSpend: string }>();
+  const paidByParty = new Map<string, { paidBills: number; onTime: number; daysSum: number; lateSpend: string; undated: number }>();
   for (const r of payRows.rows) {
-    const cur = paidByParty.get(String(r.id)) ?? { paidBills: 0, onTime: 0, daysSum: 0, lateSpend: "0" };
+    const cur = paidByParty.get(String(r.id)) ?? { paidBills: 0, onTime: 0, daysSum: 0, lateSpend: "0", undated: 0 };
     cur.paidBills += Number(r.paid_lines ?? 0);
     cur.onTime += Number(r.on_time ?? 0);
     cur.daysSum += Number(r.days_sum ?? 0);
     cur.lateSpend = add(cur.lateSpend, mulDecimal(String(r.late_amount ?? 0),
       payCtx.rateAt(r.func ?? null, String(r.late_dt ?? to).slice(0, 10))));
+    cur.undated += Number(r.undated ?? 0);
     paidByParty.set(String(r.id), cur);
   }
   const monthCtx = await flowRates(orgId, monthRows.rows.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
+    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
   })));
-  const spendByMonth = new Map<string, string>();
+  const spendByBucket = new Map<string, string>();
   for (const r of monthRows.rows) {
-    const key = String(r.month);
-    spendByMonth.set(key, add(spendByMonth.get(key) ?? "0",
-      mulDecimal(String(r.spend ?? 0), monthCtx.rateAt(r.func ?? null, String(r.late ?? `${r.month}-01`).slice(0, 10)))));
+    const key = String(r.bucket);
+    spendByBucket.set(key, add(spendByBucket.get(key) ?? "0",
+      mulDecimal(String(r.spend ?? 0), monthCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)))));
+  }
+  const bucketLabels = new Map<string, string>();
+  for (const r of monthRows.rows) {
+    const key = String(r.bucket);
+    if (!bucketLabels.has(key) && r.bucket_label != null) bucketLabels.set(key, String(r.bucket_label));
   }
 
   const billMap = new Map(billRows.rows.map((r) => [r.id, r]));
+  const zero = "0";
 
   const base = [...spendByParty.entries()]
     .map(([id, s]) => {
-      const spend = Number(s.spend);
-      const priorSpend = Number(s.priorSpend);
       const bm = billMap.get(id);
       const pm = paidByParty.get(id);
       const bills = bm ? Number(bm.bills) : 0;
       const lastBill = bm?.last_bill ?? null;
       const paidBills = pm ? pm.paidBills : 0;
       const onTime = pm ? pm.onTime : 0;
+      // Settled lines with no due date or payment terms are excluded from
+      // the on-time figure entirely — neither the numerator nor the
+      // denominator — and counted as undated instead.
+      const undatedBills = pm ? pm.undated : 0;
+      const datedBills = paidBills - undatedBills;
+      const priorPositive = cmp(s.priorSpend, zero) > 0;
       return {
         id,
         name: s.name,
-        spend,
-        priorSpend,
-        yoyPct: priorSpend > 0 ? (spend - priorSpend) / priorSpend : null,
+        spend: s.spend,
+        priorSpend: s.priorSpend,
+        yoyPct: priorPositive ? Number(div(add(s.spend, neg(s.priorSpend)), s.priorSpend)) : null,
         bills,
-        avgBill: bills > 0 ? spend / bills : 0,
+        avgBill: bills > 0 ? div(s.spend, String(bills)) : zero,
         lastBill,
         recencyDays: lastBill ? calendarDaysBetween(lastBill, ref) : null,
         paidBills,
+        undatedBills,
         avgDaysToPay: paidBills > 0 && pm ? Math.round((pm.daysSum / paidBills) * 10) / 10 : null,
-        onTimePct: paidBills > 0 ? onTime / paidBills : null,
-        latePct: paidBills > 0 ? 1 - onTime / paidBills : null,
-        lateSpend: pm ? Number(pm.lateSpend) : 0,
+        onTimePct: datedBills > 0 ? onTime / datedBills : null,
+        latePct: datedBills > 0 ? 1 - onTime / datedBills : null,
+        lateSpend: pm ? pm.lateSpend : zero,
       };
     })
-    .filter((r) => r.spend > 0 || r.priorSpend > 0)
-    .sort((a, b) => b.spend - a.spend);
+    .filter((r) => cmp(r.spend, zero) > 0 || cmp(r.priorSpend, zero) > 0)
+    .sort((a, b) => cmp(b.spend, a.spend));
 
-  const totalSpend = base.reduce((a, r) => a + r.spend, 0) || 1;
-  const sortedSpends = base.map((r) => r.spend).sort((a, b) => a - b);
-  // High-spend threshold = 80th percentile ().
-  const highSpendThreshold = sortedSpends.length ? sortedSpends[Math.floor(sortedSpends.length * 0.8)]! : 0;
+  const totalSpend = [...spendByParty.values()].reduce((a, s) => add(a, s.spend), zero);
+  const spendPositive = cmp(totalSpend, zero) > 0;
+  const sortedSpends = base.map((r) => r.spend).sort(cmp);
+  // High-spend threshold at the configured percentile of the vendor spend
+  // distribution (80th by default).
+  const highSpendThreshold = sortedSpends.length
+    ? sortedSpends[Math.min(sortedSpends.length - 1, Math.floor(sortedSpends.length * config.highSpendPercentile / 100))]!
+    : zero;
   const n = base.length;
-  const TIER_SIGNIFICANCE: Record<SpendTier, number> = { strategic: 40, core: 30, tactical: 20, tail: 10 };
+  const significance: Record<SpendTier, number> = {
+    strategic: config.significanceStrategic,
+    core: config.significanceCore,
+    tactical: config.significanceTactical,
+    tail: config.significanceTail,
+  };
 
   const rows: VendorRow[] = base.map((r, i) => {
-    const sharePct = r.spend / totalSpend;
-    const tier: SpendTier = i < n * 0.1 ? "strategic" : i < n * 0.3 ? "core" : i < n * 0.6 ? "tactical" : "tail";
+    const sharePct = spendPositive ? Number(div(r.spend, totalSpend)) : 0;
+    const tier: SpendTier = i < n * config.tierStrategicPct / 100 ? "strategic"
+      : i < n * config.tierCorePct / 100 ? "core"
+      : i < n * config.tierTacticalPct / 100 ? "tactical" : "tail";
 
     // Relationship-value scorecard (0–100): how strategic/healthy the vendor
     // relationship is. Payment reliability is deliberately NOT in the grade
     // (it measures OUR behaviour, not the vendor's) — it lives on its own tab
     // and feeds the leverage-matrix risk axis instead.
     //  · significance by spend tier (0–40)  · engagement/regularity (0–30)  · spend stability (0–30)
-    const significance = TIER_SIGNIFICANCE[tier];
-    const engagement = 30 * clamp(Math.min(r.bills, 12) / 12, 0, 1);
-    const stability = r.yoyPct === null ? 15 : 30 * clamp(1 - Math.min(Math.abs(r.yoyPct), 1), 0, 1);
-    const score = clamp(significance + engagement + stability);
+    const tierSignificance = significance[tier];
+    const engagement = 30 * clamp(Math.min(r.bills, config.engagementCapBills) / config.engagementCapBills, 0, 1);
+    const stability = r.yoyPct === null ? config.neutralStabilityScore : 30 * clamp(1 - Math.min(Math.abs(r.yoyPct), 1), 0, 1);
+    const score = clamp(tierSignificance + engagement + stability);
 
     // Leverage matrix: spend (financial impact) × performance, where our only
-    // vendor-performance signal is payment-relationship health (on-time %). No
-    // payment history → neutral 50.
-    const performance = r.onTimePct === null ? 50 : r.onTimePct * 100;
-    const highSpend = r.spend >= highSpendThreshold;
-    const highPerf = performance >= 75;
-    const quadrant: Quadrant = highSpend
-      ? highPerf ? "strategic" : "commodity"
+    // vendor-performance signal is payment-relationship health (on-time %).
+    // Vendors with no payment history are unrated — never a neutral 50.
+    const performance = r.onTimePct === null ? null : r.onTimePct * 100;
+    const highSpend = cmp(r.spend, highSpendThreshold) >= 0;
+    const highPerf = (performance ?? -1) >= config.highPerformanceScore;
+    const quadrant: Quadrant = performance === null ? "unrated"
+      : highSpend ? highPerf ? "strategic" : "commodity"
       : highPerf ? "niche" : "transactional";
 
-    return { ...r, sharePct, tier, score, grade: gradeOf(score), performance, quadrant };
+    return { ...r, sharePct, tier, score, grade: gradeOf(score, config), performance, quadrant };
   });
 
-  const monthly: MonthSpend[] = [];
-  for (let i = 0; i < 12; i++) {
-    const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
-    const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
-    monthly.push({ month: ym, label: strings.monthLabel(ym), spend: Number(spendByMonth.get(ym) ?? 0) });
-  }
+  const monthly: MonthSpend[] = buckets.useFiscal
+    ? buckets.periods
+        .filter((p) => p.to >= startIso && p.from <= to)
+        .map((p) => ({
+          month: p.from,
+          label: bucketLabels.get(p.from) ?? p.name,
+          spend: spendByBucket.get(p.from) ?? zero,
+        }))
+    : Array.from({ length: 12 }, (_, i) => {
+        const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
+        const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+        return { month: ym, label: strings.monthLabel(ym), spend: spendByBucket.get(ym) ?? zero };
+      });
 
-  const spend = rows.reduce((a, r) => a + r.spend, 0);
-  const priorSpend = rows.reduce((a, r) => a + r.priorSpend, 0);
+  const spend = rows.reduce((a, r) => add(a, r.spend), zero);
+  const priorSpend = rows.reduce((a, r) => add(a, r.priorSpend), zero);
   const bills = rows.reduce((a, r) => a + r.bills, 0);
+  const spendIsPositive = cmp(spend, zero) > 0;
+  const priorIsPositive = cmp(priorSpend, zero) > 0;
   const hhi = rows.reduce((a, r) => a + r.sharePct ** 2, 0);
-  const top5 = rows.slice(0, 5).reduce((a, r) => a + r.spend, 0);
-  const top10 = rows.slice(0, 10).reduce((a, r) => a + r.spend, 0);
+  const top5 = rows.slice(0, 5).reduce((a, r) => add(a, r.spend), zero);
+  const top10 = rows.slice(0, 10).reduce((a, r) => add(a, r.spend), zero);
   const paidTotal = rows.reduce((a, r) => a + r.paidBills, 0);
-  const onTimeTotal = rows.reduce((a, r) => a + (r.paidBills * (r.onTimePct ?? 0)), 0);
+  const datedTotal = rows.reduce((a, r) => a + (r.paidBills - r.undatedBills), 0);
+  const onTimeTotal = rows.reduce((a, r) => a + ((r.paidBills - r.undatedBills) * (r.onTimePct ?? 0)), 0);
   const daysWeighted = rows.reduce((a, r) => a + (r.avgDaysToPay !== null ? r.avgDaysToPay * r.paidBills : 0), 0);
-  const lateSpend = rows.reduce((a, r) => a + r.lateSpend, 0);
+  const lateSpend = rows.reduce((a, r) => add(a, r.lateSpend), zero);
+  const undatedBills = [...paidByParty.values()].reduce((a, p) => a + p.undated, 0);
 
   const tiers: SpendTier[] = ["strategic", "core", "tactical", "tail"];
   const grades: Grade[] = ["A", "B", "C", "D", "F"];
-  const quadrants: Quadrant[] = ["strategic", "commodity", "niche", "transactional"];
+  const quadrants: Quadrant[] = ["strategic", "commodity", "niche", "transactional", "unrated"];
+
+  const sumSpend = (set: VendorRow[]): string => set.reduce((a, r) => add(a, r.spend), zero);
 
   return {
     period,
+    config,
     rows,
     monthly,
     totals: {
       vendors: rows.length,
       spend,
       priorSpend,
-      yoyPct: priorSpend > 0 ? (spend - priorSpend) / priorSpend : null,
+      yoyPct: priorIsPositive ? Number(div(add(spend, neg(priorSpend)), priorSpend)) : null,
       bills,
-      avgBill: bills > 0 ? spend / bills : 0,
-      top5SharePct: spend > 0 ? top5 / spend : 0,
-      top10SharePct: spend > 0 ? top10 / spend : 0,
+      avgBill: bills > 0 ? div(spend, String(bills)) : zero,
+      top5SharePct: spendIsPositive ? Number(div(top5, spend)) : 0,
+      top10SharePct: spendIsPositive ? Number(div(top10, spend)) : 0,
       hhi,
       hhiScaled: Math.round(hhi * 10000),
       strategic: rows.filter((r) => r.tier === "strategic").length,
-      onTimePct: paidTotal > 0 ? onTimeTotal / paidTotal : null,
+      onTimePct: datedTotal > 0 ? onTimeTotal / datedTotal : null,
       avgDaysToPay: paidTotal > 0 ? daysWeighted / paidTotal : null,
       lateSpend,
+      undatedBills,
     },
     tierBreakdown: tiers.map((tier) => {
       const set = rows.filter((r) => r.tier === tier);
-      return { tier, count: set.length, spend: set.reduce((a, r) => a + r.spend, 0) };
+      return { tier, count: set.length, spend: sumSpend(set) };
     }),
     gradeBreakdown: grades.map((grade) => {
       const set = rows.filter((r) => r.grade === grade);
-      return { grade, count: set.length, spend: set.reduce((a, r) => a + r.spend, 0) };
+      return { grade, count: set.length, spend: sumSpend(set) };
     }),
     quadrantBreakdown: quadrants.map((quadrant) => {
       const set = rows.filter((r) => r.quadrant === quadrant);
-      return { quadrant, count: set.length, spend: set.reduce((a, r) => a + r.spend, 0) };
+      return { quadrant, count: set.length, spend: sumSpend(set) };
     }),
   };
 }

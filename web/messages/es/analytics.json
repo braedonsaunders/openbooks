@@ -1151,6 +1151,10 @@
       "transactional": {
         "desc": "Gasto bajo, bajo compromiso — automatizar / consolidar",
         "label": "Transaccionales"
+      },
+      "unrated": {
+        "label": "Sin calificar",
+        "desc": "Aún sin historial de pagos; liquide facturas para calificar"
       }
     },
     "sub": {
@@ -2698,6 +2702,10 @@
     },
     "unit": {
       "months": "meses"
+    },
+    "labels": {
+      "unknownParty": "Desconocido",
+      "accountFallback": "Cuenta {id}"
     }
   },
   "sentinel": {
