@@ -310,6 +310,13 @@ export interface DocumentEditContext {
   orgId: string
   userId: string
   allowedSubsidiaryIds?: ReadonlySet<string> | null
+  /**
+   * Customer scope asserted by the caller (a portal session, a signed link):
+   * the new party binding names this customer party, proven owned by the
+   * caller before the write. Replaces the actor-role subsidiary check for
+   * that binding only; every other scope check still applies.
+   */
+  customerPartyId?: string | null
   /** Provenance recorded on the transaction audit + flow events. */
   source: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction'
   /** Fire on_update record flows after the edit commits (default true). */
@@ -1036,12 +1043,14 @@ export async function applyDocumentEdit(
   // grandfathered — its binding predates scope and no new reference forms.
   // Null-subsidiary parties are org-wide shared, like the option lists.
   if (body.partyId !== undefined && body.partyId !== null && body.partyId !== current.partyId) {
-    const partyScope = await runner.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`)
-    const partySubsidiaryId = partyScope.rows[0]?.subsidiary_id ?? null
-    const allowed = await allowedSubsidiaryIds(ctx.userId, orgId)
-    if (!subsidiaryScopeAllows(allowed, partySubsidiaryId, { orgWideNull: true })) {
-      throw new DocumentEditError(404, 'not found')
+    if (ctx.customerPartyId === undefined || body.partyId !== ctx.customerPartyId) {
+      const partyScope = await runner.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`)
+      const partySubsidiaryId = partyScope.rows[0]?.subsidiary_id ?? null
+      const allowed = await allowedSubsidiaryIds(ctx.userId, orgId)
+      if (!subsidiaryScopeAllows(allowed, partySubsidiaryId, { orgWideNull: true })) {
+        throw new DocumentEditError(404, 'not found')
+      }
     }
   }
 
@@ -2236,6 +2245,12 @@ export interface DocumentCreateInput {
   kind: string
   /** Caller UUID idempotency key; becomes the document id. */
   key: string
+  /**
+   * Customer scope asserted by the caller (a portal session, a signed link).
+   * Carried into the edit context so the new party binding checks against
+   * the proven customer instead of the actor's subsidiary roles.
+   */
+  onBehalfOfPartyId?: string | null
   /** The drawer's save payload (without expectedUpdatedAt — no revision exists yet). */
   body: DocumentEditInput
   /** Resolved subsidiary (root default or caller choice, scope-checked by the route). */
@@ -2375,7 +2390,7 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
       key,
       current,
       { ...effectiveBody, expectedUpdatedAt: current.updatedAt },
-      { orgId, userId, source: 'ui', deferFlows: true, precomputedTotals },
+      { orgId, userId, source: 'ui', deferFlows: true, precomputedTotals, customerPartyId: input.onBehalfOfPartyId ?? undefined },
       { tx },
     )
     return { status: 'created', id: key, documentNumber, deferredUpdate: deferredUpdate ?? null } as DocumentCreateResult

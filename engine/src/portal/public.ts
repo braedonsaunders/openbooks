@@ -1,23 +1,67 @@
-/** Browser-safe customer portal contracts. */
-export type { PortalRefusalCode } from "./errors.ts";
-export { PortalRefusal } from "./errors.ts";
-export type { PortalSession } from "./tokens.ts";
-export type { PortalSection, PortalSaveOffer, PortalSettings, SavePortalSettingsInput } from "./settings.ts";
-export { DEFAULT_PORTAL_SETTINGS, PORTAL_SECTIONS } from "./settings.ts";
-export type {
-  PortalHome,
-  PortalInvoice,
-  PortalSubscription,
-  PortalPaymentMethod,
-  PortalChannelOrder,
-  PortalStoredCredit,
-  PortalPrepaidGrant,
-  PortalOrderTracking,
+/** Customer portal server contract for the web layer. */
+export { PortalRefusal, portalRefusal, type PortalRefusalCode } from "./errors.ts";
+export {
+  PORTAL_FEATURE,
+  PORTAL_LINK_TTL_MINUTES,
+  PORTAL_SESSION_TTL_HOURS,
+  PORTAL_REQUESTS_PER_HOUR,
+  mintPortalToken,
+  normalizePortalEmail,
+  portalTokenHash,
+  requestPortalLink,
+  consumePortalLink,
+  resolvePortalSession,
+  revokePortalSession,
+  recordPortalEvent,
+  type ConsumedPortalLink,
+  type PortalSession,
+  type RequestedPortalLink,
+} from "./tokens.ts";
+export {
+  DEFAULT_PORTAL_SETTINGS,
+  PORTAL_SECTIONS,
+  mergePortalSettings,
+  returnWindowDeadline,
+  readPortalSettings,
+  savePortalSettings,
+  type PortalSection,
+  type PortalSaveOffer,
+  type PortalSettings,
+  type SavePortalSettingsInput,
+} from "./settings.ts";
+export {
+  assertPortalChannelOrder,
+  assertPortalDocument,
+  assertPortalPaymentMethod,
+  assertPortalSubscription,
+} from "./scope.ts";
+export {
+  extractPayloadTracking,
+  portalAcceptanceProviders,
+  portalHome,
+  portalOrderTracking,
+  type PortalAcceptanceProvider,
+  type PortalChannelOrder,
+  type PortalHome,
+  type PortalInvoice,
+  type PortalOrderTracking,
+  type PortalPaymentMethod,
+  type PortalPrepaidGrant,
+  type PortalStoredCredit,
+  type PortalSubscription,
 } from "./workspace.ts";
-export type {
-  SubscriptionPreview,
-  AppliedSubscriptionChange,
-  SubscriptionTransition,
-  AcceptedSaveOffer,
-  ValidatedPortalReturn,
+export {
+  PORTAL_ACTOR_ID,
+  acceptSaveOffer,
+  applySubscriptionChange,
+  cancelSubscription,
+  pauseSubscription,
+  previewSubscriptionChange,
+  resumeSubscription,
+  validatePortalReturn,
+  type AcceptedSaveOffer,
+  type AppliedSubscriptionChange,
+  type SubscriptionPreview,
+  type SubscriptionTransition,
+  type ValidatedPortalReturn,
 } from "./changes.ts";
