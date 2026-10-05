@@ -12,6 +12,7 @@ import {
   type ChannelOrderDetail,
 } from "./orders.ts";
 import { getPostingPolicy, type ChannelPostingPolicy } from "./posting-policies.ts";
+import { replaceDocumentTenders, type TenderInput } from "../sales/document-tenders.ts";
 import { resolveAccountMap } from "./account-maps.ts";
 import {
   acquireOrgFeatureGateLock,
@@ -30,7 +31,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { createPromotion, setPromotionStatus } from "../sales/promotions.ts";
-import { attachDocumentIssue, redeemStoredValue } from "../stored-value/accounts.ts";
+import { attachDocumentIssue } from "../stored-value/accounts.ts";
 
 const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features.";
 
@@ -824,16 +825,25 @@ export async function postCashSaleDraft(
         ${draft.documentDate}, ${currency}, 'draft',
         ${merchantSubtotalLedger}, ${merchantTax}, ${merchantTotal},
         ${draft.externalRef}, ${draft.provider}, ${draft.channelId},
-        ${JSON.stringify({ tenders: draft.tenders.filter((t) => t.amountMinor > 0n).map((t) => ({
-          kind: t.giftCardAccountId ? "gift_card" : t.gateway,
-          accountId: t.accountId,
-          amount: t.amount,
-          reference: t.reference,
-        })) })}::jsonb, ${actor}, ${actor})
+        '{}'::jsonb, ${actor}, ${actor})
       returning id`);
     if (inserted.rows.length !== 1) throw new Error("Cash sale insert returned an unexpected row count");
     documentId = inserted.rows[0]!.id;
   }
+  // Paid-at-sale tenders ride the document_tenders table (never custom):
+  // the kernel's tender assertion reads the table, so a draft without
+  // these rows cannot post. Replaced on replay beside the rebuilt lines.
+  const tenderInputs: TenderInput[] = draft.tenders
+    .filter((tender) => tender.amountMinor > 0n)
+    .map((tender) => ({
+      kind: tender.giftCardAccountId ? "stored_value" : "gateway",
+      methodLabel: tender.gateway,
+      accountId: tender.giftCardAccountId ? null : tender.accountId,
+      storedValueAccountId: tender.giftCardAccountId,
+      amount: tender.amount,
+      reference: tender.reference,
+    }));
+  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor });
   let lineNumber = 0;
   const giftLineIds: string[] = [];
   for (const line of draft.lines) {
@@ -888,20 +898,9 @@ export async function postCashSaleDraft(
     { control: { ar: control.ar, ap: control.ap, bank: control.bank } },
     { deferEffects: true, audit: { actorId: actor, source: "channel" } },
   );
-  let giftIndex = 0;
-  for (const tender of draft.tenders) {
-    if (!tender.giftCardAccountId || tender.amountMinor <= 0n) continue;
-    giftIndex += 1;
-    await redeemStoredValue({
-      orgId,
-      accountId: tender.giftCardAccountId,
-      amountMinor: tender.amountMinor,
-      documentId,
-      journalEntryId,
-      idempotencyKey: `${idempotencyScope}:tender:${giftIndex}`,
-      actorId: actor,
-    });
-  }
+  // Stored-value tender redemptions ride the posting commit: it reads the
+  // document_tenders table written above and redeems each exactly once, so
+  // no direct redemption happens here (it would move the balance twice).
   const program = draft.giftIssues.length > 0 ? await findGiftCardProgram(orgId, currency) : null;
   if (draft.giftIssues.length > 0 && !program) {
     throw new OrderPostException(
@@ -910,7 +909,7 @@ export async function postCashSaleDraft(
       "Create a gift card program in Setup → Sales → Stored value programs for this currency, then replay the order.",
     );
   }
-  giftIndex = 0;
+  let giftIndex = 0;
   for (const issue of draft.giftIssues) {
     giftIndex += 1;
     await attachDocumentIssue({
