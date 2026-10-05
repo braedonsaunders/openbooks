@@ -171,14 +171,15 @@ test("stored-value tenders replace allocations and retain drafts while unreadabl
     });
     await act(async () => { await tick(); await tick(); });
     const dialog = document.querySelector('[role="dialog"]')!;
-    const code = dialog.querySelector<HTMLInputElement>('#sv-tender-code')!;
-    assert.ok(code.closest('[hidden]'), 'tenders cannot stack below invoice allocations');
+    assert.equal(dialog.querySelector('#sv-tender-code'), null, 'the unvisited tender editor cannot mount below invoice allocations');
     async function panel(label: string) {
       const button = [...dialog.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].find(node => node.textContent?.trim() === label);
       assert.ok(button, `the native ${label} panel must remain reachable`);
       await act(async () => { button.click(); await tick(); });
     }
     await panel(messages.storedValue.payment.tenderLabel);
+    const code = dialog.querySelector<HTMLInputElement>('#sv-tender-code');
+    assert.ok(code, 'visiting Tenders must expose the stored-value code editor');
     assert.equal(code.closest('[hidden]'), null);
     assert.match(dialog.querySelector('[role="alert"]')?.textContent ?? '', /1234.*at most 4 decimal places.*5/s, 'excess precision cannot silently truncate into a valid total');
     await act(async () => {
