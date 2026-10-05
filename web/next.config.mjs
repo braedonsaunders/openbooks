@@ -52,8 +52,12 @@ const config = {
   // cross-tenant or stale reads. Navigation latency is instead carried by the
   // (app) loading skeleton, the Suspense boundary around the layout children,
   // and explicit prefetch on the shell nav links.
-  // Both loopback names serve the same local development instance.
-  allowedDevOrigins: ["127.0.0.1", "localhost"],
+  // Shared development hosts explicitly authorize their private proxy origin.
+  allowedDevOrigins: [
+    "127.0.0.1",
+    "localhost",
+    ...(process.env.OPENBOOKS_DEV_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean),
+  ],
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
   serverExternalPackages: [
     "quickjs-emscripten-core",
