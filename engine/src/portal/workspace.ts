@@ -143,7 +143,7 @@ export async function portalHome(orgId: string, partyId: string, runner: SqlExec
      limit 20
   `)).rows;
   const prepaidGrants = (await runner.execute<PortalPrepaidGrant>(sql`
-    select id, amount::text as amount, coalesce(currency, '') as currency,
+    select id, amount::text as amount, coalesce(currency_code, '') as currency,
            expires_on::text as "expiresOn"
       from usage_prepaid_grants
      where org_id = ${orgId} and customer_id = ${partyId}
