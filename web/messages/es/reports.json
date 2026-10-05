@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "Movimientos de costos de contrato",
         "description": "Líneas de capitalización, amortización y deterioro por período desde el mayor etiquetado."
+      },
+      "billing_import_reconciliation": {
+        "label": "Conciliación de importación de facturación",
+        "description": "Conciliación por importación: MRR mensual origen frente a OpenBooks, cuentas por cobrar abiertas por cliente y las diferencias que bloquean el cambio."
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "Importe",
         "entry_id": "Asiento",
         "asset_id": "Clave de activo"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "Importación (id)",
+        "provider": "Proveedor",
+        "section": "Sección",
+        "ref": "Mes / cliente / registro",
+        "source_major": "Importe origen",
+        "openbooks_major": "Importe OpenBooks",
+        "diff_major": "Diferencia",
+        "explanation": "Explicación"
       }
     },
     "enumValues": {

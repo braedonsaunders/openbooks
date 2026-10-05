@@ -780,10 +780,22 @@
       "accountPlaceholder": "仮受・銀行勘定…",
       "accountSearchPlaceholder": "勘定を検索…",
       "fields": {
-        "walkInCustomer": { "label": "ウォークイン得意先", "hint": "得意先不明の店頭売上はこの得意先に計上されます。" },
-        "defaultCashAccountId": { "label": "現金の初期勘定", "hint": "新規売上の現金を初期表示します。" },
-        "defaultCardAccountId": { "label": "カードの初期勘定", "hint": "新規売上のカードを初期表示します。" },
-        "defaultBankAccountId": { "label": "銀行の初期勘定", "hint": "新規売上の銀行振込を初期表示します。" }
+        "walkInCustomer": {
+          "label": "ウォークイン得意先",
+          "hint": "得意先不明の店頭売上はこの得意先に計上されます。"
+        },
+        "defaultCashAccountId": {
+          "label": "現金の初期勘定",
+          "hint": "新規売上の現金を初期表示します。"
+        },
+        "defaultCardAccountId": {
+          "label": "カードの初期勘定",
+          "hint": "新規売上のカードを初期表示します。"
+        },
+        "defaultBankAccountId": {
+          "label": "銀行の初期勘定",
+          "hint": "新規売上の銀行振込を初期表示します。"
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "スコープ別収益契約",
       "description": "受注・サブスクリプション・複数請求書を1件の収益契約にまとめ、請求済みと認識済みを契約ごとに相殺表示します。"
+    },
+    "billingHistoryImport": {
+      "title": "請求履歴のインポート",
+      "description": "Chargebee・Recurly・Maxio・Zuoraから顧客・プラン・サブスクリプション・請求書・支払い・利用量を取り込み、MRR・売掛金・前受収益を照合します。"
     }
   },
   "extensions": {

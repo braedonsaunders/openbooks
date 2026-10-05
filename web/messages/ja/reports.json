@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "契約コスト記帳",
         "description": "タグ付き総勘定元帳からの期間別資産化・償却・減損明細。"
+      },
+      "billing_import_reconciliation": {
+        "label": "請求インポート照合",
+        "description": "インポートごとの照合:月次MRRのソース対OpenBooks、顧客別売掛残高、切り替えを保留する差異。"
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "金額",
         "entry_id": "仕訳",
         "asset_id": "資産キー"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "インポート実行 (ID)",
+        "provider": "プロバイダー",
+        "section": "区分",
+        "ref": "月 / 顧客 / レコード",
+        "source_major": "ソース金額",
+        "openbooks_major": "OpenBooks金額",
+        "diff_major": "差異",
+        "explanation": "説明"
       }
     },
     "enumValues": {

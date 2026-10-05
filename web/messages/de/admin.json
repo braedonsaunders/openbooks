@@ -780,10 +780,22 @@
       "accountPlaceholder": "Verrechnungs- oder Bankkonto…",
       "accountSearchPlaceholder": "Konten suchen…",
       "fields": {
-        "walkInCustomer": { "label": "Laufkunde", "hint": "Thekenverkäufe ohne namentlichen Kunden laufen auf diesen Kunden." },
-        "defaultCashAccountId": { "label": "Standard-Barkonto", "hint": "Belegt Barzahlungsmittel neuer Verkäufe vor." },
-        "defaultCardAccountId": { "label": "Standard-Kartenverrechnung", "hint": "Belegt Kartenzahlungen neuer Verkäufe vor." },
-        "defaultBankAccountId": { "label": "Standard-Bankkonto", "hint": "Belegt Bankzahlungen neuer Verkäufe vor." }
+        "walkInCustomer": {
+          "label": "Laufkunde",
+          "hint": "Thekenverkäufe ohne namentlichen Kunden laufen auf diesen Kunden."
+        },
+        "defaultCashAccountId": {
+          "label": "Standard-Barkonto",
+          "hint": "Belegt Barzahlungsmittel neuer Verkäufe vor."
+        },
+        "defaultCardAccountId": {
+          "label": "Standard-Kartenverrechnung",
+          "hint": "Belegt Kartenzahlungen neuer Verkäufe vor."
+        },
+        "defaultBankAccountId": {
+          "label": "Standard-Bankkonto",
+          "hint": "Belegt Bankzahlungen neuer Verkäufe vor."
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "Auftragsbezogene Umsatzverträge",
       "description": "Ein Umsatzvertrag über einen Auftrag, ein Abonnement oder mehrere Rechnungen, mit abgerechneten und realisierten Erlösen je Vertrag saldiert."
+    },
+    "billingHistoryImport": {
+      "title": "Abrechnungsverlauf importieren",
+      "description": "Kunden, Pläne, Abonnements, Rechnungen, Zahlungen und Nutzung aus Chargebee, Recurly, Maxio oder Zuora importieren, mit Abstimmung von MRR, Forderungen und abgegrenzten Erlösen."
     }
   },
   "extensions": {

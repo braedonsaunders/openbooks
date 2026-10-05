@@ -780,10 +780,22 @@
       "accountPlaceholder": "Cuenta transitoria o bancaria…",
       "accountSearchPlaceholder": "Buscar cuentas…",
       "fields": {
-        "walkInCustomer": { "label": "Cliente de mostrador", "hint": "Las ventas sin cliente nominal van contra este cliente." },
-        "defaultCashAccountId": { "label": "Cuenta de efectivo por defecto", "hint": "Pre-rellena el efectivo en ventas nuevas." },
-        "defaultCardAccountId": { "label": "Cuenta de tarjetas por defecto", "hint": "Pre-rellena la tarjeta en ventas nuevas." },
-        "defaultBankAccountId": { "label": "Cuenta bancaria por defecto", "hint": "Pre-rellena la transferencia en ventas nuevas." }
+        "walkInCustomer": {
+          "label": "Cliente de mostrador",
+          "hint": "Las ventas sin cliente nominal van contra este cliente."
+        },
+        "defaultCashAccountId": {
+          "label": "Cuenta de efectivo por defecto",
+          "hint": "Pre-rellena el efectivo en ventas nuevas."
+        },
+        "defaultCardAccountId": {
+          "label": "Cuenta de tarjetas por defecto",
+          "hint": "Pre-rellena la tarjeta en ventas nuevas."
+        },
+        "defaultBankAccountId": {
+          "label": "Cuenta bancaria por defecto",
+          "hint": "Pre-rellena la transferencia en ventas nuevas."
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "Contratos de ingresos por pedido",
       "description": "Un contrato de ingresos para un pedido, una suscripción o varias facturas, con lo facturado y lo reconocido netos por contrato."
+    },
+    "billingHistoryImport": {
+      "title": "Importar historial de facturación",
+      "description": "Importe clientes, planes, suscripciones, facturas, pagos y uso desde Chargebee, Recurly, Maxio o Zuora con conciliación de MRR, cuentas por cobrar e ingresos diferidos."
     }
   },
   "backupsManager": {

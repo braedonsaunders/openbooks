@@ -18,6 +18,7 @@ import ar from './ar.json'
 import assets from './assets.json'
 import assistant from './assistant.json'
 import banking from './banking.json'
+import billingImport from './billingImport.json'
 import budgets from './budgets.json'
 import close from './close.json'
 import common from './common.json'
@@ -89,6 +90,7 @@ export default {
   assets,
   assistant,
   banking,
+  billingImport,
   budgets,
   close,
   common,
