@@ -1517,3 +1517,24 @@ test('posted correction validation retains its exact revision and edited lines',
   assert.deepEqual(documentCorrectionBodySchema.parse(body), body);
   assert.equal(documentCorrectionBodySchema.safeParse({ ...body, expectedUpdatedAt: undefined }).success, false);
 });
+
+// The marketplace refusal is the operator's only signal that a line names a
+// facilitator nobody configured: it must name the facilitator and the exact
+// setup page that resolves it, never a bare "invalid" verdict.
+test('unknown marketplace facilitator names refuse with the setup remedy', async () => {
+  const { marketplaceFacilitatorNameRefusal } = await import('./documents.ts');
+  assert.equal(
+    marketplaceFacilitatorNameRefusal('Amazon', new Set(['Etsy'])),
+    'marketplace facilitator "Amazon" is not configured — add it in Setup → Taxes → Marketplace facilitators',
+  );
+  assert.equal(marketplaceFacilitatorNameRefusal('Etsy', new Set(['Etsy'])), null);
+});
+
+// The edit and correction schemas share the line shape, so the collector
+// flag rides both; a non-string flag fails closed at the boundary.
+test('document edit lines accept a marketplace facilitator name', async () => {
+  const { documentEditBodySchema } = await import('./api/document-edit-schema.ts');
+  const line = { lineId: null, accountId: randomUUID(), amount: '100.00', marketplaceFacilitator: 'Amazon' };
+  assert.equal(documentEditBodySchema.parse({ lines: [line] }).lines?.[0]?.marketplaceFacilitator, 'Amazon');
+  assert.equal(documentEditBodySchema.safeParse({ lines: [{ ...line, marketplaceFacilitator: 42 }] }).success, false);
+});

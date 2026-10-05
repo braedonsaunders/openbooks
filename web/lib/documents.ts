@@ -445,6 +445,20 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
 }
 
 /**
+ * Line-level marketplace collector check. Pure so the refusal text — the
+ * entire product of a failed save — is pinned by unit tests: an unknown or
+ * inactive name refuses with the setup remedy that resolves it. Blank input
+ * never reaches this helper (the merchant collects), and kind gating stays
+ * at the call site, where the document kind is in scope.
+ */
+export function marketplaceFacilitatorNameRefusal(name: string, activeNames: Set<string>): string | null {
+  if (!activeNames.has(name)) {
+    return `marketplace facilitator "${name}" is not configured — add it in Setup → Taxes → Marketplace facilitators`
+  }
+  return null
+}
+
+/**
  * Native line-provenance keys: conversion evidence (`purchaseOrderLineId`,
  * `convertedFrom`) and AP-capture evidence (`apCaptureEvidence`). Never
  * accepted from a caller (echoed or forged) and never colliding with tenant
@@ -1421,9 +1435,8 @@ export async function applyDocumentEdit(
           activeFacilitators = new Set((await runner.execute<{ name: string }>(sql`
             select name from marketplace_facilitators where org_id = ${orgId} and is_active`)).rows.map((row) => row.name))
         }
-        if (!activeFacilitators.has(facilitatorName)) {
-          throw new DocumentEditError(422, `Line ${i + 1}: marketplace facilitator "${facilitatorName}" is not configured — add it in Setup → Taxes → Marketplace facilitators`)
-        }
+        const refusal = marketplaceFacilitatorNameRefusal(facilitatorName, activeFacilitators)
+        if (refusal !== null) throw new DocumentEditError(422, `Line ${i + 1}: ${refusal}`)
       }
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
