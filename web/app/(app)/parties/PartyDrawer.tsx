@@ -156,6 +156,7 @@ export function PartyDrawer({
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
   const th = useTranslations('hrm')
+  const tEntities = useTranslations('entities')
   const tInv = useTranslations('projects.invoicingPref')
   const locale = useLocale()
   const router = useRouter()
@@ -979,7 +980,7 @@ export function PartyDrawer({
       onActiveTabChange={(key) => showTab(fromShellTab(key))}
       title={
         <span className="flex items-center gap-2.5">
-          <span>{displayName.trim() || t('newPartyFallback')}</span>
+          <span>{displayName.trim() || (role ? tEntities(`roles.${role}s.newLabel`) : t('newPartyFallback'))}</span>
           <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? tc('status.active') : tc('status.inactive')}</Badge>
         </span>
       }

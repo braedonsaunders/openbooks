@@ -39,7 +39,10 @@ export function PartySummary({ payload }: { payload: PartyPayload }) {
     { label: t('summary.openTransactions'), value: String(summary.openCount), icon: <CircleDollarSign size={17} /> },
     {
       label: t('summary.openBalance'),
-      value: primaryCurrency ? money(primaryCurrency.openBalance, { currency: primaryCurrency.currency }) : t('summary.multipleCurrencies'),
+      // No currencies means no transactions yet, not several currencies.
+      value: primaryCurrency
+        ? money(primaryCurrency.openBalance, { currency: primaryCurrency.currency })
+        : summary.currencies.length === 0 ? '—' : t('summary.multipleCurrencies'),
       icon: <CircleDollarSign size={17} />,
     },
     {
