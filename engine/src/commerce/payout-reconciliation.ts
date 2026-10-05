@@ -1,8 +1,17 @@
 import { sql } from "drizzle-orm";
-import { isMatchableSettlementLineKind, setSettlementLineDocument } from "../payments/psp-settlement.ts";
+import { isMatchableSettlementLineKind, setSettlementLineDocument, settlementLineDocumentInEntity } from "../payments/psp-settlement.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { CommerceError } from "./errors.ts";
+
+/**
+ * Caller subsidiary scope for payout reads. An explicit null is the
+ * unrestricted sentinel for system callers; an unknown (undefined) scope
+ * always fails closed, so a caller that forgot to resolve the actor can
+ * never read across entities.
+ */
+export type PayoutSubsidiaryScope = ReadonlySet<string> | null | undefined;
 
 /**
  * Payout line matching. Every settlement line of a matchable kind resolves
@@ -66,25 +75,41 @@ export type LineDocumentEvidence = {
   status: string;
   currency: string | null;
   total: string | null;
+  subsidiaryId: string | null;
 };
 
-/** One native document behind a settlement line, read for matching evidence. */
+/**
+ * One native document behind a settlement line, read for matching evidence.
+ * The document must be visible to the caller and belong to the payout's
+ * legal entity (an absent subsidiary resolves to the org root, the same
+ * contract the link writer enforces): anything else reads as missing, so
+ * neither evidence nor advice can carry another entity's numbers.
+ */
 export async function readSettlementDocument(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+  batchSubsidiaryId: string | null,
 ): Promise<LineDocumentEvidence | null> {
+  if (allowedSubsidiaryIds === undefined) return null;
   const row = (await db.execute<LineDocumentEvidence>(sql`
-    select id, kind, document_number as "documentNumber", status, currency, total::text as total from documents
+    select id, kind, document_number as "documentNumber", status, currency, total::text as total,
+           subsidiary_id as "subsidiaryId" from documents
      where org_id = ${orgId} and id = ${documentId}
   `)).rows[0];
-  return row ?? null;
+  if (!row) return null;
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
+  if (!(await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.subsidiaryId))) return null;
+  return row;
 }
 
 async function postedDocument(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+  batchSubsidiaryId: string | null,
 ): Promise<LineDocumentEvidence | null> {
-  return readSettlementDocument(orgId, documentId);
+  return readSettlementDocument(orgId, documentId, allowedSubsidiaryIds, batchSubsidiaryId);
 }
 
 /**
@@ -120,11 +145,17 @@ export type LineSourceOrder = {
   summaryId: string | null;
 };
 
-/** Channel orders behind a settlement line's source order reference. */
+/**
+ * Channel orders behind a settlement line's source order reference. Only
+ * orders on channels the caller may see are returned: a restricted caller
+ * never learns another entity's order numbers through the payout queue.
+ */
 export async function findLineSourceOrders(
   orgId: string,
   sourceOrderId: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
 ): Promise<LineSourceOrder[]> {
+  if (allowedSubsidiaryIds === undefined) return [];
   const ids = orderIdCandidates(sourceOrderId);
   if (ids.length === 0) return [];
   return (await db.execute<LineSourceOrder>(sql`
@@ -134,6 +165,7 @@ export async function findLineSourceOrders(
       from channel_orders o
       join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
      where o.org_id = ${orgId} and c.kind = 'shopify'
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
        and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
      order by o.id
   `)).rows;
@@ -174,9 +206,11 @@ async function resolveLineDocument(
   orgId: string,
   provider: string,
   line: SettlementLineRow,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+  batchSubsidiaryId: string | null,
 ): Promise<Omit<Extract<PayoutLineMatch, { status: "matched" }>, "lineId"> | Omit<Extract<PayoutLineMatch, { status: "unmatched" }>, "lineId" | "kind"> | null> {
   if (line.document_id) {
-    const doc = await postedDocument(orgId, line.document_id);
+    const doc = await postedDocument(orgId, line.document_id, allowedSubsidiaryIds, batchSubsidiaryId);
     if (!doc) {
       return {
         status: "unmatched",
@@ -216,7 +250,7 @@ async function resolveLineDocument(
       };
     }
     if (distinct.length === 1) {
-      const doc = await postedDocument(orgId, distinct[0]!);
+      const doc = await postedDocument(orgId, distinct[0]!, allowedSubsidiaryIds, batchSubsidiaryId);
       if (!doc) {
         return {
           status: "unmatched",
@@ -241,7 +275,7 @@ async function resolveLineDocument(
     }
   }
   if (provider === "shopify_payments" && typeof meta.sourceOrderId === "string" && meta.sourceOrderId.trim() !== "") {
-    const orders = await findLineSourceOrders(orgId, meta.sourceOrderId);
+    const orders = await findLineSourceOrders(orgId, meta.sourceOrderId, allowedSubsidiaryIds);
     if (orders.length === 0) {
       return {
         status: "unmatched",
@@ -273,7 +307,7 @@ async function resolveLineDocument(
           remedy: "The order has several posted refunds; link the line to the right one manually.",
         };
       }
-      const doc = await postedDocument(orgId, docs[0]!);
+      const doc = await postedDocument(orgId, docs[0]!, allowedSubsidiaryIds, batchSubsidiaryId);
       if (!doc || doc.status !== "posted") {
         return {
           status: "unmatched",
@@ -294,7 +328,7 @@ async function resolveLineDocument(
       summaryId: order.summaryId,
     });
     if (order.postingDocumentId) {
-      const doc = saleDocumentId ? await postedDocument(orgId, saleDocumentId) : null;
+      const doc = saleDocumentId ? await postedDocument(orgId, saleDocumentId, allowedSubsidiaryIds, batchSubsidiaryId) : null;
       if (!doc || doc.status !== "posted") {
         return {
           status: "unmatched",
@@ -311,7 +345,7 @@ async function resolveLineDocument(
       };
     }
     if (saleDocumentId) {
-      const doc = await postedDocument(orgId, saleDocumentId);
+      const doc = await postedDocument(orgId, saleDocumentId, allowedSubsidiaryIds, batchSubsidiaryId);
       if (doc && doc.status === "posted") {
         return {
           status: "matched",
@@ -344,8 +378,12 @@ export async function matchPayoutLines(
   orgId: string,
   batchId: string,
   actorId: string | null,
-  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
 ): Promise<PayoutMatchResult> {
+  // An unknown scope matches nothing: automatic matching never runs
+  // unrestricted on a forgotten actor.
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
   return withOrgContext(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
       refuse(
@@ -375,7 +413,7 @@ export async function matchPayoutLines(
     for (const line of lines) {
       // Sequential lines share one workspace view: parallel links would
       // interleave their row locks and report stale verdicts.
-      const resolved = await resolveLineDocument(orgId, batch.provider, line);
+      const resolved = await resolveLineDocument(orgId, batch.provider, line, scope, batch.subsidiary_id);
       if (!resolved || resolved.status !== "matched") {
         if (!resolved) {
           verdicts.push({ status: "not_applicable", lineId: line.id, kind: line.kind, reason: `${line.kind} lines never link to an order` });
@@ -389,7 +427,7 @@ export async function matchPayoutLines(
         continue;
       }
       try {
-        await setSettlementLineDocument(orgId, batchId, line.id, resolved.documentId, actorId, allowedSubsidiaryIds);
+        await setSettlementLineDocument(orgId, batchId, line.id, resolved.documentId, actorId, scope);
         verdicts.push({ lineId: line.id, ...resolved });
       } catch (error) {
         verdicts.push({

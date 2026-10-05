@@ -13,6 +13,8 @@ import { postChannelOrder } from "./order-posting.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { approvePayoutSuggestion, suggestPayoutLineFix } from "./exception-assistance.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { db, withBypass } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
@@ -242,6 +244,10 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
     externalId: "txn-hidden-3", nativeTable: "documents", nativeId: docB.id,
   }, "salesChannels"));
   await withBypass(() => linkExternal(org.orgId, actor, {
+    provider: "stripe", externalAccount: "acct_2", objectType: "payout",
+    externalId: "txn-mix-6", nativeTable: "documents", nativeId: docA.id,
+  }, "salesChannels"));
+  await withBypass(() => linkExternal(org.orgId, actor, {
     provider: "stripe", externalAccount: "acct_2", objectType: "order",
     externalId: "order-hidden-B", nativeTable: "documents", nativeId: docB.id,
   }, "salesChannels"));
@@ -262,6 +268,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
     currency: "CAD",
     lines: [
       { kind: "charge", amount: "60.40", externalRef: "txn-mix-1", currency: "CAD", meta: { sourceOrderId: "order-hidden-1" } },
+      { kind: "charge", amount: docA.total, externalRef: "txn-mix-6", currency: "CAD", meta: {} },
       { kind: "charge", amount: docB.total, externalRef: "txn-hidden-2", currency: "CAD", meta: {} },
       { kind: "charge", amount: "10.00", externalRef: "txn-hidden-3", currency: "CAD", meta: {} },
       { kind: "charge", amount: "5.00", externalRef: "txn-draft-B", currency: "CAD", meta: {} },
@@ -293,6 +300,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
     select id from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId} and external_ref = ${ref}`)).rows[0]!.id;
   const lines: Record<string, string> = {
     mix: await lineOf(batchA, "txn-mix-1"),
+    mixCompanion: await lineOf(batchA, "txn-mix-6"),
     hiddenOnly: await lineOf(batchA, "txn-hidden-2"),
     hiddenCompanion: await lineOf(batchA, "txn-hidden-3"),
     hiddenDraft: await lineOf(batchA, "txn-draft-B"),
@@ -301,10 +309,12 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
     shopVisible: await lineOf(batchShop, "txn-shop-A"),
     shopHidden: await lineOf(batchShop, "txn-shop-B"),
   };
-  // A stored manual link from the home payout to the other entity's receipt:
-  // the writer permits an explicit operator link; discovery must not propose
-  // from it, and a restricted caller must not read through it.
-  await setSettlementLineDocument(org.orgId, batchA, lines.plain!, docB.id, actor, null);
+  // A link stored before the entity control: it models legacy evidence the
+  // writer refuses today, so it is written directly — discovery must not
+  // propose from it, and a restricted caller must not read through it.
+  const legacy = await db.execute(sql`update psp_settlement_lines set document_id = ${docB.id}
+     where id = ${lines.plain!} and org_id = ${org.orgId} and batch_id = ${batchA}`);
+  assert.equal(legacy.rowCount, 1, "the legacy cross-entity link lands on its line");
   return { subB, channelA, channelB, docA, docB, batchA, batchB, batchShop, lines };
 }
 
@@ -339,15 +349,19 @@ test("discovery proposes only the caller's entity and names no hidden receipt", 
     const mixed = await suggestPayoutLineFix(org.orgId, lines.mix!, scope);
     assert.equal(mixed.code, "single_candidate", `one entity cannot borrow another's receipt: ${mixed.code}`);
     assert.equal(mixed.candidates.length, 1);
+    assert.equal(mixed.similarCount, 2, "the count covers the visible companion line only");
     const [only] = mixed.candidates;
     assert.ok(only!.action.type === "link_document" && only!.action.documentId === docA.id);
     for (const text of [mixed.explanation, ...only!.evidence]) {
       assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
       assert.ok(!text.includes(docB.total), `hidden receipt total leaks: ${text}`);
     }
+    // A claim the caller may not read parks as dangling — never as a named
+    // proposal, and never naming what it cannot read. Manual branches report
+    // the line itself, so no count can carry another line's cause.
     const hidden = await suggestPayoutLineFix(org.orgId, lines.hiddenOnly!, scope);
-    assert.equal(hidden.code, "no_candidate");
-    assert.equal(hidden.similarCount, 2, "both hidden-claim lines in this payout wait on the same cause");
+    assert.equal(hidden.code, "links_dangling");
+    assert.equal(hidden.similarCount, 1);
     for (const text of [hidden.explanation, ...hidden.candidates.flatMap((candidate) => candidate.evidence)]) {
       assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
       assert.ok(!text.includes(docB.total), `hidden receipt total leaks: ${text}`);
@@ -364,7 +378,7 @@ test("a document of a visible but different entity is not a candidate", { skip: 
     const { subB, docB, lines } = await seed(org, actor);
     const both = new Set([org.subsidiaryId, subB]);
     const hidden = await suggestPayoutLineFix(org.orgId, lines.hiddenOnly!, both);
-    assert.equal(hidden.code, "no_candidate", "visibility alone does not make another entity's receipt a proposal");
+    assert.equal(hidden.code, "links_dangling", "visibility alone does not make another entity's receipt a proposal");
     for (const text of [hidden.explanation, ...hidden.candidates.flatMap((candidate) => candidate.evidence)]) {
       assert.ok(!text.includes(docB.number), `other-entity receipt number leaks: ${text}`);
     }
@@ -469,10 +483,76 @@ test("an explicitly unrestricted caller keeps the established behavior", { skip:
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
-    const { docB, lines } = await seed(org, actor);
+    const { lines } = await seed(org, actor);
     const suggestion = await suggestPayoutLineFix(org.orgId, lines.otherEntity!, null);
     assert.equal(suggestion.code, "single_candidate");
     assert.ok(suggestion.candidates[0]!.action.type === "link_document");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the link writer checks the receipt's entity before its status or number", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { docA, docB, batchA, lines } = await seed(org, actor);
+    const scope = homeScope(org);
+    // A restricted caller meets the hidden receipt as missing: neither its
+    // number nor its status steers the refusal.
+    await assert.rejects(
+      () => setSettlementLineDocument(org.orgId, batchA, lines.plain!, docB.id, actor, scope),
+      (error: unknown) => {
+        assert.ok(error instanceof ScopeNotFoundError);
+        assert.equal(error.message, "not found");
+        return true;
+      },
+      "linking a hidden receipt reads as missing",
+    );
+    // An explicitly unrestricted caller is refused by name with the remedy.
+    await assert.rejects(
+      () => setSettlementLineDocument(org.orgId, batchA, lines.plain!, docB.id, actor, null),
+      (error: unknown) => {
+        assert.ok(error instanceof Error && !(error instanceof ScopeNotFoundError));
+        assert.match(error.message, /different legal entity/);
+        assert.match(error.message, /payout's entity/);
+        assert.ok(error.message.includes(docB.number), "the refusal names the visible receipt");
+        return true;
+      },
+      "linking another entity's receipt refuses with its remedy",
+    );
+    // An unknown scope writes nothing.
+    const unknown = undefined as unknown as ReadonlySet<string> | null;
+    await assert.rejects(
+      () => setSettlementLineDocument(org.orgId, batchA, lines.hiddenCompanion!, docA.id, actor, unknown),
+      (error: unknown) => error instanceof ScopeNotFoundError,
+      "an omitted scope writes nothing",
+    );
+    // A same-entity link still writes through the hardened writer.
+    const linked = await setSettlementLineDocument(org.orgId, batchA, lines.hiddenCompanion!, docA.id, actor, scope);
+    assert.equal(linked.documentId, docA.id);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a runtime restricted role resolves to the same refusal", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { lines } = await seed(org, actor);
+    const clerk = await withBypass(() => createScratchUser(org.orgId, "Entity clerk", "entity-clerk"));
+    await db.execute(sql`update app_roles set permissions = '["banking.read"]'::jsonb,
+      subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id = ${org.orgId} and key = 'entity-clerk'`);
+    const resolved = await withBypass(() => actorAllowedSubsidiaryIds(db, org.orgId, clerk));
+    assert.ok(resolved instanceof Set, "a restricted role resolves to a finite scope");
+    assert.deepEqual([...resolved].sort(), [org.subsidiaryId].sort());
+    await assert.rejects(
+      () => suggestPayoutLineFix(org.orgId, lines.otherEntity!, resolved),
+      /does not belong to this organization/,
+      "the role-resolved scope refuses the other entity's line",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

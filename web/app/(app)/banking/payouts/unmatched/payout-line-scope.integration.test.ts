@@ -138,9 +138,13 @@ test('the row drawer hides the other entity and prices in record currency', { sk
     )
     const cad = await withOrgContext(org.orgId, () => loadPspUnmatched({ line: lines.nullCurrency }))
     assert.ok(cad.drawer, "the home line opens")
-    assert.match(cad.drawer!.props.line.amount, /CA/, `a currency-less line prices in its payout currency, not dollars: ${cad.drawer!.props.line.amount}`)
+    const cadAmount = cad.drawer!.props.line.amount
+    assert.ok(cadAmount, "a currency-less line still prices its amount")
+    assert.match(cadAmount, /CA/, `a currency-less line prices in its payout currency, not dollars: ${cadAmount}`)
     const eur = await withOrgContext(org.orgId, () => loadPspUnmatched({ line: lines.eur }))
-    assert.match(eur.drawer!.props.line.amount, /€/, `a euro payout never renders as dollars: ${eur.drawer!.props.line.amount}`)
+    const eurAmount = eur.drawer!.props.line.amount
+    assert.ok(eurAmount, "a euro line still prices its amount")
+    assert.match(eurAmount, /€/, `a euro payout never renders as dollars: ${eurAmount}`)
   } finally {
     state.user = null
     await dropScratchOrgReporting(org.orgId)

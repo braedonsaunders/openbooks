@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+// Static imports resolve before the hook install below, so this is the real
+// pure SQL predicate — the route's scope double delegates to it instead of
+// reimplementing it.
+import { subsidiaryVisibleFilter as realSubsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 
 interface DomainCall {
   action: "saveConfig" | "import" | "post" | "reverse";
@@ -16,6 +20,8 @@ interface PspRouteState {
   batchRows: Array<Record<string, unknown>>;
   lineRows: Array<Record<string, unknown>>;
   subsidiaryRows: Array<Record<string, unknown>>;
+  documentRows: Array<Record<string, unknown>>;
+  subsidiaryVisibleFilter: typeof realSubsidiaryVisibleFilter;
   multiSubsidiary: boolean;
   permissionChecks: string[];
   domainCalls: DomainCall[];
@@ -29,6 +35,8 @@ const routeState: PspRouteState = {
   batchRows: [],
   lineRows: [],
   subsidiaryRows: [],
+  documentRows: [],
+  subsidiaryVisibleFilter: realSubsidiaryVisibleFilter,
   multiSubsidiary: true,
   permissionChecks: [],
   domainCalls: [],
@@ -68,6 +76,13 @@ const mockSources = new Map<string, string>([
           }
           if (text.includes('from psp_settlement_lines')) {
             return { rows: state.lineRows }
+          }
+          if (text.includes('from documents d')) {
+            if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id')) return { rows: state.documentRows }
+            if (state.allowedSubsidiaryIds) {
+              return { rows: state.documentRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }
+            }
+            return { rows: state.documentRows }
           }
           if (text.includes('reconciliation_matches') || text.includes('psp_payout_accruals')) {
             return { rows: [] }
@@ -147,6 +162,10 @@ const mockSources = new Map<string, string>([
       }
       export class ScopeNotFoundError extends Error {}
       export class UnrestrictedScopeError extends Error {}
+
+      export function subsidiaryVisibleFilter(...args) {
+        return state.subsidiaryVisibleFilter(...args)
+      }
 
       export function parseStripeBalanceTransactions(_rows, externalRef, settlementDate) {
         return {
@@ -321,6 +340,7 @@ function reset(permissions: string[]): void {
   routeState.batchRows = [];
   routeState.lineRows = [];
   routeState.subsidiaryRows = [];
+  routeState.documentRows = [];
   routeState.multiSubsidiary = true;
   routeState.permissionChecks.length = 0;
   routeState.domainCalls.length = 0;
@@ -815,4 +835,23 @@ test("resolveDoc lists posted documents for manual links", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json() as { documents: unknown[] }).documents, []);
+});
+
+test("resolveDoc hides another entity's receipts from the picker", async () => {
+  reset(["banking.read"]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
+  routeState.documentRows = [
+    { id: "doc-a", kind: "cash_sale", documentNumber: "CS-A1", total: "10.0000", currency: "CAD", documentDate: "2026-07-10", subsidiaryId: "00000000-0000-4000-8000-0000000000a1" },
+    { id: "doc-b", kind: "cash_sale", documentNumber: "CS-B1", total: "20.0000", currency: "CAD", documentDate: "2026-07-10", subsidiaryId: "00000000-0000-4000-8000-0000000000b2" },
+  ];
+
+  const response = await GET(
+    new Request("http://openbooks.test/api/psp/settlements?resolveDoc=CS"),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    ((await response.json()) as { documents: Array<{ documentNumber: string }> }).documents.map((doc) => doc.documentNumber),
+    ["CS-A1"],
+  );
 });

@@ -21,7 +21,8 @@ export interface PayoutLineDrawerData {
   id: string
   providerLabel: string
   kindLabel: string
-  amount: string
+  /** Null when the line carries no usable currency: the row is omitted rather than mispriced. */
+  amount: string | null
   externalRef: string | null
   description: string | null
   batchRef: string
