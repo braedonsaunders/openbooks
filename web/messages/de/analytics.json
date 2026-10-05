@@ -131,6 +131,59 @@
       "domainTableNote": "Monate ab {month} projizieren unter null — außerhalb des Bereichs dieser Kennzahl.",
       "domainGrowthNote": "Das projizierte Wachstum beruht auf Werten außerhalb des Bereichs von {metric} — siehe Hinweis oben."
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "Erlöse",
+        "grossMargin": "Bruttomarge",
+        "operatingIncome": "Betriebsergebnis",
+        "safetyMargin": "Sicherheitsmarge"
+      },
+      "baselineSub": "kein Ausgangswert zum Vergleich",
+      "builder": "Szenario-Editor",
+      "template": "Vorlage",
+      "custom": "Eigenes Szenario",
+      "revenueGroup": "Erlöse",
+      "costsGroup": "Kosten",
+      "fields": {
+        "growth": "Wachstum %",
+        "price": "Preis Δ %",
+        "cogs": "COGS Δ %",
+        "opex": "OpEx Δ %"
+      },
+      "reset": "Auf Ausgangswerte zurücksetzen",
+      "impact": "Projizierte Wirkung",
+      "thresholds": "Kennschwellen",
+      "risk": "Risikostufe",
+      "threshold": {
+        "breakeven": "Gewinnschwelle",
+        "safety": "Sicherheitsmarge",
+        "net": "Nettoergebnis"
+      },
+      "riskLevels": {
+        "low": "Niedrig",
+        "moderate": "Mäßig",
+        "high": "Hoch",
+        "critical": "Kritisch",
+        "unknown": "Unbekannt"
+      },
+      "chart": {
+        "revenue": "Erlöse",
+        "grossProfit": "Bruttoergebnis",
+        "opIncome": "Betriebsergebnis",
+        "netIncome": "Nettoergebnis",
+        "baseline": "Basis",
+        "scenario": "Szenario"
+      },
+      "invalidInput": "{field} muss eine einfache Zahl sein — bis dahin bleibt das Szenario auf den Ausgangswerten.",
+      "templates": {
+        "recession": "Rezession",
+        "growth": "Wachstumsschub",
+        "cost_cut": "Kostensenkung",
+        "price_war": "Preiskampf",
+        "expansion": "Expansion",
+        "stagflation": "Stagflation"
+      }
+    },
     "kpi": {
       "revenue": "Umsatz",
       "grossMargin": "Bruttomarge",

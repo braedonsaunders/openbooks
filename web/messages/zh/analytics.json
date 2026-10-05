@@ -131,6 +131,59 @@
       "domainTableNote": "自{month}起的月份预测为负，超出本指标的取值范围。",
       "domainGrowthNote": "预测增长率基于超出{metric}范围的值计算——见上文警示。"
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "收入",
+        "grossMargin": "毛利率",
+        "operatingIncome": "营业利润",
+        "safetyMargin": "安全边际"
+      },
+      "baselineSub": "无可比基准",
+      "builder": "情景构建器",
+      "template": "模板",
+      "custom": "自定义情景",
+      "revenueGroup": "收入",
+      "costsGroup": "成本",
+      "fields": {
+        "growth": "增长率％",
+        "price": "价格Δ％",
+        "cogs": "销售成本Δ％",
+        "opex": "运营费用Δ％"
+      },
+      "reset": "重置为基准",
+      "impact": "预计影响",
+      "thresholds": "关键阈值",
+      "risk": "风险等级",
+      "threshold": {
+        "breakeven": "盈亏平衡收入",
+        "safety": "安全边际",
+        "net": "净利润"
+      },
+      "riskLevels": {
+        "low": "低",
+        "moderate": "中等",
+        "high": "高",
+        "critical": "严重",
+        "unknown": "未知"
+      },
+      "chart": {
+        "revenue": "收入",
+        "grossProfit": "毛利",
+        "opIncome": "营业利润",
+        "netIncome": "净利润",
+        "baseline": "基准",
+        "scenario": "情景"
+      },
+      "invalidInput": "{field}必须是简单数字——修正之前情景保持在基准值。",
+      "templates": {
+        "recession": "衰退",
+        "growth": "增长推动",
+        "cost_cut": "成本削减",
+        "price_war": "价格战",
+        "expansion": "扩张",
+        "stagflation": "滞胀"
+      }
+    },
     "kpi": {
       "revenue": "收入",
       "grossMargin": "毛利率",

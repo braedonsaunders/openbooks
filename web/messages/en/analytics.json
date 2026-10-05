@@ -131,6 +131,59 @@
       "domainTableNote": "Months from {month} onward project below zero, outside the range this metric can take.",
       "domainGrowthNote": "Projected growth is computed from values outside {metric}'s range — see the caveat above."
     },
+    "scenarios": {
+      "kpi": {
+        "revenue": "Revenue",
+        "grossMargin": "Gross Margin",
+        "operatingIncome": "Operating Income",
+        "safetyMargin": "Safety Margin"
+      },
+      "baselineSub": "no baseline to compare",
+      "builder": "Scenario Builder",
+      "template": "Template",
+      "custom": "Custom Scenario",
+      "revenueGroup": "Revenue",
+      "costsGroup": "Costs",
+      "fields": {
+        "growth": "Growth %",
+        "price": "Price Δ %",
+        "cogs": "COGS Δ %",
+        "opex": "OpEx Δ %"
+      },
+      "reset": "Reset to baseline",
+      "impact": "Projected Impact",
+      "thresholds": "Key Thresholds",
+      "risk": "Risk Level",
+      "threshold": {
+        "breakeven": "Breakeven Revenue",
+        "safety": "Safety Margin",
+        "net": "Net Income"
+      },
+      "riskLevels": {
+        "low": "Low",
+        "moderate": "Moderate",
+        "high": "High",
+        "critical": "Critical",
+        "unknown": "Unknown"
+      },
+      "chart": {
+        "revenue": "Revenue",
+        "grossProfit": "Gross Profit",
+        "opIncome": "Op Income",
+        "netIncome": "Net Income",
+        "baseline": "Baseline",
+        "scenario": "Scenario"
+      },
+      "invalidInput": "{field} must be a plain number — the scenario is held at the baseline until it is fixed.",
+      "templates": {
+        "recession": "Recession",
+        "growth": "Growth Push",
+        "cost_cut": "Cost Cutting",
+        "price_war": "Price War",
+        "expansion": "Expansion",
+        "stagflation": "Stagflation"
+      }
+    },
     "kpi": {
       "revenue": "Revenue",
       "grossMargin": "Gross Margin",
