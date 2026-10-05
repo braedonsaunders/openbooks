@@ -19,6 +19,8 @@ export const BUILT_IN_SCRIPT_KINDS: { value: string; labelKey: string }[] = [
   { value: 'vendor_credit', labelKey: 'kinds.vendorCredit' },
   { value: 'customer_invoice', labelKey: 'kinds.customerInvoice' },
   { value: 'customer_credit', labelKey: 'kinds.customerCredit' },
+  { value: 'cash_sale', labelKey: 'kinds.cashSale' },
+  { value: 'cash_refund', labelKey: 'kinds.cashRefund' },
   { value: 'vendor_payment', labelKey: 'kinds.vendorPayment' },
   { value: 'customer_payment', labelKey: 'kinds.customerPayment' },
   { value: 'card_charge', labelKey: 'kinds.cardCharge' },

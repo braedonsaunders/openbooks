@@ -2,7 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { ListViewConfig } from '@openbooks/customization'
-import { AP_KINDS, AR_KINDS } from '../document-kinds'
+import { AP_KINDS, AR_KINDS, CASH_SALE_KINDS } from '../document-kinds'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
   DISPLAY_DOCUMENT_NUMBER_EXPR,
@@ -196,6 +196,14 @@ const SOURCES: Record<string, DocListSource> = {
     kinds: AR_KINDS,
     drawerParam: 'doc',
     multiKind: true,
+    partyRole: 'customer',
+  }),
+  cash_sale: documentSource({
+    recordType: 'cash_sale',
+    kinds: CASH_SALE_KINDS,
+    drawerParam: 'doc',
+    multiKind: true,
+    // Walk-in sales name no party; named customers still drill through.
     partyRole: 'customer',
   }),
   vendor_payment: {

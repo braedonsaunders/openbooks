@@ -5,6 +5,8 @@
     "vendor_credit": "Avoir fournisseur",
     "customer_invoice": "Facture client",
     "customer_credit": "Avoir client",
+    "cash_sale": "Vente au comptant",
+    "cash_refund": "Remboursement au comptant",
     "card_charge": "Dépense par carte",
     "card_refund": "Remboursement par carte",
     "check": "Chèque",

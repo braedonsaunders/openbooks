@@ -244,6 +244,42 @@ const CUSTOMER_CREDIT: RecordTypeMeta = {
   listFilters: CUSTOMER_INVOICE.listFilters,
 };
 
+// Paid-at-sale documents share one list (refunds filter by kind). The party
+// stays optional for walk-in sales; there is no due date and no open balance.
+const CASH_SALE: RecordTypeMeta = {
+  key: "cash_sale",
+  labelKey: "customization.recordTypes.cash_sale",
+  category: "transaction",
+  featureKey: "cashSales",
+  headerFields: [
+    { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref", locked: true },
+    { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "reference_number", labelKey: "ar.drawer.reference", level: "header", kind: "text" },
+    { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ...COMMON_HEADER_EXTRAS,
+    ...INVOICE_HEADER_EXTRAS,
+  ],
+  lineFields: TRANSACTION_LINE_FIELDS,
+  listColumns: partyListColumns("ar.list.columns.invoice", "common.labels.customer"),
+  listFilters: [
+    APPROVAL_STATUS_FILTER,
+    { key: "party_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+    DATE_FILTER,
+    { key: "reference_number", labelKey: "common.labels.reference", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+};
+
+const CASH_REFUND: RecordTypeMeta = {
+  key: "cash_refund",
+  labelKey: "customization.recordTypes.cash_refund",
+  category: "transaction",
+  featureKey: "cashSales",
+  headerFields: CASH_SALE.headerFields,
+  lineFields: TRANSACTION_LINE_FIELDS,
+  listColumns: partyListColumns("common.labels.number", "common.labels.customer"),
+  listFilters: CASH_SALE.listFilters,
+};
+
 const RETURN_AUTHORIZATION: RecordTypeMeta = {
   key: "rma",
   labelKey: "customization.recordTypes.rma",
@@ -2447,6 +2483,8 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_CREDIT,
   CUSTOMER_INVOICE,
   CUSTOMER_CREDIT,
+  CASH_SALE,
+  CASH_REFUND,
   RETURN_AUTHORIZATION,
   CARD_CHARGE,
   CARD_REFUND,

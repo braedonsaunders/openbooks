@@ -497,6 +497,8 @@
       "journal": "journal",
       "vendorCredit": "avoir fournisseur",
       "customerCredit": "avoir client",
+      "cashSale": "vente au comptant",
+      "cashRefund": "remboursement au comptant",
       "cardCharge": "débit carte",
       "cardRefund": "remboursement carte",
       "check": "chèque",

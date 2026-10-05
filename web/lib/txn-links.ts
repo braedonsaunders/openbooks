@@ -12,6 +12,8 @@ export const TRANSACTION_MODULE_BY_KIND = Object.freeze({
   purchase_order: 'purchase-orders',
   customer_invoice: 'ar-invoices',
   customer_credit: 'ar-invoices',
+  cash_sale: 'cash-sales',
+  cash_refund: 'cash-sales',
   quote: 'estimates',
   sales_order: 'sales-orders',
   pick_list: 'picks',

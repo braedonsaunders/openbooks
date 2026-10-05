@@ -5,6 +5,8 @@
     "vendor_credit": "Vendor credit",
     "customer_invoice": "Customer invoice",
     "customer_credit": "Customer credit memo",
+    "cash_sale": "Cash sale",
+    "cash_refund": "Cash refund",
     "card_charge": "Card charge",
     "card_refund": "Card refund",
     "check": "Check",

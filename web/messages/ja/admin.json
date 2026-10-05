@@ -497,6 +497,8 @@
       "journal": "仕訳",
       "vendorCredit": "仕入先クレジット",
       "customerCredit": "得意先クレジット",
+      "cashSale": "現金売上",
+      "cashRefund": "現金返金",
       "cardCharge": "カード請求",
       "cardRefund": "カード返金",
       "check": "小切手",

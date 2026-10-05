@@ -497,6 +497,8 @@
       "journal": "journal",
       "vendorCredit": "vendor credit",
       "customerCredit": "customer credit",
+      "cashSale": "cash sale",
+      "cashRefund": "cash refund",
       "cardCharge": "card charge",
       "cardRefund": "card refund",
       "check": "check",

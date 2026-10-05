@@ -26,6 +26,8 @@ const DOC_TYPE_KEYS: Record<string, string> = {
   purchase_order: 'purchaseOrder',
   customer_invoice: 'customerInvoice',
   customer_credit: 'customerCredit',
+  cash_sale: 'cashSale',
+  cash_refund: 'cashRefund',
   sales_order: 'salesOrder',
   quote: 'estimate',
   expense_report: 'expenseReport',

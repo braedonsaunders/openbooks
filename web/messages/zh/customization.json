@@ -5,6 +5,8 @@
     "vendor_credit": "供应商贷记通知",
     "customer_invoice": "客户发票",
     "customer_credit": "客户贷记通知单",
+    "cash_sale": "现金销售",
+    "cash_refund": "现金退款",
     "card_charge": "银行卡消费",
     "card_refund": "银行卡退款",
     "check": "支票",

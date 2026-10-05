@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Award,
   BadgeCheck,
+  Banknote,
   BanknoteArrowUp,
   BellRing,
   BookOpen,
@@ -96,6 +97,7 @@ import { NavCountBadge } from './nav-count-badge'
 // so the parent server component passes us a key and we resolve client-side.
 const ICONS: Record<string, LucideIcon> = {
   'badge-check': BadgeCheck,
+  banknote: Banknote,
   'banknote-arrow-up': BanknoteArrowUp,
   'briefcase-business': BriefcaseBusiness,
   'calendar-check': CalendarCheck,
