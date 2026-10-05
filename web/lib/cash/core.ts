@@ -5,6 +5,7 @@ import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.t
 import { advanceAnchoredMonth } from "@openbooks/engine/src/billing/cadence.ts";
 import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, daysInCivilMonth, parseIsoDate, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { fiscalMonthOffset } from "@openbooks/reports";
+import { enactedIncomeTaxRate } from "@openbooks/engine/tax-returns";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
 import { ANALYTICS_CONFIG } from "../analytics/config-spec";
@@ -572,41 +573,26 @@ export async function loadCategories(orgId: string): Promise<ForecastCategory[]>
 }
 
 /**
- * Resolve the formula engine's tax fraction from the tenant's effective
- * manual tax-rate configuration. A missing or malformed setting is an error;
- * silently applying a jurisdiction-specific fallback would corrupt forecasts.
+ * Resolve the formula engine's tax fraction from the EFFECTIVE-DATED,
+ * subsidiary-scoped income tax rate: the org-wide rows stacked with the
+ * entity's own, as of the week being forecast. Forecast categories are
+ * org-level models, so callers pass null and price the org-wide stack. Null
+ * (nothing configured) is a named refusal, never an assumed rate; the
+ * percent-to-fraction step is exact decimal, never a float /100.
  */
 export async function resolveFormulaTaxRate(
   orgId: string,
-  asOfIso: string,
-  runner: Pick<typeof db, "execute"> = db,
-): Promise<number> {
-  const r = await runner.execute<{ defaultRatePercent: string | number | null }>(sql`
-    select settings ->> 'defaultRatePercent' as "defaultRatePercent"
-      from tax_rate_provider_configs
-     where org_id = ${orgId}
-       and provider = 'manual'
-       and is_enabled
-       and updated_at < (${asOfIso}::date + interval '1 day')
-     limit 1
-  `);
-  const configured = r.rows[0]?.defaultRatePercent;
-  if (
-    configured === null ||
-    configured === undefined ||
-    (typeof configured === "string" && configured.trim() === "")
-  ) {
+  weekIso: string,
+  subsidiaryId: string | null = null,
+  taxReader: typeof enactedIncomeTaxRate = enactedIncomeTaxRate,
+): Promise<Money> {
+  const enacted = await taxReader(orgId, subsidiaryId, weekIso);
+  if (enacted === null) {
     throw new Error(
-      `formula {TAX_RATE} requires an enabled manual tax-rate provider with settings.defaultRatePercent for organization ${orgId} on ${asOfIso}`,
+      `formula {TAX_RATE} has no enacted income tax rate for organization ${orgId} on ${weekIso} — set one at Setup → Taxes → Income tax rates`,
     );
   }
-  const ratePercent = Number(configured);
-  if (!Number.isFinite(ratePercent) || ratePercent < 0) {
-    throw new Error(
-      `formula {TAX_RATE} has an invalid settings.defaultRatePercent for organization ${orgId} on ${asOfIso}`,
-    );
-  }
-  return ratePercent / 100;
+  return divideMoney(enacted.ratePercent, "100");
 }
 
 /* ------------------- category engine helpers ------------------------------- */
@@ -1389,7 +1375,11 @@ export async function categoryWeekly(
       .replace(/MAX\(/g, "max(").replace(/MIN\(/g, "min(").replace(/ABS\(/g, "abs(")
       .replace(/CEIL\(/g, "ceil(").replace(/FLOOR\(/g, "floor(").replace(/ROUND\(/g, "round(")
       .replace(/SQRT\(/g, "sqrt(").replace(/POW\(/g, "pow(").replace(/AVG\(/g, "avg(");
-    const taxRate = expression.includes("{TAX_RATE}") ? await resolveFormulaTaxRate(orgId, asOfIso) : 0;
+    // The rate is effective-dated per week being forecast — one read per
+    // week, only for formulas that price tax.
+    const weekTaxRates = expression.includes("{TAX_RATE}")
+      ? await Promise.all(weekStarts.map((k) => resolveFormulaTaxRate(orgId, k)))
+      : [];
     weekStarts.forEach((k, i) => {
       const cur = parseISO(k);
       const weekIndex = i + 1;
@@ -1416,7 +1406,7 @@ export async function categoryWeekly(
         .replace(/{IS_Q_START}/g, String(fiscal.isQStart))
         .replace(/{IS_Q_END}/g, String(fiscal.isQEnd))
         .replace(/{IS_YEAR_END}/g, String(fiscal.isYearEnd))
-        .replace(/{TAX_RATE}/g, String(taxRate)).replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
+        .replace(/{TAX_RATE}/g, weekTaxRates[i] ?? "0").replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
       // A malformed tenant formula is a refusal the operator must see named,
       // never a silent 0 forecast that looks like "no cash expected" —
       // forecast-only, but it is the forecast the release gate reads.

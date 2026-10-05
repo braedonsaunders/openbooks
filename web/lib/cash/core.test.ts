@@ -26,73 +26,36 @@ const horizonMessages = {
   ui: { select: { placeholder: "Select", searchPlaceholder: "Search", noMatches: "No matches", searching: "Searching" } },
 };
 
-test("formula TAX_RATE resolves each org default and fails closed", () => {
+test("formula TAX_RATE prices the enacted rate for the week, exactly", () => {
   // core.ts is server-only in production, so run the behavior check under
   // React's server condition (the same pattern used by other web tests).
+  // The enacted-rate reader is the database boundary, so the test doubles
+  // it at that seam — never the pure percent math under test.
   const source = `
     import assert from "node:assert/strict";
     import { resolveFormulaTaxRate } from "./web/lib/cash/core.ts";
 
-    const fixtures = new Map([
-      ["org-gst", { defaultRatePercent: "5", updatedAt: "2026-08-01" }],
-      ["org-bc", { defaultRatePercent: "12", updatedAt: "2026-08-01" }],
-      ["org-malformed", { defaultRatePercent: "not-a-rate", updatedAt: "2026-08-01" }],
-      ["org-negative", { defaultRatePercent: "-1", updatedAt: "2026-08-01" }],
-      ["org-revision", { defaultRatePercent: "9", updatedAt: "2026-08-01" }],
-    ]);
-    const queries = [];
-    const runner = {
-      async execute(query) {
-        const chunks = Array.isArray(query.queryChunks) ? query.queryChunks : [];
-        const params = chunks.filter((chunk) => typeof chunk === "string");
-        const [orgId, asOfIso] = params;
-        const queryText = chunks.map((chunk) => {
-          if (typeof chunk === "string") return chunk;
-          return Array.isArray(chunk?.value) ? chunk.value.join("") : "";
-        }).join("");
-        assert.match(queryText, /from tax_rate_provider_configs/);
-        assert.match(queryText, /org_id =/);
-        assert.match(queryText, /provider = 'manual'/);
-        assert.match(queryText, /is_enabled/);
-        assert.match(queryText, /updated_at </);
-        queries.push(queryText);
-
-        const fixture = fixtures.get(orgId);
-        if (!fixture || asOfIso < fixture.updatedAt) return { rows: [] };
-        return { rows: [{ defaultRatePercent: fixture.defaultRatePercent }] };
-      },
+    const calls = [];
+    const reader = async (orgId, subsidiaryId, onDate) => {
+      calls.push([orgId, subsidiaryId, onDate]);
+      if (orgId === "org-bare") return null;
+      return { ratePercent: "25.0000", jurisdictions: ["federal"] };
     };
 
-    const gstRate = await resolveFormulaTaxRate("org-gst", "2026-08-31", runner);
-    const bcRate = await resolveFormulaTaxRate("org-bc", "2026-08-31", runner);
-    assert.equal(gstRate, 0.05);
-    assert.equal(bcRate, 0.12);
-    assert.notEqual(gstRate, 0);
-    assert.notEqual(bcRate, 0.13);
-    assert.match(queries[0], /org_id = org-gst/);
-    assert.match(queries[1], /org_id = org-bc/);
+    // A 25% enacted rate prices as the exact fraction 0.2500 — a float /100
+    // would read 0.25000000000000006 territory and corrupt the formula.
+    assert.equal(await resolveFormulaTaxRate("org-1", "2026-08-31", null, reader), "0.2500");
+    assert.deepEqual(calls[0], ["org-1", null, "2026-08-31"]);
+    // The category's subsidiary rides through for the entity stack.
+    assert.equal(await resolveFormulaTaxRate("org-1", "2026-08-31", "sub-9", reader), "0.2500");
+    assert.deepEqual(calls[1], ["org-1", "sub-9", "2026-08-31"]);
 
+    // Nothing configured refuses by name with the remedy that exists.
     await assert.rejects(
-      resolveFormulaTaxRate("org-missing", "2026-08-31", runner),
-      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+      resolveFormulaTaxRate("org-bare", "2026-08-31", null, reader),
+      /no enacted income tax rate.*Setup → Taxes → Income tax rates/,
     );
-    await assert.rejects(
-      resolveFormulaTaxRate("org-malformed", "2026-08-31", runner),
-      /has an invalid settings\\.defaultRatePercent/,
-    );
-    await assert.rejects(
-      resolveFormulaTaxRate("org-negative", "2026-08-31", runner),
-      /has an invalid settings\\.defaultRatePercent/,
-    );
-
-    // A revision made after the forecast date is not usable historically;
-    // the engine must fail closed instead of applying a stale or default rate.
-    assert.equal(await resolveFormulaTaxRate("org-revision", "2026-08-01", runner), 0.09);
-    await assert.rejects(
-      resolveFormulaTaxRate("org-revision", "2026-07-31", runner),
-      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
-    );
-    console.log("cash TAX_RATE behavior passed: org-gst=5%, org-bc=12%; missing, malformed, negative, and pre-revision bindings fail closed");
+    console.log("cash TAX_RATE behavior passed: enacted 25% prices 0.2500 exactly; unconfigured refuses by name");
   `;
   const result = spawnSync(
     process.execPath,
