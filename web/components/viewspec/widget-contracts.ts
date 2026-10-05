@@ -115,7 +115,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'close-wizard': { props: ['wizard'] },
   'code-cell': { props: ['text'] },
   'collection-attempt-drawer': { props: ['drawer'] },
-  'collections-shell': { props: ['advancedSubscriptionsEnabled', 'customers', 'description', 'incomeAccounts', 'subscriptionsEnabled', 'title', 'worklistHref', 'worklistLabel'] },
+  'collections-shell': { props: ['advancedSubscriptionsEnabled', 'autopayOn', 'customers', 'description', 'incomeAccounts', 'initialView', 'subscriptionsEnabled', 'tabs', 'title', 'worklistHref', 'worklistLabel'] },
   'commitments-section': { props: ['empty', 'emptyAction', 'rows', 'showPurchaseOrders'] },
   'compliance-matrix': { props: ['classId', 'columns', 'labels', 'rows', 'stateFilter'] },
   'compliance-setup-banner': { props: ['actionHref', 'actionLabel', 'prompt'] },

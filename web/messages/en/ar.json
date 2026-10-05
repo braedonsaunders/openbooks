@@ -238,7 +238,9 @@
       "plans": "Plans",
       "versions": "Plan versions",
       "contracts": "Contracts",
-      "amendments": "Amendments"
+      "amendments": "Amendments",
+      "recovery": "Recovery",
+      "attempts": "Attempts"
     },
     "errors": {
       "actionFailed": "Action failed",
@@ -631,10 +633,11 @@
       "outreachMarkFailed": "The link was copied but outreach was not recorded. Send it again from the queue.",
       "hardStuck": "No backup method",
       "hardStuckHint": "Ask the customer for new payment details.",
-      "breakdownTitle": "By decline class and provider",
-      "breakdownSummary": "Recovery rates for the window",
+      "breakdownTitle": "Recovery breakdown",
+      "breakdownDrillDescription": "Decline reason, provider, month and currency in the governed report",
       "breakdownRow": "{failed} failed · {recovered} recovered · {rate}",
-      "openReports": "Full history in Reports",
+      "breakdownDrillAction": "Open breakdown in Reports",
+      "breakdownFallbackNote": "Decline classes for the window; the full breakdown needs the governed report definition",
       "policyNotice": {
         "title": "No collection policy is active",
         "description": "Automatic collection is on, but there is no active collection policy for customer invoices, so there is no retry schedule to collect against. Activate a policy to start collecting.",

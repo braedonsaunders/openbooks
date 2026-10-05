@@ -238,7 +238,9 @@
       "plans": "プラン",
       "versions": "プランのバージョン",
       "contracts": "契約",
-      "amendments": "契約変更"
+      "amendments": "契約変更",
+      "recovery": "回収",
+      "attempts": "試行"
     },
     "errors": {
       "actionFailed": "アクションに失敗しました",
@@ -631,10 +633,11 @@
       "outreachMarkFailed": "リンクはコピーされましたが、連絡が記録されませんでした。キューから再送信してください。",
       "hardStuck": "バックアップ方法なし",
       "hardStuckHint": "顧客に新しい支払い方法を確認してください。",
-      "breakdownTitle": "拒否クラス別・プロバイダー別",
-      "breakdownSummary": "期間の回収率",
+      "breakdownTitle": "回収内訳",
+      "breakdownDrillDescription": "ガバナンス対象レポートの拒否理由、プロバイダー、月、通貨",
       "breakdownRow": "失敗{failed} · 回収{recovered} · {rate}",
-      "openReports": "レポートで全履歴を見る",
+      "breakdownDrillAction": "レポートで内訳を開く",
+      "breakdownFallbackNote": "期間の拒否クラス。完全な内訳にはガバナンス対象レポート定義が必要です",
       "policyNotice": {
         "title": "有効な回収ポリシーがありません",
         "description": "自動回収はオンですが、顧客請求書に対する有効な回収ポリシーがないため、再試行スケジュールがありません。ポリシーを有効化して回収を開始してください。",

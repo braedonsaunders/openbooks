@@ -238,7 +238,9 @@
       "plans": "Planos",
       "versions": "Versões de planos",
       "contracts": "Contratos",
-      "amendments": "Alterações"
+      "amendments": "Alterações",
+      "recovery": "Recuperação",
+      "attempts": "Tentativas"
     },
     "errors": {
       "actionFailed": "Falha na ação",
@@ -631,10 +633,11 @@
       "outreachMarkFailed": "O link foi copiado, mas o contato não foi registrado. Envie de novo pela fila.",
       "hardStuck": "Sem método reserva",
       "hardStuckHint": "Peça ao cliente novos dados de pagamento.",
-      "breakdownTitle": "Por classe de recusa e provedor",
-      "breakdownSummary": "Taxas de recuperação do período",
+      "breakdownTitle": "Detalhamento da recuperação",
+      "breakdownDrillDescription": "Motivo de recusa, provedor, mês e moeda no relatório governado",
       "breakdownRow": "{failed} com falha · {recovered} recuperadas · {rate}",
-      "openReports": "Histórico completo em Relatórios",
+      "breakdownDrillAction": "Abrir detalhamento em Relatórios",
+      "breakdownFallbackNote": "Classes de recusa do período; o detalhamento completo requer a definição de relatório governado",
       "policyNotice": {
         "title": "Nenhuma política de cobrança ativa",
         "description": "A cobrança automática está ativada, mas não há nenhuma política de cobrança ativa para faturas de clientes — não há cronograma de novas tentativas. Ative uma política para começar a cobrar.",

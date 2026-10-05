@@ -238,7 +238,9 @@
       "plans": "方案",
       "versions": "方案版本",
       "contracts": "合同",
-      "amendments": "合同变更"
+      "amendments": "合同变更",
+      "recovery": "回收",
+      "attempts": "尝试"
     },
     "errors": {
       "actionFailed": "操作失败",
@@ -631,10 +633,11 @@
       "outreachMarkFailed": "链接已复制，但联系未记录。请从队列重新发送。",
       "hardStuck": "无备用方式",
       "hardStuckHint": "请客户提供新的付款方式。",
-      "breakdownTitle": "按拒付类别和服务商",
-      "breakdownSummary": "本期回收率",
+      "breakdownTitle": "催收明细",
+      "breakdownDrillDescription": "治理报表中的拒绝原因、提供商、月份和货币",
       "breakdownRow": "{failed} 失败 · {recovered} 收回 · {rate}",
-      "openReports": "在报表中查看完整历史",
+      "breakdownDrillAction": "在报表中打开明细",
+      "breakdownFallbackNote": "本期间的拒绝类别；完整明细需要治理报表定义",
       "policyNotice": {
         "title": "没有生效的催收政策",
         "description": "自动催收已开启，但客户发票没有任何生效的催收政策——没有重试计划。请激活一项政策以开始催收。",
