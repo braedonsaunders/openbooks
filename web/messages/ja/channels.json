@@ -242,6 +242,8 @@
     "stockLabel": "在庫ロケーション",
     "syncStock": "在庫数を同期",
     "fulfils": "受注を出荷",
+    "fulfilsOnHint": "売上は転記時にこの棚から在庫を移動します。店舗からの報告は不要です。",
+    "fulfilsOffHint": "売上は在庫を動かさずに転記されます。店舗の出荷が後から在庫を移動し、出荷がなければ棚はそのままです。",
     "columnShopify": "Shopify",
     "columnStock": "在庫ロケーション",
     "columnSync": "同期",
@@ -320,7 +322,18 @@
     "unmapped_account": "勘定科目が未登録",
     "closed_period": "会計期間が締結済み",
     "tax_mismatch": "合計が一致しない",
-    "currency_unsupported": "未対応の通貨"
+    "currency_unsupported": "未対応の通貨",
+    "over_refund": "返金が売上を超過",
+    "refund_unposted_order": "売上前の返金",
+    "unmapped_fulfilment_location": "出荷ロケーションが未登録",
+    "insufficient_stock": "在庫不足",
+    "cancellation_blocked": "キャンセル不可"
+  },
+  "eventKinds": {
+    "refund": "返金",
+    "cancellation": "キャンセル",
+    "fulfilment": "出荷",
+    "edit": "注文変更"
   },
   "columns": {
     "number": "注文",
@@ -330,17 +343,22 @@
     "document": "伝票",
     "code": "原因",
     "reason": "理由",
-    "remedy": "対処法"
+    "remedy": "対処法",
+    "event": "イベント",
+    "occurred": "発生日時"
   },
   "empty": {
     "ordersTitle": "チャネル注文はまだありません",
     "ordersDescription": "接続中の店舗が注文を送信するとここに表示されます。先にチャネルを接続してください。",
     "exceptionsTitle": "対応が必要なものはありません",
-    "exceptionsDescription": "すべての注文が転記済みか、日次サマリー待ちです。"
+    "exceptionsDescription": "すべての注文が転記済みか、日次サマリー待ちです。",
+    "eventExceptionsTitle": "ブロック中の返金・キャンセル・出荷はありません",
+    "eventExceptionsDescription": "店舗イベントはすべて転記済みです。ブロックされたものは対処法とともにここに表示されます。"
   },
   "drawer": {
     "lines": "明細",
     "tenders": "決済",
+    "activity": "履歴",
     "posting": "転記",
     "document": "伝票",
     "summary": "日次サマリー",
@@ -350,6 +368,7 @@
     "giftCard": "ギフトカード",
     "replay": "注文を再実行",
     "replayAll": "同じ原因のすべてを再実行",
+    "replayAllEvents": "同じ原因のイベントをすべて再実行",
     "replayed": "{count}件を再実行: {posted}件を転記、{parked}件は引き続き停止中。",
     "noDocument": "伝票はまだありません。転記可能になり次第転記されます。",
     "filterByCause": "同じ原因をすべて表示",
@@ -410,6 +429,23 @@
     "confirmBody": "{fix} {count}件の注文を再実行します。計上済みの履歴の勘定は変わりません。",
     "evidence": "この修正の理由",
     "evidenceSummary": "理由が{count}件"
+  },
+  "timeline": {
+    "empty": "返金・出荷・キャンセルはまだありません。",
+    "pushed": "店舗へ送信済み",
+    "restocks": "在庫に戻す",
+    "kind": {
+      "refund": "返金",
+      "fulfilment": "出荷",
+      "cancellation": "キャンセル",
+      "edit": "注文変更"
+    },
+    "status": {
+      "pending": "待機中",
+      "posted": "転記済み",
+      "exception": "ブロック中",
+      "ignored": "無視"
+    }
   },
   "posting": {
     "mode": "転記モード",

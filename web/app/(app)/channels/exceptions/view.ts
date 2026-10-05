@@ -1,14 +1,12 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
 import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { loadChannelOrderDrawer } from '../order-detail'
-import { channelTabs } from '../orders/view'
+import { channelTabs, countChannelExceptions } from '../orders/view'
 
 /**
  * Channel Exceptions: the needs-attention queue. Each row names its cause
@@ -22,6 +20,8 @@ export interface ChannelExceptionsData {
   currentParams: Record<string, string | string[] | undefined>
   emptyTitle: string
   emptyDescription: string
+  eventEmptyTitle: string
+  eventEmptyDescription: string
   canManage: boolean
   drawer: { widget: string; props: { drawer: unknown; closeHref: string } } | null
 }
@@ -35,9 +35,7 @@ export async function loadChannelExceptions(
   const orgId = authz.user.orgId
   const canManage = can(authz, 'channels.manage')
 
-  const count = await db.execute<{ count: string }>(
-    sql`select count(*)::text as count from channel_orders where org_id = ${orgId} and posting_status = 'exception'`,
-  )
+  const exceptionCount = await countChannelExceptions(orgId)
 
   const orderId = typeof sp.order === 'string' && isUuid(sp.order) ? sp.order : null
   const drawer = orderId ? await loadChannelOrderDrawer(orgId, orderId, canManage) : null
@@ -45,10 +43,12 @@ export async function loadChannelExceptions(
   return {
     title: t('exceptionsTitle'),
     description: t('exceptionsDescription'),
-    tabs: channelTabs(t, 'exceptions', Number(count.rows[0]?.count ?? '0')),
+    tabs: channelTabs(t, 'exceptions', exceptionCount),
     currentParams: sp,
     emptyTitle: t('empty.exceptionsTitle'),
     emptyDescription: t('empty.exceptionsDescription'),
+    eventEmptyTitle: t('empty.eventExceptionsTitle'),
+    eventEmptyDescription: t('empty.eventExceptionsDescription'),
     canManage,
     drawer: drawer ? { widget: 'channel-order-drawer', props: { drawer, closeHref: '/channels/exceptions' } } : null,
   }
@@ -64,7 +64,7 @@ export function channelExceptionsSpec(data: ChannelExceptionsData): PageSpec {
         description: data.description,
         actions: [
           widget('module-home-tabs', { tabs: data.tabs }),
-          ...(data.canManage ? [widget('channel-replay-all', {})] : []),
+          ...(data.canManage ? [widget('channel-replay-all', {}), widget('channel-replay-all', { scope: 'events' })] : []),
         ],
       }),
     ],
@@ -75,6 +75,13 @@ export function channelExceptionsSpec(data: ChannelExceptionsData): PageSpec {
         emptyTitle: data.emptyTitle,
         emptyDescription: data.emptyDescription,
         drawer: data.drawer,
+      }),
+      widgetBlock('entity-list-view', {
+        recordType: 'channel_event_exception',
+        sp: data.currentParams,
+        emptyTitle: data.eventEmptyTitle,
+        emptyDescription: data.eventEmptyDescription,
+        drawer: null,
       }),
     ],
   })

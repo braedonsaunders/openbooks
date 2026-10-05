@@ -34,6 +34,7 @@
     "inventory_movement": "Movimiento de inventario",
     "channel_order": "Pedido de canal",
     "channel_exception": "Excepción de pedido",
+    "channel_event_exception": "Excepción de evento de pedido",
     "webhook_endpoint": "Extremo de webhook",
     "payment_dispute_review": "Revisión de disputa de pago",
     "budget_scenario": "Presupuesto",

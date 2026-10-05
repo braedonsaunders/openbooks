@@ -242,6 +242,8 @@
     "stockLabel": "Stock location",
     "syncStock": "Sync stock levels",
     "fulfils": "Fulfils orders",
+    "fulfilsOnHint": "Sales move stock from this shelf when they post; the storefront never needs to report back.",
+    "fulfilsOffHint": "Sales post without moving stock; the storefront's fulfilments move it later, and a missing fulfilment leaves the shelf untouched.",
     "columnShopify": "Shopify",
     "columnStock": "Stock location",
     "columnSync": "Sync",
@@ -320,7 +322,18 @@
     "unmapped_account": "Missing account",
     "closed_period": "Closed period",
     "tax_mismatch": "Totals disagree",
-    "currency_unsupported": "Unsupported currency"
+    "currency_unsupported": "Unsupported currency",
+    "over_refund": "Refund exceeds sale",
+    "refund_unposted_order": "Refund before sale",
+    "unmapped_fulfilment_location": "Missing fulfilment location",
+    "insufficient_stock": "Short on stock",
+    "cancellation_blocked": "Cannot cancel"
+  },
+  "eventKinds": {
+    "refund": "Refund",
+    "cancellation": "Cancellation",
+    "fulfilment": "Fulfilment",
+    "edit": "Order edit"
   },
   "columns": {
     "number": "Order",
@@ -330,17 +343,22 @@
     "document": "Document",
     "code": "Cause",
     "reason": "Reason",
-    "remedy": "Fix"
+    "remedy": "Fix",
+    "event": "Event",
+    "occurred": "Occurred"
   },
   "empty": {
     "ordersTitle": "No channel orders yet",
     "ordersDescription": "Orders appear here when a connected storefront sends them. Connect a channel first.",
     "exceptionsTitle": "Nothing needs attention",
-    "exceptionsDescription": "Every order posted or is waiting for its daily summary."
+    "exceptionsDescription": "Every order posted or is waiting for its daily summary.",
+    "eventExceptionsTitle": "No blocked refunds, cancellations or fulfilments",
+    "eventExceptionsDescription": "Every storefront event posted. Blocked ones land here with the fix."
   },
   "drawer": {
     "lines": "Lines",
     "tenders": "Tenders",
+    "activity": "Activity",
     "posting": "Posting",
     "document": "Document",
     "summary": "Daily summary",
@@ -350,6 +368,7 @@
     "giftCard": "Gift card",
     "replay": "Replay order",
     "replayAll": "Replay all with this cause",
+    "replayAllEvents": "Replay all events with this cause",
     "replayed": "Replayed {count} order(s): {posted} posted, {parked} still blocked.",
     "noDocument": "No document yet. The order posts when it can.",
     "filterByCause": "Show all with this cause",
@@ -410,6 +429,23 @@
     "confirmBody": "{fix} This replays {count, plural, one {# order} other {# orders}}. Posted history keeps its accounts.",
     "evidence": "Why this fix",
     "evidenceSummary": "{count, plural, one {# reason} other {# reasons}}"
+  },
+  "timeline": {
+    "empty": "No refunds, fulfilments or cancellations yet.",
+    "pushed": "Pushed to storefront",
+    "restocks": "restocks",
+    "kind": {
+      "refund": "Refund",
+      "fulfilment": "Fulfilment",
+      "cancellation": "Cancellation",
+      "edit": "Order edit"
+    },
+    "status": {
+      "pending": "Waiting",
+      "posted": "Posted",
+      "exception": "Blocked",
+      "ignored": "Ignored"
+    }
   },
   "posting": {
     "mode": "Posting mode",

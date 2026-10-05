@@ -242,6 +242,8 @@
     "stockLabel": "Emplacement de stock",
     "syncStock": "Synchroniser les stocks",
     "fulfils": "Expédie les commandes",
+    "fulfilsOnHint": "Les ventes sortent le stock de cette étagère à la comptabilisation ; la boutique n'a rien à rapporter.",
+    "fulfilsOffHint": "Les ventes se comptabilisent sans mouvement de stock ; les préparations de la boutique le meuvent ensuite, et une préparation manquante laisse l'étagère intacte.",
     "columnShopify": "Shopify",
     "columnStock": "Emplacement de stock",
     "columnSync": "Synchro",
@@ -320,7 +322,18 @@
     "unmapped_account": "Compte manquant",
     "closed_period": "Période clôturée",
     "tax_mismatch": "Totaux incohérents",
-    "currency_unsupported": "Devise non prise en charge"
+    "currency_unsupported": "Devise non prise en charge",
+    "over_refund": "Remboursement supérieur à la vente",
+    "refund_unposted_order": "Remboursement avant la vente",
+    "unmapped_fulfilment_location": "Emplacement de préparation manquant",
+    "insufficient_stock": "Stock insuffisant",
+    "cancellation_blocked": "Annulation bloquée"
+  },
+  "eventKinds": {
+    "refund": "Remboursement",
+    "cancellation": "Annulation",
+    "fulfilment": "Préparation",
+    "edit": "Modification de commande"
   },
   "columns": {
     "number": "Commande",
@@ -330,17 +343,22 @@
     "document": "Document",
     "code": "Cause",
     "reason": "Motif",
-    "remedy": "Solution"
+    "remedy": "Solution",
+    "event": "Événement",
+    "occurred": "Survenu le"
   },
   "empty": {
     "ordersTitle": "Aucune commande de canal pour l'instant",
     "ordersDescription": "Les commandes apparaissent ici quand une boutique connectée les envoie. Connectez d'abord un canal.",
     "exceptionsTitle": "Rien à traiter",
-    "exceptionsDescription": "Chaque commande est comptabilisée ou attend son récapitulatif quotidien."
+    "exceptionsDescription": "Chaque commande est comptabilisée ou attend son récapitulatif quotidien.",
+    "eventExceptionsTitle": "Aucun remboursement, annulation ou préparation bloqués",
+    "eventExceptionsDescription": "Chaque événement de la boutique est comptabilisé. Les événements bloqués arrivent ici avec leur solution."
   },
   "drawer": {
     "lines": "Lignes",
     "tenders": "Encaissements",
+    "activity": "Activité",
     "posting": "Comptabilisation",
     "document": "Document",
     "summary": "Récapitulatif quotidien",
@@ -350,6 +368,7 @@
     "giftCard": "Carte cadeau",
     "replay": "Rejouer la commande",
     "replayAll": "Rejouer toutes celles de cette cause",
+    "replayAllEvents": "Rejouer tous les événements de cette cause",
     "replayed": "{count} commande(s) rejouée(s) : {posted} comptabilisée(s), {parked} toujours bloquée(s).",
     "noDocument": "Pas encore de document. La commande sera comptabilisée dès que possible.",
     "filterByCause": "Afficher toutes celles de cette cause",
@@ -410,6 +429,23 @@
     "confirmBody": "{fix} Ceci rejoue {count, plural, one {# commande} other {# commandes}}. L'historique comptabilisé conserve ses comptes.",
     "evidence": "Pourquoi cette solution",
     "evidenceSummary": "{count, plural, one {# raison} other {# raisons}}"
+  },
+  "timeline": {
+    "empty": "Aucun remboursement, préparation ou annulation pour l'instant.",
+    "pushed": "Transmis à la boutique",
+    "restocks": "retour en stock",
+    "kind": {
+      "refund": "Remboursement",
+      "fulfilment": "Préparation",
+      "cancellation": "Annulation",
+      "edit": "Modification de commande"
+    },
+    "status": {
+      "pending": "En attente",
+      "posted": "Comptabilisé",
+      "exception": "Bloqué",
+      "ignored": "Ignoré"
+    }
   },
   "posting": {
     "mode": "Mode de comptabilisation",

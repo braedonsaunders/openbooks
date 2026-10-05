@@ -242,6 +242,8 @@
     "stockLabel": "Local de estoque",
     "syncStock": "Sincronizar estoques",
     "fulfils": "Atende pedidos",
+    "fulfilsOnHint": "As vendas movem estoque desta prateleira ao contabilizar; a loja não precisa reportar nada.",
+    "fulfilsOffHint": "As vendas são contabilizadas sem mover estoque; os atendimentos da loja o movem depois, e um atendimento ausente deixa a prateleira intacta.",
     "columnShopify": "Shopify",
     "columnStock": "Local de estoque",
     "columnSync": "Sincronização",
@@ -320,7 +322,18 @@
     "unmapped_account": "Conta ausente",
     "closed_period": "Período encerrado",
     "tax_mismatch": "Totais não conferem",
-    "currency_unsupported": "Moeda não suportada"
+    "currency_unsupported": "Moeda não suportada",
+    "over_refund": "Reembolso excede a venda",
+    "refund_unposted_order": "Reembolso antes da venda",
+    "unmapped_fulfilment_location": "Local de atendimento ausente",
+    "insufficient_stock": "Estoque insuficiente",
+    "cancellation_blocked": "Cancelamento bloqueado"
+  },
+  "eventKinds": {
+    "refund": "Reembolso",
+    "cancellation": "Cancelamento",
+    "fulfilment": "Atendimento",
+    "edit": "Alteração do pedido"
   },
   "columns": {
     "number": "Pedido",
@@ -330,17 +343,22 @@
     "document": "Documento",
     "code": "Causa",
     "reason": "Motivo",
-    "remedy": "Correção"
+    "remedy": "Correção",
+    "event": "Evento",
+    "occurred": "Ocorrido em"
   },
   "empty": {
     "ordersTitle": "Ainda não há pedidos de canais",
     "ordersDescription": "Os pedidos aparecem aqui quando uma loja conectada os envia. Conecte primeiro um canal.",
     "exceptionsTitle": "Nada precisa de atenção",
-    "exceptionsDescription": "Cada pedido está contabilizado ou aguarda seu resumo diário."
+    "exceptionsDescription": "Cada pedido está contabilizado ou aguarda seu resumo diário.",
+    "eventExceptionsTitle": "Sem reembolsos, cancelamentos ou atendimentos bloqueados",
+    "eventExceptionsDescription": "Cada evento da loja está contabilizado. Os bloqueados chegam aqui com a correção."
   },
   "drawer": {
     "lines": "Itens",
     "tenders": "Pagamentos",
+    "activity": "Atividade",
     "posting": "Contabilização",
     "document": "Documento",
     "summary": "Resumo diário",
@@ -350,6 +368,7 @@
     "giftCard": "Vale-presente",
     "replay": "Reprocessar pedido",
     "replayAll": "Reprocessar todos com esta causa",
+    "replayAllEvents": "Reprocessar todos os eventos com esta causa",
     "replayed": "{count} pedido(s) reprocessado(s): {posted} contabilizados, {parked} ainda bloqueados.",
     "noDocument": "Ainda sem documento. O pedido será contabilizado quando possível.",
     "filterByCause": "Mostrar todos com esta causa",
@@ -410,6 +429,23 @@
     "confirmBody": "{fix} Isso reexecuta {count, plural, one {# pedido} other {# pedidos}}. O histórico contabilizado mantém suas contas.",
     "evidence": "Por que esta solução",
     "evidenceSummary": "{count, plural, one {# motivo} other {# motivos}}"
+  },
+  "timeline": {
+    "empty": "Ainda não há reembolsos, atendimentos ou cancelamentos.",
+    "pushed": "Enviado à loja",
+    "restocks": "volta ao estoque",
+    "kind": {
+      "refund": "Reembolso",
+      "fulfilment": "Atendimento",
+      "cancellation": "Cancelamento",
+      "edit": "Alteração do pedido"
+    },
+    "status": {
+      "pending": "Aguardando",
+      "posted": "Contabilizado",
+      "exception": "Bloqueado",
+      "ignored": "Ignorado"
+    }
   },
   "posting": {
     "mode": "Modo de contabilização",

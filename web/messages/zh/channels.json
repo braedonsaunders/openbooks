@@ -242,6 +242,8 @@
     "stockLabel": "库存地点",
     "syncStock": "同步库存数量",
     "fulfils": "履行订单",
+    "fulfilsOnHint": "销售过账时从此货架扣减库存，网店无需再上报。",
+    "fulfilsOffHint": "销售过账时不移动库存，由网店履约后续移动；缺失履约则货架保持不动。",
     "columnShopify": "Shopify",
     "columnStock": "库存地点",
     "columnSync": "同步",
@@ -320,7 +322,18 @@
     "unmapped_account": "缺少科目",
     "closed_period": "期间已关闭",
     "tax_mismatch": "金额不平",
-    "currency_unsupported": "不支持的币种"
+    "currency_unsupported": "不支持的币种",
+    "over_refund": "退款超过销售",
+    "refund_unposted_order": "销售前退款",
+    "unmapped_fulfilment_location": "缺少履约地点",
+    "insufficient_stock": "库存不足",
+    "cancellation_blocked": "无法取消"
+  },
+  "eventKinds": {
+    "refund": "退款",
+    "cancellation": "取消",
+    "fulfilment": "履约",
+    "edit": "订单修改"
   },
   "columns": {
     "number": "订单",
@@ -330,17 +343,22 @@
     "document": "凭证",
     "code": "原因",
     "reason": "说明",
-    "remedy": "处理办法"
+    "remedy": "处理办法",
+    "event": "事件",
+    "occurred": "发生时间"
   },
   "empty": {
     "ordersTitle": "暂无渠道订单",
     "ordersDescription": "已连接的网店发送订单后会显示在这里。请先连接一个渠道。",
     "exceptionsTitle": "没有需要处理事项",
-    "exceptionsDescription": "所有订单均已过账或正在等待日报。"
+    "exceptionsDescription": "所有订单均已过账或正在等待日报。",
+    "eventExceptionsTitle": "没有被阻止的退款、取消或履约",
+    "eventExceptionsDescription": "所有网店事件均已过账。被阻止的事件会连同处理办法显示在这里。"
   },
   "drawer": {
     "lines": "明细",
     "tenders": "收款",
+    "activity": "动态",
     "posting": "过账",
     "document": "凭证",
     "summary": "日报",
@@ -350,6 +368,7 @@
     "giftCard": "礼品卡",
     "replay": "重新过账",
     "replayAll": "重新过账所有相同原因订单",
+    "replayAllEvents": "重新过账所有相同原因事件",
     "replayed": "已重新过账{count}笔:{posted}笔已过账,{parked}笔仍被阻止。",
     "noDocument": "尚无凭证。订单在可以过账时会自动过账。",
     "filterByCause": "查看所有相同原因订单",
@@ -410,6 +429,23 @@
     "confirmBody": "{fix} 这将重跑{count}个订单。已过账的历史记录保留原科目。",
     "evidence": "为什么是这个方案",
     "evidenceSummary": "{count}条理由"
+  },
+  "timeline": {
+    "empty": "暂无退款、履约或取消。",
+    "pushed": "已推送到网店",
+    "restocks": "退回库存",
+    "kind": {
+      "refund": "退款",
+      "fulfilment": "履约",
+      "cancellation": "取消",
+      "edit": "订单修改"
+    },
+    "status": {
+      "pending": "等待中",
+      "posted": "已过账",
+      "exception": "被阻止",
+      "ignored": "已忽略"
+    }
   },
   "posting": {
     "mode": "过账模式",

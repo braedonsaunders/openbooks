@@ -31,6 +31,7 @@
     "inventory_movement": "Lagerbewegung",
     "channel_order": "Kanalbestellung",
     "channel_exception": "Bestellungsausnahme",
+    "channel_event_exception": "Bestellereignisausnahme",
     "webhook_endpoint": "Webhook-Endpunkt",
     "payment_dispute_review": "Zahlungsdisputprüfung",
     "budget_scenario": "Budget",

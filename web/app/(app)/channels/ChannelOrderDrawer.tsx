@@ -329,6 +329,49 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
           ),
         },
         {
+          key: 'activity',
+          label: t('drawer.activity'),
+          content: drawer.timeline.length === 0 ? (
+            <p className="p-1 text-sm text-slate-500">{t('timeline.empty')}</p>
+          ) : (
+            <ol className="space-y-4 p-1">
+              {drawer.timeline.map((item) => (
+                <li key={item.id} className="flex gap-3">
+                  <span aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-300 dark:bg-slate-600" />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">
+                        {item.outbound ? t('timeline.pushed') : t(`timeline.kind.${item.kind}`)}
+                      </Badge>
+                      <Badge variant={statusVariant(item.status)}>{t(`timeline.status.${item.status}`)}</Badge>
+                      <span className="text-xs text-slate-500">
+                        {new Date(item.occurredAt).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    {item.amountMinor ? (
+                      <p className="text-sm font-medium">{amount(item.amountMinor)}{item.restocks ? ` · ${t('timeline.restocks')}` : ''}</p>
+                    ) : null}
+                    {item.tracking ? <p className="font-mono text-xs text-slate-600 dark:text-slate-300">{item.tracking}</p> : null}
+                    {item.summary ? <p className="text-xs text-slate-600 dark:text-slate-300">{item.summary}</p> : null}
+                    {item.reason ? <p className="text-sm text-slate-700 dark:text-slate-200">{item.reason}</p> : null}
+                    {item.document && item.documentHref ? (
+                      <Link href={item.documentHref} className="text-sm font-medium text-sky-700 hover:underline dark:text-sky-300">
+                        {item.document.number ?? t('drawer.document')}
+                      </Link>
+                    ) : null}
+                    {item.exception ? (
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        <span className="font-medium">{t(`exceptionCodes.${item.exception.code}`)}: </span>
+                        {item.exception.reason} {item.exception.remedy}
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ),
+        },
+        {
           key: 'payment',
           label: t('drawer.tenders'),
           content: (

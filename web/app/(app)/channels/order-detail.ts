@@ -3,6 +3,9 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { getOrderEconomics, loadChannelOrder } from '@openbooks/engine/commerce'
+import { listChannelOrderEvents } from '@openbooks/engine/src/commerce/orders.ts'
+import { reviveFulfilmentPayload } from '@openbooks/engine/src/commerce/fulfilments.ts'
+import { reviveRefundPayload } from '@openbooks/engine/src/commerce/refunds.ts'
 import { getPostingPolicy } from '@openbooks/engine/commerce'
 import { isoDateOf } from '@openbooks/engine/platform/civil-date'
 
@@ -40,6 +43,7 @@ export interface ChannelOrderDrawerData {
   policyMode: string | null
   document: { id: string; kind: string; number: string | null; status: string } | null
   documentHref: string | null
+  timeline: ChannelOrderTimelineItem[]
   summary: { id: string; summaryDate: string; documentNumber: string | null } | null
   exception: { code: string; reason: string; remedy: string } | null
   canManage: boolean
@@ -63,6 +67,114 @@ function documentHrefFor(kind: string, id: string): string | null {
   if (kind === 'sales_order') return `/sales-orders?order=${id}`
   if (kind === 'customer_invoice') return `/ar/invoices?doc=${id}`
   return null
+}
+
+/**
+ * One lifecycle entry behind the sale: a refund with its total, a
+ * fulfilment with its tracking and shipped lines, a cancellation with its
+ * reason, or a push to the storefront. Raw values only — the drawer
+ * composes labels in the operator's locale.
+ */
+export interface ChannelOrderTimelineItem {
+  id: string
+  kind: string
+  outbound: boolean
+  status: string
+  occurredAt: string
+  amountMinor: string | null
+  restocks: boolean
+  tracking: string | null
+  summary: string | null
+  reason: string | null
+  document: { id: string; kind: string; number: string | null } | null
+  documentHref: string | null
+  exception: { code: string; reason: string; remedy: string } | null
+}
+
+function textOf(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null
+}
+
+async function loadOrderTimeline(orgId: string, orderId: string): Promise<ChannelOrderTimelineItem[]> {
+  const events = await listChannelOrderEvents(orgId, orderId)
+  if (events.length === 0) return []
+  const docIds = [...new Set(events.map((event) => event.postingDocumentId).filter((id): id is string => !!id))]
+  const docs = docIds.length > 0
+    ? (await db.execute<{ id: string; kind: string; document_number: string | null }>(
+        sql`select id, kind, document_number from documents where org_id = ${orgId} and id = any(${docIds}::uuid[])`,
+      )).rows
+    : []
+  const docById = new Map(docs.map((doc) => [doc.id, doc]))
+  return events.map((event) => {
+    const doc = (event.postingDocumentId && docById.get(event.postingDocumentId)) || null
+    const document = doc ? { id: doc.id, kind: doc.kind, number: doc.document_number } : null
+    const base = {
+      id: event.id,
+      status: event.postingStatus,
+      occurredAt: event.occurredAt,
+      document,
+      documentHref: doc ? documentHrefFor(doc.kind, doc.id) : null,
+      exception: event.postingStatus === 'exception' && event.exceptionCode
+        ? { code: event.exceptionCode, reason: event.exceptionReason ?? '', remedy: event.exceptionRemedy ?? '' }
+        : null,
+    }
+    if (event.kind === 'refund') {
+      const refund = reviveRefundPayload(event.payload)
+      return {
+        ...base,
+        kind: 'refund',
+        outbound: false,
+        amountMinor: String(refund.totalMinor),
+        restocks: refund.lines.some((line) => line.restock),
+        tracking: null,
+        summary: null,
+        reason: textOf(refund.reason),
+      }
+    }
+    if (event.kind === 'fulfilment') {
+      if ((event.payload.direction ?? 'inbound') === 'outbound') {
+        return { ...base, kind: 'fulfilment', outbound: true, amountMinor: null, restocks: false, tracking: null, summary: null, reason: null }
+      }
+      const fulfilment = reviveFulfilmentPayload(event.payload)
+      const tracking = [fulfilment.carrierName, fulfilment.trackingNumber].filter(Boolean).join(' · ') || null
+      const summary = fulfilment.lines
+        .map((line) => `${line.quantity} × ${line.sku ?? line.lineExternalId ?? '?'}`)
+        .join(', ') || null
+      return {
+        ...base,
+        kind: 'fulfilment',
+        outbound: false,
+        amountMinor: null,
+        restocks: false,
+        tracking,
+        summary,
+        reason: null,
+      }
+    }
+    if (event.kind === 'cancellation') {
+      const payload = event.payload as { reason?: unknown }
+      return {
+        ...base,
+        kind: 'cancellation',
+        outbound: false,
+        amountMinor: null,
+        restocks: false,
+        tracking: null,
+        summary: null,
+        reason: textOf(payload.reason),
+      }
+    }
+    return {
+      ...base,
+      kind: event.kind,
+      outbound: false,
+      amountMinor: null,
+      restocks: false,
+      tracking: null,
+      summary: null,
+      reason: null,
+    }
+  })
 }
 
 export async function loadChannelOrderDrawer(
@@ -93,6 +205,7 @@ export async function loadChannelOrderDrawer(
   // tracking, or a recompute that never ran): absence renders the teaching
   // empty state with a refresh action, never a failure.
   const economics = await loadOrderEconomics(orgId, order.id, order.postingDocumentId)
+  const timeline = await loadOrderTimeline(orgId, order.id)
   const doc = order.postingDocumentId && docRow.rows[0]
     ? { id: order.postingDocumentId, kind: docRow.rows[0].kind, number: docRow.rows[0].document_number, status: docRow.rows[0].status }
     : null
@@ -140,6 +253,7 @@ export async function loadChannelOrderDrawer(
     policyMode: policy?.mode ?? null,
     document: doc,
     documentHref: doc ? documentHrefFor(doc.kind, doc.id) : null,
+    timeline,
     summary,
     exception: order.postingStatus === 'exception' && order.exceptionCode
       ? { code: order.exceptionCode, reason: order.exceptionReason ?? '', remedy: order.exceptionRemedy ?? '' }
