@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { stubModules } from '../../../../../../testing/stub-modules'
 
-const state = { calls: [] as { deltaMinor: bigint; idempotencyKey: string }[], error: null as Error | null, grants: [] as string[] }
+const state = { calls: [] as { deltaMinor: bigint; idempotencyKey: string; allowedSubsidiaryIds: ReadonlySet<string> | null }[], error: null as Error | null, grants: [] as string[] }
 Object.assign(globalThis, { __storedAdjustment: state })
 stubModules({ extra: { '@/lib/feature-gates': `
   export async function guardFeaturePermission(permission, feature) {
