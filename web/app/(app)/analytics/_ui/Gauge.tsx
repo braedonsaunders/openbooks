@@ -2,7 +2,15 @@
 
 import { useId } from 'react'
 import { cn } from '@openbooks/ui'
-import { scoreTone } from './format'
+import { scoreTone, type ScoreBands } from './format'
+
+/**
+ * The neutral presentation scale for a 0–100 gauge: the starting 80/60/40
+ * cut-offs for callers with no configured bands of their own. It carries no
+ * business meaning — any dashboard with configured score bands passes those
+ * instead.
+ */
+export const NEUTRAL_GAUGE_BANDS: ScoreBands = { excellent: 80, good: 60, average: 40 }
 
 /**
  * Semicircular score gauge (0–100) rendered as pure SVG — the signature
@@ -20,6 +28,7 @@ export function Gauge({
   className,
   goodWhenHigh = true,
   ariaLabel,
+  bands,
 }: {
   value: number
   label?: string
@@ -31,9 +40,11 @@ export function Gauge({
   className?: string
   goodWhenHigh?: boolean
   ariaLabel?: string
+  /** Tone cut-offs for the 0–100 scale, from the caller's own configuration. */
+  bands: ScoreBands
 }) {
   const v = Math.min(100, Math.max(0, value))
-  const tone = scoreTone(goodWhenHigh ? v : 100 - v)
+  const tone = scoreTone(goodWhenHigh ? v : 100 - v, bands)
   const gradId = useId()
 
   const w = size

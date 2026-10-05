@@ -113,15 +113,27 @@ export function useAnalyticsValue(): (value: number | null, format: ValueFormat,
   }, [fmtMoney])
 }
 
+/**
+ * Tone bands for a 0–100 gauge: the score at or above each cut-off reads in
+ * that tone. Every caller passes its own bands — the Financial Health
+ * screens pass the configured score labels, anything without configured
+ * bands passes the neutral presentation scale.
+ */
+export interface ScoreBands {
+  excellent: number
+  good: number
+  average: number
+}
+
 /** Semantic colour for a health score / sub-score, 0–100. */
-export function scoreTone(score: number): {
+export function scoreTone(score: number, bands: ScoreBands): {
   hex: string
   text: string
   ring: string
 } {
-  if (score >= 80) return { hex: '#10b981', text: 'text-emerald-600 dark:text-emerald-400', ring: 'ring-emerald-500/20' }
-  if (score >= 60) return { hex: '#0ea5b7', text: 'text-teal-600 dark:text-teal-400', ring: 'ring-teal-500/20' }
-  if (score >= 40) return { hex: '#f59e0b', text: 'text-amber-600 dark:text-amber-400', ring: 'ring-amber-500/20' }
+  if (score >= bands.excellent) return { hex: '#10b981', text: 'text-emerald-600 dark:text-emerald-400', ring: 'ring-emerald-500/20' }
+  if (score >= bands.good) return { hex: '#0ea5b7', text: 'text-teal-600 dark:text-teal-400', ring: 'ring-teal-500/20' }
+  if (score >= bands.average) return { hex: '#f59e0b', text: 'text-amber-600 dark:text-amber-400', ring: 'ring-amber-500/20' }
   return { hex: '#ef4444', text: 'text-red-600 dark:text-red-400', ring: 'ring-red-500/20' }
 }
 

@@ -2,7 +2,7 @@
 
 import { cn } from '@openbooks/ui'
 import { Gauge } from './Gauge'
-import { scoreTone } from './format'
+import { scoreTone, type ScoreBands } from './format'
 
 export interface ScoreBar {
   label: string
@@ -19,29 +19,32 @@ export function HealthScore({
   scoreLabel,
   categories,
   overallLabel,
+  bands,
 }: {
   score: number
   scoreLabel: string
   categories: ScoreBar[]
   overallLabel: string
+  /** Tone cut-offs for the 0–100 scale, from the caller's own configuration. */
+  bands: ScoreBands
 }) {
   return (
     <div className="flex flex-col items-center gap-5">
-      <Gauge value={score} label={scoreLabel} size={200} />
+      <Gauge value={score} label={scoreLabel} size={200} bands={bands} />
       <div className="w-full space-y-3">
         {categories.map((c) => (
-          <Bar key={c.label} label={c.label} score={c.score} />
+          <Bar key={c.label} label={c.label} score={c.score} bands={bands} />
         ))}
         <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
-          <Bar label={overallLabel} score={score} emphasis />
+          <Bar label={overallLabel} score={score} emphasis bands={bands} />
         </div>
       </div>
     </div>
   )
 }
 
-function Bar({ label, score, emphasis }: { label: string; score: number; emphasis?: boolean }) {
-  const tone = scoreTone(score)
+function Bar({ label, score, emphasis, bands }: { label: string; score: number; emphasis?: boolean; bands: ScoreBands }) {
+  const tone = scoreTone(score, bands)
   const pct = Math.min(100, Math.max(0, score))
   return (
     <div>
