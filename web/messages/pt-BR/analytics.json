@@ -3046,10 +3046,6 @@
           "label": "Brecha crítica (pp)",
           "help": "A brecha de velocidade compras/vendas acima disso é crítica"
         },
-        "cliffCriticalHorizon": {
-          "label": "Horizonte crítico (meses)",
-          "help": "Horizonte exibido com penhasco crítico"
-        },
         "cliffCriticalPoints": {
           "label": "Pontos críticos",
           "help": "Dedução de saúde com penhasco crítico"
@@ -3061,10 +3057,6 @@
         "cliffWarningGap": {
           "label": "Brecha de alerta (pp)",
           "help": "A brecha de velocidade compras/vendas acima disso é um alerta"
-        },
-        "cliffWarningHorizon": {
-          "label": "Horizonte de alerta (meses)",
-          "help": "Horizonte exibido com penhasco de alerta"
         },
         "cliffWarningPoints": {
           "label": "Pontos de alerta",
