@@ -3,11 +3,14 @@ import test from "node:test";
 import {
   SubscriptionError,
   advanceSubscription,
+  billingPeriodStartBefore,
+  firstPeriodProration,
   monthlyRecurringRevenue,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
   prorate,
   prorationDocument,
+  remainingPeriodProration,
   resolveNextBillOnUpdate,
 } from "./subscription-billing.ts";
 import { unbilledBoundary } from "./advanced-subscriptions.ts";
@@ -105,14 +108,51 @@ test("prorate keeps a cross-century billing period positive", () => {
   assert.equal(prorate("130", "0099-12-25", "0100-01-07", "0100-01-01"), "60.0000");
 });
 
-test("first-period proration includes all service days from a backdated start", () => {
-  // A first invoice is for the complete [startOn, firstBillOn] service period,
-  // even when the API is called after a backdated subscription has begun.
-  assert.equal(prorate("300", "2026-08-01", "2026-09-01", "2026-08-01"), "300.0000");
-  // Service-start anchoring inside prorateFirstInvoice is proven through the
-  // real call in subscription-billing-subsidiary.integration.test.ts ("a
-  // backdated first invoice charges from service start, not the invocation
-  // date").
+test("the billing period before a bill date retreats one cadence step, pinned to the anchor", () => {
+  assert.equal(billingPeriodStartBefore("2026-08-01", "monthly"), "2026-07-01");
+  assert.equal(billingPeriodStartBefore("2026-08-03", "weekly", 2), "2026-07-20");
+  // Anchor 31 lands on Feb 28, so the quarter before it starts Nov 30 — and
+  // advancing Nov 30 with that anchor reproduces Feb 28.
+  assert.equal(billingPeriodStartBefore("2026-02-28", "quarterly", 1, 31), "2025-11-30");
+  assert.equal(advanceSubscription("2025-11-30", "quarterly", 1, 31), "2026-02-28");
+  assert.equal(billingPeriodStartBefore("2026-03-31", "monthly", 1, 31), "2026-02-28");
+  // An anchor that does not land on the bill date cannot describe a cycle
+  // through it; the bill date's own day does.
+  assert.equal(billingPeriodStartBefore("2026-08-01", "monthly", 1, 10), "2026-07-01");
+  assert.equal(billingPeriodStartBefore("2027-01-15", "annually"), "2026-01-15");
+});
+
+test("a first-period stub is its days over the FULL billing period it belongs to", () => {
+  // Six days of a 300.00 monthly plan: 300 × 6/31 in a 31-day month and
+  // 300 × 6/30 in a 30-day month — never the full 300.00.
+  assert.equal(firstPeriodProration("300", "2026-07-26", "2026-08-01", "monthly"), "58.0645");
+  assert.equal(firstPeriodProration("300", "2026-06-25", "2026-07-01", "monthly"), "60.0000");
+  assert.equal(firstPeriodProration("70", "2026-07-31", "2026-08-03", "weekly"), "30.0000");
+  // Quarterly on anchor 31 billing Feb 28: the period is Nov 30 → Feb 28
+  // (90 days); the day-28 reading (92 days) would price it at 19.5652.
+  assert.equal(firstPeriodProration("300", "2026-02-22", "2026-02-28", "quarterly", 1, 31), "20.0000");
+  assert.equal(firstPeriodProration("300", "2026-02-22", "2026-02-28", "quarterly", 1, 28), "19.5652");
+  // A stub spanning exactly one period is the full price.
+  assert.equal(firstPeriodProration("300", "2026-07-01", "2026-08-01", "monthly"), "300.0000");
+  assert.throws(
+    () => firstPeriodProration("300", "2026-06-30", "2026-08-01", "monthly"),
+    (e: unknown) => e instanceof SubscriptionError &&
+      /longer than one billing period \(2026-07-01 → 2026-08-01\); choose a first bill date/.test(e.message),
+  );
+  assert.throws(() => firstPeriodProration("300", "2026-08-01", "2026-08-01", "monthly"), /nothing to prorate/);
+});
+
+test("a mid-stub change is priced at the full period's daily rate from the later of change and service start", () => {
+  // Three of the 31 days remain in a stub that started Jul 26.
+  assert.equal(remainingPeriodProration("300", "2026-07-26", "2026-08-01", "2026-07-29", "monthly"), "29.0323");
+  // A change dated before service started counts only the six served days.
+  assert.equal(remainingPeriodProration("300", "2026-07-26", "2026-08-01", "2026-07-20", "monthly"), "58.0645");
+  // A full period keeps the ordinary remaining-slice proration.
+  assert.equal(
+    remainingPeriodProration("310", "2026-01-01", "2026-02-01", "2026-01-16", "monthly"),
+    prorate("310", "2026-01-01", "2026-02-01", "2026-01-16"),
+  );
+  assert.equal(remainingPeriodProration("300", "2026-08-01", "2026-08-01", "2026-08-01", "monthly"), "0.0000");
 });
 
 test("prorationDocument maps a signed adjustment to the native document it must become", () => {

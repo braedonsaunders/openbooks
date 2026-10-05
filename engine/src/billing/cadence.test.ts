@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advanceAnchoredMonth } from "./cadence.ts";
+import { advanceAnchoredMonth, retreatAnchoredMonth } from "./cadence.ts";
 
 test("anchored advance pins month-end starts instead of drifting", () => {
   assert.equal(advanceAnchoredMonth(2026, 1, 1, 31), "2026-02-28");
@@ -28,4 +28,13 @@ test("anchored advance refuses invalid anchors and out-of-range years", () => {
   assert.throws(() => advanceAnchoredMonth(2026, 1, 0, 10), /positive integer/);
   assert.throws(() => advanceAnchoredMonth(9999, 12, 1, 10), /supported date range/);
   assert.equal(advanceAnchoredMonth(1, 1, 1, 15), "0001-02-15");
+});
+
+test("anchored retreat mirrors the advance across year and month-end boundaries", () => {
+  assert.equal(retreatAnchoredMonth(2026, 2, 3, 31), "2025-11-30");
+  assert.equal(retreatAnchoredMonth(2026, 3, 1, 31), "2026-02-28");
+  assert.equal(retreatAnchoredMonth(2026, 1, 1, 15), "2025-12-15");
+  assert.equal(retreatAnchoredMonth(2027, 7, 12, 21), "2026-07-21");
+  assert.throws(() => retreatAnchoredMonth(2026, 1, 0, 10), /positive integer/);
+  assert.throws(() => retreatAnchoredMonth(1, 1, 1, 10), /supported date range/);
 });

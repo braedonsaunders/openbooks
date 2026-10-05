@@ -3,6 +3,7 @@ import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 import {
   SubscriptionError,
+  firstPeriodStub,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
   resolveNextBillOnUpdate,
@@ -39,6 +40,7 @@ const routeState: RouteState & {
   unrestrictedScopeError: typeof UnrestrictedScopeError;
   unrestrictedScopeRequired: typeof UNRESTRICTED_SCOPE_REQUIRED;
   SubscriptionError: typeof SubscriptionError;
+  firstPeriodStub: typeof firstPeriodStub;
   normalizeSubscriptionCadence: typeof normalizeSubscriptionCadence;
   normalizeSubscriptionMoney: typeof normalizeSubscriptionMoney;
   resolveNextBillOnUpdate: typeof resolveNextBillOnUpdate;
@@ -67,6 +69,7 @@ const routeState: RouteState & {
   // The cursor guard is pure domain validation: the double delegates to the
   // real function, or the refusal cases below would test a copy of the rule.
   resolveNextBillOnUpdate,
+  firstPeriodStub,
   normalizeSubscriptionCadence: (interval, intervalCount) => {
     const cadence = normalizeSubscriptionCadence(interval, intervalCount);
     routeState.normalizedCadences.push(cadence);
@@ -129,6 +132,9 @@ stubModules({
       const response = (query) => {
         const text = sqlText(query)
         if (text.includes('insert into subscription_plans')) return { rows: [{ id: '00000000-0000-4000-8000-00000000c002' }] }
+        if (text.includes('from subscription_plans where id =') && text.includes('"intervalCount"')) {
+          return { rows: [{ interval: 'monthly', intervalCount: 1 }] }
+        }
         if (text.includes('insert into subscriptions')) return { rows: [{ id: '00000000-0000-4000-8000-00000000c003' }] }
         if (text.includes('select * from subscriptions where id =')) {
           return { rows: state.beforeSubscription ? [state.beforeSubscription] : [] }
@@ -183,6 +189,7 @@ stubModules({
         return tx.execute({ queryChunks: ['select customer for share'] })
       }
       export const resolveNextBillOnUpdate = (...args) => state.resolveNextBillOnUpdate(...args)
+      export const firstPeriodStub = (...args) => state.firstPeriodStub(...args)
       export function monthlyRecurringRevenue(amount) { return String(amount) }
       export async function prorateFirstInvoice(...args) {
         state.engineCalls.push({ fn: 'prorateFirstInvoice', args })
@@ -440,6 +447,15 @@ test("first proration passes the restricted caller scope to the billing service"
   const prorateResponse = await post({ action: "addSubscription", customerId: "00000000-0000-4000-8000-00000000c004", planId: "00000000-0000-4000-8000-00000000c002", startOn: "2026-08-26", firstBillOn: "2026-09-26", prorateFirstPeriod: true });
   assert.equal(prorateResponse.status, 201);
   assert.deepEqual(routeState.engineCalls, [{ fn: "prorateFirstInvoice", args: ["org-1", "00000000-0000-4000-8000-00000000c003", "2026-09-26", undefined, { actorId: "user-1", allowedSubsidiaryIds: new Set(["subsidiary-a"]) }] }]);
+});
+
+test("a prorated first period longer than one billing period is refused before the subscription commits", async () => {
+  reset();
+  const response = await post({ action: "addSubscription", customerId: "00000000-0000-4000-8000-00000000c004", planId: "00000000-0000-4000-8000-00000000c002", startOn: "2026-07-10", firstBillOn: "2026-09-01", prorateFirstPeriod: true });
+  assert.equal(response.status, 422);
+  assert.match(String((await response.json() as { error: string }).error), /longer than one billing period \(2026-08-01 → 2026-09-01\); choose a first bill date/);
+  assert.ok(!routeState.transactionQueries.some((query) => sqlText(query).includes("insert into subscriptions")), "no subscription is written");
+  assert.deepEqual(routeState.engineCalls, [], "no first invoice is attempted");
 });
 
 /** A plain subscription billed for [Mar 1, Apr 1): cursor Apr 1, one invoice. */

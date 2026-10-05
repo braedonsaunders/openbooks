@@ -212,11 +212,11 @@ test(
   "a backdated first invoice charges from service start, not the invocation date",
   { skip: !DB },
   async () => {
-    // The first invoice covers the complete [startOn, firstBillOn] service
-    // period even when it is cut after a backdated start: anchoring the
-    // charge to the invocation date would silently discard already-served
-    // days. 2026-07-10..2026-08-01 is 22 days at 100.00, all of them served
-    // by the 2026-07-20 invocation.
+    // The first invoice covers the complete [startOn, firstBillOn) stub even
+    // when it is cut after a backdated start: anchoring the charge to the
+    // invocation date would silently discard already-served days. The stub
+    // 2026-07-10..2026-08-01 is 22 days of the 31-day July period, so a
+    // 100.00 monthly plan charges 100 × 22/31, never the full month.
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
@@ -227,11 +227,18 @@ test(
       });
 
       const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", { actorId });
-      assert.equal(gen.amount, "100.0000", "the full 22-day slice is charged");
+      assert.equal(gen.amount, "70.9677", "22 of 31 days are charged");
       const total = (await db.execute<{ total: string }>(sql`
         select total from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}
       `)).rows[0]!.total;
-      assert.equal(total, "100.0000");
+      assert.equal(total, "70.9677");
+      // The cycle continues on the period the stub was priced against: the
+      // next full invoice covers Aug 1 → Sep 1, not Aug 1 → Sep 10.
+      const cycle = (await db.execute<{ nextBillOn: string; anchorDay: number }>(sql`
+        select next_bill_on::text as "nextBillOn", anchor_day as "anchorDay"
+          from subscriptions where id = ${subscriptionId} and org_id = ${org.orgId}
+      `)).rows[0]!;
+      assert.deepEqual(cycle, { nextBillOn: "2026-08-01", anchorDay: 1 });
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
