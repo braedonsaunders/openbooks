@@ -233,6 +233,40 @@ test("per_fte without resolved annual hours refuses by name instead of assuming 
   );
 });
 
+test("sum and weighted refuse mixed units with the categories named", () => {
+  for (const method of ["sum", "weighted"] as const) {
+    assert.throws(
+      () =>
+        deriveOverheadDeptComposite({
+          compositeMethod: method,
+          categories: [
+            { id: "r", name: "Rent", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
+            { id: "b", name: "Benefits", rate: "25.0000", expense: "50.00", rateFormat: "percent_labor", includeInComposite: true },
+          ],
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof OverheadCalculationError);
+        assert.match(error.message, /Rent/);
+        assert.match(error.message, /Benefits/);
+        assert.match(error.message, /per_hour/);
+        assert.match(error.message, /percent_labor/);
+        return true;
+      },
+    );
+  }
+  // One unit blends; excluded categories never participate.
+  assert.equal(
+    deriveOverheadDeptComposite({
+      compositeMethod: "sum",
+      categories: [
+        { id: "r", name: "Rent", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
+        { id: "b", name: "Benefits", rate: "25.0000", expense: "50.00", rateFormat: "percent_labor", includeInComposite: false },
+      ],
+    }),
+    "10.0000",
+  );
+});
+
 test("empty and fully-excluded composites are zero", () => {
   assert.equal(deriveOverheadDeptComposite({ compositeMethod: "sum", categories: [] }), "0.0000");
   assert.equal(

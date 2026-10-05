@@ -232,6 +232,8 @@ export function formatRate(
 
 export interface CompositeCategory {
   id: string;
+  /** Display name for refusal messages; falls back to the id. */
+  name?: string;
   rateValue: number; // the formatted rate value
   totalExpense: number;
   rateFormat?: RateFormat;
@@ -279,6 +281,7 @@ export function calculateCompositeRate(
       baseLaborRate: periodData.avgLaborRate ?? compositeConfig.baseLaborRate,
       categories: included.map((category) => ({
         id: category.id,
+        name: category.name,
         rate: quantizeOverheadMoney(category.rateValue),
         expense: quantizeOverheadMoney(category.totalExpense),
         rateFormat: category.rateFormat ?? "per_hour",

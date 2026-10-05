@@ -93,6 +93,8 @@ export interface OverheadCategoryDeptInput {
 
 export interface OverheadCompositeCategory {
   id: string;
+  /** Display name for refusal messages; falls back to the id. */
+  name?: string;
   /** Exact 4dp department rate in the category's display units. */
   rate: string;
   /** Exact 4dp expense attributed to the department. */
@@ -409,6 +411,25 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
   const included = input.categories.filter((c) => c.includeInComposite);
   // Every exit below is fixed-4dp text (literals, add-chains, fromUnits).
   if (included.length === 0) return ZERO_4 as Rate;
+  // Sum and weighted blending add DISPLAY rates: percent-point rates and
+  // per-hour (or per-FTE, per-unit) rates are different units, so a mixed
+  // blend is refused with the categories named instead of shown as "/hr".
+  // (Cascading defines its own percent/absolute semantics below.)
+  if (input.compositeMethod === "sum" || input.compositeMethod === "weighted") {
+    const byFormat = new Map<OverheadRateFormat, string[]>();
+    for (const c of included) {
+      const list = byFormat.get(c.rateFormat) ?? [];
+      list.push(c.name ? `"${c.name}"` : c.id);
+      byFormat.set(c.rateFormat, list);
+    }
+    if (byFormat.size > 1) {
+      const parts = [...byFormat.entries()].map(([format, names]) => `${format} (${names.join(", ")})`);
+      throw new OverheadCalculationError(
+        `Cannot blend rate formats in one ${input.compositeMethod} composite: ${parts.join("; ")} — ` +
+          `give every included category the same rate format, or exclude the odd ones from the composite.`,
+      );
+    }
+  }
   switch (input.compositeMethod) {
     case "sum": {
       let total = ZERO_4;
