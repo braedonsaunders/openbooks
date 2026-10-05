@@ -3722,7 +3722,13 @@
       "sequentialValue": "{count} refs. · {days}+ días",
       "duplicatesValue": "≤{days} días · ≥{floor}",
       "duplicatesValueUnset": "≤{days} días · {unset}",
-      "unsetValue": "Sin definir"
+      "unsetValue": "Sin definir",
+      "groups": {
+        "detection": "Umbrales de detección",
+        "moneyFloors": "Importes mínimos",
+        "scoringBands": "Bandas de puntuación",
+        "modelParameters": "Parámetros del modelo"
+      }
     },
     "coverage": {
       "benfordBold": "Benford",

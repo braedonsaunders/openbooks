@@ -3722,7 +3722,13 @@
       "sequentialValue": "{count} réf. · {days}+ jours",
       "duplicatesValue": "≤{days} jours · ≥{floor}",
       "duplicatesValueUnset": "≤{days} jours · {unset}",
-      "unsetValue": "Non défini"
+      "unsetValue": "Non défini",
+      "groups": {
+        "detection": "Seuils de détection",
+        "moneyFloors": "Montants planchers",
+        "scoringBands": "Seuils de score",
+        "modelParameters": "Paramètres du modèle"
+      }
     },
     "coverage": {
       "benfordBold": "Benford",

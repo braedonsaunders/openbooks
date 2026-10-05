@@ -645,6 +645,15 @@ export const ANALYTICS_CONFIG = {
       ["aggregateHighAmount", "aggregateCriticalAmount"],
       ["summaryFlaggedMedium", "summaryFlaggedHigh"],
     ],
+    // Sections the editor renders with headings: per-detector cut-offs,
+    // presentation-currency floors, summary scoring bands, then the
+    // statistical windows the detectors run on.
+    groups: [
+      { labelKey: "analytics.sentinel.config.groups.detection", fields: ["duplicateDays", "duplicateMinAmount", "duplicateAreaMin", "sequentialMinCount", "sequentialMinDays", "sequentialHighRiskDays", "trapBandPercent", "ghostNameMinLength"] },
+      { labelKey: "analytics.sentinel.config.groups.moneyFloors", fields: ["moderateRiskAmount", "highRiskAmount", "criticalRiskAmount", "aggregateHighAmount", "aggregateCriticalAmount", "rsfBaselineFloor", "zscoreSigmaFloor"] },
+      { labelKey: "analytics.sentinel.config.groups.scoringBands", fields: ["summaryFlaggedMedium", "summaryFlaggedHigh"] },
+      { labelKey: "analytics.sentinel.config.groups.modelParameters", fields: ["zscoreThreshold", "zscoreMinBaseline", "rsfThreshold", "baselineMonths", "benfordMinSample"] },
+    ],
   },
   cashflow: {
     slug: "cashflow",
