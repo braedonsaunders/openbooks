@@ -51,7 +51,7 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
     seedPostingAccount(org.orgId, "4900", "Breakage income", "income_other"),
   );
   const bank2 = await withBypass(() =>
-    seedPostingAccount(org.orgId, "1090", "Scope second bank", "bank"),
+    seedPostingAccount(org.orgId, "1090", "Scope second bank", "asset_bank"),
   );
   await withBypass(async () => {
     await db.execute(sql`
