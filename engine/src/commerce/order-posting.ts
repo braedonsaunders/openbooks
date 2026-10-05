@@ -5,10 +5,12 @@ import { markOrderEconomicsDirty, recomputeOrderEconomicsScoped } from "./econom
 import { findNative } from "./external-links.ts";
 import {
   claimPendingChannelOrders,
+  governedSalesOrderRef,
   linkOrderDocument,
   loadChannelOrder,
   markOrderException,
   markOrderPosted,
+  maybeCloseGoverningOrder,
   resolveCustomer,
   type ChannelOrderDetail,
 } from "./orders.ts";
@@ -1122,6 +1124,9 @@ export async function postChannelOrder(
         } catch {
           await markOrderEconomicsDirty(orgId, orderId, "order posted").catch(() => null);
         }
+        // A storefront-fulfilled sale leaves its governing draft behind; a
+        // completed order closes it while the posting is in hand.
+        await maybeCloseGoverningOrder(orgId, actor, orderId);
       }
       return { status: outcome.status, documentId: outcome.documentId };
     } catch (error) {
@@ -1152,15 +1157,6 @@ async function findGoverningSalesOrder(
        and status != 'voided'
      order by created_at desc limit 1`)).rows[0];
   return row ?? null;
-}
-
-/**
- * External identity of the draft sales order governing a
- * storefront-fulfilled sale: namespaced so it never collides with the
- * sibling cash under the cross-kind (org, source, ref) unique key.
- */
-export function governedSalesOrderRef(orderExternalId: string): string {
-  return `channel-sales-order:${orderExternalId}`;
 }
 
 /**

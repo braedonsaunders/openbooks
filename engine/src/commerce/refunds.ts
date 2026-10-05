@@ -7,6 +7,7 @@ import {
   loadChannelOrder,
   markChannelEventException,
   markChannelEventPosted,
+  maybeCloseGoverningOrder,
   type ChannelOrderDetail,
 } from "./orders.ts";
 import { getPostingPolicy } from "./posting-policies.ts";
@@ -1387,6 +1388,9 @@ export async function postChannelRefund(
         }
         await markChannelEventPosted(orgId, eventId, actor, built.documentId);
         await retireSiblingCancellations(orgId, order.id, actor);
+        // A refunded cancellation completes the order's story: a governing
+        // draft left behind closes with the refund that settled it.
+        await maybeCloseGoverningOrder(orgId, actor, order.id);
         return { status: "posted", documentId: built.documentId, effectsDocumentId: built.documentId };
       });
       if (outcome.effectsDocumentId) {

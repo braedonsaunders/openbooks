@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   buildSalesOrderDraft,
-  governedSalesOrderRef,
   formatLedgerMinor,
   OrderPostException,
   postCashSaleDraft,
@@ -11,7 +10,7 @@ import {
   type ResolvedOrder,
 } from "./order-posting.ts";
 import { claimPendingRefundEvents, postDueRefundBatchesForOrg, postRefundBatchDocument } from "./refunds.ts";
-import { loadChannelOrder, markOrderException, markOrderSummarized } from "./orders.ts";
+import { governedSalesOrderRef, loadChannelOrder, markOrderException, markOrderSummarized, maybeCloseGoverningOrder } from "./orders.ts";
 import { getPostingPolicy } from "./posting-policies.ts";
 import { CommerceError } from "./errors.ts";
 import { db, withBypassContext, withOrg, withOrgTransaction } from "../platform/db.ts";
@@ -264,6 +263,9 @@ export async function postSummaryBatch(
       }
       for (const orderId of resolvedIds) {
         await markOrderSummarized(orgId, orderId, actor, batch.id);
+      }
+      for (const orderId of resolvedIds) {
+        await maybeCloseGoverningOrder(orgId, actor, orderId);
       }
       // Tonight's refunds join the batch they belong to: one refund document
       // beside the sales document, each event on its own lines. The batch

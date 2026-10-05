@@ -6,6 +6,7 @@ import {
   markChannelEventException,
   markChannelEventIgnored,
   markChannelEventPosted,
+  maybeCloseGoverningOrder,
 } from "./orders.ts";
 import { CHANNEL_REFUND_EXCEPTION_CODES, RefundPostException } from "./refunds.ts";
 import {
@@ -157,6 +158,10 @@ export async function postChannelCancellation(
         }
         return { status: "pending", documentId: null as string | null };
       });
+      // A cancelled storefront-fulfilled order never fulfils: its governing
+      // draft closes with the cancellation, even while the money waits for
+      // the refund.
+      await maybeCloseGoverningOrder(orgId, actor, event.orderId);
       return { status: outcome.status, documentId: outcome.documentId };
     } catch (error) {
       if (error instanceof RefundPostException) {
