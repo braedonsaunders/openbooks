@@ -278,6 +278,10 @@ test('duplicate tab names the missing floor', async () => {
       (host.textContent ?? '').includes('Set the duplicate minimum in Sentinel → Configuration.'),
       'the duplicate refusal and its remedy must reach the operator',
     )
+    assert.ok(
+      (host.textContent ?? '').includes('Not set'),
+      'an unconfigured detector shows Not set instead of a zero that reads as a fact',
+    )
   } finally {
     await unmount()
   }
