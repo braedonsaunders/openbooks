@@ -1058,6 +1058,105 @@ export async function runAutopayCollectionForOrg(
       });
     }
 
+    // Consolidated invoices: the header names the payer, so a payer-level
+    // enrollment matches above — but a subscription enrollment (anchored on
+    // the service party) does not. A subscription behind any of the
+    // invoice's source drafts authorizes collection; the charge still hits
+    // the header payer, on the enrollment's method when it belongs to the
+    // payer, else the payer's default method. Invoices an above enrollment
+    // already covers stay out, so one invoice never collects twice.
+    const consolidated = (await db.execute<CollectionCandidate>(sql`
+      select d.id as "invoiceId", d.document_number as "documentNumber",
+             d.open_balance as "openBalance", d.currency,
+             d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
+             d.document_date::text as "documentDate", d.due_date::text as "dueDate",
+             e.id as "enrollmentId", e.subscription_id as "subscriptionId",
+             m.id as "methodId", m.provider, m.provider_customer_id as "providerCustomerId",
+             m.provider_method_id as "providerMethodId"
+        from documents d
+        join subscription_period_invoices spi
+          on spi.org_id = d.org_id
+         and spi.invoice_id = any(
+               select (jsonb_array_elements_text(d.custom -> 'sourceDraftIds'))::uuid)
+        join autopay_enrollments e
+          on e.org_id = d.org_id and e.subscription_id = spi.subscription_id and e.status = 'active'
+        join customer_payment_methods m
+          on m.id = coalesce(
+               (select mm.id from customer_payment_methods mm
+                 where mm.id = e.payment_method_id and mm.org_id = e.org_id
+                   and mm.party_id = d.party_id and mm.status = 'active'),
+               (select dd.id from customer_payment_methods dd
+                 where dd.org_id = e.org_id and dd.party_id = d.party_id
+                   and dd.status = 'active' and dd.is_default limit 1))
+         and m.org_id = e.org_id and m.status = 'active'
+       where d.org_id = ${orgId} and d.kind = 'customer_invoice'
+         and d.custom ->> 'consolidationStatus' = 'consolidated'
+         and (d.due_date <= ${today}::date or (e.charge_on_issue and d.document_date <= ${today}::date))
+         and not exists (
+           select 1 from collection_attempts a
+            where a.org_id = d.org_id and a.invoice_id = d.id and a.retry_position = 0
+         )
+         and not exists (
+           select 1 from autopay_enrollments e0
+            where e0.org_id = d.org_id and e0.party_id = d.party_id and e0.status = 'active'
+              and coalesce(e0.payment_method_id,
+                    (select dd.id from customer_payment_methods dd
+                      where dd.org_id = e0.org_id and dd.party_id = e0.party_id
+                        and dd.status = 'active' and dd.is_default limit 1)) is not null
+         )
+       order by d.id
+    `)).rows;
+    for (const candidate of consolidated) {
+      result.scanned += 1;
+      await collectCandidate(orgId, candidate, 0, today, policy, charge, result).catch((error: unknown) => {
+        result.failed += 1;
+        result.notices.push({
+          invoiceId: candidate.invoiceId,
+          attemptId: null,
+          status: "failed",
+          detail: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+        });
+      });
+    }
+
+    // Enrolled consolidated invoices with no usable payer method stay
+    // uncollected by name: the operator adds a payment method for the payer
+    // instead of discovering the gap from an unpaid invoice.
+    const methodless = (await db.execute<{ invoiceId: string; documentNumber: string; payerId: string }>(sql`
+      select d.id as "invoiceId", d.document_number as "documentNumber", d.party_id as "payerId"
+        from documents d
+       where d.org_id = ${orgId} and d.kind = 'customer_invoice'
+         and d.custom ->> 'consolidationStatus' = 'consolidated'
+         and (d.due_date is null or d.due_date <= ${today}::date)
+         and not exists (
+           select 1 from collection_attempts a
+            where a.org_id = d.org_id and a.invoice_id = d.id and a.retry_position = 0
+         )
+         and exists (
+           select 1 from subscription_period_invoices spi
+             join autopay_enrollments e
+               on e.org_id = spi.org_id and e.subscription_id = spi.subscription_id and e.status = 'active'
+            where spi.org_id = d.org_id
+              and spi.invoice_id = any(
+                    select (jsonb_array_elements_text(d.custom -> 'sourceDraftIds'))::uuid)
+         )
+         and not exists (
+           select 1 from customer_payment_methods m
+            where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active'
+         )
+       order by d.id
+    `)).rows;
+    for (const row of methodless) {
+      result.skipped += 1;
+      result.notices.push({
+        invoiceId: row.invoiceId,
+        attemptId: null,
+        status: "skipped",
+        detail:
+          `consolidated invoice ${row.documentNumber} has an enrolled subscription but its payer has no active payment method; add one for the payer before autopay can collect`,
+      });
+    }
+
     // Retries: soft-declined attempts whose next retry day arrived.
     const retries = (await db.execute<CollectionCandidate>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
