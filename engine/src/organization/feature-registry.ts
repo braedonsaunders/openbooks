@@ -73,6 +73,12 @@ export const FEATURES: FeatureDef[] = [
   // amendments degrade to named refusals when their own gates stay off.
   { key: 'billingHistoryImport', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'] },
   { key: 'saasMetrics', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'], recommends: ['revenueRecognition', 'advancedSubscriptions'] },
+  // Quote-to-cash: ramp-priced subscription terms on quotes, discount
+  // approval through Flows, customer e-signature, and one-click activation
+  // into billed subscriptions. Needs the order surface for quotes and the
+  // subscription engine for activation; advanced ramps additionally need
+  // advancedSubscriptions, checked where ramps are scheduled.
+  { key: 'quoteToCash', defaultEnabled: false, category: 'sales', requiresAll: ['orders', 'subscriptionBilling'] },
   // Online customer payments: hosted payment links on invoices (Stripe /
   // Adyen / GoCardless bank debit), surcharge rules, provider webhooks that
   // auto-apply receipts to open items. Off by default — manual receipts and

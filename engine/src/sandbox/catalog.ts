@@ -130,6 +130,7 @@ export const EXCLUDE = new Set([
   // in-flight signatures dies with PG 23505 on the copy.
   "payment_links",
   "field_ticket_signature_requests",
+  "signature_requests",
   "hrm_survey_invitations",
   "hrm_document_signers",
   "time_kiosks",

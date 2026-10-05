@@ -652,6 +652,63 @@ export const documentLinks = pgTable(
   ],
 );
 
+/**
+ * Quote-to-cash (0506_quote_to_cash): generic e-signature requests over any
+ * subject row (quotes today). The signer holds a possession token delivered
+ * out of band; storage keeps only its SHA-256 hash, so a database read alone
+ * cannot sign. document_hash is the SHA-256 of the exact presentation hashed
+ * at send time. At most one open request per subject: editing a sent subject
+ * voids its request and requires re-sending.
+ */
+export const signatureRequests = pgTable(
+  "signature_requests",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subjectTable: text("subject_table").notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    signerName: text("signer_name").notNull(),
+    signerEmail: text("signer_email").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    status: text("status", {
+      enum: ["sent", "viewed", "signed", "declined", "expired", "voided"],
+    })
+      .notNull()
+      .default("sent"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    signerIp: text("signer_ip"),
+    signerUserAgent: text("signer_user_agent"),
+    /** Optional hand-drawn signature captured on the hosted page (SVG). */
+    signatureSvg: text("signature_svg"),
+    documentHash: text("document_hash").notNull(),
+    consentText: text("consent_text"),
+    /** Signed PDF in files, stored by the signing page; null until signed. */
+    signedFileId: uuid("signed_file_id"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("signature_requests_token_unique").on(t.orgId, t.tokenHash),
+    uniqueIndex("signature_requests_open_subject_unique")
+      .on(t.orgId, t.subjectTable, t.subjectId)
+      .where(sql`${t.status} IN ('sent', 'viewed')`),
+    check(
+      "signature_requests_signer_valid",
+      sql`length(btrim(${t.signerName})) > 0 AND length(btrim(${t.signerEmail})) > 0`,
+    ),
+    check(
+      "signature_requests_lifecycle_valid",
+      sql`(${t.status} <> 'signed' OR ${t.signedAt} IS NOT NULL)
+       AND (${t.status} <> 'declined' OR ${t.declinedAt} IS NOT NULL)
+       AND (${t.status} <> 'voided' OR ${t.voidedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
 /** Item catalog for services, non-inventory, and inventory businesses. */
 export const items = pgTable(
   "items",

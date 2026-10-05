@@ -1841,6 +1841,11 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "qbd_sessions.country",
   "qbd_sessions.last_error",
   "qbd_sessions.status",
+  // Quote terms: enumerations (start rule, billing timing), never people.
+  "quote_subscription_terms.billing_timing",
+  "quote_subscription_terms.start_rule",
+  "quote_to_cash_settings.default_billing_timing",
+  "quote_to_cash_settings.default_start_rule",
   "recognition_events.description",
   "recognition_events.period_month",
   "recognition_events.source_reference",
