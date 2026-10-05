@@ -49,14 +49,14 @@ test('portal order amounts retain registry precision and customer isolation', { 
             ${currency}, ${currency}, ${total}, 0, 0, ${total}, '2026-10-05T10:00:00Z')`)
       }
     })
-    const home = await withOrgTransaction(org.orgId, (tx) => portalHome(org.orgId, org.customerId, tx))
+    const home = await withOrgTransaction(org.orgId, () => portalHome(org.orgId, org.customerId, db))
     const orders = new Map(home.orders.map((order) => [order.currency, order]))
     assert.equal(orders.size, 4)
     for (const [currency, total, precision] of [['USD', '12345', 2], ['BHD', '1234', 3], ['JPY', '1234', 0], ['RHD', '12345', null]] as const) {
       assert.equal(orders.get(currency)?.totalMinor, total, `${currency} storage units remain unchanged`)
       assert.equal(orders.get(currency)?.minorUnits, precision, `${currency} uses registry precision or explicit unknown`)
     }
-    const other = await withOrgTransaction(org.orgId, (tx) => portalHome(org.orgId, org.vendorId, tx))
+    const other = await withOrgTransaction(org.orgId, () => portalHome(org.orgId, org.vendorId, db))
     assert.deepEqual(other.orders, [], 'another customer cannot read the order amounts')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
