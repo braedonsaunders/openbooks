@@ -135,6 +135,7 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     const bareVendor = randomUUID();
     const quietVendor = randomUUID();
     const refundVendor = randomUUID();
+    const fenceVendor = randomUUID();
     const seedBill = async (
       docNum: string, party: string, billDate: string, payDate: string, docDue: string | null,
     ): Promise<void> => {
@@ -179,7 +180,8 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
         values (${termsVendor}, ${org.orgId}, 'vendor', 'Terms Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
                (${bareVendor}, ${org.orgId}, 'vendor', 'Bare Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
                (${quietVendor}, ${org.orgId}, 'vendor', 'Quiet Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
-               (${refundVendor}, ${org.orgId}, 'vendor', 'Refund Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+               (${refundVendor}, ${org.orgId}, 'vendor', 'Refund Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
+               (${fenceVendor}, ${org.orgId}, 'vendor', 'Fence Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`
         insert into payment_terms (id, org_id, name, net_days) values (${termsId}, ${org.orgId}, 'Net 30', 30)`);
       await db.execute(sql`
@@ -194,10 +196,17 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       await db.execute(sql`
         insert into vendor_roles (id, org_id, party_id)
         values (${randomUUID()}, ${org.orgId}, ${refundVendor})`);
+      await db.execute(sql`
+        insert into vendor_roles (id, org_id, party_id, payment_terms_id)
+        values (${randomUUID()}, ${org.orgId}, ${fenceVendor}, ${termsId})`);
       // Terms Vendor: no document due date, Net 30 from July 1 → due July 31, paid July 15: on time.
       await seedBill("BILL-TERMS", termsVendor, "2026-07-01", "2026-07-15", null);
       // Bare Vendor: no document due date and no payment terms → excluded from on-time, counted.
       await seedBill("BILL-BARE", bareVendor, "2026-07-02", "2026-07-16", null);
+      // Fence Vendor: a June bill and a July bill — only the July one falls
+      // inside the report window, so the bill count fences the period.
+      await seedBill("BILL-FENCE-JUN", fenceVendor, "2026-06-10", "2026-07-05", null);
+      await seedBill("BILL-FENCE-JUL", fenceVendor, "2026-07-05", "2026-07-20", null);
       // Quiet Vendor: spend with no settled bills at all → unrated for lack
       // of payments, not for lack of dates.
       const spendEntry = randomUUID();
@@ -244,6 +253,10 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     assert.equal(bareRow.performance, null, "a vendor with no usable payment history is unrated, not neutral");
     assert.equal(bareRow.quadrant, "unrated");
     assert.equal(bareRow.unratedReason, "undated", "settled-but-undated bills name the dating remedy, not settling");
+    const fenceRow = data.rows.find((candidate) => candidate.id === fenceVendor);
+    assert.ok(fenceRow, "the fencing vendor must be present");
+    assert.equal(fenceRow.bills, 1, "only the in-window bill counts");
+    assert.equal(fenceRow.lastBill, "2026-07-05");
     const quietRow = data.rows.find((candidate) => candidate.id === quietVendor);
     assert.ok(quietRow, "the vendor with spend but no payments must be present");
     assert.equal(quietRow.paidBills, 0);
@@ -254,9 +267,12 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       undefined,
       "a vendor with net spend at or below zero is filtered out of the rows",
     );
+    // Shares are 4dp-rounded quotients, so a handful of shown vendors lands
+    // within a few 1e-4 of one; a total that still carried filtered vendors
+    // would overshoot by whole tenths instead.
     const shareSum = data.rows.reduce((sum, row) => sum + row.sharePct, 0);
     assert.ok(
-      Math.abs(shareSum - 1) < 1e-9,
+      Math.abs(shareSum - 1) < 1e-3,
       `spend shares must add up over the vendors shown, got ${shareSum}`,
     );
     assert.equal(data.totals.undatedBills, 1, "undated bills count only vendors actually shown");
