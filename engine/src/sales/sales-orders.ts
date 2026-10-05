@@ -13,6 +13,7 @@ import {
   submitAndReleaseIfUngated,
   type SubmissionReleaseResult,
 } from "../flows/index.ts";
+import { ensureBookingContract } from "../revenue/contract-scope.ts";
 
 export type SalesOrderIssueErrorCode =
   | "SALES_ORDER_NOT_FOUND"
@@ -271,6 +272,14 @@ export async function issueSalesOrder(input: {
       input.salesOrderId,
       input.actorId,
     );
+
+    // Orgs that book revenue contracts at booking get the order's contract
+    // shell now, so the agreement exists before its first billing. A no-op
+    // unless scoped contracts are enabled and the org chose booking; only an
+    // actually released order books one, never a gated submission.
+    if (submission.autoApproved && !submission.flowError) {
+      await ensureBookingContract(input.orgId, input.salesOrderId, input.actorId);
+    }
 
     if (credit?.overridden && !submission.flowError) {
       await db.execute(sql`

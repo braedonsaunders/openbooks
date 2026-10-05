@@ -34,6 +34,17 @@ export { shiftRecognitionDate } from "./recognition-dates.ts";
 export { recordRecognitionEvent } from "./recognition-events.ts";
 export type { RecordRecognitionEventInput, RecordRecognitionEventResult } from "./recognition-events.ts";
 export { createObligationsFromInvoice, revenueContractPostingEffectKey, revenueObligationPostingEffectKey } from "./recognition-obligations.ts";
+export {
+  contractCreationMode,
+  contractPosition,
+  ensureBookingContract,
+  ensureScopedContract,
+  recordContractBilling,
+  resolveBillingSource,
+  revenueContractsEnabled,
+  revenueScopedContractPostingEffectKey,
+} from "./contract-scope.ts";
+export type { BillingSource, ContractPosition, ContractScope } from "./contract-scope.ts";
 export type { CreateObligationsResult } from "./recognition-obligations.ts";
 export { recognitionUnearnedRemaining } from "./recognition-posting-rows.ts";
 export type { FingerprintedRecognitionLine } from "./recognition-posting-rows.ts";
