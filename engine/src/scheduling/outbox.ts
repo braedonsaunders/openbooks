@@ -692,6 +692,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "commerce_inbound") {
     const { runCommerceInboundScan } = await import("../commerce/inbound.ts");
     await runCommerceInboundScan();
+    return;
+  }
   if (row.kind === "tax_id_revalidation") {
     const { runTaxIdRevalidationScan } = await import("../tax/vat-id-validation.ts");
     const result = await runTaxIdRevalidationScan();

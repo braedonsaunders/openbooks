@@ -18,6 +18,7 @@ export {
   type VatIdScheme,
   type VatIdStatus,
 } from './cross-border-place-of-supply.ts';
+export {
   validatePartyTaxId,
   runTaxIdRevalidationScan,
   runTaxIdRevalidationScanForOrg,
