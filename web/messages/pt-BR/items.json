@@ -256,9 +256,9 @@
     "committed": "Comprometido",
     "available": "Disponível",
     "unknownComponent": "Não está mais no catálogo",
-    "effectiveRange": "Vigente {from} – {to}",
+    "effectiveRange": "Vigente {from} até antes de {to}",
     "effectiveFrom": "Vigente desde {from}",
-    "effectiveEnded": "Encerrado {to}",
+    "effectiveEnded": "Encerrado antes de {to}",
     "noCurrentRecipe": "Nenhum componente vigente hoje — as linhas abaixo são histórico."
   },
   "costing": {

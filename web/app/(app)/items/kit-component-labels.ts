@@ -28,6 +28,14 @@ export function isComponentIdentityMissing(joinedId: string | null): boolean {
   return joinedId == null
 }
 
+/** Strict current-ness: only a real boolean counts. Anything else means
+ *  the server did not answer effectivity, and the reader must refuse the
+ *  payload instead of guessing — guessing current recreates the
+ *  double-count this flag exists to prevent. */
+export function strictIsCurrent(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
 export interface EffectiveWindow {
   from: string | null
   to: string | null

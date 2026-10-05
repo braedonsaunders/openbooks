@@ -256,9 +256,9 @@
     "committed": "引当済",
     "available": "販売可能",
     "unknownComponent": "カタログに存在しません",
-    "effectiveRange": "{from} – {to}に有効",
+    "effectiveRange": "{from}から{to}の直前まで有効",
     "effectiveFrom": "{from}から有効",
-    "effectiveEnded": "{to}に終了",
+    "effectiveEnded": "{to}の直前に終了",
     "noCurrentRecipe": "今日有効な構成品がありません — 下の行は履歴です。"
   },
   "costing": {

@@ -269,9 +269,9 @@
     "committed": "Reserviert",
     "available": "Verfügbar",
     "unknownComponent": "Nicht mehr im Katalog",
-    "effectiveRange": "Gültig {from} – {to}",
+    "effectiveRange": "Gültig {from} bis vor {to}",
     "effectiveFrom": "Gültig ab {from}",
-    "effectiveEnded": "Beendet {to}",
+    "effectiveEnded": "Beendet vor {to}",
     "noCurrentRecipe": "Heute ist keine Komponente gültig — die Zeilen unten sind Verlauf."
   },
   "costing": {
