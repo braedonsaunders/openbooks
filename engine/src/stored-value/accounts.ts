@@ -846,18 +846,24 @@ export interface IssueResult {
  */
 /**
  * Replay identity for an issuance: the retried request must agree with the
- * recorded effect on every material input — entity, program, currency, and
- * customer (kind and amount are fingerprinted by priorStoredValueEntry
- * before this runs). A changed body is a reused key, refused by name instead
- * of answered with another effect's receipt; an unchanged retry replays
- * without re-checking the program's live config, so a later deactivation
- * cannot turn a completed issue into a refusal. Compares persisted rows
- * only — no shadow copy of the request is kept anywhere.
+ * recorded effect on every material input — issuing entity, program,
+ * currency, customer, source document and line, and debit account (kind and
+ * amount are fingerprinted by priorStoredValueEntry before this runs). The
+ * expiry and posting dates compare only when the retry states them
+ * explicitly: both default from the business clock, so pinning an omitted
+ * date against a recorded one would refuse a byte-identical retry made on a
+ * later day. A changed body is a reused key, refused by name instead of
+ * answered with another effect's receipt; an unchanged retry replays without
+ * re-checking the program's live config, so a later deactivation cannot turn
+ * a completed issue into a refusal. Every comparison reads persisted rows —
+ * the issue entry, its account, and its journal — never a shadow copy of
+ * the request and never the caller's word for what was recorded.
  */
 async function assertIssueReplayIntent(
   input: IssueInput,
   priorAccount: StoredValueAccountRow,
   resolvedSubsidiaryId: string | null,
+  priorEntry: { documentId: string | null; documentLineId: string | null; journalEntryId: string | null },
 ): Promise<void> {
   let expectedSubsidiary = resolvedSubsidiaryId;
   if (expectedSubsidiary === null) {
@@ -867,11 +873,28 @@ async function assertIssueReplayIntent(
        limit 1 for share
     `)).rows[0]?.id ?? null;
   }
+  // The issue journal carries the funding leg (debit-positive) and the date
+  // the value actually posted on: both are read back, never assumed.
+  const journal = priorEntry.journalEntryId
+    ? (await db.execute<{ postingDate: string; debitAccountId: string | null }>(sql`
+        select je.posting_date::text as "postingDate",
+               (select account_id from journal_lines
+                 where org_id = ${input.orgId} and entry_id = je.id and amount > 0
+                 order by line_number limit 1) as "debitAccountId"
+          from journal_entries je
+         where je.org_id = ${input.orgId} and je.id = ${priorEntry.journalEntryId}
+      `)).rows[0] ?? null
+    : null;
   const mismatches = [
     priorAccount.subsidiaryId !== expectedSubsidiary ? "issuing entity" : null,
     priorAccount.programId !== input.programId ? "program" : null,
     priorAccount.currency !== input.currency ? "currency" : null,
     (priorAccount.customerPartyId ?? null) !== (input.customerPartyId ?? null) ? "customer" : null,
+    (priorEntry.documentId ?? null) !== (input.sourceDocumentId ?? null) ? "source document" : null,
+    (priorEntry.documentLineId ?? null) !== (input.sourceLineId ?? null) ? "source line" : null,
+    !journal || (journal.debitAccountId ?? null) !== (input.debitAccountId ?? null) ? "debit account" : null,
+    input.expiresOn != null && (priorAccount.expiresOn ?? null) !== input.expiresOn ? "expiry date" : null,
+    input.postingDate != null && (journal?.postingDate ?? null) !== input.postingDate ? "posting date" : null,
   ].filter((value): value is string => value !== null);
   if (mismatches.length > 0) {
     throw storedValueRefusal({
@@ -909,15 +932,19 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
     );
   }
   const replayKey = `stored-value:issue-entry:${input.idempotencyKey}`;
-  const replayedRef = (await db.execute<{ account_id: string }>(sql`
-    select account_id from stored_value_entries
+  const replayedRef = (await db.execute<{
+    accountId: string; documentId: string | null; documentLineId: string | null; journalEntryId: string | null;
+  }>(sql`
+    select account_id as "accountId", document_id as "documentId",
+           document_line_id as "documentLineId", journal_entry_id as "journalEntryId"
+      from stored_value_entries
      where org_id = ${input.orgId} and idempotency_key = ${replayKey}
   `)).rows[0];
   if (replayedRef) {
     // The prior account locks under the actor's scope BEFORE any fingerprint
     // or amount message: a hidden original reads as missing and no hidden
     // account, entry, or journal id ever reaches a receipt.
-    const priorAccount = await lockStoredValueAccount(input.orgId, replayedRef.account_id, input.allowedSubsidiaryIds);
+    const priorAccount = await lockStoredValueAccount(input.orgId, replayedRef.accountId, input.allowedSubsidiaryIds);
     const prior = await priorStoredValueEntry(input.orgId, replayKey, {
       accountId: priorAccount.id,
       kind: "issue",
@@ -930,7 +957,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
         remedy: "Retry the operation; the idempotency key prevents a duplicate.",
       });
     }
-    await assertIssueReplayIntent(input, priorAccount, resolvedSubsidiary.subsidiaryId);
+    await assertIssueReplayIntent(input, priorAccount, resolvedSubsidiary.subsidiaryId, replayedRef);
     return { accountId: prior.accountId, code: null, entryId: prior.entryId, journalEntryId: prior.journalEntryId, replayed: true };
   }
   const program = await loadStoredValueProgram(input.orgId, input.programId);

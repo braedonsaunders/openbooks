@@ -18,8 +18,7 @@ import {
 } from '@openbooks/engine/portal'
 import { createPaymentLink } from '@openbooks/engine/payments/acceptance'
 import { removeMethod, setDefaultMethod, startMethodSetup } from '@openbooks/engine/payments/autopay'
-import { lookupStoredValueByCode } from '@openbooks/engine/stored-value'
-import { storedValueAccountOwnedByCustomer } from '@openbooks/engine/src/stored-value/accounts.ts'
+import { lookupStoredValueByCode, storedValueAccountOwnedByCustomer } from '@openbooks/engine/stored-value'
 import { appBaseUrl } from '@openbooks/engine/flows'
 
 export const runtime = 'nodejs'
