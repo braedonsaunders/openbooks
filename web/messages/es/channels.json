@@ -63,7 +63,7 @@
     "marginTitle": "Margen del pedido",
     "marginHint": "Contribución de los últimos 30 días por canal, tras envío y comisiones",
     "marginEmpty": "El margen aparece aquí cuando los pedidos del canal se contabilizan con costos. Actualiza un pedido para calcularlo ahora.",
-    "marginPrecisionUnknown": "El margen en {currency} no se puede mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Pida a su administrador del sistema que restaure la fila faltante con la siembra de monedas de la plataforma.",
+    "marginPrecisionUnknown": "El margen en {currency} no se puede mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Una fila faltante para un código ISO 4217 admitido se restaura con la siembra de monedas de la plataforma; cualquier otro código debe reemplazarse por un código ISO 4217 admitido.",
     "marginReport": "Informe de margen",
     "marginMeta": "{orders} pedido(s) · {revenue} ingresos · {adSpend} publicidad",
     "marginEstimated": "{count} estimado(s)",
@@ -368,7 +368,7 @@
   },
   "drawer": {
     "lines": "Líneas",
-    "unknownPrecision": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Si el pedido está retenido, siga su remedio en Excepciones y luego vuelva a reproducir el pedido.",
+    "unknownPrecision": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Si el pedido está retenido, siga su remedio en Excepciones y luego vuelva a reproducir el pedido. Una fila faltante para un código ISO 4217 admitido se restaura con la siembra de monedas de la plataforma; cualquier otro código debe reemplazarse por un código ISO 4217 admitido.",
     "tenders": "Cobros",
     "activity": "Actividad",
     "posting": "Contabilización",
@@ -426,7 +426,7 @@
       "manual": "Manual"
     },
     "unreadableAmount": "Un importe en {currency} no se puede mostrar: el valor almacenado no es legible. Vuelva a importar o reproduzca el evento de origen desde la pestaña Actividad del canal.",
-    "unknownPrecisionFrozen": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). El historial contabilizado es inmutable y la repetición no puede reescribirlo; pida a su administrador del sistema que restaure la fila faltante con la siembra de monedas de la plataforma.",
+    "unknownPrecisionFrozen": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). El historial contabilizado es inmutable y la repetición no puede reescribirlo. Una fila faltante para un código ISO 4217 admitido se restaura con la siembra de monedas de la plataforma; cualquier otro código debe reemplazarse por un código ISO 4217 admitido.",
     "unreadableAmountFrozen": "Un importe en {currency} no se puede mostrar: el valor almacenado no es legible. El historial contabilizado es inmutable y la repetición no puede reescribirlo; pida a su administrador del sistema que revise el registro almacenado."
   },
   "assistance": {

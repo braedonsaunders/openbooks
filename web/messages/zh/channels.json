@@ -63,7 +63,7 @@
     "marginTitle": "订单毛利",
     "marginHint": "各渠道近30天贡献毛利（扣除就运与费用后）",
     "marginEmpty": "渠道订单附成本记账后，毛利将显示在此。立即构建可刷新订单。",
-    "marginPrecisionUnknown": "无法显示{currency}边际利润：{currency}在ISO币种登记册（只读参考数据）中没有精度。请系统管理员用平台币种种子恢复缺失的行。",
+    "marginPrecisionUnknown": "无法显示{currency}边际利润：{currency}在ISO币种登记册（只读参考数据）中没有精度。受支持的ISO 4217代码缺失的行用平台币种种子恢复；其他代码必须替换为受支持的ISO 4217代码。",
     "marginReport": "毛利报表",
     "marginMeta": "{orders}个订单·营收{revenue}·广告{adSpend}",
     "marginEstimated": "{count}个估计",
@@ -368,7 +368,7 @@
   },
   "drawer": {
     "lines": "明细",
-    "unknownPrecision": "无法显示{currency}金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。如果订单被暂挂，请在异常队列中按其纠正措施处理，然后重新处理该订单。",
+    "unknownPrecision": "无法显示{currency}金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。如果订单被暂挂，请在异常队列中按其纠正措施处理，然后重新处理该订单。受支持的ISO 4217代码缺失的行用平台币种种子恢复；其他代码必须替换为受支持的ISO 4217代码。",
     "tenders": "收款",
     "activity": "动态",
     "posting": "过账",
@@ -426,7 +426,7 @@
       "manual": "手动"
     },
     "unreadableAmount": "无法显示{currency}的某笔金额：存储值不可读。请从频道的动态选项卡重新导入或重新处理源事件。",
-    "unknownPrecisionFrozen": "无法显示{currency}金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。已记账历史不可更改，重处理也无法重写；请系统管理员用平台币种种子恢复缺失的行。",
+    "unknownPrecisionFrozen": "无法显示{currency}金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。已记账历史不可更改，重处理也无法重写。受支持的ISO 4217代码缺失的行用平台币种种子恢复；其他代码必须替换为受支持的ISO 4217代码。",
     "unreadableAmountFrozen": "无法显示{currency}的某笔金额：存储值不可读。已记账历史不可更改，重处理也无法重写；请系统管理员检查存储的记录。"
   },
   "assistance": {
