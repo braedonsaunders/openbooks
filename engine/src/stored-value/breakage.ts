@@ -11,6 +11,7 @@ import {
   priorStoredValueEntry,
   requireStoredValueFeature,
   storedValueEnabledFor,
+  storedValueExpiredSql,
   storedValueLiabilityControlAccount,
   type StoredValueAccountRow,
 } from "./accounts.ts";
@@ -238,7 +239,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.status = 'active'
-       and a.expires_on is not null and a.expires_on <= ${today}::date
+       and ${storedValueExpiredSql(sql`a.expires_on`, today)}
      order by a.id
   `)).rows;
   for (const row of expired) {

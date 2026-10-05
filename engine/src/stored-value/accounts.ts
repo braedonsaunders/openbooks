@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addMonthsClamped, isIsoCalendarDate } from "../platform/civil-date.ts";
@@ -535,6 +535,20 @@ export async function lockStoredValueAccount(orgId: string, accountId: string): 
   };
 }
 
+/**
+ * A card is valid THROUGH its expiry date: it redeems on expires_on itself
+ * and is expired from the next business day. Redemption and the expiry scan
+ * decide from this one rule; the SQL form is the same comparison for the
+ * scan's candidate query, so a card is never swept on a day it still redeems.
+ */
+export function storedValueExpired(expiresOn: string | null, today: string): boolean {
+  return expiresOn !== null && expiresOn < today;
+}
+
+export function storedValueExpiredSql(expiresOn: SQL, today: string): SQL {
+  return sql`(${expiresOn} is not null and ${expiresOn} < ${today}::date)`;
+}
+
 function assertRedeemable(
   account: StoredValueAccountRow,
   amountMinor: bigint,
@@ -813,11 +827,11 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
   assertRedeemable(account, input.amountMinor, `…${account.codeLast4}`);
   if (account.expiresOn) {
     const today = await businessToday(input.orgId);
-    if (account.expiresOn < today) {
+    if (storedValueExpired(account.expiresOn, today)) {
       throw storedValueRefusal({
         message: `Stored-value …${account.codeLast4} expired on ${account.expiresOn}.`,
         code: "stored_value_account_expired",
-        remedy: "Run the stored-value breakage scan to recognize the expired balance, or issue a replacement.",
+        remedy: "The scheduled stored-value scan recognizes the expired balance; issue the customer a replacement if it should still be honoured.",
         status: 409,
       });
     }

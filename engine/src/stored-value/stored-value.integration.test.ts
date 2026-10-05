@@ -287,6 +287,44 @@ test("a second scan in one period and a replayed redemption each move the balanc
   }
 });
 
+test("a card redeems through its expiry date and the scan sweeps it the day after", { skip: !DB }, async () => {
+  const fx = await seedStoredValueOrg();
+  const { org, actorId } = fx;
+  try {
+    const issued = await withBypass(() =>
+      issueStoredValue({
+        orgId: org.orgId,
+        programId: fx.giftProgram,
+        amountMinor: toUnits("30"),
+        currency: "CAD",
+        expiresOn: "2026-10-15",
+        debitAccountId: org.accounts.bank,
+        postingDate: org.date,
+        idempotencyKey: `lastday-${randomUUID()}`,
+        actorId,
+      }),
+    );
+    const redeem = () =>
+      withBypass(() =>
+        redeemStoredValue({ orgId: org.orgId, accountId: issued.accountId, amountMinor: toUnits("10"), idempotencyKey: `lastday-${randomUUID()}`, actorId }),
+      );
+    await withSimClock("2026-10-15T12:00:00Z", async () => {
+      await runStoredValueBreakage();
+      assert.equal((await accountState(org.orgId, issued.accountId)).status, "active");
+      assert.equal((await redeem()).balanceMinor, toUnits("20"));
+    });
+    await withSimClock("2026-10-16T12:00:00Z", async () => {
+      await runStoredValueBreakage();
+      const swept = await accountState(org.orgId, issued.accountId);
+      assert.equal(swept.status, "expired");
+      assert.equal(swept.balance, "0");
+      await assert.rejects(redeem(), /expired/);
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("the scan expires lapsed cards and releases dormant remote balances", { skip: !DB }, async () => {
   const fx = await seedStoredValueOrg();
   const { org, actorId } = fx;
