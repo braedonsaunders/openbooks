@@ -127,16 +127,16 @@
     },
     "forecast": {
       "domainCaveatTitle": "予測が指標の範囲を外れています",
-      "domainCaveat": "{metric}はマイナスになりませんが、{model}予測は{month}以降ゼロを下回ります。モデルが直近の減少を先へ延長するためです。以降の月は到達可能な{metric}ではなく、トレンドの示唆として扱ってください。減衰トレンドETSは減少を延長せず収束させます。",
-      "domainTableNote": "{month}以降の月はゼロを下回り、この指標の範囲外です。",
+      "domainCaveat": "{metric}はマイナスになりませんが、{model}予測は{month}以降ゼロを下回ります。モデルが直近の減少を先へ延長するためです。以降の期間は到達可能な{metric}ではなく、トレンドの示唆として扱ってください。減衰トレンドETSは減少を延長せず収束させます。",
+      "domainTableNote": "{month}以降の期間はゼロを下回り、この指標の範囲外です。",
       "domainGrowthNote": "予測成長率は{metric}の範囲外の値から計算されています。上記の注意を参照してください。",
       "title": "複数指標予測",
-      "total": "{count}か月合計",
-      "monthN": "{count}か月目",
+      "total": "{count}期間合計",
+      "monthN": "{count}期間目",
       "growth": "予測成長率",
-      "detail": "月次予測明細",
+      "detail": "予測明細",
       "table": {
-        "month": "月",
+        "month": "期間",
         "forecast": "予測",
         "low": "下限",
         "high": "上限",
@@ -150,23 +150,29 @@
         "seasonality": "季節性",
         "adjustment": "調整"
       },
-      "horizonMonths": "{count}か月",
+      "horizonMonths": "{count}期間",
       "confidencePct": "{count}％",
       "diagnostics": "モデル診断",
       "diag": {
         "trend": "傾向",
-        "seasonality": "季節性"
+        "seasonality": "季節性",
+        "mape": "MAPE",
+        "rmse": "RMSE",
+        "r2": "R²"
       },
       "trend": {
         "up": "上昇",
         "down": "下降",
         "flat": "横ばい"
       },
-      "seasonDetected": "検出（{period}か月）",
+      "seasonDetected": "検出（{period}期間）",
       "seasonNone": "なし",
       "emptyTitle": "履歴が不足しています",
-      "emptyDescription": "予測には選択期間に3か月以上の実績が必要です。",
-      "unknownLevel": "不明な{field}「{level}」 — 有効値：{levels}。"
+      "emptyDescription": "予測には選択期間に3期間以上の実績が必要です。",
+      "unknownLevel": "不明な{field}「{level}」 — 有効値：{levels}。",
+      "noFuturePeriods": "会計カレンダーに将来期間が登録されていないため、予測に期間名を表示できません。会計カレンダーに将来期間を登録してから予測を開き直してください。",
+      "shortFuturePeriods": "会計カレンダーに登録されている将来期間は{have}件のみですが、{need}期間のホライズンには{need}件の名称が必要です。会計カレンダーに将来期間を追加してください。",
+      "declarePeriods": "期間を登録する"
     },
     "scenarios": {
       "kpi": {
@@ -211,7 +217,7 @@
         "baseline": "基準",
         "scenario": "シナリオ"
       },
-      "invalidInput": "{field}は単純な数値で入力してください — 修正されるまでシナリオは基準値に保たれます。",
+      "invalidInput": "{field}は単純な数値で入力してください — 修正されるまでシナリオは利用できません。",
       "templates": {
         "recession": "不況",
         "growth": "成長促進",
@@ -241,7 +247,7 @@
         "current": "当期粗利益",
         "residual": "丸め残差"
       },
-      "trends": "マージン推移（12か月）",
+      "trends": "マージン推移（12期間）",
       "series": {
         "gross": "粗利",
         "operating": "営業"
@@ -392,19 +398,19 @@
       },
       "revTrendingDown": {
         "title": "売上減少トレンド",
-        "detail": "直近3か月の売上が{pct}%減少しました。"
+        "detail": "直近3期間の売上が{pct}%減少しました。"
       },
       "marginCompression": {
         "title": "利益率の圧縮",
-        "detail": "直近3か月で売上総利益率が{pp}pp低下しました。"
+        "detail": "直近3期間で売上総利益率が{pp}pp低下しました。"
       },
       "belowBreakeven": {
         "title": "損益分岐点割れ",
-        "detail": "月平均売上は損益分岐点（約{amount}）を下回っています。"
+        "detail": "期間平均売上は損益分岐点（約{amount}）を下回っています。"
       },
       "thinMargin": {
         "title": "安全余裕が薄い",
-        "detail": "損益分岐点までの余裕は月売上の{pct}%しかありません。"
+        "detail": "損益分岐点までの余裕は期間売上の{pct}%しかありません。"
       },
       "heavyOverhead": {
         "title": "間接費が重い",
@@ -709,12 +715,12 @@
           "help": "前年同期比でこれを超える減少は売上減少として報告されます"
         },
         "revenueTrendAlertPercent": {
-          "label": "3か月売上トレンドのアラート（%）",
-          "help": "直近3か月でこれを超える減少は下降トレンドとして報告されます"
+          "label": "3期間売上トレンドのアラート（%）",
+          "help": "直近3期間でこれを超える減少は下降トレンドとして報告されます"
         },
         "marginCompressionPoints": {
           "label": "利益率低下アラート（ポイント）",
-          "help": "直近3か月で売上総利益率がこのポイントを超えて低下した場合"
+          "help": "直近3期間で売上総利益率がこのポイントを超えて低下した場合"
         },
         "breakevenSafetyPercent": {
           "label": "損益分岐点の安全余裕（%）",
@@ -730,7 +736,7 @@
         },
         "forecastHorizon": {
           "label": "予測期間",
-          "help": "タブを開いたときに表示する予測月数"
+          "help": "タブを開いたときに表示する予測期間数"
         },
         "forecastConfidence": {
           "label": "予測信頼度",
@@ -742,7 +748,7 @@
         },
         "forecastAdjustment": {
           "label": "予測調整",
-          "help": "各予測月に適用するマクロ調整"
+          "help": "各予測期間に適用するマクロ調整"
         },
         "forecastEtsAlpha": {
           "label": "ETS平滑化（α）",
@@ -758,7 +764,7 @@
         },
         "forecastDampedPhi": {
           "label": "減衰トレンド（φ）",
-          "help": "月次減衰率。1は減衰なし"
+          "help": "期間あたり減衰率。1は減衰なし"
         },
         "forecastMa1": {
           "label": "ARIMAショック持続",
@@ -790,7 +796,7 @@
         },
         "anomalySigma": {
           "label": "異常検知のしきい値（σ）",
-          "help": "平均からこの標準偏差を超えて乖離した月は異常として報告されます"
+          "help": "平均からこの標準偏差を超えて乖離した期間は異常として報告されます"
         }
       },
       "groups": {
@@ -813,10 +819,10 @@
           "arima": "ARIMA風"
         },
         "forecastHorizon": {
-          "3": "3か月",
-          "6": "6か月",
-          "12": "12か月",
-          "24": "24か月"
+          "3": "3期間",
+          "6": "6期間",
+          "12": "12期間",
+          "24": "24期間"
         },
         "forecastConfidence": {
           "80": "80％",
@@ -939,6 +945,7 @@
         "mid": "やや集中",
         "low": "分散"
       },
+      "hhiValue": "HHI {value}",
       "title": "セグメント業績",
       "dim": {
         "department": "部門別",

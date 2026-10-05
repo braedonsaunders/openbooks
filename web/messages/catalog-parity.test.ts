@@ -1968,6 +1968,12 @@ const COGNATES = new Set<string>([
   'fr:analytics.financialHealth.tabs.configuration|Configuration',
   'fr:analytics.financialHealth.tabs.ratios|Ratios',
   'fr:analytics.financialHealth.tabs.segments|Segments',
+  // Forecast diagnostic abbreviations (MAPE/RMSE/R²) and the HHI index name
+  // are universal statistical notations, identical in every locale.
+  'fr:analytics.financialHealth.forecast.diag.mape|MAPE',
+  'fr:analytics.financialHealth.forecast.diag.rmse|RMSE',
+  'fr:analytics.financialHealth.forecast.diag.r2|R²',
+  'fr:analytics.financialHealth.segments.hhiValue|HHI {value}',
   'fr:analytics.hub.cards.sentinelTitle|Sentinel',
   'fr:analytics.sentinel.benford.acceptable|Acceptable',
   'fr:analytics.sentinel.benford.excellent|Excellent',
@@ -2128,6 +2134,12 @@ const COGNATES = new Set<string>([
   'de:analytics.financialHealth.subKpi.roic|ROIC',
   'de:analytics.financialHealth.subKpi.rule40|Rule of 40',
   'de:analytics.financialHealth.tabs.budget|Budget',
+  // Forecast diagnostic abbreviations (MAPE/RMSE/R²) and the HHI index name
+  // are universal statistical notations, identical in every locale.
+  'de:analytics.financialHealth.forecast.diag.mape|MAPE',
+  'de:analytics.financialHealth.forecast.diag.rmse|RMSE',
+  'de:analytics.financialHealth.forecast.diag.r2|R²',
+  'de:analytics.financialHealth.segments.hhiValue|HHI {value}',
   'de:analytics.hub.cards.sentinelTitle|Sentinel',
   'de:analytics.sentinel.coverage.benfordBold|Benford',
   'de:analytics.sentinel.flag.rsf|RSF',
@@ -2230,6 +2242,12 @@ const COGNATES = new Set<string>([
   'es:analytics.financialHealth.budget.csv|CSV',
   'es:analytics.financialHealth.subKpi.roic|ROIC',
   'es:analytics.financialHealth.tabs.ratios|Ratios',
+  // Forecast diagnostic abbreviations (MAPE/RMSE/R²) and the HHI index name
+  // are universal statistical notations, identical in every locale.
+  'es:analytics.financialHealth.forecast.diag.mape|MAPE',
+  'es:analytics.financialHealth.forecast.diag.rmse|RMSE',
+  'es:analytics.financialHealth.forecast.diag.r2|R²',
+  'es:analytics.financialHealth.segments.hhiValue|HHI {value}',
   'es:analytics.hub.cards.sentinelTitle|Sentinel',
   'es:analytics.sentinel.coverage.benfordBold|Benford',
   'es:analytics.sentinel.drill.top|top {count}',
@@ -2305,6 +2323,12 @@ const COGNATES = new Set<string>([
   'pt-BR:analytics.financialHealth.budget.columns.status|Status',
   'pt-BR:analytics.financialHealth.budget.csv|CSV',
   'pt-BR:analytics.financialHealth.subKpi.roic|ROIC',
+  // Forecast diagnostic abbreviations (MAPE/RMSE/R²) and the HHI index name
+  // are universal statistical notations, identical in every locale.
+  'pt-BR:analytics.financialHealth.forecast.diag.mape|MAPE',
+  'pt-BR:analytics.financialHealth.forecast.diag.rmse|RMSE',
+  'pt-BR:analytics.financialHealth.forecast.diag.r2|R²',
+  'pt-BR:analytics.financialHealth.segments.hhiValue|HHI {value}',
   'pt-BR:analytics.hub.cards.sentinelTitle|Sentinel',
   'pt-BR:analytics.trueCost.absorption.monthCell|M{n}',
   'pt-BR:analytics.trueCost.allocation.base|Base',
@@ -2357,6 +2381,12 @@ const COGNATES = new Set<string>([
   'ja:analytics.financialHealth.budget.csv|CSV',
   'ja:analytics.financialHealth.subKpi.roic|ROIC',
   'ja:analytics.financialHealth.subKpi.rule40|Rule of 40',
+  // Forecast diagnostic abbreviations (MAPE/RMSE/R²) and the HHI index name
+  // are universal statistical notations, identical in every locale.
+  'ja:analytics.financialHealth.forecast.diag.mape|MAPE',
+  'ja:analytics.financialHealth.forecast.diag.rmse|RMSE',
+  'ja:analytics.financialHealth.forecast.diag.r2|R²',
+  'ja:analytics.financialHealth.segments.hhiValue|HHI {value}',
   'ja:analytics.hub.cards.sentinelTitle|Sentinel',
   'ja:analytics.trueCost.allocation.perFte|{currency}/FTE',
   'ja:analytics.trueCost.config.categoryCount|{count, number}',
@@ -2377,6 +2407,12 @@ const COGNATES = new Set<string>([
   'ja:reports.schedule.recipientsPlaceholder|finance@example.com, cfo@example.com',
   'zh:analytics.financialHealth.budget.csv|CSV',
   'zh:analytics.financialHealth.subKpi.roic|ROIC',
+  // Forecast diagnostic abbreviations (MAPE/RMSE/R²) and the HHI index name
+  // are universal statistical notations, identical in every locale.
+  'zh:analytics.financialHealth.forecast.diag.mape|MAPE',
+  'zh:analytics.financialHealth.forecast.diag.rmse|RMSE',
+  'zh:analytics.financialHealth.forecast.diag.r2|R²',
+  'zh:analytics.financialHealth.segments.hhiValue|HHI {value}',
   'zh:analytics.hub.cards.sentinelTitle|Sentinel',
   'zh:analytics.trueCost.allocation.perFte|{currency}/FTE',
   'zh:analytics.trueCost.config.categoryCount|{count, number}',
