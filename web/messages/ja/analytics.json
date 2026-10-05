@@ -1183,13 +1183,13 @@
       "insights": "インテリジェンス洞察",
       "keyMetrics": "主要指標",
       "monthlyDetails": "月次明細",
-      "monthlyDetailsHint": "前月比は+200/−80%で上限、「—」は成熟していない月からの立ち上がりを示す",
+      "monthlyDetailsHint": "前月比は+{up}/−{down}%で上限、「—」は成熟していない月からの立ち上がりを示す",
       "monthlyRevenueTrend": "月次売上トレンド",
       "overdueHint": "各得意先の平均発注サイクルからの超過日数",
       "overdueOrders": "延滞発注",
       "profitabilityHint": "得意先をクリックでジョブを展開 · ⚠️は利益流出（売上比率≥{share}％、マージン<{margin}％）",
       "revenueByTier": "CLV階層別売上",
-      "rfmHint": "R/F/Mスコア：5が最良、1が最悪 — レセンシーは固定日数しきい値、頻度/金額は33/66パーセンタイル",
+      "rfmHint": "R/F/Mスコア：5が最良、1が最悪 — レセンシーは{good}/{warning}/{critical}日、頻度/金額は33/66パーセンタイル",
       "rfmSegments": "RFMセグメント",
       "scoringModel": "スコアリングモデル",
       "scoringModelHint": "複合スコアの算出方法",
@@ -1235,27 +1235,27 @@
     "scoring": {
       "clvRetention": {
         "label": "CLV維持率",
-        "value": "維持率 0.95·e^(−日数/120)、10–95%に制限"
+        "value": "維持率 {base}·e^(−日数/{decay})、{min}–{max}%に制限"
       },
       "clvTiers": {
         "label": "CLV階層",
-        "value": "上位10% プラチナ · 次の20% ゴールド · 次の30% シルバー · 残り ブロンズ"
+        "value": "上位{platinum}% プラチナ · 上位{gold}% ゴールド · 上位{silver}% シルバー · 残り ブロンズ"
       },
       "frictionPenalty": {
         "label": "摩擦ペナルティ",
-        "value": "重大 −25 · 高 −15 · 中 −8"
+        "value": "重大 −{critical} · 高 −{high} · 中 −{medium}"
       },
       "healthGrades": {
         "label": "健全性評価",
-        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · Fは50未満"
+        "value": "A+ ≥{aPlus} · A ≥{a} · B ≥{b} · C ≥{c} · D ≥{d} · Fは{d}未満"
       },
       "healthWeights": {
         "label": "健全性加重",
-        "value": "レセンシー25% · 頻度25% · 金額30% · 支払20%"
+        "value": "最新度{recency}% · 頻度{frequency}% · 金額{monetary}% · 入金{payment}%"
       },
       "paymentScore": {
         "label": "支払スコア",
-        "value": "100 − DSOが60日超/30日超/15日超で40/20/10を減点 − min(40, 延滞×10)"
+        "value": "100 − DSOが{highDays}日超で{highPenalty}・{medDays}日超で{medPenalty}・{lowDays}日超で{lowPenalty}を減点 − min({cap}, 延滞×{per})"
       },
       "rfmFrequency": {
         "label": "RFM頻度/金額",
@@ -1263,7 +1263,7 @@
       },
       "rfmRecency": {
         "label": "RFMレセンシーしきい値",
-        "value": "30日以内 → 5 · 90日以内 → 3 · 180日以内 → 2 · その他1"
+        "value": "{good}日以内 → 5 · {warning}日以内 → 3 · {critical}日以内 → 2 · その他1"
       }
     },
     "segment": {
@@ -1322,12 +1322,13 @@
       "revenue": "売上",
       "invoiced": "期間内の総請求額",
       "rfmChampions": "RFMチャンピオン層",
-      "threeYearProjection": "3年予測",
+      "threeYearProjection": "{years}年予測",
       "trend": "トレンド：{trend}",
       "weightedRfm": "加重R/F/M/支払",
       "scoreHigh": "スコア≥{cutoff}",
       "scoreMid": "スコア{low}–{high}",
-      "scoreLow": "スコア<{cutoff}"
+      "scoreLow": "スコア<{cutoff}",
+      "daysShort": "{days}日"
     },
     "table": {
       "active": "アクティブ",
@@ -1394,6 +1395,25 @@
     "errors": {
       "paymentStatsUnavailable": "顧客の支払統計を読み込めませんでした。このダッシュボードを再読み込みしてください。",
       "scoringWeightsInvalid": "重み{keys}の合計が{actual}で{total}になりません。このダッシュボードの設定で修正してください。"
+    },
+    "rating": {
+      "excellent": "優良",
+      "good": "良好",
+      "fair": "普通",
+      "poor": "不良",
+      "unknown": "不明"
+    },
+    "urgency": {
+      "critical": "重大",
+      "high": "高",
+      "medium": "中",
+      "due-soon": "期限間近",
+      "on-track": "順調"
+    },
+    "trend": {
+      "growing": "増加中",
+      "declining": "減少中",
+      "stable": "横ばい"
     }
   },
   "vendor": {

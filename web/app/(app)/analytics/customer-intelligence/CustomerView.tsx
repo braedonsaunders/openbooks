@@ -209,7 +209,7 @@ export function CustomerView({
         </div>
         <KpiCard icon={Users} accent="sky" label={t('kpi.totalCustomers')} value={String(k.totalCustomers)} sub={t('sub.newInPeriod', { count: k.newCustomers })} />
         <KpiCard icon={Crown} accent="violet" label={t('kpi.champions')} value={String(k.champions)} sub={t('sub.rfmChampions')} />
-        <KpiCard icon={Gem} accent="amber" label={t('kpi.projectedClv')} value={money(k.projectedClv)} sub={t('sub.threeYearProjection')} />
+        <KpiCard icon={Gem} accent="amber" label={t('kpi.projectedClv')} value={money(k.projectedClv)} sub={t('sub.threeYearProjection', { years: data.config.clvYears })} />
         <KpiCard icon={AlertOctagon} accent={k.atRiskCount > 0 ? 'red' : 'emerald'} label={t('kpi.atRisk')} value={String(k.atRiskCount)} sub={money(k.atRiskRevenue)} tone={k.atRiskCount > 0 ? 'negative' : 'positive'} />
       </div>
 
@@ -266,7 +266,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
           {metric(t('metrics.avgValue'), money(k.avgCustomerValue), t('metricsSub.perCustomer'))}
           {metric(t('metrics.retention'), k.retentionRate === null ? '—' : `${k.retentionRate}%`, k.retentionRate === null ? t('metricsSub.noRetentionData') : t('metricsSub.retentionProb'))}
           {metric(t('metrics.paymentRate'), k.paymentRate === null ? '—' : `${k.paymentRate}%`, k.paymentRate === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.paidInFull'))}
-          {metric(t('metrics.avgDso'), k.avgDaysToPay === null ? '—' : `${k.avgDaysToPay}d`, k.avgDaysToPay === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.daysToPay'))}
+          {metric(t('metrics.avgDso'), k.avgDaysToPay === null ? '—' : t('sub.daysShort', { days: k.avgDaysToPay }), k.avgDaysToPay === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.daysToPay'))}
           {metric(t('metrics.top10Share'), `${k.top10PctShare}%`, t('metricsSub.ofRevenue'))}
           {metric(t('metrics.monthlyGrowth'), `${k.monthlyGrowth >= 0 ? '+' : ''}${k.monthlyGrowth}%`, t('metricsSub.avgMoM'))}
         </div>
@@ -389,7 +389,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</SharedTableCell>
       <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></SharedTableCell>
       <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></SharedTableCell>
-      <SharedTableCell className="px-4 py-2 text-center text-xs text-slate-500 capitalize dark:text-slate-400">{r.paymentRating}</SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-center text-xs text-slate-500 capitalize dark:text-slate-400">{t(`rating.${r.paymentRating}`)}</SharedTableCell>
       <SharedTableCell className="px-4 py-2">
         <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap', REC_STYLE[r.recommendation])} title={r.recommendationDetail}>{t(`rec.${r.recommendation}`)}</span>
       </SharedTableCell>
@@ -440,7 +440,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
             </Select>
             <button
               type="button"
-              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('table.invoiced'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, r.revenue, r.invoicedRevenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), r.paymentRating, t(`rec.${r.recommendation}`)]), today)}
+              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('table.invoiced'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, r.revenue, r.invoicedRevenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), t(`rating.${r.paymentRating}`), t(`rec.${r.recommendation}`)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
@@ -610,7 +610,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
       <Panel
         title={segment === 'all' ? t('panels.customersBySegment', { count: filtered.length }) : t('panels.segmentCustomers', { segment: t(`segment.${segment}`), count: filtered.length })}
         icon={Users}
-        hint={t('panels.rfmHint')}
+        hint={t('panels.rfmHint', { good: data.config.recencyGoodDays, warning: data.config.recencyWarningDays, critical: data.config.recencyCriticalDays })}
         bodyClassName="p-0"
       >
         <div className="overflow-x-auto">
@@ -637,7 +637,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.invoices}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : `${r.recencyDays}d`}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : t('sub.daysShort', { days: r.recencyDays })}</SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -836,7 +836,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
                     <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
                     <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.avgOrderCycle}d</SharedTableCell>
                     <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-orange-600 dark:text-orange-400">{r.daysOverdue}d</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize', URGENCY_STYLE[r.urgency])}>{r.urgency}</span></SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize', URGENCY_STYLE[r.urgency])}>{t(`urgency.${r.urgency}`)}</span></SharedTableCell>
                   </SharedTableRow>
                 ))}
               </SharedTableBody>
@@ -874,7 +874,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
                       <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{r.churnScore}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : `${r.recencyDays}d`}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : t('sub.daysShort', { days: r.recencyDays })}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionProbability} /></SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">{r.churnFactors.join(' · ') || '—'}</SharedTableCell>
@@ -904,7 +904,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiCard icon={TrendingUp} accent={(g.yoyGrowth ?? 0) >= 0 ? 'emerald' : 'red'} label={t('kpi.yoyGrowth')} value={g.yoyGrowth === null ? '—' : `${g.yoyGrowth >= 0 ? '+' : ''}${g.yoyGrowth}%`} sub={t('sub.last3moVsLy')} tone={(g.yoyGrowth ?? 0) >= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={BarChart3} accent={g.avgMonthlyGrowth >= 0 ? 'teal' : 'amber'} label={t('kpi.avgMonthly')} value={`${g.avgMonthlyGrowth >= 0 ? '+' : ''}${g.avgMonthlyGrowth}%`} sub={t('sub.trend', { trend: g.trend })} />
+        <KpiCard icon={BarChart3} accent={g.avgMonthlyGrowth >= 0 ? 'teal' : 'amber'} label={t('kpi.avgMonthly')} value={`${g.avgMonthlyGrowth >= 0 ? '+' : ''}${g.avgMonthlyGrowth}%`} sub={t('sub.trend', { trend: t(`trend.${g.trend}`) })} />
         <KpiCard icon={DollarSign} accent="sky" label={t('kpi.medianMonthly')} value={money(g.medianMonthlyRevenue)} sub={t('sub.revenue')} />
         <KpiCard icon={Users} accent="violet" label={t('kpi.newCustomers')} value={String(g.totalNewCustomers)} sub={t('sub.firstOrderInPeriod')} />
         <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= 50 ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLast6mo')} />
@@ -951,7 +951,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
           </SharedTable>
         </Panel>
 
-        <Panel title={t('panels.monthlyDetails')} hint={t('panels.monthlyDetailsHint')} bodyClassName="p-0">
+        <Panel title={t('panels.monthlyDetails')} hint={t('panels.monthlyDetailsHint', { up: data.config.growthMomCapUp, down: data.config.growthMomCapDown })} bodyClassName="p-0">
           <div className="max-h-80 overflow-y-auto">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
@@ -1133,14 +1133,14 @@ function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: bool
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ConfigEditor dashboard="customerIntelligence" canEdit={canEdit} />
         <Panel title={t('panels.scoringModel')} hint={t('panels.scoringModelHint')}>
-          {item(t('scoring.healthWeights.label'), t('scoring.healthWeights.value'))}
-          {item(t('scoring.frictionPenalty.label'), t('scoring.frictionPenalty.value'))}
-          {item(t('scoring.rfmRecency.label'), t('scoring.rfmRecency.value'))}
+          {item(t('scoring.healthWeights.label'), t('scoring.healthWeights.value', { recency: data.config.healthWeightRecency, frequency: data.config.healthWeightFrequency, monetary: data.config.healthWeightMonetary, payment: data.config.healthWeightPayment }))}
+          {item(t('scoring.frictionPenalty.label'), t('scoring.frictionPenalty.value', { critical: data.config.frictionPenaltyCritical, high: data.config.frictionPenaltyHigh, medium: data.config.frictionPenaltyMedium }))}
+          {item(t('scoring.rfmRecency.label'), t('scoring.rfmRecency.value', { good: data.config.recencyGoodDays, warning: data.config.recencyWarningDays, critical: data.config.recencyCriticalDays }))}
           {item(t('scoring.rfmFrequency.label'), t('scoring.rfmFrequency.value'))}
-          {item(t('scoring.clvRetention.label'), t('scoring.clvRetention.value'))}
-          {item(t('scoring.clvTiers.label'), t('scoring.clvTiers.value'))}
-          {item(t('scoring.paymentScore.label'), t('scoring.paymentScore.value'))}
-          {item(t('scoring.healthGrades.label'), t('scoring.healthGrades.value'))}
+          {item(t('scoring.clvRetention.label'), t('scoring.clvRetention.value', { base: data.config.clvRetentionBase / 100, decay: data.config.clvRetentionDecayDays, min: data.config.clvRetentionMinPct, max: data.config.clvRetentionMaxPct }))}
+          {item(t('scoring.clvTiers.label'), t('scoring.clvTiers.value', { platinum: data.config.tierPlatinumPct, gold: data.config.tierGoldPct, silver: data.config.tierSilverPct }))}
+          {item(t('scoring.paymentScore.label'), t('scoring.paymentScore.value', { highPenalty: data.config.paymentDsoHighPenalty, medPenalty: data.config.paymentDsoMediumPenalty, lowPenalty: data.config.paymentDsoLowPenalty, highDays: data.config.paymentDsoHighDays, medDays: data.config.paymentDsoMediumDays, lowDays: data.config.paymentDsoLowDays, cap: data.config.paymentOverdueCap, per: data.config.paymentOverduePerInvoice }))}
+          {item(t('scoring.healthGrades.label'), t('scoring.healthGrades.value', { aPlus: data.config.gradeAPlus, a: data.config.gradeA, b: data.config.gradeB, c: data.config.gradeC, d: data.config.gradeD }))}
         </Panel>
       </div>
       <Panel title={t('panels.dataSources')} icon={Timer}>

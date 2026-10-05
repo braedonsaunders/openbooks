@@ -1183,13 +1183,13 @@
       "insights": "Insights de inteligência",
       "keyMetrics": "Métricas principais",
       "monthlyDetails": "Detalhes mensais",
-      "monthlyDetailsHint": "Crescimento mensal limitado a +200/−80%; '—' marca aceleração a partir de mês imaturo",
+      "monthlyDetailsHint": "Crescimento mensal limitado a +{up}/−{down}%; '—' marca aceleração a partir de mês imaturo",
       "monthlyRevenueTrend": "Tendência mensal de receita",
       "overdueHint": "Dias além do ciclo médio de pedidos de cada cliente",
       "overdueOrders": "Pedidos em atraso",
       "profitabilityHint": "Clique em um cliente para expandir obras · ⚠️ marca vazamentos de lucro (≥{share} % da receita, margem <{margin} %)",
       "revenueByTier": "Receita por faixa de CLV",
-      "rfmHint": "Escores R/F/M: 5 melhor, 1 pior — recentidade por limiares fixos de dias, frequência/monetário por percentis 33/66",
+      "rfmHint": "Escores R/F/M: 5 melhor, 1 pior — recentidade {good}/{warning}/{critical} dias, frequência/monetário por percentis 33/66",
       "rfmSegments": "Segmentos RFM",
       "scoringModel": "Modelo de pontuação",
       "scoringModelHint": "Como os escores compostos são construídos",
@@ -1235,27 +1235,27 @@
     "scoring": {
       "clvRetention": {
         "label": "Retenção do CLV",
-        "value": "retenção 0,95·e^(−dias/120), limitada a 10–95%"
+        "value": "retenção {base}·e^(−dias/{decay}), limitada a {min}–{max}%"
       },
       "clvTiers": {
         "label": "Faixas de CLV",
-        "value": "Top 10% Platina · próximos 20% Ouro · próximos 30% Prata · resto Bronze"
+        "value": "Top {platinum}% Platina · top {gold}% Ouro · top {silver}% Prata · resto Bronze"
       },
       "frictionPenalty": {
         "label": "Penalidade de atrito",
-        "value": "Crítica −25 · Alta −15 · Média −8"
+        "value": "Crítica −{critical} · Alta −{high} · Média −{medium}"
       },
       "healthGrades": {
         "label": "Notas de saúde",
-        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F abaixo de 50"
+        "value": "A+ ≥{aPlus} · A ≥{a} · B ≥{b} · C ≥{c} · D ≥{d} · F abaixo de {d}"
       },
       "healthWeights": {
         "label": "Pesos de saúde",
-        "value": "Recentidade 25% · Frequência 25% · Monetário 30% · Pagamento 20%"
+        "value": "Recentidade {recency}% · Frequência {frequency}% · Monetário {monetary}% · Pagamento {payment}%"
       },
       "paymentScore": {
         "label": "Escore de pagamento",
-        "value": "100 − 40/20/10 por DSO >60/>30/>15d − min(40, vencidos×10)"
+        "value": "100 − {highPenalty} (DSO >{highDays}d) − {medPenalty} (>{medDays}d) − {lowPenalty} (>{lowDays}d) − min({cap}, vencidos×{per})"
       },
       "rfmFrequency": {
         "label": "Frequência RFM / monetário",
@@ -1263,7 +1263,7 @@
       },
       "rfmRecency": {
         "label": "Limiares de recentidade RFM",
-        "value": "≤30d → 5 · ≤90d → 3 · ≤180d → 2 · demais 1"
+        "value": "≤{good}d → 5 · ≤{warning}d → 3 · ≤{critical}d → 2 · demais 1"
       }
     },
     "segment": {
@@ -1322,12 +1322,13 @@
       "revenue": "receita",
       "invoiced": "faturamento bruto no período",
       "rfmChampions": "segmento de campeões RFM",
-      "threeYearProjection": "projeção de 3 anos",
+      "threeYearProjection": "projeção de {years} anos",
       "trend": "tendência: {trend}",
       "weightedRfm": "R/F/M/pagamento ponderados",
       "scoreHigh": "pontos ≥ {cutoff}",
       "scoreMid": "pontos {low}–{high}",
-      "scoreLow": "pontos < {cutoff}"
+      "scoreLow": "pontos < {cutoff}",
+      "daysShort": "{days} d"
     },
     "table": {
       "active": "Ativo",
@@ -1394,6 +1395,25 @@
     "errors": {
       "paymentStatsUnavailable": "As estatísticas de pagamento de clientes não foram carregadas. Recarregue este painel.",
       "scoringWeightsInvalid": "Os pesos {keys} somam {actual}, não {total} — corrija na Configuração deste painel."
+    },
+    "rating": {
+      "excellent": "excelente",
+      "good": "bom",
+      "fair": "razoável",
+      "poor": "ruim",
+      "unknown": "desconhecida"
+    },
+    "urgency": {
+      "critical": "crítica",
+      "high": "alta",
+      "medium": "média",
+      "due-soon": "a vencer",
+      "on-track": "em dia"
+    },
+    "trend": {
+      "growing": "em alta",
+      "declining": "em baixa",
+      "stable": "estável"
     }
   },
   "vendor": {

@@ -1183,13 +1183,13 @@
       "insights": "Analyses intelligentes",
       "keyMetrics": "Indicateurs clés",
       "monthlyDetails": "Détails mensuels",
-      "monthlyDetailsHint": "Croissance M/M plafonnée à +200/−80 % ; « — » marque une montée en puissance depuis un mois immature",
+      "monthlyDetailsHint": "Croissance M/M plafonnée à +{up}/−{down} % ; « — » marque une montée en puissance depuis un mois immature",
       "monthlyRevenueTrend": "Tendance du chiffre d’affaires mensuel",
       "overdueHint": "Jours écoulés au-delà du cycle de commande moyen propre à chaque client",
       "overdueOrders": "Commandes en retard",
       "profitabilityHint": "Cliquez sur un client pour déplier les dossiers · ⚠️ marque les fuites de marge (≥{share} % du chiffre d’affaires, marge <{margin} %)",
       "revenueByTier": "Chiffre d’affaires par niveau de CLV",
-      "rfmHint": "Scores R/F/M : 5 le meilleur, 1 le pire — ancienneté selon des seuils de jours fixes, fréquence/montant selon les percentiles 33/66",
+      "rfmHint": "Scores R/F/M : 5 le meilleur, 1 le pire — ancienneté {good}/{warning}/{critical} jours, fréquence/montant selon les percentiles 33/66",
       "rfmSegments": "Segments RFM",
       "scoringModel": "Modèle de notation",
       "scoringModelHint": "Comment les scores composites sont construits",
@@ -1235,27 +1235,27 @@
     "scoring": {
       "clvRetention": {
         "label": "Fidélisation CLV",
-        "value": "fidélisation 0,95·e^(−jours/120), bornée entre 10 et 95 %"
+        "value": "fidélisation {base}·e^(−jours/{decay}), bornée entre {min} et {max} %"
       },
       "clvTiers": {
         "label": "Niveaux de CLV",
-        "value": "Top 10 % Platine · 20 % suivants Or · 30 % suivants Argent · reste Bronze"
+        "value": "Top {platinum} % Platine · top {gold} % Or · top {silver} % Argent · reste Bronze"
       },
       "frictionPenalty": {
         "label": "Pénalité de friction",
-        "value": "Critique −25 · Élevée −15 · Moyenne −8"
+        "value": "Critique −{critical} · Élevée −{high} · Moyenne −{medium}"
       },
       "healthGrades": {
         "label": "Notes de santé",
-        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F en dessous"
+        "value": "A+ ≥{aPlus} · A ≥{a} · B ≥{b} · C ≥{c} · D ≥{d} · F en dessous"
       },
       "healthWeights": {
         "label": "Poids de santé",
-        "value": "Ancienneté 25 % · Fréquence 25 % · Montant 30 % · Paiement 20 %"
+        "value": "Ancienneté {recency} % · Fréquence {frequency} % · Montant {monetary} % · Paiement {payment} %"
       },
       "paymentScore": {
         "label": "Score de paiement",
-        "value": "100 − 40/20/10 si DSO >60/>30/>15 j − min(40, retards×10)"
+        "value": "100 − {highPenalty} (DSO >{highDays} j) − {medPenalty} (>{medDays} j) − {lowPenalty} (>{lowDays} j) − min({cap}, retards×{per})"
       },
       "rfmFrequency": {
         "label": "Fréquence / montant RFM",
@@ -1263,7 +1263,7 @@
       },
       "rfmRecency": {
         "label": "Seuils d’ancienneté RFM",
-        "value": "≤30 j → 5 · ≤90 j → 3 · ≤180 j → 2 · sinon 1"
+        "value": "≤{good} j → 5 · ≤{warning} j → 3 · ≤{critical} j → 2 · sinon 1"
       }
     },
     "segment": {
@@ -1322,12 +1322,13 @@
       "revenue": "chiffre d’affaires",
       "invoiced": "facturation brute de la période",
       "rfmChampions": "segment champions RFM",
-      "threeYearProjection": "projection sur 3 ans",
+      "threeYearProjection": "projection à {years} ans",
       "trend": "tendance : {trend}",
       "weightedRfm": "R/F/M/paiement pondérés",
-      "scoreHigh": "score ≥ {cutoff}",
-      "scoreMid": "score {low}–{high}",
-      "scoreLow": "score < {cutoff}"
+      "scoreHigh": "note ≥ {cutoff}",
+      "scoreMid": "note {low}–{high}",
+      "scoreLow": "note < {cutoff}",
+      "daysShort": "{days} j"
     },
     "table": {
       "active": "Actifs",
@@ -1394,6 +1395,25 @@
     "errors": {
       "paymentStatsUnavailable": "Les statistiques de paiement client n’ont pas été chargées. Rechargez ce tableau de bord.",
       "scoringWeightsInvalid": "Les pondérations {keys} totalisent {actual} au lieu de {total} : corrigez-les dans la Configuration de ce tableau."
+    },
+    "rating": {
+      "excellent": "excellent",
+      "good": "bon",
+      "fair": "correct",
+      "poor": "faible",
+      "unknown": "inconnue"
+    },
+    "urgency": {
+      "critical": "critique",
+      "high": "élevée",
+      "medium": "moyenne",
+      "due-soon": "imminente",
+      "on-track": "dans les temps"
+    },
+    "trend": {
+      "growing": "en hausse",
+      "declining": "en baisse",
+      "stable": "stable"
     }
   },
   "vendor": {

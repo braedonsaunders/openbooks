@@ -1937,9 +1937,10 @@ const COGNATES = new Set<string>([
   'fr:analytics.customer.panels.segmentCustomers|{segment} ({count})',
   'fr:analytics.customer.profitTier.marginal|Marginal',
   'fr:analytics.customer.segment.champions|Champions',
-  'fr:analytics.customer.sub.score40to59|score 40–59',
-  'fr:analytics.customer.sub.score80Plus|score ≥ 80',
-  'fr:analytics.customer.sub.scoreBelow40|score < 40',
+  // Customer score bands read the configured ladder now ("note ≥ {cutoff}");
+  // excellent/stable keep their identical French spellings as cognates.
+  'fr:analytics.customer.rating.excellent|excellent',
+  'fr:analytics.customer.trend.stable|stable',
   'fr:analytics.customer.table.f|F',
   'fr:analytics.customer.table.m|M',
   'fr:analytics.customer.table.mom|MoM',

@@ -1183,13 +1183,13 @@
       "insights": "智能洞察",
       "keyMetrics": "关键指标",
       "monthlyDetails": "月度明细",
-      "monthlyDetailsHint": "环比封顶+200/−80%；“—”表示从不成熟月份起步",
+      "monthlyDetailsHint": "环比封顶+{up}/−{down}%；“—”表示从不成熟月份起步",
       "monthlyRevenueTrend": "月度营收趋势",
       "overdueHint": "超出各客户自身平均订购周期的天数",
       "overdueOrders": "逾期订单",
       "profitabilityHint": "点击客户可展开任务 · ⚠️表示利润流失（营收占比≥{share}％，利润率<{margin}％）",
       "revenueByTier": "按CLV层级划分营收",
-      "rfmHint": "R/F/M评分：5最优，1最差——近期性采用固定天数阈值，频率/金额采用33/66分位数",
+      "rfmHint": "R/F/M评分：5最优，1最差——近期性采用{good}/{warning}/{critical}天阈值，频率/金额采用33/66分位数",
       "rfmSegments": "RFM细分",
       "scoringModel": "评分模型",
       "scoringModelHint": "综合评分的构建方式",
@@ -1235,27 +1235,27 @@
     "scoring": {
       "clvRetention": {
         "label": "CLV留存",
-        "value": "留存率 0.95·e^(−天数/120)，限制在10–95%"
+        "value": "留存率 {base}·e^(−天数/{decay})，限制在{min}–{max}%"
       },
       "clvTiers": {
         "label": "CLV层级",
-        "value": "前10% 铂金 · 接着20% 黄金 · 接着30% 白银 · 其余 青铜"
+        "value": "前{platinum}% 铂金 · 前{gold}% 黄金 · 前{silver}% 白银 · 其余 青铜"
       },
       "frictionPenalty": {
         "label": "摩擦罚分",
-        "value": "严重 −25 · 高 −15 · 中 −8"
+        "value": "严重 −{critical} · 高 −{high} · 中 −{medium}"
       },
       "healthGrades": {
         "label": "健康评级",
-        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F为50以下"
+        "value": "A+ ≥{aPlus} · A ≥{a} · B ≥{b} · C ≥{c} · D ≥{d} · F为{d}以下"
       },
       "healthWeights": {
         "label": "健康度权重",
-        "value": "近期性25% · 频率25% · 金额30% · 回款20%"
+        "value": "近度{recency}% · 频度{frequency}% · 金额{monetary}% · 回款{payment}%"
       },
       "paymentScore": {
         "label": "回款评分",
-        "value": "100 − DSO超60天/30天/15天分别扣40/20/10 − min(40, 逾期×10)"
+        "value": "100 − DSO超{highDays}天扣{highPenalty}・超{medDays}天扣{medPenalty}・超{lowDays}天扣{lowPenalty} − min({cap}, 逾期×{per})"
       },
       "rfmFrequency": {
         "label": "RFM频率/金额",
@@ -1263,7 +1263,7 @@
       },
       "rfmRecency": {
         "label": "RFM近期性阈值",
-        "value": "≤30天 → 5 · ≤90天 → 3 · ≤180天 → 2 · 其余1"
+        "value": "≤{good}天 → 5 · ≤{warning}天 → 3 · ≤{critical}天 → 2 · 其余1"
       }
     },
     "segment": {
@@ -1322,12 +1322,13 @@
       "revenue": "营收",
       "invoiced": "本期开票总额",
       "rfmChampions": "RFM冠军客群",
-      "threeYearProjection": "3年预测",
+      "threeYearProjection": "{years}年预测",
       "trend": "趋势：{trend}",
       "weightedRfm": "加权R/F/M/回款",
       "scoreHigh": "评分≥{cutoff}",
       "scoreMid": "评分{low}–{high}",
-      "scoreLow": "评分<{cutoff}"
+      "scoreLow": "评分<{cutoff}",
+      "daysShort": "{days}天"
     },
     "table": {
       "active": "活跃",
@@ -1394,6 +1395,25 @@
     "errors": {
       "paymentStatsUnavailable": "未能加载客户付款统计信息。请重新加载此仪表板。",
       "scoringWeightsInvalid": "权重{keys}合计为{actual}而非{total}，请在此仪表板的配置中修正。"
+    },
+    "rating": {
+      "excellent": "优秀",
+      "good": "良好",
+      "fair": "一般",
+      "poor": "差",
+      "unknown": "未知"
+    },
+    "urgency": {
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "due-soon": "即将到期",
+      "on-track": "正常"
+    },
+    "trend": {
+      "growing": "增长",
+      "declining": "下滑",
+      "stable": "平稳"
     }
   },
   "vendor": {
