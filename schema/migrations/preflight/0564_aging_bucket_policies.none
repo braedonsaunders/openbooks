@@ -1,0 +1,1 @@
+Additive organization aging policy configuration. No existing tenant rows, receivables, payables or cash figures are reinterpreted; the aging report keeps its current buckets until it reads the policy resolver in a later change, so no upgrade preflight is needed.
