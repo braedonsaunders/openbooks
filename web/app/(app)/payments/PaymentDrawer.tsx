@@ -269,6 +269,7 @@ export function PaymentDrawer({
   const { money } = useMoney()
   const t = useTranslations('payments.drawer')
   const tCommon = useTranslations('common')
+  const tStoredValue = useTranslations('storedValue')
   const router = useRouter()
   const doc = asPaymentDoc(payment.doc)
   const applied = payment.applied.map(asPaymentAppliedRow)
@@ -868,12 +869,20 @@ export function PaymentDrawer({
       }
       // No approvals tab before the first Save: the history reads the
       // persisted row the drawer has not written yet.
-      detailTabs={createMode ? [] : [
+      keepRecordTabsMounted={showTenders}
+      detailTabs={[
+        ...(showTenders ? [{
+          key: 'tenders',
+          label: tStoredValue('payment.tenderLabel'),
+          content: <StoredValueTendersSection currency={doc.currency} receiptTotal={total} partyId={partyId || null} drafts={tenderDrafts} onChange={setTenderDrafts} initialCredits={storedValue?.customerCredits ?? []} disabled={!editable} />,
+        }] : []),
+        ...(!createMode ? [
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
           content: <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} showEmptyState />,
         },
+        ] : []),
       ]}
       footer={
         <div className="flex w-full items-center gap-3">
@@ -982,17 +991,7 @@ export function PaymentDrawer({
           </div>
         </div>}
 
-        {showTenders && (editable || tenderDrafts.length > 0) ? (
-          <StoredValueTendersSection
-            currency={doc.currency}
-            receiptTotal={total}
-            partyId={partyId || null}
-            drafts={tenderDrafts}
-            onChange={setTenderDrafts}
-            initialCredits={storedValue?.customerCredits ?? []}
-            disabled={!editable}
-          />
-        ) : null}
+
 
         {isDraft ? (
           <div className="space-y-2">
