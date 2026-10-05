@@ -1820,10 +1820,25 @@ function channelEventExceptionWhere(view: ListViewConfig, adhoc: EntityAdhoc, or
 
 async function enrichChannelOrderTotals(rows: Record<string, unknown>[]): Promise<void> {
   for (const row of rows) {
+    const currency = typeof row.shop_currency === 'string' ? row.shop_currency.trim() : ''
+    let total: bigint | null = null
     try {
-      row.total = fromMinorUnits(BigInt(String(row.total_minor ?? '0')), String(row.shop_currency ?? 'USD'))
+      total = BigInt(String(row.total_minor ?? ''))
     } catch {
-      row.total = '0.0000'
+      total = null
+    }
+    // The order's own currency prices its total. A row without one (or
+    // without a readable total) keeps no formatted total and names the gap
+    // on the cell instead of a fallback currency or a zero that was never
+    // charged.
+    if (!currency) {
+      row.total = null
+      row.totalError = "Order currency is missing — set the order's shop currency to price its total."
+    } else if (total === null) {
+      row.total = null
+      row.totalError = 'Order total is unreadable — correct the stored total on the order.'
+    } else {
+      row.total = fromMinorUnits(total, currency)
     }
   }
 }

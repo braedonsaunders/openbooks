@@ -14,6 +14,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isUuid, pickString } from "../../../lib/list-params";
 import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
 import { loadContract, revenueModificationOptions, revenueRecognitionCandidates } from "./_lib";
 import type { ContractDrawer } from "./ContractDrawer";
 import type { RunRecognitionDrawer } from "./RunRecognitionDrawer";
@@ -63,6 +64,7 @@ export async function loadRevenue(
   const authz = await requirePermission("ar.read");
   const canRun = can(authz, "ar.post");
   const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "revenueRecognition");
 
   const contractId = typeof sp.contract === "string" ? sp.contract : undefined;
   const openContract =

@@ -288,6 +288,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting',
     subgroup: 'revenue-accounting',
     requiredPermission: 'ar.read',
+    featureKey: 'revenueRecognition',
   },
   {
     key: 'contract-costs',
