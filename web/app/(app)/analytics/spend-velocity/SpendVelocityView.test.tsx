@@ -65,6 +65,7 @@ function fixture(): SpendVelocityData {
       billsVelocity: 0,
       savingsPotential: '0',
       totalAlerts: 0,
+      unconfiguredDetectors: ['fragmentation', 'cliff'],
     },
     anomalies: { summary: { count: 0, criticalCount: 0 }, items: [] },
     boilingFrog: { summary: { count: 0, totalAnnualizedCreep: '0' }, accounts: [] },
@@ -281,6 +282,30 @@ test('detector details never double the percent sign and name trends in words', 
     assert.ok(
       host.textContent?.includes('Accelerating'),
       `the concentration trend must read in words, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  }
+})
+
+test('the headlines caveat the detectors the score omits', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    await act(async () => {
+      root.render(providers(<SpendVelocityView data={fixture()} />))
+      await tick()
+    })
+    await tick()
+    // The fixture leaves fragmentation unconfigured: the gauge and the
+    // alerts headline must carry its remedy, not a clean bill of health.
+    assert.ok(
+      host.textContent?.includes('Set the fragmentation size cap in Spend Velocity → Configuration'),
+      `the headlines must caveat the omitted detector, got:\n${host.textContent}`,
     )
   } finally {
     await act(async () => {
