@@ -229,7 +229,7 @@ export function observeAttendance(input: {
   const evidenceHash = createHash("sha256").update(canonicalJson({ shift: input.shift, policy, completeThrough: input.completeThrough, events })).digest("hex");
   const base = { completeThrough: input.completeThrough, eventIds: events.map(event => event.id), firstIn: null, lastOut: null, presenceMilliseconds: null, breakMilliseconds: null, late: null, leftEarly: null, evidenceHash };
   if (complete === null || complete < through) return { ...base, status: "waiting_for_sync" };
-  if (!events.length) return { ...base, status: "absent", presenceMilliseconds: 0, breakMilliseconds: 0 };
+  if (!events.length) return { ...base, status: "absent", presenceMilliseconds: 0, breakMilliseconds: 0, late: false, leftEarly: false };
   let clockedIn = false, onBreak = false, open = 0, breakStart = 0, priorTime: number | null = null;
   let gross = 0, breaks = 0, firstIn: string | null = null, lastOut: string | null = null;
   for (const event of events) {
