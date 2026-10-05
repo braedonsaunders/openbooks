@@ -455,6 +455,16 @@
       "description": "Infrastructure every module stands on: the database handle and RLS request scoping, sealed secrets, telemetry, clock and business date, file storage, canonical JSON, the SQL query surface.",
       "dependsOn": []
     },
+    "portal": {
+      "description": "Customer portal: passwordless magic-link sessions, customer-scoped reads, proration previews, pause and cancel flows, save offers and portal return-rule validation.",
+      "dependsOn": [
+        "billing",
+        "money",
+        "organization",
+        "platform",
+        "sales"
+      ]
+    },
     "projects": {
       "description": "Project accounting: financials and profiles, recognition, project revenue, labor costing, overhead, construction billing, subcontracts, field-ticket labor evidence, billing source integrity.",
       "dependsOn": [

@@ -6287,6 +6287,10 @@
       "title": "Sammelabrechnung",
       "description": "Eine Rechnung pro Zahler für die Abonnements einer Hierarchie — Muttergesellschaften, Wiederverkäufer und Franchisenehmer — auch über Rechtsträger hinweg mit Intercompany-Buchungen."
     },
+    "customerPortal": {
+      "title": "Kundenportal",
+      "description": "Passwortlose Kundenanmeldung mit Rechnungen und Jetzt-zahlen, Zahlungsmethoden, Abo-Änderungen, Sendungsverfolgung, Selfservice-Retouren und Guthabenabfrage."
+    },
     "storedValue": {
       "title": "Guthaben",
       "description": "Geschenkkarten und Ladenguthaben als Verbindlichkeiten, mit Ausgabe, Einlösung, Verfall und Erlöserfassung."

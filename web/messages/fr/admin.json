@@ -6403,6 +6403,10 @@
       "title": "Facturation consolidée",
       "description": "Une facture par payeur pour les abonnements d'une hiérarchie — sociétés mères, revendeurs et franchises — y compris entre entités juridiques avec écritures intercompagnies."
     },
+    "customerPortal": {
+      "title": "Portail client",
+      "description": "Connexion client sans mot de passe avec factures et paiement immédiat, moyens de paiement, modifications d’abonnement, suivi des commandes, retours en libre-service et consultation du solde des cartes cadeaux."
+    },
     "storedValue": {
       "title": "Cartes cadeaux et avoirs",
       "description": "Cartes cadeaux et avoirs comptabilisés au passif, avec émission, utilisation, péremption et breakage."

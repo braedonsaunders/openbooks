@@ -142,6 +142,13 @@ export const FEATURES: FeatureDef[] = [
   // charging of due invoices with retries, and suspension on final failure.
   // Needs onlinePayments — every charge rides a configured PSP provider.
   { key: 'autopay', defaultEnabled: false, category: 'billing', requiresAll: ['onlinePayments'] },
+  // Customer portal: passwordless customer sign-in with invoices and
+  // pay-now, payment methods, subscription changes with proration preview,
+  // usage and credit balances, order tracking, self-service returns and
+  // gift card lookup. Off by default — opening customer self-service is
+  // adoption. Pay-now and saved methods degrade to named refusals while
+  // onlinePayments and autopay stay off.
+  { key: 'customerPortal', defaultEnabled: false, category: 'billing' },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'billing', navModules: ['revenue'] },
   // Revenue contracts spanning orders, subscriptions and several invoices.
   // Off by default: without it every invoice keeps its own contract. A child

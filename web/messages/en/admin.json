@@ -6475,6 +6475,10 @@
       "title": "Consolidated billing",
       "description": "One invoice per payer for a hierarchy's subscriptions — parent companies, resellers and franchises — including across legal entities with intercompany legs."
     },
+    "customerPortal": {
+      "title": "Customer portal",
+      "description": "Passwordless customer sign-in with invoices and pay-now, payment methods, subscription changes, order tracking, self-service returns, and gift card lookup."
+    },
     "storedValue": {
       "title": "Stored value",
       "description": "Gift cards and store credit carried as liabilities, with issuance, redemption, breakage, and expiry."
