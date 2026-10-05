@@ -97,6 +97,9 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     // Daily marketing spend restates the day's order margins through the
     // commerce engine (re-importing a source replaces its figure), never raw CRUD.
     command: { name: 'recordChannelAdSpend', permission: 'channels.manage', feature: 'salesChannels' },
+    // Import rows travel the same command, so the natural-key upsert, margin
+    // restatement, audit evidence and feature gate match the workspace exactly.
+    importVia: 'command',
     columns: [
       { key: 'spendDate', kind: 'date' },
       { key: 'amountMinor', kind: 'number', labelKey: 'entities.channel-ad-spend.amount' },
