@@ -47,14 +47,6 @@ type SettlementLineRow = {
   meta: Record<string, unknown> | null;
 };
 
-type ChannelOrderRow = {
-  id: string;
-  channel_id: string;
-  posting_status: string;
-  posting_document_id: string | null;
-  summary_id: string | null;
-};
-
 function refuse(code: string, message: string, remedy: string): never {
   throw new CommerceError(code, message, remedy, { field: null, status: 422 });
 }
@@ -67,15 +59,115 @@ function orderIdCandidates(raw: string): string[] {
   return tail !== trimmed && /^\d+$/.test(tail) ? [trimmed, tail] : [trimmed];
 }
 
-async function postedDocument(
+export type LineDocumentEvidence = {
+  id: string;
+  kind: string;
+  documentNumber: string | null;
+  status: string;
+  currency: string | null;
+  total: string | null;
+};
+
+/** One native document behind a settlement line, read for matching evidence. */
+export async function readSettlementDocument(
   orgId: string,
   documentId: string,
-): Promise<{ id: string; kind: string; document_number: string | null; status: string } | null> {
-  const row = (await db.execute<{ id: string; kind: string; document_number: string | null; status: string }>(sql`
-    select id, kind, document_number, status from documents
+): Promise<LineDocumentEvidence | null> {
+  const row = (await db.execute<LineDocumentEvidence>(sql`
+    select id, kind, document_number as "documentNumber", status, currency, total::text as total from documents
      where org_id = ${orgId} and id = ${documentId}
   `)).rows[0];
   return row ?? null;
+}
+
+async function postedDocument(
+  orgId: string,
+  documentId: string,
+): Promise<LineDocumentEvidence | null> {
+  return readSettlementDocument(orgId, documentId);
+}
+
+/**
+ * Document ids the provider references claim directly through
+ * `external_links`, distinct. Shared by the automatic matcher and the
+ * assistance queue: both read the same identity, the matcher deciding
+ * alone and the queue proposing with evidence. Missing documents stay in
+ * the list so a dangling link still reads as missing, never as absent.
+ */
+export async function lineExternalDocumentIds(
+  orgId: string,
+  provider: string,
+  refs: Array<string | null | undefined>,
+): Promise<string[]> {
+  const candidates = refs.filter((value): value is string => typeof value === "string" && value.trim() !== "");
+  if (candidates.length === 0) return [];
+  const links = (await db.execute<{ native_table: string; native_id: string }>(sql`
+    select native_table, native_id from external_links
+     where org_id = ${orgId} and provider = ${provider}
+       and external_id in (${sql.join(candidates.map((candidate) => sql`${candidate}`), sql`, `)})
+       and native_table = 'documents'
+  `)).rows;
+  return [...new Set(links.map((link) => link.native_id))];
+}
+
+export type LineSourceOrder = {
+  id: string;
+  channelId: string;
+  externalId: string;
+  externalNumber: string;
+  postingStatus: string;
+  postingDocumentId: string | null;
+  summaryId: string | null;
+};
+
+/** Channel orders behind a settlement line's source order reference. */
+export async function findLineSourceOrders(
+  orgId: string,
+  sourceOrderId: string,
+): Promise<LineSourceOrder[]> {
+  const ids = orderIdCandidates(sourceOrderId);
+  if (ids.length === 0) return [];
+  return (await db.execute<LineSourceOrder>(sql`
+    select o.id, o.channel_id as "channelId", o.external_id as "externalId",
+           o.external_number as "externalNumber", o.posting_status as "postingStatus",
+           o.posting_document_id as "postingDocumentId", o.summary_id as "summaryId"
+      from channel_orders o
+      join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
+     where o.org_id = ${orgId} and c.kind = 'shopify'
+       and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+     order by o.id
+  `)).rows;
+}
+
+/** The sale document id behind a channel order: per-order cash, else the posted summary, else null. */
+export async function findOrderSaleDocumentId(
+  orgId: string,
+  order: { postingDocumentId: string | null; summaryId: string | null },
+): Promise<string | null> {
+  if (order.postingDocumentId) {
+    return order.postingDocumentId;
+  }
+  if (order.summaryId) {
+    const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
+      select posting_document_id from channel_daily_summaries
+       where org_id = ${orgId} and id = ${order.summaryId}
+    `)).rows[0];
+    return summary?.posting_document_id ?? null;
+  }
+  return null;
+}
+
+/** Refund document ids behind a channel order, in event order. */
+export async function findOrderRefundDocumentIds(
+  orgId: string,
+  orderId: string,
+): Promise<string[]> {
+  const events = (await db.execute<{ posting_document_id: string | null }>(sql`
+    select posting_document_id from channel_order_events
+     where org_id = ${orgId} and order_id = ${orderId}
+       and posting_document_id is not null
+  `)).rows;
+  return [...new Set(events.map((event) => event.posting_document_id).filter((id): id is string => id !== null))];
 }
 
 async function resolveLineDocument(
@@ -96,14 +188,14 @@ async function resolveLineDocument(
       return {
         status: "unmatched",
         reason: "document_unposted",
-        remedy: `Document ${doc.document_number ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
+        remedy: `Document ${doc.documentNumber ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
       };
     }
     return {
       status: "matched",
       documentId: doc.id,
       documentKind: doc.kind,
-      documentNumber: doc.document_number,
+      documentNumber: doc.documentNumber,
       via: "stored_link",
     };
   }
@@ -111,18 +203,11 @@ async function resolveLineDocument(
     return null;
   }
   const meta = line.meta ?? {};
-  const candidates = [
+  const distinct = await lineExternalDocumentIds(orgId, provider, [
     line.external_ref,
     typeof meta.sourceOrderId === "string" ? meta.sourceOrderId : null,
-  ].filter((value): value is string => typeof value === "string" && value.trim() !== "");
-  if (candidates.length > 0) {
-    const links = (await db.execute<{ native_table: string; native_id: string }>(sql`
-      select native_table, native_id from external_links
-       where org_id = ${orgId} and provider = ${provider}
-         and external_id in (${sql.join(candidates.map((candidate) => sql`${candidate}`), sql`, `)})
-         and native_table = 'documents'
-    `)).rows;
-    const distinct = [...new Set(links.map((link) => link.native_id))];
+  ]);
+  if (distinct.length > 0) {
     if (distinct.length > 1) {
       return {
         status: "unmatched",
@@ -143,28 +228,20 @@ async function resolveLineDocument(
         return {
           status: "unmatched",
           reason: "document_unposted",
-          remedy: `Document ${doc.document_number ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
+          remedy: `Document ${doc.documentNumber ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
         };
       }
       return {
         status: "matched",
         documentId: doc.id,
         documentKind: doc.kind,
-        documentNumber: doc.document_number,
+        documentNumber: doc.documentNumber,
         via: "external_link",
       };
     }
   }
   if (provider === "shopify_payments" && typeof meta.sourceOrderId === "string" && meta.sourceOrderId.trim() !== "") {
-    const ids = orderIdCandidates(meta.sourceOrderId);
-    const orders = (await db.execute<ChannelOrderRow>(sql`
-      select o.id, o.channel_id, o.posting_status, o.posting_document_id, o.summary_id
-        from channel_orders o
-        join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
-       where o.org_id = ${orgId} and c.kind = 'shopify'
-         and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-       order by o.id
-    `)).rows;
+    const orders = await findLineSourceOrders(orgId, meta.sourceOrderId);
     if (orders.length === 0) {
       return {
         status: "unmatched",
@@ -181,12 +258,7 @@ async function resolveLineDocument(
     }
     const order = orders[0]!;
     if (line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal") {
-      const events = (await db.execute<{ posting_document_id: string | null }>(sql`
-        select posting_document_id from channel_order_events
-         where org_id = ${orgId} and order_id = ${order.id}
-           and posting_document_id is not null
-      `)).rows;
-      const docs = [...new Set(events.map((event) => event.posting_document_id).filter((id): id is string => id !== null))];
+      const docs = await findOrderRefundDocumentIds(orgId, order.id);
       if (docs.length === 0) {
         return {
           status: "unmatched",
@@ -213,12 +285,16 @@ async function resolveLineDocument(
         status: "matched",
         documentId: doc.id,
         documentKind: doc.kind,
-        documentNumber: doc.document_number,
+        documentNumber: doc.documentNumber,
         via: "channel_order",
       };
     }
-    if (order.posting_document_id) {
-      const doc = await postedDocument(orgId, order.posting_document_id);
+    const saleDocumentId = await findOrderSaleDocumentId(orgId, {
+      postingDocumentId: order.postingDocumentId,
+      summaryId: order.summaryId,
+    });
+    if (order.postingDocumentId) {
+      const doc = saleDocumentId ? await postedDocument(orgId, saleDocumentId) : null;
       if (!doc || doc.status !== "posted") {
         return {
           status: "unmatched",
@@ -230,26 +306,20 @@ async function resolveLineDocument(
         status: "matched",
         documentId: doc.id,
         documentKind: doc.kind,
-        documentNumber: doc.document_number,
+        documentNumber: doc.documentNumber,
         via: "channel_order",
       };
     }
-    if (order.summary_id) {
-      const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
-        select posting_document_id from channel_daily_summaries
-         where org_id = ${orgId} and id = ${order.summary_id}
-      `)).rows[0];
-      if (summary?.posting_document_id) {
-        const doc = await postedDocument(orgId, summary.posting_document_id);
-        if (doc && doc.status === "posted") {
-          return {
-            status: "matched",
-            documentId: doc.id,
-            documentKind: doc.kind,
-            documentNumber: doc.document_number,
-            via: "channel_order",
-          };
-        }
+    if (saleDocumentId) {
+      const doc = await postedDocument(orgId, saleDocumentId);
+      if (doc && doc.status === "posted") {
+        return {
+          status: "matched",
+          documentId: doc.id,
+          documentKind: doc.kind,
+          documentNumber: doc.documentNumber,
+          via: "channel_order",
+        };
       }
     }
     return {
