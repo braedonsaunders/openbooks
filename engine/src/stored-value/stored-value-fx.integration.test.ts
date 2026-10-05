@@ -6,7 +6,7 @@ import { db, withBypass, withBypassContext, withOrg } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { completeRequestedDocumentVoid, requestDocumentVoid } from "../ledger/document-void.ts";
-import { reverseRedemptionsForVoidedDocument } from "./void-redemptions.ts";
+import { reverseStoredValueForVoidedDocument } from "./void-reversal.ts";
 import { runRevaluation } from "../close/fx-revaluation.ts";
 import { attachDocumentIssue } from "./accounts.ts";
 import { createProgram } from "./accounts.ts";
@@ -326,14 +326,15 @@ test("voiding a redeeming sale restores the card and reverses its realized FX", 
     assert.equal(mirror.length, 1);
     // A retried unwind finds the first reversal instead of restoring twice.
     const again = await withBypass(() =>
-      reverseRedemptionsForVoidedDocument({
+      reverseStoredValueForVoidedDocument({
         orgId: org.orgId,
         documentId: saleId,
+        documentNumber: "CS-FX-VOID",
+        reversalEntryId: null,
         actorId: fx.actorId,
-        reversalDate: org.date,
         reason: "till error",
       }));
-    assert.deepEqual(again, { reversed: 0, realizedReversed: 0 });
+    assert.deepEqual(again, { reversed: 0 });
     // The roll-forward ties again: the full 50 USD carried at 1.36.
     assert.equal(await subledgerFunctional(org.orgId, org.subsidiaryId), "680000");
   } finally {
