@@ -381,6 +381,7 @@ export type ApplyPromotionResult = {
   code: string;
   discountMinor: string;
   currency: string;
+  minorUnits: number | null;
   lines: AppliedPromotionLine[];
 };
 
@@ -462,11 +463,17 @@ export async function applyPromotion(
     currency: document.currency,
     lineIds: inserted.map((line) => line.lineId),
   });
+  // Display precision rides with the result from the authoritative registry;
+  // a missing row refuses at render, never guesses hundredths.
+  const precision = (await runner.execute<{ minor_units: number | null }>(sql`
+    select minor_units from currencies where code = ${document.currency}
+  `)).rows[0];
   return {
     promotionId: promotion.id,
     code: promotion.code,
     discountMinor: total.toString(),
     currency: document.currency,
+    minorUnits: precision?.minor_units ?? null,
     lines: inserted,
   };
 }

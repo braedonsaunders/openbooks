@@ -63,6 +63,7 @@
     "marginTitle": "Margem do pedido",
     "marginHint": "Contribuição dos últimos 30 dias por canal, após envio e taxas",
     "marginEmpty": "A margem aparece aqui quando os pedidos do canal são lançados com custos. Atualize um pedido para calculá-la agora.",
+    "marginPrecisionUnknown": "Os valores em {currency} precisam da precisão em Configuração → Moedas.",
     "marginReport": "Relatório de margem",
     "marginMeta": "{orders} pedido(s) · {revenue} de receita · {adSpend} em anúncios",
     "marginEstimated": "{count} estimado(s)",
@@ -366,6 +367,7 @@
   },
   "drawer": {
     "lines": "Itens",
+    "unknownPrecision": "Os valores em {currency} precisam da precisão em Configuração → Moedas.",
     "tenders": "Pagamentos",
     "activity": "Atividade",
     "posting": "Contabilização",

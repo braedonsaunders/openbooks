@@ -33,6 +33,7 @@
     "codeTitle": "Aplicar código promocional",
     "codeLabel": "Código promocional",
     "applied": "{code} aplicada: {amount} de desconto em {count, plural, one {# linha} other {# linhas}}",
+    "precisionUnknown": "O desconto foi aplicado, mas os valores em {currency} precisam da precisão em Configuração → Moedas.",
     "loadFailed": "Não foi possível carregar as promoções",
     "applyFailed": "Não foi possível aplicar a promoção"
   }

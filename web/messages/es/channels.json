@@ -63,6 +63,7 @@
     "marginTitle": "Margen del pedido",
     "marginHint": "Contribución de los últimos 30 días por canal, tras envío y comisiones",
     "marginEmpty": "El margen aparece aquí cuando los pedidos del canal se contabilizan con costos. Actualiza un pedido para calcularlo ahora.",
+    "marginPrecisionUnknown": "Los importes en {currency} necesitan su precisión en Configuración → Monedas.",
     "marginReport": "Informe de margen",
     "marginMeta": "{orders} pedido(s) · {revenue} ingresos · {adSpend} publicidad",
     "marginEstimated": "{count} estimado(s)",
@@ -366,6 +367,7 @@
   },
   "drawer": {
     "lines": "Líneas",
+    "unknownPrecision": "Los importes en {currency} necesitan su precisión en Configuración → Monedas.",
     "tenders": "Cobros",
     "activity": "Actividad",
     "posting": "Contabilización",

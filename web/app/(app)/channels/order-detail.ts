@@ -25,6 +25,7 @@ export interface ChannelOrderDrawerData {
   customerName: string | null
   customerEmail: string | null
   currency: string
+  currencyUnits: Record<string, number | null>
   presentmentCurrency: string
   presentmentRate: string | null
   subtotalMinor: string
@@ -204,6 +205,18 @@ export async function loadChannelOrderDrawer(
   // empty state with a refresh action, never a failure.
   const economics = await loadOrderEconomics(orgId, order.id, order.postingDocumentId)
   const timeline = await loadOrderTimeline(orgId, order.id)
+  // Display precision for every currency on the drawer from the
+  // authoritative registry; a missing row refuses at render, never guesses.
+  const unitCodes = new Set<string>([order.shopCurrency])
+  for (const component of economics?.components ?? []) unitCodes.add(component.currency)
+  const unitRows = (await db.execute<{ code: string; minor_units: number | null }>(sql`
+    select code, minor_units from currencies
+     where code in (${sql.join([...unitCodes].map((code) => sql`${code}`), sql`, `)})
+  `)).rows
+  const currencyUnits: Record<string, number | null> = {}
+  for (const code of unitCodes) {
+    currencyUnits[code] = unitRows.find((row) => row.code === code)?.minor_units ?? null
+  }
   const doc = order.postingDocumentId && docRow.rows[0]
     ? { id: order.postingDocumentId, kind: docRow.rows[0].kind, number: docRow.rows[0].document_number, status: docRow.rows[0].status }
     : null
@@ -223,6 +236,7 @@ export async function loadChannelOrderDrawer(
     customerName: order.customerName,
     customerEmail: order.customerEmail,
     currency: order.shopCurrency,
+    currencyUnits,
     presentmentCurrency: order.presentmentCurrency,
     presentmentRate: order.presentmentRate,
     subtotalMinor: String(order.subtotalMinor),

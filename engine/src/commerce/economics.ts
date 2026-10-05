@@ -1266,6 +1266,7 @@ export interface ChannelMarginSummary {
   channelId: string;
   channelName: string;
   currency: string;
+  minorUnits: number | null;
   orders: number;
   revenueMinor: bigint;
   cm2Minor: bigint;
@@ -1277,6 +1278,7 @@ type SummaryRow = {
   channel_id: string;
   channel_name: string;
   currency: string;
+  minor_units: number | null;
   orders: string;
   revenue: string;
   cm2: string;
@@ -1298,7 +1300,7 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
   }
   return withOrg(orgId, async () => {
     const rows = (await db.execute<SummaryRow>(sql`
-      select c.id as channel_id, c.name as channel_name, f.currency,
+      select c.id as channel_id, c.name as channel_name, f.currency, cur.minor_units,
              count(distinct f.order_id)::text as orders,
              coalesce(sum(case when f.component in ('net_revenue', 'discount') then f.amount_minor else 0 end), 0)::text as revenue,
              coalesce(sum(case when f.component in ('net_revenue', 'discount', 'cogs', 'returns', 'restocking_fee',
@@ -1307,8 +1309,9 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
         from channel_order_economics f
         join channel_orders o on o.id = f.order_id and o.org_id = f.org_id
         join sales_channels c on c.id = f.channel_id and c.org_id = f.org_id
+        left join currencies cur on cur.code = f.currency
        where f.org_id = ${orgId} and f.is_current and o.ordered_at >= now() - make_interval(days => ${days})
-       group by c.id, c.name, f.currency
+       group by c.id, c.name, f.currency, cur.minor_units
        order by c.name, f.currency`)).rows;
     const spend = (await db.execute<{ channel_id: string; currency: string; total: string }>(sql`
       select channel_id, currency, coalesce(sum(amount_minor), 0)::text as total
@@ -1320,6 +1323,7 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
       channelId: row.channel_id,
       channelName: row.channel_name,
       currency: row.currency,
+      minorUnits: row.minor_units,
       orders: Number(row.orders),
       revenueMinor: BigInt(row.revenue),
       cm2Minor: BigInt(row.cm2),

@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { useAppAction } from '@/lib/use-app-action'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { createMoneyFormatter, minorToMajorText } from '@/lib/money-format'
+import { createMoneyFormatter, minorToMajorTextUnits } from '@/lib/money-format'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { channelRequest } from './channel-client'
@@ -226,11 +226,15 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
   const { busy, refusal: replayRefusal, execute } = useAppAction()
   const { busy: refreshBusy, refusal: refreshRefusal, execute: executeRefresh } = useAppAction()
   const money = createMoneyFormatter(locale, drawer.currency)
-  const amount = (minor: string) => money.money(minorToMajorText(minor), { currency: drawer.currency })
-  const amountIn = (minor: string, currency: string) =>
-    currency === drawer.currency
-      ? amount(minor)
-      : createMoneyFormatter(locale, currency).money(minorToMajorText(minor), { currency })
+  // Precision comes from the authoritative registry via currencyUnits; an
+  // unregistered currency refuses by name instead of guessing /100.
+  const amountIn = (minor: string, currency: string) => {
+    const units = drawer.currencyUnits[currency]
+    if (units == null) return t('drawer.unknownPrecision', { currency })
+    const formatter = currency === drawer.currency ? money : createMoneyFormatter(locale, currency)
+    return formatter.money(minorToMajorTextUnits(minor, units), { currency })
+  }
+  const amount = (minor: string) => amountIn(minor, drawer.currency)
 
   const onRefreshEconomics = async () => {
     await executeRefresh(

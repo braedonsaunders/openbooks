@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { minorToMajorText } from '@/lib/money-format'
+import { minorToMajorTextUnits } from '@/lib/money-format'
 import { promptDialog } from '@/lib/prompt'
 
 type ActivePromotion = { id: string; code: string; name: string; kind: string }
@@ -79,9 +79,24 @@ export function PromotionApplyControl({ documentId, currency, disabled, onApplie
       const applied = await readJson(applyRes)
       const total = typeof applied.discountMinor === 'string' ? applied.discountMinor : '0'
       const count = Array.isArray(applied.lines) ? applied.lines.length : 0
+      const units = typeof applied.minorUnits === 'number' ? applied.minorUnits : Number.NaN
+      let amount: string | null = null
+      try {
+        amount = money(minorToMajorTextUnits(total, units))
+      } catch {
+        amount = null
+      }
+      if (amount === null) {
+        // The discount applied; only its display amount refuses by name.
+        toast.error(t('promotion.precisionUnknown', {
+          currency: typeof applied.currency === 'string' ? applied.currency : currency,
+        }))
+        onApplied()
+        return
+      }
       toast.success(t('promotion.applied', {
         code: typeof applied.code === 'string' ? applied.code : code,
-        amount: money(minorToMajorText(total)),
+        amount,
         count,
       }))
       onApplied()

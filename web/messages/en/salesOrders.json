@@ -33,6 +33,7 @@
     "codeTitle": "Apply promotion code",
     "codeLabel": "Promotion code",
     "applied": "{code} applied: {amount} off across {count, plural, one {# line} other {# lines}}",
+    "precisionUnknown": "The discount applied, but amounts in {currency} need their precision set in Setup → Currencies.",
     "loadFailed": "Could not load promotions",
     "applyFailed": "Could not apply the promotion"
   }

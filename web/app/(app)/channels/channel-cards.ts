@@ -24,6 +24,7 @@ export interface MarginChannel {
   channelId: string
   channelName: string
   currency: string
+  minorUnits: number | null
   orders: number
   revenueMinor: string
   cm2Minor: string

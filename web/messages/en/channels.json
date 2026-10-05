@@ -63,6 +63,7 @@
     "marginTitle": "Order margin",
     "marginHint": "Trailing 30-day contribution by channel, after fulfilment and fees",
     "marginEmpty": "Margin appears here once channel orders post with costs. Refresh an order to build it now.",
+    "marginPrecisionUnknown": "Amounts in {currency} need their precision set in Setup → Currencies.",
     "marginReport": "Margin report",
     "marginMeta": "{orders} order(s) · {revenue} revenue · {adSpend} ad spend",
     "marginEstimated": "{count} estimated",
@@ -366,6 +367,7 @@
   },
   "drawer": {
     "lines": "Lines",
+    "unknownPrecision": "Amounts in {currency} need their precision set in Setup → Currencies.",
     "tenders": "Tenders",
     "activity": "Activity",
     "posting": "Posting",
