@@ -1173,7 +1173,7 @@
       "monthlyRevenueTrend": "月次売上トレンド",
       "overdueHint": "各得意先の平均発注サイクルからの超過日数",
       "overdueOrders": "延滞発注",
-      "profitabilityHint": "得意先をクリックでジョブを展開 · ⚠️は利益流出（売上>{threshold}、マージン<15%）",
+      "profitabilityHint": "得意先をクリックでジョブを展開 · ⚠️は利益流出（売上比率≥{share}％、マージン<{margin}％）",
       "revenueByTier": "CLV階層別売上",
       "rfmHint": "R/F/Mスコア：5が最良、1が最悪 — レセンシーは固定日数しきい値、頻度/金額は33/66パーセンタイル",
       "rfmSegments": "RFMセグメント",
@@ -1298,7 +1298,7 @@
       "firstOrderInPeriod": "期間内初回発注",
       "highCriticalAccounts": "高・重大の得意先",
       "highCriticalChurn": "高・重大な離反",
-      "highRevenueLowMargin": "売上大・マージン<15%",
+      "highRevenueLowMargin": "売上比率≥{share}％、マージン<{margin}％",
       "jobsCount": "{count}件",
       "last3moVsLy": "過去3か月（前年同期比）",
       "marginPct": "{pct}%マージン",
@@ -1375,7 +1375,10 @@
       "platinum": "プラチナ",
       "silver": "シルバー"
     },
-    "txnsCount": "{count}件の取引"
+    "txnsCount": "{count}件の取引",
+    "errors": {
+      "paymentStatsUnavailable": "顧客の支払統計を読み込めませんでした。このダッシュボードを再読み込みしてください。"
+    }
   },
   "vendor": {
     "title": "仕入先パフォーマンス",

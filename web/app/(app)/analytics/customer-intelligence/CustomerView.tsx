@@ -69,13 +69,15 @@ const PROFIT_TIER_STYLE: Record<ProfitTier, string> = {
   marginal: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
   loss: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
 }
-function marginClass(m: number): string {
+function marginClass(m: number | null): string {
+  if (m === null) return 'text-slate-400 dark:text-slate-500'
   if (m >= 40) return 'text-emerald-600 dark:text-emerald-400'
   if (m < 0) return 'text-red-600 dark:text-red-400'
   if (m < 10) return 'text-amber-600 dark:text-amber-400'
   return 'text-slate-700 dark:text-slate-300'
 }
-function marginAccent(m: number): 'emerald' | 'sky' | 'violet' | 'amber' | 'red' {
+function marginAccent(m: number | null): 'emerald' | 'sky' | 'violet' | 'amber' | 'red' | 'slate' {
+  if (m === null) return 'slate'
   if (m >= 40) return 'emerald'
   if (m >= 25) return 'sky'
   if (m >= 10) return 'violet'
@@ -218,7 +220,7 @@ export function CustomerView({
         {tab === 'lifetime' ? <LifetimeTab data={data} profitability={profitability} projectsEnabled={projectsEnabled} /> : null}
         {tab === 'churn' ? <ChurnTab data={data} /> : null}
         {tab === 'growth' ? <GrowthTab data={data} /> : null}
-        {tab === 'profitability' && projectsEnabled && profitability ? <ProfitabilityTab p={profitability} /> : null}
+        {tab === 'profitability' && projectsEnabled && profitability ? <ProfitabilityTab p={profitability} leak={{ share: data.config.profitLeakRevenueSharePct, margin: data.config.profitLeakMarginTarget }} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
             </AnalyticsTabContent>
@@ -662,8 +664,8 @@ function LifetimeTab({
         <KpiCard icon={FileText} accent="sky" label={t('kpi.totalInvoiced')} value={money(k.totalInvoiced)} sub={t('sub.invoiced')} />
         {projectsEnabled && profitability ? (
           <>
-            <KpiCard icon={HandCoins} accent={cmp(profitability.summary.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={fmtMoney(profitability.summary.totalGrossProfit, { compact: true })} sub={t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
-            <KpiCard icon={AlertTriangle} accent={(k.fakeChampions ?? 0) > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={k.fakeChampions === null ? '—' : String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin')} tone={(k.fakeChampions ?? 0) > 0 ? 'negative' : 'positive'} />
+            <KpiCard icon={HandCoins} accent={cmp(profitability.summary.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={fmtMoney(profitability.summary.totalGrossProfit, { compact: true })} sub={profitability.summary.avgMarginPct === null ? '—' : t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
+            <KpiCard icon={AlertTriangle} accent={k.fakeChampions === null ? 'sky' : k.fakeChampions > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={k.fakeChampions === null ? '—' : String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin', { share: data.config.profitLeakRevenueSharePct, margin: data.config.profitLeakMarginTarget })} tone={k.fakeChampions === null ? undefined : k.fakeChampions > 0 ? 'negative' : 'positive'} />
           </>
         ) : null}
       </div>
@@ -973,11 +975,12 @@ function GrowthTab({ data }: { data: CustomerData }) {
 type ProfitSort = 'customerName' | 'totalRevenue' | 'totalCost' | 'grossProfit' | 'marginPct'
 const PAGE_SIZE = 20
 
-function ProfitabilityTab({ p }: { p: Profitability }) {
+function ProfitabilityTab({ p, leak }: { p: Profitability; leak: { share: number; margin: number } }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const marginLabel = (m: number): string => {
+  const marginLabel = (m: number | null): string => {
+    if (m === null) return '—'
     if (m >= 40) return t('margin.excellent')
     if (m >= 25) return t('margin.good')
     if (m >= 10) return t('margin.fair')
@@ -1025,7 +1028,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
         <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.totalRevenue')} value={money(s.totalRevenue)} sub={t('sub.customersCount', { count: s.customerCount })} />
         <KpiCard icon={FileText} accent="red" label={t('kpi.totalCosts')} value={money(s.totalCost)} sub={t('sub.jobsCount', { count: s.totalJobs })} />
         <KpiCard icon={HandCoins} accent={cmp(s.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(s.totalGrossProfit)} sub={cmp(s.totalGrossProfit, '0') < 0 ? t('margin.loss') : t('margin.profit')} tone={cmp(s.totalGrossProfit, '0') < 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct)} label={t('kpi.avgMargin')} value={`${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct)} />
+        <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct)} label={t('kpi.avgMargin')} value={s.avgMarginPct === null ? '—' : `${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct)} />
       </div>
 
       {p.customers.length === 0 ? (
@@ -1033,7 +1036,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
           <p className="py-8 text-center text-sm text-slate-400">{t('empty.noProjectProfitability')}</p>
         </Panel>
       ) : (
-        <Panel title={t('panels.customerProfitability')} icon={Users} hint={t('panels.profitabilityHint', { threshold: money(100_000) })} bodyClassName="p-0">
+        <Panel title={t('panels.customerProfitability')} icon={Users} hint={t('panels.profitabilityHint', { share: leak.share, margin: leak.margin })} bodyClassName="p-0">
           <div className="overflow-x-auto">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader>
@@ -1066,7 +1069,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                         <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</SharedTableCell>
                         <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</SharedTableCell>
                         <SharedTableCell className={cn('px-3 py-2.5 text-right font-medium tabular-nums', cmp(c.grossProfit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</SharedTableCell>
-                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct.toFixed(1)}%</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct === null ? '—' : `${c.marginPct.toFixed(1)}%`}</SharedTableCell>
                         <SharedTableCell className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></SharedTableCell>
                       </InteractiveTableRow>
                       {isOpen
@@ -1083,7 +1086,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                               <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</SharedTableCell>
                               <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.costs)}</SharedTableCell>
                               <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', cmp(j.profit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</SharedTableCell>
-                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct))}>{j.marginPct.toFixed(1)}%</SharedTableCell>
+                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct))}>{j.marginPct === null ? '—' : `${j.marginPct.toFixed(1)}%`}</SharedTableCell>
                               <SharedTableCell />
                             </SharedTableRow>
                           ))

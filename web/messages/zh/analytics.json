@@ -1173,7 +1173,7 @@
       "monthlyRevenueTrend": "月度营收趋势",
       "overdueHint": "超出各客户自身平均订购周期的天数",
       "overdueOrders": "逾期订单",
-      "profitabilityHint": "点击客户可展开任务 · ⚠️表示利润流失（营收>{threshold}，利润率<15%）",
+      "profitabilityHint": "点击客户可展开任务 · ⚠️表示利润流失（营收占比≥{share}％，利润率<{margin}％）",
       "revenueByTier": "按CLV层级划分营收",
       "rfmHint": "R/F/M评分：5最优，1最差——近期性采用固定天数阈值，频率/金额采用33/66分位数",
       "rfmSegments": "RFM细分",
@@ -1298,7 +1298,7 @@
       "firstOrderInPeriod": "期内首次下单",
       "highCriticalAccounts": "高中严重账户",
       "highCriticalChurn": "高中严重流失",
-      "highRevenueLowMargin": "高营收、利润率<15%",
+      "highRevenueLowMargin": "营收占比≥{share}％、利润率<{margin}％",
       "jobsCount": "{count}个任务",
       "last3moVsLy": "近3个月（去年同期比）",
       "marginPct": "利润率{pct}%",
@@ -1375,7 +1375,10 @@
       "platinum": "铂金",
       "silver": "白银"
     },
-    "txnsCount": "{count}笔交易"
+    "txnsCount": "{count}笔交易",
+    "errors": {
+      "paymentStatsUnavailable": "未能加载客户付款统计信息。请重新加载此仪表板。"
+    }
   },
   "vendor": {
     "title": "供应商绩效",

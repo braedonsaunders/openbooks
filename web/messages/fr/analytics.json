@@ -1173,7 +1173,7 @@
       "monthlyRevenueTrend": "Tendance du chiffre d’affaires mensuel",
       "overdueHint": "Jours écoulés au-delà du cycle de commande moyen propre à chaque client",
       "overdueOrders": "Commandes en retard",
-      "profitabilityHint": "Cliquez sur un client pour déplier les dossiers · ⚠️ marque les fuites de marge (> {threshold} de chiffre d’affaires, marge < 15 %)",
+      "profitabilityHint": "Cliquez sur un client pour déplier les dossiers · ⚠️ marque les fuites de marge (≥{share} % du chiffre d’affaires, marge <{margin} %)",
       "revenueByTier": "Chiffre d’affaires par niveau de CLV",
       "rfmHint": "Scores R/F/M : 5 le meilleur, 1 le pire — ancienneté selon des seuils de jours fixes, fréquence/montant selon les percentiles 33/66",
       "rfmSegments": "Segments RFM",
@@ -1298,7 +1298,7 @@
       "firstOrderInPeriod": "première commande sur la période",
       "highCriticalAccounts": "comptes élevés + critiques",
       "highCriticalChurn": "attrition élevée + critique",
-      "highRevenueLowMargin": "chiffre d’affaires élevé, marge < 15 %",
+      "highRevenueLowMargin": "≥{share} % du chiffre d’affaires, marge <{margin} %",
       "jobsCount": "{count} dossiers",
       "last3moVsLy": "3 derniers mois vs même période N-1",
       "marginPct": "marge de {pct} %",
@@ -1375,7 +1375,10 @@
       "platinum": "Platine",
       "silver": "Argent"
     },
-    "txnsCount": "{count} trans."
+    "txnsCount": "{count} trans.",
+    "errors": {
+      "paymentStatsUnavailable": "Les statistiques de paiement client n’ont pas été chargées. Rechargez ce tableau de bord."
+    }
   },
   "vendor": {
     "title": "Performance fournisseurs",

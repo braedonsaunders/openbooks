@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/platform/database";
 import { analyticsConfig } from "./config";
+import type { ConfigValuesOf } from "./config-spec";
 import { customerStrings, type CustomerStrings } from "./customer-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { paymentStats } from "../cash/core";
@@ -302,15 +303,12 @@ export interface CustomerData {
   };
   cohorts: { list: Cohort[]; overallRetention: number };
   insights: Insight[];
-  /** Effective tunable thresholds (org overrides over defaults). */
-  config: {
-    churnCriticalScore: number;
-    churnHighScore: number;
-    churnMediumScore: number;
-    hhiWarning: number;
-    hhiCritical: number;
-    clvYears: number;
-  };
+  /**
+   * The effective scoring thresholds the dashboard ran on (org overrides
+   * over defaults) — the view renders scoring copy and bands from these,
+   * never its own copies of the constants.
+   */
+  config: ConfigValuesOf<"customerIntelligence">;
 }
 
 /* ------------------------------------------------------------ Profitability */
@@ -325,7 +323,8 @@ export interface ProfitJob {
   revenue: string;
   costs: string;
   profit: string;
-  marginPct: number; // percentage points (24.7 not 0.247)
+  /** Percentage points (24.7 not 0.247); null when the job has no revenue. */
+  marginPct: number | null;
   transactionCount: number;
 }
 
@@ -335,7 +334,8 @@ export interface ProfitCustomer {
   totalRevenue: string;
   totalCost: string;
   grossProfit: string;
-  marginPct: number;
+  /** Percentage points; null when the customer has no revenue. */
+  marginPct: number | null;
   profitTier: ProfitTier;
   isFakeChampion: boolean;
   jobs: ProfitJob[];
@@ -345,7 +345,8 @@ export interface ProfitabilitySummary {
   totalRevenue: string;
   totalCost: string;
   totalGrossProfit: string;
-  avgMarginPct: number;
+  /** Percentage points; null when no customer has revenue. */
+  avgMarginPct: number | null;
   customerCount: number;
   totalJobs: number;
   fakeChampions: number;
@@ -407,12 +408,48 @@ interface CustomerGrowthSqlRow {
   late: string | null;
 }
 
-function profitTierOf(marginPct: number): ProfitTier {
-  if (marginPct >= 40) return "high";
-  if (marginPct >= 25) return "medium";
-  if (marginPct >= 10) return "low";
+export interface ProfitTierCutoffs {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+/**
+ * Margin tier from the configured cut-offs. An undefined margin (no
+ * revenue) is a loss when the customer cost money, marginal otherwise —
+ * never a 0% that reads as "correctly nil".
+ */
+export function profitTierOf(marginPct: number | null, profit: string, cutoffs: ProfitTierCutoffs): ProfitTier {
+  if (marginPct === null) return cmp(profit, "0") < 0 ? "loss" : "marginal";
+  if (marginPct >= cutoffs.high) return "high";
+  if (marginPct >= cutoffs.medium) return "medium";
+  if (marginPct >= cutoffs.low) return "low";
   if (marginPct >= 0) return "marginal";
   return "loss";
+}
+
+export interface ProfitLeakCutoffs {
+  /** Revenue share of the period total, in percentage points. */
+  revenueSharePct: number;
+  /** Leak candidates earn margin below this target, in percentage points. */
+  marginTarget: number;
+}
+
+/**
+ * A profit leak is relative, never an absolute amount: revenue share of the
+ * period total at or above the configured share AND margin below the
+ * configured target. Absolute cut-offs treat 100,000 JPY and 100,000 USD
+ * the same; shares are currency-neutral.
+ */
+export function isProfitLeak(
+  customer: { revenue: string; totalRevenue: string; marginPct: number | null },
+  cutoffs: ProfitLeakCutoffs,
+): boolean {
+  if (customer.marginPct === null || customer.marginPct >= cutoffs.marginTarget) return false;
+  if (cmp(customer.totalRevenue, "0") <= 0) return false;
+  const share = evaluateAnalyticsRatio(customer.revenue, customer.totalRevenue, "percent", 2);
+  if (share === null) return false;
+  return cmp(share, String(cutoffs.revenueSharePct)) >= 0;
 }
 
 function emptyProfitability(): Profitability {
@@ -458,7 +495,7 @@ export async function customerProfitability(
       coalesce(pr.name, 'Untitled project') as job_name,
       sub.base_currency as func,
       max(e.posting_date)::text as late,
-      -sum(case when a.type in ('income','income_other') then l.amount else 0 end) as revenue,
+      -sum(case when a.type in ${REVENUE_TYPES} then l.amount else 0 end) as revenue,
       sum(case when a.type in (${PNL_COST_TYPES_SQL}) then l.amount else 0 end) as costs,
       count(distinct e.id) as txns
     from ew e
@@ -514,7 +551,7 @@ export async function customerProfitability(
     };
     let c = byCustomer.get(merged.customer_id);
     if (!c) {
-      c = { customerId: merged.customer_id, customerName: strings.displayCustomerName(merged.customer_name), totalRevenue: "0", totalCost: "0", grossProfit: "0", marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
+      c = { customerId: merged.customer_id, customerName: strings.displayCustomerName(merged.customer_name), totalRevenue: "0", totalCost: "0", grossProfit: "0", marginPct: null, profitTier: "marginal", isFakeChampion: false, jobs: [] };
       byCustomer.set(merged.customer_id, c);
     }
     c.jobs.push(job);
@@ -522,19 +559,34 @@ export async function customerProfitability(
     c.totalCost = add(c.totalCost, costs);
   }
 
+  // Profit tiers and the leak definition read the effective scoring config:
+  // tiers and leaks are policy, never absolute amounts in the code.
+  const cfg = await analyticsConfig(orgId, "customerIntelligence");
+  const tierCutoffs: ProfitTierCutoffs = {
+    high: cfg.profitHighMargin!,
+    medium: cfg.profitMediumMargin!,
+    low: cfg.profitLowMargin!,
+  };
+  const leakCutoffs: ProfitLeakCutoffs = {
+    revenueSharePct: cfg.profitLeakRevenueSharePct!,
+    marginTarget: cfg.profitLeakMarginTarget!,
+  };
+  const totalRevenue = sum([...byCustomer.values()].map((c) => c.totalRevenue));
   const tierBreakdown: Record<ProfitTier, number> = { high: 0, medium: 0, low: 0, marginal: 0, loss: 0 };
   const customers = [...byCustomer.values()].map((c) => {
     c.grossProfit = exactProfit(c.totalRevenue, c.totalCost);
     c.marginPct = exactMarginPercent(c.grossProfit, c.totalRevenue);
-    c.profitTier = profitTierOf(c.marginPct);
-    c.isFakeChampion = cmp(c.totalRevenue, "100000") > 0 && c.marginPct < 15;
+    c.profitTier = profitTierOf(c.marginPct, c.grossProfit, tierCutoffs);
+    c.isFakeChampion = isProfitLeak(
+      { revenue: c.totalRevenue, totalRevenue, marginPct: c.marginPct },
+      leakCutoffs,
+    );
     c.jobs.sort((a, b) => cmp(b.revenue, a.revenue));
     tierBreakdown[c.profitTier]++;
     return c;
   });
   customers.sort((a, b) => cmp(b.totalRevenue, a.totalRevenue));
 
-  const totalRevenue = sum(customers.map((c) => c.totalRevenue));
   const totalCost = sum(customers.map((c) => c.totalCost));
   const totalGrossProfit = exactProfit(totalRevenue, totalCost);
 
@@ -1266,6 +1318,9 @@ async function readCustomerData(
     let recommendation: Recommendation = "maintain";
     let detail = strings.recMaintain;
     const velOverdue = vel.hasPattern ? vel.overdue : 0;
+    // A leak candidate always carries a margin: the leak definition refuses
+    // undefined margins, so the reprice sentence always has a figure.
+    const leakMargin: number | null = profit && profit.isFakeChampion ? profit.marginPct : null;
     if (friction && (friction.level === "critical" || friction.level === "high")) {
       recommendation = "resolve-issues";
       detail = strings.recFriction(friction.credits);
@@ -1281,9 +1336,9 @@ async function readCustomerData(
     } else if (rfm.segment === "new") {
       recommendation = "onboard";
       detail = strings.recOnboard;
-    } else if (profit?.isFakeChampion) {
+    } else if (leakMargin !== null) {
       recommendation = "reprice";
-      detail = strings.recReprice(profit.marginPct.toFixed(1));
+      detail = strings.recReprice(leakMargin.toFixed(1));
     } else if (healthScore < 50) {
       recommendation = "review";
       detail = strings.recReview;
@@ -1442,7 +1497,7 @@ async function readCustomerData(
   // The metric-only preview above deliberately skips payment statistics.
   // The full dashboard uses the canonical engine DSO, while customer rows
   // retain their own days-to-pay detail.
-  if (dsoStats === null) throw new Error("Customer payment statistics did not load. Reload this dashboard to retry.");
+  if (dsoStats === null) throw new Error(strings.paymentStatsUnavailable());
   const avgDaysToPay = dsoStats.globalAvg;
 
   let yoyGrowth: number | null = null;
@@ -1604,6 +1659,6 @@ async function readCustomerData(
     growth: { monthly, yoyGrowth, avgMonthlyGrowth, medianMonthlyRevenue: Math.round(medianRevenue), totalNewCustomers, trend },
     cohorts: { list: cohortList, overallRetention },
     insights,
-    config: { churnCriticalScore: churnCritical, churnHighScore: churnHigh, churnMediumScore: churnMedium, hhiWarning, hhiCritical, clvYears },
+    config: cfg,
   };
 }
