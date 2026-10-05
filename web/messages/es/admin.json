@@ -3280,6 +3280,16 @@
       "contract-cost-policy": {
         "title": "Política de costos de contrato",
         "description": "Qué costos de adquisición se capitalizan, durante qué período de beneficio y en qué cuentas (ASC 340-40)."
+      },
+      "package-presets": {
+        "title": "Tamaños de paquete",
+        "singular": "Tamaño de paquete",
+        "description": "Cajas y sobres reutilizables para comparar tarifas. Un tamaño sin peso no puede fijar el precio de una etiqueta."
+      },
+      "shipping-settings": {
+        "title": "Ajustes de envío",
+        "singular": "Ajustes de envío",
+        "description": "Qué cuentas llevan el costo de las etiquetas, qué tamaño completa las medidas faltantes y los valores de tarifa, recargo, seguro, firma y aduana."
       }
     },
     "fields": {
@@ -3788,7 +3798,20 @@
       "feePercent": "Porcentaje del cargo",
       "itemCategory": "Categoría del artículo",
       "percentValue": "Porcentaje de descuento",
-      "usageCount": "Usos"
+      "usageCount": "Usos",
+      "length": "Largo",
+      "width": "Ancho",
+      "height": "Alto",
+      "dimUnit": "Unidad de medida",
+      "weightUnit": "Unidad de peso",
+      "shippingExpenseAccountId": "Cuenta de gastos de envío",
+      "carrierPayableAccountId": "Cuenta por pagar al transportista",
+      "defaultPresetId": "Paquete predeterminado",
+      "defaultRateRule": "Regla de tarifa predeterminada",
+      "markupBps": "Recargo",
+      "defaultInsurance": "Seguro predeterminado",
+      "defaultSignature": "Firma predeterminada",
+      "customsDefaults": "Valores de aduana"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
@@ -3916,7 +3939,10 @@
       "ianaTimezone": "Introduzca una zona horaria IANA, como Europe/Madrid.",
       "contractCostPracticalExpedient": "Cuando está activado, los costos cuyo período de beneficio es de doce meses o menos se llevan a gasto de inmediato en lugar de capitalizarse.",
       "contractCostCommensurate": "Una comisión de renovación igual o superior a esta parte de la comisión inicial limita la amortización al plazo del contrato, incluso con base de vida del cliente.",
-      "minorAmount": "Unidades menores enteras de la moneda: 1000 significa 10,00 USD."
+      "minorAmount": "Unidades menores enteras de la moneda: 1000 significa 10,00 USD.",
+      "shippingDefaultPreset": "Se usa cuando el envío no tiene un tamaño de paquete propio.",
+      "shippingMarkup": "Cargo adicional sobre la tarifa del transportista, en puntos básicos. 100 es un uno por ciento.",
+      "shippingCustomsDefaults": "Descripción de contenido predeterminada para envíos al extranjero."
     },
     "options": {
       "usageAggregation": {
@@ -4536,6 +4562,30 @@
       "restockingFeeKind": {
         "percent": "Porcentaje del valor abonado",
         "fixed": "Importe fijo"
+      },
+      "dimUnit": {
+        "cm": "Centímetros",
+        "in": "Pulgadas"
+      },
+      "weightUnit": {
+        "g": "Gramos",
+        "kg": "Kilogramos",
+        "oz": "Onzas",
+        "lb": "Libras"
+      },
+      "rateRule": {
+        "cheapest": "Más económica",
+        "fastest": "Más rápida",
+        "cheapest_by_date": "Más económica que llega a tiempo"
+      },
+      "insuranceDefault": {
+        "none": "Sin seguro",
+        "carrier_full": "Valor total del transportista"
+      },
+      "signatureDefault": {
+        "none": "Sin firma",
+        "direct": "Firma directa",
+        "adult": "Firma de un adulto"
       }
     },
     "laborCosting": {
@@ -5716,6 +5766,51 @@
       "employerContribution": {
         "label": "Aportación de la empresa",
         "description": "Un coste que paga la empresa además de los salarios y que no aparece en la nómina de la persona empleada."
+      }
+    },
+    "shipping": {
+      "navTitle": "Envíos",
+      "title": "Envíos",
+      "description": "Cuentas de transportista, tamaños de paquete y valores iniciales de cada envío.",
+      "tabs": {
+        "accounts": "Cuentas de transportista"
+      },
+      "accounts": {
+        "title": "Cuentas de transportista",
+        "description": "Conecta EasyPost o Shippo para comparar tarifas en vivo y comprar etiquetas sin salir del envío. Las claves de API se sellan y no se vuelven a mostrar.",
+        "connect": "Conectar cuenta",
+        "name": "Nombre",
+        "namePlaceholder": "Cuenta principal de EasyPost",
+        "provider": "Proveedor",
+        "mode": "Modo",
+        "modeTest": "Prueba",
+        "modeLive": "Producción",
+        "apiKey": "Clave de API",
+        "keyPlaceholder": "Pega la clave de API del proveedor",
+        "keyKeepPlaceholder": "Deja en blanco para conservar la clave guardada",
+        "makeDefault": "Cuenta predeterminada para nuevos envíos",
+        "updated": "Cuenta guardada.",
+        "connected": "Cuenta conectada.",
+        "testOk": "La conexión con {name} funciona.",
+        "disconnected": "{name} pausada. Las etiquetas y el historial de costos se conservan.",
+        "disconnectConfirm": "¿Pausar {name}? Las etiquetas y el historial de costos se conservan.",
+        "test": "Probar conexión",
+        "disconnect": "Pausar",
+        "defaultBadge": "Predeterminada",
+        "noKey": "Sin clave guardada",
+        "emptyTitle": "Aún no hay cuentas de transportista",
+        "emptyDescription": "Conecta una cuenta de EasyPost o Shippo para comparar tarifas en vivo y comprar etiquetas desde el envío.",
+        "status": {
+          "active": "Activa",
+          "disabled": "Pausada",
+          "error": "Requiere atención"
+        },
+        "errors": {
+          "loadFailed": "No se pudieron cargar las cuentas de transportista.",
+          "saveFailed": "No se pudo guardar la cuenta.",
+          "testFailed": "La prueba de conexión falló.",
+          "disconnectFailed": "No se pudo pausar la cuenta."
+        }
       }
     }
   },

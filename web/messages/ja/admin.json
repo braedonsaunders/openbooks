@@ -3400,6 +3400,16 @@
       "contract-cost-policy": {
         "title": "契約コストポリシー",
         "description": "どの獲得コストを資産化し、どの受益期間で、どの科目に計上するか(ASC 340-40)。"
+      },
+      "package-presets": {
+        "title": "梱包プリセット",
+        "singular": "梱包プリセット",
+        "description": "運賃比較に使う箱・封筒サイズの再利用設定。重量のないプリセットではラベル料金を算出できません。"
+      },
+      "shipping-settings": {
+        "title": "配送設定",
+        "singular": "配送設定",
+        "description": "ラベル原価を計上する勘定、不足サイズを補う梱包、運賃・割増・保険・署名・通関の初期値。"
       }
     },
     "fields": {
@@ -3908,7 +3918,20 @@
       "feePercent": "手数料率",
       "itemCategory": "商品カテゴリ",
       "percentValue": "割引率",
-      "usageCount": "利用回数"
+      "usageCount": "利用回数",
+      "length": "長さ",
+      "width": "幅",
+      "height": "高さ",
+      "dimUnit": "サイズ単位",
+      "weightUnit": "重量単位",
+      "shippingExpenseAccountId": "配送費勘定",
+      "carrierPayableAccountId": "運送会社未払勘定",
+      "defaultPresetId": "既定の梱包",
+      "defaultRateRule": "既定の運賃ルール",
+      "markupBps": "割増",
+      "defaultInsurance": "既定の保険",
+      "defaultSignature": "既定の署名",
+      "customsDefaults": "通関の初期値"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -4036,7 +4059,10 @@
       "ianaTimezone": "Asia/Tokyo などの IANA タイムゾーンを入力してください。",
       "contractCostPracticalExpedient": "オンの場合、受益期間が12か月以下のコストは資産化せず即時費用処理されます。",
       "contractCostCommensurate": "初回手数料に対するこの割合以上の更新手数料は、顧客ライフ基準でも償却を契約期間に限定します。",
-      "minorAmount": "通貨の補助単位の整数値。1000は米ドルで10.00を意味します。"
+      "minorAmount": "通貨の補助単位の整数値。1000は米ドルで10.00を意味します。",
+      "shippingDefaultPreset": "出荷に梱包サイズがない場合に使用されます。",
+      "shippingMarkup": "運送会社運賃への追加料金（ベーシスポイント）。100が1パーセントです。",
+      "shippingCustomsDefaults": "国外への出荷に使う内容品の既定説明。"
     },
     "options": {
       "usageAggregation": {
@@ -4656,6 +4682,30 @@
       "restockingFeeKind": {
         "percent": "返金額に対する割合",
         "fixed": "定額"
+      },
+      "dimUnit": {
+        "cm": "センチメートル",
+        "in": "インチ"
+      },
+      "weightUnit": {
+        "g": "グラム",
+        "kg": "キログラム",
+        "oz": "オンス",
+        "lb": "ポンド"
+      },
+      "rateRule": {
+        "cheapest": "最安",
+        "fastest": "最速",
+        "cheapest_by_date": "期日到着の最安"
+      },
+      "insuranceDefault": {
+        "none": "保険なし",
+        "carrier_full": "運送会社の全額補償"
+      },
+      "signatureDefault": {
+        "none": "署名なし",
+        "direct": "直接署名",
+        "adult": "成人の署名"
       }
     },
     "invoicing": {
@@ -5716,6 +5766,51 @@
       "employerContribution": {
         "label": "事業主負担",
         "description": "賃金に加えて事業主が負担し、従業員の給与には表示されない費用。"
+      }
+    },
+    "shipping": {
+      "navTitle": "配送",
+      "title": "配送",
+      "description": "運送会社アカウント、梱包サイズ、各出荷の初期値を管理します。",
+      "tabs": {
+        "accounts": "運送会社アカウント"
+      },
+      "accounts": {
+        "title": "運送会社アカウント",
+        "description": "EasyPostやShippoを接続し、出荷画面からリアルタイム運賃を比較してラベルを購入できます。APIキーは封印され、再表示されません。",
+        "connect": "アカウントを接続",
+        "name": "名前",
+        "namePlaceholder": "メインのEasyPostアカウント",
+        "provider": "プロバイダー",
+        "mode": "モード",
+        "modeTest": "テスト",
+        "modeLive": "本番",
+        "apiKey": "APIキー",
+        "keyPlaceholder": "プロバイダーのAPIキーを貼り付け",
+        "keyKeepPlaceholder": "保存済みキーを維持する場合は空欄",
+        "makeDefault": "新規出荷の既定アカウント",
+        "updated": "アカウントを保存しました。",
+        "connected": "アカウントを接続しました。",
+        "testOk": "{name}への接続は正常です。",
+        "disconnected": "{name}を停止しました。ラベルと原価履歴は保持されます。",
+        "disconnectConfirm": "{name}を停止しますか。ラベルと原価履歴は保持されます。",
+        "test": "接続をテスト",
+        "disconnect": "停止",
+        "defaultBadge": "既定",
+        "noKey": "キー未登録",
+        "emptyTitle": "運送会社アカウントがありません",
+        "emptyDescription": "EasyPostやShippoのアカウントを接続し、リアルタイム運賃の比較とラベル購入を出荷画面から行えます。",
+        "status": {
+          "active": "有効",
+          "disabled": "停止中",
+          "error": "要確認"
+        },
+        "errors": {
+          "loadFailed": "運送会社アカウントを読み込めませんでした。",
+          "saveFailed": "アカウントを保存できませんでした。",
+          "testFailed": "接続テストに失敗しました。",
+          "disconnectFailed": "アカウントを停止できませんでした。"
+        }
       }
     }
   },

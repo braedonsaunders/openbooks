@@ -95,6 +95,7 @@ export function SetupNav({
   crmEnabled = true,
   bankFeedsEnabled = false,
   onlinePaymentsEnabled = false,
+  shippingEnabled = false,
   payrollEnabled = false,
   hrmEnabled = false,
 }: {
@@ -111,6 +112,7 @@ export function SetupNav({
   crmEnabled?: boolean
   bankFeedsEnabled?: boolean
   onlinePaymentsEnabled?: boolean
+  shippingEnabled?: boolean
   payrollEnabled?: boolean
   hrmEnabled?: boolean
 }) {
@@ -249,6 +251,17 @@ export function SetupNav({
                   ...(payrollEnabled
                     ? [{ href: '/admin/setup/payroll', label: t('payroll.navTitle'), iconKey: 'payments' }]
                     : []),
+                ]
+              : group.key === 'inventory'
+              ? [
+                  ...(shippingEnabled
+                    ? [{ href: '/admin/setup/shipping', label: t('shipping.navTitle'), iconKey: 'package' }]
+                    : []),
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
                 ]
               : group.key === 'assets'
               ? fixedAssetsEnabled

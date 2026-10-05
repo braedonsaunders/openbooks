@@ -3325,6 +3325,16 @@
       "contract-cost-policy": {
         "title": "Contract Cost Policy",
         "description": "Which acquisition costs capitalize, over what benefit period, and into which accounts (ASC 340-40)."
+      },
+      "package-presets": {
+        "title": "Package presets",
+        "singular": "Package preset",
+        "description": "Reusable box and envelope sizes for rate shopping. A preset without a weight cannot price a label."
+      },
+      "shipping-settings": {
+        "title": "Shipping settings",
+        "singular": "Shipping settings",
+        "description": "Which ledger accounts carry label cost, which package fills in missing sizes, and the rate, markup, insurance, signature, and customs defaults."
       }
     },
     "fields": {
@@ -3833,7 +3843,20 @@
       "feePercent": "Fee percent",
       "itemCategory": "Item category",
       "percentValue": "Percent off",
-      "usageCount": "Times used"
+      "usageCount": "Times used",
+      "length": "Length",
+      "width": "Width",
+      "height": "Height",
+      "dimUnit": "Size unit",
+      "weightUnit": "Weight unit",
+      "shippingExpenseAccountId": "Shipping expense account",
+      "carrierPayableAccountId": "Carrier payable account",
+      "defaultPresetId": "Default package",
+      "defaultRateRule": "Default rate rule",
+      "markupBps": "Markup",
+      "defaultInsurance": "Default insurance",
+      "defaultSignature": "Default signature",
+      "customsDefaults": "Customs defaults"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -3961,7 +3984,10 @@
       "ianaTimezone": "Enter an IANA time zone, such as America/Toronto.",
       "contractCostPracticalExpedient": "When on, costs whose benefit period is twelve months or less expense immediately instead of capitalizing.",
       "contractCostCommensurate": "A renewal commission at or above this share of the initial commission confines amortization to the contract term, even under customer-life basis.",
-      "minorAmount": "Whole minor units of the currency: 1000 means 10.00 in USD."
+      "minorAmount": "Whole minor units of the currency: 1000 means 10.00 in USD.",
+      "shippingDefaultPreset": "Used when a shipment has no package size of its own.",
+      "shippingMarkup": "Extra charge added to the carrier rate, in basis points. 100 is one percent.",
+      "shippingCustomsDefaults": "Default contents description for shipments that leave the country."
     },
     "options": {
       "usageAggregation": {
@@ -4581,6 +4607,30 @@
       "restockingFeeKind": {
         "percent": "Percent of credited value",
         "fixed": "Fixed amount"
+      },
+      "dimUnit": {
+        "cm": "Centimeters",
+        "in": "Inches"
+      },
+      "weightUnit": {
+        "g": "Grams",
+        "kg": "Kilograms",
+        "oz": "Ounces",
+        "lb": "Pounds"
+      },
+      "rateRule": {
+        "cheapest": "Cheapest",
+        "fastest": "Fastest",
+        "cheapest_by_date": "Cheapest that arrives by date"
+      },
+      "insuranceDefault": {
+        "none": "No insurance",
+        "carrier_full": "Full carrier value"
+      },
+      "signatureDefault": {
+        "none": "No signature",
+        "direct": "Direct signature",
+        "adult": "Adult signature"
       }
     },
     "payroll": {
@@ -5716,6 +5766,51 @@
       "employerContribution": {
         "label": "Employer contribution",
         "description": "A cost the employer pays on top of wages that does not appear in the employee’s pay."
+      }
+    },
+    "shipping": {
+      "navTitle": "Shipping",
+      "title": "Shipping",
+      "description": "Carrier accounts, package sizes, and the defaults every shipment starts from.",
+      "tabs": {
+        "accounts": "Carrier accounts"
+      },
+      "accounts": {
+        "title": "Carrier accounts",
+        "description": "Connect EasyPost or Shippo to shop live rates and buy labels without leaving the shipment. API keys are sealed and never shown again.",
+        "connect": "Connect account",
+        "name": "Name",
+        "namePlaceholder": "Main EasyPost account",
+        "provider": "Provider",
+        "mode": "Mode",
+        "modeTest": "Test",
+        "modeLive": "Live",
+        "apiKey": "API key",
+        "keyPlaceholder": "Paste the provider API key",
+        "keyKeepPlaceholder": "Leave blank to keep the stored key",
+        "makeDefault": "Default account for new shipments",
+        "updated": "Account saved.",
+        "connected": "Account connected.",
+        "testOk": "Connection to {name} works.",
+        "disconnected": "{name} parked. Labels and cost history are kept.",
+        "disconnectConfirm": "Park {name}? Labels and cost history are kept.",
+        "test": "Test connection",
+        "disconnect": "Park",
+        "defaultBadge": "Default",
+        "noKey": "No key stored",
+        "emptyTitle": "No carrier accounts yet",
+        "emptyDescription": "Connect an EasyPost or Shippo account to shop live rates and buy labels from a shipment.",
+        "status": {
+          "active": "Active",
+          "disabled": "Parked",
+          "error": "Needs attention"
+        },
+        "errors": {
+          "loadFailed": "Carrier accounts could not be loaded.",
+          "saveFailed": "The account could not be saved.",
+          "testFailed": "The connection test failed.",
+          "disconnectFailed": "The account could not be parked."
+        }
       }
     }
   },

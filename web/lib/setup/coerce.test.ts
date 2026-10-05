@@ -7,6 +7,7 @@ import {
   coerceField,
   describeDbError,
   scaleShapeCheckRefusal,
+  shippingCheckRefusal,
 } from './coerce.ts'
 import { foldWholeNumber } from './whole-number'
 import { SETUP_ENTITY_BY_KEY, type SetupField } from './registry.ts'
@@ -291,6 +292,24 @@ test('carrier storage checks answer with the named refusal, never the raw CHECK'
   assert.equal(carrierCheckRefusal('putaway-rules', check('carriers_services_check')), null)
   assert.equal(carrierCheckRefusal('carriers', check('some_other_check')), null)
   assert.equal(carrierCheckRefusal('carriers', new Error('nope')), null)
+})
+
+test('shipping storage checks answer with the named refusal, never the raw CHECK', () => {
+  const check = (constraint: string) => Object.assign(new Error('driver text'), {
+    code: '23514',
+    cause: { constraint, message: 'raw CHECK text' },
+  })
+  assert.deepEqual(shippingCheckRefusal('package-presets', check('package_presets_weight_positive')), {
+    status: 400,
+    body: { error: 'A package preset needs a positive weight so a label can be priced', code: 'invalid' },
+  })
+  assert.match(
+    shippingCheckRefusal('shipping-settings', check('shipping_settings_rate_rule_valid'))?.body.error ?? '',
+    /cheapest, fastest/,
+  )
+  assert.equal(shippingCheckRefusal('carriers', check('package_presets_weight_positive')), null)
+  assert.equal(shippingCheckRefusal('package-presets', check('some_other_check')), null)
+  assert.equal(shippingCheckRefusal('package-presets', new Error('nope')), null)
 })
 
 test('structured availability binds JSONB text and preserves offset-bearing timestamps and evidence', () => {

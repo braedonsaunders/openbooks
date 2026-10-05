@@ -406,6 +406,35 @@ export function carrierCheckRefusal(
   return message ? { status: 400, body: { error: message, code: 'invalid' } } : null
 }
 
+const SHIPPING_CHECK_REFUSALS: Record<string, Record<string, string>> = {
+  'package-presets': {
+    package_presets_name_nonblank: 'A package preset needs a name',
+    package_presets_dims_positive: 'Box dimensions must be positive numbers — check length, width and height',
+    package_presets_weight_positive: 'A package preset needs a positive weight so a label can be priced',
+  },
+  'shipping-settings': {
+    shipping_settings_rate_rule_valid: 'The default rate rule is cheapest, fastest, or cheapest that arrives by date',
+    shipping_settings_markup_nonnegative: 'The shipping markup cannot be negative',
+    shipping_settings_insurance_valid: 'Default insurance is none or the carrier full value',
+    shipping_settings_signature_valid: 'Default signature is none, direct, or adult',
+  },
+}
+
+/**
+ * Residual storage refusal for shipping configuration. Select and integer
+ * bounds name these before the write; reaching a CHECK means a defense
+ * layer was bypassed or drifted, and the answer is still the named
+ * refusal rather than the raw constraint text.
+ */
+export function shippingCheckRefusal(
+  entityKey: string,
+  e: unknown,
+): { status: 400; body: { error: string; code: 'invalid' } } | null {
+  if (pgErrorCode(e) !== '23514') return null
+  const message = SHIPPING_CHECK_REFUSALS[entityKey]?.[pgErrorConstraint(e) ?? '']
+  return message ? { status: 400, body: { error: message, code: 'invalid' } } : null
+}
+
 /** Translate a few common Postgres error codes into stable, client-friendly strings. */
 export function describeDbError(e: unknown): string {
   const code = pgErrorCode(e)

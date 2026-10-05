@@ -3280,6 +3280,16 @@
       "contract-cost-policy": {
         "title": "Méthode des coûts de contrat",
         "description": "Quels coûts d’acquisition sont capitalisés, sur quelle période d’avantage et dans quels comptes (ASC 340-40)."
+      },
+      "package-presets": {
+        "title": "Formats de colis",
+        "singular": "Format de colis",
+        "description": "Boîtes et enveloppes réutilisables pour comparer les tarifs. Un format sans poids ne peut pas tarifer une étiquette."
+      },
+      "shipping-settings": {
+        "title": "Réglages d’expédition",
+        "singular": "Réglages d’expédition",
+        "description": "Les comptes qui portent le coût des étiquettes, le format qui complète les tailles manquantes, et les réglages de tarif, majoration, assurance, signature et douane."
       }
     },
     "fields": {
@@ -3788,7 +3798,20 @@
       "feePercent": "Pourcentage de frais",
       "itemCategory": "Catégorie d'article",
       "percentValue": "Pourcentage de remise",
-      "usageCount": "Utilisations"
+      "usageCount": "Utilisations",
+      "length": "Longueur",
+      "width": "Largeur",
+      "height": "Hauteur",
+      "dimUnit": "Unité de taille",
+      "weightUnit": "Unité de poids",
+      "shippingExpenseAccountId": "Compte de frais d’expédition",
+      "carrierPayableAccountId": "Compte transporteur à payer",
+      "defaultPresetId": "Colis par défaut",
+      "defaultRateRule": "Règle de tarif par défaut",
+      "markupBps": "Majoration",
+      "defaultInsurance": "Assurance par défaut",
+      "defaultSignature": "Signature par défaut",
+      "customsDefaults": "Réglages de douane"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
@@ -3916,7 +3939,10 @@
       "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris.",
       "contractCostPracticalExpedient": "Quand elle est activée, les coûts dont la période d’avantage est de douze mois ou moins sont passés en charges aussitôt au lieu d’être capitalisés.",
       "contractCostCommensurate": "Une commission de renouvellement égale ou supérieure à cette part de la commission initiale limite l’amortissement à la durée du contrat, même en base de durée de vie client.",
-      "minorAmount": "Sous-unités entières de la devise : 1000 vaut 10,00 USD."
+      "minorAmount": "Sous-unités entières de la devise : 1000 vaut 10,00 USD.",
+      "shippingDefaultPreset": "Utilisé quand l’envoi n’a pas son propre format de colis.",
+      "shippingMarkup": "Supplément ajouté au tarif du transporteur, en points de base. 100 vaut un pour cent.",
+      "shippingCustomsDefaults": "Description de contenu par défaut pour les envois vers l’étranger."
     },
     "options": {
       "usageAggregation": {
@@ -4536,6 +4562,30 @@
       "restockingFeeKind": {
         "percent": "Pourcentage de la valeur créditée",
         "fixed": "Montant fixe"
+      },
+      "dimUnit": {
+        "cm": "Centimètres",
+        "in": "Pouces"
+      },
+      "weightUnit": {
+        "g": "Grammes",
+        "kg": "Kilogrammes",
+        "oz": "Onces",
+        "lb": "Livres"
+      },
+      "rateRule": {
+        "cheapest": "Le moins cher",
+        "fastest": "Le plus rapide",
+        "cheapest_by_date": "Le moins cher arrivé à temps"
+      },
+      "insuranceDefault": {
+        "none": "Sans assurance",
+        "carrier_full": "Valeur totale du transporteur"
+      },
+      "signatureDefault": {
+        "none": "Sans signature",
+        "direct": "Signature directe",
+        "adult": "Signature d’un adulte"
       }
     },
     "laborCosting": {
@@ -5716,6 +5766,51 @@
       "employerContribution": {
         "label": "Cotisation de l’employeur",
         "description": "Un coût payé par l’employeur en plus des salaires, qui n’apparaît pas dans la paie de l’employé."
+      }
+    },
+    "shipping": {
+      "navTitle": "Expédition",
+      "title": "Expédition",
+      "description": "Comptes transporteurs, formats de colis et réglages de chaque envoi.",
+      "tabs": {
+        "accounts": "Comptes transporteurs"
+      },
+      "accounts": {
+        "title": "Comptes transporteurs",
+        "description": "Connectez EasyPost ou Shippo pour comparer les tarifs en direct et acheter des étiquettes sans quitter l’envoi. Les clés d’API sont scellées et ne sont plus jamais affichées.",
+        "connect": "Connecter un compte",
+        "name": "Nom",
+        "namePlaceholder": "Compte EasyPost principal",
+        "provider": "Fournisseur",
+        "mode": "Mode",
+        "modeTest": "Test",
+        "modeLive": "Production",
+        "apiKey": "Clé d’API",
+        "keyPlaceholder": "Collez la clé d’API du fournisseur",
+        "keyKeepPlaceholder": "Laissez vide pour garder la clé enregistrée",
+        "makeDefault": "Compte par défaut des nouveaux envois",
+        "updated": "Compte enregistré.",
+        "connected": "Compte connecté.",
+        "testOk": "La connexion à {name} fonctionne.",
+        "disconnected": "{name} mis en pause. Les étiquettes et les coûts sont conservés.",
+        "disconnectConfirm": "Mettre {name} en pause ? Les étiquettes et les coûts sont conservés.",
+        "test": "Tester la connexion",
+        "disconnect": "Mettre en pause",
+        "defaultBadge": "Par défaut",
+        "noKey": "Aucune clé enregistrée",
+        "emptyTitle": "Aucun compte transporteur",
+        "emptyDescription": "Connectez un compte EasyPost ou Shippo pour comparer les tarifs en direct et acheter des étiquettes depuis l’envoi.",
+        "status": {
+          "active": "Actif",
+          "disabled": "En pause",
+          "error": "Attention requise"
+        },
+        "errors": {
+          "loadFailed": "Les comptes transporteurs n’ont pas pu être chargés.",
+          "saveFailed": "Le compte n’a pas pu être enregistré.",
+          "testFailed": "Le test de connexion a échoué.",
+          "disconnectFailed": "Le compte n’a pas pu être mis en pause."
+        }
       }
     }
   },

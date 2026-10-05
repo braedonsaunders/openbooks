@@ -3400,6 +3400,16 @@
       "contract-cost-policy": {
         "title": "Vertragskostenrichtlinie",
         "description": "Welche Akquisitionskosten aktiviert werden, über welchen Nutzenzeitraum und auf welche Konten (ASC 340-40)."
+      },
+      "package-presets": {
+        "title": "Paketvorlagen",
+        "singular": "Paketvorlage",
+        "description": "Wiederverwendbare Karton- und Umschlaggrößen für die Tarifsuche. Eine Vorlage ohne Gewicht kann kein Etikett bepreisen."
+      },
+      "shipping-settings": {
+        "title": "Versandeinstellungen",
+        "singular": "Versandeinstellungen",
+        "description": "Welche Konten die Etikettkosten tragen, welche Vorlage fehlende Größen ergänzt, und die Vorgaben für Tarif, Aufschlag, Versicherung, Unterschrift und Zoll."
       }
     },
     "fields": {
@@ -3908,7 +3918,20 @@
       "feePercent": "Gebühr in Prozent",
       "itemCategory": "Artikelkategorie",
       "percentValue": "Rabatt in Prozent",
-      "usageCount": "Nutzungen"
+      "usageCount": "Nutzungen",
+      "length": "Länge",
+      "width": "Breite",
+      "height": "Höhe",
+      "dimUnit": "Größeneinheit",
+      "weightUnit": "Gewichtseinheit",
+      "shippingExpenseAccountId": "Versandaufwandskonto",
+      "carrierPayableAccountId": "Frachtführerkonto",
+      "defaultPresetId": "Standardpaket",
+      "defaultRateRule": "Standardtarifregel",
+      "markupBps": "Aufschlag",
+      "defaultInsurance": "Standardversicherung",
+      "defaultSignature": "Standardunterschrift",
+      "customsDefaults": "Zollvorgaben"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
@@ -4036,7 +4059,10 @@
       "ianaTimezone": "Geben Sie eine IANA-Zeitzone ein, z. B. Europe/Berlin.",
       "contractCostPracticalExpedient": "Wenn aktiv, werden Kosten mit einem Nutzenzeitraum von zwölf Monaten oder weniger sofort aufgewandt statt aktiviert.",
       "contractCostCommensurate": "Eine Folgeprovision ab diesem Anteil der Erstprovision begrenzt die Abschreibung auf die Vertragslaufzeit, auch bei Kundenlaufzeit-Basis.",
-      "minorAmount": "Ganze Nebeneinheiten der Währung: 1000 bedeutet 10,00 USD."
+      "minorAmount": "Ganze Nebeneinheiten der Währung: 1000 bedeutet 10,00 USD.",
+      "shippingDefaultPreset": "Wird verwendet, wenn eine Sendung keine eigene Paketgröße hat.",
+      "shippingMarkup": "Zusätzlicher Aufschlag auf den Frachttarif, in Basispunkten. 100 entspricht einem Prozent.",
+      "shippingCustomsDefaults": "Standard-Inhaltsbeschreibung für Sendungen ins Ausland."
     },
     "options": {
       "usageAggregation": {
@@ -4656,6 +4682,30 @@
       "restockingFeeKind": {
         "percent": "Prozent des Gutschriftswerts",
         "fixed": "Festbetrag"
+      },
+      "dimUnit": {
+        "cm": "Zentimeter",
+        "in": "Zoll"
+      },
+      "weightUnit": {
+        "g": "Gramm",
+        "kg": "Kilogramm",
+        "oz": "Unzen",
+        "lb": "Pfund"
+      },
+      "rateRule": {
+        "cheapest": "Günstigster",
+        "fastest": "Schnellster",
+        "cheapest_by_date": "Günstigster mit Terminankunft"
+      },
+      "insuranceDefault": {
+        "none": "Keine Versicherung",
+        "carrier_full": "Volle Frachtführerhaftung"
+      },
+      "signatureDefault": {
+        "none": "Keine Unterschrift",
+        "direct": "Direkte Unterschrift",
+        "adult": "Unterschrift eines Erwachsenen"
       }
     },
     "bankFeeds": {
@@ -5716,6 +5766,51 @@
       "employerContribution": {
         "label": "Arbeitgeberbeitrag",
         "description": "Kosten, die der Arbeitgeber zusätzlich zum Lohn trägt und die nicht in der Abrechnung des Mitarbeitenden erscheinen."
+      }
+    },
+    "shipping": {
+      "navTitle": "Versand",
+      "title": "Versand",
+      "description": "Frachtkonten, Paketgrößen und die Vorgaben für jede Sendung.",
+      "tabs": {
+        "accounts": "Frachtkonten"
+      },
+      "accounts": {
+        "title": "Frachtkonten",
+        "description": "EasyPost oder Shippo verbinden, um Live-Tarife zu vergleichen und Etiketten direkt an der Sendung zu kaufen. API-Schlüssel werden versiegelt und nie wieder angezeigt.",
+        "connect": "Konto verbinden",
+        "name": "Name",
+        "namePlaceholder": "EasyPost-Hauptkonto",
+        "provider": "Anbieter",
+        "mode": "Modus",
+        "modeTest": "Test",
+        "modeLive": "Live",
+        "apiKey": "API-Schlüssel",
+        "keyPlaceholder": "API-Schlüssel des Anbieters einfügen",
+        "keyKeepPlaceholder": "Leer lassen, um den gespeicherten Schlüssel zu behalten",
+        "makeDefault": "Standardkonto für neue Sendungen",
+        "updated": "Konto gespeichert.",
+        "connected": "Konto verbunden.",
+        "testOk": "Die Verbindung zu {name} funktioniert.",
+        "disconnected": "{name} geparkt. Etiketten und Kosten bleiben erhalten.",
+        "disconnectConfirm": "{name} parken? Etiketten und Kosten bleiben erhalten.",
+        "test": "Verbindung testen",
+        "disconnect": "Parken",
+        "defaultBadge": "Standard",
+        "noKey": "Kein Schlüssel hinterlegt",
+        "emptyTitle": "Noch keine Frachtkonten",
+        "emptyDescription": "Ein EasyPost- oder Shippo-Konto verbinden, um Live-Tarife zu vergleichen und Etiketten an der Sendung zu kaufen.",
+        "status": {
+          "active": "Aktiv",
+          "disabled": "Geparkt",
+          "error": "Handlungsbedarf"
+        },
+        "errors": {
+          "loadFailed": "Frachtkonten konnten nicht geladen werden.",
+          "saveFailed": "Das Konto konnte nicht gespeichert werden.",
+          "testFailed": "Der Verbindungstest ist fehlgeschlagen.",
+          "disconnectFailed": "Das Konto konnte nicht geparkt werden."
+        }
       }
     }
   },

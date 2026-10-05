@@ -55,6 +55,7 @@ export async function SetupWorkspace({
             crmEnabled={featureEnabled(features, 'crm')}
             bankFeedsEnabled={featureEnabled(features, 'bankFeeds')}
             onlinePaymentsEnabled={featureEnabled(features, 'onlinePayments')}
+            shippingEnabled={featureEnabled(features, 'shippingHub')}
             payrollEnabled={featureEnabled(features, 'payroll')}
             hrmEnabled={featureEnabled(features, 'hrm')}
           />
