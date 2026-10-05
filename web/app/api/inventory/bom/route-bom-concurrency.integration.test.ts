@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
 
 // Bill of materials replacement races (web/app/api/inventory/bom/route.ts).
 // ROW EXCLUSIVE table locks do not conflict with each other, so two PUTs on
@@ -18,20 +19,34 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
+const responseKey = Symbol.for("openbooks.bom-route-test-next-response");
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+// The real refusal contract, shared with the doubles below: they answer
+// with actual NextResponse refusals, never plain Responses, because the
+// route checks instanceof NextResponse exactly like production.
+(globalThis as typeof globalThis & Record<symbol, unknown>)[responseKey] = NextResponse;
 
 const mockFeatureGates = `
+  const NextResponse = globalThis[Symbol.for('openbooks.bom-route-test-next-response')]
   const state = globalThis[Symbol.for('openbooks.bom-route-concurrency-test')]
-  export async function guardFeaturePermission(_permission, _featureKey) {
-    if (!state.authz) return new Response(null, { status: 403 })
+  export async function guardFeaturePermission(permission, _featureKey) {
+    if (!state.authz) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    if (!state.authz.permissions.has(permission)) return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
     return state.authz
   }
 `;
 
 const mockAuthz = `
+  const NextResponse = globalThis[Symbol.for('openbooks.bom-route-test-next-response')]
+  const state = globalThis[Symbol.for('openbooks.bom-route-concurrency-test')]
   export function guardUnrestrictedScope(authz) {
     if (authz.allowedSubsidiaryIds == null) return null
     return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+  }
+  export function guardPermission(perm) {
+    if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    if (!state.authz.permissions.has(perm)) return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
+    return state.authz
   }
 `;
 
@@ -236,6 +251,36 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     assert.equal(rebody.components[0]!.name, "Component");
     assert.equal(rebody.components[0]!.isActive, false);
     assert.ok(!rebody.validItems.some((item) => item.id === org.items.component));
+    // Reading serves both grants: the catalog grant opens the recipe to a
+    // reader who cannot change it, and the established setup grant keeps
+    // working. A caller with neither is refused naming the primary grant.
+    const readerUrl = `http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`;
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["items.read"]),
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    const reader = await GET(new Request(readerUrl));
+    assert.equal(reader.status, 200);
+    assert.equal((await reader.json() as { assemblyItemId: string }).assemblyItemId, org.items.assembly);
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["unrelated.hold"]),
+      allowedSubsidiaryIds: null,
+    };
+    const refused = await GET(new Request(readerUrl));
+    assert.equal(refused.status, 403);
+    assert.equal((await refused.json() as { error: string }).error, "missing permission: items.read");
+    // A catalog reader cannot replace the shared recipe: the write gate
+    // refuses naming its own grant before any read or write.
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["items.read"]),
+      allowedSubsidiaryIds: null,
+    };
+    const readerPut = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
+    assert.equal(readerPut.status, 403);
+    assert.equal((await readerPut.json() as { error: string }).error, "missing permission: admin.setup.manage");
   } finally {
     await dropScratchOrg(org.orgId);
   }
