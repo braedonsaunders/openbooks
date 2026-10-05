@@ -11,24 +11,31 @@ const { payrollHome } = await import('./payroll.ts')
 
 const DB = !!env.OPENBOOKS_DB_URL
 
-// The payroll tax year is a pack property (HMRC's 6 April), never the
-// calendar year: in February 2026 a GB org is still in tax year 2025, and
-// the YTD/run counts must follow the pack there instead of silently
-// splitting one statutory year across two calendar years.
-test('the tax year follows the installed pack, not the calendar', { skip: !DB }, async () => {
+type PackOrg = {
+  scratch: Awaited<ReturnType<typeof createScratchOrg>>
+  actorId: string
+  scheduleId: string
+}
+
+/** One scratch org with a payroll actor, installed packs, and a monthly schedule. */
+async function seedPackOrg(countries: string[]): Promise<PackOrg> {
   const scratch = await withBypass(() => createScratchOrg())
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`
-        update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"payroll": {"countries": ["GB"]}}'::jsonb
-         where id = ${scratch.orgId}`)
-    })
-    const home = await pinClock('2026-02-15', () => withBypass(() => payrollHome(scratch.orgId, null)))
-    assert.deepEqual(home.taxYears, [{ country: 'GB', taxYear: 2025 }], 'February 2026 is still GB tax year 2025')
-  } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
-  }
-})
+  const actorId = await withBypass(() => createScratchUser(scratch.orgId, 'Payroll clerk', 'admin'))
+  const scheduleId = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`
+      update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ payroll: { countries } })}::jsonb
+       where id = ${scratch.orgId}`)
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active, created_by, updated_by)
+      values (${scheduleId}, ${scratch.orgId}, 'Monthly', 'monthly', 12, '2027-01-31', 5, true,
+              ${actorId}, ${actorId})`)
+  })
+  return { scratch, actorId, scheduleId }
+}
+
+
 
 // YTD stubs in different currencies are translated at their pay-date spot
 // before adding — a USD 100 stub at 1.50 joins CAD 1000 as 150, never 100.
@@ -76,6 +83,8 @@ test('YTD totals translate per-currency stubs instead of raw-adding them', { ski
       }
     })
     const home = await withBypass(() => payrollHome(scratch.orgId, null))
+    // Pack-less orgs keep the single calendar-year fallback pair.
+    assert.deepEqual(home.taxYears, [{ country: null, taxYear: year }])
     assert.equal(toUnits(home.ytdGross), toUnits('1150'), 'USD 100 at 1.50 joins CAD 1000 as 150')
     assert.equal(toUnits(home.ytdNet), toUnits('1150'))
     assert.equal(home.runsThisYear, 1)
@@ -89,11 +98,9 @@ test('YTD totals translate per-currency stubs instead of raw-adding them', { ski
 // unattributed stubs stay out instead of being pulled in by a year-only
 // filter.
 test('multi-pack YTD filters by (country, tax_year) pairs', { skip: !DB }, async () => {
-  const scratch = await withBypass(() => createScratchOrg())
-  const actorId = await withBypass(() => createScratchUser(scratch.orgId, 'Payroll clerk', 'admin'))
+  const { scratch, actorId, scheduleId } = await seedPackOrg(['GB', 'US'])
   const today = '2027-02-15'
   try {
-    const scheduleId = randomUUID()
     const mkParty = async () => {
       const party = randomUUID()
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${party}, ${scratch.orgId}, 'person', 'Stub employee')`)
@@ -125,14 +132,6 @@ test('multi-pack YTD filters by (country, tax_year) pairs', { skip: !DB }, async
                 ${gross}, ${gross}, '0', ${actorId}, ${actorId})`)
     }
     await withBypass(async () => {
-      await db.execute(sql`
-        update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"payroll": {"countries": ["GB", "US"]}}'::jsonb
-         where id = ${scratch.orgId}`)
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${scratch.orgId}, 'Monthly', 'monthly', 12, '2027-01-31', 5, true,
-                ${actorId}, ${actorId})`)
       const run2026 = await mkRun(2026, '2026-02-01', '2026-02-28', '2026-02-28')
       await mkStub(run2026, 'GB', 2026, '100')
       await mkStub(run2026, 'US', 2026, '1000')
