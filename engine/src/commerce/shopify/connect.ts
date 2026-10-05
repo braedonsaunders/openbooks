@@ -8,7 +8,8 @@ import {
   verifyShopifyCallbackHmac,
 } from "../../connectors/shopify.ts";
 import { upsertAccountMap } from "../account-maps.ts";
-import { catalogQueueCounts, importShopifyCatalog } from "./catalog.ts";
+import { catalogMatchViaCounts, catalogQueueCounts, importShopifyCatalog } from "./catalog.ts";
+import { listChannelLocations } from "../locations.ts";
 import { loadShopifyChannel } from "./channel-access.ts";
 import {
   createChannel,
@@ -19,7 +20,7 @@ import {
   updateChannel,
 } from "../channels.ts";
 import { CommerceError } from "../errors.ts";
-import { importShopifyLocations, listChannelLocations } from "./locations.ts";
+import { importShopifyLocations } from "./locations.ts";
 import { ensureShopifySubscriptions, removeShopifySubscriptions } from "./subscriptions.ts";
 import { orgFeatureEnabled } from "../../organization/org-feature-lock.ts";
 import { isoDateOf } from "../../platform/civil-date.ts";
@@ -132,7 +133,7 @@ function readShopifyOauthState(state: string): OauthState {
 }
 
 function webhookCallbackUrl(webOrigin: string, channelId: string): string {
-  return `${webOrigin.replace(/\/$/, "")}/api/channels/webhooks/${channelId}`;
+  return `${webOrigin.replace(/\/$/, "")}/api/channels/${channelId}/webhooks`;
 }
 
 function oauthCallbackUrl(webOrigin: string): string {
@@ -566,6 +567,7 @@ export async function acceptShopifyReview(
 export interface ReviewPayload {
   channel: { id: string; name: string; shop: string; status: string; currency: string };
   counts: { queued: number; matched: number; ignored: number };
+  via: { bySku: number; byBarcode: number };
   locations: { total: number; mapped: number };
   proposals: AccountProposal[];
   oauthAvailable: boolean;
@@ -574,11 +576,15 @@ export interface ReviewPayload {
 /** Everything the review screen shows: match counts, locations, and the proposed posting configuration. */
 export async function shopifyReview(orgId: string, channelId: string): Promise<ReviewPayload> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const counts = await catalogQueueCounts(orgId, channelId);
-  const locations = await listChannelLocations(orgId, channelId);
+  const [counts, via, locations] = await Promise.all([
+    catalogQueueCounts(orgId, channelId),
+    catalogMatchViaCounts(orgId, channelId),
+    listChannelLocations(orgId, channelId),
+  ]);
   return {
     channel: { id: channel.channelId, name: channel.name, shop: channel.shop, status: channel.status, currency: channel.currency },
     counts,
+    via,
     locations: { total: locations.length, mapped: locations.filter((entry) => entry.stockLocationId).length },
     proposals: await proposeShopifyAccountMaps(orgId, channelId),
     oauthAvailable: shopifyOAuthAvailable(),

@@ -15,7 +15,7 @@ import { matchCatalogVariant } from "../catalog-matching.ts";
 import { loadShopifyChannel, type ShopifyChannelAccess } from "./channel-access.ts";
 import { CommerceError } from "../errors.ts";
 import { findExternal, linkExternal, unlinkExternal } from "../external-links.ts";
-import { shopifyDecimalToMinor, shopifyDecimalToRate } from "./money.ts";
+import { minorToMajorText, shopifyDecimalToMinor, shopifyDecimalToRate } from "./money.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
@@ -686,6 +686,8 @@ export interface CatalogQueueRow {
   sku: string | null;
   barcode: string | null;
   priceMinor: string | null;
+  /** Exact major-unit decimal for display; the web layer never divides minors. */
+  priceMajor: string | null;
   currency: string;
   optionValues: Record<string, string>;
   status: string;
@@ -778,6 +780,7 @@ export async function listCatalogQueue(
       sku: row.sku,
       barcode: row.barcode,
       priceMinor: row.price_minor,
+      priceMajor: row.price_minor === null ? null : minorToMajorText(BigInt(row.price_minor), row.currency),
       currency: row.currency,
       optionValues: row.option_values ?? {},
       status: row.status,
@@ -798,6 +801,36 @@ export interface CatalogQueueCounts {
   queued: number;
   matched: number;
   ignored: number;
+}
+
+export interface CatalogMatchViaCounts {
+  bySku: number;
+  byBarcode: number;
+}
+
+/**
+ * How matched variants resolved: an entry whose SKU equals its item code
+ * matched by SKU, anything else matched by barcode. Powers the review
+ * line without storing a redundant derivation.
+ */
+export async function catalogMatchViaCounts(orgId: string, channelId: string): Promise<CatalogMatchViaCounts> {
+  const rows = (
+    await withOrgContext(orgId, () =>
+      db.execute<{ by_sku: string; by_barcode: string }>(sql`
+        select count(*) filter (
+                 where e.sku is not null and i.code is not null
+                   and lower(e.sku) = lower(i.code))::text as by_sku,
+               count(*) filter (
+                 where not (e.sku is not null and i.code is not null
+                   and lower(e.sku) = lower(i.code)))::text as by_barcode
+          from shopify_catalog_entries e
+          join items i on i.org_id = e.org_id and i.id = e.native_id
+         where e.org_id = ${orgId} and e.channel_id = ${channelId}
+           and e.status = 'matched' and e.native_table = 'items'
+           and e.object_type = 'variant'`),
+    )
+  ).rows[0];
+  return { bySku: Number(rows?.by_sku ?? "0"), byBarcode: Number(rows?.by_barcode ?? "0") };
 }
 
 export async function catalogQueueCounts(orgId: string, channelId: string): Promise<CatalogQueueCounts> {
