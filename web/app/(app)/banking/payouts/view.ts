@@ -4,8 +4,8 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/database'
 import { page, pageHeader, grid, statTile, widgetBlock, ref, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { getMoneyFormatter } from '@/lib/money-server'
 
 /**
@@ -27,7 +27,7 @@ export interface PayoutTile {
   sub: string
 }
 
-export interface PayoutQueueRow {
+export type PayoutQueueRow = {
   lineId: string
   batchId: string
   provider: string
