@@ -149,6 +149,16 @@ function ScoreChip({ v }: { v: number }) {
   return <span className={cn('inline-block w-5 rounded py-0.5 text-center text-[10px] font-bold', cls)}>{v}</span>
 }
 
+/** Tier band widths from the cumulative cut-offs: Platinum takes the top slice, each later tier the band up to its own cut-off. */
+function tierBands(cfg: CustomerData['config']) {
+  return {
+    platinum: cfg.tierPlatinumPct,
+    gold: cfg.tierGoldPct - cfg.tierPlatinumPct,
+    silver: cfg.tierSilverPct - cfg.tierGoldPct,
+    bronze: 100 - cfg.tierSilverPct,
+  }
+}
+
 function RetentionBadge({ v, bands }: { v: number; bands: { good: number; fair: number } }) {
   // Retention colours follow the shared grade ladder (good at B, fair at D),
   // never a second set of fixed cut-offs.
@@ -279,7 +289,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
           {metric(t('metrics.retention'), k.retentionRate === null ? '—' : `${k.retentionRate}%`, k.retentionRate === null ? t('metricsSub.noRetentionData') : t('metricsSub.retentionProb'))}
           {metric(t('metrics.paymentRate'), k.paymentRate === null ? '—' : `${k.paymentRate}%`, k.paymentRate === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.paidInFull'))}
           {metric(t('metrics.avgDso'), k.avgDaysToPay === null ? '—' : t('sub.daysShort', { days: k.avgDaysToPay }), k.avgDaysToPay === null ? t('metricsSub.noPaymentHistory') : t('metricsSub.daysToPay'))}
-          {metric(t('metrics.top10Share'), `${k.top10PctShare}%`, t('metricsSub.ofRevenue'))}
+          {metric(t('metrics.top10Share', { pct: data.config.topSharePct }), `${k.top10PctShare}%`, t('metricsSub.ofRevenue'))}
           {metric(t('metrics.monthlyGrowth'), `${k.monthlyGrowth >= 0 ? '+' : ''}${k.monthlyGrowth}%`, t('metricsSub.avgMoM'))}
         </div>
       </Panel>
@@ -720,10 +730,10 @@ function LifetimeTab({
         </Panel>
         <Panel title={t('panels.howClvProjected')} icon={Info}>
           <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.annualBold')}</span>{t('clvHow.annualTail')}{' '}
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.retentionBold')}</span>{t('clvHow.retentionHead')}<sup>{t('clvHow.retentionSup')}</sup>{t('clvHow.retentionTail')}{' '}
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.clvBold')}</span>{t('clvHow.clvTail')}
-            {t('clvHow.tiersNote')}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.annualBold')}</span>{t('clvHow.annualTail', { floorMonths: data.config.clvMinYears * 12 })}{' '}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.retentionBold')}</span>{t('clvHow.retentionHead', { base: data.config.clvRetentionBase / 100 })}<sup>{t('clvHow.retentionSup', { decay: data.config.clvRetentionDecayDays })}</sup>{t('clvHow.retentionTail', { min: data.config.clvRetentionMinPct, max: data.config.clvRetentionMaxPct })}{' '}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.clvBold')}</span>{t('clvHow.clvTail', { years: data.config.clvYears })}
+            {t('clvHow.tiersNote', tierBands(data.config))}
           </p>
           <div className="mt-3">
             <GroupedBar
@@ -866,7 +876,18 @@ function ChurnTab({ data }: { data: CustomerData }) {
       <Panel
         title={t('panels.atRiskCustomers', { count: atRisk.length })}
         icon={AlertOctagon}
-        hint={t('panels.atRiskHint')}
+        hint={t('panels.atRiskHint', {
+          recMax: data.config.churnInactiveCriticalPoints,
+          highDays: data.config.churnHighDays,
+          medDays: data.config.churnMediumDays,
+          lowDays: data.config.churnInactiveLowDays,
+          cadMax: data.config.churnCadenceHighPoints,
+          highX: data.config.churnCadenceHighMultiple,
+          lowX: data.config.churnCadenceLowMultiple,
+          engMax: data.config.churnSinglePoints,
+          singleTxns: data.config.churnSingleMaxTxns,
+          fewTxns: data.config.churnFewMaxTxns,
+        })}
         bodyClassName="p-0"
       >
         {atRisk.length === 0 ? (
@@ -925,7 +946,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
         <KpiCard icon={BarChart3} accent={g.avgMonthlyGrowth >= 0 ? 'teal' : 'amber'} label={t('kpi.avgMonthly')} value={`${g.avgMonthlyGrowth >= 0 ? '+' : ''}${g.avgMonthlyGrowth}%`} sub={t('sub.trend', { trend: t(`trend.${g.trend}`) })} />
         <KpiCard icon={DollarSign} accent="sky" label={t('kpi.medianMonthly')} value={money(g.medianMonthlyRevenue)} sub={t('sub.revenue')} />
         <KpiCard icon={Users} accent="violet" label={t('kpi.newCustomers')} value={String(g.totalNewCustomers)} sub={t('sub.firstOrderInPeriod')} />
-        <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= data.config.gradeD ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLast6mo')} />
+        <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= data.config.gradeD ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLastMonths', { months: data.config.cohortActiveMonths })} />
       </div>
 
       {k.overdueInvoices > data.config.overdueInsightCount ? (
@@ -944,7 +965,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title={t('panels.cohortRetention')} hint={t('panels.cohortHint')} bodyClassName="p-0">
+        <Panel title={t('panels.cohortRetention')} hint={t('panels.cohortHint', { months: data.config.cohortActiveMonths })} bodyClassName="p-0">
           <SharedTable className="w-full text-sm">
             <SharedTableHeader>
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
@@ -1156,7 +1177,7 @@ function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: bool
           {item(t('scoring.rfmRecency.label'), t('scoring.rfmRecency.value', { good: data.config.recencyGoodDays, warning: data.config.recencyWarningDays, critical: data.config.recencyCriticalDays }))}
           {item(t('scoring.rfmFrequency.label'), t('scoring.rfmFrequency.value'))}
           {item(t('scoring.clvRetention.label'), t('scoring.clvRetention.value', { base: data.config.clvRetentionBase / 100, decay: data.config.clvRetentionDecayDays, min: data.config.clvRetentionMinPct, max: data.config.clvRetentionMaxPct }))}
-          {item(t('scoring.clvTiers.label'), t('scoring.clvTiers.value', { platinum: data.config.tierPlatinumPct, gold: data.config.tierGoldPct, silver: data.config.tierSilverPct }))}
+          {item(t('scoring.clvTiers.label'), t('scoring.clvTiers.value', tierBands(data.config)))}
           {item(t('scoring.paymentScore.label'), t('scoring.paymentScore.value', { highPenalty: data.config.paymentDsoHighPenalty, medPenalty: data.config.paymentDsoMediumPenalty, lowPenalty: data.config.paymentDsoLowPenalty, highDays: data.config.paymentDsoHighDays, medDays: data.config.paymentDsoMediumDays, lowDays: data.config.paymentDsoLowDays, cap: data.config.paymentOverdueCap, per: data.config.paymentOverduePerInvoice }))}
           {item(t('scoring.healthGrades.label'), t('scoring.healthGrades.value', { aPlus: data.config.gradeAPlus, a: data.config.gradeA, b: data.config.gradeB, c: data.config.gradeC, d: data.config.gradeD }))}
         </Panel>
@@ -1170,7 +1191,15 @@ function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: bool
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.newCustomersBold')}</span>{t('sources.newCustomersTail')}</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.cohortsBold')}</span>{t('sources.cohortsTail')}</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.profitabilityBold')}</span>{t('sources.profitabilityTail')}</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.intelligenceBold')}</span> {data.intelligence.score === null ? data.intelligence.reason : t('sources.intelligenceTail', { score: data.intelligence.score, grade: data.intelligence.grade })}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.intelligenceBold')}</span> {data.intelligence.score === null ? data.intelligence.reason : t('sources.intelligenceTail', {
+            champions: data.config.intelWeightChampions,
+            saturation: data.config.tierPlatinumPct * 2,
+            retention: data.config.intelWeightRetention,
+            concentration: data.config.intelWeightConcentration,
+            payment: data.config.intelWeightPayment,
+            score: data.intelligence.score,
+            grade: data.intelligence.grade,
+          })}</li>
         </ul>
       </Panel>
     </div>

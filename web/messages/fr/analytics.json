@@ -726,14 +726,14 @@
     },
     "clvHow": {
       "annualBold": "Valeur annuelle",
-      "annualTail": " = facture moyenne × (factures ÷ années d’activité, plancher de 3 mois). ",
+      "annualTail": " = facture moyenne × (factures ÷ années d’activité, plancher de {floorMonths} mois). ",
       "clvBold": "CLV projetée",
-      "clvTail": " = valeur annuelle × 3 ans × fidélisation.\n",
+      "clvTail": " = valeur annuelle × {years} ans × fidélisation.\n",
       "retentionBold": "Facteur de fidélisation",
-      "retentionHead": " = 0,95·e",
-      "retentionSup": "−jours depuis la dernière commande ÷ 120",
-      "retentionTail": " , borné entre 10 et 95 %. ",
-      "tiersNote": "Les niveaux sont classés par CLV projetée : 10 % supérieurs Platine, 20 % suivants Or, 30 % suivants Argent, 40 % restants Bronze."
+      "retentionHead": " = {base}·e",
+      "retentionSup": "−jours depuis la dernière commande ÷ {decay}",
+      "retentionTail": " , borné entre {min} et {max} %. ",
+      "tiersNote": "Les niveaux sont classés par CLV projetée : {platinum} % supérieurs Platine, {gold} % suivants Or, {silver} % suivants Argent, {bronze} % restants Bronze."
     },
     "config": {
       "fields": {
@@ -1169,7 +1169,7 @@
       "monthlyGrowth": "Croissance mensuelle",
       "paymentRate": "Taux de paiement",
       "retention": "Rétention",
-      "top10Share": "Part du top 10 %"
+      "top10Share": "Part du top {pct} %"
     },
     "metricsSub": {
       "avgMoM": "M/M moy. (mois matures)",
@@ -1193,9 +1193,9 @@
     },
     "panels": {
       "atRiskCustomers": "Clients à risque ({count})",
-      "atRiskHint": "Score d’attrition : ancienneté 0–40 (>120 j/>60 j/>30 j) + baisse de cadence 0–30 (2×/1,5× la moyenne propre) + faible engagement 0–30 (≤1/≤3 commandes)",
+      "atRiskHint": "Score d’attrition : ancienneté 0–{recMax} (>{highDays} j/>{medDays} j/>{lowDays} j) + baisse de cadence 0–{cadMax} ({highX}×/{lowX}× la moyenne propre) + faible engagement 0–{engMax} (≤{singleTxns}/≤{fewTxns} commandes)",
       "clvRanking": "Classement par valeur à vie",
-      "cohortHint": "Par année de première commande · actif = a commandé dans les 6 derniers mois",
+      "cohortHint": "Par année de première commande · actif = a commandé dans les {months} derniers mois",
       "cohortRetention": "Rétention par cohorte",
       "customerHealth": "Santé client ({count})",
       "customerHealthHint": "Pondéré {recency} % récence · {frequency} % fréquence · {monetary} % valeur · {payment} % paiements, moins la friction",
@@ -1264,7 +1264,7 @@
       },
       "clvTiers": {
         "label": "Niveaux de CLV",
-        "value": "Top {platinum} % Platine · top {gold} % Or · top {silver} % Argent · reste Bronze"
+        "value": "{platinum} % supérieurs Platine · {gold} % suivants Or · {silver} % suivants Argent · {bronze} % restants Bronze"
       },
       "frictionPenalty": {
         "label": "Pénalité de friction",
@@ -1317,7 +1317,7 @@
       "frictionBold": "Friction :",
       "frictionTail": " avoirs uniquement — ce grand livre ne contient aucun document d’autorisation de retour, la composante retours est donc toujours à 0.",
       "intelligenceBold": "Score d’intelligence :",
-      "intelligenceTail": " 30 % de part des champions (20 % des clients = max) + 30 % de probabilité de fidélisation moy. + 20 % de santé de la concentration + 20 % de taux de paiement — score {score} ({grade}).",
+      "intelligenceTail": " {champions} % de part des champions ({saturation} % des clients = max) + {retention} % de probabilité de fidélisation moy. + {concentration} % de santé de la concentration + {payment} % de taux de paiement — score {score} ({grade}).",
       "newCustomersBold": "Nouveaux clients :",
       "newCustomersTail": " aucune facture ni commande client antérieure, à vie, avant le mois de première activité.",
       "paymentBold": "Comportement de paiement :",
@@ -1330,7 +1330,7 @@
       "revenueTail": " produits constatés — écritures nettes de produits, même univers comptable que le compte de résultat. Facturé correspond à la facturation brute ; le détail client réconcilie les deux."
     },
     "sub": {
-      "activeLast6mo": "actifs dans les 6 derniers mois",
+      "activeLastMonths": "actifs dans les {months} derniers mois",
       "avgPerCustomer": "moy. {amount} / client",
       "clvBase": "base CLV historique",
       "creditHeavy": "comptes à fort crédit",

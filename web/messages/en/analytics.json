@@ -719,7 +719,7 @@
       "revenue": "revenue",
       "invoiced": "gross billings in period",
       "firstOrderInPeriod": "first order in period",
-      "activeLast6mo": "active in last 6 months",
+      "activeLastMonths": "active in last {months} months",
       "customersCount": "{count} customers",
       "jobsCount": "{count} jobs",
       "scoreHigh": "score ≥ {cutoff}",
@@ -735,7 +735,7 @@
       "retention": "Retention",
       "paymentRate": "Payment Rate",
       "avgDso": "Avg DSO",
-      "top10Share": "Top 10% Share",
+      "top10Share": "Top {pct}% Share",
       "monthlyGrowth": "Monthly Growth"
     },
     "metricsSub": {
@@ -767,10 +767,10 @@
       "overdueOrders": "Overdue Orders",
       "overdueHint": "Days past each customer's own average order cycle",
       "atRiskCustomers": "At-Risk Customers ({count})",
-      "atRiskHint": "Churn score: recency 0–40 (>120d/>60d/>30d) + cadence decline 0–30 (2×/1.5× own average) + low engagement 0–30 (≤1/≤3 orders)",
+      "atRiskHint": "Churn score: recency 0–{recMax} (>{highDays}d/>{medDays}d/>{lowDays}d) + cadence decline 0–{cadMax} ({highX}×/{lowX}× own average) + low engagement 0–{engMax} (≤{singleTxns}/≤{fewTxns} orders)",
       "monthlyRevenueTrend": "Monthly Revenue Trend",
       "cohortRetention": "Cohort Retention",
-      "cohortHint": "By first-order year · active = ordered in the last 6 months",
+      "cohortHint": "By first-order year · active = ordered in the last {months} months",
       "monthlyDetails": "Monthly Details",
       "monthlyDetailsHint": "MoM growth capped +{up}/−{down}%; '—' marks ramp-up from an immature month",
       "customerProfitability": "Customer Profitability",
@@ -916,14 +916,14 @@
     },
     "clvHow": {
       "annualBold": "Annual value",
-      "annualTail": " = avg invoice × (invoices ÷ years active, floor 3 months). ",
+      "annualTail": " = avg invoice × (invoices ÷ years active, floor {floorMonths} months). ",
       "retentionBold": "Retention factor",
-      "retentionHead": " = 0.95·e",
-      "retentionSup": "−days since last ÷ 120",
-      "retentionTail": ", clamped 10–95%. ",
+      "retentionHead": " = {base}·e",
+      "retentionSup": "−days since last ÷ {decay}",
+      "retentionTail": ", clamped {min}–{max}%. ",
       "clvBold": "Projected CLV",
-      "clvTail": " = annual value × 3 years × retention.\n",
-      "tiersNote": "Tiers rank by projected CLV: top 10% Platinum, next 20% Gold, next 30% Silver, bottom 40% Bronze."
+      "clvTail": " = annual value × {years} years × retention.\n",
+      "tiersNote": "Tiers rank by projected CLV: top {platinum}% Platinum, next {gold}% Gold, next {silver}% Silver, bottom {bronze}% Bronze."
     },
     "chart": {
       "projectedClv": "Projected CLV"
@@ -1331,7 +1331,7 @@
       },
       "clvTiers": {
         "label": "CLV tiers",
-        "value": "Top {platinum}% Platinum · top {gold}% Gold · top {silver}% Silver · rest Bronze"
+        "value": "Top {platinum}% Platinum · next {gold}% Gold · next {silver}% Silver · bottom {bronze}% Bronze"
       },
       "paymentScore": {
         "label": "Payment score",
@@ -1358,7 +1358,7 @@
       "profitabilityBold": "Profitability:",
       "profitabilityTail": " project-tagged GL lines rolled job → customer; customers without project-tagged activity show no margin (never estimated).",
       "intelligenceBold": "Intelligence score:",
-      "intelligenceTail": " 30% champions share (20% of customers = max) + 30% avg retention probability + 20% concentration health + 20% payment rate — score {score} ({grade})."
+      "intelligenceTail": " {champions}% champions share ({saturation}% of customers = max) + {retention}% avg retention probability + {concentration}% concentration health + {payment}% payment rate — score {score} ({grade})."
     },
     "insights": {
       "churnInactive": "No activity in {days, plural, one {# day} other {# days}}",

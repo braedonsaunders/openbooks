@@ -726,14 +726,14 @@
     },
     "clvHow": {
       "annualBold": "年間価値",
-      "annualTail": " ＝ 平均請求書 ×（請求書数 ÷ 稼働年数、下限3か月）。 ",
+      "annualTail": " ＝ 平均請求書 ×（請求書数 ÷ 稼働年数、下限{floorMonths}か月）。 ",
       "clvBold": "予測CLV",
-      "clvTail": " ＝ 年間価値 × 3年 × 維持率。\n",
+      "clvTail": " ＝ 年間価値 × {years}年 × 維持率。\n",
       "retentionBold": "維持係数",
-      "retentionHead": " ＝ 0.95·e",
-      "retentionSup": "−最終取引からの日数 ÷ 120",
-      "retentionTail": "、10–95%に制限。 ",
-      "tiersNote": "階層は予測CLVで順位付け：上位10%がプラチナ、次の20%がゴールド、次の30%がシルバー、下位40%がブロンズ。"
+      "retentionHead": " ＝ {base}·e",
+      "retentionSup": "−最終取引からの日数 ÷ {decay}",
+      "retentionTail": "、{min}–{max}%に制限。 ",
+      "tiersNote": "階層は予測CLVで順位付け：上位{platinum}%がプラチナ、次の{gold}%がゴールド、次の{silver}%がシルバー、下位{bronze}%がブロンズ。"
     },
     "config": {
       "fields": {
@@ -1169,7 +1169,7 @@
       "monthlyGrowth": "月次成長率",
       "paymentRate": "入金率",
       "retention": "維持率",
-      "top10Share": "上位10%シェア"
+      "top10Share": "上位{pct}%シェア"
     },
     "metricsSub": {
       "avgMoM": "平均前月比（成熟月）",
@@ -1193,9 +1193,9 @@
     },
     "panels": {
       "atRiskCustomers": "要注意得意先（{count}）",
-      "atRiskHint": "離反スコア：レセンシー0–40（120日超/60日超/30日超）＋頻度低下0–30（自社平均の2倍/1.5倍）＋低関与0–30（1件以下/3件以下）",
+      "atRiskHint": "離反スコア：レセンシー0–{recMax}（{highDays}日超/{medDays}日超/{lowDays}日超）＋頻度低下0–{cadMax}（自社平均の{highX}倍/{lowX}倍）＋低関与0–{engMax}（{singleTxns}件以下/{fewTxns}件以下）",
       "clvRanking": "生涯価値ランキング",
-      "cohortHint": "初回発注年別 · アクティブ＝過去6か月以内に発注",
+      "cohortHint": "初回発注年別 · アクティブ＝過去{months}か月以内に発注",
       "cohortRetention": "コホート維持率",
       "customerHealth": "得意先健全性（{count}）",
       "customerHealthHint": "加重：最新度{recency}％・頻度{frequency}％・金額{monetary}％・入金{payment}％から摩擦分を減点",
@@ -1264,7 +1264,7 @@
       },
       "clvTiers": {
         "label": "CLV階層",
-        "value": "上位{platinum}% プラチナ · 上位{gold}% ゴールド · 上位{silver}% シルバー · 残り ブロンズ"
+        "value": "上位{platinum}%がプラチナ · 次の{gold}%がゴールド · 次の{silver}%がシルバー · 下位{bronze}%がブロンズ"
       },
       "frictionPenalty": {
         "label": "摩擦ペナルティ",
@@ -1317,7 +1317,7 @@
       "frictionBold": "摩擦：",
       "frictionTail": " クレジットメモのみ — この元帳には返品承認書類がないため、返品要素は常に0。",
       "intelligenceBold": "インテリジェンススコア：",
-      "intelligenceTail": " チャンピオン比率30%（得意先の20%が最大）＋平均維持確率30%＋集中健全性20%＋入金率20% — スコア{score}（{grade}）。",
+      "intelligenceTail": " チャンピオン比率{champions}%（得意先の{saturation}%が最大）＋平均維持確率{retention}%＋集中健全性{concentration}%＋入金率{payment}% — スコア{score}（{grade}）。",
       "newCustomersBold": "新規得意先：",
       "newCustomersTail": " 初回取引月より前には生涯にわたり請求書も受注も存在しない。",
       "paymentBold": "支払行動：",
@@ -1330,7 +1330,7 @@
       "revenueTail": " 認識済み売上——損益勘定の純記帳であり、損益計算書と同じ元帳範囲。請求済みは総請求額であり、得意先ドリルで両者を照合する。"
     },
     "sub": {
-      "activeLast6mo": "過去6か月アクティブ",
+      "activeLastMonths": "過去{months}か月アクティブ",
       "avgPerCustomer": "平均{amount}/社",
       "clvBase": "履歴CLV基準",
       "creditHeavy": "クレジットの多い得意先",
