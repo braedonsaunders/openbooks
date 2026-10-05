@@ -76,6 +76,7 @@ async function mountDrawer(
   mutationBasePath?: string,
   presentation?: ReturnType<typeof benefitPlanPresentation>,
   startEditing = true,
+  refOptions: Record<string, { value: string; label: string; minorUnits?: number }[]> = {},
 ) {
   const entity = presentation ?? SETUP_ENTITY_BY_KEY.get(entityKey)
   assert.ok(entity, `the registry must declare ${entityKey}`)
@@ -112,7 +113,7 @@ async function mountDrawer(
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <SetupDrawer entity={entity} row={row} members={[]} refOptions={{}} initialValues={initialValues} mutationBasePath={mutationBasePath} />
+        <SetupDrawer entity={entity} row={row} members={[]} refOptions={refOptions} initialValues={initialValues} mutationBasePath={mutationBasePath} />
       </NextIntlClientProvider>,
     )
     await tick()
@@ -444,9 +445,53 @@ test('each nested drawer stays above its parent and Escape closes only the deepe
   assert.deepEqual(closed, ['component'], 'closing a nested record must preserve both parents')
 })
 
-
 test('effective-dated policy versions stay readable without offering an edit action', async (t) => {
   const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000001', rate_kind: 'closing', max_age_days: 7, effective_from: '2026-07-01' }, () => new Response('{}'), 'fx-rate-age-policies', undefined, undefined, undefined, false)
   assert.equal([...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Edit'), false)
   assert.equal(seen.length, 0)
+})
+
+const spendCurrencies = () => ({
+  currencies: [
+    { value: 'USD', label: 'US Dollar', minorUnits: 2 },
+    { value: 'BHD', label: 'Bahraini Dinar', minorUnits: 3 },
+  ],
+})
+
+test('an unknown-precision amount opens blank and saves nothing, naming the stored minors', async (t) => {
+  // Stored minors without a known precision must never display as majors:
+  // the field opens blank with the remedy, and an untouched save refuses
+  // before any request instead of clearing the stored figure.
+  const { seen } = await mountDrawer(t, {
+    id: 'spend-legacy', channel_id: 'ch-1', spend_date: '2026-09-30', amount_minor: 777, currency: 'XX9', source: 'legacy',
+  }, () => Response.json({ ok: true, id: 'spend-legacy' }), 'channel-ad-spend', undefined, '/api/admin/setup', undefined, true, spendCurrencies())
+  const spend = document.querySelector('input[aria-label="Spend"]') as HTMLInputElement | null
+  assert.ok(spend, 'the locked amount stays editable for deliberate re-entry')
+  assert.equal(spend.value, '', 'stored minors never show as a major amount')
+  await clickSave(false)
+  assert.deepEqual(seen, [], 'an untouched locked save must not reach the API')
+  assert.match(alertText() ?? '', /777/, 'the refusal names the stored minor units')
+})
+
+test('a precision-locked amount has no editable input outside editing', async (t) => {
+  // Read-only display owns forceLocked and locked natural keys, so the
+  // re-entry input only renders for an editable field.
+  await mountDrawer(t, {
+    id: 'spend-legacy', channel_id: 'ch-1', spend_date: '2026-09-30', amount_minor: 777, currency: 'XX9', source: 'legacy',
+  }, () => Response.json({ ok: true }), 'channel-ad-spend', undefined, '/api/admin/setup', undefined, false, spendCurrencies())
+  assert.equal(document.querySelector('input[aria-label="Spend"]'), null)
+})
+
+test('a known-precision amount reopens as majors and saves minors', async (t) => {
+  const { seen } = await mountDrawer(t, {
+    id: 'spend-usd', channel_id: 'ch-1', spend_date: '2026-10-01', amount_minor: 12050, currency: 'USD', source: 'qa',
+  }, () => Response.json({ spendId: 'spend-usd' }), 'channel-ad-spend', undefined, '/api/admin/setup', undefined, true, spendCurrencies())
+  const spend = document.querySelector('input[aria-label="Spend"]') as HTMLInputElement | null
+  assert.ok(spend)
+  assert.equal(spend.value, '120.50', 'the stored minors reopen as operator majors')
+  await clickSave(false)
+  assert.equal(seen.length, 1, 'reopening and saving posts exactly one command')
+  assert.ok(String(seen[0]!.url).endsWith('/channel-ad-spend/command'), 'command-owned rows save through their command')
+  assert.ok(seen[0]!.headers['idempotency-key'], 'the command save carries its idempotency key')
+  assert.deepEqual((seen[0]!.body as Record<string, unknown>)['amountMinor'], 12050)
 })

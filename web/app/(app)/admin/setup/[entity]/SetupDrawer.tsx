@@ -301,6 +301,10 @@ export function SetupDrawer({
       }
       if (!f.required || (f.kind === 'boolean' && !f.nullable) || f.kind === 'multiref') continue
       if (!creating && f.lockedOnEdit) continue
+      // A precision-locked money field opens blank by design; the save loop
+      // refuses it with the remedy naming the stored figure, never a bare
+      // "required" that hides why a kept value cannot stay.
+      if (moneyLocked[f.key]) continue
       const v = form[f.key]
       // keepDefault columns carry a DB default the server applies to blanks
       // An empty ownership acquisitionRate/nciMeasurement is
@@ -341,9 +345,9 @@ export function SetupDrawer({
         // The precision lock is checked before the empty skip: a locked
         // field opens blank, so an untouched save would otherwise sail past
         // the guard and clear the stored amount instead of refusing.
-        if (moneyLocked[field.key]) {
-          const error = moneyLocked[field.key]
-          setFieldError(error); toast.error(error); setBusy(false); return
+        const precisionLock = moneyLocked[field.key]
+        if (precisionLock) {
+          setFieldError(precisionLock); toast.error(precisionLock); setBusy(false); return
         }
         if (typeof body[field.key] !== 'string' || String(body[field.key]).trim() === '') continue
         const currency = String(body[field.currencyField ?? 'currency'] ?? '').toUpperCase()
