@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getTranslations } from "next-intl/server";
-import { AutopayError, completeSetupByToken, publicSetupPage } from "@openbooks/engine/src/payments/autopay.ts";
+import { AutopayError, completeSetupByToken, publicSetupPage } from "@openbooks/engine/payments/autopay";
 
 export const dynamic = "force-dynamic";
 

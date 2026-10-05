@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { buyShipmentLabel, getShipmentLabels } from '@openbooks/engine/src/sales/shipping-labels.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { buyShipmentLabel, getShipmentLabels } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
-import { fulfillmentDocumentScope } from '@openbooks/engine/src/sales/fulfillment.ts'
+import { fulfillmentDocumentScope } from '@openbooks/engine/sales/fulfillment'
 import { guardSubsidiaryScope } from '@/lib/authz'
 
 /** Every bought label on one shipment, newest first, for the drawer timeline. */

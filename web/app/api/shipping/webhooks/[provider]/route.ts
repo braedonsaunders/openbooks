@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { receiveTrackerDelivery } from '@openbooks/engine/src/sales/shipping-labels.ts'
+import { receiveTrackerDelivery } from '@openbooks/engine/sales/shipping-labels'
 import { readBoundedBodyText } from '@/lib/bounded-body'
 import { defineRoute } from '@/lib/api/route'
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { importBillingAdjustments } from '@openbooks/engine/src/sales/shipping-labels.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { importBillingAdjustments } from '@openbooks/engine/sales/shipping-labels'
 import { defineRoute } from '@/lib/api/route'
 
 const adjustmentItem = z.object({

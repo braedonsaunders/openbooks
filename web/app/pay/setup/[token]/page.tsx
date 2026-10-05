@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { AutopayError, publicSetupPage } from "@openbooks/engine/src/payments/autopay.ts";
+import { AutopayError, publicSetupPage } from "@openbooks/engine/payments/autopay";
 import { SetupContinueButton } from "./SetupContinueButton";
 import { setupProviderLabel } from "./provider-label";
 

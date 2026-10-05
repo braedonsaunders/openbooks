@@ -1,6 +1,7 @@
 /** Shipment completion for the web fulfillment layer: the document view, the completion lock, and completion itself. */
 export {
   FulfillmentRefusal,
+  fulfillmentDocumentScope,
   getFulfillmentDocument,
   lockShipmentForCompletion,
   markShipmentComplete,
