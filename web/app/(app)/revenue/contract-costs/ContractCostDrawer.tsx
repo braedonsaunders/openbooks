@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import {
@@ -13,6 +14,7 @@ import {
   TableRow,
   UrlDrawer,
 } from "@openbooks/ui";
+import { DrawerTabStrip } from "../../../../components/drawer-tab-strip";
 import { useMoney } from "@/components/money-provider";
 import type { ContractCostAssetPayload } from "./view";
 import { ImpairAssetButton } from "./ImpairAssetButton";
@@ -27,8 +29,9 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "outl
 
 /**
  * Capitalized cost detail: facts, the amortization schedule (planned vs
- * posted, with the posted period entries), and the journal trail. Linking
- * and impairment act here, in context, and return to this drawer.
+ * posted, with per-period entry links), and the journal trail on its own
+ * sibling tab — never stacked. Linking and impairment act here, in
+ * context, and return to this drawer.
  */
 export function ContractCostDrawer({
   payload,
@@ -50,6 +53,10 @@ export function ContractCostDrawer({
   const t = useTranslations("contractCosts");
   const { money } = useMoney();
   const a = payload.asset;
+  // The schedule and the journal trail are separate concepts with separate
+  // bodies. Client-local like the drawer rail: switching never navigates,
+  // and both stay mounted so link and impair actions keep their context.
+  const [panel, setPanel] = useState<"schedule" | "journal">("schedule");
   return (
     <UrlDrawer
       open
@@ -86,6 +93,16 @@ export function ContractCostDrawer({
           </section>
         )}
 
+        <DrawerTabStrip
+          tabs={[
+            { key: "schedule", label: t("drawer.scheduleTitle") },
+            { key: "journal", label: t("drawer.entriesTitle") },
+          ]}
+          activeKey={panel}
+          onSelect={(key) => setPanel(key)}
+          ariaLabel={a.contractNumber ?? t("drawer.unlinked")}
+        />
+        <div hidden={panel !== "schedule"} className="space-y-2">
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">{t("drawer.scheduleTitle")}</h3>
           <Table>
@@ -122,7 +139,8 @@ export function ContractCostDrawer({
             </TableBody>
           </Table>
         </section>
-
+        </div>
+        <div hidden={panel !== "journal"} className="space-y-2">
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">{t("drawer.entriesTitle")}</h3>
           <ul className="space-y-1">
@@ -141,6 +159,7 @@ export function ContractCostDrawer({
             ))}
           </ul>
         </section>
+        </div>
 
         <DisclosureSection title={t("drawer.advancedTitle")} summary={t("drawer.advancedSummary")}>
           <dl className="grid grid-cols-2 gap-2 text-sm">
