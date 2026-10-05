@@ -17,7 +17,13 @@ const state = { cadence: "quarterly" };
 Object.assign(globalThis, { __healthFiscal: state });
 const { PgDialect } = await import("drizzle-orm/pg-core");
 const dialect = new PgDialect();
-Object.assign(globalThis, { __healthFiscalQuery: (query: Parameters<InstanceType<typeof PgDialect>["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql });
+type FiscalQuery = ReturnType<InstanceType<typeof PgDialect>["sqlToQuery"]>;
+Object.assign(globalThis, { __healthFiscalQueries: [] as FiscalQuery[] });
+Object.assign(globalThis, { __healthFiscalQuery: (query: Parameters<InstanceType<typeof PgDialect>["sqlToQuery"]>[0]) => {
+  const built = dialect.sqlToQuery(query);
+  (globalThis as unknown as { __healthFiscalQueries: FiscalQuery[] }).__healthFiscalQueries.push(built);
+  return built.sql;
+} });
 
 const mocks: Record<string, string> = {
   "server-only": "export {}",
@@ -70,4 +76,19 @@ test("a monthly calendar keeps calendar months", async () => {
   assert.equal(result.monthly.length, 12);
   assert.equal(result.monthly[11]?.month, "2026-06");
   assert.ok((result.monthly[11]?.label ?? "").includes("26"));
+});
+
+test("a mid-period end closes the last bucket at the selected end", async () => {
+  // Q2 runs to 2026-06-30 but the operator selected 2026-05-15: every date
+  // bound the series sends must sit at or before the selected end, so
+  // postings after it cannot leak into the trailing figures.
+  state.cadence = "quarterly";
+  const queries = (globalThis as unknown as { __healthFiscalQueries: FiscalQuery[] }).__healthFiscalQueries;
+  queries.length = 0;
+  await healthData({ from: "2026-04-01", to: "2026-05-15", label: "Q2" }, "00000000-0000-4000-8000-000000000001", null);
+  const fiscal = queries.find((q) => q.sql.includes("operating_revenue") && !q.sql.includes("gl_month_activity") && !q.sql.includes("departments") && !q.sql.includes("classes") && !q.sql.includes("locations"));
+  assert.ok(fiscal, "the fiscal-period series query ran");
+  const bounds = (fiscal.params as unknown[]).map(String).filter((p) => /^\d{4}-\d{2}-\d{2}$/.test(p));
+  assert.ok(bounds.length > 0, "the series bounds its buckets by date");
+  for (const bound of bounds) assert.ok(bound <= "2026-05-15", `bucket bound ${bound} runs past the selected end`);
 });
