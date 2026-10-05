@@ -753,7 +753,7 @@ const sentinelTool: AssistantToolDef = {
 const apPositionTool: AssistantToolDef = {
   name: "ap_position",
   description:
-    "AP position (the AP cockpit): outstanding/overdue payables, aging, 4-week payment schedule, vendor groups, priority worklist, pay-run recommendation. Lists capped. Read-only.",
+    "AP position (the AP cockpit): outstanding/overdue payables, aging, payment schedule over the configured horizon, vendor groups, priority worklist, pay-run recommendation. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ap.read"] },
   inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
@@ -762,7 +762,7 @@ const apPositionTool: AssistantToolDef = {
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return apPosition(orgId, 4, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
+      return apPosition(orgId, apSettings.horizonWeeks, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
     });
     return {
       ok: true,
@@ -821,7 +821,7 @@ const apPositionTool: AssistantToolDef = {
 const arPositionTool: AssistantToolDef = {
   name: "ar_position",
   description:
-    "AR position (the AR cockpit): outstanding/overdue receivables, aging, 4-week collection schedule, customer groups, most-overdue-first worklist. Lists capped. Read-only.",
+    "AR position (the AR cockpit): outstanding/overdue receivables, aging, collection schedule over the configured horizon, customer groups, most-overdue-first worklist. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read"] },
   inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
@@ -830,7 +830,7 @@ const arPositionTool: AssistantToolDef = {
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return arPosition(orgId, 4, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
+      return arPosition(orgId, apSettings.horizonWeeks, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
     });
     return {
       ok: true,

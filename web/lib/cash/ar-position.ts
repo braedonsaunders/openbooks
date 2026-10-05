@@ -187,7 +187,12 @@ export async function arPosition(
 
   const expectedThisWeek = weeks[0]?.amount ?? ZERO_MONEY;
   const cutoff30 = toISO(addDays(grid.asOf, 30));
-  const expectedNext30 = sumMoney(ar.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
+  // The dashboard tile reads the same +30d cut-off off the same items: the
+  // weekly grid can end short of it, so a cut-off-bounded schedule feeds
+  // this figure instead of the grid-bounded entries (placement is
+  // end-independent — widening the bound only adds days 29–30).
+  const cutoffSchedule = scheduleForecast(arItems, arStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model);
+  const expectedNext30 = sumMoney(cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
 
   // Collections worklist: most overdue first, then largest.
   const worklist = ar.entries

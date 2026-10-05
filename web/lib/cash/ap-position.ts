@@ -202,7 +202,11 @@ export async function apPosition(
 
   const dueThisWeek = weeks[0]?.amount ?? ZERO_MONEY;
   const cutoff30 = toISO(addDays(grid.asOf, 30));
-  const dueNext30 = sumMoney(ap.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
+  // Same +30d cut-off as the dashboard tile (see ar-position): a
+  // cut-off-bounded schedule feeds this figure, never the grid-bounded
+  // entries the weekly grid can truncate short of day 30.
+  const cutoffSchedule = scheduleForecast(apItems, apStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model);
+  const dueNext30 = sumMoney(cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
 
   // Pay-priority worklist: oldest due first, then most overdue, then largest.
   const worklist = ap.entries
