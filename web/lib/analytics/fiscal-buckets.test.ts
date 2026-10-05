@@ -35,8 +35,9 @@ test("a thirteen-period year annualises by thirteen, 4-4-5 by twelve", () => {
     }));
   assert.equal(fiscalPeriodsPerYear(year(13), "2026-07-15"), 13);
   assert.equal(fiscalPeriodsPerYear(year(12), "2026-07-15"), 12);
-  assert.equal(fiscalPeriodsPerYear([], "2026-07-15"), 12);
-  assert.equal(fiscalPeriodsPerYear(year(12), "2027-01-01"), 12);
+  // Outside declared coverage the cadence is unknown, never silently twelve.
+  assert.equal(fiscalPeriodsPerYear([], "2026-07-15"), null);
+  assert.equal(fiscalPeriodsPerYear(year(12), "2027-01-01"), null);
 });
 
 test("the prior-year window spans the matched periods, never calendar -12 months", () => {
