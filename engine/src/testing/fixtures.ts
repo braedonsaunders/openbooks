@@ -1003,6 +1003,12 @@ const CORE_A = [
   "inventory_provisional_costs",
   "cost_layers",
   "inventory_movements",
+  // Capitalized contract costs, children first: amortization rows reference
+  // assets, periods and journal entries; assets reference revenue contracts;
+  // policies reference accounts.
+  "contract_cost_amortization",
+  "contract_cost_assets",
+  "contract_cost_policies",
   "recognition_schedules",
   "performance_obligations",
   "revenue_contracts",
@@ -1070,6 +1076,9 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   // sandbox-wipe escape either; same scoped disable for the one transaction.
   { table: "application_idempotency_keys", trigger: "application_idempotency_guard" },
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
+  // Amortization rows are immutable posted history with no sandbox-wipe
+  // escape; scratch reset/drop disables the guard for the one transaction.
+  { table: "contract_cost_amortization", trigger: "contract_cost_amortization_immutable_trigger" },
 ];
 
 /**
