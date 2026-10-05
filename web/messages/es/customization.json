@@ -32,6 +32,7 @@
     "inventory_onhand": "Inventario disponible",
     "inventory_movement": "Movimiento de inventario",
     "webhook_endpoint": "Extremo de webhook",
+    "payment_dispute_review": "Revisión de disputa de pago",
     "budget_scenario": "Presupuesto",
     "revenue_contract": "Contrato de ingresos",
     "contract_cost_asset": "Activo de costo de contrato",

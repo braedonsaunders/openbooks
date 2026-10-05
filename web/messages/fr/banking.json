@@ -1019,6 +1019,41 @@
     "reverse": "Contrepasser",
     "empty": "Aucun règlement importé."
   },
+  "pspReviews": {
+    "title": "Examens des remboursements et litiges",
+    "description": "Remboursements et litiges mis en attente par la règle d'examen. Valider comptabilise ; refuser ne comptabilise rien.",
+    "emptyTitle": "Rien à examiner",
+    "emptyDescription": "Remboursements et litiges dès que la règle du prestataire est l'examen, ou quand l'automatisation ne peut pas encore comptabiliser.",
+    "colReference": "Référence",
+    "colProvider": "Prestataire",
+    "colKind": "Nature",
+    "kind": {
+      "refund": "Remboursement",
+      "dispute": "Litige"
+    },
+    "status": {
+      "pending_review": "En attente d'examen",
+      "posted": "Comptabilisé",
+      "rejected": "Refusé",
+      "opened": "Litige ouvert",
+      "won": "Litige gagné",
+      "lost": "Litige perdu"
+    },
+    "drawerKind": "Nature",
+    "drawerEvent": "Événement prestataire",
+    "drawerProviderRef": "Référence prestataire",
+    "drawerReason": "Motif indiqué",
+    "drawerReceipt": "Reçu",
+    "drawerInvoice": "Facture",
+    "drawerHistory": "Historique",
+    "approve": "Valider",
+    "reject": "Refuser",
+    "reasonLabel": "Motif",
+    "reasonPlaceholder": "Pourquoi cet examen est refusé (5 caractères minimum).",
+    "decidedNote": "Cet examen est clos ; la file le conserve pour mémoire.",
+    "approvedMessage": "Examen validé et comptabilisé.",
+    "rejectedMessage": "L'examen n'a pas pu être traité."
+  },
   "docStatus": {
     "draft": "Brouillon",
     "pending_approval": "En attente d'approbation",

@@ -1019,6 +1019,41 @@
     "reverse": "Estornar",
     "empty": "Nenhuma liquidação importada ainda."
   },
+  "pspReviews": {
+    "title": "Revisões de reembolsos e disputas",
+    "description": "Reembolsos e disputas retidos pela regra de revisão. Aprovar contabiliza; rejeitar não contabiliza nada.",
+    "emptyTitle": "Nada para revisar",
+    "emptyDescription": "Reembolsos e disputas aparecem aqui quando a regra do provedor é revisão, ou quando a automação ainda não pode contabilizar.",
+    "colReference": "Referência",
+    "colProvider": "Provedor",
+    "colKind": "Tipo",
+    "kind": {
+      "refund": "Reembolso",
+      "dispute": "Disputa"
+    },
+    "status": {
+      "pending_review": "Aguardando revisão",
+      "posted": "Contabilizado",
+      "rejected": "Rejeitado",
+      "opened": "Disputa aberta",
+      "won": "Disputa vencida",
+      "lost": "Disputa perdida"
+    },
+    "drawerKind": "Tipo",
+    "drawerEvent": "Evento do provedor",
+    "drawerProviderRef": "Referência do provedor",
+    "drawerReason": "Motivo informado",
+    "drawerReceipt": "Recibo",
+    "drawerInvoice": "Fatura",
+    "drawerHistory": "Histórico",
+    "approve": "Aprovar",
+    "reject": "Rejeitar",
+    "reasonLabel": "Motivo",
+    "reasonPlaceholder": "Por que esta revisão é recusada (mínimo 5 caracteres).",
+    "decidedNote": "Esta revisão está encerrada; a fila a mantém para registro.",
+    "approvedMessage": "Revisão aprovada e contabilizada.",
+    "rejectedMessage": "A revisão não pôde ser resolvida."
+  },
   "docStatus": {
     "draft": "Rascunho",
     "pending_approval": "Aprovação pendente",

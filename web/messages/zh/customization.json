@@ -29,6 +29,7 @@
     "inventory_onhand": "现有库存",
     "inventory_movement": "库存移动",
     "webhook_endpoint": "Webhook 端点",
+    "payment_dispute_review": "付款争议复核",
     "budget_scenario": "预算",
     "revenue_contract": "收入合同",
     "contract_cost_asset": "合同成本资产",

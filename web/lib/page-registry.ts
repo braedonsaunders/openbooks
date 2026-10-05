@@ -1060,6 +1060,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/banking/psp-settlements/reviews': {
+    route: '/banking/psp-settlements/reviews',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/banking/psp-settlements/reviews/view')
+      return {
+        load: (input) => m.loadPspReviews(input.searchParams ?? {}),
+        spec: (data) => m.pspReviewsSpec(data as never),
+      }
+    },
+  },
   '/banking/reconciliations': {
     route: '/banking/reconciliations',
     segments: [],

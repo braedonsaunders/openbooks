@@ -29,6 +29,7 @@
     "inventory_onhand": "Lagerbestand",
     "inventory_movement": "Lagerbewegung",
     "webhook_endpoint": "Webhook-Endpunkt",
+    "payment_dispute_review": "Zahlungsdisputprüfung",
     "budget_scenario": "Budget",
     "revenue_contract": "Erlösvertrag",
     "contract_cost_asset": "Vertragskostenanlage",

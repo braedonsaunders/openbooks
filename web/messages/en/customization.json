@@ -33,6 +33,7 @@
     "inventory_onhand": "Inventory on hand",
     "inventory_movement": "Inventory movement",
     "webhook_endpoint": "Webhook endpoint",
+    "payment_dispute_review": "Payment dispute review",
     "budget_scenario": "Budget",
     "revenue_contract": "Revenue contract",
     "contract_cost_asset": "Contract cost asset",

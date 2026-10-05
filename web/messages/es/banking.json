@@ -1019,6 +1019,41 @@
     "reverse": "Revertir",
     "empty": "Aún no se han importado liquidaciones."
   },
+  "pspReviews": {
+    "title": "Revisiones de reembolsos y disputas",
+    "description": "Reembolsos y disputas retenidos por la regla de revisión. Aprobar contabiliza; rechazar no contabiliza nada.",
+    "emptyTitle": "Nada por revisar",
+    "emptyDescription": "Los reembolsos y disputas aparecen aquí cuando la regla del proveedor es la revisión, o cuando la automatización aún no puede contabilizar.",
+    "colReference": "Referencia",
+    "colProvider": "Proveedor",
+    "colKind": "Tipo",
+    "kind": {
+      "refund": "Reembolso",
+      "dispute": "Disputa"
+    },
+    "status": {
+      "pending_review": "Pendiente de revisión",
+      "posted": "Contabilizado",
+      "rejected": "Rechazado",
+      "opened": "Disputa abierta",
+      "won": "Disputa ganada",
+      "lost": "Disputa perdida"
+    },
+    "drawerKind": "Tipo",
+    "drawerEvent": "Evento del proveedor",
+    "drawerProviderRef": "Referencia del proveedor",
+    "drawerReason": "Motivo indicado",
+    "drawerReceipt": "Recibo",
+    "drawerInvoice": "Factura",
+    "drawerHistory": "Historial",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "reasonLabel": "Motivo",
+    "reasonPlaceholder": "Por qué se rechaza esta revisión (mínimo 5 caracteres).",
+    "decidedNote": "Esta revisión está cerrada; la cola la conserva como constancia.",
+    "approvedMessage": "Revisión aprobada y contabilizada.",
+    "rejectedMessage": "La revisión no pudo resolverse."
+  },
   "docStatus": {
     "draft": "Borrador",
     "pending_approval": "Pendiente de aprobación",

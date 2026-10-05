@@ -1651,6 +1651,50 @@ const BANK_RULE: RecordTypeMeta = {
   ],
 };
 
+const PAYMENT_DISPUTE_REVIEW: RecordTypeMeta = {
+  key: "payment_dispute_review",
+  labelKey: "customization.recordTypes.payment_dispute_review",
+  category: "entity",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  // The queue opens newest-first: the operator works the latest provider
+  // event down, and resolved rows leave the queue on transition.
+  defaultSort: { sortKey: "created", dir: "desc" },
+  listColumns: [
+    { key: "provider_event", labelKey: "banking.pspReviews.colReference", kind: "reference", sortable: true, sortKey: "provider_event", locked: true },
+    { key: "provider", labelKey: "banking.pspReviews.colProvider", kind: "text", sortable: true, sortKey: "provider" },
+    { key: "kind", labelKey: "banking.pspReviews.colKind", kind: "text", sortable: true, sortKey: "kind" },
+    { key: "amount", labelKey: "common.labels.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created" },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["pending_review", "posted", "rejected", "opened", "won", "lost"].map((value) => ({
+        value,
+        labelKey: `banking.pspReviews.status.${value}`,
+      })),
+    },
+    {
+      key: "kind", labelKey: "banking.pspReviews.colKind", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["refund", "dispute"].map((value) => ({
+        value,
+        labelKey: `banking.pspReviews.kind.${value}`,
+      })),
+    },
+    {
+      key: "provider", labelKey: "banking.pspReviews.colProvider", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["stripe", "adyen", "gocardless", "paypal", "shopify_payments"].map((value) => ({
+        value,
+        labelKey: `banking.pspSettlements.providers.${value}`,
+      })),
+    },
+  ],
+};
+
 const VENDOR: RecordTypeMeta = {
   key: "vendor",
   labelKey: "customization.recordTypes.vendor",
@@ -2560,6 +2604,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   BANK_RECONCILIATION,
   BANK_STATEMENT,
   BANK_RULE,
+  PAYMENT_DISPUTE_REVIEW,
   CHANGE_SET,
   VENDOR,
   EMPLOYEE,

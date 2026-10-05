@@ -218,3 +218,83 @@ export function bankRuleWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: s
   if (adhoc.q) parts.push(sql`and br.name ilike ${`%${adhoc.q}%`}`)
   return sql.join(parts, sql` `)
 }
+
+/* ------------------------------------------------------------------ */
+/* Payment dispute reviews                                              */
+/* ------------------------------------------------------------------ */
+
+const PAYMENT_DISPUTE_STATUSES = ['pending_review', 'posted', 'rejected', 'opened', 'won', 'lost']
+const PAYMENT_DISPUTE_KINDS = ['refund', 'dispute']
+
+export const PAYMENT_DISPUTE_BUILT_IN_EXPR: Record<string, SQL> = {
+  provider: sql`pd.provider`,
+  kind: sql`pd.kind`,
+  provider_event: sql`pd.provider_event_id`,
+  amount: sql`pd.amount`,
+  currency: sql`pd.currency`,
+  status: sql`pd.status`,
+  reason: sql`pd.reason`,
+  created: sql`to_char(pd.created_at, 'YYYY-MM-DD')`,
+}
+
+export const PAYMENT_DISPUTE_SORTS: Record<string, SQL> = {
+  provider: sql`pd.provider`,
+  kind: sql`pd.kind`,
+  provider_event: sql`pd.provider_event_id`,
+  amount: sql`pd.amount`,
+  status: sql`pd.status`,
+  created: sql`pd.created_at`,
+}
+
+function paymentDisputeListPredicate(column: SQL, clause: FilterClause, allowed: string[]): SQL | null {
+  if (clause.operator === 'eq' || clause.operator === 'ne') {
+    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+    if (!allowed.includes(value)) return sql`false`
+    return clause.operator === 'eq' ? sql`${column} = ${value}` : sql`${column} <> ${value}`
+  }
+  if (clause.operator === 'in' || clause.operator === 'not_in') {
+    const values = (Array.isArray(clause.value) ? clause.value : [clause.value]).map(String).filter((v) => allowed.includes(v))
+    if (!values.length) return clause.operator === 'in' ? sql`false` : sql`true`
+    const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
+    return clause.operator === 'not_in' ? sql`${column} not in (${list})` : sql`${column} in (${list})`
+  }
+  return null
+}
+
+export function paymentDisputeWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
+  const parts: SQL[] = [sql`pd.org_id = ${orgId}`]
+  for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, null)) continue
+    // An unlisted value can never match a stored row: fail closed instead of
+    // ignoring the filter and showing the queue unfiltered.
+    if (filter.key === 'status') {
+      const predicate = paymentDisputeListPredicate(sql`pd.status`, filter, PAYMENT_DISPUTE_STATUSES)
+      parts.push(sql`and ${predicate ?? sql`false`}`)
+      continue
+    }
+    if (filter.key === 'kind') {
+      const predicate = paymentDisputeListPredicate(sql`pd.kind`, filter, PAYMENT_DISPUTE_KINDS)
+      parts.push(sql`and ${predicate ?? sql`false`}`)
+      continue
+    }
+    if (filter.key === 'provider') {
+      const value = Array.isArray(filter.value) ? filter.value.map(String) : [String(filter.value ?? '')]
+      const known = value.filter(Boolean)
+      if (!known.length) {
+        parts.push(sql`and false`)
+        continue
+      }
+      if (filter.operator === 'ne' || filter.operator === 'not_in') {
+        parts.push(sql`and pd.provider not in (${sql.join(known.map((item) => sql`${item}`), sql`, `)})`)
+      } else {
+        parts.push(sql`and pd.provider in (${sql.join(known.map((item) => sql`${item}`), sql`, `)})`)
+      }
+      continue
+    }
+  }
+  if (adhoc.q) {
+    const query = `%${adhoc.q}%`
+    parts.push(sql`and (pd.provider_event_id ilike ${query} or coalesce(pd.provider_ref, '') ilike ${query} or coalesce(pd.reason, '') ilike ${query})`)
+  }
+  return sql.join(parts, sql` `)
+}

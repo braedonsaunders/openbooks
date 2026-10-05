@@ -462,6 +462,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'provision-recon-section',
   'provision-runs-table',
   'provision-status-badge',
+  'psp-dispute-review-drawer',
   'psp-settlements',
   'putaway-queue',
   'query-console',
