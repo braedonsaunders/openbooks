@@ -2219,7 +2219,9 @@
       "timeCategory": "非請求可能時間",
       "unknownEmployee": "不明",
       "defaultProfile": "デフォルト",
-      "formulaError": "数式の結果が無効です"
+      "formulaError": "数式の結果が無効です",
+      "absorptionNoAccount": "間接費適用勘定が設定されていません — Setup → Overhead で設定してください。",
+      "absorptionNoPostings": "設定された間接費適用勘定には、この期間の適用仕訳がありません。"
     },
     "formats": {
       "perHour": "{amount}/時間"
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ 未吸収",
       "overAbsorbed": "過剰吸収",
       "billedHours": "請求可能時間",
-      "utilizationPct": "稼働率 {pct}"
+      "utilizationPct": "稼働率 {pct}",
+      "notAvailable": "利用不可"
     },
     "summary": {
       "compositeRate": "合成間接費レート",
@@ -2553,9 +2556,7 @@
       "directExcluded": "除外",
       "noteDirect": "請求可能な賃金・給与コスト（`cost_pool` ディメンション）は直接費であり、間接費負担には含まれません。売上原価は直接費です",
       "glApplied": "GL 適用額",
-      "utilizationOnly": "稼働率",
-      "noteAbsorptionGl": "間接費負担 GL 勘定への転記額に基づきます",
-      "noteAbsorptionUtil": "設定された間接費負担勘定に転記がない場合、実績転記が利用可能になるまで間接費 × 稼働率で適用負担額を計算します",
+      "noteAbsorptionGl": "設定された間接費適用勘定の適用仕訳",
       "labourRatesValue": "{count, plural, one {# 人の従業員} other {# 人の従業員}}",
       "noteLabourRates": "入力ごとの原価レート（{min}～{max}）、加重平均 {weighted}",
       "howIntro": "このダッシュボードのすべてのレートは元帳からリアルタイムで計算されます:",

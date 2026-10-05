@@ -189,10 +189,12 @@ export interface TrueCostData {
     compositeRateChangePct: number | null; // vs immediately-preceding equal window
     totalOverhead: number;
     overheadAccounts: number;
-    burdenApplied: number;
-    gap: number; // applied − actual (negative = under-absorbed)
-    gapPerHour: number;
-    absorptionPct: number;
+    /** Actual applied burden; null when the mechanism carried no postings. */
+    burdenApplied: number | null;
+    /** applied − actual (negative = under-absorbed); null when unavailable. */
+    gap: number | null;
+    gapPerHour: number | null;
+    absorptionPct: number | null;
     billedHours: number;
     totalHours: number;
     utilization: number;
@@ -204,7 +206,9 @@ export interface TrueCostData {
   labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number };
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
-  hasBurdenGL: boolean; // the 5200 applied account carries postings
+  hasBurdenGL: boolean; // the configured application account carries applied postings
+  /** Translated reason when absorption is unavailable; null when available. */
+  absorptionUnavailable: string | null;
   /** Allocation base values () for the engine + UI. */
   bases: AllocationBaseBundle;
   /**
@@ -1090,12 +1094,15 @@ export async function trueCostData(
     return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, composite, compositeExact };
   });
 
-  // ---- absorption (utilization-recovery model unless the GL mechanism is live) --
+  // ---- absorption (actual applied burden only) ---------------------------------
+  // With no applied postings there is nothing to compare against actuals:
+  // the comparison is unavailable by name — never modelled from
+  // utilization, never 100%.
   const glApplied = Number(appliedTotal);
   const hasBurdenGL = appliedLines > 0 && Math.abs(glApplied) > 0;
   const utilization = totalHours > 0 ? billedHours / totalHours : 0;
-  const burdenApplied = hasBurdenGL ? glApplied : totalOverhead * utilization;
-  const gap = burdenApplied - totalOverhead;
+  const burdenApplied = hasBurdenGL ? glApplied : null;
+  const gap = burdenApplied === null ? null : burdenApplied - totalOverhead;
 
   // ---- prior-window composite for the change chip (same classification) -----------
   const priorBilled = priorBilledHours;
@@ -1179,8 +1186,8 @@ export async function trueCostData(
       overheadAccounts: categories.reduce((s, c) => s + c.accounts.length, 0),
       burdenApplied,
       gap,
-      gapPerHour: billedHours > 0 ? gap / billedHours : 0,
-      absorptionPct: totalOverhead > 0 ? (burdenApplied / totalOverhead) * 100 : 100,
+      gapPerHour: gap === null || billedHours <= 0 ? null : gap / billedHours,
+      absorptionPct: burdenApplied === null || totalOverhead <= 0 ? null : (burdenApplied / totalOverhead) * 100,
       billedHours,
       totalHours,
       utilization,
@@ -1199,6 +1206,9 @@ export async function trueCostData(
     monthly,
     forecast,
     hasBurdenGL,
+    absorptionUnavailable: hasBurdenGL
+      ? null
+      : (appliedAccountId ? strings.absorptionNoPostings : strings.absorptionNoAccount),
     bases,
     ratePublication: { supported: exactSupported, blockers: publishBlockers },
     config: {
