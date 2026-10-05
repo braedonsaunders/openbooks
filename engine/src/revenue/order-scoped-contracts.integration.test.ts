@@ -222,7 +222,7 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
       { itemId: setupItemId, amount: "3000" },
       { itemId: org.items.service, amount: "12000" },
     ]);
-    let contracts = (await db.execute<{ id: string; status: string; total_consideration: string; modification_seq: number }>(sql`
+    const contracts = (await db.execute<{ id: string; status: string; total_consideration: string; modification_seq: number }>(sql`
       select id, status, total_consideration::text, modification_seq from revenue_contracts
        where org_id = ${org.orgId}`)).rows;
     assert.equal(contracts.length, 1);
