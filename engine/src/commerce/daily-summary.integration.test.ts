@@ -183,6 +183,20 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     }
     const waiting = await withBypass(() => loadChannelOrder(org.orgId, d.id));
     assert.equal(waiting!.postingStatus, "pending");
+    await db.execute(sql`update sales_channel_posting_policies set effective_to='2026-07-31'
+      where org_id=${org.orgId} and channel_id=${channelId}`);
+    const refused = await withBypass(() => postDueDailySummariesForOrg(org.orgId,actor));
+    assert.equal(refused.parked,1);
+    const exception = await withBypass(() => loadChannelOrder(org.orgId,d.id));
+    assert.equal(exception!.postingStatus,'exception');
+    assert.equal(exception!.exceptionCode,'channel_policy_missing');
+    assert.match(exception!.exceptionReason!,/Test Shop.*no posting policy/);
+    assert.match(exception!.exceptionRemedy!,/Channels → Settings → Posting/);
+    const audit = (await db.execute<{changes:{before:{posting_status:string};after:{posting_status:string}}}>(sql`
+      select changes from audit_log where org_id=${org.orgId} and table_name='channel_orders'
+       and row_id=${d.id} order by at desc,id desc limit 1`)).rows[0]!;
+    assert.equal(audit.changes.before.posting_status,'pending');
+    assert.equal(audit.changes.after.posting_status,'exception');
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -10,10 +10,10 @@ import {
   type ResolvedOrder,
 } from "./order-posting.ts";
 import { claimPendingRefundEvents, postDueRefundBatchesForOrg, postRefundBatchDocument } from "./refunds.ts";
-import { governedSalesOrderRef, loadChannelOrder, markOrderException, markOrderSummarized, maybeCloseGoverningOrder } from "./orders.ts";
+import { governedSalesOrderRef, loadChannelOrder, markOrderException, markOrderSummarized, maybeCloseGoverningOrder, parkPendingChannelOrders } from "./orders.ts";
 import { getPostingPolicy } from "./posting-policies.ts";
-import { CommerceError } from "./errors.ts";
-import { db, withBypassContext, withOrg, withOrgTransaction } from "../platform/db.ts";
+import { CommerceError, pgCause } from "./errors.ts";
+import { db, withBypassContext, withOrg, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 
@@ -328,19 +328,28 @@ export async function postDueDailySummaries(): Promise<{ posted: number; parked:
     .then((result) => result.rows);
   let posted = 0;
   let parked = 0;
+  const failures: string[] = [];
   for (const org of orgs) {
     try {
       const outcome = await withOrg(org.org_id, () => postDueDailySummariesForOrg(org.org_id, null));
       posted += outcome.posted;
       parked += outcome.parked;
-    } catch {
-      continue;
+    } catch (error) {
+      failures.push(`Organization ${org.org_id}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  if (failures.length) throw new Error(`Daily summary scan failed: ${failures.join('; ')}`);
   return { posted, parked };
 }
 
 export async function postDueDailySummariesForOrg(
+  orgId: string,
+  actor: string | null,
+): Promise<{ posted: number; parked: number }> {
+  return withOrg(orgId, () => postDueDailySummariesForOrgIn(orgId, actor));
+}
+
+async function postDueDailySummariesForOrgIn(
   orgId: string,
   actor: string | null,
 ): Promise<{ posted: number; parked: number }> {
@@ -352,20 +361,27 @@ export async function postDueDailySummariesForOrg(
   for (const channel of channels) {
     const meta = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
       select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`)).rows[0];
-    if (!meta) continue;
+    if (!meta) throw new Error(`Pending orders reference missing channel ${channel.channel_id}`);
     let policy: { mode: string; cutoffTz: string };
     try {
       const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
       policy = await getPostingPolicy(orgId, channel.channel_id, today);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof CommerceError)) throw error;
+      parked += await parkPendingChannelOrders(orgId, channel.channel_id, actor, error);
       continue;
     }
     if (policy.mode !== "daily_summary") continue;
     let shopToday: string;
     try {
-      shopToday = (await db.execute<{ day: string }>(sql`
-        select ((now() at time zone ${policy.cutoffTz})::date)::text as day`)).rows[0]!.day;
-    } catch {
+      shopToday = await withTransactionSavepoint(db, async () => (await db.execute<{ day: string }>(sql`
+        select ((now() at time zone ${policy.cutoffTz})::date)::text as day`)).rows[0]!.day);
+    } catch (error) {
+      if (pgCause(error)?.code !== '22023') throw error;
+      parked += await parkPendingChannelOrders(orgId, channel.channel_id, actor, new CommerceError(
+        'channel_policy_timezone_unknown', `Cut-off time zone "${policy.cutoffTz}" is not a known time zone.`,
+        'Set an IANA cut-off time zone, for example America/Toronto, in the channel posting policy, then replay the exceptions.',
+        { field: 'cutoffTz' }));
       continue;
     }
     const due: DueChannel = { channelId: channel.channel_id, provider: meta.kind, subsidiaryId: meta.subsidiary_id, cutoffTz: policy.cutoffTz };
@@ -403,7 +419,7 @@ export async function postDueDailySummariesForOrg(
          limit 1`)).rows[0];
       if (postedSummary) {
         for (const orderId of group.order_ids) {
-          const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true }).catch(() => ({ status: "pending" as string }));
+          const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true });
           if (outcome.status === "posted") posted += 1;
           else if (outcome.status === "exception") parked += 1;
         }
@@ -411,7 +427,7 @@ export async function postDueDailySummariesForOrg(
       }
       if (!groupShelf) {
         for (const orderId of group.order_ids) {
-          const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true }).catch(() => ({ status: "pending" as string }));
+          const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true });
           if (outcome.status === "exception") parked += 1;
         }
         continue;
@@ -433,7 +449,7 @@ export async function postDueDailySummariesForOrg(
   // Refunds behind already-posted sales (a refund-only day, or a refund that
   // arrived after its sales batch closed) post as their own day documents.
   // Refunds behind still-pending orders joined the sales batch above.
-  const refunds = await postDueRefundBatchesForOrg(orgId, actor).catch(() => ({ posted: 0, parked: 0 }));
+  const refunds = await postDueRefundBatchesForOrg(orgId, actor);
   posted += refunds.posted;
   parked += refunds.parked;
   return { posted, parked };
