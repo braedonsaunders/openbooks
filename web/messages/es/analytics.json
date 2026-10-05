@@ -933,6 +933,26 @@
           "label": "Concentración — tramo superior (%)",
           "help": "Tramo superior de clientes en la cifra principal"
         },
+        "concentrationHealthHigh": {
+          "label": "Concentración — salud alta (puntos)",
+          "help": "Puntos de inteligencia con concentración alta"
+        },
+        "concentrationHealthModerate": {
+          "label": "Concentración — salud media (puntos)",
+          "help": "Puntos de inteligencia con concentración media"
+        },
+        "concentrationHealthLow": {
+          "label": "Concentración — salud baja (puntos)",
+          "help": "Puntos de inteligencia con concentración baja"
+        },
+        "velocityUrgencyHighMultiple": {
+          "label": "Ritmo — muy urgente desde (×)",
+          "help": "El atraso más allá de esta parte del ciclo se lee como muy urgente"
+        },
+        "velocityDueSoonDays": {
+          "label": "Ritmo — vence pronto (días)",
+          "help": "Un pedido esperado en estos días se lee como próximo a vencer"
+        },
         "frictionPointsPerCredit": {
           "label": "Fricción — puntos por crédito",
           "help": "Puntos de fricción por cada nota de crédito"
@@ -1049,9 +1069,17 @@
           "label": "Crecimiento — banda de tendencia (%)",
           "help": "Las comparaciones más allá se leen como alza o baja"
         },
+        "growthTrendWindowMonths": {
+          "label": "Crecimiento — ventana de tendencia (meses)",
+          "help": "Meses por lado al comparar la ventana reciente con la anterior"
+        },
         "growthYoyWindowMonths": {
           "label": "Crecimiento — ventana interanual (meses)",
           "help": "Meses finales a cada lado de la comparación interanual"
+        },
+        "cohortActiveMonths": {
+          "label": "Cohortes — activo en (meses)",
+          "help": "Un cliente con pedido en estos meses cuenta como activo"
         },
         "overdueInsightCount": {
           "label": "Aviso — vencidas sobre (facturas)",

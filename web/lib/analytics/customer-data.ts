@@ -61,20 +61,25 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
  *    this ledger, so returns are always 0, stated in the UI); configured
  *    point and issue-rate bands.
  *  - Velocity: avg days between orders (tenure/(txns−1)); overdue vs cadence;
- *    urgency critical >1× / high >0.5× / medium >0 / due-soon ≤7d.
+ *    urgency critical past a full cycle, high past the configured multiple,
+ *    medium on any overdue, due-soon inside the configured days. Without
+ *    repeat orders the cadence is unknown and no urgency is claimed.
  *  - Payment: paid = fully-applied invoices; days-to-pay = final application
  *    date − invoice date (the closedate−trandate); score 100 minus the
  *    configured DSO-band and overdue penalties; configured ratings.
  *  - Growth: monthly revenue/customers/new-customers with median-based mature
  *    months (configured floor), capped MoM, YoY = last-3mo vs the matching
- *    window a year back, trend = recent-6 vs prior-6 in a configured band.
- *  - Cohorts: lifetime by first-order year; active = ordered in last 6 months.
+ *    window a year back, trend = recent window vs prior window over the
+ *    configured span in a configured band.
+ *  - Cohorts: lifetime by first-order year; active = ordered inside the
+ *    configured active months.
  *  - Health: RFM sub-scores weighted by the configured health weights minus
  *    the configured friction penalty; a missing payment term drops out and
  *    the rest re-normalise. Graded on the shared A+/A/B/C/D/F ladder.
- *  - Intelligence score: champions share, average retention, concentration
- *    health and payment rate weighted by the configured intelligence
- *    weights, with missing terms dropped. Same shared ladder.
+ *  - Intelligence score: champions share (saturating at twice the configured
+ *    Platinum share), average retention, concentration health from the
+ *    configured per-level scores, and payment rate — weighted by the
+ *    configured intelligence weights, with missing terms dropped. Same ladder.
  */
 
 /* --------------------------------------------------------------- constants */
@@ -973,6 +978,11 @@ async function readCustomerData(
   const concMedium = cfg.concentrationMediumShare!;
   const concCoverage = cfg.concentrationCoverageShare!;
   const topSlice = cfg.topSharePct! / 100;
+  const concHealthHigh = cfg.concentrationHealthHigh!;
+  const concHealthModerate = cfg.concentrationHealthModerate!;
+  const concHealthLow = cfg.concentrationHealthLow!;
+  const urgencyHighMultiple = cfg.velocityUrgencyHighMultiple!;
+  const dueSoonDays = cfg.velocityDueSoonDays!;
   const frictionPerCredit = cfg.frictionPointsPerCredit!;
   const frictionCriticalCut = cfg.frictionCriticalPoints!;
   const frictionHighCut = cfg.frictionHighPoints!;
@@ -1000,7 +1010,9 @@ async function readCustomerData(
   const momCapUp = cfg.growthMomCapUp!;
   const momCapDown = cfg.growthMomCapDown!;
   const trendBand = cfg.growthTrendPct!;
+  const trendWindow = cfg.growthTrendWindowMonths!;
   const yoyWindow = cfg.growthYoyWindowMonths!;
+  const cohortActiveMonths = cfg.cohortActiveMonths!;
   const overdueInsightAt = cfg.overdueInsightCount!;
 
   const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, growthLedgerRows, cohortLedgerRows, profitData, dsoStats] = await Promise.all([
@@ -1496,16 +1508,21 @@ async function readCustomerData(
   const velocityOf = (c: Base) => {
     // Unknown recency shows no lateness: velocity measures overdue evidence
     // and unknown is not evidence (churn already flags undated customers).
+    // Without repeat orders there is no measurable cadence — the cycle is
+    // unknown rather than an assumed 30 days, so no urgency is claimed for it.
     const recency = c.recency ?? 0;
-    const cycle = c.tenure > 0 && c.txns > 1 ? c.tenure / (c.txns - 1) : 30;
-    const nextIn = Math.max(0, cycle - recency);
-    const overdue = Math.max(0, recency - cycle);
+    const hasPattern = c.txns >= 2;
+    const cycle = hasPattern && c.tenure > 0 ? c.tenure / (c.txns - 1) : null;
+    const nextIn = cycle === null ? 0 : Math.max(0, cycle - recency);
+    const overdue = cycle === null ? 0 : Math.max(0, recency - cycle);
     let urgency: CustomerRow["urgency"] = "on-track";
-    if (overdue > cycle) urgency = "critical";
-    else if (overdue > cycle * 0.5) urgency = "high";
-    else if (overdue > 0) urgency = "medium";
-    else if (nextIn <= 7) urgency = "due-soon";
-    return { cycle: Math.round(cycle), overdue: Math.round(overdue), urgency, hasPattern: c.txns >= 2 };
+    if (cycle !== null) {
+      if (overdue > cycle) urgency = "critical";
+      else if (overdue > cycle * urgencyHighMultiple) urgency = "high";
+      else if (overdue > 0) urgency = "medium";
+      else if (nextIn <= dueSoonDays) urgency = "due-soon";
+    }
+    return { cycle: cycle === null ? 0 : Math.round(cycle), overdue: Math.round(overdue), urgency, hasPattern };
   };
 
   /* ---- friction / payment lookups ---- */
@@ -1865,11 +1882,11 @@ async function readCustomerData(
   const matureGrowthRates = monthly.filter((m) => m.isMature && m.growthRate !== null).map((m) => m.growthRate!) ;
   const avgMonthlyGrowth = matureGrowthRates.length ? Math.round((matureGrowthRates.reduce((a, r) => a + r, 0) / matureGrowthRates.length) * 10) / 10 : 0;
   let trend: CustomerData["growth"]["trend"] = "stable";
-  if (monthly.length >= 6) {
-    // Compare equal-length, adjacent windows. With less than twelve months of
-    // history, use the largest pair available (three to five months each)
-    // rather than reusing months in both windows and damping the signal.
-    const windowSize = Math.min(6, Math.floor(monthly.length / 2));
+  if (monthly.length >= trendWindow) {
+    // Compare equal-length, adjacent windows over the configured span. With
+    // less than twice that history, use the largest pair available rather
+    // than reusing months in both windows and damping the signal.
+    const windowSize = Math.max(1, Math.min(trendWindow, Math.floor(monthly.length / 2)));
     const recentWindow = monthly.slice(-windowSize);
     const priorWindow = monthly.slice(-windowSize * 2, -windowSize);
     // Both windows share their size, so comparing sums compares averages.
@@ -1887,7 +1904,8 @@ async function readCustomerData(
   /* ---- cohorts () ---- */
   // Month arithmetic clamps instead of overflowing (Aug 31 minus six months
   // is Feb 28/29, never Mar 3): addMonthsClamped carries the civil calendar.
-  const activeCut = addMonthsClamped(ref, -6).slice(0, 10);
+  // Cohort activity counts orders inside the configured active months.
+  const activeCut = addMonthsClamped(ref, -cohortActiveMonths).slice(0, 10);
   // Lifetime INVOICED revenue arrives per (party, functional, posting day):
   // translate each day at its own spot rate, merge per party, then run the
   // cohort logic on parties (never on legs). Lifetime recognized merges in
@@ -1950,14 +1968,21 @@ async function readCustomerData(
 
   /* ---- intelligence score () ---- */
   const championsStat = segments.find((s) => s.segment === "champions")!;
-  const championsScore = Math.min(100, championsStat.percentage * 5);
+  // Full marks when champions reach twice the Platinum tier share: the
+  // saturation point derives from the configured tier, never a fixed ×5.
+  const championSaturation = 2 * tierPlatinum * 100;
+  const championsScore = championSaturation > 0
+    ? Math.min(100, (championsStat.percentage / championSaturation) * 100)
+    : 0;
   // Terms with no data are dropped and the remaining weights re-normalised:
   // with no scored customers there is no average retention, and with no
   // invoices there is no payment rate — neither reads as a number.
   const avgRetentionProbability = rows.length
     ? Math.round(rows.reduce((a, r) => a + r.retentionProbability, 0) / rows.length)
     : null;
-  const concentrationHealth = hhiLevel === "high" ? 30 : hhiLevel === "moderate" ? 60 : 90;
+  // Concentration health follows the configured per-level scores: a spread
+  // book contributes near full marks, a concentrated one drags the portfolio.
+  const concentrationHealth = hhiLevel === "high" ? concHealthHigh : hhiLevel === "moderate" ? concHealthModerate : concHealthLow;
   const intelTerms: { value: number; weight: number }[] = [{ value: championsScore, weight: intelChampions }];
   if (avgRetentionProbability !== null) intelTerms.push({ value: avgRetentionProbability, weight: intelRetention });
   intelTerms.push({ value: concentrationHealth, weight: intelConcentration });

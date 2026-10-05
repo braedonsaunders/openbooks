@@ -933,6 +933,26 @@
           "label": "Konzentration — Top-Anteil (%)",
           "help": "Oberster Kundenanteil in der Konzentrations-Leitkennzahl"
         },
+        "concentrationHealthHigh": {
+          "label": "Konzentration — Gesundheit hoch (Punkte)",
+          "help": "Intelligenzpunkte bei hoher Konzentration"
+        },
+        "concentrationHealthModerate": {
+          "label": "Konzentration — Gesundheit mittel (Punkte)",
+          "help": "Intelligenzpunkte bei mittlerer Konzentration"
+        },
+        "concentrationHealthLow": {
+          "label": "Konzentration — Gesundheit niedrig (Punkte)",
+          "help": "Intelligenzpunkte bei niedriger Konzentration"
+        },
+        "velocityUrgencyHighMultiple": {
+          "label": "Bestelltempo — dringend ab (×)",
+          "help": "Überfälligkeit jenseits dieses Anteils am Bestellzyklus gilt als dringend"
+        },
+        "velocityDueSoonDays": {
+          "label": "Bestelltempo — bald fällig (Tage)",
+          "help": "Eine Bestellung innerhalb dieser Tage gilt als bald fällig"
+        },
         "frictionPointsPerCredit": {
           "label": "Reibung — Punkte je Gutschrift",
           "help": "Reibungspunkte je Gutschrift"
@@ -1049,9 +1069,17 @@
           "label": "Wachstum — Trendband (%)",
           "help": "Fenstervergleiche jenseits dieses Werts gelten als wachsend oder rückläufig"
         },
+        "growthTrendWindowMonths": {
+          "label": "Wachstum — Trendfenster (Monate)",
+          "help": "Monate je Seite beim Vergleich des aktuellen mit dem vorherigen Fenster"
+        },
         "growthYoyWindowMonths": {
           "label": "Wachstum — Vorjahresfenster (Monate)",
           "help": "Folgemonate je Seite des Vorjahresvergleichs"
+        },
+        "cohortActiveMonths": {
+          "label": "Kohorten — aktiv innerhalb (Monate)",
+          "help": "Kunden mit Bestellung innerhalb dieser Monate zählen als aktiv"
         },
         "overdueInsightCount": {
           "label": "Hinweis — überfällig über (Rechnungen)",

@@ -933,6 +933,26 @@
           "label": "集中度 — 头部分层（％）",
           "help": "主要集中指标中的头部客户分层"
         },
+        "concentrationHealthHigh": {
+          "label": "集中度 — 高集中得分",
+          "help": "集中度高时的智能得分"
+        },
+        "concentrationHealthModerate": {
+          "label": "集中度 — 中集中得分",
+          "help": "集中度中等时的智能得分"
+        },
+        "concentrationHealthLow": {
+          "label": "集中度 — 低集中得分",
+          "help": "集中度低时的智能得分"
+        },
+        "velocityUrgencyHighMultiple": {
+          "label": "流速 — 高紧急阈值（倍）",
+          "help": "逾期超过订购周期该比例即判定为高度紧急"
+        },
+        "velocityDueSoonDays": {
+          "label": "流速 — 即将到期（天）",
+          "help": "预计在这些天内的订单判定为即将到期"
+        },
         "frictionPointsPerCredit": {
           "label": "摩擦 — 每贷项记分",
           "help": "每张贷项单据的摩擦分数"
@@ -1049,9 +1069,17 @@
           "label": "增长 — 趋势带（％）",
           "help": "超出即判定为增长或下滑"
         },
+        "growthTrendWindowMonths": {
+          "label": "增长 — 趋势窗口（月）",
+          "help": "比较近期与前期窗口时每侧的月数"
+        },
         "growthYoyWindowMonths": {
           "label": "增长 — 同比窗口（月）",
           "help": "同比比较两侧的尾端月数"
+        },
+        "cohortActiveMonths": {
+          "label": "同期群 — 活跃期（月）",
+          "help": "在此月数内下过单的客户计为活跃"
         },
         "overdueInsightCount": {
           "label": "提示 — 逾期超（张）",

@@ -236,6 +236,16 @@ export const ANALYTICS_CONFIG = {
       concentrationMediumShare: 10,
       concentrationCoverageShare: 80,
       topSharePct: 10,
+      // Concentration health: intelligence points per HHI level. A spread book
+      // scores near full marks; a concentrated one drags the portfolio score.
+      concentrationHealthHigh: 30,
+      concentrationHealthModerate: 60,
+      concentrationHealthLow: 90,
+      // Velocity urgency: overdue beyond the high multiple of the order cycle
+      // reads highly urgent; an order expected within the due-soon days reads
+      // as due soon. Past a full cycle overdue is critical by definition.
+      velocityUrgencyHighMultiple: 0.5,
+      velocityDueSoonDays: 7,
       // Friction: points per credit memo, level point cut-offs, penalty
       // points and issue-rate bands.
       frictionPointsPerCredit: 2,
@@ -271,12 +281,15 @@ export const ANALYTICS_CONFIG = {
       // Nurture: health floor plus a percentile of the CLV distribution.
       nurtureMinHealth: 85,
       nurtureClvPercentile: 90,
-      // Growth: maturity floor, MoM caps, trend band, YoY window, insight count.
+      // Growth: maturity floor, MoM caps, trend band and window, YoY window,
+      // insight count. Cohorts count a customer active within the active months.
       growthMaturityFloorPct: 10,
       growthMomCapUp: 200,
       growthMomCapDown: 80,
       growthTrendPct: 10,
+      growthTrendWindowMonths: 6,
       growthYoyWindowMonths: 15,
+      cohortActiveMonths: 6,
       overdueInsightCount: 5,
     },
     fields: [
@@ -329,6 +342,11 @@ export const ANALYTICS_CONFIG = {
       pct("concentrationMediumShare", "analytics.customer.config.fields.concentrationMediumShare"),
       pct("concentrationCoverageShare", "analytics.customer.config.fields.concentrationCoverageShare", 1, 100),
       num("topSharePct", "analytics.customer.config.fields.topSharePct", 1, 100),
+      pct("concentrationHealthHigh", "analytics.customer.config.fields.concentrationHealthHigh"),
+      pct("concentrationHealthModerate", "analytics.customer.config.fields.concentrationHealthModerate"),
+      pct("concentrationHealthLow", "analytics.customer.config.fields.concentrationHealthLow"),
+      num("velocityUrgencyHighMultiple", "analytics.customer.config.fields.velocityUrgencyHighMultiple", 0.1, 0.9, 0.05),
+      num("velocityDueSoonDays", "analytics.customer.config.fields.velocityDueSoonDays", 0, 30),
       num("frictionPointsPerCredit", "analytics.customer.config.fields.frictionPointsPerCredit", 1, 10),
       num("frictionCriticalPoints", "analytics.customer.config.fields.frictionCriticalPoints", 0, 100),
       num("frictionHighPoints", "analytics.customer.config.fields.frictionHighPoints", 0, 100),
@@ -361,7 +379,9 @@ export const ANALYTICS_CONFIG = {
       num("growthMomCapUp", "analytics.customer.config.fields.growthMomCapUp", 0, 1000),
       num("growthMomCapDown", "analytics.customer.config.fields.growthMomCapDown", 0, 1000),
       pct("growthTrendPct", "analytics.customer.config.fields.growthTrendPct"),
+      num("growthTrendWindowMonths", "analytics.customer.config.fields.growthTrendWindowMonths", 2, 12),
       num("growthYoyWindowMonths", "analytics.customer.config.fields.growthYoyWindowMonths", 3, 36),
+      num("cohortActiveMonths", "analytics.customer.config.fields.cohortActiveMonths", 1, 24),
       num("overdueInsightCount", "analytics.customer.config.fields.overdueInsightCount", 1, 1000),
     ],
     ordered: [
@@ -381,6 +401,7 @@ export const ANALYTICS_CONFIG = {
       ["clvRetentionMinPct", "clvRetentionMaxPct"],
       ["tierPlatinumPct", "tierGoldPct", "tierSilverPct"],
       ["concentrationMediumShare", "concentrationHighShare", "concentrationCriticalShare"],
+      ["concentrationHealthHigh", "concentrationHealthModerate", "concentrationHealthLow"],
       ["paymentDsoLowDays", "paymentDsoMediumDays", "paymentDsoHighDays"],
       ["paymentDsoLowPenalty", "paymentDsoMediumPenalty", "paymentDsoHighPenalty"],
       ["paymentRatingFair", "paymentRatingGood", "paymentRatingExcellent"],

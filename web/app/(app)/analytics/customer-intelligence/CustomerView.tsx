@@ -149,8 +149,10 @@ function ScoreChip({ v }: { v: number }) {
   return <span className={cn('inline-block w-5 rounded py-0.5 text-center text-[10px] font-bold', cls)}>{v}</span>
 }
 
-function RetentionBadge({ v }: { v: number }) {
-  const cls = v >= 70 ? 'text-emerald-600 dark:text-emerald-400' : v >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
+function RetentionBadge({ v, bands }: { v: number; bands: { good: number; fair: number } }) {
+  // Retention colours follow the shared grade ladder (good at B, fair at D),
+  // never a second set of fixed cut-offs.
+  const cls = v >= bands.good ? 'text-emerald-600 dark:text-emerald-400' : v >= bands.fair ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
   return <span className={cn('font-semibold tabular-nums', cls)}>{v}%</span>
 }
 
@@ -758,7 +760,7 @@ function LifetimeTab({
                   <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', marginClass(r.marginPct, bands))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.annualValue)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionFactor} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionFactor} bands={{ good: data.config.gradeB, fair: data.config.gradeD }} /></SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -892,7 +894,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
                       <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{r.churnScore}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : t('sub.daysShort', { days: r.recencyDays })}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionProbability} /></SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionProbability} bands={{ good: data.config.gradeB, fair: data.config.gradeD }} /></SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">{r.churnFactors.join(' · ') || '—'}</SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -923,7 +925,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
         <KpiCard icon={BarChart3} accent={g.avgMonthlyGrowth >= 0 ? 'teal' : 'amber'} label={t('kpi.avgMonthly')} value={`${g.avgMonthlyGrowth >= 0 ? '+' : ''}${g.avgMonthlyGrowth}%`} sub={t('sub.trend', { trend: t(`trend.${g.trend}`) })} />
         <KpiCard icon={DollarSign} accent="sky" label={t('kpi.medianMonthly')} value={money(g.medianMonthlyRevenue)} sub={t('sub.revenue')} />
         <KpiCard icon={Users} accent="violet" label={t('kpi.newCustomers')} value={String(g.totalNewCustomers)} sub={t('sub.firstOrderInPeriod')} />
-        <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= 50 ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLast6mo')} />
+        <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= data.config.gradeD ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLast6mo')} />
       </div>
 
       {k.overdueInvoices > data.config.overdueInsightCount ? (
@@ -959,7 +961,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
                   <SharedTableCell className="px-4 py-2 font-medium text-slate-700 tabular-nums dark:text-slate-300">{c.year}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{c.totalCustomers}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.activeCustomers}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={c.retentionRate} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={c.retentionRate} bands={{ good: data.config.gradeB, fair: data.config.gradeD }} /></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(c.avgRevenue)}</SharedTableCell>
                 </SharedTableRow>
               ))}

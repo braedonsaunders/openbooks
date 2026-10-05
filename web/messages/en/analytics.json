@@ -1145,6 +1145,26 @@
           "label": "Concentration — top slice (%)",
           "help": "Top customer share in the headline concentration figure"
         },
+        "concentrationHealthHigh": {
+          "label": "Concentration — high health (score)",
+          "help": "Intelligence points when concentration reads high"
+        },
+        "concentrationHealthModerate": {
+          "label": "Concentration — moderate health (score)",
+          "help": "Intelligence points when concentration reads moderate"
+        },
+        "concentrationHealthLow": {
+          "label": "Concentration — low health (score)",
+          "help": "Intelligence points when concentration reads low"
+        },
+        "velocityUrgencyHighMultiple": {
+          "label": "Velocity — highly urgent past (×)",
+          "help": "Overdue beyond this share of the order cycle reads as highly urgent"
+        },
+        "velocityDueSoonDays": {
+          "label": "Velocity — due soon (days)",
+          "help": "An order expected within this many days reads as due soon"
+        },
         "frictionPointsPerCredit": {
           "label": "Friction — points per credit",
           "help": "Friction points added per credit memo"
@@ -1261,9 +1281,17 @@
           "label": "Growth — trend band (%)",
           "help": "Window comparisons beyond this read as growing or declining"
         },
+        "growthTrendWindowMonths": {
+          "label": "Growth — trend window (months)",
+          "help": "Months per side when comparing the recent window against the prior one"
+        },
         "growthYoyWindowMonths": {
           "label": "Growth — YoY window (months)",
           "help": "Trailing months on each side of the year-on-year comparison"
+        },
+        "cohortActiveMonths": {
+          "label": "Cohorts — active within (months)",
+          "help": "A customer ordered within this many months counts as active"
         },
         "overdueInsightCount": {
           "label": "Insight — overdue above (invoices)",

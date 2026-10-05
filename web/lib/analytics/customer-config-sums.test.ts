@@ -75,6 +75,10 @@ test('a worse churn or payment band can never score less than a milder one', () 
     () => cleanConfigValues('customerIntelligence', fullSave({ paymentDsoHighPenalty: 5 })),
     (error: unknown) => error instanceof Error && /paymentDsoHighPenalty/.test(error.message),
   )
+  assert.throws(
+    () => cleanConfigValues('customerIntelligence', fullSave({ concentrationHealthModerate: 20 })),
+    (error: unknown) => error instanceof Error && /concentrationHealthModerate/.test(error.message),
+  )
 })
 
 test('an unknown scoring key is refused', () => {
