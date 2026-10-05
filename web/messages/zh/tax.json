@@ -194,7 +194,51 @@
   },
   "tabs": {
     "prepare": "编制申报表",
-    "history": "历史申报"
+    "history": "历史申报",
+    "activity": "服务商活动记录"
+  },
+  "activity": {
+    "emptyTitle": "尚无服务商提交记录",
+    "emptyDescription": "在配置税费服务商后过账销售发票或贷项通知单，每条提交记录及其状态都会显示在这里。",
+    "title": "{document} 的服务商提交",
+    "document": "单据",
+    "direction": "业务方向",
+    "direction_sale": "销售",
+    "direction_return": "退款",
+    "providerCode": "服务商侧单据编号",
+    "attempts": "尝试次数",
+    "nextAttempt": "下次尝试",
+    "committedAt": "已提交",
+    "providerDetail": "服务商凭证",
+    "postedTax": "已过账税额",
+    "merchantTax": "商家税额",
+    "providerTax": "服务商税额",
+    "status": {
+      "pending": "待处理",
+      "committed": "已提交",
+      "voided": "已作废",
+      "failed": "失败",
+      "skipped": "已跳过"
+    },
+    "columns": {
+      "document": "单据",
+      "provider": "服务商",
+      "status": "状态",
+      "attempts": "尝试次数",
+      "nextAttempt": "下次尝试",
+      "committedAt": "已提交"
+    },
+    "summaryPending": "{provider}尚未提交{document}。",
+    "summaryCommitted": "{document}已提交至{provider}。",
+    "summaryFailed": "{provider}未能提交{document}。请查看下方原因，然后重试。",
+    "summaryVoided": "单据作废后，{document}已在{provider}侧作废。",
+    "summarySkipped": "{document}无需服务商提交，未发送任何内容。",
+    "retryNow": "立即重试",
+    "retryConfirmTitle": "要重试此次提交吗？",
+    "retryConfirmDescription": "将{document}重新发送至{provider}。提交使用相同的单据编号重放，服务商不会重复记账。",
+    "retryStarted": "重试已排队——下次扫描将提交。",
+    "retryFailed": "重试未能启动，请再试一次。",
+    "mismatchNotice": "{provider}记录的税额为{providerTax}，但OpenBooks过账的商家税额为{merchantTax}。服务商数值将保留以供复核，绝不会被自动调整。"
   },
   "registration": "申报登记",
   "oss": {

@@ -1519,6 +1519,58 @@ const SOURCES: Record<string, EntityListSource> = {
     basePath: '/collections',
     statusVariant: (row) => row.status === 'succeeded' ? 'success' : row.status === 'failed' ? 'destructive' : row.status === 'processing' ? 'warning' : row.status === 'initiated' ? 'secondary' : 'outline',
   },
+  tax_provider_transaction: {
+    // Provider commit queue: one row per (document, provider, direction)
+    // with the commit outcome. The document join scopes subsidiary
+    // visibility the way collection attempts do; the tax page itself
+    // already refuses entity-restricted callers.
+    recordType: 'tax_provider_transaction',
+    table: 'tax_provider_transactions',
+    alias: 't',
+    readPermission: 'reports.read',
+    baseJoins: sql`join documents d on d.org_id = t.org_id and d.id = t.document_id`,
+    builtInExpr: {
+      document: sql`d.document_number`,
+      provider: sql`t.provider`,
+      kind: sql`t.kind`,
+      attempts: sql`t.attempts`,
+      next_attempt_at: sql`t.next_attempt_at`,
+      committed_at: sql`t.committed_at`,
+      created_at: sql`t.created_at`,
+      status: sql`t.status`,
+    },
+    sorts: {
+      document: sql`d.document_number`,
+      provider: sql`t.provider`,
+      attempts: sql`t.attempts`,
+      next_attempt_at: sql`t.next_attempt_at`,
+      committed_at: sql`t.committed_at`,
+      created_at: sql`t.created_at`,
+      status: sql`t.status`,
+    },
+    defaultSort: sql`t.created_at desc`,
+    statusDisplayName: (storedName, translate) => {
+      const fullKey = `tax.activity.status.${storedName}`
+      const out = translate(fullKey)
+      return out === fullKey ? storedName : out
+    },
+    statusFilterKey: 'status',
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => {
+      const resolvedScope = allowedSubsidiaryIds === undefined ? new Set<string>() : allowedSubsidiaryIds, parts = [sql`t.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`d.subsidiary_id`, resolvedScope)]
+      if (adhoc.q) parts.push(sql`and (d.document_number ilike ${`%${adhoc.q}%`} or t.provider ilike ${`%${adhoc.q}%`} or coalesce(t.last_error, '') ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters?.status) parts.push(sql`and t.status = ${adhoc.filters.status}`)
+      for (const filter of view.filters) {
+        if (pushCustomFieldFilter(parts, filter, 't')) continue
+        parts.push(sql`and false`)
+      }
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'activity',
+    basePath: '/tax',
+    exclusiveDrawerParams: ['filing'],
+    statusVariant: (row) => row.status === 'committed' ? 'success' : row.status === 'failed' ? 'warning' : row.status === 'pending' ? 'secondary' : 'outline',
+  },
   encumbrance: {
     recordType: 'encumbrance',
     table: 'encumbrances',

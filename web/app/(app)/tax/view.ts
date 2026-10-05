@@ -10,6 +10,7 @@ import { accessDeniedHref } from '../../../lib/gate-targets'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../lib/tax-filing-permission'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import type { FilingHistoryRecord } from './FilingHistoryDrawer'
+import type { ProviderActivityPayload } from './ProviderActivityDrawer'
 import type { TaxFormOption, TaxHistoryRow } from './sections'
 
 /**
@@ -81,10 +82,15 @@ export interface TaxData {
   tabKey: string
   onPrepare: boolean
   onHistory: boolean
+  onActivity: boolean
   tabs: { key: string; href: string; label: string; active: boolean; count: number | null }[]
   forms: TaxFormOption[]
   canSave: boolean
   history: TaxHistoryTableData
+  currentParams: Record<string, string | string[] | undefined>
+  activityDrawer: ({ widget: 'tax-provider-activity-drawer'; props: { drawer: { activity: ProviderActivityPayload; canRetry: boolean; closeHref: string } & { remountKey: string } } }) | null
+  activityEmptyTitle: string
+  activityEmptyDescription: string
   drawerOpen: boolean
   drawer: {
     remountKey: string
@@ -107,11 +113,13 @@ export async function loadTax(
   }
   const { orgId } = authz.user
   const t = await getTranslations('tax')
-  const tab = pickString(sp.tab) === 'history' ? 'history' : 'prepare'
+  const rawTab = pickString(sp.tab)
+  const tab = rawTab === 'history' ? 'history' : rawTab === 'activity' ? 'activity' : 'prepare'
   const list = parseListParams(sp, { sort: 'period', dir: 'desc', perPage: 20, allowedSorts: ['period', 'form', 'status', 'created'] as const })
   const status = pickString(sp.status)
   const formCode = pickString(sp.form)
   const filingId = pickString(sp.filing)
+  const activityId = pickString(sp.activity)
   const canManageSetup = can(authz, 'admin.setup.manage')
 
   const formsResult = (await db.execute<FormRow>(sql`
@@ -139,8 +147,10 @@ export async function loadTax(
         : sql`period_to ${list.dir === 'asc' ? sql`asc` : sql`desc`}, version desc`
 
   // Total filings drives the History tab's count badge (always cheap); the full
-  // history rows are only queried when that tab is open.
-  const [badgeResult, historyResult, countResult, selectedResult] = await Promise.all([
+  // history rows are only queried when that tab is open. The Activity tab's
+  // badge counts failed commits — the rows that need the operator.
+  const [badgeResult, failedResult, historyResult, countResult, selectedResult, activityResult] = await Promise.all([
+    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_provider_transactions where org_id = ${orgId} and status = 'failed'`),
     db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings where org_id = ${orgId}`),
     tab === 'history'
       ? db.execute<FilingRow>(sql`
@@ -159,12 +169,40 @@ export async function loadTax(
                  version, status, filing_reference, filed_at::text, snapshot_hash, boxes
             from tax_filings where id = ${filingId} and org_id = ${orgId} limit 1`)
       : Promise.resolve({ rows: [] as FilingHistoryRecord[] }),
+    activityId && isUuid(activityId)
+      ? db.execute<ProviderActivityPayload>(sql`
+          select t.id::text as id, t.document_id::text as "documentId",
+                 d.document_number as "documentNumber", d.kind as "documentKind",
+                 t.provider, t.provider_code as "providerCode", t.kind, t.status,
+                 t.attempts, t.next_attempt_at::text as "nextAttemptAt",
+                 t.last_error as "lastError", t.committed_at::text as "committedAt",
+                 t.provider_response_excerpt as "excerpt"
+            from tax_provider_transactions t
+            join documents d on d.id = t.document_id and d.org_id = t.org_id
+           where t.id = ${activityId} and t.org_id = ${orgId} limit 1`)
+      : Promise.resolve({ rows: [] as ProviderActivityPayload[] }),
   ])
   const badgeCount = Number(badgeResult.rows[0]?.count ?? 0)
+  const failedCount = Number(failedResult.rows[0]?.count ?? 0)
   const history = historyResult.rows
   const total = Number(countResult.rows[0]?.count ?? 0)
   const selected = selectedResult.rows[0]
   const closeHref = mergeHref('/tax', sp, { filing: undefined })
+  const activity = activityResult.rows[0]
+  const activityCloseHref = mergeHref('/tax', sp, { activity: undefined })
+  const activityDrawer: TaxData['activityDrawer'] = activity
+    ? {
+        widget: 'tax-provider-activity-drawer',
+        props: {
+          drawer: {
+            activity,
+            canRetry: can(authz, TAX_FILING_WRITE_PERMISSION),
+            closeHref: activityCloseHref,
+            remountKey: activity.id,
+          },
+        },
+      }
+    : null
 
   return {
     title: t('title'),
@@ -175,10 +213,16 @@ export async function loadTax(
     tabKey: tab,
     onPrepare: tab === 'prepare',
     onHistory: tab === 'history',
+    onActivity: tab === 'activity',
     tabs: [
       { key: 'prepare', label: t('tabs.prepare'), href: '/tax', active: tab === 'prepare', count: null },
       { key: 'history', label: t('tabs.history'), href: '/tax?tab=history', active: tab === 'history', count: badgeCount },
+      { key: 'activity', label: t('tabs.activity'), href: '/tax?tab=activity', active: tab === 'activity', count: failedCount },
     ],
+    currentParams: sp,
+    activityDrawer,
+    activityEmptyTitle: t('activity.emptyTitle'),
+    activityEmptyDescription: t('activity.emptyDescription'),
     forms: forms.map((form) => ({ ...form })),
     canSave: can(authz, TAX_FILING_WRITE_PERMISSION),
     history: {
@@ -256,6 +300,19 @@ export function taxSpec(data: TaxData): PageSpec {
         canSave: data.canSave,
         history: data.history,
       }),
+      {
+        // The provider commit queue shares the page with the filings shell:
+        // the shell owns the tab strip while the list reads every other key,
+        // the same split the collections page gave its attempts queue.
+        ...widgetBlock('entity-list-view', {
+          recordType: 'tax_provider_transaction',
+          sp: f('currentParams'),
+          drawer: f('activityDrawer'),
+          emptyTitle: f('activityEmptyTitle'),
+          emptyDescription: f('activityEmptyDescription'),
+        }),
+        when: f('onActivity'),
+      },
       { ...widgetBlock('tax-filing-drawer', { drawer: data.drawer }), when: f('drawerOpen') },
     ],
   })

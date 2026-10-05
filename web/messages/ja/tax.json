@@ -194,7 +194,51 @@
   },
   "tabs": {
     "prepare": "申告書を作成する",
-    "history": "過去の申告"
+    "history": "過去の申告",
+    "activity": "プロバイダー履歴"
+  },
+  "activity": {
+    "emptyTitle": "プロバイダーへの送信はまだありません",
+    "emptyDescription": "税金プロバイダーを設定した状態で売上請求書またはクレジットメモを計上すると、各送信がステータス付きでここに表示されます。",
+    "title": "{document} のプロバイダー送信",
+    "document": "伝票",
+    "direction": "取引区分",
+    "direction_sale": "売上",
+    "direction_return": "返金",
+    "providerCode": "プロバイダー側の伝票コード",
+    "attempts": "試行回数",
+    "nextAttempt": "次回試行",
+    "committedAt": "送信済み",
+    "providerDetail": "プロバイダーの証跡",
+    "postedTax": "計上済み税額",
+    "merchantTax": "自社税額",
+    "providerTax": "プロバイダー税額",
+    "status": {
+      "pending": "処理待ち",
+      "committed": "送信済み",
+      "voided": "無効化済み",
+      "failed": "失敗",
+      "skipped": "スキップ済み"
+    },
+    "columns": {
+      "document": "伝票",
+      "provider": "プロバイダー",
+      "status": "ステータス",
+      "attempts": "試行回数",
+      "nextAttempt": "次回試行",
+      "committedAt": "送信済み"
+    },
+    "summaryPending": "{provider}は{document}をまだ送信していません。",
+    "summaryCommitted": "{document}は{provider}に送信済みです。",
+    "summaryFailed": "{provider}は{document}を送信できませんでした。以下の理由を確認して再試行してください。",
+    "summaryVoided": "{document}は伝票の無効化に伴い{provider}側でも無効化されました。",
+    "summarySkipped": "{document}にプロバイダー送信は不要のため、何も送信されませんでした。",
+    "retryNow": "今すぐ再試行",
+    "retryConfirmTitle": "この送信を再試行しますか?",
+    "retryConfirmDescription": "{document}を{provider}に再送信します。同じ伝票コードで再送されるため、プロバイダー側で二重計上されることはありません。",
+    "retryStarted": "再試行をキューに入れました。次回のスキャンで送信されます。",
+    "retryFailed": "再試行を開始できませんでした。もう一度お試しください。",
+    "mismatchNotice": "{provider}は{providerTax}を記録しましたが、OpenBooksには自社税額{merchantTax}が計上されています。プロバイダーの数値は確認用に保持され、自動調整されることはありません。"
   },
   "registration": "申告用登録",
   "oss": {

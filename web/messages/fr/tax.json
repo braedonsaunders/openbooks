@@ -194,7 +194,51 @@
   },
   "tabs": {
     "prepare": "Préparer une déclaration",
-    "history": "Déclarations antérieures"
+    "history": "Déclarations antérieures",
+    "activity": "Activité du prestataire"
+  },
+  "activity": {
+    "emptyTitle": "Aucun envoi pour le moment",
+    "emptyDescription": "Comptabilisez une facture client ou un avoir avec un prestataire fiscal configuré : chaque envoi apparaîtra ici avec son statut.",
+    "title": "Envoi de {document} au prestataire",
+    "document": "Document",
+    "direction": "Opération",
+    "direction_sale": "Vente",
+    "direction_return": "Avoir",
+    "providerCode": "Code du document chez le prestataire",
+    "attempts": "Tentatives",
+    "nextAttempt": "Prochain essai",
+    "committedAt": "Envoyé",
+    "providerDetail": "Données du prestataire",
+    "postedTax": "Taxe comptabilisée",
+    "merchantTax": "Taxe du commerçant",
+    "providerTax": "Taxe du prestataire",
+    "status": {
+      "pending": "En attente",
+      "committed": "Envoyé",
+      "voided": "Annulé",
+      "failed": "Échoué",
+      "skipped": "Ignoré"
+    },
+    "columns": {
+      "document": "Document",
+      "provider": "Prestataire",
+      "status": "Statut",
+      "attempts": "Tentatives",
+      "nextAttempt": "Prochain essai",
+      "committedAt": "Envoyé"
+    },
+    "summaryPending": "{provider} n'a pas encore envoyé {document}.",
+    "summaryCommitted": "{document} est envoyé à {provider}.",
+    "summaryFailed": "{provider} n'a pas pu envoyer {document}. Vérifiez le motif ci-dessous, puis réessayez.",
+    "summaryVoided": "{document} a été annulé chez {provider} après l'annulation du document.",
+    "summarySkipped": "{document} ne nécessite aucun envoi au prestataire, et rien n'a été envoyé.",
+    "retryNow": "Réessayer",
+    "retryConfirmTitle": "Renvoyer cet envoi ?",
+    "retryConfirmDescription": "Renvoyer {document} à {provider}. L'envoi est rejoué sous le même code de document, le prestataire ne peut donc pas le comptabiliser deux fois.",
+    "retryStarted": "Nouvel essai en file : le prochain passage l'enverra.",
+    "retryFailed": "Le nouvel essai n'a pas démarré. Réessayez.",
+    "mismatchNotice": "{provider} a enregistré {providerTax}, mais OpenBooks a comptabilisé {merchantTax} de taxe. Le chiffre du prestataire est conservé pour contrôle et n'est jamais ajusté automatiquement."
   },
   "registration": "Inscription pour les déclarations",
   "oss": {

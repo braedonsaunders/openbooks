@@ -529,6 +529,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'tax-depreciation-header': { props: ['description', 'descriptionClassName', 'tabs', 'tabsAria', 'title'] },
   'tax-depreciation-overview': { props: ['overview'] },
   'tax-filing-drawer': { props: ['drawer'] },
+  'tax-provider-activity-drawer': { props: ['drawer'] },
   'tax-page': { props: ['canManageSetup', 'canSave', 'description', 'forms', 'history', 'onHistory', 'onPrepare', 'setupHref', 'setupLabel', 'tabKey', 'tabs', 'title'] },
   'oss-console': { props: ['setupHref'] },
   'tax-pools': { props: ['canConfigure', 'canRun', 'defaultTaxYear', 'regimes'] },

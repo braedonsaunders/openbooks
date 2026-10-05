@@ -3,6 +3,13 @@ export { quoteGoodsPlaceOfSupply, PlaceOfSupplyError, type GoodsSupplyQuoteInput
 export { parseCanadianGoodsSelection,resolveCanadianGoodsTaxes,persistGoodsTaxSnapshot,assertCanadianGoodsTaxEvidence,type CanadianGoodsSelection,type GoodsTaxSnapshot } from './goods-selection.ts'
 export { validateMarketplaceFacilitatorWrite } from './marketplace-facilitators.ts';
 export {
+  PROVIDER_COMMIT_KINDS,
+  TaxProviderCommitError,
+  readProviderTransactionsForDocument,
+  retryProviderTransaction,
+  type ProviderCommitRow,
+} from './provider-commit.ts';
+export {
   assessEuDistanceThreshold,
   determineCrossBorderSupply,
   DEFAULT_EVIDENCE_PRECEDENCE,

@@ -54,7 +54,8 @@
     "rma": "Autorisation de retour",
     "fund": "Fonds",
     "fund_release": "Versement du fonds",
-    "collection_attempt": "Tentative de recouvrement"
+    "collection_attempt": "Tentative de recouvrement",
+    "tax_provider_transaction": "Envoi au prestataire fiscal"
   },
   "resourcing": {
     "fields": {
