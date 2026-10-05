@@ -299,6 +299,39 @@ export async function inventoryFeatureEnabled(
   return orgFeatureEnabled(orgId, "inventory", runner as SqlExecutor);
 }
 
+/**
+ * With Inventory off a document's stock lines move no stock and book no COGS.
+ * That is only sound for items that hold nothing: an item that still has
+ * stock on hand, open cost layers or unsettled negative stock would sell
+ * without relieving its cost, or receive without a layer. Turning Inventory
+ * off is refused in that state, so this is the posting-side guard for stock
+ * that predates the refusal.
+ */
+export async function assertInventoryOffHoldsNoStock(
+  runner: Runner,
+  orgId: string,
+  itemIds: string[],
+  activity: string,
+): Promise<void> {
+  const ids = [...new Set(itemIds)].sort();
+  if (ids.length === 0) return;
+  const held = (await runner.execute<{ label: string }>(sql`
+    select coalesce(nullif(btrim(item.code), ''), item.name) as label
+      from items item
+     where item.org_id = ${orgId}
+       and item.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
+       and (exists (select 1 from cost_layers layer where layer.org_id = item.org_id
+                     and layer.item_id = item.id and layer.remaining_quantity > 0)
+         or exists (select 1 from inventory_provisional_costs provisional where provisional.org_id = item.org_id
+                     and provisional.item_id = item.id and provisional.remaining_quantity > 0))
+     order by 1`)).rows;
+  if (held.length === 0) return;
+  const labels = held.map((row) => row.label).join(", ");
+  throw new InventoryError(
+    `Inventory is turned off, but ${labels} still ${held.length === 1 ? "has" : "have"} stock on hand or open cost layers, so this ${activity} would post without moving stock or its cost — turn Inventory back on under Company Settings → Features before posting`,
+  );
+}
+
 /** New stock activity holds the authoritative feature through its write transaction. */
 export async function assertInventoryFeature(runner: Runner, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(runner, orgId, "inventory"))) {

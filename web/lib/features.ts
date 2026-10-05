@@ -227,9 +227,31 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     const n = await countRows(sql`select count(*)::int as n from fixed_assets where org_id = ${orgId}`)
     return { blocked: false, impacts: n ? [{ labelKey: 'assets', count: n }] : [] }
   },
+  // With Inventory off, sales post revenue with no COGS and no stock relief
+  // and receipts create no layers. That is only sound once nothing is held:
+  // stock on hand, open cost layers, unsettled negative stock, stock in
+  // transit and open counts all block the switch until they are cleared.
   inventory: async (orgId) => {
-    const n = await countRows(sql`select count(*)::int as n from inventory_movements where org_id = ${orgId}`)
-    return { blocked: false, impacts: n ? [{ labelKey: 'inventoryMovements', count: n }] : [] }
+    const [movements, onHand, provisional, inTransit, openCounts] = await sequential([
+      () => countRows(sql`select count(*)::int as n from inventory_movements where org_id = ${orgId}`),
+      () => countRows(sql`
+        select count(distinct item_id)::int as n from cost_layers
+         where org_id = ${orgId} and remaining_quantity > 0`),
+      () => countRows(sql`
+        select count(distinct item_id)::int as n from inventory_provisional_costs
+         where org_id = ${orgId} and remaining_quantity > 0`),
+      () => countRows(sql`select count(*)::int as n from transfer_orders where org_id = ${orgId} and status = 'in_transit'`),
+      () => countRows(sql`
+        select count(*)::int as n from stock_counts
+         where org_id = ${orgId} and status in ('draft', 'counting', 'review')`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (onHand) impacts.push({ labelKey: 'inventoryItemsOnHand', count: onHand })
+    if (provisional) impacts.push({ labelKey: 'inventoryNegativeStock', count: provisional })
+    if (inTransit) impacts.push({ labelKey: 'inventoryTransfersInTransit', count: inTransit })
+    if (openCounts) impacts.push({ labelKey: 'inventoryOpenCounts', count: openCounts })
+    if (movements) impacts.push({ labelKey: 'inventoryMovements', count: movements })
+    return { blocked: onHand + provisional + inTransit + openCounts > 0, impacts }
   },
   projects: async (orgId) => {
     const bookId = await activePostingPrimaryBookId(orgId)

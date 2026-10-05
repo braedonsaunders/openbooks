@@ -6,7 +6,7 @@ import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
-import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
+import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
@@ -43,7 +43,11 @@ export async function assertBillReceiptsPostable(
   orgId: string,
   documentId: string,
 ): Promise<void> {
-  if (!(await inventoryFeatureEnabled(runner, orgId))) return;
+  if (!(await inventoryFeatureEnabled(runner, orgId))) {
+    await assertInventoryOffHoldsNoStock(runner as Runner, orgId,
+      (await loadDocumentInventoryLines(runner as Runner, orgId, documentId)).map((line) => line.itemId), "bill");
+    return;
+  }
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
   const agency = await resolveAgencyPosting(runner,orgId,documentId);
   const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(line=>!agency.has(line.lineId));
@@ -112,7 +116,11 @@ export async function applyBillInventoryReceipts(
   date: string,
   subsidiaryId: string,
 ): Promise<number> {
-  if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
+  if (!(await inventoryFeatureEnabled(runner, orgId))) {
+    await assertInventoryOffHoldsNoStock(runner as Runner, orgId,
+      (await loadDocumentInventoryLines(runner as Runner, orgId, documentId)).map((line) => line.itemId), "bill");
+    return 0;
+  }
   // Posted agency evidence survives later feature and configuration changes.
   // This drain owes no stock receipt for those immutable vendor-bill lines.
   const agency = new Set((await runner.execute<{id:string}>(sql`select document_line_id as id from drop_ship_agent_allocations where org_id=${orgId} and document_id=${documentId} and kind='vendor_bill'`)).rows.map(row=>row.id));
