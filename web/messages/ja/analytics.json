@@ -3763,7 +3763,8 @@
       "leadingDigit": "第一位",
       "noDocuments": "{digit}で始まる書類はありません。",
       "top": "上位{count}件",
-      "documentsCount": "{count}件の書類"
+      "documentsCount": "{count}件の書類",
+      "loadFailed": "ドリルダウンを読み込めませんでした"
     },
     "empty": {
       "noAuditEvents": "当期の高リスク監査イベントはありません",

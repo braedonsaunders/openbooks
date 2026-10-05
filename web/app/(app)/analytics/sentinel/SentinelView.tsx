@@ -582,13 +582,13 @@ function BenfordDrill({ digit, dim, currency, presCcy, from, to, onClose }: { di
     const scope = currency ? `&currency=${encodeURIComponent(currency)}` : ''
     fetch(`/api/analytics/sentinel/benford?digit=${digit}&dim=${dim}&from=${from}&to=${to}${scope}`)
       .then(async (r) => {
-        await throwApiErrorIfNotOk(r, 'Failed to load drilldown')
+        await throwApiErrorIfNotOk(r, t('drill.loadFailed'))
         return r.json()
       })
       .then((j) => { if (live) setData(j) })
-      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Failed to load drilldown') })
+      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : t('drill.loadFailed')) })
     return () => { live = false }
-  }, [digit, dim, currency, from, to])
+  }, [digit, dim, currency, from, to, t])
 
 
   return (

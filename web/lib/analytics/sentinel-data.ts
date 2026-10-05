@@ -45,10 +45,11 @@ import { englishCatalogMessage } from "./catalog-strings";
 
 const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"] as const;
 
-// Nigrini's published Mean Absolute Deviation conformity bands: first-digit
-// 0.006 / 0.012 / 0.015 (close / acceptable / marginal; above nonconforming)
-// and first-two-digit 0.0012 / 0.0018 / 0.0022. Expected frequencies are
-// mathematics (log10(1 + 1/d)).
+// Mean Absolute Deviation conformity bands from Benford's Law
+// (Mark Nigrini, 2012): first-digit 0.006 / 0.012 / 0.015
+// (close / acceptable / marginal; above nonconforming) and first-two-digit
+// 0.0012 / 0.0018 / 0.0022. Expected frequencies are mathematics
+// (log10(1 + 1/d)).
 const BENFORD_1D: Record<number, number> = {
   1: 0.30103, 2: 0.17609, 3: 0.12494, 4: 0.09691, 5: 0.07918, 6: 0.06695, 7: 0.05799, 8: 0.05115, 9: 0.04576,
 };
@@ -62,10 +63,11 @@ export const benfordConformity2D = (mad: number): ConformityCode =>
   (mad <= 0.0012 ? "excellent" : mad <= 0.0018 ? "acceptable" : mad <= 0.0022 ? "marginal" : "nonConforming");
 
 /**
- * Nigrini's per-digit Z-statistic: whether one digit's observed share
- * deviates significantly from its Benford expectation, with the continuity
- * correction. Published standard — a fixed 25%/50% deviation band cannot
- * tell a real deviation from small-sample noise. Z above 1.96 flags.
+ * Per-digit Z-statistic from Benford's Law (Mark Nigrini, 2012): whether one
+ * digit's observed share deviates significantly from its Benford
+ * expectation, with the continuity correction. Published standard — a fixed
+ * 25%/50% deviation band cannot tell a real deviation from small-sample
+ * noise. Z above 1.96 flags.
  */
 export function benfordDigitZ(observed: number, expected: number, n: number): number {
   if (!(n > 0) || !(expected > 0) || !(expected < 1)) return 0;
@@ -74,8 +76,10 @@ export function benfordDigitZ(observed: number, expected: number, n: number): nu
   return corrected / Math.sqrt((expected * (1 - expected)) / n);
 }
 
-/** Return the inclusive start of the vendor-statistics baseline window. */
-export function sentinelBaselineFrom(to: string, months = 36): string {
+/** Return the inclusive start of the vendor-statistics baseline window. The
+ * window length always comes from configuration (baselineMonths) — never a
+ * hardcoded default here. */
+export function sentinelBaselineFrom(to: string, months: number): string {
   return addMonthsClamped(to, -months);
 }
 
@@ -1077,8 +1081,8 @@ export async function sentinelData(
   // Digit rows arrive keyed (currency, digit) with exact transaction sums.
   // Below the configured minimum sample a slice reports `insufficient` and
   // never scores — an empty period is insufficient, never nonconforming.
-  // Per-digit anomalies use Nigrini's Z-statistic, not a fixed deviation
-  // band.
+  // Per-digit anomalies use the Z-statistic from Benford's Law
+  // (Mark Nigrini, 2012), not a fixed deviation band.
   const minSample = cfg.benfordMinSample;
   const slice1D = (currency: string, rows: { digit: unknown; count: unknown; amount: unknown }[]): BenfordCurrencySlice => {
     const map = new Map<string, { count: number; amount: string }>(
@@ -1109,15 +1113,18 @@ export async function sentinelData(
         anomalies: [],
       };
     }
+    // The message follows the conformity code, never a restated copy of
+    // the bands: benfordConformity1D owns the cut-offs.
+    const conformity = benfordConformity1D(mad);
     return {
       currency, totalTransactions: total, digits, mad,
-      conformity: benfordConformity1D(mad),
+      conformity,
       message:
-        mad <= 0.006
+        conformity === "excellent"
           ? strings.benfordClose
-          : mad <= 0.012
+          : conformity === "acceptable"
             ? strings.benfordReasonable
-            : mad <= 0.015
+            : conformity === "marginal"
               ? strings.benfordSomeDeviation
               : strings.benfordSignificant,
       anomalies: digits.filter((x) => x.isAnomaly),
@@ -1199,7 +1206,7 @@ export async function sentinelData(
   const trapItems: FlaggedDoc[] = (trapRows.rows as FlaggedDocumentRow[]).map((r) => ({
     docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
     amount: r.amount, currency: r.currency, funcAmount: translatedOf(r),
-    partyId: r.party_id, partyName: r.party_name ?? "",
+    partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
     flagType: "trap" as const,
     reason: strings.trapReason(r.trap as string),
     riskScore: r.trap === "9999" ? trapRules.ends9999.points : r.trap === "999" ? trapRules.ends999.points : trapRules.ends99.points,
@@ -1255,7 +1262,7 @@ export async function sentinelData(
     if (sameReference) score += dupRules.sharedReference.points;
     return {
       groupId: [r.party_id ?? "", r.kind, r.currency, amount, r.refkey].join("|"),
-      partyId: r.party_id, partyName: r.party_name,
+      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
       kind: r.kind, currency: r.currency, amount, funcTotal,
       count, dateSpanDays: spanDays, firstDate: r.first_date, lastDate: r.last_date,
       sameReference,
@@ -1319,7 +1326,7 @@ export async function sentinelData(
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
-      partyId: r.party_id, partyName: r.party_name ?? "",
+      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
       flagType: "weekend" as const,
       reason: strings.weekendReason(isSunday),
       riskScore: Math.min(100, score),
@@ -1348,9 +1355,9 @@ export async function sentinelData(
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
-      partyId: r.party_id, partyName: r.party_name ?? "",
+      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
       flagType: "rsf" as const,
-      reason: strings.rsfReason(rsf.toFixed(1), strings.displayPartyName(r.party_name), String(r.currency)),
+      reason: strings.rsfReason(rsf, strings.displayPartyName(r.party_name), String(r.currency)),
       riskScore: Math.min(100, score),
       rsf, secondLargest: r.second_amount, baselineCount: Number(r.baseline_count),
     };
@@ -1371,9 +1378,9 @@ export async function sentinelData(
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
-      partyId: r.party_id, partyName: r.party_name ?? "",
+      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
       flagType: "zscore" as const,
-      reason: strings.zscoreReason(Math.abs(z).toFixed(2), strings.displayPartyName(r.party_name), String(r.currency), Number(r.baseline_count)),
+      reason: strings.zscoreReason(Math.abs(z), strings.displayPartyName(r.party_name), String(r.currency), Number(r.baseline_count)),
       riskScore: Math.min(100, score),
       zScore: z, vendorAvg: r.avg_amount, vendorStdDev: r.std_amount, baselineCount: Number(r.baseline_count),
     };
@@ -1399,7 +1406,7 @@ export async function sentinelData(
     else if (cfg.criticalRiskAmount !== "" && cmp(totalAmount, cfg.criticalRiskAmount) > 0) score += seqRules.tierModerate.points;
     const level: "high" | "medium" = spanDays >= seqHighDays ? "high" : "medium";
     return {
-      partyId: r.party_id, partyName: r.party_name, count, totalAmount,
+      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name), count, totalAmount,
       currency: r.currency,
       startRef: Number(r.start_ref), endRef: Number(r.end_ref), dateSpanDays: spanDays,
       firstDate: String(r.first_date), lastDate: String(r.last_date),

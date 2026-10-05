@@ -11,6 +11,7 @@
  */
 
 import type { CatalogMessageFn } from "./catalog-strings";
+import { viewerNumber } from "../format";
 
 export type ConformityCode = "excellent" | "acceptable" | "marginal" | "nonConforming" | "insufficient";
 
@@ -46,10 +47,10 @@ export interface SentinelStrings {
   /** `trap` is the digit pattern from the ledger (999/9999 — data). */
   trapReason(trap: string): string;
   weekendReason(sunday: boolean): string;
-  /** `multiple` is pre-rendered (legacy toFixed(1)); `vendor`/`currency` are data. */
-  rsfReason(multiple: string, vendor: string, currency: string): string;
-  /** `z` is pre-rendered (legacy toFixed(2) of |z|); `vendor`/`currency` are data. */
-  zscoreReason(z: string, vendor: string, currency: string, baseline: number): string;
+  /** `multiple` renders with one fraction digit in the request locale; `vendor`/`currency` are data. */
+  rsfReason(multiple: number, vendor: string, currency: string): string;
+  /** `z` is |z| and renders with two fraction digits in the request locale; `vendor`/`currency` are data. */
+  zscoreReason(z: number, vendor: string, currency: string, baseline: number): string;
   sequentialReason(count: number, first: string, last: string, days: number, high: boolean, currency: string): string;
   ghostBoth(vendor: string, employee: string): string;
   ghostAddress(vendor: string, employee: string): string;
@@ -158,9 +159,19 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
     benfordSignificant: t("sentinel.forensics.benfordSignificant"),
     trapReason: (trap) => t("sentinel.forensics.trap", { trap }),
     weekendReason: (sunday) => t(sunday ? "sentinel.forensics.weekendSunday" : "sentinel.forensics.weekendSaturday"),
-    rsfReason: (multiple, vendor, currency) => t("sentinel.forensics.rsf", { multiple, vendor, currency }),
+    rsfReason: (multiple, vendor, currency) =>
+      t("sentinel.forensics.rsf", {
+        multiple: viewerNumber(multiple, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+        vendor,
+        currency,
+      }),
     zscoreReason: (z, vendor, currency, baseline) =>
-      t("sentinel.forensics.zscore", { z, vendor, currency, n: baseline }),
+      t("sentinel.forensics.zscore", {
+        z: viewerNumber(z, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        vendor,
+        currency,
+        n: baseline,
+      }),
     sequentialReason: (count, first, last, days, high, currency) =>
       t("sentinel.forensics.sequential", {
         count,

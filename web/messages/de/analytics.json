@@ -3763,7 +3763,8 @@
       "leadingDigit": "Anfangsziffer",
       "noDocuments": "Kein Dokument beginnt mit {digit}.",
       "top": "Top {count}",
-      "documentsCount": "{count} Dokumente"
+      "documentsCount": "{count} Dokumente",
+      "loadFailed": "Drilldown konnte nicht geladen werden"
     },
     "empty": {
       "noAuditEvents": "Keine hochriskanten Prüfereignisse in diesem Zeitraum",
