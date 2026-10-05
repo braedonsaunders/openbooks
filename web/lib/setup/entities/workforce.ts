@@ -400,7 +400,9 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       // salary sacrifice, a CA one the T4127 factors, and a pack with no
       // transcribed treatment offers after-tax only. The static list is the
       // fallback for surfaces that render without resolving.
-      { key: 'taxTreatment', kind: 'select', keepDefault: true, defaultValue: 'none', options: PAY_TAX_TREATMENTS, optionsSource: 'payroll-deduction-treatments' },
+      // Treatments are deduction vocabulary (a pack's factors that reduce a
+      // tax base); an earning or employer contribution always carries 'none'.
+      { key: 'taxTreatment', kind: 'select', keepDefault: true, defaultValue: 'none', options: PAY_TAX_TREATMENTS, optionsSource: 'payroll-deduction-treatments', showWhen: { field: 'kind', in: ['deduction'] } },
       // Deduction protection. Only money leaving the employee can be protected,
       // so the group hides on an earning or an employer contribution (the
       // pay_components CHECK constraint enforces the same rule).
