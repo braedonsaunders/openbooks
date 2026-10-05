@@ -66,6 +66,12 @@ export const FEATURES: FeatureDef[] = [
   // Usage billing and SaaS metrics: metered usage rated onto subscriptions,
   // and recurring-revenue analytics read from subscription data.
   { key: 'usageBilling', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'] },
+  // Billing-platform history import (Chargebee, Recurly, Maxio, Zuora):
+  // customers, plans, subscriptions with change history, invoices, payments,
+  // usage and coupons into native records with MRR/AR/deferred reconciliation.
+  // Requires the subscription engine it writes through; usage, coupons and
+  // amendments degrade to named refusals when their own gates stay off.
+  { key: 'billingHistoryImport', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'] },
   { key: 'saasMetrics', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'], recommends: ['revenueRecognition', 'advancedSubscriptions'] },
   // Online customer payments: hosted payment links on invoices (Stripe /
   // Adyen / GoCardless bank debit), surcharge rules, provider webhooks that
