@@ -1725,8 +1725,8 @@
         }
       }
     },
-    "unplacedAr": "期日も支払履歴もない請求書が{count}件 · {total}は予測対象外。期日を登録すると予測に含まれます。",
-    "unplacedAp": "期日も支払履歴もない請求書（仕入）が{count}件 · {total}は予測対象外。期日を登録すると予測に含まれます。"
+    "unplacedAr": "期日も支払履歴もない請求書が{count}件 · {total}は予測対象外。",
+    "unplacedAp": "期日も支払履歴もない請求書（仕入）が{count}件 · {total}は予測対象外。"
   },
   "trueCost": {
     "title": "真のコスト",

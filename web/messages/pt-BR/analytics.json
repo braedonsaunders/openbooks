@@ -1725,8 +1725,8 @@
         }
       }
     },
-    "unplacedAr": "{count, plural, one {# fatura não tem} other {# faturas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão. Adicione uma data de vencimento para incluí-las.",
-    "unplacedAp": "{count, plural, one {# conta não tem} other {# contas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão. Adicione uma data de vencimento para incluí-las."
+    "unplacedAr": "{count, plural, one {# fatura não tem} other {# faturas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão.",
+    "unplacedAp": "{count, plural, one {# conta não tem} other {# contas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão."
   },
   "trueCost": {
     "title": "Custo real",

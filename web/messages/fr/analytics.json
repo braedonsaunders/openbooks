@@ -1725,8 +1725,8 @@
         }
       }
     },
-    "unplacedAr": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu. Ajoutez une échéance pour les placer.",
-    "unplacedAp": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu. Ajoutez une échéance pour les placer."
+    "unplacedAr": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu.",
+    "unplacedAp": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu."
   },
   "trueCost": {
     "title": "Coût réel",

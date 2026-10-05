@@ -1725,8 +1725,8 @@
         }
       }
     },
-    "unplacedAr": "有{count}张发票既无到期日又无付款历史 · {total}未纳入预测。添加到期日即可纳入。",
-    "unplacedAp": "有{count}张应付单既无到期日又无付款历史 · {total}未纳入预测。添加到期日即可纳入。"
+    "unplacedAr": "有{count}张发票既无到期日又无付款历史 · {total}未纳入预测。",
+    "unplacedAp": "有{count}张应付单既无到期日又无付款历史 · {total}未纳入预测。"
   },
   "trueCost": {
     "title": "真实成本",
