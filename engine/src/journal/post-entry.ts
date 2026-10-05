@@ -295,12 +295,25 @@ async function writeEntry(
 
   // Period guard: the period belongs to this org (a write matching zero rows
   // is a failure, not a success — prove the row first).
-  const period = (await executor.execute<{ id: string }>(sql`
-    select id from accounting_periods
-     where org_id = ${orgId} and id = ${input.periodId}
-     limit 1`)).rows[0];
+  const period = (await executor.execute<{
+    is_adjustment: boolean;
+    period_name: string;
+    fiscal_year: number;
+    window_start: string;
+    window_end: string;
+  }>(sql`
+    select is_adjustment, period_name, fiscal_year,
+           window_start::text as window_start, window_end::text as window_end
+      from accounting_period_posting_window(${orgId}, ${input.periodId})`)).rows[0];
   if (!period)
     fail(`journal entry ${input.entryNumber}: accounting period ${input.periodId} does not exist in this organization`);
+  // An adjustment period is one fiscal year's close bucket: a posting dated
+  // outside that year would sit in one year by date and another by period
+  // (the storage guard je_adjustment_period_date enforces the same window).
+  if (period!.is_adjustment && (input.postingDate < period!.window_start || input.postingDate > period!.window_end))
+    fail(
+      `journal entry ${input.entryNumber}: adjustment period "${period!.period_name}" takes postings dated inside fiscal year ${period!.fiscal_year} (${period!.window_start} to ${period!.window_end}), not ${input.postingDate} — date the entry inside that year or post it to the period that covers ${input.postingDate}`,
+    );
 
   if (input.reversesEntryId) {
     const target = (await executor.execute<{ id: string; status: string }>(sql`
