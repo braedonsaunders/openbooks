@@ -13,7 +13,8 @@ import { CollectionsQueue } from "./CollectionsQueue";
 import { ListDrawerHost } from "@/components/list-drawer-host";
 import { KpiStrip } from "@/components/kpi-strip";
 import { useMoney } from "@/components/money-provider";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import { ModuleHomeTabs } from "@/components/module-home/ui";
 import { useTranslations } from "next-intl";
 import { enumLabel } from "@/lib/enum-label";
 import {
@@ -124,7 +125,9 @@ export type CollectionsView =
   | "plans"
   | "versions"
   | "contracts"
-  | "amendments";
+  | "amendments"
+  | "recovery"
+  | "attempts";
 type EditorProps = { creating: boolean; onClose: () => void };
 
 export function CollectionsClient({
@@ -134,6 +137,8 @@ export function CollectionsClient({
   incomeAccounts = [],
   title,
   description,
+  tabs = [],
+  autopayOn = false,
   worklistEnabled = false,
   initialView,
 }: {
@@ -143,8 +148,10 @@ export function CollectionsClient({
   incomeAccounts?: Opt[];
   title?: string;
   description?: string;
+  tabs?: ComponentProps<typeof ModuleHomeTabs>["tabs"];
+  autopayOn?: boolean;
   worklistEnabled?: boolean;
-  initialView?: CollectionsView;
+  initialView?: string;
 }) {
   const search = useSearchParams();
   const t = useTranslations("ar.collections");
@@ -154,6 +161,7 @@ export function CollectionsClient({
     search?.get("view") ??
     (worklistEnabled ? "worklist" : "policies");
   const available: CollectionsView[] = [
+    ...(autopayOn ? (["recovery", "attempts"] as const) : []),
     ...(worklistEnabled ? ["worklist" as const] : []),
     "policies",
     "recurring",
@@ -166,6 +174,11 @@ export function CollectionsClient({
   ];
   const view =
     available.find((candidate) => candidate === requested) ?? available[0]!;
+  // Recovery and attempts own their page views with the server blocks: the
+  // shell renders its header and tab strip there, never an operational
+  // panel beside them.
+  const panelView =
+    view === "recovery" || view === "attempts" ? null : view;
   const [creatingFor, setCreatingFor] = useState<CollectionsView | null>(null);
   const router = useRouter();
   const editor = {
@@ -182,14 +195,15 @@ export function CollectionsClient({
         <PageHeader
           title={title ?? t("title")}
           description={description ?? t("pageDescription")}
-          actions={
-            view !== "worklist" ? (
-              <Button onClick={openNew}>
+          actions={[
+            panelView && panelView !== "worklist" ? (
+              <Button key="new" onClick={openNew}>
                 <Plus size={16} />
-                {newAction(view)}
+                {newAction(panelView)}
               </Button>
-            ) : undefined
-          }
+            ) : null,
+            <ModuleHomeTabs key="tabs" tabs={tabs} />,
+          ]}
         />
       }
     >

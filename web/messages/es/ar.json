@@ -238,7 +238,9 @@
       "plans": "Planes",
       "versions": "Versiones de planes",
       "contracts": "Contratos",
-      "amendments": "Modificaciones"
+      "amendments": "Modificaciones",
+      "recovery": "Recuperación",
+      "attempts": "Intentos"
     },
     "errors": {
       "actionFailed": "La acción no se pudo completar",
@@ -631,10 +633,11 @@
       "outreachMarkFailed": "El enlace se copió pero el contacto no quedó registrado. Envíelo de nuevo desde la cola.",
       "hardStuck": "Sin método de respaldo",
       "hardStuckHint": "Pida al cliente nuevos datos de pago.",
-      "breakdownTitle": "Por clase de rechazo y proveedor",
-      "breakdownSummary": "Tasas de recuperación del período",
+      "breakdownTitle": "Desglose de recuperación",
+      "breakdownDrillDescription": "Motivo de rechazo, proveedor, mes y moneda en el informe gobernado",
       "breakdownRow": "{failed} fallidos · {recovered} recuperados · {rate}",
-      "openReports": "Historial completo en Informes",
+      "breakdownDrillAction": "Abrir desglose en Informes",
+      "breakdownFallbackNote": "Clases de rechazo del período; el desglose completo requiere la definición de informe gobernado",
       "policyNotice": {
         "title": "No hay ninguna política de cobro activa",
         "description": "El cobro automático está activado, pero no hay ninguna política de cobro activa para las facturas de clientes: no hay calendario de reintentos. Active una política para empezar a cobrar.",

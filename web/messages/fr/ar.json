@@ -238,7 +238,9 @@
       "plans": "Offres",
       "versions": "Versions des offres",
       "contracts": "Contrats",
-      "amendments": "Avenants"
+      "amendments": "Avenants",
+      "recovery": "Recouvrement",
+      "attempts": "Tentatives"
     },
     "errors": {
       "actionFailed": "L’action a échoué",
@@ -631,10 +633,11 @@
       "outreachMarkFailed": "Le lien a été copié mais le rappel n'a pas été enregistré. Renvoyez-le depuis la file.",
       "hardStuck": "Aucune méthode de secours",
       "hardStuckHint": "Demandez au client de nouveaux moyens de paiement.",
-      "breakdownTitle": "Par classe de refus et prestataire",
-      "breakdownSummary": "Taux de recouvrement sur la période",
+      "breakdownTitle": "Ventilation du recouvrement",
+      "breakdownDrillDescription": "Motif de refus, prestataire, mois et devise dans le rapport gouverné",
       "breakdownRow": "{failed} en échec · {recovered} récupérés · {rate}",
-      "openReports": "Historique complet dans Rapports",
+      "breakdownDrillAction": "Ouvrir la ventilation dans Rapports",
+      "breakdownFallbackNote": "Classes de refus pour la période ; la ventilation complète nécessite la définition de rapport gouvernée",
       "policyNotice": {
         "title": "Aucune politique de recouvrement active",
         "description": "Le recouvrement automatique est activé, mais aucune politique de recouvrement n'est active pour les factures clients : il n'y a aucun calendrier de nouvelles tentatives. Activez une politique pour commencer le recouvrement.",

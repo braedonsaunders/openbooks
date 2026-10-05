@@ -48,6 +48,8 @@ export interface AttemptDrawerData {
 
 export interface RecoveryDashboardData {
   window: { from: string; to: string }
+  /** Tenant id of the governed collection-recovery-rate definition; null until seeded. */
+  recoveryReportId: string | null
   metrics: {
     attempts: number
     invoicesWithFailures: number
@@ -124,6 +126,11 @@ export interface CollectionsData {
   autopayOn: boolean
   /** Recovery facts for the dashboard; null while the surface is off. */
   recovery: RecoveryDashboardData | null
+  /** Page-owned URL views: exactly one operational body renders per view. */
+  tabs: { href: string; label: string; active?: boolean; count?: number | null }[]
+  activeView: string
+  onRecovery: boolean
+  onAttempts: boolean
   currentParams: Record<string, string | string[] | undefined>
   attemptDrawer: ({ widget: 'collection-attempt-drawer'; props: { drawer: AttemptDrawerData & { remountKey: string } } }) | null
   attemptsEmptyTitle: string
@@ -197,8 +204,15 @@ async function loadRecovery(orgId: string): Promise<RecoveryDashboardData> {
      where d.org_id = ${orgId} and d.kind = 'customer_invoice'
      order by d.document_date desc limit 1
   `)).rows[0]?.currency ?? 'USD'
+  // The governed recovery breakdown lives in the Reports hub; the dashboard
+  // links to the tenant's own definition rather than duplicating its lists.
+  const recoveryReport = ((await db.execute<{ id: string }>(sql`
+    select id from report_definitions
+     where org_id = ${orgId} and slug = 'collection-recovery-rate' limit 1
+  `))).rows[0] ?? null
   return {
     window,
+    recoveryReportId: recoveryReport?.id ?? null,
     metrics: {
       attempts: metrics.attempts,
       invoicesWithFailures: metrics.invoicesWithFailures,
@@ -323,10 +337,61 @@ export async function loadCollections(
     }
   }
 
+  const worklistHref = can(authz, 'ar.read') ? '/ar' : null
+  // Exactly one operational body renders per view. An open attempt drawer
+  // forces its attempts list; otherwise the requested view wins while
+  // available, defaulting to recovery for autopay portals and the standing
+  // shell default everywhere else.
+  const shellViews = [
+    ...(worklistHref ? ['worklist' as const] : []),
+    'recurring' as const,
+    ...(subscriptionsEnabled ? ['subscriptions' as const, 'plans' as const] : []),
+    ...(advancedSubscriptionsEnabled
+      ? ['versions' as const, 'contracts' as const, 'amendments' as const]
+      : []),
+    'policies' as const,
+  ]
+  const requestedView = pickString(sp.view)
+  const availableViews = [...(autopayOn ? (['recovery', 'attempts'] as const) : []), ...shellViews]
+  const activeView =
+    attemptDrawer !== null
+      ? 'attempts'
+      : requestedView && (availableViews as readonly string[]).includes(requestedView)
+        ? requestedView
+        : autopayOn
+          ? 'recovery'
+          : worklistHref
+            ? 'worklist'
+            : 'policies'
+  const viewHref = (view: string) => `/collections?view=${view}`
+  const attentionCount = recovery
+    ? recovery.awaitingAuth.length + recovery.expiring.length + recovery.hardStuck.length
+    : 0
+  const tabLabels = {
+    recovery: tAr('collections.tabs.recovery'),
+    attempts: tAr('collections.tabs.attempts'),
+    worklist: tAr('collections.tabs.worklist'),
+    recurring: tAr('collections.tabs.recurring'),
+    subscriptions: tAr('collections.tabs.subscriptions'),
+    plans: tAr('collections.tabs.plans'),
+    versions: tAr('collections.tabs.versions'),
+    contracts: tAr('collections.tabs.contracts'),
+    amendments: tAr('collections.tabs.amendments'),
+    policies: tAr('collections.tabs.policies'),
+  } as const
+  const tabs = (['recovery', 'attempts', ...shellViews] as const)
+    .filter((view) => (availableViews as readonly string[]).includes(view))
+    .map((view) => ({
+      href: viewHref(view),
+      label: tabLabels[view],
+      active: activeView === view,
+      ...(view === 'recovery' ? { count: attentionCount } : {}),
+    }))
+
   return {
     title: tNav('modules.collections'),
     description: tAr('collections.pageDescription'),
-    worklistHref: can(authz, 'ar.read') ? '/ar' : null,
+    worklistHref,
     worklistLabel: tAr('collections.worklistCta'),
     subscriptionsEnabled,
     advancedSubscriptionsEnabled,
@@ -338,6 +403,10 @@ export async function loadCollections(
     autopayOn,
     recovery,
     policyNotice,
+    tabs,
+    activeView,
+    onRecovery: activeView === 'recovery',
+    onAttempts: activeView === 'attempts',
     currentParams: sp,
     attemptDrawer,
     attemptsEmptyTitle: tAr('collections.attempts.emptyTitle'),
@@ -355,18 +424,20 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
     header: [],
     body: [
       {
-        // Recovery vitals sit above the console: the dashboard owns the
-        // recovery facts while the shell owns the operational queue, and a
-        // block the shell does not know never disturbs its tab state.
+        // The recovery cockpit owns its URL view: it never shares the body
+        // with the console or the attempts list.
         ...widgetBlock('recovery-dashboard', {
           data: f('recovery'),
           notice: f('policyNotice'),
         }),
-        when: f('autopayOn'),
+        when: f('onRecovery'),
       },
       widgetBlock('collections-shell', {
         title: f('title'),
         description: f('description'),
+        tabs: f('tabs'),
+        initialView: f('activeView'),
+        autopayOn: f('autopayOn'),
         worklistHref: f('worklistHref'),
         worklistLabel: f('worklistLabel'),
         subscriptionsEnabled: f('subscriptionsEnabled'),
@@ -375,10 +446,9 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
         incomeAccounts: f('incomeAccounts'),
       }),
       {
-        // The automatic-collection queue shares the page with the shell: the
-        // shell owns `view` for its panel switch while the list reads every
-        // other key, and saved-view ids the shell does not know are uuids the
-        // shell ignores — so neither surface breaks the other.
+        // The attempts list owns its URL view with its drawer: an open
+        // attempt forces this view server-side, so the drawer always has
+        // its list underneath.
         ...widgetBlock('entity-list-view', {
           recordType: 'collection_attempt',
           sp: f('currentParams'),
@@ -386,7 +456,7 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
           emptyTitle: f('attemptsEmptyTitle'),
           emptyDescription: f('attemptsEmptyDescription'),
         }),
-        when: f('autopayOn'),
+        when: f('onAttempts'),
       },
     ],
   })

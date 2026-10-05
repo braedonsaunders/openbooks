@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
 import { Banknote, HeartHandshake, KeyRound, Percent, ShieldAlert, Timer } from 'lucide-react'
 import { StatTile, CockpitPanel } from '../../../components/cockpit/ui'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { createMoneyFormatter } from '@/lib/money-format'
 import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
 
@@ -15,15 +16,20 @@ import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
  * Revenue recovery at a glance: what automatic collection brought back in
  * the trailing window, and the three queues that need a human — customers
  * who must verify a payment, cards about to expire, and hard declines with
- * no backup on file. Every queue row carries its one-click remedy; the
- * class/provider breakdown lives one disclosure down, and the full history
- * in the Reports hub.
+ * no backup on file. The queues replace each other behind the shared
+ * strip, defaulting to the first with work. Every queue row carries its
+ * one-click remedy; the decline/provider/month/currency breakdown lives in
+ * the governed Reports definition this panel links to, with a single
+ * decline-class list as the fallback until that definition is seeded.
  */
 export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardData | null; notice?: CollectionPolicyNotice | null }) {
   const t = useTranslations('ar.collections.recovery')
   const locale = useLocale()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
+  // The three recovery queues replace each other behind the shared strip —
+  // never stacked — defaulting to the first queue with work.
+  const [queue, setQueue] = useState<'auth' | 'expiring' | 'hardStuck' | null>(null)
   // Automatic collection is on but no collection policy is: the dashboard
   // has no schedule to report against, so its slot carries the setup remedy
   // and the rest of the page renders around it.
@@ -50,6 +56,11 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
     .join(' · ')
   const attentionCount =
     data.awaitingAuth.length + data.expiring.length + data.hardStuck.length
+  // The queues replace each other: the strip defaults to the first queue
+  // with work, and an explicit selection survives reloads of the rows.
+  const activeQueue =
+    queue ??
+    (data.awaitingAuth.length > 0 ? 'auth' : data.expiring.length > 0 ? 'expiring' : 'hardStuck')
 
   const copyAuthLink = async (authUrl: string | null) => {
     if (!authUrl) return
@@ -143,7 +154,18 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
         {attentionCount === 0 ? (
           <EmptyState title={t('attentionEmptyTitle')} description={t('attentionEmptyDescription')} />
         ) : (
-          <div className="flex flex-col gap-4">
+          <>
+            <DrawerTabStrip
+              tabs={[
+                { key: 'auth', label: t('needsAuth'), count: data.awaitingAuth.length },
+                { key: 'expiring', label: t('cardExpiring'), count: data.expiring.length },
+                { key: 'hardStuck', label: t('hardStuck'), count: data.hardStuck.length },
+              ]}
+              activeKey={activeQueue}
+              onSelect={(key) => setQueue(key)}
+              ariaLabel={t('attentionTitle')}
+            />
+            <div hidden={activeQueue !== 'auth'} className="flex flex-col gap-4">
             {data.awaitingAuth.map((row) => (
               <div key={row.attemptId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Badge variant="warning">{t('needsAuth')}</Badge>
@@ -163,6 +185,8 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
                 </Button>
               </div>
             ))}
+            </div>
+            <div hidden={activeQueue !== 'expiring'} className="flex flex-col gap-4">
             {data.expiring.map((row) => (
               <div key={row.methodId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Badge variant="warning">{t('cardExpiring')}</Badge>
@@ -182,6 +206,8 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
                 </Button>
               </div>
             ))}
+            </div>
+            <div hidden={activeQueue !== 'hardStuck'} className="flex flex-col gap-4">
             {data.hardStuck.map((row) => (
               <div key={row.attemptId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Badge variant="destructive">{t('hardStuck')}</Badge>
@@ -196,43 +222,42 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
                 <span className="text-sm text-muted-foreground">{t('hardStuckHint')}</span>
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
-        <DisclosureSection
-          title={t('breakdownTitle')}
-          summary={t('breakdownSummary')}
-        >
-          <div className="flex flex-col gap-3">
-            {data.metrics.byDeclineClass.map((row) => (
-              <div key={row.declineClass} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <Badge variant="secondary">{row.declineClass}</Badge>
-                <span className="text-muted-foreground">
-                  {t('breakdownRow', {
-                    failed: row.failedAttempts,
-                    recovered: row.recoveredInvoices,
-                    rate: row.recoveryRate === null ? '—' : `${(row.recoveryRate * 100).toFixed(1)}%`,
-                  })}
-                </span>
-              </div>
-            ))}
-            {data.metrics.byProvider.map((row) => (
-              <div key={row.provider} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <Badge variant="outline">{row.provider}</Badge>
-                <span className="text-muted-foreground">
-                  {t('breakdownRow', {
-                    failed: row.failedAttempts,
-                    recovered: row.recoveredInvoices,
-                    rate: row.recoveryRate === null ? '—' : `${(row.recoveryRate * 100).toFixed(1)}%`,
-                  })}
-                </span>
-              </div>
-            ))}
-            <a className="text-sm font-medium underline" href="/reports">
-              <Timer size={13} className="mr-1 inline" />
-              {t('openReports')}
-            </a>
+        {data.recoveryReportId ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
+            <Timer size={14} aria-hidden className="text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">{t('breakdownTitle')}</p>
+              <p className="text-sm text-muted-foreground">{t('breakdownDrillDescription')}</p>
+            </div>
+            <span className="flex-1" />
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/reports/custom/run/${data.recoveryReportId}`}>{t('breakdownDrillAction')}</Link>
+            </Button>
           </div>
-        </DisclosureSection>
+        ) : (
+          <DisclosureSection
+            title={t('breakdownTitle')}
+            summary={t('breakdownFallbackNote')}
+          >
+            <div className="flex flex-col gap-3">
+              {data.metrics.byDeclineClass.map((row) => (
+                <div key={row.declineClass} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <Badge variant="secondary">{row.declineClass}</Badge>
+                  <span className="text-muted-foreground">
+                    {t('breakdownRow', {
+                      failed: row.failedAttempts,
+                      recovered: row.recoveredInvoices,
+                      rate: row.recoveryRate === null ? '—' : `${(row.recoveryRate * 100).toFixed(1)}%`,
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </DisclosureSection>
+        )}
       </CockpitPanel>
     </div>
   )
