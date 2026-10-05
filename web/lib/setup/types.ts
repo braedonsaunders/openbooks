@@ -134,6 +134,12 @@ export interface SetupField {
   ref?: SetupRefSource
   /** Filter native reference choices by the live owning entity. */
   refScopeField?: string
+  /**
+   * Narrow an `accounts` ref to these account types, so the picker offers
+   * only accounts the entity's write guard accepts. The guard stays the
+   * enforcement; this only keeps refused choices out of the list.
+   */
+  refAccountTypes?: readonly string[]
   /** Natural keys / immutable columns: editable on create, read-only on edit. */
   lockedOnEdit?: boolean
   /** Column is NOT NULL with a DB default — when left blank, omit it (let the

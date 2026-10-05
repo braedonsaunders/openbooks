@@ -771,7 +771,7 @@ export function FieldControl({
   }
 
   if (field.kind === 'ref') {
-    const options: SelectOption[] = refOptions.filter((option) => !field.refScopeField || option.scopeValue == null || option.scopeValue === String(formValues[field.refScopeField] ?? '')).map((o) => ({ value: o.value, label: o.label }))
+    const options: SelectOption[] = refOptions.filter((option) => !field.refScopeField || option.scopeValue == null || option.scopeValue === String(formValues[field.refScopeField] ?? '')).filter((option) => !field.refAccountTypes || option.value === String(value ?? '') || (option.accountType !== undefined && field.refAccountTypes.includes(option.accountType))).map((o) => ({ value: o.value, label: o.label }))
     return (
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>

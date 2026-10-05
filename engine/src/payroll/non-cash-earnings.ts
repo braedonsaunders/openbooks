@@ -2,20 +2,11 @@ import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
 import { add, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
+import { NON_CASH_CONTRA_EXPENSE_TYPES, NON_CASH_OFFSET_ACCOUNT_TYPES } from "./non-cash-offset-types.ts";
 import type { Line } from "./run-stub-records.ts";
 
-/**
- * Where the credit side of a non-cash earning may post. A prepaid asset
- * (the benefit was paid for in advance), a provider clearing liability (a
- * premium owed to an insurer or plan) or a contra-expense account (a benefit
- * whose cost the employer already expensed elsewhere, such as personal use
- * of a company vehicle, so the payroll entry nets to nothing).
- */
-const NON_CASH_OFFSET_ACCOUNT_TYPES = new Set([
-  "asset_current_other", "asset_other", "liability_current_other", "liability_long_term",
-  "cogs", "expense", "expense_other",
-]);
-const CONTRA_EXPENSE_TYPES = new Set(["cogs", "expense", "expense_other"]);
+const NON_CASH_OFFSET_TYPES = new Set(NON_CASH_OFFSET_ACCOUNT_TYPES);
+const CONTRA_EXPENSE_TYPES = new Set(NON_CASH_CONTRA_EXPENSE_TYPES);
 
 /**
  * Why a non-cash earning's offset account cannot be used, or null. A
@@ -23,7 +14,7 @@ const CONTRA_EXPENSE_TYPES = new Set(["cogs", "expense", "expense_other"]);
  * posting both sides to one account would record nothing.
  */
 export function nonCashOffsetProblem(offset: { id: string; type: string } | undefined, expenseAccountId: string | null): string | null {
-  if (!offset || !NON_CASH_OFFSET_ACCOUNT_TYPES.has(offset.type)) {
+  if (!offset || !NON_CASH_OFFSET_TYPES.has(offset.type)) {
     return "the non-cash offset account must be an active posting prepaid asset, a provider clearing liability, or a contra-expense account";
   }
   if (CONTRA_EXPENSE_TYPES.has(offset.type) && expenseAccountId !== null && offset.id === expenseAccountId) {

@@ -1,6 +1,7 @@
 /** Setup-registry workforce entities (split from registry.ts; pure moves only). */
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { featureEnabled } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { NON_CASH_OFFSET_ACCOUNT_TYPES } from '@openbooks/engine/src/payroll/non-cash-offset-types.ts'
 import { OVERHEAD_RATE_KINDS, OVERHEAD_RATE_METHODS, PAY_FREQUENCIES, PAY_COMPONENT_KINDS, PAY_COMPONENT_COUNTRIES, PAY_COMPONENT_BASES, PAY_SUPPLEMENTAL_WAGE_CATEGORIES, PAY_STATUTORY_EXEMPTION_CATEGORIES, PAY_TAX_TREATMENTS, PAY_PROTECTION_BASES, PAY_PROTECTED_BASES, PAYROLL_PROGRAM_TYPES, PAYROLL_REMITTER_TYPES, ENTITLEMENT_UNITS, ENTITLEMENT_DIRECTIONS, ENTITLEMENT_ACCRUAL_METHODS, ENTITLEMENT_CAP_BEHAVIORS } from '../options'
 import { PAY_DERIVED_RULE_ENTITIES } from '../payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../payroll-holidays'
@@ -354,7 +355,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
         showWhen: { field: 'kind', in: ['earning'] }, helpTextKey: 'fieldHelp.paymentKind',
       },
       {
-        key: 'nonCashAccountId', kind: 'ref', ref: 'accounts',
+        key: 'nonCashAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: NON_CASH_OFFSET_ACCOUNT_TYPES,
         showWhen: { field: 'paymentKind', in: ['non_cash'] }, helpTextKey: 'fieldHelp.nonCashAccountId',
       },
       // Every installable pack, resolved at render time — the static pair
