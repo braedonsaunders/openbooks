@@ -43,6 +43,7 @@ function shortfallData() {
         },
       ],
       totals: { budget: '10000.5000', actual: '9876.5400', variance: '-123.9600' },
+      tolerance: { onTrack: 10, watch: 25 },
     },
   } as unknown as HealthData
 }

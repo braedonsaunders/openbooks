@@ -91,7 +91,7 @@ function RealBudget({ data }: { data: HealthData }) {
         <KpiCard icon={ClipboardList} accent={overCount > 0 ? 'red' : 'emerald'} label={t('overBudget')} value={String(overCount)} sub={t('onWatch', { count: counts.watch })} tone={overCount > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={ClipboardList} accent="violet" label={t('coverage')} value={fmtPct(coverage)} sub={t('coverageSub')} />
       </div>
-      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('toleranceNote')}</p>
+      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('toleranceNote', { onTrack: b.tolerance.onTrack, watch: b.tolerance.watch })}</p>
 
       <Panel
         title={t('tableTitle', { count: filtered.length })}

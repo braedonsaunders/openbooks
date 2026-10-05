@@ -201,7 +201,7 @@
       "onWatch": "{count} 项关注",
       "coverage": "覆盖率",
       "coverageSub": "有预算行的科目",
-      "toleranceNote": "正常：有利或在预算±10%以内·关注：在±25%以内·超支（支出）／未达（收入）：超过±25%",
+      "toleranceNote": "正常：有利或在预算±{onTrack}%以内·关注：在±{watch}%以内·超支（支出）／未达（收入）：超过±{watch}%",
       "tableTitle": "预算与实际对比（{count}）",
       "search": "搜索科目…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "盈亏平衡安全边际（%）",
           "help": "收入仅高出盈亏平衡点此比例以内时报告为利润微薄"
+        },
+        "breakevenComfortPercent": {
+          "label": "舒适安全边际（％）",
+          "help": "收入高出盈亏平衡点这么多即为舒适边际"
+        },
+        "budgetOnTrackPercent": {
+          "label": "预算正常容忍度（％）",
+          "help": "差异在此预算比例以内即为正常"
+        },
+        "budgetWatchPercent": {
+          "label": "预算关注容忍度（％）",
+          "help": "超出正常但在此比例以内的差异即为关注"
+        },
+        "segmentHhiWarning": {
+          "label": "分部集中度警告（HHI）",
+          "help": "收入集中度达到或超过该指数即为中度集中"
+        },
+        "segmentHhiCritical": {
+          "label": "分部集中度危险（HHI）",
+          "help": "收入集中度达到或超过该指数即为高度集中"
         },
         "anomalySigma": {
           "label": "异常阈值（σ）",

@@ -201,7 +201,7 @@
       "onWatch": "{count} à surveiller",
       "coverage": "Couverture",
       "coverageSub": "comptes avec une ligne budgétaire",
-      "toleranceNote": "Conforme : favorable ou dans ±10 % du budget · À surveiller : dans ±25 % · Dépassé (dépenses) / En dessous (produits) : au-delà de ±25 %",
+      "toleranceNote": "Conforme : favorable ou dans ±{onTrack} % du budget · À surveiller : dans ±{watch} % · Dépassé (dépenses) / En dessous (produits) : au-delà de ±{watch} %",
       "tableTitle": "Budget et réel ({count})",
       "search": "Rechercher des comptes…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "Marge de sécurité sur le point mort (%)",
           "help": "Un CA dans cette part au-dessus du point mort est signalé comme marge mince"
+        },
+        "breakevenComfortPercent": {
+          "label": "Marge de sécurité confortable (%)",
+          "help": "Un chiffre d’affaires aussi loin au-dessus du seuil de rentabilité est un matelas confortable"
+        },
+        "budgetOnTrackPercent": {
+          "label": "Tolérance budgétaire « conforme » (%)",
+          "help": "Un écart dans cette part du budget est considéré comme conforme"
+        },
+        "budgetWatchPercent": {
+          "label": "Tolérance budgétaire « à surveiller » (%)",
+          "help": "Un écart au-delà du « conforme », mais dans cette part du budget, est à surveiller"
+        },
+        "segmentHhiWarning": {
+          "label": "Alerte de concentration par segment (HHI)",
+          "help": "Une concentration du chiffre d’affaires à partir de cet indice est modérément concentrée"
+        },
+        "segmentHhiCritical": {
+          "label": "Concentration critique par segment (HHI)",
+          "help": "Une concentration du chiffre d’affaires à partir de cet indice est fortement concentrée"
         },
         "anomalySigma": {
           "label": "Seuil d’anomalie (σ)",

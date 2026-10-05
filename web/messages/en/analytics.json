@@ -201,7 +201,7 @@
       "onWatch": "{count} on watch",
       "coverage": "Coverage",
       "coverageSub": "accounts with a budget line",
-      "toleranceNote": "On Track: favorable or within ±10% of budget · Watch: within ±25% · Over (spend) / Under (revenue): beyond ±25%",
+      "toleranceNote": "On Track: favorable or within ±{onTrack}% of budget · Watch: within ±{watch}% · Over (spend) / Under (revenue): beyond ±{watch}%",
       "tableTitle": "Budget vs Actual ({count})",
       "search": "Search accounts…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "Breakeven safety margin (%)",
           "help": "Revenue within this share above breakeven is reported as a thin margin"
+        },
+        "breakevenComfortPercent": {
+          "label": "Comfortable safety margin (%)",
+          "help": "Revenue this far above breakeven reads as a comfortable margin"
+        },
+        "budgetOnTrackPercent": {
+          "label": "Budget on-track tolerance (%)",
+          "help": "A variance within this share of budget reads as on track"
+        },
+        "budgetWatchPercent": {
+          "label": "Budget watch tolerance (%)",
+          "help": "A variance beyond on-track but within this share of budget reads as watch"
+        },
+        "segmentHhiWarning": {
+          "label": "Segment concentration warning (HHI)",
+          "help": "Revenue concentration at or above this index reads as moderately concentrated"
+        },
+        "segmentHhiCritical": {
+          "label": "Segment concentration critical (HHI)",
+          "help": "Revenue concentration at or above this index reads as highly concentrated"
         },
         "anomalySigma": {
           "label": "Anomaly threshold (σ)",
