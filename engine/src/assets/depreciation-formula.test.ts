@@ -125,6 +125,23 @@ test("a part-period convention prorates period 1 and extends the schedule", () =
   assert.equal(money(lines), toUnits("12000")); // total unchanged
 });
 
+test("half-year double-declining spends the withheld half-year in the year after the nominal life", () => {
+  // 12,000 over 60 months, half-year rule: year 1 at half charge, the withheld
+  // half lands in months 61-66. The straight-line crossover divides by the
+  // remaining life INCLUDING those months, so none of them plans zero.
+  const lines = computeScheduleByFormula({
+    cost: "12000", salvage: "0", lifePeriods: 60, formula: BUILTIN_FORMULAS.double_declining,
+    firstPeriodFraction: "0.5", firstFractionPeriods: 12,
+  });
+  assert.equal(lines.length, 66);
+  assert.equal(lines[0]!.planned, "200.0000"); // 12,000 x 2/60 x 1/2
+  const years: bigint[] = [];
+  lines.forEach((line, i) => { years[Math.floor(i / 12)] = (years[Math.floor(i / 12)] ?? 0n) + toUnits(line.planned); });
+  assert.deepEqual(years, ["2191.7758", "3278.2525", "2182.5454", "1738.9704", "1738.9704", "869.4855"].map(toUnits));
+  assert.deepEqual(lines.slice(60).map((l) => l.planned), ["144.9143", "144.9142", "144.9143", "144.9142", "144.9143", "144.9142"]);
+  assert.equal(lines.at(-1)!.netBookValue, "0.0000");
+});
+
 test("INVARIANT: fully_depreciate methods total exactly cost − salvage, NBV = salvage", () => {
   for (const formula of [BUILTIN_FORMULAS.straight_line, BUILTIN_FORMULAS.declining_150, BUILTIN_FORMULAS.double_declining, BUILTIN_FORMULAS.sum_of_years_digits]) {
     const lines = computeScheduleByFormula({ cost: "8000", salvage: "500", lifePeriods: 36, formula });

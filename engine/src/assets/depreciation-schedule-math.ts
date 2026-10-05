@@ -190,7 +190,7 @@ function formulaForMethod(
       const monthlyRate = ratePercent != null && cmp(ratePercent, "0") > 0
         ? exactRatio(ratePercent, "1200")
         : exactRatio("1", String(lifeMonths));
-      return { formula: "(NB-RV)*R1~(NB-RV)/(AL-CP+1)", rateTable: [monthlyRate] };
+      return { formula: "(NB-RV)*R1~(NB-RV)/RL", rateTable: [monthlyRate] };
     }
     case "straight_line":
       return { formula: BUILTIN_FORMULAS.straight_line };
