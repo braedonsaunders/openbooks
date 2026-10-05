@@ -331,7 +331,7 @@ test("a restricted caller reads another entity's settlement line as missing", { 
       () => suggestPayoutLineFix(org.orgId, lines.otherEntity!, homeScope(org)),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.match(error.message, /does not belong to this organization/);
+        assert.match(error.message, /unavailable in this payout's legal entity/);
         assert.ok(!error.message.includes(docB.number), "the refusal names no receipt number");
         return true;
       },
@@ -447,7 +447,7 @@ test("approval discovers under the caller's scope and preserves the audited link
     const scope = homeScope(org);
     await assert.rejects(
       () => approvePayoutSuggestion(org.orgId, actor, lines.otherEntity!, { rank: 0, applyToSimilar: false }, scope),
-      /does not belong to this organization/,
+      /unavailable in this payout's legal entity/,
       "approving another entity's line refuses as missing",
     );
     const approved = await approvePayoutSuggestion(org.orgId, actor, lines.mix!, { rank: 0, applyToSimilar: false }, scope);
@@ -472,17 +472,17 @@ test("an unknown or empty scope fails closed", { skip: !DB }, async () => {
     const unknown = undefined as unknown as ReadonlySet<string> | null;
     await assert.rejects(
       () => suggestPayoutLineFix(org.orgId, lines.mix!, unknown),
-      /does not belong to this organization/,
+      /unavailable in this payout's legal entity/,
       "an omitted scope reads as missing, never as unrestricted",
     );
     await assert.rejects(
       () => suggestPayoutLineFix(org.orgId, lines.mix!, new Set()),
-      /does not belong to this organization/,
+      /unavailable in this payout's legal entity/,
       "an empty scope reads as missing",
     );
     await assert.rejects(
       () => approvePayoutSuggestion(org.orgId, actor, lines.mix!, { rank: 0, applyToSimilar: false }, unknown),
-      /does not belong to this organization/,
+      /unavailable in this payout's legal entity/,
       "approval with an omitted scope refuses before discovery",
     );
   } finally {
@@ -561,7 +561,7 @@ test("a runtime restricted role resolves to the same refusal", { skip: !DB }, as
     assert.deepEqual([...resolved].sort(), [org.subsidiaryId].sort());
     await assert.rejects(
       () => suggestPayoutLineFix(org.orgId, lines.otherEntity!, resolved),
-      /does not belong to this organization/,
+      /unavailable in this payout's legal entity/,
       "the role-resolved scope refuses the other entity's line",
     );
   } finally {
@@ -842,6 +842,115 @@ test("a claimed but ineligible order never asks for re-ingest", { skip: !DB }, a
       assert.ok(!text.includes("#8802"), `the foreign order number leaks: ${text}`);
       assert.doesNotMatch(text, /ingest/i, `an ineligible order never asks for re-ingest: ${text}`);
     }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a hidden sale document never asks for posting work already done", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { channelA, docB } = await seed(org, actor);
+    // Legacy cross-posted evidence: the home order points at the hidden
+    // receipt the way a pre-control posting left it. Discovery must not
+    // propose from it, and the matcher must not ask to post it again.
+    const moved = await db.execute(sql`update channel_orders set posting_document_id = ${docB.id}
+       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
+    assert.equal(moved.rowCount, 1, "the home order carries the hidden receipt");
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-hidden-sale-1", currency: "CAD", issuedAt: "2026-07-10" },
+      [{ id: "txn-hidden-sale-1", type: "charge", amount: "60.40", currency: "CAD", sourceOrderId: "gid://shopify/Order/8801" }],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    assert.equal(result.lines.length, 1);
+    const [verdict] = result.lines;
+    assert.ok(verdict, "the batch yields its sale verdict");
+    assert.equal(verdict.status, "unmatched");
+    assert.ok(verdict.status === "unmatched");
+    assert.equal(verdict.reason, "document_unavailable", `a hidden sale document never reads as unposted, got ${verdict.reason}`);
+    assert.match(verdict.remedy, /unavailable in this payout's legal entity/);
+    assert.match(verdict.remedy, /authorized operator/);
+    for (const text of [verdict.reason, verdict.remedy]) {
+      assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
+      assert.doesNotMatch(text, /post the order/i, `posted work never asks for posting: ${text}`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a hidden summary document never asks for posting work already done", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { channelA, docB } = await seed(org, actor);
+    const summaryId = (await db.execute<{ id: string }>(sql`
+      insert into channel_daily_summaries (org_id, channel_id, summary_date, stock_location_id, currency, posting_document_id)
+      values (${org.orgId}, ${channelA}, ${org.date}, ${org.stockLocationId}, 'CAD', ${docB.id})
+      returning id`)).rows[0]!.id;
+    const moved = await db.execute(sql`update channel_orders set posting_document_id = null, summary_id = ${summaryId}
+       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
+    assert.equal(moved.rowCount, 1, "the home order summarizes through the hidden receipt");
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-hidden-summary-1", currency: "CAD", issuedAt: "2026-07-10" },
+      [{ id: "txn-hidden-sum-1", type: "charge", amount: "60.40", currency: "CAD", sourceOrderId: "8801" }],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    assert.equal(result.lines.length, 1);
+    const [verdict] = result.lines;
+    assert.ok(verdict, "the batch yields its summary verdict");
+    assert.equal(verdict.status, "unmatched");
+    assert.ok(verdict.status === "unmatched");
+    assert.equal(verdict.reason, "document_unavailable", `a hidden summary document never reads as unposted, got ${verdict.reason}`);
+    assert.match(verdict.remedy, /daily summary's document is unavailable/);
+    assert.match(verdict.remedy, /authorized operator/);
+    for (const text of [verdict.reason, verdict.remedy]) {
+      assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
+      assert.doesNotMatch(text, /post it/i, `posted work never asks for posting: ${text}`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a hidden order reads exactly like an unknown one to a restricted caller", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    await seed(org, actor);
+    // 8802 exists on a channel the caller may not see; 9999 exists nowhere.
+    // A restricted caller must not distinguish the two responses.
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-oracle-1", currency: "CAD", issuedAt: "2026-07-10" },
+      [
+        { id: "txn-oracle-hidden", type: "charge", amount: "25.30", currency: "CAD", sourceOrderId: "8802" },
+        { id: "txn-oracle-unknown", type: "charge", amount: "11.00", currency: "CAD", sourceOrderId: "9999" },
+      ],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
+    }, null)).batchId;
+    const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
+      select id, external_ref as ref from psp_settlement_lines
+       where org_id = ${org.orgId} and batch_id = ${batch}`)).rows.map((row) => [row.id, row.ref] as const));
+    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+    const byRef = new Map([...refs].map(([id, ref]) => [ref, result.lines.find((line) => line.lineId === id)!]));
+    const hidden = byRef.get("txn-oracle-hidden")!;
+    const unknown = byRef.get("txn-oracle-unknown")!;
+    assert.ok(hidden.status === "unmatched" && unknown.status === "unmatched");
+    assert.equal(hidden.reason, "order_unknown");
+    assert.equal(hidden.reason, unknown.reason, "hidden reads exactly like missing");
+    assert.equal(hidden.remedy, unknown.remedy, "hidden remedies exactly like missing");
   } finally {
     await dropScratchOrg(org.orgId);
   }
