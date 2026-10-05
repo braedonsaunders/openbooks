@@ -111,8 +111,10 @@ function textOf(text: string): Element | null {
 
 function twoObligationPayload(): Payload {
   const base = payload();
+  const [firstBase] = base.obligations;
+  assert.ok(firstBase, "the base payload carries one obligation");
   const second = {
-    ...base.obligations[0],
+    ...firstBase,
     id: "ob-2",
     description: "Annual plan B",
     allocated_price: "600.0000",
@@ -131,7 +133,7 @@ function twoObligationPayload(): Payload {
   return {
     ...base,
     obligations: [
-      { ...base.obligations[0], id: "ob-1", description: "Annual plan A" },
+      { ...firstBase, id: "ob-1", description: "Annual plan A" },
       second,
     ],
   };
