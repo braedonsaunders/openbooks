@@ -51,6 +51,10 @@ test('YTD totals translate per-currency stubs instead of raw-adding them', { ski
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${scratch.orgId}, 'Biweekly', 'biweekly', 26, '2026-06-28', 3, true,
                 ${actorId}, ${actorId})`)
+      for (const party of [cadParty, usdParty]) {
+        await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${party}, ${scratch.orgId}, 'person', 'Stub employee')`)
+        await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id) values (${party}, ${scratch.orgId}, ${party}, ${scratch.subsidiaryId})`)
+      }
       await db.execute(sql`
         insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date, currency, status, created_by, updated_by)
         values (${scratch.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
