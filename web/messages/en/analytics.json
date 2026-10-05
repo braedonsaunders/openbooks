@@ -3577,7 +3577,8 @@
       "higherRiskWeighting": "higher risk weighting",
       "inPeriod": "in period",
       "recordsRemoved": "records removed",
-      "bankingContactAddress": "banking / contact / address"
+      "bankingContactAddress": "banking / contact / address",
+      "madValue": "MAD {value}"
     },
     "yes": "Yes",
     "no": "No",

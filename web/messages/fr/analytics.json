@@ -3882,7 +3882,8 @@
       "seeThresholdTrap": "voir Piège de seuil",
       "sumPairAmounts": "exemplaires en trop à la valeur convertie",
       "twoD": "2D : {value}",
-      "twoDigitPairs": "paires des deux premiers chiffres"
+      "twoDigitPairs": "paires des deux premiers chiffres",
+      "madValue": "MAD {value}"
     },
     "tabs": {
       "analysis": "Analyse",

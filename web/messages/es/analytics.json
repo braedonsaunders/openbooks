@@ -3882,7 +3882,8 @@
       "seeThresholdTrap": "ver Trampa de umbral",
       "sumPairAmounts": "copias de más a valor convertido",
       "twoD": "2D: {value}",
-      "twoDigitPairs": "parejas de dos primeros dígitos"
+      "twoDigitPairs": "parejas de dos primeros dígitos",
+      "madValue": "MAD {value}"
     },
     "tabs": {
       "analysis": "Análisis",

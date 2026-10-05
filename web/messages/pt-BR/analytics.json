@@ -3882,7 +3882,8 @@
       "seeThresholdTrap": "ver Armadilha de limite",
       "sumPairAmounts": "cópias excedentes ao valor convertido",
       "twoD": "2D: {value}",
-      "twoDigitPairs": "pares dos dois primeiros dígitos"
+      "twoDigitPairs": "pares dos dois primeiros dígitos",
+      "madValue": "MAD {value}"
     },
     "tabs": {
       "analysis": "Análise",

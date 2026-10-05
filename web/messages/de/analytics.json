@@ -3882,7 +3882,8 @@
       "seeThresholdTrap": "siehe Schwellenfalle",
       "sumPairAmounts": "Mehrfachexemplare zum Umrechnungswert",
       "twoD": "2D: {value}",
-      "twoDigitPairs": "Paare erster zwei Ziffern"
+      "twoDigitPairs": "Paare erster zwei Ziffern",
+      "madValue": "MAD {value}"
     },
     "tabs": {
       "analysis": "Analyse",
