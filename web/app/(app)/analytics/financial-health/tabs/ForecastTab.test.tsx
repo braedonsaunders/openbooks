@@ -150,6 +150,58 @@ test("an unknown confidence level refuses with the valid levels", async () => {
   }
 });
 
+test("a confidence the model cannot band renders the refusal, not the empty state", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  const data = decliningData();
+  // The offered list names 97, so the invalid-input branch passes and the
+  // model itself throws: the tab must render that refusal by name instead
+  // of falling through to "not enough history".
+  (data.forecast as { confidences: number[] }).confidences = [97];
+  (data.forecast as { defaultConfidence: number }).defaultConfidence = 97;
+  const { host, unmount } = await mount(data);
+  try {
+    const text = host.textContent ?? "";
+    assert.match(text, /Unknown Confidence/);
+    assert.match(text, /97/);
+    assert.doesNotMatch(text, /Not enough history/);
+    assert.doesNotMatch(text, /Projected Growth/);
+  } finally {
+    await unmount();
+  }
+});
+
+test("a non-monthly calendar without future periods refuses by name", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  const data = decliningData();
+  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames = [];
+  const { host, unmount } = await mount(data);
+  try {
+    const text = host.textContent ?? "";
+    // Names the missing declaration and where to fix it — never
+    // month-stepped buckets the calendar cannot reconcile.
+    assert.match(text, /no future periods/);
+    assert.match(text, /Declare periods/);
+    assert.doesNotMatch(text, /Projected Growth/);
+  } finally {
+    await unmount();
+  }
+});
+
+test("declared future period names label the buckets", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  const data = decliningData();
+  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames =
+    ["Q3 FY26", "Q4 FY26", "Q1 FY27", "Q2 FY27", "Q3 FY27", "Q4 FY27"];
+  const { host, unmount } = await mount(data);
+  try {
+    const text = host.textContent ?? "";
+    assert.match(text, /Q3 FY26/);
+    assert.match(text, /Q4 FY26/);
+  } finally {
+    await unmount();
+  }
+});
+
 test("an in-domain projection shows no caveat", async () => {
   globalThis.__fcRouter = { push() {}, refresh() {} };
   const data = decliningData();

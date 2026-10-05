@@ -2,6 +2,7 @@
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { EmptyState, Select } from '@openbooks/ui'
@@ -40,11 +41,11 @@ const METRIC_KPI: Record<Metric, 'revenue' | 'grossProfit' | 'operatingIncome'> 
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const
 
 /**
- * Labels for the projected buckets, stepping calendar months from the last
- * history point's month. The history key is a calendar month (YYYY-MM) or a
- * fiscal period start (YYYY-MM-DD) — both split the same way, so the first
- * two segments always carry the year and month stepping starts from.
- * Month names and the year template come from the catalog, never English.
+ * Labels for the projected buckets on monthly cadence, stepping calendar
+ * months from the last history point's month. Non-monthly calendars never
+ * reach this path: the server sends their declared future period names with
+ * the series. Month names and the year template come from the catalog,
+ * never English.
  */
 function futureLabels(
   lastMonth: string,
@@ -83,8 +84,8 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const [seasonality, setSeasonality] = useState(fp.defaultSeasonality)
   const [adjustment, setAdjustment] = useState(fp.defaultAdjustment)
 
-  const fmtFloat = (n: number, digits: number) =>
-    new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(n)
+  const fmtPercent = (n: number) =>
+    new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(n)
 
   // Every configured level is validated before it reaches the model: an
   // unknown confidence has no band multiplier, so the tab refuses with the
@@ -118,7 +119,10 @@ export function ForecastTab({ data }: { data: HealthData }) {
     [hist, metric],
   )
 
-  const result = useMemo(() => {
+  // An unknown confidence level is a refusal, never the not-enough-history
+  // empty state: the caught error carries the offending level, and the
+  // branch below renders it with the levels that would work.
+  const outcome = useMemo(() => {
     if (invalid || adjValue === undefined || series.length < 3) return null
     try {
       const r = applyForecastMethod(
@@ -142,12 +146,14 @@ export function ForecastTab({ data }: { data: HealthData }) {
         },
       )
       r.values = applyForecastAdjustment(r.values, adjValue)
-      return r
+      return { result: r }
     } catch (e) {
-      if (e instanceof UnknownConfidenceError) return null
+      if (e instanceof UnknownConfidenceError) return { error: e }
       throw e
     }
   }, [series, invalid, adjValue, method, horizon, seasonality, confidence, fp])
+  const result = outcome && 'result' in outcome ? outcome.result : null
+  const confidenceError = outcome && 'error' in outcome ? outcome.error : null
 
   // The caveat input: whether the DISPLAYED (post-adjustment) central
   // projection leaves the metric's sign domain, and where it first does.
@@ -166,13 +172,43 @@ export function ForecastTab({ data }: { data: HealthData }) {
     )
   }
 
+  // Non-monthly calendars label each projected bucket with the declared
+  // fiscal period names the server sent. Too few (or none) declared means
+  // the tab refuses by name — stepping calendar months would print buckets
+  // the organization cannot reconcile to its periods.
+  const declaredNames = fp.futurePeriodNames
+  if (declaredNames !== null && declaredNames !== undefined && declaredNames.length < horizon) {
+    const short = declaredNames.length > 0
+    return (
+      <Panel title={t('title')} icon={LineChart}>
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <LineChart size={28} className="text-slate-300 dark:text-slate-600" />
+          <p className="max-w-lg text-sm text-slate-500 dark:text-slate-400">
+            {short ? t('shortFuturePeriods', { have: declaredNames.length, need: horizon }) : t('noFuturePeriods')}
+          </p>
+          <Link href="/admin/setup/period-close" className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800">{t('declarePeriods')}</Link>
+        </div>
+      </Panel>
+    )
+  }
+
+  if (confidenceError) {
+    return (
+      <Panel title={t('title')} icon={LineChart}>
+        <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+          {t('unknownLevel', { field: t('field.confidence'), level: String(confidenceError.level), levels: fp.confidences.map((c) => t('confidencePct', { count: c })).join(', ') })}
+        </p>
+      </Panel>
+    )
+  }
+
   if (series.length < 3 || !result) {
     return <EmptyState icon={<LineChart size={28} />} title={t('emptyTitle')} description={t('emptyDescription')} />
   }
 
   const diag = diagnostics(series, result)
   const histLabels = hist.map((p) => p.label)
-  const futLabels = futureLabels(hist[hist.length - 1]!.month, horizon, (key, values) => tc(key, values))
+  const futLabels = (fp.futurePeriodNames ?? futureLabels(hist[hist.length - 1]!.month, horizon, (key, values) => tc(key, values))).slice(0, horizon)
   const labels = [...histLabels, ...futLabels]
   const N = series.length
   const history = [...series, ...Array(horizon).fill(null)]
@@ -222,7 +258,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
           <div className="mt-3 grid grid-cols-3 gap-3 text-center">
             <Stat label={t('total', { count: horizon })} value={fmtMoney(totalForecast, { compact: true })} />
             <Stat label={t('monthN', { count: horizon })} value={fmtMoney(endValue, { compact: true })} />
-            <Stat label={t('growth')} value={growth === null ? '—' : breach.breached ? `${fmtFloat(growth * 100, 1)}% *` : `${fmtFloat(growth * 100, 1)}%`} tone={growth === null ? undefined : growth >= 0 ? 'pos' : 'neg'} />
+            <Stat label={t('growth')} value={growth === null ? '—' : breach.breached ? `${fmtPercent(growth)} *` : fmtPercent(growth)} tone={growth === null ? undefined : growth >= 0 ? 'pos' : 'neg'} />
           </div>
           {breach.breached ? (
             <p className="mt-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">
@@ -300,9 +336,9 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
         <Panel title={t('diagnostics')} icon={Stethoscope} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-            <Diag label="MAPE" value={`${fmtFloat(diag.mape, 1)}%`} />
-            <Diag label="RMSE" value={fmtMoney(diag.rmse, { compact: true })} />
-            <Diag label="R²" value={fmtFloat(diag.r2, 3)} />
+            <Diag label={t('diag.mape')} value={fmtPercent(diag.mape / 100)} />
+            <Diag label={t('diag.rmse')} value={fmtMoney(diag.rmse, { compact: true })} />
+            <Diag label={t('diag.r2')} value={new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(diag.r2)} />
             <Diag label={t('diag.trend')} value={t(`trend.${diag.trendDir === 'Upward' ? 'up' : diag.trendDir === 'Downward' ? 'down' : 'flat'}`)} />
             <Diag label={t('diag.seasonality')} value={result.seasonal ? t('seasonDetected', { period: result.seasonalPeriod }) : t('seasonNone')} />
           </ul>

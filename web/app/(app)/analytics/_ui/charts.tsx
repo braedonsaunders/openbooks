@@ -89,7 +89,9 @@ export function TrendChart({
   format = 'money',
 }: {
   labels: string[]
-  series: { name: string; data: number[]; color?: string; pct?: boolean }[]
+  /** A null point is a period with no margin to plot: ECharts leaves a gap,
+   * never a zero stand-in. */
+  series: { name: string; data: (number | null)[]; color?: string; pct?: boolean }[]
   /** Pixel height, or 'fill' to fill a sized parent (dashboard widgets). */
   height?: ChartHeight
   area?: boolean
@@ -110,7 +112,7 @@ export function TrendChart({
       ...tooltip,
       valueFormatter: undefined,
       formatter: (params: ChartParam[]) =>
-        [escapeTooltipHtml(params[0]?.axisValue), ...params.map((p) => `${p.marker} ${escapeTooltipHtml(p.seriesName)}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : plain(p.value)}`)].join('<br/>'),
+        [escapeTooltipHtml(params[0]?.axisValue), ...params.filter((p) => (p.value as unknown) !== null).map((p) => `${p.marker} ${escapeTooltipHtml(p.seriesName)}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : plain(p.value)}`)].join('<br/>'),
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
     xAxis: catAxis(labels, maxTicks),
@@ -123,7 +125,7 @@ export function TrendChart({
       lineStyle: { width: 2, color: s.color ?? PALETTE[i % PALETTE.length] },
       itemStyle: { color: s.color ?? PALETTE[i % PALETTE.length] },
       areaStyle: area ? { opacity: 0.12, color: s.color ?? PALETTE[i % PALETTE.length] } : undefined,
-      data: s.pct ? s.data.map((v) => (pctAxis ? v * 100 : v)) : s.data,
+      data: s.pct ? s.data.map((v) => (v === null ? null : pctAxis ? v * 100 : v)) : s.data,
     })),
   }
   return <Chart option={option} height={height} />

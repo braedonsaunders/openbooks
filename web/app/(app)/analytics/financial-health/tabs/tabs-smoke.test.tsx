@@ -87,7 +87,9 @@ const ratios = {
   ],
 };
 const bands = {
-  hhi: { warning: 1500, critical: 2500 },
+  // Deliberately off the starting 1500/2500 levels: a hardcoded band would
+  // misgrade the HHI 2000 below, so the test pins the configured read.
+  hhi: { warning: 2100, critical: 2600 },
   scenario: { safety: "0.1000", comfort: "0.3000" },
 };
 
@@ -126,10 +128,12 @@ test("segments read configured HHI bands and translate every band", async () => 
       budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
     } as never} />,
   );
-  // Five equal shares price HHI 2000: inside the configured 1500/2500 band.
+  // Five equal shares price HHI 2000: below the configured 2100 warning
+  // level, so unconcentrated — the starting 1500/2500 bands would read
+  // moderate here instead.
   assert.match(text, /Segment Performance/);
   assert.match(text, /HHI 2000/);
-  assert.match(text, /Moderate/);
+  assert.match(text, /Unconcentrated/);
   assert.match(text, /By Department/);
 });
 

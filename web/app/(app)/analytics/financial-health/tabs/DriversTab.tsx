@@ -6,7 +6,7 @@ import { TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { cn, EmptyState } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
-import { cmp } from '@openbooks/engine/money'
+import { abs, cmp } from '@openbooks/engine/money'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
@@ -24,7 +24,8 @@ export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: 
   const topCost = useMemo(() => data.drivers.cost.slice(0, 8), [data.drivers.cost])
   const top = useMemo(() => {
     const all = [...data.drivers.revenue, ...data.drivers.cost]
-    return all.sort((a, b) => Math.abs(toChartNumber(b.change)) - Math.abs(toChartNumber(a.change))).slice(0, 10)
+    // Rank by exact money magnitude — never through the chart projection.
+    return all.sort((a, b) => cmp(abs(b.change), abs(a.change))).slice(0, 10)
   }, [data.drivers])
   const best = data.drivers.revenue[0]
   const worst = data.drivers.cost[0]
