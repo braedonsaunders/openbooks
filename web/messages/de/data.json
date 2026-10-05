@@ -106,7 +106,13 @@
     "rowCount": "{n, plural, one {# Zeile} other {# Zeilen}}",
     "parsing": "Datei wird gelesen…",
     "pastedData": "Eingefügte Daten",
-    "reviewHint": "Prüfen Sie die Anzahl und alle Fehler vor dem Import. Es wurden noch keine Datensätze importiert."
+    "reviewHint": "Prüfen Sie die Anzahl und alle Fehler vor dem Import. Es wurden noch keine Datensätze importiert.",
+    "commitBlocked": {
+      "errors": "{n, plural, one {# Zeile enthält einen Fehler} other {# Zeilen enthalten Fehler}}. Korrigieren Sie sie in der Datei und erstellen Sie die Vorschau erneut; importiert wird erst, wenn jede Zeile gültig ist.",
+      "stale": "Datei, Zuordnung oder Optionen wurden nach dieser Vorschau geändert. Erstellen Sie die Vorschau vor dem Import erneut.",
+      "nothing": "Es würden keine Zeilen angelegt oder aktualisiert, daher gibt es nichts zu importieren.",
+      "notReady": "Die Vorschau wird noch vorbereitet. Der Import ist verfügbar, sobald sie fertig ist."
+    }
   },
   "history": {
     "title": "Importverlauf",

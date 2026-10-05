@@ -69,6 +69,7 @@ const script = {
   resources: [] as { key: string; label: string; group: string; supportsImport?: boolean }[],
   importRequests: [] as { mode?: string }[],
   importFailureMode: null as string | null,
+  previewFailed: 0,
   job: dataTransferJob(),
 }
 
@@ -106,7 +107,7 @@ function stubFetch(): void {
     }
     if (url.startsWith('/api/data/transfers/') && method === 'GET') {
       if (script.job.state === 'parsing') script.job = { ...script.job, state: 'mapping', totalRows: 1, processedRows: 0 }
-      if (script.job.state === 'previewing') script.job = { ...script.job, state: 'ready', processedRows: 1, approvalHash: 'approved-source', preview: { created: 1, updated: 0, failed: 0, errors: [] } }
+      if (script.job.state === 'previewing') script.job = { ...script.job, state: 'ready', processedRows: 1, approvalHash: 'approved-source', preview: { created: 1, updated: 0, failed: script.previewFailed, errors: [] } }
       if (script.job.state === 'committing') script.job = { ...script.job, state: 'completed', processedRows: 1, outcome: { created: 1, updated: 0, failed: 0, errors: [] } }
       return Response.json({ job: script.job })
     }
@@ -134,6 +135,7 @@ async function mountWizard(t: TestContext, sample = false, back?: { backHref: st
   script.postBody = { error: 'sample-company-clone-failed', stage: 'clone' }
   script.importRequests = []
   script.importFailureMode = null
+  script.previewFailed = 0
   window.history.replaceState(null, '', '/data/import')
   stubFetch()
   const rootHandle = createRoot(document.body)
@@ -287,6 +289,22 @@ test('the durable server job preserves retry identity when session storage is un
   assert.equal(new URL(window.location.href).searchParams.get('transfer'), script.job.id)
   assert.equal(document.querySelector('[role="alert"]'), null)
 
+})
+
+test('a preview with error rows names why it cannot be imported', async (t) => {
+  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data', supportsImport: true }]
+  await mountWizard(t)
+  script.previewFailed = 2
+  await chooseImportSource()
+  await clickImportAction('Continue')
+  await clickImportAction('Preview')
+
+  const importButton = () => [...document.querySelectorAll('button')].find((item) => (item.textContent ?? '').includes('Import 1 row'))
+  for (let attempt = 0; attempt < 120 && !importButton(); attempt++) await act(async () => { await tick() })
+
+  assert.equal(importAction('Import 1 row').disabled, true)
+  assert.match(document.body.textContent ?? '', /2 rows have errors\. Fix them in the file and preview again/)
+  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview'])
 })
 
 for (const stage of [

@@ -106,7 +106,13 @@
     "rowCount": "{n, plural, one {# fila} other {# filas}}",
     "parsing": "Leyendo archivo…",
     "pastedData": "Datos pegados",
-    "reviewHint": "Revise las cantidades y los errores antes de importar. Aún no se ha importado ningún registro."
+    "reviewHint": "Revise las cantidades y los errores antes de importar. Aún no se ha importado ningún registro.",
+    "commitBlocked": {
+      "errors": "{n, plural, one {# fila tiene un error} other {# filas tienen errores}}. Corríjalas en el archivo y vuelva a generar la vista previa; no se importa nada hasta que todas las filas sean válidas.",
+      "stale": "El archivo, la asignación o las opciones cambiaron después de esta vista previa. Vuelva a generarla antes de importar.",
+      "nothing": "No se crearía ni actualizaría ninguna fila, así que no hay nada que importar.",
+      "notReady": "La vista previa aún se está preparando. La importación estará disponible cuando termine."
+    }
   },
   "history": {
     "title": "Historial de importaciones",
