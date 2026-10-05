@@ -29,3 +29,9 @@ export {
   type TaxIdValidationOutcome,
   type ValidateTaxIdOptions,
 } from './vat-id-validation.ts';
+export {
+  assertCrossBorderSupplyEvidence,
+  parseCrossBorderElection,
+  type CrossBorderElection,
+  type CrossBorderVerdict,
+} from './cross-border-posting.ts';
