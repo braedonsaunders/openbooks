@@ -53,6 +53,12 @@ export const PERMISSION_CATALOGUE = [
   "payment_methods.read",
   "payment_methods.manage",
   "autopay.manage",
+  // Capitalized contract costs (ASC 340-40): read sees policies, assets and
+  // amortization; manage capitalizes, links and runs amortization; approve
+  // recognizes impairment and changes policy (segregated from manage).
+  "contract_costs.read",
+  "contract_costs.manage",
+  "contract_costs.approve",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -437,6 +443,15 @@ export const PERMISSION_GROUPS: {
       { key: "usage.read", labelKey: permissionLabelKey("usage.read") },
       { key: "usage.manage", labelKey: permissionLabelKey("usage.manage") },
       { key: "usage.bill", labelKey: permissionLabelKey("usage.bill") },
+    ],
+  },
+  {
+    key: "contract-costs",
+    labelKey: "permissions.groups.contract-costs",
+    permissions: [
+      { key: "contract_costs.read", labelKey: permissionLabelKey("contract_costs.read") },
+      { key: "contract_costs.manage", labelKey: permissionLabelKey("contract_costs.manage") },
+      { key: "contract_costs.approve", labelKey: permissionLabelKey("contract_costs.approve") },
     ],
   },
   {
@@ -836,6 +851,9 @@ export const BUILT_IN_ROLES: Record<
       "payment_methods.read",
       "payment_methods.manage",
       "autopay.manage",
+      "contract_costs.read",
+      "contract_costs.manage",
+      "contract_costs.approve",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -964,6 +982,10 @@ export const BUILT_IN_ROLES: Record<
       "payment_methods.read",
       "payment_methods.manage",
       "autopay.manage",
+      // Day-to-day capitalization and amortization are bookkeeping;
+      // impairment approval stays with the controller (maker/checker).
+      "contract_costs.read",
+      "contract_costs.manage",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -1045,6 +1067,10 @@ export const BUILT_IN_ROLES: Record<
       "budgets.approve",
       "allocations.read",
       "allocations.approve",
+      // The approver reviews impairment (read + approve) without the
+      // day-to-day capitalization duty.
+      "contract_costs.read",
+      "contract_costs.approve",
       "nonprofit.report",
       "funds.read",
       "grants.read",
@@ -1072,7 +1098,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "payment_methods.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",

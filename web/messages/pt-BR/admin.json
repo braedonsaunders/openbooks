@@ -1067,6 +1067,7 @@
       "ar": "Contas a receber",
       "stored_value": "Vales e créditos",
       "usage": "Faturamento por uso",
+      "contract-costs": "Custos de contrato",
       "autopay": "Cobrança automática",
       "reports": "Relatórios",
       "budgets": "Orçamentos e previsões",
@@ -1119,6 +1120,9 @@
     "usage_read": "Ver o uso medido",
     "usage_manage": "Gerenciar medidores, planos de tarifas e registros de uso importados",
     "usage_bill": "Tarifar o uso e faturar cobranças de assinatura",
+    "contract_costs_read": "Ver custos de contrato capitalizados",
+    "contract_costs_manage": "Capitalizar custos e executar a amortização",
+    "contract_costs_approve": "Aprovar perdas por recuperabilidade e mudanças de política",
     "payment_methods_read": "Ver métodos de pagamento salvos",
     "payment_methods_manage": "Adicionar, definir como padrão e remover métodos de pagamento salvos",
     "autopay_manage": "Gerenciar inscrição na cobrança automática, tentativas e suspensão",
@@ -5919,6 +5923,10 @@
     "revenueRecognition": {
       "title": "Reconhecimento de receita",
       "description": "Regras, cronogramas e receita diferida de contratos."
+    },
+    "contractCosts": {
+      "title": "Custos de contrato",
+      "description": "Comissões de vendas capitalizadas amortizadas ao longo do contrato ou da vida do cliente (ASC 340-40)."
     },
     "projects": {
       "title": "Projetos e custeio de obras",

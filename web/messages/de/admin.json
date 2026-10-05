@@ -1067,6 +1067,7 @@
       "ar": "Debitorenbuchhaltung",
       "stored_value": "Guthaben",
       "usage": "Nutzungsabrechnung",
+      "contract-costs": "Vertragskosten",
       "autopay": "Automatische Abbuchung",
       "reports": "Berichte",
       "budgets": "Budgets & Prognosen",
@@ -1119,6 +1120,9 @@
     "usage_read": "Gemessene Nutzung anzeigen",
     "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
     "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",
+    "contract_costs_read": "Aktivierte Vertragskosten anzeigen",
+    "contract_costs_manage": "Kosten aktivieren und Abschreibung ausführen",
+    "contract_costs_approve": "Wertminderung und Richtlinienänderungen genehmigen",
     "payment_methods_read": "Gespeicherte Zahlungsmethoden ansehen",
     "payment_methods_manage": "Gespeicherte Zahlungsmethoden hinzufügen, als Standard festlegen und entfernen",
     "autopay_manage": "Automatische Abbuchung, Wiederholungen und Sperrung verwalten",
@@ -6135,6 +6139,10 @@
     "revenueRecognition": {
       "description": "Realisierungsregeln, Pläne und passive Rechnungsabgrenzung für Verträge.",
       "title": "Umsatzrealisierung"
+    },
+    "contractCosts": {
+      "title": "Vertragskosten",
+      "description": "Aktivierte Verkaufsprovisionen, abgeschrieben über Vertrags- oder Kundenlaufzeit (ASC 340-40)."
     },
     "subcontractorCompliance": {
       "description": "Versicherungszertifikate, Verzichtserklärungen und 1099-NEC/MISC- und T4A-Informationsmeldungen, mit Zahlungssperren bei erloschenem Nachunternehmerschutz.",

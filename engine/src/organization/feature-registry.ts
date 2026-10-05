@@ -45,6 +45,11 @@ export const FEATURES: FeatureDef[] = [
   // Off by default: without it every invoice keeps its own contract. A child
   // of revenueRecognition, so it can never resolve on while recognition is off.
   { key: 'revenueContracts', defaultEnabled: false, category: 'sales', parentKey: 'revenueRecognition' },
+  // Capitalized contract costs (ASC 340-40): sales commissions held as an
+  // asset and amortized over the contract term or the expected customer
+  // life. Subordinate to revenue recognition — amortization follows the
+  // revenue schedule for pattern-method assets.
+  { key: 'contractCosts', defaultEnabled: false, category: 'sales', requiresAll: ['revenueRecognition'] },
   // Subscription billing: plans + subscriptions that auto-generate recurring
   // invoices (SaaS/retainer style). Off by default — recurring document
   // schedules + dunning work without it; this adds the plan/subscription model.

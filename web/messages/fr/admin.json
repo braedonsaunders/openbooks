@@ -1067,6 +1067,7 @@
       "ar": "Comptes clients",
       "stored_value": "Cartes cadeaux et avoirs",
       "usage": "Facturation à l’usage",
+      "contract-costs": "Coûts de contrat",
       "autopay": "Prélèvement automatique",
       "reports": "Rapports",
       "budgets": "Budgets et prévisions",
@@ -1119,6 +1120,9 @@
     "usage_read": "Consulter la consommation mesurée",
     "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
     "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",
+    "contract_costs_read": "Voir les coûts de contrat capitalisés",
+    "contract_costs_manage": "Capitaliser les coûts et exécuter l’amortissement",
+    "contract_costs_approve": "Approuver les dépréciations et les changements de méthode",
     "payment_methods_read": "Voir les moyens de paiement enregistrés",
     "payment_methods_manage": "Ajouter, définir par défaut et supprimer les moyens de paiement enregistrés",
     "autopay_manage": "Gérer l’inscription au prélèvement automatique, les relances et la suspension",
@@ -5919,6 +5923,10 @@
     "revenueRecognition": {
       "title": "Reconnaissance des revenus",
       "description": "Règles, échéanciers et revenus reportés des contrats."
+    },
+    "contractCosts": {
+      "title": "Coûts de contrat",
+      "description": "Commissions de vente capitalisées amorties sur la durée du contrat ou de vie client (ASC 340-40)."
     },
     "projects": {
       "title": "Projets et coûts de revient",
