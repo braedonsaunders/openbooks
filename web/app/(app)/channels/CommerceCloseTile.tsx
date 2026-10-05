@@ -128,14 +128,14 @@ export function CommerceCloseTile() {
           {open.map((check) => (
             <li key={check.code} className="flex items-center justify-between gap-3 py-2">
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-medium">
+                <div className="flex items-center gap-2 text-sm font-medium">
                   <Badge variant={SEVERITY_VARIANT[check.severity]}>{check.count}</Badge>
                   <span className="truncate">
                     {tClose.has(`diagnostics.${check.code}.title`)
                       ? tClose(`diagnostics.${check.code}.title`)
                       : check.code}
                   </span>
-                </p>
+                </div>
                 <p className="text-sm text-slate-500">
                   {tClose.has(`diagnostics.${check.code}.message`)
                     ? tClose(`diagnostics.${check.code}.message`, { count: check.count })
