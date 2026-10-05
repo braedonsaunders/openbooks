@@ -260,6 +260,68 @@ test("a void after the period reports its reversal in the void's period, not now
   }
 });
 
+test("a reverse-charge bill on org-default accounts reports output and input VAT", { skip: !DB }, async () => {
+  // A pack-style code carries no accounts of its own and posts to the org's
+  // control accounts, so its components snapshot no account. The output leg
+  // of a reverse charge used to fall out of the collected box (and cancel
+  // the input VAT in the paid box), understating the VAT due.
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts}',
+        coalesce(settings->'controlAccounts', '{}'::jsonb)
+          || ${JSON.stringify({ taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput })}::jsonb)
+       where id = ${org.orgId}`);
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, applies_to, calculation_type, is_active)
+      values (${codeId}, ${org.orgId}, 'VAT-RC', 'Reverse charge 20%', 'purchases', 'reverse_charge', true)`);
+    const documentId = randomUUID();
+    const lineId = randomUUID();
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
+        values (${documentId}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-RC', ${org.subsidiaryId}, ${org.vendorId},
+                ${org.date}, ${org.date}, 'CAD', '1', '10000.0000', '0.0000', '10000.0000')`);
+      await tx.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+           tax_amount, tax_code_id, quantity, unit_price)
+        values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '10000.0000',
+                '10000.0000', '0.0000', ${codeId}, '1', '10000.0000')`);
+      await tx.execute(sql`
+        insert into document_line_tax_components
+          (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+           tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+           price_includes_tax, compound_on_previous, rounding_scale, collected_account_id,
+           paid_account_id, withholding_account_id, overridden)
+        values (${org.orgId}, ${lineId}, ${codeId}, 1, '20', '10000.0000', '2000.0000',
+                '2000.0000', '0.0000', 'reverse_charge', false, false, 2, null, null, null, false)`);
+      await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+    });
+    await postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+
+    const formCode = "RC-SCOPE";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Reverse charge probe', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'VAT due', ${codeId}, 'tax_collected', -1, 10),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '4', 'VAT reclaimed', ${codeId}, 'tax_paid', 1, 40)`);
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+    assert.equal(values.get("1"), "2000.0000");
+    assert.equal(values.get("4"), "2000.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a taxable-base box converts foreign-currency lines at the posted rate", { skip: !DB }, async () => {
   // Live-Postgres regression: the journal-backed boxes (tax_collected /
   // tax_paid / tax_amount) sum journal_lines.amount — the kernel's

@@ -964,6 +964,10 @@ async function sumReturnGlRaw(
     if (src.basis === "tax_collected" || src.basis === "tax_paid") {
       const orgFallback = src.basis === "tax_collected" ? orgTaxCollected : orgTaxPaid;
       const acctCol = src.basis === "tax_collected" ? sql`tc.collected_account_id` : sql`tc.paid_account_id`;
+      const reverseChargeOutputLeg = sql`
+        c.calculation_type = 'reverse_charge'
+        and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')
+        and l.account_id is not distinct from coalesce(c.collected_account_id, tc.collected_account_id, ${orgTaxCollected})`;
       const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
@@ -990,8 +994,16 @@ async function sumReturnGlRaw(
                   and (
                     ${src.basis === "tax_collected" ? sql`c.collected_account_id = l.account_id` : sql`c.paid_account_id = l.account_id`}
                     or (
-                      ${src.basis === "tax_collected" ? sql`c.collected_account_id is null and sd.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')` : sql`c.paid_account_id is null and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')`}
+                      ${src.basis === "tax_collected" ? sql`c.collected_account_id is null and sd.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')` : sql`c.paid_account_id is null and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund') and not (${reverseChargeOutputLeg})`}
                     )
+                    -- Reverse charge: a purchase document also owes OUTPUT tax.
+                    -- A code that relies on the org-default collected account
+                    -- snapshots no account, so its output leg is recognised by
+                    -- the account a collected leg resolves to — the same
+                    -- resolution posting uses. That leg belongs in the
+                    -- collected box and never in the paid box, where it would
+                    -- cancel the input tax it accompanies.
+                    ${src.basis === "tax_collected" ? sql`or (c.collected_account_id is null and ${reverseChargeOutputLeg})` : sql``}
                   )
              )
              or (

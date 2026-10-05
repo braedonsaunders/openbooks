@@ -221,11 +221,21 @@ export function validateTaxControlAccounts(
           assertTaxControlAccount(component, deps, "collected");
         }
       } else {
-        if (!isZero(component.recoverableAmount)) {
-          assertTaxControlAccount(component, deps, "paid");
-        }
+        const paid = isZero(component.recoverableAmount)
+          ? null
+          : assertTaxControlAccount(component, deps, "paid");
         if (component.calculationType === "reverse_charge") {
-          assertTaxControlAccount(component, deps, "collected");
+          const collected = assertTaxControlAccount(component, deps, "collected");
+          // The output tax a reverse charge owes and the input tax it
+          // reclaims are reported in different return boxes, told apart by
+          // the account each leg posts to. One shared account would make
+          // the legs indistinguishable and net both boxes to zero.
+          if (paid !== null && paid === collected) {
+            throw new PostingError(
+              `line ${line.lineNumber} reverse-charge tax ${component.taxCodeId} posts its output tax and its reclaimed input tax to the same account — ` +
+              `give the tax code a collected (output) account different from its paid (input) account in Setup → Taxes → Tax codes, then post again`,
+            );
+          }
         }
       }
     }
