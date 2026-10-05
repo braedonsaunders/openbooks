@@ -12,6 +12,7 @@
   "or": "或",
   "sso": "单点登录",
   "ssoFailed": "无法完成单点登录",
+  "signInUnavailable": "暂时无法登录。请刷新页面后重试。如果问题仍然存在，请联系管理员。",
   "reset": {
     "requestFailed": "无法请求密码重置链接 — 请检查网络连接后重试。",
     "requestTitle": "重置密码",

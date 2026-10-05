@@ -12,6 +12,7 @@
   "or": "ou",
   "sso": "Authentification unique",
   "ssoFailed": "L’authentification unique n’a pas pu être terminée",
+  "signInUnavailable": "La connexion est indisponible. Actualisez la page et réessayez. Si le problème persiste, contactez votre administrateur.",
   "reset": {
     "requestFailed": "Le lien de réinitialisation n’a pas pu être demandé — vérifiez votre connexion et réessayez.",
     "requestTitle": "Réinitialiser votre mot de passe",

@@ -114,27 +114,30 @@ function LoginForm() {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(mfaRequired ? { mfaCode } : { email, password }),
-    })
-    if (res.status === 202) {
-      setMfaRequired(true)
-      setPassword('')
-      setBusy(false)
-    } else if (res.ok) {
-      router.push(nextPath)
-      router.refresh()
-    } else {
-      // 429 is the ingress limiter, not a credential verdict — say so instead
-      // of blaming the password.
-      if (res.status === 429) {
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mfaRequired ? { mfaCode } : { email, password }),
+      })
+      if (res.status === 202) {
+        setMfaRequired(true)
+        setPassword('')
+      } else if (res.ok) {
+        router.push(nextPath)
+        router.refresh()
+      } else if (res.status === 429) {
         const retryAfter = Number(res.headers.get('Retry-After') ?? 0)
         setError(retryAfter > 0 ? t('tooManyAttempts', { seconds: retryAfter }) : t('busyTryAgain'))
-      } else {
+      } else if (res.status === 401) {
         setError(mfaRequired ? t('invalidMfa') : t('invalidCredentials'))
+      } else {
+        // Origin refusals and server failures are not credential verdicts.
+        setError(t('signInUnavailable'))
       }
+    } catch {
+      setError(t('signInUnavailable'))
+    } finally {
       setBusy(false)
     }
   }
