@@ -597,3 +597,46 @@ test(
     }
   },
 );
+
+test(
+  "contract creation is refused without the scoped-contracts switch and persists with it",
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const gatedOff = await put(fixture, { contractCreation: "booking" });
+      assert.equal(gatedOff.status, 404);
+
+      await withBypass(async () => {
+        await db.execute(sql`
+          update orgs set settings = jsonb_set(
+            coalesce(settings, '{}'::jsonb), '{features,revenueContracts}', 'true'::jsonb)
+           where id = ${fixture.orgId}`);
+      });
+      const invalid = await put(fixture, { contractCreation: "on_issue" });
+      assert.equal(invalid.status, 400);
+      const issues = ((await invalid.json()) as { issues: { path: string }[] }).issues;
+      assert.ok(
+        issues.some((issue) => issue.path === "contractCreation"),
+        "the refusal names the offending field",
+      );
+
+      const before = await settingsState(fixture.orgId);
+      const stored = await put(fixture, { contractCreation: "booking" });
+      assert.equal(stored.status, 200);
+      const after = await settingsState(fixture.orgId);
+      assert.equal(
+        (after.settings.revenue as Record<string, unknown>).contractCreation,
+        "booking",
+      );
+      assert.equal(after.audits, before.audits + 1);
+
+      const repeated = await put(fixture, { contractCreation: "booking" });
+      assert.equal(repeated.status, 200);
+      assert.deepEqual(await settingsState(fixture.orgId), after);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);

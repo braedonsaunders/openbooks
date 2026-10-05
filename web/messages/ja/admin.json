@@ -896,6 +896,12 @@
         "off": "オフ — レンジチェックなし",
         "hint": "請求書明細の配分単価が品目の公正価値の下限/上限レンジを外れた場合、履行義務が収益契約上でレビュー対象としてフラグされます。転記がブロックされることはありません。"
       },
+      "contractCreation": {
+        "label": "契約の作成",
+        "firstBilling": "初回請求 — 初回の請求書で契約を作成",
+        "booking": "受注 — 受注時に契約を作成",
+        "hint": "受注・サブスクリプション単位の契約は、1件の受注またはサブスクリプションを複数の請求書で対象とします。初回請求では初回の請求書で契約を作成し、受注では請求前に受注時点で作成します。"
+      },
       "learnMore": "詳細はこちら。"
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "スコープ別収益契約",
+      "description": "受注・サブスクリプション・複数請求書を1件の収益契約にまとめ、請求済みと認識済みを契約ごとに相殺表示します。"
     }
   },
   "extensions": {

@@ -896,6 +896,12 @@
         "off": "Aus — keine Bandbreitenprüfung",
         "hint": "Liegt der zugeteilte Stückpreis einer Rechnungszeile außerhalb der Unter-/Obergrenze des beizulegenden Zeitwerts des Artikels, wird die Leistungsverpflichtung im Umsatzvertrag zur Prüfung markiert. Die Buchung wird nie blockiert."
       },
+      "contractCreation": {
+        "label": "Vertragsanlage",
+        "firstBilling": "Erste Abrechnung — Vertrag mit der ersten Rechnung anlegen",
+        "booking": "Buchung — Vertrag bei Auftragserteilung anlegen",
+        "hint": "Verträge mit Auftrags- oder Abo-Umfang decken einen Auftrag oder ein Abonnement über mehrere Rechnungen ab. Bei erster Abrechnung entsteht der Vertrag mit seiner ersten Rechnung; bei Buchung entsteht er mit der Auftragserteilung, also vor der ersten Abrechnung."
+      },
       "learnMore": "Mehr erfahren."
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "Auftragsbezogene Umsatzverträge",
+      "description": "Ein Umsatzvertrag über einen Auftrag, ein Abonnement oder mehrere Rechnungen, mit abgerechneten und realisierten Erlösen je Vertrag saldiert."
     }
   },
   "extensions": {

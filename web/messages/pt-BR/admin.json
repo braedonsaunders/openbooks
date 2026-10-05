@@ -896,6 +896,12 @@
         "off": "Desativado — sem verificação de faixa",
         "hint": "Quando o preço unitário alocado de uma linha de fatura fica fora da faixa mínima/máxima de valor justo do item, a obrigação de desempenho é sinalizada para revisão no contrato de receita. Nunca bloqueia o lançamento."
       },
+      "contractCreation": {
+        "label": "Criação do contrato",
+        "firstBilling": "Primeira fatura — criar o contrato com sua primeira fatura",
+        "booking": "Registro — criar o contrato ao emitir o pedido",
+        "hint": "Contratos por pedido ou assinatura cobrem um pedido ou uma assinatura em várias faturas. Na primeira fatura, o contrato nasce com sua primeira fatura; no registro, nasce ao emitir o pedido, antes de faturar."
+      },
       "learnMore": "Saiba mais."
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "Contratos de receita por pedido",
+      "description": "Um contrato de receita para um pedido, uma assinatura ou várias faturas, com faturado e reconhecido líquidos por contrato."
     }
   },
   "backupsManager": {

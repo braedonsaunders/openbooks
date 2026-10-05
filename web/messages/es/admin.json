@@ -896,6 +896,12 @@
         "off": "Desactivado: sin comprobación de rango",
         "hint": "Cuando el precio unitario asignado de una línea de factura queda fuera del rango bajo/alto del valor razonable del artículo, la obligación de desempeño se marca para revisión en su contrato de ingresos. Nunca bloquea la contabilización."
       },
+      "contractCreation": {
+        "label": "Creación del contrato",
+        "firstBilling": "Primera factura — crear el contrato con su primera factura",
+        "booking": "Registro — crear el contrato al emitir el pedido",
+        "hint": "Los contratos por pedido o suscripción cubren un pedido o una suscripción en varias facturas. Con primera factura, el contrato nace con su primera factura; con registro, nace al emitir el pedido, antes de facturar."
+      },
       "learnMore": "Más información."
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "Contratos de ingresos por pedido",
+      "description": "Un contrato de ingresos para un pedido, una suscripción o varias facturas, con lo facturado y lo reconocido netos por contrato."
     }
   },
   "backupsManager": {

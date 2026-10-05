@@ -48,6 +48,13 @@ const normalizationCopy = (
   states: Record<string, string>
 }
 const { SettingsForm } = await import('./SettingsForm')
+const contractCreationCopy = (
+  await import('../../../../messages/en/admin.json', { with: { type: 'json' } })
+).default.settings.revenue.contractCreation as unknown & {
+  label: string
+  firstBilling: string
+  booking: string
+}
 
 type FormProps = Parameters<typeof SettingsForm>[0]
 
@@ -64,6 +71,7 @@ const INITIAL: FormProps['initial'] = {
   defaultLocale: 'en' as never,
   reportPdfStyle: 'formal',
   fairValueRangePolicy: 'off',
+  contractCreation: 'first_billing',
   requireVendorBillApproval: false,
   requireStockCountReview: false,
   controlAccounts: {
@@ -95,7 +103,10 @@ interface SeenRequest {
   body: unknown
 }
 
-async function mountForm(initial: FormProps['initial'] = INITIAL) {
+async function mountForm(
+  initial: FormProps['initial'] = INITIAL,
+  extraProps: Partial<Omit<FormProps, 'initial'>> = {},
+) {
   globalThis.__settingsRouter = { push() {}, refresh() {} }
   globalThis.__settingsToasts = []
   const seen: SeenRequest[] = []
@@ -114,7 +125,7 @@ async function mountForm(initial: FormProps['initial'] = INITIAL) {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <SettingsForm initial={initial} {...PROPS} />
+        <SettingsForm initial={initial} {...PROPS} {...extraProps} />
       </NextIntlClientProvider>,
     )
     await tick()
@@ -264,6 +275,78 @@ test('the organization card exposes the business time zone picker', async () => 
     )
   } finally {
     await unmount()
+  }
+})
+
+// Contract creation belongs to scoped revenue contracts: the choice renders
+// only while the switch is on, travels with the save, and stays out of the
+// payload while off so the stored choice survives the toggle.
+test('contract creation travels only while scoped contracts are on', async () => {
+  const gated = await mountForm(INITIAL, { revenueRecognition: true, revenueContracts: true })
+  try {
+    const trigger = [...document.querySelectorAll('button')].find((button) =>
+      (button.textContent ?? '').includes(String(contractCreationCopy.firstBilling)),
+    ) as HTMLButtonElement | undefined
+    assert.ok(trigger, 'expected the contract-creation picker while scoped contracts are on')
+    await act(async () => {
+      trigger.click()
+      await tick()
+    })
+    await tick()
+    const booking = [...document.querySelectorAll('[role="option"]')].find((el) =>
+      (el.textContent ?? '').includes(String(contractCreationCopy.booking)),
+    ) as HTMLButtonElement | undefined
+    assert.ok(booking, 'expected a booking option')
+    // Drive the picker's backing native select (its documented contract:
+    // the genuine change event fires from the native control), which is the
+    // seam this form owns — the picker's own suite covers option clicks.
+    const native = [...document.querySelectorAll('select')].find((candidate) =>
+      [...candidate.options].some((option) => option.value === 'booking'),
+    )
+    assert.ok(native, 'expected the backing native select')
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!
+    await act(async () => {
+      setter.call(native, 'booking')
+      native.dispatchEvent(new window.Event('change', { bubbles: true }))
+      await tick()
+    })
+    await tick()
+    await act(async () => {
+      saveButton().click()
+      await tick()
+      await tick()
+    })
+    await tick()
+    assert.equal(gated.seen.length, 1, 'the save must PUT once')
+    assert.equal(
+      (gated.seen[0]!.body as Record<string, unknown>).contractCreation,
+      'booking',
+      'the booking choice travels with the save',
+    )
+  } finally {
+    await gated.unmount()
+  }
+
+  const ungated = await mountForm(INITIAL, { revenueRecognition: true })
+  try {
+    assert.equal(
+      document.getElementById('contractCreation'),
+      null,
+      'no contract-creation control while scoped contracts are off',
+    )
+    await act(async () => {
+      saveButton().click()
+      await tick()
+      await tick()
+    })
+    await tick()
+    assert.equal(ungated.seen.length, 1, 'the save must PUT once')
+    assert.ok(
+      !('contractCreation' in ((ungated.seen[0]!.body as Record<string, unknown>) ?? {})),
+      'the stored choice is left alone while the switch is off',
+    )
+  } finally {
+    await ungated.unmount()
   }
 })
 

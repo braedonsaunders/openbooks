@@ -1193,6 +1193,10 @@ const REVENUE_CONTRACT: RecordTypeMeta = {
       key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
       options: ["draft", "active", "complete", "cancelled"].map((value) => ({ value, labelKey: `revenue.status.${value}` })),
     },
+    {
+      key: "scope", labelKey: "revenue.labels.scope", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["invoice", "order", "subscription"].map((value) => ({ value, labelKey: `revenue.scope.${value}` })),
+    },
     { key: "customer_id", labelKey: "revenue.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
     { key: "starts_on", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
     { key: "ends_on", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },

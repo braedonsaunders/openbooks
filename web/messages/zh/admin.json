@@ -896,6 +896,12 @@
         "off": "关闭 — 不进行区间检查",
         "hint": "当发票行的分摊单价超出物料公允价值的下限/上限区间时，该履约义务将在其收入合同中标记为待复核。绝不会阻止过账。"
       },
+      "contractCreation": {
+        "label": "合同创建",
+        "firstBilling": "首次开票——随首张发票创建合同",
+        "booking": "接单——下达销售订单时创建合同",
+        "hint": "按订单或订阅核算的合同将一份订单或订阅分多张发票涵盖。首次开票随首张发票创建合同；接单则在下达销售订单时创建，早于首次开票。"
+      },
       "learnMore": "了解更多。"
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "按范围核算的收入合同",
+      "description": "将销售订单、订阅或多张发票合并为一份收入合同，按合同轧差列示已开票与已确认收入。"
     }
   },
   "backupsManager": {

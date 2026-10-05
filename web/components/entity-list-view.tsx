@@ -123,10 +123,11 @@ export async function EntityListView({
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
   const catalog = getRecordType(recordType)
-  const [inventoryOn, crmFeatureOn, hrmFeatureOn] = await Promise.all([
+  const [inventoryOn, crmFeatureOn, hrmFeatureOn, contractsOn] = await Promise.all([
     isFeatureEnabled(orgId, 'inventory'),
     recordType === 'customer' ? isFeatureEnabled(orgId, 'crm') : Promise.resolve(true),
     recordType === 'employee' ? isFeatureEnabled(orgId, 'hrm') : Promise.resolve(true),
+    recordType === 'revenue_contract' ? isFeatureEnabled(orgId, 'revenueContracts') : Promise.resolve(true),
   ])
   const crmOn = recordType === 'customer' ? crmFeatureOn && crmAccountsVisible : crmFeatureOn
   // The employment filters and columns belong to the HRM read surface: the
@@ -212,11 +213,16 @@ export async function EntityListView({
   // option loaders would query crm_account_statuses for an org that has no
   // CRM, and their predicates would reference joins that are not in the FROM.
   // The employment filters vanish the same way while HRM is off.
+  // The contract scope filter belongs to the gated surface: while scoped
+  // contracts are off every contract is invoice scope, so the picker hides
+  // instead of offering a choice with one option.
   const quickFilterDefs = recordType === 'customer' && !crmOn
     ? source.quickFilters.filter((quick) => !CUSTOMER_CRM_QUICK_FILTERS.has(quick.filterKey))
     : recordType === 'employee' && !hrmOn
       ? source.quickFilters.filter((quick) => !EMPLOYEE_HRM_QUICK_FILTERS.has(quick.filterKey))
-      : source.quickFilters
+      : recordType === 'revenue_contract' && !contractsOn
+        ? source.quickFilters.filter((quick) => quick.filterKey !== 'scope')
+        : source.quickFilters
 
   const quickValues: Record<string, string | undefined> = {}
   const quickDefaults: Record<string, string | undefined> = {}

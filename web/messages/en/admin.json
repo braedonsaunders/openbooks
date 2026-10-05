@@ -896,6 +896,12 @@
         "off": "Off — no range checking",
         "hint": "When an invoice line's allocated per-unit price falls outside the item's fair value low/high range, the performance obligation is flagged for review on its revenue contract. Never blocks posting."
       },
+      "contractCreation": {
+        "label": "Contract creation",
+        "firstBilling": "First billing — create the contract with its first invoice",
+        "booking": "Booking — create the contract when the sales order issues",
+        "hint": "Scoped revenue contracts cover a sales order or subscription across several invoices. First billing creates the contract with its first invoice; booking creates it when the sales order issues, so the agreement exists before billing."
+      },
       "learnMore": "Learn more."
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "Scoped revenue contracts",
+      "description": "One revenue contract across a sales order, subscription, or several invoices, with billed and recognized revenue netted per contract."
     }
   },
   "backupsManager": {

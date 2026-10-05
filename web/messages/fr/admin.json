@@ -896,6 +896,12 @@
         "off": "Désactivé — aucun contrôle de fourchette",
         "hint": "Lorsque le prix unitaire alloué d'une ligne de facture sort de la fourchette basse/haute de juste valeur de l'article, l'obligation de prestation est signalée pour revue sur son contrat de revenus. Ne bloque jamais la comptabilisation."
       },
+      "contractCreation": {
+        "label": "Création du contrat",
+        "firstBilling": "Première facture — créer le contrat avec sa première facture",
+        "booking": "Enregistrement — créer le contrat à l'émission du bon de commande",
+        "hint": "Les contrats par commande ou abonnement couvrent une commande ou un abonnement sur plusieurs factures. Avec première facture, le contrat naît avec sa première facture ; avec enregistrement, il naît à l'émission de la commande, avant toute facturation."
+      },
       "learnMore": "En savoir plus."
     },
     "saasMetrics": {
@@ -6219,6 +6225,10 @@
     "geographicTerritories": {
       "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
       "title": "Geographic territories"
+    },
+    "revenueContracts": {
+      "title": "Contrats de revenus par commande",
+      "description": "Un contrat de revenus pour un bon de commande, un abonnement ou plusieurs factures, avec facturé et comptabilisé nets par contrat."
     }
   },
   "backupsManager": {
