@@ -23,9 +23,11 @@ function signedStripeBody(secret: string, event: unknown): { body: string; heade
  * a pending-clawback marker instead of dropping as unknown_attempt/200 —
  * otherwise the return is lost forever while the later settlement posts a
  * receipt with no reversal flag. When the succeeded event lands it settles
- * AND fires the clawback note; a redelivered refund then notes normally.
+ * AND replays the parked return through refund automation: the fixture
+ * carries no refunded amount, so the replay queues for review with the
+ * amount to confirm instead of guessing.
  */
-test("a refund arriving before its success parks, settles, and notes exactly once", { skip: !DB }, async () => {
+test("a refund arriving before its success parks, settles, and queues exactly once", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Clawback Tester", "admin");
@@ -101,7 +103,8 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
       select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`)).rows[0]!;
     assert.equal(untouched.status, "initiated");
 
-    // The real settlement lands late: books the receipt AND fires the note.
+    // The real settlement lands late: books the receipt AND replays the
+    // parked return into the review queue (the fixture reports no amount).
     const succeeded = signedStripeBody(secret, {
       id: `evt_succeeded_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
@@ -120,24 +123,28 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
       select consumed_at, consumed_attempt_id from payment_pending_clawbacks
        where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`)).rows[0]!;
     assert.ok(consumed.consumed_at, "marker consumed by the settlement");
-    const notes = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'payment_attempts'
-         and changes->'after'->>'note' like '%before its settlement event%'`));
-    assert.equal(notes.rows[0]!.n, 1, "exactly one clawback note from the parked refund");
+    const queued = (await db.execute<{ status: string; reason: string }>(sql`
+      select status, reason from payment_disputes where org_id = ${org.orgId}`)).rows;
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0]!.status, "pending_review");
+    assert.match(queued[0]!.reason ?? "", /did not report the refunded amount/);
 
-    // The refund redelivery now resolves normally (no second marker, no second note).
+    // The refund redelivery is a new provider event, so it queues as its own
+    // review row — but the marker stays single and nothing posts twice.
     const redelivered = signedStripeBody(secret, {
       id: `evt_refund2_${randomUUID().slice(0, 8)}`,
       type: "charge.refunded",
       data: { object: { id: "ch_1", payment_intent: intentId } },
     });
     const third = await handleProviderWebhook("stripe", redelivered.headers, redelivered.body);
-    assert.equal(third?.status, "refunded_noted");
+    assert.equal(third?.status, "refunded_pending_review");
     const markers = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from payment_pending_clawbacks
        where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`));
     assert.equal(markers.rows[0]!.n, 1);
+    const queuedAfter = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`));
+    assert.equal(queuedAfter.rows[0]!.n, 2);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -147,8 +154,8 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
  * A refund redelivery that lands in the park branch AFTER its marker was
  * consumed must only refresh last_seen_at/payload — it must never re-arm
  * consumed_at/consumed_attempt_id. Otherwise the next duplicate succeeded
- * event consumes the marker a second time and writes a second clawback note
- * for one return.
+ * event consumes the marker a second time and replays a second automation
+ * run for one return.
  *
  * The park branch is reachable post-consumption when the settling event never
  * merged the intent (e.g. a link-token settlement with no payment_intent):
@@ -248,16 +255,21 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     assert.equal(await notes(), 0);
 
     // A duplicate success carrying the intent dedupes on the booked receipt
-    // but still consumes the open marker: exactly one note.
+    // but still consumes the open marker and replays the parked return into
+    // the review queue.
     const duplicate = await fire({
       id: `evt_rearm_dup_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
       data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
     });
     assert.equal(duplicate?.status, "duplicate");
-    assert.equal(await notes(), 1);
+    assert.equal(await notes(), 0);
     const consumedOnce = await marker();
     assert.ok(consumedOnce?.consumed_at, "marker consumed by the duplicate success");
+    const queued = (await db.execute<{ status: string }>(sql`
+      select status from payment_disputes where org_id = ${org.orgId}`)).rows;
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0]!.status, "pending_review");
 
     // The refund redelivery still cannot resolve (no intent was ever merged),
     // so it re-parks — but must NOT re-arm the consumed marker.
@@ -271,15 +283,19 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     assert.equal(afterRedelivery?.consumed_at, consumedOnce?.consumed_at, "redelivery refreshes tracking, never re-arms");
     assert.equal(afterRedelivery?.consumed_attempt_id, consumedOnce?.consumed_attempt_id);
 
-    // A further duplicate success must find the marker closed: no second note.
+    // A further duplicate success must find the marker closed: no replay, no
+    // second queue row.
     const late = await fire({
       id: `evt_rearm_late_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
       data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
     });
     assert.equal(late?.status, "duplicate");
-    assert.equal(await notes(), 1, "one return fires exactly one clawback note");
+    assert.equal(await notes(), 0, "no controller notes; the queue carries the return");
     assert.equal((await marker())?.consumed_at, consumedOnce?.consumed_at);
+    const queuedAfter = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`));
+    assert.equal(queuedAfter.rows[0]!.n, 1, "one return queues exactly once");
   } finally {
     await dropScratchOrg(org.orgId);
   }

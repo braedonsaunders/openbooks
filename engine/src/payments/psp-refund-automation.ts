@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
+import { cmp, fromUnits, neg, toUnits } from "../money/money.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -19,6 +18,7 @@ import { paymentControlDeps } from "./payment-accounts.ts";
 import { openItemsForParty } from "./payment-queries.ts";
 import { applyStandaloneCredits } from "./credit-settlement.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
+import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
@@ -318,6 +318,7 @@ async function disputeRow(
   provider_ref: string | null;
   reason: string | null;
   documents_posted: unknown;
+  status_history: unknown;
 }> {
   const row = (await db.execute<{
     id: string;
@@ -334,10 +335,11 @@ async function disputeRow(
     provider_ref: string | null;
     reason: string | null;
     documents_posted: unknown;
+    status_history: unknown;
   }>(sql`
     select id, kind, status, attempt_id, receipt_document_id, invoice_document_id,
            currency, amount::text, fee_amount::text, provider, provider_event_id,
-           provider_ref, reason, documents_posted
+           provider_ref, reason, documents_posted, status_history
       from payment_disputes
      where id = ${disputeId} and org_id = ${orgId}
      for update
@@ -370,7 +372,8 @@ async function findPostedPurposeReceipt(orgId: string, memo: string): Promise<st
 
 /** Post an unapplied customer receipt (cash moves, nothing settles) — the
  *  same validated draft shape settleAttempt builds when the invoice needs no
- *  application. */
+ *  application. A gated receipt parks: the caller records pending_review and
+ *  the approval resumes it, so nothing voids before the hold can post. */
 async function postUnappliedReceipt(
   orgId: string,
   opts: {
@@ -382,7 +385,7 @@ async function postUnappliedReceipt(
     memo: string;
     referenceNumber: string;
   },
-): Promise<string> {
+): Promise<{ receiptId: string; gated: boolean }> {
   const actorId = PSP_AUTOMATION_SYSTEM_ACTOR_ID;
   const payment = await createPaymentDocument({
     orgId,
@@ -410,8 +413,13 @@ async function postUnappliedReceipt(
            updated_at = now(), updated_by = ${actorId}
      where id = ${payment.id} and org_id = ${orgId} and status = 'draft'
   `);
+  const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, actorId);
+  if (submission.flowError) {
+    throw new PspAutomationError(`receipt approval could not be routed: ${submission.flowError}`);
+  }
+  if (submission.gated) return { receiptId: payment.id, gated: true };
   await postDocument(payment.id, await paymentControlDeps(orgId));
-  return payment.id;
+  return { receiptId: payment.id, gated: false };
 }
 
 /** Post a receipt applied to one invoice (plus on-account for any remainder),
@@ -527,11 +535,10 @@ async function refundAgainstCredit(
   creditDocumentId: string,
   creditLineId: string,
   refundedAmount: string,
-  reason: string,
-): Promise<string> {
+): Promise<{ refundId: string; gated: boolean }> {
   const purpose = `PSP auto-refund against credit for ${ctx.attempt.external_ref}`;
   const reused = await findPostedPurposeReceipt(orgId, purpose);
-  const refundId = reused ?? await postUnappliedReceipt(orgId, {
+  const issued = reused ? { receiptId: reused, gated: false } : await postUnappliedReceipt(orgId, {
     partyId: ctx.link.party_id,
     bankAccountId: ctx.bankAccountId,
     subsidiaryId: ctx.link.subsidiary_id,
@@ -540,6 +547,8 @@ async function refundAgainstCredit(
     memo: purpose,
     referenceNumber: `psp-refund:${ctx.attempt.external_ref.slice(0, 8)}`,
   });
+  if (issued.gated) return { refundId: issued.receiptId, gated: true };
+  const refundId = issued.receiptId;
   const refundLine = (await db.execute<{ id: string }>(sql`
     select jl.id
       from journal_lines jl
@@ -548,26 +557,107 @@ async function refundAgainstCredit(
      limit 1
   `)).rows[0];
   if (!refundLine) throw new PspAutomationError("refund receipt posted without an open item");
-  // The caller's key makes the credit application once-only: a retried run
-  // converges on the existing application instead of settling twice.
-  await applyStandaloneCredits(
-    orgId,
-    PSP_AUTOMATION_SYSTEM_ACTOR_ID,
-    {
-      partyId: ctx.link.party_id,
-      side: "ar",
-      appliedOn: await businessToday(orgId),
-      credits: [{
-        fromLineId: creditLineId,
-        toLineId: refundLine.id,
-        amount: refundedAmount,
-        sourceDocumentId: creditDocumentId,
-      }],
-      idempotencyKey: `psp-refund-credit:${orgId}:${ctx.attempt.id}:${refundedAmount}`,
-    },
-    null,
-  );
-  return refundId;
+  // Convergent retry: an existing application for these endpoints settles the
+  // run without a second write.
+  const settled = (await db.execute<{ id: string }>(sql`
+    select id from applications
+     where org_id = ${orgId} and from_line_id = ${creditLineId} and to_line_id = ${refundLine.id}
+       and unapplied_at is null
+  `)).rows[0];
+  if (!settled) {
+    await applyStandaloneCredits(
+      orgId,
+      PSP_AUTOMATION_SYSTEM_ACTOR_ID,
+      {
+        partyId: ctx.link.party_id,
+        side: "ar",
+        appliedOn: await businessToday(orgId),
+        credits: [{
+          fromLineId: creditLineId,
+          toLineId: refundLine.id,
+          amount: refundedAmount,
+          sourceDocumentId: creditDocumentId,
+        }],
+        idempotencyKey: randomUUID(),
+      },
+      null,
+    );
+  }
+  return { refundId, gated: false };
+}
+
+/**
+ * Apply one posted payment open line to another posted open item (the lost
+ * path settles the invoice from the dispute hold). Same currency, both
+ * endpoints locked, evidence spelled out — the deposits precedent for a
+ * payment-sourced application, since the credit-settlement path admits only
+ * credit-memo lines. The open-balance trigger moves both balances; the
+ * zero-row check fails the run instead of reporting a settled invoice the
+ * ledger never reflects.
+ */
+async function applyPaymentToOpenItem(
+  orgId: string,
+  opts: {
+    fromLineId: string;
+    toLineId: string;
+    amount: string;
+    currency: string;
+    reference: string;
+  },
+): Promise<string> {
+  const appliedOn = await businessToday(orgId);
+  await lockApplicationEvidence(db, orgId, [opts.fromLineId, opts.toLineId]);
+  const endpoints = (await db.execute<{ id: string; currency: string; open: string }>(sql`
+    select jl.id, jl.currency,
+           (abs(jl.amount) - coalesce(sum(case when a.unapplied_at is null then a.source_amount else 0 end), 0))::text as open
+      from journal_lines jl
+      left join applications a on (a.from_line_id = jl.id or a.to_line_id = jl.id) and a.org_id = jl.org_id
+     where jl.org_id = ${orgId} and (jl.id = ${opts.fromLineId} or jl.id = ${opts.toLineId})
+     group by jl.id
+  `)).rows;
+  const from = endpoints.find((row) => row.id === opts.fromLineId);
+  const to = endpoints.find((row) => row.id === opts.toLineId);
+  if (!from || !to) {
+    throw new PspAutomationError("a receipt or invoice line disappeared while settling; retry the event");
+  }
+  if (from.currency.toUpperCase() !== opts.currency.toUpperCase() || to.currency.toUpperCase() !== opts.currency.toUpperCase()) {
+    throw new PspAutomationError(
+      `settlement needs both lines in ${opts.currency}; re-check the receipt and invoice currencies`,
+    );
+  }
+  if (toUnits(opts.amount) <= 0n) {
+    throw new PspAutomationError("settlement amount must be positive");
+  }
+  if (toUnits(opts.amount) > toUnits(from.open) || toUnits(opts.amount) > toUnits(to.open)) {
+    throw new PspAutomationError(
+      `settlement of ${opts.amount} exceeds an open balance; reload the receipt and invoice and retry`,
+    );
+  }
+  const applicationId = randomUUID();
+  const inserted = (await db.execute<{ id: string }>(sql`
+    insert into applications
+      (id, org_id, from_line_id, to_line_id, amount, source_amount,
+       source_transaction_amount, source_transaction_currency,
+       target_transaction_amount, target_transaction_currency,
+       settlement_rate, settlement_rate_source, settlement_rate_reference,
+       applied_on, created_by, updated_by)
+    values (${applicationId}, ${orgId}, ${opts.fromLineId}, ${opts.toLineId}, ${opts.amount},
+            ${opts.amount}, ${opts.amount}, ${opts.currency},
+            ${opts.amount}, ${opts.currency},
+            '1', 'same_currency', ${opts.reference},
+            ${appliedOn}, ${PSP_AUTOMATION_SYSTEM_ACTOR_ID}, ${PSP_AUTOMATION_SYSTEM_ACTOR_ID})
+    returning id
+  `)).rows[0];
+  if (!inserted) {
+    throw new PspAutomationError("the settlement could not be recorded; retry the event");
+  }
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'applications', ${applicationId}, 'insert',
+            ${JSON.stringify({ mode: "payment_applied_without_cash", source: "payments.psp-refund-automation", after: { fromLineId: opts.fromLineId, toLineId: opts.toLineId, amount: opts.amount, appliedOn } })}::jsonb,
+            ${PSP_AUTOMATION_SYSTEM_ACTOR_ID})
+  `);
+  return inserted.id;
 }
 
 /** An open customer credit memo covering the refunded amount, if the
@@ -641,6 +731,7 @@ async function parkForReview(
 export async function processProviderRefundEvent(
   orgId: string,
   event: ProviderRefundEvent,
+  opts: { forcePolicy?: PspAutomationPolicy } = {},
 ): Promise<RefundAutomationOutcome> {
   return withOrg(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "onlinePayments"))) {
@@ -679,7 +770,7 @@ export async function processProviderRefundEvent(
         return { status: "duplicate", disputeId };
       }
     }
-    if (ctx.policy === "review") {
+    if ((opts.forcePolicy ?? ctx.policy) === "review") {
       return parkForReview(
         orgId,
         disputeId,
@@ -730,14 +821,20 @@ export async function processProviderRefundEvent(
     }
     const credit = await openCreditCovering(orgId, ctx.link.party_id, ctx.receipt.currency, event.refundedAmount);
     if (credit) {
-      const refundId = await refundAgainstCredit(
+      const { refundId, gated } = await refundAgainstCredit(
         orgId,
         ctx,
         credit.documentId,
         credit.lineId,
         event.refundedAmount,
-        reason,
       );
+      if (gated) {
+        return parkForReview(
+          orgId,
+          disputeId,
+          `refund receipt ${refundId} needs approval before it can settle against the credit memo`,
+        );
+      }
       await setAttemptRefunded(orgId, ctx.attempt.id, null);
       await transitionDisputeRow(orgId, disputeId, "posted", [refundId], `settled against credit memo ${credit.documentId}`);
       return { status: "posted", disputeId, documents: [refundId] };
@@ -931,15 +1028,19 @@ async function openDisputeHold(
   }
   const holdPurpose = `PSP dispute hold ${providerRef}`;
   const reusedHold = await findPostedPurposeReceipt(orgId, holdPurpose);
-  const holdId = reusedHold ?? await postUnappliedReceipt(orgId, {
-    partyId: ctx.link.party_id,
-    bankAccountId: disputedFunds,
-    subsidiaryId: ctx.link.subsidiary_id,
-    currency: ctx.receipt!.currency,
-    total: disputeAmount,
-    memo: holdPurpose,
-    referenceNumber: `psp-dispute:${providerRef.slice(0, 12)}`,
-  });
+  const issuedHold = reusedHold
+    ? { receiptId: reusedHold, gated: false }
+    : await postUnappliedReceipt(orgId, {
+      partyId: ctx.link.party_id,
+      bankAccountId: disputedFunds,
+      subsidiaryId: ctx.link.subsidiary_id,
+      currency: ctx.receipt!.currency,
+      total: disputeAmount,
+      memo: holdPurpose,
+      referenceNumber: `psp-dispute:${providerRef.slice(0, 12)}`,
+    });
+  if (issuedHold.gated) return { documents, holdId: issuedHold.receiptId, gated: true };
+  const holdId = issuedHold.receiptId;
   documents.push(holdId);
   return { documents, holdId, gated: false };
 }
@@ -953,6 +1054,7 @@ async function openDisputeHold(
 export async function processProviderDisputeEvent(
   orgId: string,
   event: ProviderDisputeEvent,
+  opts: { forcePolicy?: PspAutomationPolicy } = {},
 ): Promise<RefundAutomationOutcome> {
   return withOrg(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "onlinePayments"))) {
@@ -992,7 +1094,7 @@ export async function processProviderDisputeEvent(
       return { status: "duplicate", disputeId: existing.id };
     }
     const ctx = event.attemptId ? await loadAutomationContext(orgId, event.attemptId) : null;
-    if (ctx && ctx.policy === "review") {
+    if (ctx && (opts.forcePolicy ?? ctx.policy) === "review") {
       const row = existing ?? (await insertDisputeRow(orgId, {
         provider: event.provider,
         providerEventId: event.providerEventId,
@@ -1256,23 +1358,22 @@ async function runDisputeLost(
   const invoiceItem = invoiceItems.find((i) => i.documentId === invoice.id);
   const applied = cmp(row.amount, invoice.open_balance) < 0 ? row.amount : invoice.open_balance;
   if (cmp(applied, "0") > 0 && invoiceItem) {
-    await applyStandaloneCredits(
-      orgId,
-      PSP_AUTOMATION_SYSTEM_ACTOR_ID,
-      {
-        partyId: ctx.link.party_id,
-        side: "ar",
-        appliedOn: await businessToday(orgId),
-        credits: [{
-          fromLineId: holdLine.id,
-          toLineId: invoiceItem.lineId,
-          amount: applied,
-          sourceDocumentId: holdId!,
-        }],
-        idempotencyKey: `psp-dispute-apply:${orgId}:${disputeId}`,
-      },
-      null,
-    );
+    // Convergent retry: an existing application for these endpoints settles
+    // the run without a second write.
+    const settled = (await db.execute<{ id: string }>(sql`
+      select id from applications
+       where org_id = ${orgId} and from_line_id = ${holdLine.id} and to_line_id = ${invoiceItem.lineId}
+         and unapplied_at is null
+    `)).rows[0];
+    if (!settled) {
+      await applyPaymentToOpenItem(orgId, {
+        fromLineId: holdLine.id,
+        toLineId: invoiceItem.lineId,
+        amount: applied,
+        currency: row.currency,
+        reference: `dispute ${event.dispute.id} lost; hold settles invoice`,
+      });
+    }
   }
   // Write off the held funds to chargeback loss (plus the provider fee to
   // fees), clearing the hold account to zero.
@@ -1304,12 +1405,12 @@ async function runDisputeLost(
     actorId: PSP_AUTOMATION_SYSTEM_ACTOR_ID,
     idempotencyKey: `psp-dispute-loss:${orgId}:${disputeId}`,
     lines: [
-      { accountId: lossAccount, amount: applied, memo: "Chargeback loss" },
+      { accountId: lossAccount, amount: applied, currency: row.currency, memo: "Chargeback loss" },
       ...(cmp(fee, "0") > 0
-        ? [{ accountId: ctx.disputeAccounts.disputeFeeAccountId!, amount: fee, memo: "Provider dispute fee" }]
+        ? [{ accountId: ctx.disputeAccounts.disputeFeeAccountId!, amount: fee, currency: row.currency, memo: "Provider dispute fee" }]
         : []),
-      { accountId: ctx.disputeAccounts.disputedFundsAccountId!, amount: neg(applied), memo: "Clear dispute hold" },
-      ...(cmp(fee, "0") > 0 ? [{ accountId: ctx.bankAccountId, amount: neg(fee), memo: "Dispute fee taken" }] : []),
+      { accountId: ctx.disputeAccounts.disputedFundsAccountId!, amount: neg(applied), currency: row.currency, memo: "Clear dispute hold" },
+      ...(cmp(fee, "0") > 0 ? [{ accountId: ctx.bankAccountId, amount: neg(fee), currency: row.currency, memo: "Dispute fee taken" }] : []),
     ],
   });
   await transitionDisputeRow(
@@ -1388,13 +1489,18 @@ export async function approveDisputeReview(
   });
 }
 
-/** Approval re-runs post against the queued row itself (never a new row). */
+/** Approval re-runs post against the queued row itself (never a new row),
+ *  under the automatic path: the operator's approval IS the policy gate. */
 async function runApprovedRefund(
   orgId: string,
   disputeId: string,
   event: ProviderRefundEvent,
 ): Promise<RefundAutomationOutcome> {
-  const outcome = await processProviderRefundEvent(orgId, { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") });
+  const outcome = await processProviderRefundEvent(
+    orgId,
+    { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") },
+    { forcePolicy: "automatic" },
+  );
   if (outcome.status === "duplicate" || outcome.disputeId !== disputeId) return outcome;
   return outcome;
 }
@@ -1404,7 +1510,11 @@ async function runApprovedDispute(
   disputeId: string,
   event: ProviderDisputeEvent,
 ): Promise<RefundAutomationOutcome> {
-  const outcome = await processProviderDisputeEvent(orgId, { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") });
+  const outcome = await processProviderDisputeEvent(
+    orgId,
+    { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") },
+    { forcePolicy: "automatic" },
+  );
   if (outcome.disputeId !== disputeId) return outcome;
   return outcome;
 }
