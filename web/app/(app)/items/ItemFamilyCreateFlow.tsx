@@ -201,7 +201,9 @@ export function ItemFamilyCreateFlow({
             <p className="mt-1 text-sm font-medium text-teal-700 dark:text-teal-300">{t('variantCount', { count: combos.length })}</p>
           </div>
           <FamilyOptionsEditor
-            initial={[{ id: null, name: '', values: [] }]}
+            // The parent options state outlives the step: remounting with a
+            // fresh empty draft would discard what Back was meant to keep.
+            initial={options}
             variantValues={{}}
             onSave={async () => {}}
             onOptionsChange={setOptions}
