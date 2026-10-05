@@ -265,7 +265,6 @@
       "growth": "同比 {pct}",
       "grossProfit": "毛利：{amount}",
       "opex": "运营费用：{amount}",
-      "perMonth": "每月",
       "noPriorYear": "上年同期无收入",
       "forPeriod": "本期所需收入",
       "noBreakeven": "需要正的毛利率"
@@ -886,6 +885,115 @@
         "none": "无有息负债 — 债务权益比为零。",
         "confirmNone": "我们没有有息负债"
       }
+    },
+    "overview": {
+      "trendRevenue": "收入趋势",
+      "revTab": "收入",
+      "marginTab": "利润",
+      "series": {
+        "revenue": "收入",
+        "grossProfit": "毛利",
+        "operatingIncome": "营业利润",
+        "grossMargin": "毛利率",
+        "operatingMargin": "营业利润率"
+      },
+      "trendMargin": "利润趋势",
+      "trendOpinc": "营业利润趋势",
+      "trendOpMargin": "营业利润率",
+      "perfTrend": "业绩趋势",
+      "table": {
+        "item": "项目",
+        "current": "当期",
+        "prior": "上期",
+        "change": "变动",
+        "changePct": "变动率"
+      },
+      "groups": {
+        "issues": "问题",
+        "recs": "建议",
+        "anomalies": "异常"
+      },
+      "empty": "无标记事项。",
+      "severity": {
+        "critical": "严重",
+        "warn": "关注",
+        "anomaly": "异常",
+        "info": "信息"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "收入",
+        "operatingIncome": "营业利润",
+        "bestMargin": "最高利润率",
+        "concentration": "集中度"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {1个分部} other {#个分部}}"
+      },
+      "hhi": {
+        "high": "集中",
+        "mid": "中度",
+        "low": "分散"
+      },
+      "title": "分部业绩",
+      "dim": {
+        "department": "按部门",
+        "class": "按类别",
+        "location": "按地点"
+      },
+      "table": {
+        "segment": "分部",
+        "revenue": "收入",
+        "share": "占比",
+        "grossMargin": "毛利率",
+        "opMargin": "营业利润率",
+        "yoy": "同比"
+      },
+      "empty": "无分部数据。",
+      "chart": {
+        "revenueBy": "分部收入",
+        "marginsBy": "分部利润",
+        "grossProfit": "毛利",
+        "operatingIncome": "营业利润"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "最大收入动因",
+        "topCost": "最大成本动因"
+      },
+      "kpiSub": {
+        "vsPrior": "同比上期"
+      },
+      "movers": "变动最大（绝对值）",
+      "revenueTitle": "收入动因",
+      "costTitle": "成本动因",
+      "table": {
+        "driver": "动因",
+        "current": "当期",
+        "change": "变动",
+        "changePct": "变动率",
+        "share": "Δ占比"
+      },
+      "emptyRevenue": "无收入动因。",
+      "emptyCost": "无成本动因。"
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "最大增长",
+        "topDecliner": "最大下降"
+      },
+      "movers": "变动最大（绝对值）",
+      "detail": "科目明细",
+      "table": {
+        "account": "科目",
+        "current": "当期",
+        "change": "变动",
+        "changePct": "变动率",
+        "share": "Δ占比"
+      },
+      "empty": "暂无明细项目。"
     }
   },
   "customer": {

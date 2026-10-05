@@ -265,7 +265,6 @@
       "growth": "YoY {pct}",
       "grossProfit": "GP: {amount}",
       "opex": "OpEx: {amount}",
-      "perMonth": "per month",
       "noPriorYear": "No revenue in the same period last year",
       "forPeriod": "Revenue needed this period",
       "noBreakeven": "Needs a positive gross margin"
@@ -886,6 +885,115 @@
         "none": "No interest-bearing debt — debt to equity reads as zero.",
         "confirmNone": "We carry no interest-bearing debt"
       }
+    },
+    "overview": {
+      "trendRevenue": "Revenue Trend",
+      "revTab": "Revenue",
+      "marginTab": "Margins",
+      "series": {
+        "revenue": "Revenue",
+        "grossProfit": "Gross Profit",
+        "operatingIncome": "Operating Income",
+        "grossMargin": "Gross Margin",
+        "operatingMargin": "Operating Margin"
+      },
+      "trendMargin": "Margin Trend",
+      "trendOpinc": "Op Income Trend",
+      "trendOpMargin": "Op Margin",
+      "perfTrend": "Performance Trend",
+      "table": {
+        "item": "Line Item",
+        "current": "Current",
+        "prior": "Prior Year",
+        "change": "Change",
+        "changePct": "Change %"
+      },
+      "groups": {
+        "issues": "Issues",
+        "recs": "Recommendations",
+        "anomalies": "Anomalies"
+      },
+      "empty": "Nothing flagged.",
+      "severity": {
+        "critical": "Critical",
+        "warn": "Watch",
+        "anomaly": "Anomaly",
+        "info": "Info"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "Revenue",
+        "operatingIncome": "Operating Income",
+        "bestMargin": "Best Margin",
+        "concentration": "Concentration"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {1 segment} other {# segments}}"
+      },
+      "hhi": {
+        "high": "Concentrated",
+        "mid": "Moderate",
+        "low": "Unconcentrated"
+      },
+      "title": "Segment Performance",
+      "dim": {
+        "department": "By Department",
+        "class": "By Class",
+        "location": "By Location"
+      },
+      "table": {
+        "segment": "Segment",
+        "revenue": "Revenue",
+        "share": "Share",
+        "grossMargin": "Gross Margin",
+        "opMargin": "Op Margin",
+        "yoy": "YoY"
+      },
+      "empty": "No segment data.",
+      "chart": {
+        "revenueBy": "Revenue by Segment",
+        "marginsBy": "Margins by Segment",
+        "grossProfit": "Gross Profit",
+        "operatingIncome": "Operating Income"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "Top Rev Driver",
+        "topCost": "Top Cost Driver"
+      },
+      "kpiSub": {
+        "vsPrior": "vs prior year"
+      },
+      "movers": "Top Movers (Abs)",
+      "revenueTitle": "Revenue Drivers",
+      "costTitle": "Cost Drivers",
+      "table": {
+        "driver": "Driver",
+        "current": "Current",
+        "change": "Change",
+        "changePct": "Change %",
+        "share": "Share of Δ"
+      },
+      "emptyRevenue": "No revenue drivers.",
+      "emptyCost": "No cost drivers."
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "Largest Gainer",
+        "topDecliner": "Largest Decliner"
+      },
+      "movers": "Top Movers (Abs)",
+      "detail": "Account Detail",
+      "table": {
+        "account": "Account",
+        "current": "Current",
+        "change": "Change",
+        "changePct": "Change %",
+        "share": "Share of Δ"
+      },
+      "empty": "No line items yet."
     }
   },
   "customer": {

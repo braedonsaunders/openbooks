@@ -265,7 +265,6 @@
       "growth": "im Jahresvergleich {pct}",
       "grossProfit": "BG: {amount}",
       "opex": "Betriebskosten: {amount}",
-      "perMonth": "pro Monat",
       "noPriorYear": "Kein Umsatz im Vorjahreszeitraum",
       "forPeriod": "In diesem Zeitraum benötigter Umsatz",
       "noBreakeven": "Erfordert eine positive Bruttomarge"
@@ -886,6 +885,115 @@
         "none": "Keine verzinslichen Schulden – der Verschuldungsgrad ist null.",
         "confirmNone": "Wir haben keine verzinslichen Schulden"
       }
+    },
+    "overview": {
+      "trendRevenue": "Erlöstrend",
+      "revTab": "Erlöse",
+      "marginTab": "Margen",
+      "series": {
+        "revenue": "Erlöse",
+        "grossProfit": "Bruttoergebnis",
+        "operatingIncome": "Betriebsergebnis",
+        "grossMargin": "Bruttomarge",
+        "operatingMargin": "Betriebsmarge"
+      },
+      "trendMargin": "Margentrend",
+      "trendOpinc": "Betriebsergebnis-Trend",
+      "trendOpMargin": "Betriebsmarge",
+      "perfTrend": "Ergebnisentwicklung",
+      "table": {
+        "item": "Position",
+        "current": "Aktuell",
+        "prior": "Vorjahr",
+        "change": "Veränderung",
+        "changePct": "Veränderung %"
+      },
+      "groups": {
+        "issues": "Probleme",
+        "recs": "Empfehlungen",
+        "anomalies": "Auffälligkeiten"
+      },
+      "empty": "Nichts markiert.",
+      "severity": {
+        "critical": "Kritisch",
+        "warn": "Beobachten",
+        "anomaly": "Auffällig",
+        "info": "Hinweis"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "Erlöse",
+        "operatingIncome": "Betriebsergebnis",
+        "bestMargin": "Beste Marge",
+        "concentration": "Konzentration"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {1 Segment} other {# Segmente}}"
+      },
+      "hhi": {
+        "high": "Konzentriert",
+        "mid": "Mäßig",
+        "low": "Unkonzentriert"
+      },
+      "title": "Segmentleistung",
+      "dim": {
+        "department": "Nach Abteilung",
+        "class": "Nach Klasse",
+        "location": "Nach Standort"
+      },
+      "table": {
+        "segment": "Name",
+        "revenue": "Erlöse",
+        "share": "Anteil",
+        "grossMargin": "Bruttomarge",
+        "opMargin": "Betriebsmarge",
+        "yoy": "VJ"
+      },
+      "empty": "Keine Segmentdaten.",
+      "chart": {
+        "revenueBy": "Erlöse nach Segment",
+        "marginsBy": "Margen nach Segment",
+        "grossProfit": "Bruttoergebnis",
+        "operatingIncome": "Betriebsergebnis"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "Top Erlösbringer",
+        "topCost": "Top Kostentreiber"
+      },
+      "kpiSub": {
+        "vsPrior": "ggü. Vorjahr"
+      },
+      "movers": "Größte Bewegungen (abs.)",
+      "revenueTitle": "Erlösbringer",
+      "costTitle": "Kostentreiber",
+      "table": {
+        "driver": "Treiber",
+        "current": "Aktuell",
+        "change": "Veränderung",
+        "changePct": "Veränderung %",
+        "share": "Anteil an Δ"
+      },
+      "emptyRevenue": "Keine Erlösbringer.",
+      "emptyCost": "Keine Kostentreiber."
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "Größter Gewinner",
+        "topDecliner": "Größter Verlierer"
+      },
+      "movers": "Größte Bewegungen (abs.)",
+      "detail": "Kontendetails",
+      "table": {
+        "account": "Konto",
+        "current": "Aktuell",
+        "change": "Veränderung",
+        "changePct": "Veränderung %",
+        "share": "Anteil an Δ"
+      },
+      "empty": "Noch keine Positionen."
     }
   },
   "customer": {

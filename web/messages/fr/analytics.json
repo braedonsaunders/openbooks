@@ -265,7 +265,6 @@
       "growth": "Sur un an {pct}",
       "grossProfit": "MB : {amount}",
       "opex": "Charges : {amount}",
-      "perMonth": "par mois",
       "noPriorYear": "Aucun CA sur la même période l’an dernier",
       "forPeriod": "CA nécessaire sur cette période",
       "noBreakeven": "Nécessite une marge brute positive"
@@ -886,6 +885,115 @@
         "none": "Aucune dette portant intérêt — le ratio dette/capitaux propres vaut zéro.",
         "confirmNone": "Nous n’avons aucune dette portant intérêt"
       }
+    },
+    "overview": {
+      "trendRevenue": "Tendance du chiffre d’affaires",
+      "revTab": "Chiffre d’affaires",
+      "marginTab": "Marges",
+      "series": {
+        "revenue": "Chiffre d’affaires",
+        "grossProfit": "Marge brute",
+        "operatingIncome": "Résultat opérationnel",
+        "grossMargin": "Marge brute",
+        "operatingMargin": "Marge opérationnelle"
+      },
+      "trendMargin": "Tendance des marges",
+      "trendOpinc": "Tendance opérationnelle",
+      "trendOpMargin": "Marge opérationnelle",
+      "perfTrend": "Tendance de la performance",
+      "table": {
+        "item": "Poste",
+        "current": "Actuel",
+        "prior": "Année précédente",
+        "change": "Variation",
+        "changePct": "Variation %"
+      },
+      "groups": {
+        "issues": "Problèmes",
+        "recs": "Recommandations",
+        "anomalies": "Irrégularités"
+      },
+      "empty": "Rien à signaler.",
+      "severity": {
+        "critical": "Critique",
+        "warn": "À surveiller",
+        "anomaly": "Anomalie",
+        "info": "Information"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "Chiffre d’affaires",
+        "operatingIncome": "Résultat opérationnel",
+        "bestMargin": "Meilleure marge",
+        "concentration": "Indice de concentration"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {un segment} other {# segments}}"
+      },
+      "hhi": {
+        "high": "Concentrée",
+        "mid": "Modérée",
+        "low": "Non concentrée"
+      },
+      "title": "Performance par segment",
+      "dim": {
+        "department": "Par département",
+        "class": "Par classe",
+        "location": "Par site"
+      },
+      "table": {
+        "segment": "Nom",
+        "revenue": "Chiffre d’affaires",
+        "share": "Part",
+        "grossMargin": "Marge brute",
+        "opMargin": "Marge opérationnelle",
+        "yoy": "A/A"
+      },
+      "empty": "Aucune donnée par segment.",
+      "chart": {
+        "revenueBy": "Chiffre d’affaires par segment",
+        "marginsBy": "Marges par segment",
+        "grossProfit": "Marge brute",
+        "operatingIncome": "Résultat opérationnel"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "Premier moteur des produits",
+        "topCost": "Premier moteur des coûts"
+      },
+      "kpiSub": {
+        "vsPrior": "vs année précédente"
+      },
+      "movers": "Plus fortes variations (abs.)",
+      "revenueTitle": "Moteurs des produits",
+      "costTitle": "Moteurs des coûts",
+      "table": {
+        "driver": "Moteur",
+        "current": "Actuel",
+        "change": "Variation",
+        "changePct": "Variation %",
+        "share": "Part de Δ"
+      },
+      "emptyRevenue": "Aucun moteur des produits.",
+      "emptyCost": "Aucun moteur des coûts."
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "Plus forte hausse",
+        "topDecliner": "Plus forte baisse"
+      },
+      "movers": "Plus fortes variations (abs.)",
+      "detail": "Détail des comptes",
+      "table": {
+        "account": "Compte",
+        "current": "Actuel",
+        "change": "Variation",
+        "changePct": "Variation %",
+        "share": "Part de Δ"
+      },
+      "empty": "Aucune écriture pour l’instant."
     }
   },
   "customer": {

@@ -65,12 +65,6 @@ export function fmtPct(n: number, decimals = 1): string {
   return `${(n * 100).toFixed(decimals)}%`
 }
 
-export function fmtNum(n: number, suffix = 'x'): string {
-  return `${n.toFixed(2)}${suffix}`
-}
-
-export type ValueFormat = 'pct' | 'money' | 'num' | 'raw'
-
 /**
  * Locale-aware display of an exact ratio value (a decimal string from the
  * Financial Health engine): fractions as percentages, multiples with a ×,
@@ -94,23 +88,6 @@ export function useRatioFormat(): (value: string | null, format: 'pct' | 'times'
         return fmtMoney(value, { compact })
     }
   }, [fmtMoney, locale])
-}
-
-export function useAnalyticsValue(): (value: number | null, format: ValueFormat, compact?: boolean) => string {
-  const fmtMoney = useAnalyticsMoney()
-  return useCallback((value: number | null, format: ValueFormat, compact = true): string => {
-    if (value === null || !isFinite(value)) return 'N/A'
-    switch (format) {
-      case 'pct':
-        return fmtPct(value)
-      case 'money':
-        return fmtMoney(value, { compact })
-      case 'num':
-        return fmtNum(value)
-      case 'raw':
-        return value.toFixed(1)
-    }
-  }, [fmtMoney])
 }
 
 /**

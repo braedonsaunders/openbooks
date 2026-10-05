@@ -265,7 +265,6 @@
       "growth": "A/A {pct}",
       "grossProfit": "LB: {amount}",
       "opex": "Despesas op.: {amount}",
-      "perMonth": "por mês",
       "noPriorYear": "Sem receita no mesmo período do ano anterior",
       "forPeriod": "Receita necessária neste período",
       "noBreakeven": "Requer margem bruta positiva"
@@ -886,6 +885,115 @@
         "none": "Sem dívida com juros — a dívida sobre patrimônio é zero.",
         "confirmNone": "Não temos dívida com juros"
       }
+    },
+    "overview": {
+      "trendRevenue": "Tendência de receita",
+      "revTab": "Receita",
+      "marginTab": "Margens",
+      "series": {
+        "revenue": "Receita",
+        "grossProfit": "Lucro bruto",
+        "operatingIncome": "Resultado operacional",
+        "grossMargin": "Margem bruta",
+        "operatingMargin": "Margem operacional"
+      },
+      "trendMargin": "Tendência de margens",
+      "trendOpinc": "Tendência operacional",
+      "trendOpMargin": "Margem operacional",
+      "perfTrend": "Tendência de desempenho",
+      "table": {
+        "item": "Item",
+        "current": "Atual",
+        "prior": "Ano anterior",
+        "change": "Variação",
+        "changePct": "Variação %"
+      },
+      "groups": {
+        "issues": "Problemas",
+        "recs": "Recomendações",
+        "anomalies": "Anomalias"
+      },
+      "empty": "Nada a destacar.",
+      "severity": {
+        "critical": "Crítico",
+        "warn": "Observar",
+        "anomaly": "Anomalia",
+        "info": "Informação"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "Receita",
+        "operatingIncome": "Resultado operacional",
+        "bestMargin": "Melhor margem",
+        "concentration": "Concentração"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {1 segmento} other {# segmentos}}"
+      },
+      "hhi": {
+        "high": "Concentrada",
+        "mid": "Moderada",
+        "low": "Não concentrada"
+      },
+      "title": "Desempenho por segmento",
+      "dim": {
+        "department": "Por departamento",
+        "class": "Por classe",
+        "location": "Por local"
+      },
+      "table": {
+        "segment": "Segmento",
+        "revenue": "Receita",
+        "share": "Participação",
+        "grossMargin": "Margem bruta",
+        "opMargin": "Margem operacional",
+        "yoy": "Anual"
+      },
+      "empty": "Sem dados por segmento.",
+      "chart": {
+        "revenueBy": "Receita por segmento",
+        "marginsBy": "Margens por segmento",
+        "grossProfit": "Lucro bruto",
+        "operatingIncome": "Resultado operacional"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "Principal impulsionador de receita",
+        "topCost": "Principal impulsionador de custos"
+      },
+      "kpiSub": {
+        "vsPrior": "vs. ano anterior"
+      },
+      "movers": "Maiores movimentos (abs.)",
+      "revenueTitle": "Impulsionadores de receita",
+      "costTitle": "Impulsionadores de custos",
+      "table": {
+        "driver": "Impulsionador",
+        "current": "Atual",
+        "change": "Variação",
+        "changePct": "Variação %",
+        "share": "Parcela de Δ"
+      },
+      "emptyRevenue": "Sem impulsionadores de receita.",
+      "emptyCost": "Sem impulsionadores de custos."
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "Maior ganho",
+        "topDecliner": "Maior perda"
+      },
+      "movers": "Maiores movimentos (abs.)",
+      "detail": "Detalhe de contas",
+      "table": {
+        "account": "Conta",
+        "current": "Atual",
+        "change": "Variação",
+        "changePct": "Variação %",
+        "share": "Parcela de Δ"
+      },
+      "empty": "Ainda não há itens."
     }
   },
   "customer": {
