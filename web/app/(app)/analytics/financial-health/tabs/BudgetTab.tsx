@@ -52,6 +52,10 @@ function RealBudget({ data }: { data: HealthData }) {
   const fmtRatio = useRatioFormat()
   const fmtProgress = (ratio: number) =>
     new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(ratio)
+  // Tolerance bands read as viewer-locale percents (10% in English, 10 % in
+  // French): the catalog carries no hard-coded % sign.
+  const fmtBand = (wholePercent: number) =>
+    new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(wholePercent / 100)
   const t = useTranslations('analytics.financialHealth.budget')
   const tb = useTranslations('budgets')
   const b = data.budget
@@ -104,7 +108,7 @@ function RealBudget({ data }: { data: HealthData }) {
         <KpiCard icon={ClipboardList} accent={overCount > 0 ? 'red' : 'emerald'} label={t('overBudget')} value={String(overCount)} sub={t('onWatch', { count: counts.watch })} tone={overCount > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={ClipboardList} accent="violet" label={t('coverage')} value={coverage === null ? '—' : (fmtRatio(coverage, 'pct') ?? '—')} sub={t('coverageSub')} />
       </div>
-      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('toleranceNote', { onTrack: b.tolerance.onTrack, watch: b.tolerance.watch })}</p>
+      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('toleranceNote', { onTrack: fmtBand(b.tolerance.onTrack), watch: fmtBand(b.tolerance.watch) })}</p>
 
       <Panel
         title={t('tableTitle', { count: filtered.length })}

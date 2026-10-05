@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Settings2 } from 'lucide-react'
 import { Skeleton } from '@openbooks/ui'
 import { Panel } from './Panel'
@@ -54,6 +54,17 @@ export function ConfigEditor({
 }) {
   const t = useTranslations()
   const te = useTranslations('analytics.configEditor')
+  const locale = useLocale()
+  // A select option label: catalog text, unless the spec declares the
+  // options locale-formatted (percent codes like 90 render in the viewer's
+  // own percent shape, never from a hard-coded "%" string).
+  const optionLabel = (f: ConfigField, option: string) => {
+    if (f.optionsFormat === 'percent') {
+      const whole = Number(option)
+      if (Number.isFinite(whole)) return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(whole / 100)
+    }
+    return f.optionsKey ? t(`${f.optionsKey}.${option}`) : option
+  }
   const router = useRouter()
   const [config, setConfig] = useState<ConfigPayload | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -182,7 +193,7 @@ export function ConfigEditor({
     const value = config.defaults[f.key]
     if (value === '' || value === undefined) return te('notSet')
     if (f.kind === 'toggle') return value === 1 ? te('on') : te('off')
-    if (f.kind === 'select' && f.optionsKey) return t(`${f.optionsKey}.${value}`)
+    if (f.kind === 'select' && (f.optionsKey || f.optionsFormat)) return optionLabel(f, value)
     return String(value)
   }
 
@@ -216,7 +227,7 @@ export function ConfigEditor({
                     className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                   >
                     {(f.options ?? []).map((option) => (
-                      <option key={option} value={option}>{f.optionsKey ? t(`${f.optionsKey}.${option}`) : option}</option>
+                      <option key={option} value={option}>{optionLabel(f, option)}</option>
                     ))}
                   </select>
                 ) : f.kind === 'money' ? (

@@ -1110,7 +1110,11 @@ async function fiscalPeriodsPerYear(orgId: string, asOf: string): Promise<number
   const containing = declared.periods.find((p) => p.from <= asOf && asOf <= p.to);
   const year = containing?.fiscalYear ?? Math.max(...declared.periods.map((p) => p.fiscalYear));
   const count = declared.periods.filter((p) => p.fiscalYear === year).length;
-  return count > 0 ? count : 12;
+  // The year always comes from a declared period, so zero is unreachable —
+  // but falling back to 12 would silently price a non-monthly calendar as
+  // monthly. Refuse by name instead.
+  if (count === 0) throw new Error(`fiscal calendar declares no periods for fiscal year ${year} — declare the year's periods in the fiscal calendar`);
+  return count;
 }
 
 /**
