@@ -2019,7 +2019,8 @@
       }
     },
     "payment": {
-      "undatedNote": "期日も支払条件もない{count}件の請求書を除外しています"
+      "undatedNote": "期日も支払条件もない{count}件の請求書を除外しています",
+      "noHistory": "支払履歴がまだありません"
     },
     "matrix": {
       "unratedNote": "支払履歴のない{count}件の仕入先はプロットしていません"

@@ -2019,7 +2019,8 @@
       }
     },
     "payment": {
-      "undatedNote": "已排除{count}张无到期日或付款条件的账单"
+      "undatedNote": "已排除{count}张无到期日或付款条件的账单",
+      "noHistory": "尚无付款记录"
     },
     "matrix": {
       "unratedNote": "{count}家供应商尚无付款记录，未在图中绘制"
