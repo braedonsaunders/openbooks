@@ -52,7 +52,7 @@ export interface InboxListContext {
   readonly exec?: SqlExecutor;
   /**
    * Authz-derived union scope for the flows leg (roles, subsidiary
-   * boundary, budget/pay-run legs). Built by web callers from the session;
+   * boundary, budget leg). Built by web callers from the session;
    * absent means flows legs only with no subsidiary restriction beyond the
    * reader's own gates. Never trust client input here — only the session.
    */
@@ -60,8 +60,6 @@ export interface InboxListContext {
     readonly roles?: readonly string[];
     readonly allowedSubsidiaryIds?: readonly string[] | null;
     readonly includeBudgets?: boolean;
-    readonly includePayRuns?: boolean;
-    readonly payDirections?: readonly string[];
   };
 }
 

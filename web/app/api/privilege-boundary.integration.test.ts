@@ -136,7 +136,7 @@ test("least-privileged viewer is refused by every mutating route", async () => {
       { name: "POST payroll/remittances", run: async () => (await import(HANDLERS.remitBill)).POST(req("POST", { action: "create-bill", partyId: org.vendorId, from: org.date, to: org.date })) },
       { name: "POST file-cabinet grants", run: async () => (await import(HANDLERS.fileGrant)).POST(req("POST", { principalType: "user", principalId: viewer.id, access: "manager" }), params({ id: randomUUID() })) },
       { name: "POST file-cabinet restore", run: async () => (await import(HANDLERS.fileRestore)).POST(req("POST", {}), params({ id: randomUUID() })) },
-      { name: "PATCH payment-operations profile", run: async () => (await import(HANDLERS.profilePatch)).PATCH(req("PATCH", { requireRunApproval: false }), params({ resource: "profiles", id: randomUUID() })) },
+      { name: "PATCH payment-operations profile", run: async () => (await import(HANDLERS.profilePatch)).PATCH(req("PATCH", { autoRemittance: false }), params({ resource: "profiles", id: randomUUID() })) },
       { name: "POST scripts endpoint", run: async () => (await import(HANDLERS.runScript)).POST(req("POST", {}), params({ slug: "nope" })) },
     ];
     for (const cell of cells) {

@@ -58,7 +58,7 @@ import type { PaymentSetupView } from './PaymentOperationsSetup'
  * `web/messages/en/admin.json` (verified by survey: `states.*`, `tabs.*`,
  * `search.*`, `new.*`, `columns.*`, `rails.*`, `directions.*`,
  * `actions.create_draft/submit_for_approval`, `schemes.*`, `empty`,
- * `manualDelivery`, `runApproval`, `automatic`, `any`, plus the
+ * `manualDelivery`, `any`, plus the
  * drawer/edit/new keys passed through as data to the editor slot).
  */
 
@@ -78,7 +78,6 @@ export interface PaymentOperationsRow {
   currency: string | null
   currencyFallback: string | null
   delivery: string | null
-  approval: string | null
   code: string | null
   railLabel: string | null
   railVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
@@ -124,7 +123,6 @@ export interface PaymentOperationsData {
     format: string
     currency: string
     delivery: string
-    approval: string
     status: string
     code: string
     rail: string
@@ -197,7 +195,7 @@ export async function loadPaymentOperations(
       db.execute(sql`
         select x.id, x.name, x.bank_account_id, x.subsidiary_id, x.payment_format_id,
                x.currency, x.country, x.settings, x.sftp_server_id, x.sftp_folder,
-               x.require_run_approval, x.require_file_approval, x.auto_remittance,
+               x.auto_remittance,
                x.originator_secrets_encrypted is not null as has_secrets, x.is_active,
                f.name as format_name, f.rail, a.number as bank_number, a.name as bank_name,
                s.name as subsidiary_name, sv.name as sftp_server_name
@@ -297,8 +295,7 @@ export async function loadPaymentOperations(
   // Every cell the loaders resolve to a presentation string; the spec binds
   // `text`/`link`/`badge` directly. Conditional pairs stay loader-side: the
   // bank join (`number · name`), the delivery fallback (`manualDelivery`),
-  // the approval switch (`runApproval`/`automatic`), the active/archived
-  // badge, the `any` currency fallback, and the mandates em-dash fallbacks.
+  // the active/archived badge, the `any` currency fallback, and the mandates em-dash fallbacks.
   const mapped: PaymentOperationsRow[] = rows.map((r) => {
     const id = String(r.id)
     if (view === 'profiles') {
@@ -312,7 +309,6 @@ export async function loadPaymentOperations(
         currency: str(r, 'currency'),
         currencyFallback: null,
         delivery: str(r, 'sftp_server_name') ?? t('manualDelivery'),
-        approval: r.require_run_approval === true ? t('runApproval') : t('automatic'),
         code: null,
         railLabel: null,
         railVariant: 'outline',
@@ -341,7 +337,6 @@ export async function loadPaymentOperations(
         currency: str(r, 'currency') ?? t('any'),
         currencyFallback: null,
         delivery: null,
-        approval: null,
         code: str(r, 'code'),
         railLabel: t(`rails.${str(r, 'rail') ?? ''}`),
         railVariant: 'outline',
@@ -377,7 +372,6 @@ export async function loadPaymentOperations(
         currency: null,
         currencyFallback: null,
         delivery: null,
-        approval: null,
         code: null,
         railLabel: null,
         railVariant: 'outline',
@@ -405,7 +399,6 @@ export async function loadPaymentOperations(
       currency: null,
       currencyFallback: null,
       delivery: null,
-      approval: null,
       code: null,
       railLabel: null,
       railVariant: 'outline',
@@ -459,7 +452,6 @@ export async function loadPaymentOperations(
       format: t('columns.format'),
       currency: t('columns.currency'),
       delivery: t('columns.delivery'),
-      approval: t('columns.approval'),
       status: t('columns.status'),
       code: t('columns.code'),
       rail: t('columns.rail'),
@@ -561,7 +553,7 @@ export function paymentOperationsSpec(data: PaymentOperationsData): PageSpec {
               variant: 'app',
               rows: f('rows'),
               rowKey: item('id'),
-              emptyRow: { text: rootF('emptyText'), colSpan: 7, className: 'py-10 text-center text-slate-500' },
+              emptyRow: { text: rootF('emptyText'), colSpan: 6, className: 'py-10 text-center text-slate-500' },
               columns: [
                 column(rootF('labels.name'), link(item('name'), item('href'), NAME_LINK)),
                 column(rootF('labels.bank'), text(item('bank'))),
@@ -570,7 +562,6 @@ export function paymentOperationsSpec(data: PaymentOperationsData): PageSpec {
                   className: 'font-mono text-xs',
                 }),
                 column(rootF('labels.delivery'), text(item('delivery'))),
-                column(rootF('labels.approval'), text(item('approval'))),
                 column(rootF('labels.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
               ],
             }),

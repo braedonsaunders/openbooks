@@ -2475,7 +2475,6 @@
         "format": "Format",
         "currency": "Currency",
         "delivery": "Delivery",
-        "approval": "Run approval",
         "status": "Status",
         "code": "Code",
         "rail": "Rail",
@@ -2533,8 +2532,6 @@
         "country": "Country",
         "sftpServer": "Existing SFTP server",
         "sftpFolder": "Outbound folder",
-        "requireRunApproval": "Require payment-run approval",
-        "requireFileApproval": "Require generated-file approval",
         "autoRemittance": "Send remittance advice automatically",
         "discountAccount": "Early-payment discount account",
         "positivePayAccountReference": "Institution account reference",
@@ -2558,6 +2555,7 @@
         "validFrom": "Valid from",
         "expiresOn": "Expires on"
       },
+      "approvalHint": "Payment-run approval is set up in <flows>Flows</flows>. Without a payment-run flow, submitted runs are approved immediately.",
       "secretFields": {
         "originatorId": "Originator ID",
         "originatorShortName": "Short name",
@@ -2635,8 +2633,6 @@
       },
       "empty": "No records to show.",
       "manualDelivery": "Manual download",
-      "runApproval": "Required",
-      "automatic": "Automatic",
       "any": "Any",
       "builtInFormatHint": "This built-in formatter is maintained by the payment engine. Its executable definition cannot be edited here.",
       "save": "Save",
@@ -3324,6 +3320,11 @@
         "title": "Contributions",
         "singular": "Contributions",
         "description": "Define each employee deduction, employer contribution or taxable non-cash benefit. Payroll components control tax treatment and posting."
+      },
+      "benefit-contribution-rule-components": {
+        "title": "Counted earning components",
+        "singular": "Counted earning component",
+        "description": "Choose the earning components whose hours count toward this contribution. Quantity-based units do not count as hours."
       },
       "benefit-contribution-classes": {
         "title": "Eligibility classes",

@@ -216,12 +216,8 @@
     "cancelRun": "Cancelar remessa",
     "downloadFile": "Baixar arquivo",
     "downloadBlockedTitle": "Resolva primeiro os problemas de perfil e dados bancários",
-    "submitRun": "Enviar para aprovação",
-    "approve": "Aprovar remessa",
-    "reject": "Rejeitar remessa",
+    "submitRun": "Enviar remessa",
     "generateFile": "Gerar arquivo",
-    "approveFile": "Aprovar arquivo",
-    "rejectFile": "Rejeitar arquivo",
     "reprocess": "Reprocessar",
     "resolveDelivered": "Confirmar recebimento do banco",
     "resolveApproved": "Liberar para reenvio",
@@ -282,12 +278,9 @@
       "deliverFailed": "Não foi possível entregar o arquivo",
       "delivered": "Entregue em {path}"
       ,"actionFailed": "A ação de pagamento falhou"
-      ,"submitted": "Remessa de pagamento enviada"
+      ,"submittedForApproval": "Remessa de pagamento enviada para aprovação"
+      ,"submittedApproved": "Remessa de pagamento enviada e aprovada; nenhum fluxo de aprovação se aplica"
       ,"fileGenerated": "Arquivo de pagamento gerado"
-      ,"runApproved": "Remessa de pagamento aprovada"
-      ,"runRejected": "Remessa de pagamento rejeitada"
-      ,"fileApproved": "Arquivo de pagamento aprovado"
-      ,"fileRejected": "Arquivo de pagamento rejeitado"
       ,"fileReprocessed": "Arquivo de pagamento reprocessado"
       ,"deliveryResolved": "Resolução registrada"
       ,"rolledBack": "Remessa de pagamento revertida"

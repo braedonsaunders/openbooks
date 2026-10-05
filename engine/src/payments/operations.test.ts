@@ -4,8 +4,6 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import {
-  decidePaymentFile,
-  decidePaymentRun,
   claimPaymentFileDelivery,
   generatePaymentFileArtifact,
   nachaOriginator,
@@ -417,17 +415,13 @@ test(
   },
 );
 
-async function seedPaymentRun(
+/** A run its approval already released and whose file has been generated. */
+async function seedGeneratedPaymentRun(
   org: ScratchOrg,
-  submitterId: string,
-  opts?: {
-    profileId?: string;
-    status?: "pending_approval" | "generated";
-    approvedBy?: string;
-  },
+  makerId: string,
+  opts: { profileId: string; approvedBy: string },
 ): Promise<string> {
   const runId = randomUUID();
-  const status = opts?.status ?? "pending_approval";
   await db.execute(sql`
     insert into payment_runs
       (id, org_id, run_number, bank_account_id, payment_bank_profile_id, method,
@@ -435,18 +429,16 @@ async function seedPaymentRun(
        approved_at, approved_by, created_by, updated_by)
     values
       (${runId}, ${org.orgId}, ${`RUN-${runId.slice(0, 8)}`}, ${org.accounts.bank},
-       ${opts?.profileId ?? null}, 'wire', 'CAD', ${status}, 1, '25', now(),
-       ${submitterId}, ${opts?.approvedBy ? sql`now()` : null}, ${opts?.approvedBy ?? null},
-       ${submitterId}, ${submitterId})
+       ${opts.profileId}, 'wire', 'CAD', 'generated', 1, '25', now(),
+       ${makerId}, now(), ${opts.approvedBy}, ${makerId}, ${makerId})
   `);
   return runId;
 }
 
-async function seedPendingPaymentFile(
+async function seedApprovedPaymentFile(
   org: ScratchOrg,
   generatorId: string,
   runApproverId: string,
-  opts?: { generatedBy?: string | null },
 ): Promise<{ fileId: string; runId: string }> {
   const formatId = randomUUID();
   const profileId = randomUUID();
@@ -455,7 +447,6 @@ async function seedPendingPaymentFile(
   const versionId = randomUUID();
   const fileId = randomUUID();
   const hash = "0".repeat(64);
-  const generatedBy = opts?.generatedBy === undefined ? generatorId : opts.generatedBy;
 
   await db.execute(sql`
     insert into payment_formats
@@ -468,14 +459,13 @@ async function seedPendingPaymentFile(
   await db.execute(sql`
     insert into payment_bank_profiles
       (id, org_id, name, bank_account_id, payment_format_id, currency,
-       require_run_approval, require_file_approval, created_by, updated_by)
+       created_by, updated_by)
     values
-      (${profileId}, ${org.orgId}, ${`Approval test profile ${profileId}`}, ${org.accounts.bank},
-       ${formatId}, 'CAD', true, true, ${generatorId}, ${generatorId})
+      (${profileId}, ${org.orgId}, ${`Delivery test profile ${profileId}`}, ${org.accounts.bank},
+       ${formatId}, 'CAD', ${generatorId}, ${generatorId})
   `);
-  const runId = await seedPaymentRun(org, generatorId, {
+  const runId = await seedGeneratedPaymentRun(org, generatorId, {
     profileId,
-    status: "generated",
     approvedBy: runApproverId,
   });
   await db.execute(sql`
@@ -505,11 +495,11 @@ async function seedPendingPaymentFile(
       (id, org_id, payment_run_id, payment_bank_profile_id, payment_format_id,
        sequence_number, filename, content_type, content_hash, file_id,
        file_version_id, payment_count, total_amount, currency, status,
-       generated_by, created_by, updated_by)
+       generated_by, approved_at, created_by, updated_by)
     values
       (${fileId}, ${org.orgId}, ${runId}, ${profileId}, ${formatId}, 1,
        'payment-test.txt', 'text/plain', ${hash}, ${storedFileId}, ${versionId},
-       1, '25', 'CAD', 'pending_approval', ${generatedBy},
+       1, '25', 'CAD', 'approved', ${generatorId}, now(),
        ${generatorId}, ${generatorId})
   `);
   return { fileId, runId };
@@ -556,10 +546,10 @@ async function seedGeneratableRun(org: ScratchOrg, actorId: string): Promise<str
   await db.execute(sql`
     insert into payment_bank_profiles
       (id, org_id, name, bank_account_id, payment_format_id, currency,
-       require_run_approval, require_file_approval, created_by, updated_by)
+       created_by, updated_by)
     values
       (${profileId}, ${org.orgId}, ${`Generation test profile ${profileId}`}, ${org.accounts.bank},
-       ${formatId}, 'CAD', false, false, ${actorId}, ${actorId})
+       ${formatId}, 'CAD', ${actorId}, ${actorId})
   `);
   const runId = randomUUID();
   await db.execute(sql`
@@ -595,461 +585,6 @@ async function generationOutcomeSnapshot(
              where r.id = ${runId} and r.org_id = ${orgId}) as run_status
   `)).rows[0];
 }
-
-interface PaymentDecisionAuditSnapshot {
-  [key: string]: unknown;
-  status: string;
-  maker_at: Date;
-  maker_by: string | null;
-  approved_at: Date | null;
-  approved_by: string | null;
-  rejected_at: Date | null;
-  rejected_by: string | null;
-  rejection_reason: string | null;
-  created_at: Date;
-  created_by: string | null;
-  updated_at: Date;
-  updated_by: string | null;
-  event_count: number;
-}
-
-async function paymentRunDecisionAuditSnapshot(
-  orgId: string,
-  runId: string,
-): Promise<PaymentDecisionAuditSnapshot | undefined> {
-  return (await db.execute<PaymentDecisionAuditSnapshot>(sql`
-    select r.status, r.submitted_at as maker_at, r.submitted_by as maker_by,
-           r.approved_at, r.approved_by, r.rejected_at, r.rejected_by,
-           r.rejection_reason, r.created_at, r.created_by, r.updated_at, r.updated_by,
-           (select count(*)::int from payment_events e
-             where e.payment_run_id = r.id and e.org_id = r.org_id) as event_count
-      from payment_runs r
-     where r.id = ${runId} and r.org_id = ${orgId}
-  `)).rows[0];
-}
-
-async function paymentFileDecisionAuditSnapshot(
-  orgId: string,
-  fileId: string,
-): Promise<PaymentDecisionAuditSnapshot | undefined> {
-  return (await db.execute<PaymentDecisionAuditSnapshot>(sql`
-    select pf.status, pf.generated_at as maker_at, pf.generated_by as maker_by,
-           pf.approved_at, pf.approved_by, pf.rejected_at, pf.rejected_by,
-           pf.rejection_reason, pf.created_at, pf.created_by, pf.updated_at, pf.updated_by,
-           (select count(*)::int from payment_events e
-             where e.payment_file_id = pf.id and e.org_id = pf.org_id) as event_count
-      from payment_files pf
-     where pf.id = ${fileId} and pf.org_id = ${orgId}
-  `)).rows[0];
-}
-
-test(
-  "payment run decisions enforce maker-checker and record canonical decision events",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const submitterId = await withBypass(() =>
-        createScratchUser(org.orgId, "Payment Run Submitter", "payment_run_submitter"),
-      );
-      const approverId = await withBypass(() =>
-        createScratchUser(org.orgId, "Payment Run Approver", "payment_run_approver"),
-      );
-      const runId = await withOrgContext(org.orgId, () => seedPaymentRun(org, submitterId));
-      const rejectedRunId = await withOrgContext(org.orgId, () =>
-        seedPaymentRun(org, submitterId),
-      );
-      const unidentifiedRunId = await withOrgContext(org.orgId, async () => {
-        const id = await seedPaymentRun(org, submitterId);
-        await db.execute(sql`
-          update payment_runs set submitted_by = null
-           where id = ${id} and org_id = ${org.orgId}
-        `);
-        return id;
-      });
-
-      const beforeSelfAttempt = await withOrgContext(org.orgId, () =>
-        paymentRunDecisionAuditSnapshot(org.orgId, runId),
-      );
-      assert.equal(beforeSelfAttempt?.event_count, 0);
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentRun(runId, org.orgId, submitterId, "approve"),
-        ),
-        (error: Error) =>
-          error instanceof PaymentError
-          && error.message === "the payment run submitter cannot approve the same run",
-      );
-      const afterSelfAttempt = await withOrgContext(org.orgId, () =>
-        paymentRunDecisionAuditSnapshot(org.orgId, runId),
-      );
-      assert.deepEqual(afterSelfAttempt, beforeSelfAttempt);
-
-      const beforeMissingSubmitterAttempt = await withOrgContext(org.orgId, () =>
-        paymentRunDecisionAuditSnapshot(org.orgId, unidentifiedRunId),
-      );
-      assert.ok(beforeMissingSubmitterAttempt);
-      assert.equal(beforeMissingSubmitterAttempt.maker_by, null);
-      // A null submitter is a system submission (the payment scheduler): the
-      // maker is the system itself, so any authenticated human is an
-      // independent checker and the approval succeeds.
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(unidentifiedRunId, org.orgId, approverId, "approve"),
-      );
-      const afterSystemSubmissionApproval = await withOrgContext(org.orgId, () =>
-        paymentRunDecisionAuditSnapshot(org.orgId, unidentifiedRunId),
-      );
-      assert.equal(afterSystemSubmissionApproval?.status, "approved");
-      assert.equal(afterSystemSubmissionApproval?.maker_by, null);
-      assert.equal(afterSystemSubmissionApproval?.event_count, 1);
-
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(runId, org.orgId, approverId, "approve"),
-      );
-      const afterIndependentApproval = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          approved_by: string | null;
-          approved_at: boolean;
-          approval_events: number;
-          event_actor_id: string | null;
-        }>(sql`
-          select r.status, r.approved_by, r.approved_at is not null as approved_at,
-                 (select count(*)::int from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_approved') as approval_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_approved'
-                   order by e.created_at desc limit 1) as event_actor_id
-            from payment_runs r
-           where r.id = ${runId} and r.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(afterIndependentApproval, {
-        status: "approved",
-        approved_by: approverId,
-        approved_at: true,
-        approval_events: 1,
-        event_actor_id: approverId,
-      });
-
-      const rejectionReason = "duplicate payment batch";
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(rejectedRunId, org.orgId, approverId, "reject", rejectionReason),
-      );
-      const afterIndependentRejection = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          rejected_by: string | null;
-          rejected_at: boolean;
-          rejection_reason: string | null;
-          rejection_events: number;
-          malformed_rejection_events: number;
-          event_actor_id: string | null;
-          event_from_status: string | null;
-          event_to_status: string | null;
-          event_reason: string | null;
-        }>(sql`
-          select r.status, r.rejected_by, r.rejected_at is not null as rejected_at,
-                 r.rejection_reason,
-                 (select count(*)::int from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected') as rejection_events,
-                 (select count(*)::int from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejectd') as malformed_rejection_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_actor_id,
-                 (select e.from_status from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_from_status,
-                 (select e.to_status from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_to_status,
-                 (select e.details ->> 'reason' from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_reason
-            from payment_runs r
-           where r.id = ${rejectedRunId} and r.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(afterIndependentRejection, {
-        status: "rejected",
-        rejected_by: approverId,
-        rejected_at: true,
-        rejection_reason: rejectionReason,
-        rejection_events: 1,
-        malformed_rejection_events: 0,
-        event_actor_id: approverId,
-        event_from_status: "pending_approval",
-        event_to_status: "rejected",
-        event_reason: rejectionReason,
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
-test(
-  "payment file decisions enforce maker-checker and record canonical decision events",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    const fileIds: string[] = [];
-    try {
-      const generatorId = await withBypass(() =>
-        createScratchUser(org.orgId, "Payment File Generator", "payment_file_generator"),
-      );
-      const approverId = await withBypass(() =>
-        createScratchUser(org.orgId, "Payment File Approver", "payment_file_approver"),
-      );
-      const seeded = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, approverId),
-      );
-      fileIds.push(seeded.fileId);
-      const rejected = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, approverId),
-      );
-      fileIds.push(rejected.fileId);
-      const unidentified = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, approverId, { generatedBy: null }),
-      );
-      fileIds.push(unidentified.fileId);
-
-      const beforeSelfAttempt = await withOrgContext(org.orgId, () =>
-        paymentFileDecisionAuditSnapshot(org.orgId, seeded.fileId),
-      );
-      assert.equal(beforeSelfAttempt?.event_count, 0);
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentFile(seeded.fileId, org.orgId, generatorId, "approve"),
-        ),
-        (error: Error) =>
-          error instanceof PaymentError
-          && error.message === "the payment file generator cannot approve the same file",
-      );
-      const afterSelfAttempt = await withOrgContext(org.orgId, () =>
-        paymentFileDecisionAuditSnapshot(org.orgId, seeded.fileId),
-      );
-      assert.deepEqual(afterSelfAttempt, beforeSelfAttempt);
-
-      const beforeMissingGeneratorAttempt = await withOrgContext(org.orgId, () =>
-        paymentFileDecisionAuditSnapshot(org.orgId, unidentified.fileId),
-      );
-      assert.ok(beforeMissingGeneratorAttempt);
-      assert.equal(beforeMissingGeneratorAttempt.maker_by, null);
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentFile(unidentified.fileId, org.orgId, approverId, "approve"),
-        ),
-        (error: Error) =>
-          error instanceof PaymentError
-          && error.message === "payment file approval requires an identified generator",
-      );
-      // Same causal contract as the run: the named refusal leaves every
-      // column — including updated_at/updated_by — exactly as it found them,
-      // and writes no event.
-      const afterMissingGeneratorAttempt = await withOrgContext(org.orgId, () =>
-        paymentFileDecisionAuditSnapshot(org.orgId, unidentified.fileId),
-      );
-      assert.deepEqual(afterMissingGeneratorAttempt, beforeMissingGeneratorAttempt);
-
-      await withOrgContext(org.orgId, () =>
-        decidePaymentFile(seeded.fileId, org.orgId, approverId, "approve"),
-      );
-      const afterIndependentApproval = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          approved_by: string | null;
-          approved_at: boolean;
-          approval_events: number;
-          event_actor_id: string | null;
-          event_run_id: string | null;
-        }>(sql`
-          select pf.status, pf.approved_by, pf.approved_at is not null as approved_at,
-                 (select count(*)::int from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_approved') as approval_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_approved'
-                   order by e.created_at desc limit 1) as event_actor_id,
-                 (select e.payment_run_id from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_approved'
-                   order by e.created_at desc limit 1) as event_run_id
-            from payment_files pf
-           where pf.id = ${seeded.fileId} and pf.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(afterIndependentApproval, {
-        status: "approved",
-        approved_by: approverId,
-        approved_at: true,
-        approval_events: 1,
-        event_actor_id: approverId,
-        event_run_id: seeded.runId,
-      });
-
-      const rejectionReason = "incorrect beneficiary details";
-      await withOrgContext(org.orgId, () =>
-        decidePaymentFile(rejected.fileId, org.orgId, approverId, "reject", rejectionReason),
-      );
-      const afterIndependentRejection = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          rejected_by: string | null;
-          rejected_at: boolean;
-          rejection_reason: string | null;
-          rejection_events: number;
-          malformed_rejection_events: number;
-          event_actor_id: string | null;
-          event_run_id: string | null;
-          event_from_status: string | null;
-          event_to_status: string | null;
-          event_reason: string | null;
-        }>(sql`
-          select pf.status, pf.rejected_by, pf.rejected_at is not null as rejected_at,
-                 pf.rejection_reason,
-                 (select count(*)::int from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected') as rejection_events,
-                 (select count(*)::int from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejectd') as malformed_rejection_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_actor_id,
-                 (select e.payment_run_id from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_run_id,
-                 (select e.from_status from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_from_status,
-                 (select e.to_status from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_to_status,
-                 (select e.details ->> 'reason' from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_reason
-            from payment_files pf
-           where pf.id = ${rejected.fileId} and pf.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(afterIndependentRejection, {
-        status: "rejected",
-        rejected_by: approverId,
-        rejected_at: true,
-        rejection_reason: rejectionReason,
-        rejection_events: 1,
-        malformed_rejection_events: 0,
-        event_actor_id: approverId,
-        event_run_id: rejected.runId,
-        event_from_status: "pending_approval",
-        event_to_status: "rejected",
-        event_reason: rejectionReason,
-      });
-    } finally {
-      for (const fileId of fileIds) {
-        await withBypass(() => removePaymentFileFixture(org.orgId, fileId));
-      }
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
-test(
-  "a payment run decision whose evidence write fails rolls the whole decision back",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const submitterId = await withBypass(() =>
-        createScratchUser(org.orgId, "Run Evidence Submitter", "payment_run_submitter"),
-      );
-      const approverId = await withBypass(() =>
-        createScratchUser(org.orgId, "Run Evidence Approver", "payment_run_approver"),
-      );
-      const runId = await withOrgContext(org.orgId, () => seedPaymentRun(org, submitterId));
-      // No users row identifies this approver. payment_runs pins no foreign
-      // key on approved_by, so the decision UPDATE itself succeeds; the
-      // approval then dies at the payment_events evidence insert
-      // (actor_id -> users), which is sequenced strictly after the status
-      // flip inside the same tenant transaction. The failure must carry the
-      // status flip back with it: an approved run without its approval event
-      // would be an unauditable transition.
-      const unrecordedApproverId = randomUUID();
-      const beforeFailedDecision = await withOrgContext(org.orgId, () =>
-        paymentRunDecisionAuditSnapshot(org.orgId, runId),
-      );
-      assert.ok(beforeFailedDecision);
-      assert.equal(beforeFailedDecision.event_count, 0);
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentRun(runId, org.orgId, unrecordedApproverId, "approve"),
-        ),
-        (error: unknown) => {
-          const failure = postgresFailure(error);
-          assert.equal(failure?.code, "23503");
-          assert.equal(failure?.constraint, "payment_events_actor_id_fkey");
-          return true;
-        },
-      );
-      const afterFailedDecision = await withOrgContext(org.orgId, () =>
-        paymentRunDecisionAuditSnapshot(org.orgId, runId),
-      );
-      assert.deepEqual(afterFailedDecision, beforeFailedDecision);
-
-      // The rolled-back decision left a decidable run: the identified,
-      // independent approver can still approve it, and that success records
-      // exactly one canonical approval event naming them.
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(runId, org.orgId, approverId, "approve"),
-      );
-      const afterRecoveredApproval = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          approved_by: string | null;
-          approved_at: boolean;
-          approval_events: number;
-          event_actor_id: string | null;
-        }>(sql`
-          select r.status, r.approved_by, r.approved_at is not null as approved_at,
-                 (select count(*)::int from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_approved') as approval_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_approved'
-                   order by e.created_at desc limit 1) as event_actor_id
-            from payment_runs r
-           where r.id = ${runId} and r.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(afterRecoveredApproval, {
-        status: "approved",
-        approved_by: approverId,
-        approved_at: true,
-        approval_events: 1,
-        event_actor_id: approverId,
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
 
 test(
   "a rolled-back run cannot gain a bank-file artifact",
@@ -1162,242 +697,6 @@ test(
 );
 
 test(
-  "a payment file decision whose evidence write fails rolls the whole decision back",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    const fileIds: string[] = [];
-    try {
-      const generatorId = await withBypass(() =>
-        createScratchUser(org.orgId, "File Evidence Generator", "payment_file_generator"),
-      );
-      const approverId = await withBypass(() =>
-        createScratchUser(org.orgId, "File Evidence Approver", "payment_file_approver"),
-      );
-      const seeded = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, approverId),
-      );
-      fileIds.push(seeded.fileId);
-      // Same injection as the run rail: no users row identifies this
-      // approver, payment_files pins no foreign key on its decision columns,
-      // so only the payment_events evidence insert can fail — and the status
-      // flip must not outlive it.
-      const unrecordedApproverId = randomUUID();
-      const beforeFailedDecision = await withOrgContext(org.orgId, () =>
-        paymentFileDecisionAuditSnapshot(org.orgId, seeded.fileId),
-      );
-      assert.ok(beforeFailedDecision);
-      assert.equal(beforeFailedDecision.event_count, 0);
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentFile(seeded.fileId, org.orgId, unrecordedApproverId, "approve"),
-        ),
-        (error: unknown) => {
-          const failure = postgresFailure(error);
-          assert.equal(failure?.code, "23503");
-          assert.equal(failure?.constraint, "payment_events_actor_id_fkey");
-          return true;
-        },
-      );
-      const afterFailedDecision = await withOrgContext(org.orgId, () =>
-        paymentFileDecisionAuditSnapshot(org.orgId, seeded.fileId),
-      );
-      assert.deepEqual(afterFailedDecision, beforeFailedDecision);
-
-      await withOrgContext(org.orgId, () =>
-        decidePaymentFile(seeded.fileId, org.orgId, approverId, "approve"),
-      );
-      const afterRecoveredApproval = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          approved_by: string | null;
-          approved_at: boolean;
-          approval_events: number;
-          event_actor_id: string | null;
-        }>(sql`
-          select pf.status, pf.approved_by, pf.approved_at is not null as approved_at,
-                 (select count(*)::int from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_approved') as approval_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_approved'
-                   order by e.created_at desc limit 1) as event_actor_id
-            from payment_files pf
-           where pf.id = ${seeded.fileId} and pf.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(afterRecoveredApproval, {
-        status: "approved",
-        approved_by: approverId,
-        approved_at: true,
-        approval_events: 1,
-        event_actor_id: approverId,
-      });
-    } finally {
-      for (const fileId of fileIds) {
-        await withBypass(() => removePaymentFileFixture(org.orgId, fileId));
-      }
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
-test(
-  "an identified submitter may reject their own pending run, and the rejection names them",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const submitterId = await withBypass(() =>
-        createScratchUser(org.orgId, "Run Self Rejection Submitter", "payment_run_submitter"),
-      );
-      const runId = await withOrgContext(org.orgId, () => seedPaymentRun(org, submitterId));
-      // The maker-checker guard exists to stop an artifact's maker moving it
-      // FORWARD; refusing it is fail-safe and needs no second person. A
-      // rejection that succeeds is still fully evidenced — it must record a
-      // canonical run_rejected event carrying the maker's own identity.
-      const reason = "selected the wrong bank account";
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(runId, org.orgId, submitterId, "reject", reason),
-      );
-      const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          approved_by: string | null;
-          rejected_by: string | null;
-          rejected_at: boolean;
-          rejection_reason: string | null;
-          rejection_events: number;
-          event_actor_id: string | null;
-          event_from_status: string | null;
-          event_to_status: string | null;
-          event_reason: string | null;
-        }>(sql`
-          select r.status, r.approved_by, r.rejected_by,
-                 r.rejected_at is not null as rejected_at, r.rejection_reason,
-                 (select count(*)::int from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected') as rejection_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_actor_id,
-                 (select e.from_status from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_from_status,
-                 (select e.to_status from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_to_status,
-                 (select e.details ->> 'reason' from payment_events e
-                   where e.payment_run_id = r.id and e.org_id = r.org_id
-                     and e.event_type = 'run_rejected'
-                   order by e.created_at desc limit 1) as event_reason
-            from payment_runs r
-           where r.id = ${runId} and r.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(state, {
-        status: "rejected",
-        approved_by: null,
-        rejected_by: submitterId,
-        rejected_at: true,
-        rejection_reason: reason,
-        rejection_events: 1,
-        event_actor_id: submitterId,
-        event_from_status: "pending_approval",
-        event_to_status: "rejected",
-        event_reason: reason,
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
-test(
-  "an identified generator may reject their own pending file, and the rejection names them",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    const fileIds: string[] = [];
-    try {
-      const generatorId = await withBypass(() =>
-        createScratchUser(org.orgId, "File Self Rejection Generator", "payment_file_generator"),
-      );
-      const runApproverId = await withBypass(() =>
-        createScratchUser(org.orgId, "File Self Rejection Run Approver", "payment_run_approver"),
-      );
-      const seeded = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, runApproverId),
-      );
-      fileIds.push(seeded.fileId);
-      const reason = "beneficiary details changed after generation";
-      await withOrgContext(org.orgId, () =>
-        decidePaymentFile(seeded.fileId, org.orgId, generatorId, "reject", reason),
-      );
-      const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          approved_by: string | null;
-          rejected_by: string | null;
-          rejected_at: boolean;
-          rejection_reason: string | null;
-          rejection_events: number;
-          event_actor_id: string | null;
-          event_from_status: string | null;
-          event_to_status: string | null;
-          event_reason: string | null;
-        }>(sql`
-          select pf.status, pf.approved_by, pf.rejected_by,
-                 pf.rejected_at is not null as rejected_at, pf.rejection_reason,
-                 (select count(*)::int from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected') as rejection_events,
-                 (select e.actor_id from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_actor_id,
-                 (select e.from_status from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_from_status,
-                 (select e.to_status from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_to_status,
-                 (select e.details ->> 'reason' from payment_events e
-                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
-                     and e.event_type = 'file_rejected'
-                   order by e.created_at desc limit 1) as event_reason
-            from payment_files pf
-           where pf.id = ${seeded.fileId} and pf.org_id = ${org.orgId}
-        `)).rows[0]
-      );
-      assert.deepEqual(state, {
-        status: "rejected",
-        approved_by: null,
-        rejected_by: generatorId,
-        rejected_at: true,
-        rejection_reason: reason,
-        rejection_events: 1,
-        event_actor_id: generatorId,
-        event_from_status: "pending_approval",
-        event_to_status: "rejected",
-        event_reason: reason,
-      });
-    } finally {
-      for (const fileId of fileIds) {
-        await withBypass(() => removePaymentFileFixture(org.orgId, fileId));
-      }
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
-test(
   "concurrent generation of one run yields exactly one live artifact",
   { skip: !DB },
   async () => {
@@ -1446,13 +745,10 @@ test(
         createScratchUser(org.orgId, "Voided Delivery Approver", "payment_file_approver"),
       );
       seeded = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, approverId),
+        seedApprovedPaymentFile(org, generatorId, approverId),
       );
       const seededFileId = seeded.fileId;
       const seededRunId = seeded.runId;
-      await withOrgContext(org.orgId, () =>
-        decidePaymentFile(seededFileId, org.orgId, approverId, "approve"),
-      );
       await withOrgContext(org.orgId, () =>
         rollbackPaymentRun(seededRunId, org.orgId, approverId, "run recalled before dispatch"),
       );
@@ -1503,10 +799,7 @@ test(
         createScratchUser(org.orgId, "SFTP File Approver", "payment_file_approver"),
       );
       seeded = await withOrgContext(org.orgId, () =>
-        seedPendingPaymentFile(org, generatorId, approverId),
-      );
-      await withOrgContext(org.orgId, () =>
-        decidePaymentFile(seeded!.fileId, org.orgId, approverId, "approve"),
+        seedApprovedPaymentFile(org, generatorId, approverId),
       );
       const claim = await withOrgContext(org.orgId, () => claimPaymentFileDelivery({
         fileId: seeded!.fileId,

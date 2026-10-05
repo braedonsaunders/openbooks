@@ -237,8 +237,7 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
     const keyOf = (item: Full[number]): string => {
       if (item.kind === "flow_gate") return `flow_gate:${item.id}`;
       if (item.kind === "document") return `document:${item.id}`;
-      if (item.kind === "budget") return `budget:${item.id}`;
-      return `pay_run:${item.id}`;
+      return `budget:${item.id}`;
     };
     assert.deepEqual(
       new Set(seen.map(keyOf)),
@@ -253,9 +252,7 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
           ? (item.document?.kind ?? item.subjectKind)
           : item.kind === "document"
             ? item.docKind
-            : item.kind === "budget"
-              ? "budget_scenario"
-              : "pay_run";
+            : "budget_scenario";
       expectedChips.set(kind, (expectedChips.get(kind) ?? 0) + 1);
     }
     assert.deepEqual(Object.fromEntries(chips), Object.fromEntries(expectedChips), "kind chips tie the full set");

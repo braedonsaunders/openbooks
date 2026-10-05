@@ -49,7 +49,7 @@ type Translator = ReturnType<typeof useTranslations>
 type SetupRow = {
   id: string; name: string; bank_number: string | null; bank_name: string | null;
   format_name: string | null; currency: string | null; sftp_server_name: string | null;
-  require_run_approval: boolean; is_active: boolean; code: string; rail: string;
+  is_active: boolean; code: string; rail: string;
   direction: string; profile_name: string | null; cron: string; next_run_at: string | null;
   action: string; mandate_reference: string; party_name: string; scheme: string;
   signed_on: string | null; expires_on: string | null; status: string;
@@ -65,8 +65,7 @@ type SetupForm = {
   party_id?: string; partyId?: string; party_bank_account_id?: string; partyBankAccountId?: string;
   scheme?: string; mandate_reference?: string; mandateReference?: string; status?: string;
   signed_on?: string; signedOn?: string; valid_from?: string; validFrom?: string;
-  expires_on?: string; expiresOn?: string; require_run_approval?: boolean;
-  requireRunApproval?: boolean; require_file_approval?: boolean; requireFileApproval?: boolean;
+  expires_on?: string; expiresOn?: string;
   auto_remittance?: boolean; autoRemittance?: boolean; is_active?: boolean; isActive?: boolean;
   originatorSecrets?: Record<string, string>;
   settings?: { discountAccountId?: string | null; positivePayAccountReference?: string };
@@ -198,7 +197,7 @@ export function PaymentOperationsSetup({
 function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows: SetupRow[]; t: Translator; basePath: string }) {
   const { dateTime } = useViewerFormat()
   const cols: Record<PaymentSetupView, string[]> = {
-    profiles: ['name', 'bank', 'format', 'currency', 'delivery', 'approval', 'status'],
+    profiles: ['name', 'bank', 'format', 'currency', 'delivery', 'status'],
     formats: ['code', 'name', 'rail', 'direction', 'currency', 'status'],
     schedules: ['name', 'profile', 'cron', 'nextRun', 'action', 'status'],
     mandates: ['reference', 'party', 'scheme', 'signedOn', 'expiresOn', 'status'],
@@ -213,7 +212,7 @@ function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows:
             <TableCell><Link href={href} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.name}</Link></TableCell>
             <TableCell>{[row.bank_number, row.bank_name].filter(Boolean).join(' · ')}</TableCell><TableCell>{row.format_name}</TableCell>
             <TableCell className="font-mono text-xs">{row.currency}</TableCell><TableCell>{row.sftp_server_name ?? t('manualDelivery')}</TableCell>
-            <TableCell>{row.require_run_approval ? t('runApproval') : t('automatic')}</TableCell><TableCell><Active active={row.is_active} t={t} /></TableCell>
+            <TableCell><Active active={row.is_active} t={t} /></TableCell>
           </TableRow>
           if (view === 'formats') return <TableRow key={row.id}>
             <TableCell><Link href={href} className="font-mono text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.code}</Link></TableCell>
@@ -293,8 +292,6 @@ function normalizePayload(view: PaymentSetupView, form: SetupForm, creating: boo
       country: form.country || null, ...(Object.keys(originatorSecrets).length ? { originatorSecrets } : {}),
       settings: form.settings ?? {}, sftpServerId: form.sftp_server_id ?? form.sftpServerId ?? null,
       sftpFolder: form.sftp_folder ?? form.sftpFolder ?? null,
-      requireRunApproval: form.require_run_approval ?? form.requireRunApproval ?? true,
-      requireFileApproval: form.require_file_approval ?? form.requireFileApproval ?? false,
       autoRemittance: form.auto_remittance ?? form.autoRemittance ?? false,
       isActive: form.is_active ?? form.isActive ?? true,
     }
@@ -322,7 +319,7 @@ function ProfileFields({ form, set, options, t, creating, multiCurrency = false 
     {secretFields.length ? <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"><div><h3 className="text-sm font-semibold">{t('originator.title')}</h3><p className="text-xs text-slate-500">{creating ? t('originator.newHint') : t('originator.editHint')}</p></div><div className="grid gap-4 sm:grid-cols-2">{secretFields.map((key) => <Field key={key} label={t(`secretFields.${key}`)}><Input type="password" autoComplete="new-password" value={secrets[key] ?? ''} onChange={(e) => secretSet(key, e.target.value)} /></Field>)}</div></div> : null}
     <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="text-sm font-semibold">{t('accounting.title')}</h3><Field label={t('fields.discountAccount')}><Select value={settings.discountAccountId ?? ''} onChange={(e) => settingSet('discountAccountId', e.target.value || null)}><option value="">{t('accounting.noDiscountAccount')}</option>{options.accountingAccounts.map((a) => <option key={a.id} value={a.id}>{[a.number, a.name].filter(Boolean).join(' · ')}</option>)}</Select></Field>{format?.rail === 'positive_pay' ? <Field label={t('fields.positivePayAccountReference')}><Input value={settings.positivePayAccountReference ?? ''} onChange={(e) => settingSet('positivePayAccountReference', e.target.value)} /></Field> : null}<p className="text-xs text-slate-500">{t('accounting.hint')}</p></div>
     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="mb-3 text-sm font-semibold">{t('delivery.title')}</h3><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.sftpServer')}><Select value={form.sftp_server_id ?? form.sftpServerId ?? ''} onChange={(e) => set('sftp_server_id', e.target.value || null)}><option value="">{t('delivery.manual')}</option>{options.sftpServers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field><Field label={t('fields.sftpFolder')}><Input value={form.sftp_folder ?? form.sftpFolder ?? ''} onChange={(e) => set('sftp_folder', e.target.value)} placeholder="outbound" /></Field></div><p className="mt-2 text-xs text-slate-500">{t('delivery.existingSftpHint')}</p></div>
-    <div className="space-y-2"><Toggle checked={form.require_run_approval ?? form.requireRunApproval ?? true} onChange={(v) => set('require_run_approval', v)} label={t('fields.requireRunApproval')} /><Toggle checked={form.require_file_approval ?? form.requireFileApproval ?? false} onChange={(v) => set('require_file_approval', v)} label={t('fields.requireFileApproval')} /><Toggle checked={form.auto_remittance ?? form.autoRemittance ?? false} onChange={(v) => set('auto_remittance', v)} label={t('fields.autoRemittance')} /><Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('is_active', v)} label={t('fields.active')} /></div>
+    <p className="text-xs text-slate-500 dark:text-slate-400">{t.rich('approvalHint', { flows: (chunks) => <Link href="/admin/flows" className="font-medium text-teal-700 hover:underline dark:text-teal-300">{chunks}</Link> })}</p><div className="space-y-2"><Toggle checked={form.auto_remittance ?? form.autoRemittance ?? false} onChange={(v) => set('auto_remittance', v)} label={t('fields.autoRemittance')} /><Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('is_active', v)} label={t('fields.active')} /></div>
   </>
 }
 

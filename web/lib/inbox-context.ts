@@ -6,7 +6,7 @@ import { isFeatureEnabled } from "./features";
 
 /**
  * HR-15: build the server-side inbox context from the session. The union
- * scope (roles, subsidiary boundary, budget/pay-run legs) rides the
+ * scope (roles, subsidiary boundary, budget leg) rides the
  * context so the flows leg sees exactly the gates the inbox page's union
  * table shows. Built only from the session — never from client input.
  */
@@ -16,9 +16,6 @@ export async function inboxContext(authz: Authz): Promise<InboxListContext> {
     businessToday(orgId),
     isFeatureEnabled(orgId, "budgets"),
   ]);
-  const payDirections: string[] = [];
-  if (can(authz, "ap.approve")) payDirections.push("outbound");
-  if (can(authz, "ar.approve")) payDirections.push("inbound");
   return {
     orgId,
     actorId: authz.user.id,
@@ -27,8 +24,6 @@ export async function inboxContext(authz: Authz): Promise<InboxListContext> {
       roles: authz.user.roles.map((role) => role.key),
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
       includeBudgets: budgetsOn && can(authz, "budgets.approve"),
-      includePayRuns: payDirections.length > 0,
-      payDirections,
     },
   };
 }
@@ -43,15 +38,9 @@ export function toInboxNoticeViews(notices: InboxSourceNotice[]): { source: Inbo
   return notices.map((notice) => ({ source: notice.kind, reason: notice.message }));
 }
 
-/** The doorway to decision rows: callers who cannot approve see no union. */
-export function maySeeUnion(authz: Authz): boolean {
-  return (
-    can(authz, "flows.approve") ||
-    can(authz, "ap.approve") ||
-    can(authz, "ar.approve") ||
-    can(authz, "budgets.approve")
-  );
-}
+/** The doorway to decision rows lives in ./approval-doorway; re-exported for inbox callers. */
+import { maySeeUnion } from "./approval-doorway";
+export { maySeeUnion };
 
 export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
   approvals: ["flows_approval", "expense_report"],

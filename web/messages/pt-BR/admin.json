@@ -2475,7 +2475,6 @@
         "format": "Formato",
         "currency": "Moeda",
         "delivery": "Entrega",
-        "approval": "Aprovação da execução",
         "status": "Status",
         "code": "Código",
         "rail": "Canal",
@@ -2533,8 +2532,6 @@
         "country": "País",
         "sftpServer": "Servidor SFTP existente",
         "sftpFolder": "Pasta de saída",
-        "requireRunApproval": "Exigir aprovação da execução de pagamento",
-        "requireFileApproval": "Exigir aprovação do arquivo gerado",
         "autoRemittance": "Enviar aviso de remessa automaticamente",
         "discountAccount": "Conta de desconto por pagamento antecipado",
         "positivePayAccountReference": "Referência da conta na instituição",
@@ -2558,6 +2555,7 @@
         "validFrom": "Válido a partir de",
         "expiresOn": "Expira em"
       },
+      "approvalHint": "A aprovação de remessas de pagamento é configurada em <flows>Fluxos</flows>. Sem um fluxo de remessas de pagamento, as remessas enviadas são aprovadas imediatamente.",
       "secretFields": {
         "originatorId": "ID do originador",
         "originatorShortName": "Nome curto",
@@ -2635,8 +2633,6 @@
       },
       "empty": "Nenhum registro para exibir.",
       "manualDelivery": "Download manual",
-      "runApproval": "Obrigatória",
-      "automatic": "Automática",
       "any": "Qualquer",
       "builtInFormatHint": "Este formatador integrado é mantido pelo mecanismo de pagamento. Sua definição executável não pode ser editada aqui.",
       "save": "Salvar",
@@ -3324,6 +3320,11 @@
         "title": "Contribuições",
         "singular": "Contribuições",
         "description": "Defina cada desconto do funcionário, contribuição patronal ou benefício tributável não monetário. Os componentes da folha controlam tributos e lançamentos."
+      },
+      "benefit-contribution-rule-components": {
+        "title": "Componentes de proventos incluídos",
+        "singular": "Componente de proventos incluído",
+        "description": "Escolha os componentes de proventos cujas horas contam para esta contribuição. Unidades baseadas em quantidade não contam como horas."
       },
       "benefit-contribution-classes": {
         "title": "Classes de elegibilidade",

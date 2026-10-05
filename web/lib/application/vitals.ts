@@ -1,6 +1,7 @@
 import "server-only";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can } from "../authz";
+import { maySeeUnion } from "../approval-doorway";
 import { analyticsConfig } from "../analytics/config";
 import { cashPosition } from "../cash/cash-position";
 import { normalizeMoneyValue } from "../cash/core";
@@ -71,11 +72,8 @@ async function agingSection(context: ApplicationContext, side: "ar" | "ap", asOf
 
 async function approvalsSection(context: ApplicationContext) {
   // Same doorway as the worklist itself: anyone who can approve anything
-  // (gates/documents or either pay direction) sees the unified count.
-  const mayApprove = can(context.authz, "flows.approve")
-    || can(context.authz, "ap.approve")
-    || can(context.authz, "ar.approve");
-  if (!mayApprove) return unavailable("flows.approve, ap.approve, or ar.approve");
+  // (gates, gateless documents, or budgets) sees the unified count.
+  if (!maySeeUnion(context.authz)) return unavailable("flows.approve or budgets.approve");
   const approvals = await listApprovalWorklist(context);
   return { available: true as const, pending: approvals.length };
 }

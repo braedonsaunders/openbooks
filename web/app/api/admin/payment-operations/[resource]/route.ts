@@ -51,8 +51,7 @@ const paymentProfileBodySchema = z.object({
   subsidiaryId: z.string().uuid().nullable().optional(), country: countrySchema, currency: currencySchema,
   originatorSecrets: z.record(z.string(), z.string()).nullable().optional(),
   settings: z.record(z.string(), z.json()).optional(), sftpServerId: z.string().uuid().nullable().optional(),
-  sftpFolder: z.string().nullable().optional(), requireRunApproval: z.boolean().optional(),
-  requireFileApproval: z.boolean().optional(), autoRemittance: z.boolean().optional(), isActive: z.boolean().optional(),
+  sftpFolder: z.string().nullable().optional(), autoRemittance: z.boolean().optional(), isActive: z.boolean().optional(),
 })
 const paymentScheduleBodySchema = z.object({
   name: z.string().trim().min(1).max(200), paymentBankProfileId: z.string().uuid(), cron: z.string().trim().min(1).max(200),
@@ -126,7 +125,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ resource
     const rows = await db.execute(sql`
       select p.id, p.name, p.bank_account_id, p.subsidiary_id, p.payment_format_id,
              p.currency, p.country, p.settings, p.sftp_server_id, p.sftp_folder,
-             p.require_run_approval, p.require_file_approval, p.auto_remittance,
+             p.auto_remittance,
              p.originator_secrets_encrypted is not null as has_secrets, p.is_active,
              f.name as format_name, f.rail, a.number as bank_number, a.name as bank_name
         from payment_bank_profiles p

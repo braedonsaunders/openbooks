@@ -2550,7 +2550,6 @@
         "format": "Format",
         "currency": "Währung",
         "delivery": "Zustellung",
-        "approval": "Laufgenehmigung",
         "status": "Status",
         "code": "Code",
         "rail": "Zahlungsweg",
@@ -2608,8 +2607,6 @@
         "country": "Land",
         "sftpServer": "Vorhandener SFTP-Server",
         "sftpFolder": "Ausgangsordner",
-        "requireRunApproval": "Genehmigung des Zahlungslaufs erforderlich",
-        "requireFileApproval": "Genehmigung der generierten Datei erforderlich",
         "autoRemittance": "Zahlungsavis automatisch senden",
         "discountAccount": "Konto für Skonto bei Frühzahlung",
         "positivePayAccountReference": "Kontoreferenz des Instituts",
@@ -2633,6 +2630,7 @@
         "validFrom": "Gültig ab",
         "expiresOn": "Läuft ab am"
       },
+      "approvalHint": "Die Genehmigung von Zahlungsläufen wird in <flows>Flows</flows> eingerichtet. Ohne Zahlungslauf-Flow werden eingereichte Läufe sofort genehmigt.",
       "secretFields": {
         "originatorId": "Auftraggeber-ID",
         "originatorShortName": "Kurzname",
@@ -2710,8 +2708,6 @@
       },
       "empty": "Keine Datensätze anzuzeigen.",
       "manualDelivery": "Manueller Download",
-      "runApproval": "Erforderlich",
-      "automatic": "Automatisch",
       "any": "Beliebig",
       "builtInFormatHint": "Dieser integrierte Formatierer wird von der Zahlungs-Engine gepflegt. Seine ausführbare Definition kann hier nicht bearbeitet werden.",
       "save": "Speichern",
@@ -3399,6 +3395,11 @@
         "title": "Beiträge",
         "singular": "Beiträge",
         "description": "Legen Sie Mitarbeiterabzüge, Arbeitgeberbeiträge und steuerpflichtige Sachleistungen fest. Lohnarten steuern Steuern und Buchungen."
+      },
+      "benefit-contribution-rule-components": {
+        "title": "Berücksichtigte Verdienstkomponenten",
+        "singular": "Berücksichtigte Verdienstkomponente",
+        "description": "Wählen Sie die Verdienstkomponenten, deren Stunden für diesen Beitrag zählen. Mengenbasierte Einheiten zählen nicht als Stunden."
       },
       "benefit-contribution-classes": {
         "title": "Berechtigungsgruppen",

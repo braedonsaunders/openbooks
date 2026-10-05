@@ -73,8 +73,6 @@ export const paymentBankProfiles = pgTable(
     settings: jsonb("settings").$type<Record<string, unknown>>().notNull().default({}),
     sftpServerId: uuid("sftp_server_id"),
     sftpFolder: text("sftp_folder"),
-    requireRunApproval: boolean("require_run_approval").notNull().default(true),
-    requireFileApproval: boolean("require_file_approval").notNull().default(false),
     autoRemittance: boolean("auto_remittance").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,

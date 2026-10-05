@@ -45,6 +45,14 @@ import {
   payRunsFlowAdapter,
 } from "./pay-runs-adapter.ts";
 import {
+  INBOUND_PAYMENT_RUN_SUBJECT_KIND,
+  inboundPaymentRunSubjectProfile,
+  inboundPaymentRunsFlowAdapter,
+  OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
+  outboundPaymentRunSubjectProfile,
+  outboundPaymentRunsFlowAdapter,
+} from "./payment-runs-adapter.ts";
+import {
   TIMESHEET_WEEK_SUBJECT_KIND,
   timesheetWeekSubjectProfile,
   timesheetWeeksFlowAdapter,
@@ -110,6 +118,8 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
   if (subjectKind === FUND_RELEASE_SUBJECT_KIND) return fundReleasesFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
+  if (subjectKind === OUTBOUND_PAYMENT_RUN_SUBJECT_KIND) return outboundPaymentRunsFlowAdapter;
+  if (subjectKind === INBOUND_PAYMENT_RUN_SUBJECT_KIND) return inboundPaymentRunsFlowAdapter;
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
   if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
   if (subjectKind === HRM_LEAVE_REQUEST_SUBJECT_KIND) return hrmLeaveRequestFlowAdapter;
@@ -164,6 +174,8 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     fundReleaseSubjectProfile,
     fieldTicketSubjectProfile,
     payRunSubjectProfile,
+    outboundPaymentRunSubjectProfile,
+    inboundPaymentRunSubjectProfile,
     timesheetWeekSubjectProfile,
     hrmChangeRequestSubjectProfile,
     hrmLeaveRequestSubjectProfile,

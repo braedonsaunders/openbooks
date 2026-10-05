@@ -3,17 +3,23 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
-import { decidePaymentRun, runDuePaymentSchedules, submitPaymentRun } from "./operations.ts";
+import { runDuePaymentSchedules, submitPaymentRun } from "./operations.ts";
 import { createPaymentRun } from "./run-creation.ts";
-import { PaymentError } from "../payments-core/payment-errors.ts";
 import { cancelPaymentRun } from "./run-cancellation.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { installEngineSeams } from "../composition/install.ts";
+import { decideGate } from "../flows/gates.ts";
+import { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } from "../flows/payment-runs-adapter.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedApprovalFlow,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+
+// Payment-run approvals release through the engine seams.
+installEngineSeams();
 
 /**
  * Live-PostgreSQL durability and provenance proofs for the payment scheduler
@@ -42,7 +48,8 @@ async function seedScheduleFixture(
   options: {
     action?: "create_draft" | "submit_for_approval";
     createdBy?: string | null;
-    requireRunApproval?: boolean;
+    /** Seed an approval flow for outbound payment runs (the default). */
+    approvalFlow?: boolean;
     dueAt?: Date;
   } = {},
 ): Promise<ScheduleFixture> {
@@ -62,11 +69,21 @@ async function seedScheduleFixture(
     await db.execute(sql`
       insert into payment_bank_profiles
         (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
-         currency, country, require_run_approval, created_by, updated_by)
+         currency, country, created_by, updated_by)
       values
         (${profileId}, ${org.orgId}, 'Scheduled run profile', ${org.accounts.bank},
-         ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA',
-         ${options.requireRunApproval ?? true}, ${operatorId}, ${operatorId})`);
+         ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${operatorId}, ${operatorId})`);
+    if (options.approvalFlow !== false) {
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
+        assignees: [
+          { type: "role", role: "payment_approver" },
+          { type: "role", role: "payment_author" },
+          { type: "role", role: "payment_operator" },
+        ],
+        mode: "any",
+      });
+    }
     await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
@@ -272,6 +289,16 @@ async function runsForSchedule(orgId: string, scheduleId: string): Promise<strin
     `)).rows.map((r) => r.id));
 }
 
+/** Decide the run's open approval gate as `userId`. */
+async function decideRunApproval(orgId: string, runId: string, userId: string): Promise<void> {
+  const gate = (await withBypass(() => db.execute<{ id: string }>(sql`
+    select id from flow_gates
+     where org_id = ${orgId} and subject_id = ${runId} and status = 'pending'
+     order by created_at limit 1`))).rows[0];
+  assert.ok(gate, "the run has an open approval gate");
+  await decideGate({ gateId: gate.id, decision: "approved", userId });
+}
+
 test(
   "a scheduled submission is durable and carries system provenance, and a human checker can approve it",
   { skip: !DB },
@@ -332,8 +359,7 @@ test(
 
       // Maker-checker: the system is the maker; any authenticated human is an
       // independent checker.
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(runId, org.orgId, approverId, "approve"));
+      await decideRunApproval(org.orgId, runId, approverId);
       const approved = await runRow(org.orgId, runId);
       assert.equal(approved!.status, "approved");
       assert.equal(approved!.submitted_by, null, "the maker stays the system");
@@ -370,8 +396,7 @@ test(
       // The historical author was never the maker of this system submission,
       // so they are an independent human checker — not SOD-barred by their own
       // authorship of the schedule.
-      await withOrgContext(org.orgId, () =>
-        decidePaymentRun(runId, org.orgId, historicalAuthor, "approve"));
+      await decideRunApproval(org.orgId, runId, historicalAuthor);
       const approved = await runRow(org.orgId, runId);
       assert.equal(approved!.status, "approved");
       assert.equal(approved!.submitted_by, null);
@@ -410,14 +435,11 @@ test(
       assert.equal(submitted.actor_id, fixture.operatorId);
       assert.equal(submitted.details.source, "user");
 
-      // Maker-checker is unchanged for interactive submissions.
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          decidePaymentRun(run.id, org.orgId, fixture.operatorId, "approve")),
-        (error: unknown) =>
-          error instanceof PaymentError
-          && error.message === "the payment run submitter cannot approve the same run",
-      );
+      // Maker-checker is unchanged for interactive submissions: the
+      // operator holds an assignee role, so only separation of duties keeps
+      // them off their own run.
+      await assert.rejects(decideRunApproval(org.orgId, run.id, fixture.operatorId));
+      assert.equal((await runRow(org.orgId, run.id))!.status, "pending_approval");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }

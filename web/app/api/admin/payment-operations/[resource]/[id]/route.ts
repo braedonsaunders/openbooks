@@ -50,8 +50,6 @@ const requestBodySchema = z.object({
   "originatorSecrets": z.record(z.string(), z.string()).nullable().optional(),
   "sftpServerId": z.string().uuid().nullable().optional(),
   "sftpFolder": z.string().nullable().optional(),
-  "requireRunApproval": z.boolean().optional(),
-  "requireFileApproval": z.boolean().optional(),
   "autoRemittance": z.boolean().optional(),
   "signedOn": datePatchSchema,
   "status": z.enum(["pending", "active", "suspended", "revoked", "expired"], { error: 'status must be pending, active, suspended, revoked, or expired' }).optional(),
@@ -88,7 +86,7 @@ export const PATCH = defineRoute({
 
     const patchFieldsByResource: Record<string, readonly string[]> = {
       formats: ['name', 'country', 'currency', 'fileExtension', 'contentType', 'formatterScript', 'isActive'],
-      profiles: ['name', 'bankAccountId', 'paymentFormatId', 'subsidiaryId', 'country', 'currency', 'originatorSecrets', 'settings', 'sftpServerId', 'sftpFolder', 'requireRunApproval', 'requireFileApproval', 'autoRemittance', 'isActive'],
+      profiles: ['name', 'bankAccountId', 'paymentFormatId', 'subsidiaryId', 'country', 'currency', 'originatorSecrets', 'settings', 'sftpServerId', 'sftpFolder', 'autoRemittance', 'isActive'],
       schedules: ['name', 'paymentBankProfileId', 'cron', 'timezone', 'selectionCriteria', 'action', 'isActive'],
       mandates: ['status', 'signedOn', 'validFrom', 'expiresOn'],
     }

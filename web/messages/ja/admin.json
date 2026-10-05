@@ -2550,7 +2550,6 @@
         "format": "フォーマット",
         "currency": "通貨",
         "delivery": "送付",
-        "approval": "実行承認",
         "status": "ステータス",
         "code": "コード",
         "rail": "レール",
@@ -2608,8 +2607,6 @@
         "country": "国",
         "sftpServer": "既存のSFTPサーバー",
         "sftpFolder": "送信フォルダー",
-        "requireRunApproval": "支払実行の承認を必須にする",
-        "requireFileApproval": "生成ファイルの承認を必須にする",
         "autoRemittance": "送金通知を自動的に送信する",
         "discountAccount": "早期支払割引勘定",
         "positivePayAccountReference": "金融機関口座参照",
@@ -2633,6 +2630,7 @@
         "validFrom": "有効開始日",
         "expiresOn": "有効期限"
       },
+      "approvalHint": "支払処理の承認は<flows>フロー</flows>で設定します。支払処理のフローがない場合、申請された支払処理はすぐに承認されます。",
       "secretFields": {
         "originatorId": "オリジネーターID",
         "originatorShortName": "略称",
@@ -2710,8 +2708,6 @@
       },
       "empty": "表示するレコードがありません。",
       "manualDelivery": "手動ダウンロード",
-      "runApproval": "必須",
-      "automatic": "自動",
       "any": "任意",
       "builtInFormatHint": "この組み込みフォーマッターは支払エンジンによって保守されています。その実行可能な定義はここでは編集できません。",
       "save": "保存",
@@ -3399,6 +3395,11 @@
         "title": "拠出",
         "singular": "拠出",
         "description": "従業員控除、雇用主拠出、課税対象の現物給付を定義します。税務処理と仕訳は給与項目で管理します。"
+      },
+      "benefit-contribution-rule-components": {
+        "title": "対象の支給項目",
+        "singular": "対象の支給項目",
+        "description": "この拠出額の計算に時間を含める支給項目を選択してください。数量ベースの単位は時間としてカウントされません。"
       },
       "benefit-contribution-classes": {
         "title": "適格区分",
