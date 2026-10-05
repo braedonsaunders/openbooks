@@ -110,7 +110,7 @@ test('profile POST names the role when the party is active but its employee role
       update employee_roles set is_active = false where org_id = ${org.orgId} and party_id = ${employee.id}`))
     const refused = await post(await profileBody(employee.id, scheduleId))
     assert.equal(refused.status, 422, await refused.clone().text())
-    assert.match(((await refused.json()) as { error: string }).error, /employee role is not active/)
+    assert.match(((await refused.json()) as { error: string }).error, /employee role has ended — .*Save to restore the employee role/)
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -118,3 +118,21 @@ test('profile POST names the role when the party is active but its employee role
 })
 
 test.after(async () => { await pool.end() })
+
+test('profile POST names reactivation when the employee has been deactivated', async () => {
+  const { org, scheduleId } = await fixture()
+  try {
+    const employee = await createEmployee()
+    await activateParty(employee.id, 'Former Hire')
+    await withBypassContext(() => db.execute(sql`
+      update parties set is_active = false where org_id = ${org.orgId} and id = ${employee.id}`))
+    const refused = await post(await profileBody(employee.id, scheduleId))
+    assert.equal(refused.status, 422, await refused.clone().text())
+    const message = ((await refused.json()) as { error: string }).error
+    assert.match(message, /employee is inactive — reactivate them from Employees/)
+    assert.doesNotMatch(message, /draft/)
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

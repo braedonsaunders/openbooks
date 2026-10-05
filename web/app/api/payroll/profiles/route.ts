@@ -899,13 +899,21 @@ export const POST = defineRoute({
                 on er.party_id = p.id and er.org_id = p.org_id
              where p.org_id = ${orgId} and p.id = ${body.employeePartyId}`)).rows[0]
           if (!employee) return NextResponse.json({ error: 'employee is not available' }, { status: 422 })
+          // An unsaved new employee never reaches this route (the drawer
+          // creates the record on Save), so an inactive party is a deactivated
+          // employee, typically a former one.
           if (!employee.partyActive) {
             return NextResponse.json(
-              { error: 'this employee is still a draft — save the employee record first, then set up payroll' },
+              { error: 'this employee is inactive — reactivate them from Employees (turn on Show inactive, open the record, then Actions → Activate) before setting up payroll' },
               { status: 422 },
             )
           }
-          return NextResponse.json({ error: 'employee role is not active for this party' }, { status: 422 })
+          return NextResponse.json(
+            { error: employee.roleActive === false
+              ? 'this person\'s employee role has ended — open them from Employees (turn on Show inactive), choose Edit, then Save to restore the employee role before setting up payroll'
+              : 'this person is not an employee — add them from Employees → New employee, or open their record from Employees and Save to give them the employee role' },
+            { status: 422 },
+          )
         }
         return NextResponse.json({ error: 'pay schedule is not available' }, { status: 422 })
       }
