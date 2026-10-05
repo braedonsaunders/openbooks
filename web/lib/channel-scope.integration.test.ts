@@ -42,32 +42,33 @@ test("a subsidiary-restricted channel manager sees and changes only channels of 
     }));
     session.user = { id: actor, orgId: org.orgId, name: "Channel manager", email: "channels@scratch.test", roles: [], isSuperAdmin: false,
       envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
-    const call = <T extends (...args: never[]) => Promise<Response>>(handler: T, ...args: Parameters<T>) =>
-      withOrgContext(org.orgId, () => handler(...args));
+    type Handler = (request: Request, context?: unknown) => Promise<Response>;
+    const call = (handler: unknown, request: Request, context?: unknown) =>
+      withOrgContext(org.orgId, () => (handler as Handler)(request, context));
     const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
-    const listed = await call(channelsRoute.GET as never, new Request("http://scope.local/api/channels") as never);
+    const listed = await call(channelsRoute.GET, new Request("http://scope.local/api/channels"));
     assert.equal(listed.status, 200);
     assert.deepEqual((await listed.json()).channels.map((channel: { name: string }) => channel.name), ["Child store"]);
 
     // Another entity's channel answers exactly like a missing one, for reads and writes.
-    const read = await call(channelRoute.GET as never, new Request("http://scope.local") as never, params(rootChannel.channel.id) as never);
+    const read = await call(channelRoute.GET, new Request("http://scope.local"), params(rootChannel.channel.id));
     assert.equal(read.status, 404);
-    const patched = await call(channelRoute.PATCH as never, new Request("http://scope.local", {
+    const patched = await call(channelRoute.PATCH, new Request("http://scope.local", {
       method: "PATCH", body: JSON.stringify({ name: "Renamed" }),
-    }) as never, params(rootChannel.channel.id) as never);
+    }), params(rootChannel.channel.id));
     assert.equal(patched.status, 404);
 
     // A visible channel cannot be moved, and a new one cannot be created, into an entity outside the scope.
-    const moved = await call(channelRoute.PATCH as never, new Request("http://scope.local", {
+    const moved = await call(channelRoute.PATCH, new Request("http://scope.local", {
       method: "PATCH", body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
-    }) as never, params(childChannel.channel.id) as never);
+    }), params(childChannel.channel.id));
     assert.equal(moved.status, 403);
     assert.match((await moved.json()).error, /subsidiary your role can access/);
     for (const subsidiaryId of [org.subsidiaryId, null]) {
-      const createdOutside = await call(channelsRoute.POST as never, new Request("http://scope.local/api/channels", {
+      const createdOutside = await call(channelsRoute.POST, new Request("http://scope.local/api/channels", {
         method: "POST", body: JSON.stringify({ kind: "shopify", name: "Elsewhere", subsidiaryId, currency: "USD", externalAccount: `x-${randomUUID()}` }),
-      }) as never);
+      }));
       assert.equal(createdOutside.status, 403);
     }
     const stored = await db.execute<{ name: string; subsidiary_id: string }>(sql`
