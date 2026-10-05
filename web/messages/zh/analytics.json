@@ -172,6 +172,7 @@
       "unknownLevel": "未知的{field}“{level}”——有效值：{levels}。",
       "noFuturePeriods": "会计日历未声明未来期间，预测没有期间名称可显示。请在会计日历中声明未来期间，然后重新打开预测。",
       "shortFuturePeriods": "会计日历仅声明了{have}个未来期间，但{need}个期间的预测跨度需要{need}个名称。请在会计日历中声明更多未来期间。",
+      "shortHorizonHint": "请在预测设置中选择至多 {have} 个期间。",
       "declarePeriods": "声明期间"
     },
     "scenarios": {

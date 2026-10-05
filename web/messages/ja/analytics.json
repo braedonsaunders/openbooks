@@ -172,6 +172,7 @@
       "unknownLevel": "不明な{field}「{level}」 — 有効値：{levels}。",
       "noFuturePeriods": "会計カレンダーに将来期間が登録されていないため、予測に期間名を表示できません。会計カレンダーに将来期間を登録してから予測を開き直してください。",
       "shortFuturePeriods": "会計カレンダーに登録されている将来期間は{have}件のみですが、{need}期間のホライズンには{need}件の名称が必要です。会計カレンダーに将来期間を追加してください。",
+      "shortHorizonHint": "予測設定では{have}以下の期間を選んでください。",
       "declarePeriods": "期間を登録する"
     },
     "scenarios": {

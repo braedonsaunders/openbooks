@@ -172,6 +172,7 @@
       "unknownLevel": "Valor no válido para {field}: „{level}“ — valores válidos: {levels}.",
       "noFuturePeriods": "El calendario fiscal no declara períodos futuros, así que la proyección no tiene nombres de período. Declare períodos futuros en el calendario fiscal y vuelva a abrir el pronóstico.",
       "shortFuturePeriods": "El calendario fiscal declara solo {have} períodos futuros, pero el horizonte de {need} períodos necesita {need} nombres. Declare más períodos futuros en el calendario fiscal.",
+      "shortHorizonHint": "Elija como máximo {have} períodos en los Ajustes del pronóstico.",
       "declarePeriods": "Declarar períodos"
     },
     "scenarios": {

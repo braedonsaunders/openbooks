@@ -172,6 +172,7 @@
       "unknownLevel": "Unbekannte {field} „{level}“ — gültige Werte: {levels}.",
       "noFuturePeriods": "Der Geschäftskalender enthält keine künftigen Perioden, daher hat die Prognose keine Periodennamen. Legen Sie künftige Perioden im Geschäftskalender an und öffnen Sie die Prognose erneut.",
       "shortFuturePeriods": "Der Geschäftskalender enthält nur {have} künftige Perioden, der {need}-Perioden-Horizont braucht aber {need} Namen. Legen Sie weitere künftige Perioden im Geschäftskalender an.",
+      "shortHorizonHint": "Wählen Sie in den Prognose-Einstellungen höchstens {have} Perioden.",
       "declarePeriods": "Perioden anlegen"
     },
     "scenarios": {

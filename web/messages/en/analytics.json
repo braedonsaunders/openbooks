@@ -172,6 +172,7 @@
       "unknownLevel": "Unknown {field} “{level}” — valid values: {levels}.",
       "noFuturePeriods": "The fiscal calendar declares no future periods, so the projection has no period names to show. Declare future periods in the fiscal calendar, then reopen the forecast.",
       "shortFuturePeriods": "The fiscal calendar declares only {have} future periods, but the {need}-period horizon needs {need} names. Declare more future periods in the fiscal calendar.",
+      "shortHorizonHint": "Choose at most {have} periods in Forecast Settings.",
       "declarePeriods": "Declare periods"
     },
     "scenarios": {
