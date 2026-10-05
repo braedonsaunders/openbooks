@@ -34,6 +34,7 @@ export function validateForwardedOptions(args) {
       + 'For one file, use: node ' + TEST_RUNTIME_FLAGS.join(' ')
       + ' --import ./scripts/test-output-drain.mjs --import tsx --import ./scripts/test-hooks.mjs'
       + ' --import ./engine/src/testing/database-bypass.ts --test --test-force-exit --test-concurrency=1 <file>. '
+      + 'For bracketed routes, escape Node test globs with literalTestPath exported by scripts/test-suite.mjs. '
       + 'Pass other forwarded option values as --option=value.', { cause: error })
   }
 }
