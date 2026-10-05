@@ -100,6 +100,7 @@
     "kpiSpendVelocityHint": "{savings} de ahorro potencial · {period}",
     "forensicRisk": "Riesgo forense",
     "forensicRiskHint": "{flagged} marcados · {value} en riesgo · {period}",
+    "forensicRiskExcluded": "Excluye los elementos sin configurar: {detectors}",
     "duplicatePayments": "Pagos duplicados",
     "duplicatePaymentsHint": "{value} en riesgo · {period}"
   },

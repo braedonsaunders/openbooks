@@ -29,18 +29,27 @@ export function RiskWidgetCard({ widgetId, data }: WidgetCardProps): React.React
     case 'kpi-forensic-risk': {
       const tile = data.forensicRisk
       if (tile === null) return null
+      if (!tile.available) {
+        return (
+          <CardShell title={t('widgets.forensicRisk')} icon={<ShieldAlert size={15} />} href="/analytics/sentinel">
+            <UnavailableRow reason={tile.reason} />
+          </CardShell>
+        )
+      }
+      const risk = tile.value
+      const hint = t('widgets.forensicRiskHint', {
+        flagged: risk.flagged,
+        value: money(risk.value, { currency: risk.currency }),
+        period: risk.periodLabel,
+      })
       return (
         <MetricTile
           icon={<ShieldAlert size={15} />}
           label={t('widgets.forensicRisk')}
-          value={String(tile.score)}
+          value={String(risk.score)}
           href="/analytics/sentinel"
-          tone={scoreTone(tile.score)}
-          hint={t('widgets.forensicRiskHint', {
-            flagged: tile.flagged,
-            value: money(tile.value, { currency: tile.currency }),
-            period: tile.periodLabel,
-          })}
+          tone={scoreTone(risk.score)}
+          hint={risk.excluded.length > 0 ? `${hint} ${t('widgets.forensicRiskExcluded', { detectors: risk.excluded.join(', ') })}` : hint}
         />
       )
     }
