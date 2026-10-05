@@ -6,6 +6,8 @@ import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-
 import { lockScopeRow } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
+import { openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
+import { sameCurrencyAllocation } from "@openbooks/engine/src/payments/settlement-policy.ts";
 import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
@@ -118,6 +120,17 @@ export async function redeemStoredValueForInvoice(
             throw invalidInput(`invoice is ${invoice.status}; only an open invoice can be paid with stored value`);
           }
           assertSubsidiaryAccess(context, invoice.subsidiaryId);
+          // The receipt applies against the invoice's open AR line, not the
+          // document: the settlement kernel allocates per open-item line with
+          // rate evidence, so a document reference alone no longer addresses
+          // anything. An invoice with no open line is already paid.
+          const openLine = invoice.partyId
+            ? (await openItemsForParty(invoice.partyId, "ar", orgId, context.authz.allowedSubsidiaryIds))
+              .find((item) => item.documentId === invoice.id)
+            : undefined;
+          if (!openLine) {
+            throw invalidInput("invoice has no open balance; only an unpaid invoice can be paid with stored value");
+          }
           await lockLedgerSetupFence(db, orgId, "shared");
           const created = await createPaymentDocument({
             orgId,
@@ -133,7 +146,7 @@ export async function redeemStoredValueForInvoice(
           await updateDraftPayment(
             created.id,
             {
-              allocations: [{ documentId: invoice.id, amount: input.amount }],
+              allocations: [sameCurrencyAllocation(openLine.lineId, input.amount)],
               storedValueTenders: [{ code, amount: input.amount }],
             },
             context.authz.user.id,
@@ -149,7 +162,7 @@ export async function redeemStoredValueForInvoice(
               status: "pending_approval" as const,
               paymentId: created.id,
               entryId: null,
-              requestId: submission.runId,
+              requestId: submission.runId ?? undefined,
               accountId: resolved.accountId,
               balance: resolved.balanceMinor.toString(),
             };
