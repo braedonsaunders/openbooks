@@ -11,7 +11,7 @@ export const EMPLOYEE_WORKER_COMP_KEY = 'employee-worker-compensation'
 export const EMPLOYEE_WORKER_COMP_DESCRIPTOR: ResourceDescriptor = {
   key: EMPLOYEE_WORKER_COMP_KEY, label: 'Employee worker-compensation groups', group: 'Setup',
   iconKey: 'users', readPermission: 'parties.read', writePermission: 'parties.manage',
-  supportsImport: true, scopedWrite: true, naturalKey: 'employee ID',
+  supportsImport: true, scopedWrite: true, naturalKey: 'employee',
 }
 const FIELDS: ResourceField[] = [
   { key: 'employee', label: 'Employee ID', kind: 'text', required: true },
@@ -46,7 +46,9 @@ export function employeeWorkerCompResource(orgId: string): DataResource {
       if (ctx.orgId !== orgId) throw new Error('Worker-compensation organization does not match the import')
       if (ctx.allowedSubsidiaryIds === undefined) throw new Error('Worker-compensation assignments require an explicit legal-entity scope')
       if (ctx.post) throw new Error('Worker-compensation assignments cannot post payroll — calculate and review the run in Payroll')
-      const duplicates = duplicateImportRowIndexes(rows.map(row => String(row.employee ?? '').trim().toLowerCase() || null))
+      const keys = rows.map(row => String(row.employee ?? '').trim().toLowerCase() || null)
+      if (ctx.recordKeys) await ctx.recordKeys(keys)
+      const duplicates = duplicateImportRowIndexes(keys)
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const resolver = new RefResolver(orgId)
       for (let index = 0; index < rows.length; index++) {
