@@ -3,7 +3,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import pg from "pg";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { DB, setupHarness, withHarness, seedEmployment, setFeatures, grant } from "../testing/hrm-harness.ts";
 import { seedPayrollSchedule, seedPayrollProfile } from "../testing/fixtures.ts";
 import { createCompensationPackage, getCompensationPackage, saveCompensationPackageVersion, transitionCompensationPackageVersion,
@@ -11,6 +11,8 @@ import { createCompensationPackage, getCompensationPackage, saveCompensationPack
 import type { CompensationPackageDefinition } from "./compensation-package.ts";
 import { compensationPackageDefinitionHash } from "./compensation-package.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
+import { compensationPackageEmploymentSource, compensationPackageRunSource, lockCompensationPackageComponents } from './compensation-package-source.ts';
+import { canonicalJson } from '../platform/canonical-json.ts';
 
 const spec = { features: ["payroll", "hrm"], country: "CA", users: [
   { key: "authorId", name: "Package author", handle: "package_author", permissions: ["payroll.manage", "payroll.read", "hrm.compensation.approve"], link: true, partyKey: "authorPartyId" },
@@ -46,6 +48,102 @@ async function assignment(f: Fixture) {
   return saveCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id,
     employmentId: f.employmentId, effectiveFrom: "2026-01-01", effectiveTo: null, inputs: { allowance: "310.00" }, reason: "Employee package terms" });
 }
+
+test('payroll package sources require an effective approved employment assignment and retain exact native limits', { skip: !DB }, async () => {
+  await withHarness(setup, async f => {
+    await approveVersion(f);
+    const saved = await assignment(f);
+    const query = { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: '2026-01-01', periodEnd: '2026-01-31' };
+    assert.deepEqual(await compensationPackageEmploymentSource(db, query), [], 'a draft assignment must not create payroll defaults');
+    const base = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Independent employee terms' };
+    const submitted = await transitionCompensationPackageAssignment({ ...base, expectedRevision: saved.revision, action: 'submit' });
+    assert.deepEqual(await compensationPackageEmploymentSource(db, query), [], 'submission is not authority to pay');
+    await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+    const updated = await db.execute(sql`update pay_components set basis_cap_hours_per_period='40.25',
+      basis_cap_amount_per_period='1234.5678',basis_cap_amount_per_year='249999.1234'
+      where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
+    assert.equal(updated.rows.length, 1);
+    const [source] = await compensationPackageEmploymentSource(db, query);
+    assert.ok(source);
+    assert.equal(source.assignmentId, saved.id);
+    assert.equal(source.employmentId, f.employmentId);
+    assert.equal(source.employeePartyId, f.workerPartyId);
+    assert.equal(source.subsidiaryId, f.org.subsidiaryId);
+    assert.equal(source.definitionHash, f.version.definitionHash);
+    assert.deepEqual(source.inputs, { allowance: '310' });
+    const component = source.components[0]!;
+    assert.equal(component.basisCapHoursPerPeriod, '40.25', 'native package hours caps must remain exact decimal text');
+    assert.equal(component.basisCapAmountPerPeriod, '1234.5678', 'native package period caps must remain exact decimal text');
+    assert.equal(component.basisCapAmountPerYear, '249999.1234', 'native package annual caps must remain exact decimal text');
+    assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, allowedSubsidiaryIds: new Set() }), []);
+    assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, allowedSubsidiaryIds: new Set([randomUUID()]) }), []);
+    assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, employmentId: randomUUID() }), [], 'a different employment never inherits this assignment');
+    assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, periodStart: '2025-12-01', periodEnd: '2025-12-31' }), []);
+    const documentId = randomUUID();
+    await db.execute(sql`insert into documents(org_id,id,kind,document_number,subsidiary_id,document_date,currency,status,created_by,updated_by)
+      values(${f.org.orgId},${documentId},'pay_run',${`PAY-${documentId}`},${f.org.subsidiaryId},'2026-01-31','CAD','draft',${f.authorId},${f.authorId})`);
+    await db.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,created_by,updated_by)
+      values(${documentId},${f.org.orgId},${f.scheduleId},'2026-01-01','2026-01-31','2026-01-31',2026,${f.authorId},${f.authorId})`);
+    assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, documentId), [], 'approved terms outside the calculated employee population cannot enter its source evidence');
+    await db.execute(sql`insert into pay_stubs(org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,country,country_source,currency_code,created_by,updated_by)
+      values(${f.org.orgId},${documentId},${f.workerPartyId},${f.employmentId},'ON',12,'2026-01-31',2026,'CA','calculation','CAD',${f.authorId},${f.authorId})`);
+    assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, documentId), [source], 'run evidence resolves the exact employment preserved on its native stub');
+    assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, documentId, new Set()), []);
+    assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, randomUUID()), []);
+  });
+});
+
+test('future package proposals and retirement preserve pinned terms while native component changes alter payroll evidence', { skip: !DB }, async () => {
+  await withHarness(setup, async f => {
+    await approveVersion(f);
+    const saved = await assignment(f);
+    const base = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Approved employee coverage' };
+    const submitted = await transitionCompensationPackageAssignment({ ...base, expectedRevision: saved.revision, action: 'submit' });
+    const active = await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+    const query = { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: '2026-01-01', periodEnd: '2026-01-31' };
+    const before = await compensationPackageEmploymentSource(db, query);
+    await saveCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id,
+      effectiveFrom: '2026-01-01', effectiveTo: null, definition: { ...f.definition, rules: f.definition.rules.map(rule => ({ ...rule, expression: 'allowance * 2' })) }, reason: 'Separate proposed terms' });
+    await updateCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, expectedRevision: 1,
+      name: f.pack.name, description: null, retire: true, reason: 'Stop new assignments while retaining obligations' });
+    assert.deepEqual(await compensationPackageEmploymentSource(db, query), before);
+    const changed = await db.execute(sql`update pay_components set vacationable=false where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
+    assert.equal(changed.rows.length, 1);
+    assert.notEqual(canonicalJson(await compensationPackageEmploymentSource(db, query)), canonicalJson(before), 'changed native financial flags must invalidate source equality');
+    await transitionCompensationPackageAssignment({ ...base, expectedRevision: active.revision, action: 'end', effectiveTo: '2026-01-15' });
+    assert.equal((await compensationPackageEmploymentSource(db, query))[0]!.effectiveTo, '2026-01-15');
+    assert.deepEqual(await compensationPackageEmploymentSource(db, { ...query, periodStart: '2026-01-16' }), [], 'an ended assignment owes no defaults outside its preserved window');
+  });
+});
+
+test('native package component and classification edits cannot cross the held payroll evidence fence', { skip: !DB }, async () => {
+  await withHarness(setup, async f => {
+    await approveVersion(f);
+    const saved = await assignment(f);
+    const base = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Independent employee terms' };
+    const submitted = await transitionCompensationPackageAssignment({ ...base, expectedRevision: saved.revision, action: 'submit' });
+    await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+    assert.ok(process.env.OPENBOOKS_TEST_ADMIN_DB_URL, 'the component fence proof requires the named isolated database');
+    const client = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL });
+    await client.connect();
+    try {
+      await withOrgTransaction(f.org.orgId, async () => {
+        const source = await compensationPackageEmploymentSource(db, { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: '2026-01-01', periodEnd: '2026-01-31' });
+        await lockCompensationPackageComponents(db, f.org.orgId, source);
+        for (const statement of [
+          'update pay_components set basis_cap_amount_per_year=1000 where org_id=$1 and id=$2',
+          'update pay_component_earning_classifications set statutory_reporting_category=statutory_reporting_category where org_id=$1 and pay_component_id=$2',
+        ]) {
+          await client.query('begin');
+          await client.query("select set_config('app.current_org',$1,true),set_config('lock_timeout','100ms',true)", [f.org.orgId]);
+          await assert.rejects(client.query(statement, [f.org.orgId, f.componentId]), (error: unknown) =>
+            error instanceof Error && 'code' in error && error.code === '55P03', 'native component policy must remain fenced until payroll finishes comparing its evidence');
+          await client.query('rollback');
+        }
+      });
+    } finally { await client.query('rollback'); await client.end(); }
+  });
+});
 
 test("package approval requires independent user and person identities, freezes terms and preserves complete audit", { skip: !DB }, async () => {
   await withHarness(setup, async (f) => {
