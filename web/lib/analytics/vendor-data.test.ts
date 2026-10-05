@@ -81,6 +81,7 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     const fenceVendor = randomUUID();
     const seedBill = async (
       docNum: string, party: string, billDate: string, payDate: string, docDue: string | null,
+      settle = true,
     ): Promise<void> => {
       const docId = randomUUID();
       const billEntry = randomUUID();
@@ -95,6 +96,9 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
         insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
         values (${billLine}, ${org.orgId}, ${billEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${party}, true, '-100', 'CAD', '-100', 1),
                (${randomUUID()}, ${org.orgId}, ${billEntry}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${party}, false, '100', 'CAD', '100', 1)`);
+      // An unposted bill stays a draft throughout: no posting, no payment,
+      // no settlement — it must stay outside every fenced figure.
+      if (!settle) return;
       await db.execute(sql`
         update journal_entries set status = 'posted', posted_at = now() where id = ${billEntry}`);
       await db.execute(sql`
@@ -147,9 +151,13 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       // Bare Vendor: no document due date and no payment terms → excluded from on-time, counted.
       await seedBill("BILL-BARE", bareVendor, "2026-07-02", "2026-07-16", null);
       // Fence Vendor: a June bill and a July bill — only the July one falls
-      // inside the report window, so the bill count fences the period.
+      // inside the report window, so the bill count fences the period. A
+      // settled August bill falls past the window end, and an in-window July
+      // draft was never posted: both must stay outside every fenced figure.
       await seedBill("BILL-FENCE-JUN", fenceVendor, "2026-06-10", "2026-07-05", null);
       await seedBill("BILL-FENCE-JUL", fenceVendor, "2026-07-05", "2026-07-20", null);
+      await seedBill("BILL-FENCE-AUG", fenceVendor, "2026-08-05", "2026-08-20", null);
+      await seedBill("BILL-FENCE-DRAFT", fenceVendor, "2026-07-12", "2026-07-12", null, false);
       // Quiet Vendor: spend with no settled bills at all → unrated for lack
       // of payments, not for lack of dates.
       const spendEntry = randomUUID();
@@ -217,6 +225,9 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     assert.ok(fenceRow, "the fencing vendor must be present");
     assert.equal(fenceRow.bills, 1, "only the in-window bill counts");
     assert.equal(fenceRow.lastBill, "2026-07-05");
+    assert.equal(fenceRow.paidBills, 1, "neither the post-window nor the draft bill counts as paid");
+    assert.equal(fenceRow.spend, "100.0000", "only the in-window bill's spend counts");
+    assert.equal(fenceRow.avgBill, "100.0000", "one in-window 100 bill averages to exactly 100");
     const quietRow = data.rows.find((candidate) => candidate.id === quietVendor);
     assert.ok(quietRow, "the vendor with spend but no payments must be present");
     assert.equal(quietRow.paidBills, 0);
@@ -236,6 +247,11 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       `spend shares must add up over the vendors shown, got ${shareSum}`,
     );
     assert.equal(data.totals.undatedBills, 1, "undated bills count only vendors actually shown");
+    // In-window spend is three 100 bills plus Quiet's 250 journal spend; the
+    // bill count is three posted in-window documents (Quiet keeps none).
+    assert.equal(data.totals.spend, "550.0000");
+    assert.equal(data.totals.bills, 3);
+    assert.equal(data.totals.avgBill, "183.3333", "550 over 3 bills averages to exactly 183.3333");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
