@@ -38,6 +38,8 @@ const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default as Record<string, unknown>;
 const { QuoteSignForm } = await import("./QuoteSignForm");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -83,7 +85,11 @@ async function mountForm(
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<QuoteSignForm token="test-token" />);
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <QuoteSignForm token="test-token" />
+      </NextIntlClientProvider>,
+    );
     await tick();
     await tick();
   });

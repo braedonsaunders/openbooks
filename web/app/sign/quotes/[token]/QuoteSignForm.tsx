@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { createMoneyFormatter } from '@/lib/money-format'
 
 /**
  * The customer's side of quote-to-cash: review the quoted subscription,
@@ -35,31 +37,36 @@ interface QuoteLine {
   } | null
 }
 
+/**
+ * House money formatting on the exact decimal strings: the formatter keeps
+ * numeric strings out of binary floats, so a quoted total renders exactly
+ * what the engine priced.
+ */
 function money(amount: string, currency: string): string {
-  const units = Number(amount)
-  if (!Number.isFinite(units)) return `${amount} ${currency}`
-  return new Intl.NumberFormat('en', { style: 'currency', currency }).format(units)
+  return createMoneyFormatter('en', currency).money(amount, { currency })
 }
 
 export function QuoteSignForm({ token }: { token: string }) {
+  const t = useTranslations('estimates')
   const [quote, setQuote] = useState<QuoteLine | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [consented, setConsented] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+  const [activatedCount, setActivatedCount] = useState(0)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/sign/quotes/${encodeURIComponent(token)}`)
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null
-      setRefusal(typeof body?.error === 'string' && body.error ? body.error : 'This signing link is not available.')
+      setRefusal(typeof body?.error === 'string' && body.error ? body.error : t('quoteSign.unavailable'))
       return
     }
     const body = (await res.json()) as QuoteLine
     setQuote(body)
     setName((current) => current || body.signature?.signerName || '')
-  }, [token])
+  }, [token, t])
 
   useEffect(() => {
     queueMicrotask(() => { void load() })
@@ -77,13 +84,18 @@ export function QuoteSignForm({ token }: { token: string }) {
       })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null
-        setRefusal(typeof body?.error === 'string' && body.error ? body.error : 'This signing link is not available.')
+        setRefusal(typeof body?.error === 'string' && body.error ? body.error : t('quoteSign.unavailable'))
         return
       }
       if (action === 'decline') {
-        setRefusal('You declined this quote. Your decline is recorded — ask the sender for a new link if anything changes.')
+        setRefusal(t('quoteSign.declinedConfirm'))
         return
       }
+      // The confirmation renders what the POST actually did: a synchronously
+      // activated subscription reads as active, otherwise the signature alone
+      // stands — never a promised future sender action without its mechanism.
+      const signed = (await res.json().catch(() => null)) as { subscriptionIds?: unknown } | null
+      setActivatedCount(Array.isArray(signed?.subscriptionIds) ? signed.subscriptionIds.length : 0)
       setDone(true)
     } finally {
       setBusy(false)
@@ -93,7 +105,7 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (refusal) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="font-medium text-slate-900 dark:text-slate-100">This link cannot be used</p>
+        <p className="font-medium text-slate-900 dark:text-slate-100">{t('quoteSign.unavailableTitle')}</p>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{refusal}</p>
       </div>
     )
@@ -102,9 +114,9 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (done) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Signed — thank you</p>
+        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('quoteSign.signedTitle')}</p>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          Your signature is recorded. The sender will activate your subscription and confirm the start date.
+          {activatedCount > 0 ? t('quoteSign.signedActiveBody') : t('quoteSign.signedBody')}
         </p>
       </div>
     )
@@ -113,7 +125,7 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (!quote) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm text-slate-500">Loading your quote…</p>
+        <p className="text-sm text-slate-500">{t('quoteSign.loading')}</p>
       </div>
     )
   }
@@ -121,8 +133,8 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (!quote.signature) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="font-medium text-slate-900 dark:text-slate-100">This link has no active signing request</p>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Ask the sender to re-send the signing link.</p>
+        <p className="font-medium text-slate-900 dark:text-slate-100">{t('quoteSign.missingTitle')}</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t('quoteSign.resendBody')}</p>
       </div>
     )
   }
@@ -130,9 +142,9 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (quote.signature.status === 'signed') {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Signed — thank you</p>
+        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('quoteSign.signedTitle')}</p>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          This link already recorded a signature. The sender will activate your subscription and confirm the start date.
+          {t('quoteSign.signedAgainBody')}
         </p>
       </div>
     )
@@ -141,9 +153,9 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (quote.signature.status === 'declined') {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="font-medium text-slate-900 dark:text-slate-100">You declined this quote</p>
+        <p className="font-medium text-slate-900 dark:text-slate-100">{t('quoteSign.declinedTitle')}</p>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          Your decline is recorded. Ask the sender for a new link if anything changes.
+          {t('quoteSign.declinedBody')}
         </p>
       </div>
     )
@@ -152,8 +164,8 @@ export function QuoteSignForm({ token }: { token: string }) {
   if (quote.signature.status !== 'sent' && quote.signature.status !== 'viewed') {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="font-medium text-slate-900 dark:text-slate-100">This link is no longer open</p>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Ask the sender to re-send the signing link.</p>
+        <p className="font-medium text-slate-900 dark:text-slate-100">{t('quoteSign.closedTitle')}</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t('quoteSign.resendBody')}</p>
       </div>
     )
   }
@@ -161,10 +173,10 @@ export function QuoteSignForm({ token }: { token: string }) {
   return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div>
-        <p className="text-xs uppercase tracking-wide text-slate-500">Quote {quote.quoteNumber}</p>
+        <p className="text-xs uppercase tracking-wide text-slate-500">{t('quoteSign.quoteEyebrow', { number: quote.quoteNumber })}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums">{money(quote.tcv, quote.currency)}</p>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          {quote.terms.length} subscription{quote.terms.length === 1 ? '' : 's'} · quoted {quote.documentDate}
+          {t('quoteSign.quotedLine', { count: quote.terms.length, date: quote.documentDate })}
         </p>
       </div>
       <ul className="divide-y rounded-lg border">
@@ -181,14 +193,14 @@ export function QuoteSignForm({ token }: { token: string }) {
               ))}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Starts {term.startRule.replaceAll('_', ' ')} · billed {term.billingTiming}
+              {t('quoteSign.startsBilled', { start: term.startRule.replaceAll('_', ' '), timing: term.billingTiming })}
             </p>
           </li>
         ))}
       </ul>
       <p className="text-sm text-slate-600 dark:text-slate-400">{quote.signature.consentText}</p>
       <label className="block text-sm">
-        <span className="mb-1 block font-medium">Your full name (as signature)</span>
+        <span className="mb-1 block font-medium">{t('quoteSign.nameLabel')}</span>
         <input
           className="w-full rounded-md border px-2 py-1.5"
           value={name}
@@ -203,9 +215,9 @@ export function QuoteSignForm({ token }: { token: string }) {
           checked={consented}
           onChange={(e) => setConsented(e.target.checked)}
         />
-        <span>I accept this quote and the subscription it describes, starting on the stated date.</span>
+        <span>{t('quoteSign.acceptLabel')}</span>
       </label>
-      <p className="text-xs text-slate-500">The link expires {quote.signature.expiresAt.slice(0, 10)} and works once.</p>
+      <p className="text-xs text-slate-500">{t('quoteSign.expiryNote', { date: quote.signature.expiresAt.slice(0, 10) })}</p>
       <div className="flex gap-2">
         <button
           type="button"
@@ -213,7 +225,7 @@ export function QuoteSignForm({ token }: { token: string }) {
           onClick={() => void submit('sign')}
           className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Signing…' : 'Sign this quote'}
+          {busy ? t('quoteSign.signing') : t('quoteSign.sign')}
         </button>
         <button
           type="button"
@@ -221,7 +233,7 @@ export function QuoteSignForm({ token }: { token: string }) {
           onClick={() => void submit('decline')}
           className="rounded-md border px-4 py-2 text-sm"
         >
-          Decline
+          {t('quoteSign.decline')}
         </button>
       </div>
     </div>

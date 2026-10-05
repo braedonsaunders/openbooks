@@ -75,5 +75,29 @@
     "colQuantity": "Quantity",
     "colEscalator": "Escalator %",
     "termNeedsLineAndPlan": "Pick a quote line and a plan first."
+  },
+  "quoteSign": {
+    "unavailableTitle": "This link cannot be used",
+    "unavailable": "This signing link is not available.",
+    "signedTitle": "Signed — thank you",
+    "signedBody": "Your signature is recorded.",
+    "signedAgainBody": "This link already recorded a signature.",
+    "declinedTitle": "You declined this quote",
+    "declinedBody": "Your decline is recorded. Ask the sender for a new link if anything changes.",
+    "declinedConfirm": "You declined this quote. Your decline is recorded — ask the sender for a new link if anything changes.",
+    "closedTitle": "This link is no longer open",
+    "missingTitle": "This link has no active signing request",
+    "resendBody": "Ask the sender to re-send the signing link.",
+    "loading": "Loading your quote…",
+    "quoteEyebrow": "Quote {number}",
+    "quotedLine": "{count, plural, one {# subscription} other {# subscriptions}} · quoted {date}",
+    "startsBilled": "Starts {start} · billed {timing}",
+    "nameLabel": "Your full name (as signature)",
+    "acceptLabel": "I accept this quote and the subscription it describes, starting on the stated date.",
+    "expiryNote": "The link expires {date} and works once.",
+    "sign": "Sign this quote",
+    "signing": "Signing…",
+    "decline": "Decline",
+    "signedActiveBody": "Your signature is recorded and your subscription is now active."
   }
 }

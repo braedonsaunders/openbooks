@@ -17,8 +17,10 @@ const signBody = z.object({
 /**
  * Public quote signing endpoint — possession-authenticated by the link
  * token, no session. GET opens the page state (recording first view);
- * POST signs or declines. Every use re-validates the request row:
- * voided, expired, and consumed links refuse by name. No feature gate:
+ * POST signs or declines. Every use re-validates the request row: invalid
+ * and expired links refuse by name on both methods; voided, signed and
+ * declined links refuse by name on POST and resolve their status on GET so
+ * the page can name the remedy. No feature gate:
  * a link the org sent must explain itself even after the switch flips.
  */
 export const GET = defineRoute({

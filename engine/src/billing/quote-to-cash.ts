@@ -743,6 +743,8 @@ export interface SignatureView {
   quoteId: string;
   status: string;
   signerName: string;
+  signerEmail: string;
+  expiresAt: Date;
   documentHash: string;
   consentText: string | null;
 }
@@ -774,6 +776,8 @@ export async function viewQuoteSignature(token: string): Promise<SignatureView> 
       quoteId: request.subjectId,
       status: request.status,
       signerName: request.signerName,
+      signerEmail: request.signerEmail,
+      expiresAt: request.expiresAt,
       documentHash: request.documentHash,
       consentText: request.consentText,
     };
@@ -1323,9 +1327,9 @@ export interface PublicQuoteSignTerm {
   tcv: string;
 }
 
-/** Everything the hosted signing page renders. Null signature means no open
- * signing request remains — the page refuses with a re-send remedy instead
- * of rendering a form that cannot sign. */
+/** Everything the hosted signing page renders. The signature is the exact
+ * request the token addresses — its status tells the page whether to offer
+ * the form (sent/viewed) or a named remedy, never a borrowed identity. */
 export interface PublicQuoteSignView {
   quoteNumber: string;
   status: string;
@@ -1340,15 +1344,19 @@ export interface PublicQuoteSignView {
     signerEmail: string;
     expiresAt: string;
     consentText: string;
-  } | null;
+  };
 }
 
 /**
  * The anonymous signing page's view: the possession token both authenticates
- * and scopes (no session, no org parameter). Re-validates by name first —
- * voided, expired and consumed links refuse through viewQuoteSignature —
- * then values the quoted terms off the same preview the drawer shows, so the
- * customer signs exactly what the sender priced.
+ * and scopes (no session, no org parameter). Invalid and expired links
+ * refuse by name; every other link resolves its own request state — voided,
+ * consumed, signed and declined links return their status and the page
+ * names the remedy instead of rendering a form. The signature fields come
+ * from the exact request the token addresses, snapshotted with the terms:
+ * a newer resend never leaks its invite identity into an older link.
+ * Stored consent is authoritative — a request without one refuses rather
+ * than borrowing current text.
  */
 export async function publicQuoteSignView(token: string): Promise<PublicQuoteSignView> {
   const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, token);
@@ -1357,7 +1365,9 @@ export async function publicQuoteSignView(token: string): Promise<PublicQuoteSig
   }
   const view = await viewQuoteSignature(token);
   const preview = await quoteCashPreview(claims.orgId, view.quoteId);
-  const signature = preview.signature;
+  if (!view.consentText) {
+    throw new QuoteToCashError("This request predates the recorded consent — ask the sender to re-send it");
+  }
   return {
     quoteNumber: preview.quote.documentNumber,
     status: preview.quote.status,
@@ -1377,15 +1387,13 @@ export async function publicQuoteSignView(token: string): Promise<PublicQuoteSig
       tcv: valuation.schedule.tcv,
     })),
     tcv: preview.tcv,
-    signature: signature
-      ? {
-          status: signature.status,
-          signerName: signature.signerName,
-          signerEmail: signature.signerEmail,
-          expiresAt: signature.expiresAt.toISOString(),
-          consentText: signature.consentText ?? QUOTE_SIGNATURE_CONSENT,
-        }
-      : null,
+    signature: {
+      status: view.status,
+      signerName: view.signerName,
+      signerEmail: view.signerEmail,
+      expiresAt: view.expiresAt.toISOString(),
+      consentText: view.consentText,
+    },
   };
 }
 

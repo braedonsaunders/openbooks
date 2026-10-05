@@ -75,5 +75,29 @@
     "colQuantity": "Menge",
     "colEscalator": "Staffelung %",
     "termNeedsLineAndPlan": "Wählen Sie zuerst Angebotsposition und Plan."
+  },
+  "quoteSign": {
+    "unavailableTitle": "Dieser Link kann nicht verwendet werden",
+    "unavailable": "Dieser Signierlink ist nicht verfügbar.",
+    "signedTitle": "Signiert — danke",
+    "signedBody": "Ihre Unterschrift ist erfasst.",
+    "signedActiveBody": "Ihre Unterschrift ist erfasst und Ihr Abonnement ist jetzt aktiv.",
+    "signedAgainBody": "Dieser Link hat bereits eine Unterschrift erfasst.",
+    "declinedTitle": "Sie haben dieses Angebot abgelehnt",
+    "declinedBody": "Ihre Ablehnung ist erfasst. Bitten Sie den Absender um einen neuen Link, falls sich etwas ändert.",
+    "declinedConfirm": "Sie haben dieses Angebot abgelehnt. Ihre Ablehnung ist erfasst — bitten Sie den Absender um einen neuen Link, falls sich etwas ändert.",
+    "closedTitle": "Dieser Link ist nicht mehr offen",
+    "missingTitle": "Dieser Link hat keine aktive Signieranfrage",
+    "resendBody": "Bitten Sie den Absender, den Signierlink erneut zu senden.",
+    "loading": "Ihr Angebot wird geladen…",
+    "quoteEyebrow": "Angebot {number}",
+    "quotedLine": "{count, plural, one {# Abonnement} other {# Abonnements}} · angeboten am {date}",
+    "startsBilled": "Beginnt {start} · abgerechnet {timing}",
+    "nameLabel": "Ihr vollständiger Name (als Unterschrift)",
+    "acceptLabel": "Ich akzeptiere dieses Angebot und das darin beschriebene Abonnement mit dem genannten Startdatum.",
+    "expiryNote": "Der Link läuft am {date} ab und funktioniert einmal.",
+    "sign": "Angebot signieren",
+    "signing": "Wird signiert…",
+    "decline": "Ablehnen"
   }
 }

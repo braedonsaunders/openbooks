@@ -75,5 +75,29 @@
     "colQuantity": "数量",
     "colEscalator": "递增 %",
     "termNeedsLineAndPlan": "请先选择报价行和方案。"
+  },
+  "quoteSign": {
+    "unavailableTitle": "此链接无法使用",
+    "unavailable": "此签名链接不可用。",
+    "signedTitle": "已签署 — 谢谢",
+    "signedBody": "您的签名已记录。",
+    "signedActiveBody": "您的签名已记录，订阅现已生效。",
+    "signedAgainBody": "此链接已记录过签名。",
+    "declinedTitle": "您已拒绝此报价",
+    "declinedBody": "您的拒绝已记录。如有变化，请向发送者索取新链接。",
+    "declinedConfirm": "您已拒绝此报价。您的拒绝已记录 — 如有变化，请向发送者索取新链接。",
+    "closedTitle": "此链接已不再开放",
+    "missingTitle": "此链接没有有效的签名请求",
+    "resendBody": "请要求发送者重新发送签名链接。",
+    "loading": "正在加载您的报价…",
+    "quoteEyebrow": "报价 {number}",
+    "quotedLine": "{count, plural, other {# 个订阅}} · 报价日期 {date}",
+    "startsBilled": "开始 {start} · 计费 {timing}",
+    "nameLabel": "您的全名（作为签名）",
+    "acceptLabel": "我接受此报价及其所述订阅，自所述开始日期起生效。",
+    "expiryNote": "链接将于 {date} 过期，仅可使用一次。",
+    "sign": "签署此报价",
+    "signing": "签署中…",
+    "decline": "拒绝"
   }
 }
