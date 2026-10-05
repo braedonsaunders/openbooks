@@ -258,15 +258,15 @@ async function sideOpenItems(
   }));
 }
 
-type SettlementStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number };
+export type SettlementStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number | null };
 
 /**
  * Per-party avg days (+ σ) from invoice/bill date to the applied payment,
  * from party_payment_stats — the rollup maintained at the settlement event,
  * holding sufficient statistics per (party, settlement day) so the trailing
  * 365-day window is an exact range scan. Global average weighted by data
- * point (not an average of per-party averages); 45-day default with no
- * history.
+ * point (not an average of per-party averages); null with no history
+ * anywhere — a missing input is never a fabricated default.
  */
 async function settlementStats(
   orgId: string,
@@ -302,7 +302,7 @@ async function settlementStats(
     total += avg * n;
     count += n;
   }
-  return { map, globalAvg: count > 0 ? Math.round(total / count) : 45 };
+  return { map, globalAvg: count > 0 ? Math.round(total / count) : null };
 }
 
 type ForecastEntry = {
@@ -316,21 +316,32 @@ type ForecastEntry = {
   partyName: string;
 };
 
-/** Predict collection/payment date for one open item. */
-function predictItem(
+/**
+ * Predict collection/payment date for one open item. Party history predicts
+ * from the transaction date; without it the global average applies; with
+ * neither, the contractual due date is the prediction — a fact, not a
+ * fallback. An item with neither history nor a due date is not placed
+ * (null): the caller leaves it out of the week grid rather than inventing
+ * a date for it.
+ */
+export function predictItem(
   item: OpenItem,
   asOf: string,
   stats: SettlementStats,
-): { date: string; method: string } {
-  let date: string;
+): { date: string | null; method: string } {
+  let date: string | null;
   let method = "Global avg";
   const s = item.partyId ? stats.map.get(item.partyId) : undefined;
   if (s) {
     const buffer = s.sd ? Math.ceil(s.sd * 0.5) : 0;
     date = addCalendarDays(item.tranDate, Math.round(s.avg) + buffer);
     method = "Statistical";
-  } else {
+  } else if (stats.globalAvg !== null) {
     date = addCalendarDays(item.tranDate, stats.globalAvg);
+  } else {
+    date = item.dueDate;
+    method = "Due date";
+    if (date === null) return { date: null, method: "Unplaced" };
   }
   // Floor at due date.
   if (item.dueDate && date < item.dueDate) {
@@ -362,6 +373,8 @@ function scheduleByWeek(
   const byWeek = new Map<string, ForecastEntry[]>();
   for (const item of items) {
     const { date, method } = predictItem(item, asOf, stats);
+    // No history and no due date: unplaced, never invented into a week.
+    if (date === null) continue;
     if (date < start || date > end) continue;
     const wk = weekStart(date);
     const entry: ForecastEntry = {
