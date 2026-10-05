@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import {
   assertUnrestrictedScope,
   subsidiaryScopeAllows,
@@ -32,12 +33,18 @@ export {
  * A user without an assigned role has no role-granted permissions.
  */
 
-export async function getAuthz(): Promise<Authz | null> {
-  const verified = requestAuthzContext();
-  if (verified) return verified;
+// Server components in one render share the same authority snapshot. React
+// discards this cache for every request; API and background calls remain live.
+const renderAuthz = cache(async (): Promise<Authz | null> => {
   const user = await currentUser();
   if (!user) return null;
   return resolveUserAuthz(user);
+});
+
+export async function getAuthz(): Promise<Authz | null> {
+  const verified = requestAuthzContext();
+  if (verified) return verified;
+  return renderAuthz();
 }
 
 export class ForbiddenError extends Error {
