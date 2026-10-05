@@ -236,10 +236,8 @@ export function importHistorySpec(): PageSpec {
           }),
         ],
       }, [
-        widget('list-toolbar', {
-          basePath: '/data/import/history',
-          currentParams: f('currentParams'),
-          search: f('search'),
+        widget('search-input', {
+          placeholder: field('search.placeholder'),
         }),
       ]),
       pagination({
