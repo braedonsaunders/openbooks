@@ -26,6 +26,7 @@
     "item_family": "产品系列",
     "account": "科目",
     "bank_transaction": "银行交易",
+    "demand_suggestion": "计划建议",
     "inventory_onhand": "现有库存",
     "inventory_movement": "库存移动",
     "webhook_endpoint": "Webhook 端点",

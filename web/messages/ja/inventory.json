@@ -13,7 +13,8 @@
     "movements": "変動",
     "locations": "保管場所",
     "bom": "部品表",
-    "counts": "カウント"
+    "counts": "カウント",
+    "planning": "計画"
   },
   "bom": {
     "columns": {

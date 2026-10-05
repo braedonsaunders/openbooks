@@ -922,6 +922,91 @@ const SOURCES: Record<string, EntityListSource> = {
     extraSelect: sql`oh.item_id`,
     rowHref: (row) => `/items?item=${row.item_id}`,
   },
+  demand_suggestion: {
+    recordType: 'demand_suggestion',
+    table: 'demand_plan_suggestions',
+    alias: 's',
+    readPermission: 'inventory.plan',
+    baseJoins: sql`join demand_forecast_runs r on r.org_id = s.org_id and r.id = s.run_id
+      join items i on i.org_id = s.org_id and i.id = s.item_id
+      join stock_locations sl on sl.org_id = s.org_id and sl.id = s.stock_location_id
+      left join subsidiaries sub on sub.org_id = s.org_id and sub.id::text = r.parameters->>'subsidiaryId'
+      left join demand_item_policies pol on pol.org_id = s.org_id and pol.item_id = s.item_id
+      left join parties pty on pty.org_id = s.org_id and pty.id = pol.preferred_supplier_id
+      left join lateral (
+        -- The receipt-vendor fallback reads the same most-recent live
+        -- receipt the planning engine resolves, so the list and the drawer
+        -- never name different suppliers for one suggestion.
+        select p2.display_name as name
+          from inventory_movements m
+          join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+          join documents d on d.id = l.document_id and d.org_id = l.org_id
+          join parties p2 on p2.id = d.party_id and p2.org_id = d.org_id
+         where m.org_id = s.org_id and m.item_id = s.item_id
+           and m.kind = 'receipt' and m.status = 'posted'
+           and m.reverses_movement_id is null
+           and not exists (
+             select 1 from inventory_movements reversal
+              where reversal.org_id = m.org_id and reversal.reverses_movement_id = m.id)
+           and d.kind in ('purchase_receipt', 'vendor_bill')
+         order by m.moved_at desc, m.id desc limit 1) receipt on true
+      left join lateral (
+        select coalesce(jsonb_agg(d.qty order by d.week_start), '[]'::jsonb) as weeks
+          from (
+            select date_trunc('week', m.moved_at)::date as week_start,
+                   sum(case when m.kind = 'issue' then -m.quantity else 0 end) as qty
+              from inventory_movements m
+             where m.org_id = s.org_id and m.item_id = s.item_id
+               and m.stock_location_id = s.stock_location_id and m.status = 'posted'
+               and m.moved_at >= (r.as_of - 83) and m.moved_at < (r.as_of + 1)
+             group by 1) d) trend on true`,
+    countJoins: sql`join demand_forecast_runs r on r.org_id = s.org_id and r.id = s.run_id`,
+    builtInExpr: {
+      item_name: sql`i.name`, item_code: sql`i.code`, item_id: sql`s.item_id`,
+      location_code: sql`sl.code`, subsidiary_name: sql`sub.name`,
+      action: sql`s.action`, quantity: sql`s.quantity::text`,
+      supplier_name: sql`coalesce(pty.display_name, receipt.name)`,
+      due_date: sql`s.due_date::text`, days_of_cover: sql`s.days_of_cover::text`,
+      trend: sql`trend.weeks`, status: sql`s.status`,
+      forecast_qty: sql`s.forecast_qty::text`, projected_supply: sql`s.projected_supply::text`,
+      run_number: sql`r.number`,
+    },
+    sorts: {
+      item: sql`i.name`, location: sql`sl.code`, subsidiary: sql`sub.name`, action: sql`s.action`,
+      quantity: sql`s.quantity`, supplier: sql`coalesce(pty.display_name, receipt.name)`,
+      due: sql`s.due_date`, cover: sql`s.days_of_cover`, status: sql`s.status`,
+    },
+    defaultSort: sql`s.due_date, i.name`,
+    statusExpr: sql`s.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'action', filterKey: 'action' }],
+    where: (view, adhoc, orgId, allowed) => {
+      const parts: SQL[] = [
+        sql`s.org_id=${orgId}`,
+        sql`and r.status='complete'`,
+        subsidiaryVisibleFilter(sql`(r.parameters->>'subsidiaryId')::uuid`, allowed ?? null),
+      ]
+      for (const filter of view.filters) {
+        if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, sql`s.status`, ['suggested', 'confirmed', 'converted', 'dismissed'])
+        else if (filter.key === 'action') pushNonprofitStatusFilter(parts, { ...filter, key: 'status' }, sql`s.action`, ['buy', 'transfer'])
+        else parts.push(sql`and false`)
+      }
+      if (adhoc.q) parts.push(sql`and (i.name ilike ${`%${adhoc.q}%`} or i.code ilike ${`%${adhoc.q}%`} or coalesce(pty.display_name, receipt.name) ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters?.status) parts.push(sql`and s.status=${adhoc.filters.status}`)
+      if (adhoc.filters?.action) parts.push(sql`and s.action=${adhoc.filters.action}`)
+      if (adhoc.filters?.item_id) parts.push(sql`and s.item_id=${adhoc.filters.item_id}`)
+      if (adhoc.filters?.stock_location_id) parts.push(sql`and s.stock_location_id=${adhoc.filters.stock_location_id}`)
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'suggestion',
+    basePath: '/inventory/planning',
+    statusVariant: (_row, value) => value === 'converted' ? 'success' : value === 'suggested' ? 'warning' : value === 'dismissed' ? 'outline' : 'secondary',
+    statusDisplayName: (storedName, translate) => {
+      const fullKey = `planning.status.${storedName}`
+      const out = translate(fullKey)
+      return out === fullKey ? storedName : out
+    },
+    statusFilterKey: 'status',
+  },
   inventory_movement: {
     recordType: 'inventory_movement',
     table: 'inventory_movements',

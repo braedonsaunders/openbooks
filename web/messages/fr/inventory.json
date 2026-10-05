@@ -13,7 +13,8 @@
     "movements": "Mouvements",
     "locations": "Emplacements de stock",
     "bom": "Nomenclature",
-    "counts": "Comptages"
+    "counts": "Comptages",
+    "planning": "Planification"
   },
   "bom": {
     "columns": {

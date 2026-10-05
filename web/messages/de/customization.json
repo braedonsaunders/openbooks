@@ -26,6 +26,7 @@
     "item_family": "Produktfamilie",
     "account": "Konto",
     "bank_transaction": "Banktransaktion",
+    "demand_suggestion": "Planungsvorschlag",
     "inventory_onhand": "Lagerbestand",
     "inventory_movement": "Lagerbewegung",
     "webhook_endpoint": "Webhook-Endpunkt",

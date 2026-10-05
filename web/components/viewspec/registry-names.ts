@@ -140,6 +140,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'date-range-filter',
   'delegation-banner',
   'delivery-panel',
+  'demand-plan-actions',
+  'demand-suggestion-drawer',
   'depreciation-setup-header',
   'directory-section',
   'doc-article',

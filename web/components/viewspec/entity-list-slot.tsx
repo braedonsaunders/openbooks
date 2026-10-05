@@ -7,6 +7,26 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz } from '../../lib/authz'
 import { summarizeGroup, type ConditionGroup, type FieldDef } from '../../lib/conditions'
 import { EntityListView } from '../entity-list-view'
+import { Sparkline } from '../module-home/ui'
+
+/**
+ * Weekly demand behind one planning suggestion, drawn from the list's own
+ * `trend` column (twelve trailing weeks of issued quantities, oldest
+ * first). The values are display-only demand history, never money, so they
+ * parse to chart points the way any roster number does.
+ */
+function demandTrendFormatValue(): (_row: unknown, columnKey: string, value: unknown) => ReactNode {
+  function DemandTrendCell(_row: unknown, columnKey: string, value: unknown) {
+    if (columnKey !== 'trend') return undefined
+    const raw = Array.isArray(value) ? value : []
+    const points = raw
+      .map((point) => (typeof point === 'number' ? point : typeof point === 'string' ? Number(point) : NaN))
+      .filter((point) => Number.isFinite(point))
+    if (points.length < 2) return <span className="text-slate-400">—</span>
+    return <Sparkline points={points} width={96} height={24} />
+  }
+  return DemandTrendCell
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -119,7 +139,11 @@ export async function EntityListSlot({
 }) {
   const authz = await getAuthz()
   if (!authz) return null
-  const formatValue = recordType === 'bank_rule' ? await bankRuleFormatValue(authz.user.orgId) : undefined
+  const formatValue = recordType === 'bank_rule'
+    ? await bankRuleFormatValue(authz.user.orgId)
+    : recordType === 'demand_suggestion'
+      ? demandTrendFormatValue()
+      : undefined
   // Change sets are PRODUCTION configuration, read from a sandbox-aware
   // session: the native page lists them against `productionOrgId`, not the
   // current org, and hardcodes `canManage`. Decided here rather than passed,

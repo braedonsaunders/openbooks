@@ -14,6 +14,7 @@ import {
 import { can, requirePermission } from '../../../lib/authz'
 import { canPostInventoryMovement } from './movement-permissions'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
 import { pickString } from '../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -71,6 +72,7 @@ export async function loadInventory(
   const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
 
+  const planningOn = await isFeatureEnabled(orgId, 'demandPlanning')
   const sectionValues = ['onhand', 'movements', 'locations', 'bom'] as const
   const explicitSection = pickString(sp.inventoryView)
   const legacySection = pickString(sp.view)
@@ -117,6 +119,15 @@ export async function loadInventory(
         label: t('view.movements'),
         active: view === 'movements',
       },
+      ...(planningOn
+        ? [
+            {
+              href: '/inventory/planning',
+              label: t('view.planning'),
+              active: false,
+            },
+          ]
+        : []),
       {
         href: '/inventory?inventoryView=counts',
         label: t('view.counts'),

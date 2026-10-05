@@ -13,7 +13,8 @@
     "movements": "Movements",
     "locations": "Stock locations",
     "bom": "Bill of materials",
-    "counts": "Counts"
+    "counts": "Counts",
+    "planning": "Planning"
   },
   "bom": {
     "columns": {

@@ -30,6 +30,7 @@
     "account": "Account",
     "bank_transaction": "Bank transaction",
     "pay_run": "Pay run",
+    "demand_suggestion": "Planning suggestion",
     "inventory_onhand": "Inventory on hand",
     "inventory_movement": "Inventory movement",
     "webhook_endpoint": "Webhook endpoint",

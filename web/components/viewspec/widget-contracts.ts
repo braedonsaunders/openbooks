@@ -136,6 +136,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'date-range-filter': { props: ['clearLabel', 'clearable', 'defaultFrom', 'defaultTo', 'fromKey', 'fromLabel', 'pageParamKey', 'toKey', 'toLabel'] },
   'delegation-banner': { props: ['users'] },
   'delivery-panel': { props: ['canSchedule', 'definitionId', 'recentRuns', 'schedules'] },
+  'demand-plan-actions': { props: ['subsidiaries', 'subsidiaryId'] },
+  'demand-suggestion-drawer': { props: ['closeHref', 'locale', 'locations', 'suggestionId', 'vendors'] },
   'depreciation-setup-header': { props: ['description', 'tabs', 'tabsAria', 'title'] },
   'directory-section': { props: ['items', 'title'] },
   'doc-article': { props: ['content'] },

@@ -13,7 +13,8 @@
     "movements": "变动",
     "locations": "库位",
     "bom": "物料清单",
-    "counts": "盘点"
+    "counts": "盘点",
+    "planning": "计划"
   },
   "bom": {
     "columns": {
