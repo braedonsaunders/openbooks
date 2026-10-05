@@ -201,7 +201,7 @@
       "onWatch": "{count} em observação",
       "coverage": "Cobertura",
       "coverageSub": "contas com linha de orçamento",
-      "toleranceNote": "No caminho certo: favorável ou dentro de ±10 % do orçamento · Observação: dentro de ±25 % · Acima (despesas) / Abaixo (receitas): além de ±25 %",
+      "toleranceNote": "No caminho certo: favorável ou dentro de ±{onTrack} % do orçamento · Observação: dentro de ±{watch} % · Acima (despesas) / Abaixo (receitas): além de ±{watch} %",
       "tableTitle": "Orçado vs. real ({count})",
       "search": "Buscar contas…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "Margem de segurança sobre o ponto de equilíbrio (%)",
           "help": "Receita dentro desta parcela acima do equilíbrio é relatada como margem estreita"
+        },
+        "breakevenComfortPercent": {
+          "label": "Margem de segurança confortável (%)",
+          "help": "Receita tão acima do ponto de equilíbrio é considerada uma margem confortável"
+        },
+        "budgetOnTrackPercent": {
+          "label": "Tolerância orçamentária “no caminho certo” (%)",
+          "help": "Uma variação dentro dessa parte do orçamento é considerada no caminho certo"
+        },
+        "budgetWatchPercent": {
+          "label": "Tolerância orçamentária “em observação” (%)",
+          "help": "Uma variação além do caminho certo, mas dentro dessa parte, fica em observação"
+        },
+        "segmentHhiWarning": {
+          "label": "Aviso de concentração por segmento (HHI)",
+          "help": "Uma concentração de receita igual ou superior a este índice é considerada moderadamente concentrada"
+        },
+        "segmentHhiCritical": {
+          "label": "Concentração crítica por segmento (HHI)",
+          "help": "Uma concentração de receita igual ou superior a este índice é considerada altamente concentrada"
         },
         "anomalySigma": {
           "label": "Limite de anomalia (σ)",

@@ -201,7 +201,7 @@
       "onWatch": "{count}件が要注意",
       "coverage": "カバレッジ",
       "coverageSub": "予算ラインのある勘定",
-      "toleranceNote": "順調：良好または予算の±10％以内・要注意：±25％以内・超過（支出）／未達（収益）：±25％超",
+      "toleranceNote": "順調：良好または予算の±{onTrack}％以内・要注意：±{watch}％以内・超過（支出）／未達（収益）：±{watch}％超",
       "tableTitle": "予算対実績（{count}）",
       "search": "勘定を検索…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "損益分岐点の安全余裕（%）",
           "help": "損益分岐点をこの割合以内で上回る売上は薄い利益として報告されます"
+        },
+        "breakevenComfortPercent": {
+          "label": "快適な安全余裕（％）",
+          "help": "損益分岐点をこれだけ上回る収益は快適な余裕とみなされます"
+        },
+        "budgetOnTrackPercent": {
+          "label": "予算順調許容度（％）",
+          "help": "予算に対する乖離がこの範囲内なら順調とみなされます"
+        },
+        "budgetWatchPercent": {
+          "label": "予算要注意許容度（％）",
+          "help": "順調範囲を超えてもこの範囲内なら要注意とみなされます"
+        },
+        "segmentHhiWarning": {
+          "label": "セグメント集中度警告（HHI）",
+          "help": "収益集中度がこの指数以上なら中程度の集中とみなされます"
+        },
+        "segmentHhiCritical": {
+          "label": "セグメント集中度危険（HHI）",
+          "help": "収益集中度がこの指数以上なら高度の集中とみなされます"
         },
         "anomalySigma": {
           "label": "異常検知のしきい値（σ）",

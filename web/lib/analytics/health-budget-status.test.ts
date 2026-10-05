@@ -30,3 +30,13 @@ test('favorable and near lines stay on-track, the middle band stays watch', () =
   assert.equal(budgetLineStatus('expense', '20000', 0.2, '100000'), 'watch')
   assert.equal(budgetLineStatus('income', '0', 0, '0'), 'no-budget')
 })
+
+test('the tolerance bands come from configuration, not fixed percentages', () => {
+  // An 8% cost overrun is on-track under the starting 10%/25% bands but
+  // watch under a stricter 5%/15% organization policy — the same variance
+  // must grade differently when the organization says so.
+  assert.equal(budgetLineStatus('expense', '8000', 0.08, '100000'), 'on-track')
+  assert.equal(budgetLineStatus('expense', '8000', 0.08, '100000', { onTrack: 5, watch: 15 }), 'watch')
+  assert.equal(budgetLineStatus('expense', '20000', 0.2, '100000', { onTrack: 5, watch: 15 }), 'over')
+  assert.equal(budgetLineStatus('income', '-20000', -0.2, '100000', { onTrack: 5, watch: 15 }), 'under')
+})

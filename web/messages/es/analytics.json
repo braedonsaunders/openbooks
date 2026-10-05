@@ -201,7 +201,7 @@
       "onWatch": "{count} en observación",
       "coverage": "Cobertura",
       "coverageSub": "cuentas con una línea presupuestaria",
-      "toleranceNote": "En línea: favorable o dentro del ±10 % del presupuesto · En observación: dentro del ±25 % · Excedido (gasto) / Por debajo (ingresos): más del ±25 %",
+      "toleranceNote": "En línea: favorable o dentro del ±{onTrack} % del presupuesto · En observación: dentro del ±{watch} % · Excedido (gasto) / Por debajo (ingresos): más del ±{watch} %",
       "tableTitle": "Presupuesto vs. real ({count})",
       "search": "Buscar cuentas…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "Margen de seguridad sobre el punto de equilibrio (%)",
           "help": "Ingresos dentro de esta parte por encima del equilibrio se informan como margen estrecho"
+        },
+        "breakevenComfortPercent": {
+          "label": "Margen de seguridad cómodo (%)",
+          "help": "Ingresos tan por encima del punto de equilibrio se consideran un margen cómodo"
+        },
+        "budgetOnTrackPercent": {
+          "label": "Tolerancia presupuestaria „en línea“ (%)",
+          "help": "Una desviación dentro de esta parte del presupuesto se considera en línea"
+        },
+        "budgetWatchPercent": {
+          "label": "Tolerancia presupuestaria „en observación“ (%)",
+          "help": "Una desviación más allá de „en línea“, pero dentro de esta parte, queda en observación"
+        },
+        "segmentHhiWarning": {
+          "label": "Aviso de concentración por segmento (HHI)",
+          "help": "Una concentración de ingresos igual o superior a este índice se considera moderadamente concentrada"
+        },
+        "segmentHhiCritical": {
+          "label": "Concentración crítica por segmento (HHI)",
+          "help": "Una concentración de ingresos igual o superior a este índice se considera muy concentrada"
         },
         "anomalySigma": {
           "label": "Umbral de anomalía (σ)",

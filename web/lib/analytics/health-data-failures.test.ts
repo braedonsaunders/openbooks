@@ -15,7 +15,7 @@ const mocks: Record<string, string> = {
     return {rows:[]};}}`,
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return globalThis.__healthFailures.budgets}",
-  "./config": "export async function analyticsConfig(){return {insightCriticalPercent:50,insightWarningPercent:75,revenueDeclineAlertPercent:15,revenueTrendAlertPercent:10,marginCompressionPoints:3,breakevenSafetyPercent:10,anomalySigma:2}}",
+  "./config": "export async function analyticsConfig(){return {insightCriticalPercent:50,insightWarningPercent:75,revenueDeclineAlertPercent:15,revenueTrendAlertPercent:10,marginCompressionPoints:3,breakevenSafetyPercent:10,breakevenComfortPercent:30,budgetOnTrackPercent:10,budgetWatchPercent:25,segmentHhiWarning:1500,segmentHhiCritical:2500,operatingMarginTarget:15,anomalySigma:2}}",
   "./financial-health": `export async function priorFiscalWindow(){return {from:'2025-07-01',to:'2025-07-31'}}
     export async function financialHealth(){const r=(n)=>Number(n).toFixed(4);return {ratios:{profitability:[],liquidity:[],solvency:[],efficiency:[],operating:[]},benchmarks:{targets:{}},figures:{
     revenue:r(0),cogs:r(0),grossProfit:r(0),opex:r(0),operatingIncome:r(0),otherIncome:r(0),otherExpense:r(0),netIncome:r(0),
@@ -39,6 +39,6 @@ test("Financial Health represents genuinely absent data and disabled budgets wit
   const result = await healthData(period, "00000000-0000-4000-8000-000000000001", null);
   assert.deepEqual(result.segments, { department: [], class: [], location: [] });
   assert.deepEqual(result.items.rows, []);
-  assert.deepEqual(result.budget, { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } });
+  assert.deepEqual(result.budget, { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } });
   assert.ok(!state.queries.some(query => query.includes(state.fail)));
 });

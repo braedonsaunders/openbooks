@@ -201,7 +201,7 @@
       "onWatch": "{count} unter Beobachtung",
       "coverage": "Abdeckung",
       "coverageSub": "Konten mit einer Budgetposition",
-      "toleranceNote": "Im Plan: günstig oder innerhalb ±10 % des Budgets · Beobachtung: innerhalb ±25 % · Über (Ausgaben) / Unter (Erlöse): über ±25 %",
+      "toleranceNote": "Im Plan: günstig oder innerhalb ±{onTrack} % des Budgets · Beobachtung: innerhalb ±{watch} % · Über (Ausgaben) / Unter (Erlöse): über ±{watch} %",
       "tableTitle": "Budget vs. Ist ({count})",
       "search": "Konten durchsuchen…",
       "csv": "CSV",
@@ -596,6 +596,26 @@
         "breakevenSafetyPercent": {
           "label": "Sicherheitsabstand zum Break-even (%)",
           "help": "Umsatz innerhalb dieses Anteils über dem Break-even wird als knappe Marge gemeldet"
+        },
+        "breakevenComfortPercent": {
+          "label": "Komfortable Sicherheitsmarge (%)",
+          "help": "Erlöse so weit über der Gewinnschwelle gelten als komfortable Marge"
+        },
+        "budgetOnTrackPercent": {
+          "label": "Budgettoleranz „im Plan“ (%)",
+          "help": "Eine Abweichung innerhalb dieses Budgetanteils gilt als im Plan"
+        },
+        "budgetWatchPercent": {
+          "label": "Budgettoleranz „Beobachtung“ (%)",
+          "help": "Eine Abweichung jenseits von „im Plan“, aber innerhalb dieses Anteils gilt als zu beobachten"
+        },
+        "segmentHhiWarning": {
+          "label": "Warnung Segmentkonzentration (HHI)",
+          "help": "Eine Erlöskonzentration ab diesem Index gilt als mäßig konzentriert"
+        },
+        "segmentHhiCritical": {
+          "label": "Kritische Segmentkonzentration (HHI)",
+          "help": "Eine Erlöskonzentration ab diesem Index gilt als stark konzentriert"
         },
         "anomalySigma": {
           "label": "Anomalie-Schwelle (σ)",

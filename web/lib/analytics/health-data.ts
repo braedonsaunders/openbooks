@@ -137,10 +137,29 @@ export interface BudgetRow {
   status: "on-track" | "watch" | "over" | "under" | "no-budget";
 }
 
+/** Budget status bands in percentage points, from organization configuration. */
+export interface BudgetTolerance {
+  onTrack: number;
+  watch: number;
+}
+
 export interface BudgetVariance {
   scenario: { id: string; name: string; fiscalYear: number; status: string } | null;
   rows: BudgetRow[];
   totals: { budget: string; actual: string; variance: string };
+  /** The configured tolerance bands behind every row status (for the disclosed note). */
+  tolerance: BudgetTolerance;
+}
+
+/**
+ * Client-needed configuration: every band a tab compares against, read once
+ * on the server so no tab keeps its own copy of a threshold.
+ */
+export interface HealthBands {
+  /** Segment concentration (HHI, 0–10,000 scale) warning/critical levels. */
+  hhi: { warning: number; critical: number };
+  /** Scenario safety margin: the thin-margin floor and the comfort level above breakeven, exact fractions. */
+  scenario: { safety: string; comfort: string };
 }
 
 export interface HealthData extends FinancialHealth {
@@ -152,6 +171,7 @@ export interface HealthData extends FinancialHealth {
   items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: string; totalChange: string };
   insights: Insight[];
   budget: BudgetVariance;
+  bands: HealthBands;
 }
 
 type SqlNumeric = string | number | null;
@@ -383,6 +403,12 @@ async function monthlySeries(
   return out;
 }
 
+/** Operating-margin target and warning share behind the segment health dot, exact fractions. */
+interface SegmentHealthPolicy {
+  target: string;
+  warningShare: string;
+}
+
 /** Segment breakdown for one dimension (department/class/location) with YoY. */
 async function segmentsBy(
   orgId: string,
@@ -391,6 +417,7 @@ async function segmentsBy(
   from: string,
   to: string,
   allowed: ReadonlySet<string> | null,
+  healthPolicy: SegmentHealthPolicy,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<SegmentRow[]> {
   const pFrom = priorYear(from);
@@ -473,7 +500,18 @@ async function segmentsBy(
       const gmPct = revPositive ? amountRatio(grossProfit, revenue) : 0;
       const opPct = revPositive ? amountRatio(operatingIncome, revenue) : 0;
       const yoyPct = cmp(priorRev, "0") > 0 ? amountRatio(sum([revenue, neg(priorRev)]), priorRev) : null;
-      const health: SegmentRow["health"] = opPct >= 0.1 ? "good" : opPct >= 0 ? "warn" : "bad";
+      // Segment health grades against the organization's own operating-margin
+      // target: at or above target is good, within the configured warning
+      // share of target is warn, below that is bad. Without revenue there is
+      // no margin to grade, so the segment keeps the neutral warn.
+      const opMargin = revPositive ? decimalRatio(operatingIncome, revenue) : null;
+      const health: SegmentRow["health"] = opMargin === null
+        ? "warn"
+        : cmp(opMargin, healthPolicy.target) >= 0
+          ? "good"
+          : cmp(opMargin, mulDecimal(healthPolicy.target, healthPolicy.warningShare)) >= 0
+            ? "warn"
+            : "bad";
       return {
         id: x.id,
         name: strings.displaySegmentName(x.id, x.name),
@@ -828,8 +866,12 @@ export async function healthData(
   const { from, to } = period;
   const prior = await priorFiscalWindow(orgId, from, to);
 
-  const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } });
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
+  // One configuration read serves the segment health dots, the client-side
+  // bands and the budget tolerance below — no tab keeps its own copy.
+  const configured = await healthBands(orgId);
+  const emptyBudget = (tolerance: BudgetTolerance): BudgetVariance =>
+    ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance });
 
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
     financialHealth(period, orgId, allowedSubsidiaryIds, strings),
@@ -837,14 +879,14 @@ export async function healthData(
       ? financialHealth({ from: prior.from, to: prior.to, label: "prior" }, orgId, allowedSubsidiaryIds, strings)
       : Promise.resolve(null),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
-    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, strings) : Promise.resolve([]),
-    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, strings) : Promise.resolve([]),
-    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, strings) : Promise.resolve([]),
+    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
+    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
+    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
     analyticsSection('financial-health', ['drivers']) ? drivers(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ revenue: [], cost: [] }),
     analyticsSection('financial-health', ['items']) ? itemAnalysis(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ rows: [], gainers: [], decliners: [], totalCurrent: '0', totalChange: '0' }),
     budgetsOn && analyticsSection('financial-health', ['budget'])
       ? budgetVariance(orgId, from, to, allowedSubsidiaryIds)
-      : Promise.resolve(emptyBudget()),
+      : Promise.resolve(emptyBudget(configured.tolerance)),
     insightPolicy(orgId),
   ]);
 
@@ -857,29 +899,49 @@ export async function healthData(
     drivers: drv,
     items,
     budget,
+    bands: configured.bands,
     insights: buildInsights(base, monthly, policy, money, strings),
   };
 }
 
+/** The starting budget tolerance bands, matching the configuration defaults. */
+const DEFAULT_BUDGET_TOLERANCE: BudgetTolerance = { onTrack: 10, watch: 25 };
+
 /**
- * Budget-line status rule: on-track when favorable or within
- * 10%, watch to 25%, and beyond that the direction keeps its meaning —
- * overspent cost lines read "over", missed revenue lines read "under".
- * Flagging a revenue shortfall as over-budget spend inverts the story, so
- * income and cost have distinct unfavorable-beyond-tolerance statuses while
- * sharing the neutral watch band. Exported for unit tests.
+ * Budget-line status rule: on-track when favorable or within the configured
+ * tolerance, watch to the configured watch band, and beyond that the
+ * direction keeps its meaning — overspent cost lines read "over", missed
+ * revenue lines read "under". Flagging a revenue shortfall as over-budget
+ * spend inverts the story, so income and cost have distinct
+ * unfavorable-beyond-tolerance statuses while sharing the neutral watch
+ * band. Exported for unit tests.
  */
 export function budgetLineStatus(
   type: string,
   variance: string,
   variancePct: number | null,
   budget: string,
+  tolerance: BudgetTolerance = DEFAULT_BUDGET_TOLERANCE,
 ): BudgetRow["status"] {
   const favorable = type === "income" || type === "income_other" ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
   if (isZero(budget)) return "no-budget";
-  if (favorable || Math.abs(variancePct ?? 0) <= 0.1) return "on-track";
-  if (Math.abs(variancePct ?? 0) <= 0.25) return "watch";
+  if (favorable || Math.abs(variancePct ?? 0) * 100 <= tolerance.onTrack) return "on-track";
+  if (Math.abs(variancePct ?? 0) * 100 <= tolerance.watch) return "watch";
   return type === "income" || type === "income_other" ? "under" : "over";
+}
+
+/** The organization's configured budget tolerance, HHI and scenario bands. */
+async function healthBands(orgId: string): Promise<{ tolerance: BudgetTolerance; bands: HealthBands; segment: SegmentHealthPolicy }> {
+  const c = await analyticsConfig(orgId, "financialHealth");
+  const fraction = (pct: number) => decimalRatio(String(pct), "100")!;
+  return {
+    tolerance: { onTrack: c.budgetOnTrackPercent, watch: c.budgetWatchPercent },
+    bands: {
+      hhi: { warning: c.segmentHhiWarning, critical: c.segmentHhiCritical },
+      scenario: { safety: fraction(c.breakevenSafetyPercent), comfort: fraction(c.breakevenComfortPercent) },
+    },
+    segment: { target: fraction(c.operatingMarginTarget), warningShare: fraction(c.insightWarningPercent) },
+  };
 }
 
 /** Preserve ledger amounts through budget variance arithmetic; only the
@@ -903,6 +965,7 @@ export function exactBudgetVariance(budget: string, actual: string): { variance:
  * cost accounts the reverse.
  */
 export async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
+  const tolerance = (await healthBands(orgId)).tolerance;
   const scen = (await analyticsQuery(sql`
     select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
     from budget_scenarios bs
@@ -917,7 +980,7 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
     limit 1
   `)) as unknown as { rows: BudgetScenarioSqlRow[] };
   const s = scen.rows[0];
-  if (!s) return { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } };
+  if (!s) return { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance };
 
   // Both sides arrive per (account, functional) and translate to
   // presentation before the variance compares them — the same second leg as
@@ -1004,7 +1067,7 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
       const variance = sum([actual, neg(budget)]);
       const variancePct = cmp(budget, "0") !== 0 ? amountRatio(variance, abs(budget)) : null;
       const favorable = isIncome(v.type) ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
-      const status = budgetLineStatus(v.type, variance, variancePct, budget);
+      const status = budgetLineStatus(v.type, variance, variancePct, budget, tolerance);
       return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
     })
     .sort((a, b) => cmp(abs(b.variance), abs(a.variance)));
@@ -1016,5 +1079,6 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
       actual: sum(rows.map((x) => x.actual)),
       variance: sum(rows.map((x) => x.variance)),
     },
+    tolerance,
   };
 }
