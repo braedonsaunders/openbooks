@@ -25,6 +25,7 @@
       "netIncome": "Resultado neto",
       "close": "Avance del cierre",
       "closeSub": "{period}",
+      "closeUnavailable": "No disponible",
       "noClose": "—",
       "noCloseSub": "Sin cierre iniciado",
       "draftJournals": "Asientos en borrador",

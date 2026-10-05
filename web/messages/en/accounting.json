@@ -25,6 +25,7 @@
       "netIncome": "Net income",
       "close": "Close progress",
       "closeSub": "{period}",
+      "closeUnavailable": "Unavailable",
       "noClose": "—",
       "noCloseSub": "No close run started",
       "draftJournals": "Draft journals",
