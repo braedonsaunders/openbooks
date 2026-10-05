@@ -82,8 +82,8 @@ function dynamicOptions(source: SetupDynamicOptionsSource, packs: PayrollPackCho
       // lists ride `scopedOptions` (see resolveField below); the drawer and
       // the write path both scope through `setupFieldOptions`, so the union
       // only renders where no country is in scope.
-      const seen = new Set<string>()
-      const union: SetupOption[] = []
+      const seen = new Set<string>([AFTER_TAX_OPTION.value])
+      const union: SetupOption[] = [AFTER_TAX_OPTION]
       for (const pack of packs) {
         for (const option of packTreatmentOptions(pack.country)) {
           if (!seen.has(option.value)) {
