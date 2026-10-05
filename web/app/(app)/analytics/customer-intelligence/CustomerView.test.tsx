@@ -45,21 +45,21 @@ function row(overrides: Partial<CustomerRow> = {}): CustomerRow {
   return {
     id: 'c-acme',
     name: 'Acme Corp',
-    revenue: 845,
-    priorRevenue: 800,
-    invoicedRevenue: 900,
-    recon: { tax: 20, credits: 5, timingDeferred: 30, timingRecognized: 10, voids: 5, other: 5 },
+    revenue: '845',
+    priorRevenue: '800',
+    invoicedRevenue: '900',
+    recon: { tax: '20', credits: '5', timingDeferred: '30', timingRecognized: '10', voids: '5', other: '5' },
     yoyPct: 5.6,
     invoices: 12,
-    avgInvoice: 75,
+    avgInvoice: '75',
     firstInvoice: '2025-01-04',
     lastInvoice: '2026-07-20',
     recencyDays: 8,
     tenureDays: 400,
     rfm: { r: 5, f: 4, m: 5, score: 90, code: '555' },
     segment: 'champions',
-    annualValue: 900,
-    clv: 432.109,
+    annualValue: '900',
+    clv: '432.109',
     retentionFactor: 92,
     tier: 'gold',
     clvRank: 1,
@@ -83,7 +83,7 @@ function row(overrides: Partial<CustomerRow> = {}): CustomerRow {
     paymentRate: 100,
     sharePct: 42,
     concentrationRisk: 'medium',
-    grossProfit: 400,
+    grossProfit: '400',
     marginPct: 47.3,
     isFakeChampion: false,
     jobs: 3,
@@ -101,16 +101,17 @@ function dataWith(rows: CustomerRow[]): CustomerData {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
     rows,
     intelligence: { score: 80, label: 'Strong', grade: 'A' },
+    config: { profitLeakRevenueSharePct: 10, profitLeakMarginTarget: 15, clvYears: 3 },
     kpis: {
       totalCustomers: rows.length,
-      totalRevenue: 845,
-      totalInvoiced: 900,
-      avgCustomerValue: 845,
-      projectedClv: 432.109,
-      avgClv: 432.109,
+      totalRevenue: '845',
+      totalInvoiced: '900',
+      avgCustomerValue: '845',
+      projectedClv: '432.109',
+      avgClv: '432.109',
       champions: 1,
       atRiskCount: 0,
-      atRiskRevenue: 0,
+      atRiskRevenue: '0',
       retentionRate: 92,
       paymentRate: 100,
       avgDaysToPay: 12,
@@ -128,9 +129,9 @@ function dataWith(rows: CustomerRow[]): CustomerData {
       fakeChampions: 0,
     },
     segments: [
-      { segment: 'champions', count: 1, percentage: 100, totalRevenue: 845, avgRevenue: 845, totalInvoiced: 900 },
+      { segment: 'champions', count: 1, percentage: 100, totalRevenue: '845', avgRevenue: '845', totalInvoiced: '900' },
     ],
-    tierBreakdown: [{ tier: 'gold', count: 1, revenue: 845, invoiced: 900, threshold: 0 }],
+    tierBreakdown: [{ tier: 'gold', count: 1, revenue: '845', invoiced: '900', threshold: '0' }],
     growth: [],
     insights: [],
   } as unknown as CustomerData
@@ -195,7 +196,7 @@ function stubDownloads() {
 test('customer health CSV exports retain revenue and CLV decimals', async () => {
   globalThis.__cvRouter = { push() {}, refresh() {} }
   const data = dataWith([
-    row({ revenue: 1845.756, invoicedRevenue: 1900.125, clv: 432.109 }),
+    row({ revenue: '1845.756', invoicedRevenue: '1900.125', clv: '432.109' }),
   ])
   const downloads = stubDownloads()
   const host = document.createElement('div')
@@ -234,7 +235,7 @@ test('the customer drill carries the waterfall-signed recon bridge', async () =>
   globalThis.__cvRouter = { push() {}, refresh() {} }
   // Invoiced 900 − tax 20 − credits 5 − deferred 30 + recognized 10 −
   // voids 5 − other 5 = recognized 845.
-  const data = dataWith([row({ revenue: 845, invoicedRevenue: 900 })])
+  const data = dataWith([row({ revenue: '845', invoicedRevenue: '900' })])
   const priorFetch = globalThis.fetch
   globalThis.fetch = (async () =>
     Response.json({

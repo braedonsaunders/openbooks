@@ -73,9 +73,9 @@ test('customer intelligence translates every revenue functional to presentation'
     await pinClock('2026-07-15', async () => {
       const data = await withOrgContext(scratch.orgId, () => customerData(P, scratch.orgId, null))
       const byName = new Map(data.rows.map((r) => [r.name, r]))
-      assert.equal(byName.get('US Customer')?.revenue, 270)
-      assert.equal(byName.get('US Customer')?.priorRevenue, 130)
-      assert.equal(data.kpis.totalRevenue, 520)
+      assert.equal(byName.get('US Customer')?.revenue, '270.0000')
+      assert.equal(byName.get('US Customer')?.priorRevenue, '130.0000')
+      assert.equal(data.kpis.totalRevenue, '520.0000')
       const summary = await withOrgContext(scratch.orgId, () => customerSummaryData(P, scratch.orgId, null))
       for (const key of ['totalCustomers', 'atRiskCount'] as const) assert.equal(summary.kpis[key], data.kpis[key], key)
       assert.equal(summary.kpis.totalRevenue, '520.0000')
@@ -107,7 +107,7 @@ test('customer revenue rounds a non-terminating document rate instead of throwin
     await pinClock('2026-07-15', async () => {
       const data = await withOrgContext(scratch.orgId, () => customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null))
       const byName = new Map(data.rows.map((r) => [r.name, r]))
-      assert.equal(byName.get('Acme Customer')?.revenue, 133.3333)
+      assert.equal(byName.get('Acme Customer')?.revenue, '133.3333')
     })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))

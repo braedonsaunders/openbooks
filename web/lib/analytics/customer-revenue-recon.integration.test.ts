@@ -10,6 +10,7 @@ const { runRevenueRecognition } = await import('@openbooks/engine/src/revenue/re
 const { cancelRevenueRecognitionForInvoice } = await import('@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts')
 const { customerData } = await import('./customer-data')
 const { profitAndLoss } = await import('../reports/statements')
+const { add, neg } = await import('@openbooks/engine/src/money/money.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 const JULY = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
@@ -72,9 +73,10 @@ async function postSale(
  * Five customers pin the bridge stories plus the residual — taxed invoice with
  * a partial credit, deferred subscription recognized in-period, cross-period
  * document void, party-tagged manual journal, and a cross-period recognition
- * cancellation (f6's route; the mirror attributes through the schedule
- * back-link) — and the org total ties to the P&L resolver in both months
- * (the unification proof — one definition of revenue, read by both surfaces).
+ * cancellation (the cancellation route; the mirror attributes through the
+ * schedule back-link) — and the org total ties to the P&L resolver in both
+ * months (the unification proof — one definition of revenue, read by both
+ * surfaces).
  */
 test('customer revenue reconciles invoiced billings to ledger recognized revenue', { skip: !DB }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
@@ -152,7 +154,8 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
     })
 
     // E: 600 deferred subscription recognized in July, then cancelled in August
-    // (f6's route flips the July posting to reversed and mirrors in August).
+    // (the cancellation route flips the July posting to reversed and mirrors
+    // in August).
     // A small August invoice keeps E in the August billing population.
     await postSale(scratch, actor, { kind: 'customer_invoice', partyId: custE, amount: '10', date: '2026-08-05' })
     await withBypass(() => cancelRevenueRecognitionForInvoice({ documentId: eJul, orgId: scratch.orgId, actorId: actor, reason: 'Recon cancel test', reversalDate: '2026-08-15', allowedSubsidiaryIds: null }))
@@ -166,48 +169,54 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
       pnl: await profitAndLoss('2026-07-01', '2026-07-31', undefined, scratch.orgId),
     }))
     const byName = new Map(data.rows.map((r) => [r.name, r]))
-    const close = (actual: number, expected: number, what: string) =>
+    // Loader-internal figures are exact decimal strings: equality, not a
+    // tolerance. Only the cross-surface P&L tie keeps its 0.01 tolerance.
+    const close = (actual: string, expected: string, what: string) =>
+      assert.equal(actual, expected, `${what}: ${actual} ≈ ${expected}`)
+    const closeNum = (actual: number, expected: number, what: string) =>
       assert.ok(Math.abs(actual - expected) < 0.01, `${what}: ${actual} ≈ ${expected}`)
 
     // The bridge identity holds per customer: nothing unexplained, no plug.
     for (const row of data.rows) {
-      const b = row.recon.tax + row.recon.credits
-        + (row.recon.timingDeferred - row.recon.timingRecognized) + row.recon.voids + row.recon.other
-      close(row.invoicedRevenue - row.revenue, b, `${row.name} bridge`)
+      const b = add(
+        add(add(row.recon.tax, row.recon.credits), add(row.recon.timingDeferred, neg(row.recon.timingRecognized))),
+        add(row.recon.voids, row.recon.other),
+      )
+      close(add(row.invoicedRevenue, neg(row.revenue)), b, `${row.name} bridge`)
     }
 
     const a = byName.get('Taxed')!
-    close(a.invoicedRevenue, 1550, 'A invoiced')
-    close(a.revenue, 1300, 'A recognized')
-    close(a.recon.tax, 50, 'A tax')
-    close(a.recon.credits, 200, 'A credits')
-    close(a.recon.other, 0, 'A other')
+    close(a.invoicedRevenue, '1550.0000', 'A invoiced')
+    close(a.revenue, '1300.0000', 'A recognized')
+    close(a.recon.tax, '50.0000', 'A tax')
+    close(a.recon.credits, '200.0000', 'A credits')
+    close(a.recon.other, '0.0000', 'A other')
 
     const b = byName.get('Deferred')!
-    close(b.invoicedRevenue, 1200, 'B invoiced')
-    close(b.revenue, 1200, 'B recognized')
-    close(b.recon.timingDeferred, 1200, 'B parked')
-    close(b.recon.timingRecognized, 1200, 'B scheduled')
-    close(b.recon.other, 0, 'B other')
+    close(b.invoicedRevenue, '1200.0000', 'B invoiced')
+    close(b.revenue, '1200.0000', 'B recognized')
+    close(b.recon.timingDeferred, '1200.0000', 'B parked')
+    close(b.recon.timingRecognized, '1200.0000', 'B scheduled')
+    close(b.recon.other, '0.0000', 'B other')
 
     const c = byName.get('Voided')!
-    close(c.invoicedRevenue, -250, 'C July includes the invoice void movement')
-    close(c.revenue, -250, 'C recognized nets the mirror')
-    close(c.recon.voids, 0, 'C document reversal is already included in invoiced movement')
-    close(c.recon.other, 0, 'C other')
-    close(new Map(june.rows.map((r) => [r.name, r])).get('Voided')!.invoicedRevenue, 300, 'C June retains the invoice before its later void')
+    close(c.invoicedRevenue, '-250.0000', 'C July includes the invoice void movement')
+    close(c.revenue, '-250.0000', 'C recognized nets the mirror')
+    close(c.recon.voids, '0.0000', 'C document reversal is already included in invoiced movement')
+    close(c.recon.other, '0.0000', 'C other')
+    close(new Map(june.rows.map((r) => [r.name, r])).get('Voided')!.invoicedRevenue, '300.0000', 'C June retains the invoice before its later void')
 
     const d = byName.get('Manual')!
-    close(d.invoicedRevenue, 10, 'D invoiced')
-    close(d.revenue, 85, 'D recognized includes the manual journal')
-    close(d.recon.other, -75, 'D residual catches the manual income')
+    close(d.invoicedRevenue, '10.0000', 'D invoiced')
+    close(d.revenue, '85.0000', 'D recognized includes the manual journal')
+    close(d.recon.other, '-75.0000', 'D residual catches the manual income')
 
     // E remains in July because its invoice was voided in August; the reverse
     // movement lands in that later period.
-    close(byName.get('Cancelled')!.invoicedRevenue, 600, 'E July retains the invoice before its later void')
+    close(byName.get('Cancelled')!.invoicedRevenue, '600.0000', 'E July retains the invoice before its later void')
 
-    close(Number(pnl.revenue) - data.kpis.totalRevenue, 0, 'July recognized total ties to the P&L resolver')
-    close(data.kpis.totalInvoiced, 1550 + 1200 - 250 + 10 + 600, 'CI invoiced movements include the void period')
+    closeNum(Number(pnl.revenue) - Number(data.kpis.totalRevenue), 0, 'July recognized total ties to the P&L resolver')
+    close(data.kpis.totalInvoiced, '3110.0000', 'CI invoiced movements include the void period')
 
     // E in August: the recognition mirror (attributed through the schedule
     // back-link — those legs carry no party) explains the whole gap. The
@@ -220,14 +229,16 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
     }))
     assert.equal(aug.rows.length, 1, 'only E billed in August')
     const ea = aug.rows[0]!
-    const eb = ea.recon.tax + ea.recon.credits
-      + (ea.recon.timingDeferred - ea.recon.timingRecognized) + ea.recon.voids + ea.recon.other
-    close(ea.invoicedRevenue - ea.revenue, eb, 'E August bridge')
-    close(ea.invoicedRevenue, -590, 'E August includes the invoice void movement')
-    close(ea.revenue, -590, 'E August recognized nets the mirror')
-    close(ea.recon.voids, 0, 'E document reversal is already included in invoiced movement')
-    close(ea.recon.other, 0, 'E August other')
-    close(aug.kpis.totalRevenue, Number(augPnl.revenue), 'August CI ties to P&L')
+    const eb = add(
+      add(add(ea.recon.tax, ea.recon.credits), add(ea.recon.timingDeferred, neg(ea.recon.timingRecognized))),
+      add(ea.recon.voids, ea.recon.other),
+    )
+    close(add(ea.invoicedRevenue, neg(ea.revenue)), eb, 'E August bridge')
+    close(ea.invoicedRevenue, '-590.0000', 'E August includes the invoice void movement')
+    close(ea.revenue, '-590.0000', 'E August recognized nets the mirror')
+    close(ea.recon.voids, '0.0000', 'E document reversal is already included in invoiced movement')
+    close(ea.recon.other, '0.0000', 'E August other')
+    closeNum(Number(aug.kpis.totalRevenue) - Number(augPnl.revenue), 0, 'August CI ties to P&L')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
