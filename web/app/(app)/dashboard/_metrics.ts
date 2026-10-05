@@ -773,6 +773,25 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'workflow-errors': ['workflowErrors'],
   'admin-calendar': ['adminCalendar'],
   // ── Analytics: financial ratios and health (Financial Health) ──────────
+  'ratios-profitability': ['financialSummary'],
+  'ratios-liquidity': ['financialSummary'],
+  'ratios-solvency': ['financialSummary'],
+  'ratios-efficiency': ['financialSummary'],
+  'ratios-operating': ['financialSummary'],
+  'kpi-ratio-current': ['financialSummary'],
+  'kpi-ratio-quick': ['financialSummary'],
+  'kpi-working-capital': ['financialSummary'],
+  'kpi-ratio-debt-equity': ['financialSummary'],
+  'kpi-ratio-interest-coverage': ['financialSummary'],
+  'kpi-ratio-roe': ['financialSummary'],
+  'kpi-ratio-roic': ['financialSummary'],
+  'kpi-ratio-operating-margin': ['financialSummary'],
+  'kpi-ratio-net-margin': ['financialSummary'],
+  'health-score': ['financialSummary'],
+  'list-health-insights': ['financialInsights'],
+  'chart-revenue-trend': ['financialTrend'],
+  'chart-margin-trend': ['financialTrend'],
+  'budget-variance': ['budgetSummary'],
 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
 
