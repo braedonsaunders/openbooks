@@ -125,5 +125,83 @@
     "send": "发送",
     "sent": "已将物流跟踪发送给 {to}。",
     "failed": "无法发送物流跟踪邮件。"
+  },
+  "shipping": {
+    "tab": "配送",
+    "loading": "正在加载面单…",
+    "labelsTitle": "面单",
+    "labelsEmpty": "暂无面单。在下方比较运费以购买第一张。",
+    "status": {
+      "purchased": "已购买",
+      "voided": "已作废",
+      "refunded": "已退款"
+    },
+    "tracking": {
+      "unknown": "无追踪",
+      "pre_transit": "面单已创建",
+      "in_transit": "运输中",
+      "out_for_delivery": "派送中",
+      "delivered": "已送达",
+      "exception": "异常",
+      "returned": "已退回",
+      "cancelled": "已取消"
+    },
+    "print": "打印",
+    "refresh": "刷新追踪",
+    "void": "作废",
+    "ratesTitle": "运费比较",
+    "noAccountsTitle": "暂无承运商账号",
+    "noAccounts": "请先连接 EasyPost 或 Shippo 账号，再比较运费。",
+    "setupLink": "打开配送设置",
+    "rateAccount": "账号",
+    "ratePackage": "包裹",
+    "ratePackageAuto": "按商品称重",
+    "rateDirection": "方向",
+    "direction": {
+      "outbound": "发出",
+      "return": "退货"
+    },
+    "modeTest": "测试",
+    "modeLive": "正式",
+    "getRates": "获取运费",
+    "checkAddress": "校验地址",
+    "validationValid": "地址无误。",
+    "validationIssues": "承运商提出了修改建议。",
+    "addressUnchanged": "出货单上的地址保持不变。",
+    "noBuyGrant": "购买需要配送权限。运费比较不受影响。",
+    "rateFor": "通过{account}的实时运费",
+    "colRate": "运费",
+    "colDelivery": "送达",
+    "colPrice": "价格",
+    "buy": "购买面单",
+    "badges": {
+      "cheapest": "最便宜",
+      "fastest": "最快",
+      "best_value": "最划算"
+    },
+    "deliveryDays": "{count, plural, other {#天}}",
+    "costNote": "面单成本计入配送费用科目，对方为承运商应付款科目。",
+    "noRatesTitle": "没有可用运费",
+    "noRates": "请换个账号或包裹试试，或检查地址。",
+    "buyTitle": "购买{carrier}{service}？",
+    "buyConfirm": "以{amount}购买{carrier}{service}面单？成本将立即入账。",
+    "bought": "{carrier}面单已购买。追踪单号已记在出货单上。",
+    "voided": "{carrier}面单已作废。成本已冲回。",
+    "refreshed": "追踪已更新。",
+    "voidTitle": "作废{carrier}面单？",
+    "voidLabel": "原因",
+    "voidPlaceholder": "取件前客户已取消",
+    "advancedTitle": "高级",
+    "advancedSummary": "配送设置的默认值",
+    "defaultsLine": "运费默认使用{account}和{preset}。规则、加价、保险、签名和报关请前往设置。",
+    "noDefault": "尚未设置默认值",
+    "fail": {
+      "labels": "无法加载面单。",
+      "rates": "无法加载运费。",
+      "buy": "无法购买面单。",
+      "void": "无法作废面单。",
+      "tracking": "无法刷新追踪。",
+      "validation": "无法校验地址。"
+    }
   }
 }

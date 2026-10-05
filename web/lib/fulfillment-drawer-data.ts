@@ -5,7 +5,12 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { salesOrderScope } from '@openbooks/engine/src/sales/backorders.ts'
 import { getFulfillmentDocument, type FulfillmentKind } from '@openbooks/engine/src/sales/fulfillment.ts'
-import type { FulfillmentDrawerData, NewPickListData } from '../app/(app)/_fulfillment/types'
+import type {
+  FulfillmentDrawerData,
+  NewPickListData,
+  PackagePresetOption,
+  ShippingAccountOption,
+} from '../app/(app)/_fulfillment/types'
 import type { CustomFieldDefClient } from '../components/custom-field-inputs'
 import { can, guardSubsidiaryScope, type Authz } from './authz'
 import { loadFieldDefs } from './custom-fields'
@@ -46,12 +51,13 @@ export async function loadFulfillmentDrawerData({
   const document = await getFulfillmentDocument(db, orgId, id, authz.allowedSubsidiaryIds)
   if (!document || document.kind !== kind) return null
 
-  const [headerDefs, customRow, carriers, barcodeScanningEnabled] = await Promise.all([
+  const [headerDefs, customRow, carriers, barcodeScanningEnabled, shipping] = await Promise.all([
     loadFieldDefs('documents', kind),
     db.execute<{ custom: Record<string, unknown> | null }>(sql`
       select custom from documents where org_id = ${orgId} and id = ${document.id}`),
     kind === 'shipment' && document.status === 'draft' ? listActiveCarriers(orgId) : Promise.resolve([]),
     isFeatureEnabled(orgId, 'barcodeScanning'),
+    kind === 'shipment' ? loadShipmentShipping(authz, orgId) : Promise.resolve({ enabled: false, canBuy: false, accounts: [], presets: [] }),
   ])
   const resolved = await resolveFormLayout({
     orgId,
@@ -71,7 +77,38 @@ export async function loadFulfillmentDrawerData({
     canManage: can(authz, 'orders.fulfill'),
     canPost: can(authz, 'items.post'),
     barcodeScanningEnabled,
+    shippingHubEnabled: shipping.enabled,
+    canBuyLabels: shipping.canBuy,
+    shippingAccounts: shipping.accounts,
+    packagePresets: shipping.presets,
     closeHref: closeHref ?? FULFILLMENT_DRAWER_ROUTE[kind].base,
+  }
+}
+
+/**
+ * Rate-shopping options for a shipment drawer: active carrier accounts and
+ * package presets, read without secrets. Nothing loads while the hub is
+ * off — the drawer keeps its manual carrier fields and no extra queries
+ * run for pick lists either.
+ */
+async function loadShipmentShipping(
+  authz: Authz,
+  orgId: string,
+): Promise<{ enabled: boolean; canBuy: boolean; accounts: ShippingAccountOption[]; presets: PackagePresetOption[] }> {
+  const empty = { enabled: false, canBuy: false, accounts: [], presets: [] as PackagePresetOption[] }
+  if (!(await isFeatureEnabled(orgId, 'shippingHub'))) return empty
+  const [accounts, presets] = await Promise.all([
+    db.execute<{ id: string; name: string; provider: string; mode: string; isDefault: boolean }>(sql`
+      select id, name, provider, mode, is_default as "isDefault" from shipping_accounts
+       where org_id = ${orgId} and status = 'active' order by is_default desc, name`),
+    db.execute<{ id: string; name: string }>(sql`
+      select id, name from package_presets where org_id = ${orgId} order by name`),
+  ])
+  return {
+    enabled: true,
+    canBuy: can(authz, 'shipping.manage'),
+    accounts: accounts.rows,
+    presets: presets.rows,
   }
 }
 

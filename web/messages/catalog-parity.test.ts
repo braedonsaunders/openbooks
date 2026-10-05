@@ -3316,6 +3316,11 @@ const COGNATES = new Set<string>([
   'de:admin.setup.shipping.accounts.modeLive|Live',
   'fr:admin.setup.shipping.accounts.modeTest|Test',
   'fr:admin.setup.shipping.accounts.mode|Mode',
+  // Shipment drawer rate shopper: the same Test/Live loanwords, spelled
+  // identically in German and (for Test) in French.
+  'de:fulfillment.shipping.modeTest|Test',
+  'de:fulfillment.shipping.modeLive|Live',
+  'fr:fulfillment.shipping.modeTest|Test',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {

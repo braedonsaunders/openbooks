@@ -125,5 +125,83 @@
     "send": "Enviar",
     "sent": "Seguimiento enviado a {to}.",
     "failed": "No se pudo enviar el correo de seguimiento."
+  },
+  "shipping": {
+    "tab": "Envío",
+    "loading": "Cargando etiquetas…",
+    "labelsTitle": "Etiquetas",
+    "labelsEmpty": "Aún no hay etiquetas. Compara tarifas abajo para comprar la primera.",
+    "status": {
+      "purchased": "Comprada",
+      "voided": "Anulada",
+      "refunded": "Reembolsada"
+    },
+    "tracking": {
+      "unknown": "Sin rastreo",
+      "pre_transit": "Etiqueta creada",
+      "in_transit": "En tránsito",
+      "out_for_delivery": "En reparto",
+      "delivered": "Entregada",
+      "exception": "Incidencia",
+      "returned": "Devuelta",
+      "cancelled": "Cancelada"
+    },
+    "print": "Imprimir",
+    "refresh": "Actualizar rastreo",
+    "void": "Anular",
+    "ratesTitle": "Comparar tarifas",
+    "noAccountsTitle": "Aún no hay cuentas de transportista",
+    "noAccounts": "Conecta una cuenta de EasyPost o Shippo antes de comparar tarifas.",
+    "setupLink": "Abrir ajustes de envío",
+    "rateAccount": "Cuenta",
+    "ratePackage": "Paquete",
+    "ratePackageAuto": "Pesar los artículos",
+    "rateDirection": "Sentido",
+    "direction": {
+      "outbound": "Salida",
+      "return": "Devolución"
+    },
+    "modeTest": "Prueba",
+    "modeLive": "Producción",
+    "getRates": "Ver tarifas",
+    "checkAddress": "Verificar dirección",
+    "validationValid": "La dirección está correcta.",
+    "validationIssues": "El transportista sugiere correcciones.",
+    "addressUnchanged": "La dirección del envío no cambia.",
+    "noBuyGrant": "Comprar requiere el permiso de envíos. Las tarifas se comparan igual.",
+    "rateFor": "Tarifas en vivo vía {account}",
+    "colRate": "Tarifa",
+    "colDelivery": "Entrega",
+    "colPrice": "Precio",
+    "buy": "Comprar etiqueta",
+    "badges": {
+      "cheapest": "Más económica",
+      "fastest": "Más rápida",
+      "best_value": "Mejor valor"
+    },
+    "deliveryDays": "{count, plural, one {# día} other {# días}}",
+    "costNote": "El costo de la etiqueta va a la cuenta de gastos de envío contra la cuenta del transportista.",
+    "noRatesTitle": "Sin tarifas",
+    "noRates": "Prueba con otra cuenta o paquete, o revisa las direcciones.",
+    "buyTitle": "¿Comprar {carrier} {service}?",
+    "buyConfirm": "¿Comprar la etiqueta {carrier} {service} por {amount}? El costo se registra al momento.",
+    "bought": "Etiqueta {carrier} comprada. El número de rastreo queda en el envío.",
+    "voided": "Etiqueta {carrier} anulada. El costo se revierte.",
+    "refreshed": "Rastreo actualizado.",
+    "voidTitle": "¿Anular la etiqueta {carrier}?",
+    "voidLabel": "Motivo",
+    "voidPlaceholder": "El cliente canceló antes de la recogida",
+    "advancedTitle": "Avanzado",
+    "advancedSummary": "Valores desde los ajustes de envío",
+    "defaultsLine": "Las tarifas parten de {account} y {preset}. Reglas, recargos, seguro, firma y aduana están en los ajustes.",
+    "noDefault": "sin valor aún",
+    "fail": {
+      "labels": "No se pudieron cargar las etiquetas.",
+      "rates": "No se pudieron cargar las tarifas.",
+      "buy": "No se pudo comprar la etiqueta.",
+      "void": "No se pudo anular la etiqueta.",
+      "tracking": "No se pudo actualizar el rastreo.",
+      "validation": "No se pudo verificar la dirección."
+    }
   }
 }
