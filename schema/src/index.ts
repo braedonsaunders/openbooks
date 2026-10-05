@@ -36,6 +36,7 @@ export * from "./compliance";
 export * from "./subscriptions";
 export * from "./consolidated-billing";
 export * from "./usage";
+export * from "./entitlements";
 export * from "./subcontracts";
 export * from "./property-management";
 export * from "./iam";
