@@ -18,6 +18,7 @@
 import type { SetupEntity } from './types'
 import { SETUP_GROUPS } from './types'
 import { COMPANY_ENTITIES } from './entities/company'
+import { CALENDAR_ENTITIES } from './entities/calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
 import { TAX_ENTITIES } from './entities/taxes'
 import { DIMENSION_ENTITIES } from './entities/dimensions'
@@ -47,6 +48,7 @@ export { OVERHEAD_RATE_KINDS, LIEN_WAIVER_TYPES } from './options'
 
 export const SETUP_ENTITIES: SetupEntity[] = [
   ...COMPANY_ENTITIES,
+  ...CALENDAR_ENTITIES,
   ...ACCOUNTING_ENTITIES,
   ...TAX_ENTITIES,
   ...DIMENSION_ENTITIES,

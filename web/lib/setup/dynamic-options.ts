@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
-import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
+import { declaredJurisdictions, installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
 import { installedPayrollCountries } from '@openbooks/engine/payroll/setup'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './types'
 
@@ -118,6 +118,16 @@ function dynamicOptions(source: SetupDynamicOptionsSource, packs: PayrollPackCho
       }
       return union
     }
+    case 'payroll-holiday-jurisdictions':
+      // Every declared statutory calendar key, named with its declaration.
+      // Company closures file under the calendar they close, so a key the
+      // static fallback predates (a German Land, a French overseas
+      // collectivity) must still be fileable — and writable, since the write
+      // path validates against this same resolved list.
+      return declaredJurisdictions().map((jurisdiction) => ({
+        value: jurisdiction.key,
+        label: jurisdiction.name,
+      }))
     case 'payroll-statutory-reporting-categories': {
       const options = new Map<string, SetupOption>()
       for (const pack of packs) {

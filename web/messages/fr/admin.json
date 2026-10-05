@@ -3414,6 +3414,16 @@
         "title": "Participants",
         "singular": "Participants",
         "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats."
+      },
+      "business-calendars": {
+        "title": "Calendriers de travail",
+        "singularTitle": "Calendrier de travail",
+        "description": "Début de semaine, jours de fin de semaine et jours fériés par organisation et par filiale, avec dates de validité. Les prévisions et les tableaux de bord lisent ce calendrier."
+      },
+      "aging-bucket-policies": {
+        "title": "Tranches d'ancienneté",
+        "singularTitle": "Politique de tranches d'ancienneté",
+        "description": "Seuils de jours qui convertissent les jours échus en tranches d'ancienneté, avec dates de validité. Sans politique, les tranches 30/60/90 s'appliquent."
       }
     },
     "fields": {
@@ -3956,7 +3966,12 @@
       "bufferQuantity": "Stock mis de côté",
       "stopSellingAtZero": "Arrêter la vente à zéro",
       "scheme": "Régime",
-      "identificationState": "État membre d’identification"
+      "identificationState": "État membre d’identification",
+      "weekStartsOn": "Début de la semaine",
+      "weekendDays": "Jours de fin de semaine",
+      "holidayCountry": "Pays des jours fériés",
+      "boundaries": "Seuils",
+      "holidayRegion": "Région des jours fériés"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4010,7 +4025,7 @@
       "holidayEffectiveTo": "Laissez vide pour aucune date de fin. Les dates d’effet se comparent à la date du jour férié : les cycles passés gardent donc le calendrier sous lequel ils ont été exécutés.",
       "holidayIsObserved": "Désactivé supprime un jour férié optionnel précédemment choisi.",
       "holidayIsPaid": "Désactivé en fait une fermeture dont le jour n’est pas payé. Les jours fériés légaux sont toujours payés.",
-      "holidayJurisdiction": "La juridiction dont ce changement modifie le calendrier. Prenez la province dont relèvent vos employés, ou Canada (fédéral) pour un employeur sous réglementation fédérale.",
+      "holidayJurisdiction": "Le calendrier légal auquel appartiennent cette élection ou cette fermeture — tous les calendriers déclarés sont proposés.",
       "holidayName": "Le nom du jour férié d’entreprise que vous ajoutez. Laissez vide quand cette ligne est une option sur un jour férié légal.",
       "holidayObservance": "Les jours fériés légaux gardent leur date et la loi accorde plutôt un jour de congé compensatoire. Choisissez un déplacement seulement pour un jour férié d’entreprise que vous déplacez vraiment.",
       "holidayPackKey": "Le jour férié légal auquel cette option s’applique, par exemple boxing_day ou heritage_day. Laissez vide pour ajouter votre propre jour férié d’entreprise. Seuls les jours optionnels peuvent être désactivés — un jour obligatoire est refusé.",
@@ -4098,7 +4113,11 @@
       "shippingMarkup": "Supplément ajouté au tarif du transporteur, en points de base. 100 vaut un pour cent.",
       "shippingCustomsDefaults": "Description de contenu par défaut pour les envois vers l’étranger.",
       "payBandTarget": "Facultatif. Saisissez une cible approuvée comprise dans la fourchette. Laissez vide si la politique définit seulement le minimum et le maximum ; aucun point médian n’est déduit.",
-      "compensationCriteria": "Facultatif tant qu’une base approuvée d’évaluation du travail de valeur égale n’est pas définie. Les évaluations d’équité salariale exigent des critères et des pondérations déclarés."
+      "compensationCriteria": "Facultatif tant qu’une base approuvée d’évaluation du travail de valeur égale n’est pas définie. Les évaluations d’équité salariale exigent des critères et des pondérations déclarés.",
+      "businessCalendarWeekendDays": "Jours de la semaine ISO sous forme de liste JSON, par exemple [6, 7] pour samedi et dimanche. Une liste vide indique qu'aucun jour n'est en fin de semaine.",
+      "businessCalendarHolidayCountry": "Les jours fériés proviennent d'un seul calendrier de travail : celui du pays, ou celui de sa région lorsque le pays en tient un par région (indiquez la région ci-dessous). Un pays sans module transcrit ne peut pas être utilisé — enregistrez sans pays de jours fériés pour les seules fins de semaine.",
+      "agingBucketBoundaries": "Nombres de jours croissants sous forme de liste JSON, par exemple [30, 60, 90]. Le dernier seuil ouvre la dernière tranche : 90 jours échus relèvent déjà de 90+.",
+      "businessCalendarHolidayRegion": "Qualificatif de région sélectionnant le calendrier de travail : ON pour l'Ontario (jamais CA-ON). Lorsqu'un calendrier fédéral côtoie des calendriers régionaux, FEDERAL désigne le calendrier fédéral. Laissez vide lorsque le pays tient un calendrier unique ; un pays à calendriers régionaux l'exige."
     },
     "options": {
       "storedValueKind": {
@@ -4789,6 +4808,15 @@
       "portalOfferKind": {
         "pause": "Suspendre plutôt",
         "discount": "Remise avec promotion"
+      },
+      "weekday": {
+        "monday": "lundi",
+        "tuesday": "mardi",
+        "wednesday": "mercredi",
+        "thursday": "jeudi",
+        "friday": "vendredi",
+        "saturday": "samedi",
+        "sunday": "dimanche"
       }
     },
     "laborCosting": {

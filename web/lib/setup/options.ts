@@ -382,6 +382,21 @@ export const LIEN_WAIVER_TYPES = [
   { value: 'unconditional_final', labelKey: 'options.lienWaiverType.unconditionalFinal' },
 ]
 
+/**
+ * ISO weekdays for the business calendar week start: 1 is Monday through 7
+ * is Sunday, matching the week_starts_on storage. Values are strings because
+ * the shared select control and its coercer carry option values as text.
+ */
+export const ISO_WEEKDAYS = [
+  { value: '1', labelKey: 'options.weekday.monday' },
+  { value: '2', labelKey: 'options.weekday.tuesday' },
+  { value: '3', labelKey: 'options.weekday.wednesday' },
+  { value: '4', labelKey: 'options.weekday.thursday' },
+  { value: '5', labelKey: 'options.weekday.friday' },
+  { value: '6', labelKey: 'options.weekday.saturday' },
+  { value: '7', labelKey: 'options.weekday.sunday' },
+]
+
 const INFORMATION_RETURN_FORM_TYPES = [
   { value: '1099-NEC', labelKey: 'options.informationReturnForm.nec' },
   { value: '1099-MISC', labelKey: 'options.informationReturnForm.misc' },

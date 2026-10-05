@@ -3534,6 +3534,16 @@
         "title": "Teilnehmende",
         "singular": "Teilnehmende",
         "description": "Kursregeln genehmigen, Termine planen und Ergebnisse erfassen."
+      },
+      "business-calendars": {
+        "title": "Geschäftskalender",
+        "singularTitle": "Geschäftskalender",
+        "description": "Wochenbeginn, Wochenendtage und Feiertage je Organisation und Tochtergesellschaft, mit Gültigkeitsdatum. Prognosen und Dashboards lesen diesen Kalender."
+      },
+      "aging-bucket-policies": {
+        "title": "Altersstufen",
+        "singularTitle": "Altersstufe",
+        "description": "Tagesgrenzen, die aus Überfälligkeitstagen Altersstufen machen, mit Gültigkeitsdatum. Ohne Richtlinie gelten die Stufen 30/60/90."
       }
     },
     "fields": {
@@ -4076,7 +4086,12 @@
       "bufferQuantity": "Zurückgehaltener Bestand",
       "stopSellingAtZero": "Verkauf bei Null stoppen",
       "scheme": "Verfahren",
-      "identificationState": "Mitgliedstaat der Identifizierung"
+      "identificationState": "Mitgliedstaat der Identifizierung",
+      "weekStartsOn": "Wochenbeginn",
+      "weekendDays": "Wochenendtage",
+      "holidayCountry": "Feiertagsland",
+      "boundaries": "Grenzwerte",
+      "holidayRegion": "Feiertagsregion"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4125,7 +4140,7 @@
       "holidayEffectiveTo": "Leer lassen für kein Enddatum. Wirksamkeitsdaten werden mit dem Feiertagsdatum verglichen, sodass frühere Lohnläufe den Kalender behalten, unter dem sie liefen.",
       "holidayIsObserved": "Aus blendet einen optionalen Feiertag aus, den Sie zuvor gewählt haben.",
       "holidayIsPaid": "Aus macht daraus eine Schließung, für die der Tag nicht bezahlt wird. Gesetzliche Feiertage werden immer bezahlt.",
-      "holidayJurisdiction": "Die Jurisdiktion, deren Kalender dies ändert. Verwenden Sie die Provinz, unter die Ihre Mitarbeiter fallen, oder Kanada (Bund) für einen bundesrechtlich regulierten Arbeitgeber.",
+      "holidayJurisdiction": "Der gesetzliche Kalender, zu dem diese Wahl oder Schließung gehört — jeder erfasste Paketkalender wird angeboten.",
       "holidayName": "Der Name des Firmenfeiertags, den Sie hinzufügen. Leer lassen, wenn diese Zeile eine Wahl zu einem gesetzlichen Feiertag ist.",
       "holidayObservance": "Gesetzliche Feiertage behalten ihr Datum, und das Gesetz gewährt stattdessen einen Ersatzruhetag. Wählen Sie eine Verschiebung nur für einen Firmenfeiertag, den Sie tatsächlich verlegen.",
       "holidayPackKey": "Der gesetzliche Feiertag, für den diese Wahl gilt, zum Beispiel boxing_day oder heritage_day. Leer lassen, um einen eigenen Firmenfeiertag hinzuzufügen. Nur optionale Feiertage können abgeschaltet werden – ein obligatorischer wird abgelehnt.",
@@ -4218,7 +4233,11 @@
       "shippingMarkup": "Zusätzlicher Aufschlag auf den Frachttarif, in Basispunkten. 100 entspricht einem Prozent.",
       "shippingCustomsDefaults": "Standard-Inhaltsbeschreibung für Sendungen ins Ausland.",
       "payBandTarget": "Optional. Geben Sie einen genehmigten Zielwert innerhalb der Spanne ein. Lassen Sie das Feld leer, wenn die Richtlinie nur Mindest- und Höchstwert festlegt; ein Mittelwert wird nicht abgeleitet.",
-      "compensationCriteria": "Optional, bis eine genehmigte Grundlage für die Bewertung gleichwertiger Arbeit festgelegt ist. Entgeltgleichheitsbewertungen erfordern festgelegte Kriterien und Gewichtungen."
+      "compensationCriteria": "Optional, bis eine genehmigte Grundlage für die Bewertung gleichwertiger Arbeit festgelegt ist. Entgeltgleichheitsbewertungen erfordern festgelegte Kriterien und Gewichtungen.",
+      "businessCalendarWeekendDays": "ISO-Wochentage als JSON-Liste, zum Beispiel [6, 7] für Samstag und Sonntag. Eine leere Liste bedeutet, dass kein Wochentag ein Wochenendtag ist.",
+      "businessCalendarHolidayCountry": "Feiertage stammen aus genau einem Arbeitskalender: dem des Landes oder dem seiner Region, wo das Land einen Kalender je Region führt (Region unten setzen). Ein Land ohne erfasstes Paket ist nicht wählbar — speichern Sie ohne Feiertagsland für reine Wochenendregeln.",
+      "agingBucketBoundaries": "Aufsteigende Tageszahlen als JSON-Liste, zum Beispiel [30, 60, 90]. Die letzte Grenze eröffnet die letzte Stufe: 90 Tage Überfälligkeit sind bereits 90+.",
+      "businessCalendarHolidayRegion": "Regionskennzeichen für den Arbeits-Feiertagskalender: ON für Ontario (niemals CA-ON). Wo neben regionalen Kalendern ein Bundeskalender steht, benennt FEDERAL den Bundeskalender. Leer lassen, wo das Land einen einzigen Kalender führt; ein Land mit regionalen Kalendern erfordert die Angabe."
     },
     "options": {
       "storedValueKind": {
@@ -4909,6 +4928,15 @@
       "portalOfferKind": {
         "pause": "Stattdessen pausieren",
         "discount": "Rabatt per Aktion"
+      },
+      "weekday": {
+        "monday": "Montag",
+        "tuesday": "Dienstag",
+        "wednesday": "Mittwoch",
+        "thursday": "Donnerstag",
+        "friday": "Freitag",
+        "saturday": "Samstag",
+        "sunday": "Sonntag"
       }
     },
     "bankFeeds": {

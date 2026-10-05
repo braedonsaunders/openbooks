@@ -3489,6 +3489,16 @@
         "title": "Participantes",
         "singular": "Participantes",
         "description": "Aprove políticas de cursos, programe sessões e registre resultados."
+      },
+      "business-calendars": {
+        "title": "Calendários de trabalho",
+        "singularTitle": "Calendário de trabalho",
+        "description": "Início da semana, dias de fim de semana e feriados por organização e filial, com vigência. Previsões e painéis leem este calendário."
+      },
+      "aging-bucket-policies": {
+        "title": "Faixas de vencimento",
+        "singularTitle": "Política de faixas de vencimento",
+        "description": "Limites de dias que convertem dias em atraso em faixas de vencimento, com vigência. Sem política, aplicam-se as faixas 30/60/90."
       }
     },
     "fields": {
@@ -4031,7 +4041,12 @@
       "bufferQuantity": "Estoque reservado",
       "stopSellingAtZero": "Parar de vender no zero",
       "scheme": "Esquema",
-      "identificationState": "Estado-Membro de identificação"
+      "identificationState": "Estado-Membro de identificação",
+      "weekStartsOn": "Início da semana",
+      "weekendDays": "Dias de fim de semana",
+      "holidayCountry": "País dos feriados",
+      "boundaries": "Limites",
+      "holidayRegion": "Região dos feriados"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4089,7 +4104,7 @@
       "includedJobTitles": "Só funcionários cujo cargo está listado aqui ganham esta regra — escolha entre os cargos do quadro ou digite um novo. Vazio paga a todos. A comparação ignora maiúsculas e espaços.",
       "excludedJobTitles": "Funcionários cujo cargo está listado aqui nunca ganham esta regra. Exclusões vencem inclusões. A comparação ignora maiúsculas e espaços.",
       "excludeFromWages": "O apontamento registra um evento de campo — um dia de plantão, uma noite de diária — não hora trabalhada. Regras de proventos derivados o leem; o cálculo do salário o pula.",
-      "holidayJurisdiction": "A jurisdição cujo calendário isto altera. Use a província que cobre seus funcionários, ou Canadá (federal) para empregador regulado federalmente.",
+      "holidayJurisdiction": "O calendário legal ao qual pertencem esta eleição ou fechamento — todos os calendários declarados são oferecidos.",
       "holidayEffectiveTo": "Vazio para sem data final. Vigências são comparadas com a data do feriado, então folhas passadas mantêm o calendário sob o qual rodaram.",
       "holidayPackKey": "O feriado legal a que esta opção se aplica, por exemplo boxing_day ou heritage_day. Vazio para adicionar um feriado próprio da empresa. Só opcionais podem ser desligados — um obrigatório é recusado.",
       "holidayName": "O nome do feriado da empresa que você está adicionando. Vazio quando esta linha é uma opção sobre feriado legal.",
@@ -4173,7 +4188,11 @@
       "shippingMarkup": "Cobrança extra sobre a tarifa da transportadora, em pontos-base. 100 é um por cento.",
       "shippingCustomsDefaults": "Descrição de conteúdo padrão para envios ao exterior.",
       "payBandTarget": "Opcional. Informe uma meta aprovada dentro da faixa. Deixe em branco se a política definir apenas o mínimo e o máximo; nenhum ponto médio será presumido.",
-      "compensationCriteria": "Opcional até que uma base aprovada para avaliar trabalho de igual valor seja definida. As avaliações de equidade salarial exigem critérios e pesos declarados."
+      "compensationCriteria": "Opcional até que uma base aprovada para avaliar trabalho de igual valor seja definida. As avaliações de equidade salarial exigem critérios e pesos declarados.",
+      "businessCalendarWeekendDays": "Dias da semana ISO como lista JSON, por exemplo [6, 7] para sábado e domingo. Uma lista vazia indica que nenhum dia é fim de semana.",
+      "businessCalendarHolidayCountry": "Os feriados vêm de um único calendário de trabalho: o do país ou o de sua região onde o país mantém um por região (informe a região abaixo). Um país sem pacote transcrito não pode ser usado — salve sem país de feriados apenas para fins de semana.",
+      "agingBucketBoundaries": "Contagens de dias ascendentes como lista JSON, por exemplo [30, 60, 90]. O último limite abre a última faixa: 90 dias em atraso já são 90+.",
+      "businessCalendarHolidayRegion": "Qualificador de região que seleciona o calendário de trabalho: ON para Ontário (nunca CA-ON). Onde um calendário federal convive com calendários regionais, FEDERAL nomeia o calendário federal. Deixe vazio onde o país mantém um único calendário; um país de calendários regionais o exige."
     },
     "options": {
       "storedValueKind": {
@@ -4864,6 +4883,15 @@
       "portalOfferKind": {
         "pause": "Pausar em vez disso",
         "discount": "Desconto com promoção"
+      },
+      "weekday": {
+        "monday": "segunda-feira",
+        "tuesday": "terça-feira",
+        "wednesday": "quarta-feira",
+        "thursday": "quinta-feira",
+        "friday": "sexta-feira",
+        "saturday": "sábado",
+        "sunday": "domingo"
       }
     },
     "payroll": {
