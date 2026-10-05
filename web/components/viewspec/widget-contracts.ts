@@ -469,7 +469,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'record-count-cell': { props: ['count', 'href', 'linked'] },
   'record-drawer': { props: ['drawer'] },
   'record-list-view': { props: ['basePath', 'drawer', 'emptyAction', 'recordType', 'rowActions', 'sp'], open: true },
-  'recovery-dashboard': { props: ['data'] },
+  'recovery-dashboard': { props: ['data', 'notice'] },
   'registered-record-list': { props: ['source', 'table', 'toolbar'] },
   'related-txn-drawer': { props: ['drawer'] },
   'relationships-section': { props: ['crmEnabled', 'empty', 'rows'] },
