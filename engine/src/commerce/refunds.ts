@@ -12,6 +12,7 @@ import {
 import { getPostingPolicy } from "./posting-policies.ts";
 import {
   CHANNEL_ORDER_EXCEPTION_CODES,
+  discountTaxes,
   OrderPostException,
   resolveOrderForPosting,
 } from "./order-posting.ts";
@@ -1107,10 +1108,12 @@ export async function buildCashRefundLines(
         unitPrice: minorToLedger(-line.discountMinor, resolved.currency),
         amount: minorToLedger(-line.discountMinor, resolved.currency),
         promotionId: line.promotionId,
-        marketplaceFacilitator: null,
+        // The reversal nets the refunded line's taxable base by the same
+        // tax codes the sale's discount line carried, moving no tax.
+        marketplaceFacilitator: line.marketplaceFacilitator,
         stockLocationId: null,
         customJson: "{}",
-        taxes: [],
+        taxes: discountTaxes(line.taxes),
       });
     }
   }

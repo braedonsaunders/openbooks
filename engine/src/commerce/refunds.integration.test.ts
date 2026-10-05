@@ -224,6 +224,23 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
     assert.equal(doc.total, "68.8600");
     assert.equal(doc.tax_total, "5.8600");
     assert.equal(await journalSum(org.orgId, outcome.documentId!), 0n);
+    // The discount reversal carries the tee's tax code at zero tax, so the
+    // refunded taxable base nets to the 63.00 the sale taxed, not 68.00.
+    const components = (await withOrgContext(org.orgId, () => db.execute<{ amount: string; taxable: string; tax: string }>(sql`
+      select dl.amount::text as amount, c.taxable_amount::text as taxable, c.tax_amount::text as tax
+        from document_lines dl
+        join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
+       where dl.org_id = ${org.orgId} and dl.document_id = ${outcome.documentId}`))).rows;
+    assert.deepEqual(
+      components.filter((c) => c.amount.startsWith("-")).map((c) => [c.taxable, c.tax]),
+      [["-5.0000", "0.0000"]],
+    );
+    assert.equal(components.reduce((sum, c) => {
+      const negative = c.taxable.startsWith("-");
+      const [whole, frac = ""] = c.taxable.replace("-", "").split(".");
+      const units = BigInt(`${whole}${(frac + "0000").slice(0, 4)}`);
+      return sum + (negative ? -units : units);
+    }, 0n), 630000n);
     // The payout credits the gateway clearing the sale debited.
     const clearing = (await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
       select l.amount::text as amount from journal_lines l
