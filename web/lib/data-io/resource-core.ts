@@ -168,6 +168,11 @@ export class RefResolver {
     if (target.resource === 'projects') {
       return { table: 'projects', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'code' }
     }
+    if (target.resource === 'worker-employments') {
+      // A worker can have several employment episodes. Keep the explicit
+      // episode identity; an employee name or number cannot select one.
+      return { table: 'worker_employments', keyCol: 'id', idCol: 'id', orgScoped: true, labelExpr: 'id' }
+    }
     if (target.resource === 'trades') {
       return { table: 'trades', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
     }
@@ -246,6 +251,7 @@ export class RefResolver {
   async resolveId(target: ResourceRefTarget, human: unknown): Promise<string | null> {
     const value = String(human ?? '').trim()
     if (!value) return null
+    if (target.resource === 'worker-employments' && !isUuid(value)) return null
     if (target.resource === 'number-sequence-kinds') {
       if (isUuid(value)) return null
       return (await this.loadSequenceKinds()).has(value) ? value : null
