@@ -491,7 +491,7 @@ export async function unapplyCreditSettlement(
       select document_number from documents
        where org_id = ${orgId}
          and kind in ('customer_payment', 'vendor_payment')
-         and status <> 'void'
+         and status <> 'voided'
          and custom -> 'creditAllocations' @> ${JSON.stringify([
            { fromLineId: application.from_line_id, toLineId: application.to_line_id },
          ])}::jsonb
