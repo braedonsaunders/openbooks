@@ -424,6 +424,7 @@ function GrantBudgetTab({ budget }: { budget: Extract<GrantDrawerData, { mode: '
     [t('grants.indirectCost'), budget.indirectCost],
     [t('grants.allowableSpend'), budget.allowableSpend],
     [t('grants.reimbursedAmount'), budget.reimbursedAmount],
+    [t('grants.reimbursedByOtherGrants'), budget.reimbursedByOtherGrants],
     [t('grants.remainingAllowable'), budget.remainingAllowableSpend],
   ]
   return (

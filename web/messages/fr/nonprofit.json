@@ -147,6 +147,7 @@
     "indirectRate": "Taux indirect",
     "allowableSpend": "Dépense admissible",
     "reimbursedAmount": "Montant remboursé",
+    "reimbursedByOtherGrants": "Remboursé par d’autres subventions de ce fonds",
     "remainingAllowable": "Dépense admissible restante",
     "drawdownsEmpty": "Aucun tirage enregistré pour cette subvention.",
     "createDrawdownAction": "Créer un tirage",

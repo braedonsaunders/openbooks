@@ -147,6 +147,7 @@
     "indirectRate": "間接費率",
     "allowableSpend": "対象支出額",
     "reimbursedAmount": "精算済額",
+    "reimbursedByOtherGrants": "同じファンドの他の助成金による精算額",
     "remainingAllowable": "対象支出残額",
     "drawdownsEmpty": "この助成金の支出はありません。",
     "createDrawdownAction": "支出を作成",

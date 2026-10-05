@@ -147,6 +147,7 @@
     "indirectRate": "Indirekter Satz",
     "allowableSpend": "Förderfähige Ausgaben",
     "reimbursedAmount": "Erstatteter Betrag",
+    "reimbursedByOtherGrants": "Von anderen Zuschüssen dieses Fonds erstattet",
     "remainingAllowable": "Verbleibende förderfähige Ausgaben",
     "drawdownsEmpty": "Keine Abrufe für diesen Zuschuss erfasst.",
     "createDrawdownAction": "Abruf erstellen",

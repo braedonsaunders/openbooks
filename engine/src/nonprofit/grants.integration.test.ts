@@ -6,7 +6,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import { postEntry } from "../journal/post-entry.ts";
 import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
-import { activateGrant, amendGrant, awardGrant, createGrant, recognizeGrantDrawdown, recordGrantDrawdown, satisfyGrantBarrier, type GrantPostingAccounts } from "./grants.ts";
+import { activateGrant, amendGrant, awardGrant, createGrant, getGrantBudget, recognizeGrantDrawdown, recordGrantDrawdown, satisfyGrantBarrier, type GrantPostingAccounts } from "./grants.ts";
 import { createFund } from "./funds.ts";
 import { provisionFundAccounting } from "./provision.ts";
 import { NonprofitError } from "./errors.ts";
@@ -264,6 +264,51 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       { version: 1, award_amount: "10.0000", supersedes_id: null },
       { version: 2, award_amount: "30.0000", supersedes_id: draft.id },
     ]);
+
+    // Costs are recorded by fund, so a fund shared by two awards is reimbursed
+    // once across both, and only costs inside an award's period count.
+    const sharedFund = await createFund({
+      orgId: org.orgId, code: "GRANT-SHARED", name: "Shared Program Fund",
+      kind: "restricted", restrictionClass: "with_donor_restrictions", actorId,
+    });
+    await withOrgTransaction(org.orgId, () => postEntry(db, {
+      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+      entryNumber: `GRANT-SHARED-COST-${randomUUID().slice(0, 8)}`,
+      postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
+      lines: [
+        { accountId: org.accounts.cogs, amount: "100.00", extraDims: { fund: sharedFund.id } },
+        { accountId: org.accounts.bank, amount: "-100.00", extraDims: { fund: sharedFund.id } },
+      ],
+    }));
+    const sharedGrant = async (code: string, periodFrom: string) => {
+      const created = await createGrant({
+        orgId: org.orgId, code, name: `Shared award ${code}`, sponsorPartyId: org.customerId,
+        sponsorKind: "foundation", determination: "contribution_unconditional", awardAmount: "500.00",
+        periodFrom, periodTo: "2026-12-31", fundId: sharedFund.id, allowableAccountGroupId: groupId, actorId,
+      });
+      await awardGrant({ orgId: org.orgId, grantId: created.id, accounts, postingDate: org.date, actorId });
+      await activateGrant({ orgId: org.orgId, grantId: created.id, actorId });
+      return created.id;
+    };
+    const reimburse = (grantId: string, amount: string) =>
+      recordGrantDrawdown({ orgId: org.orgId, grantId, amount, kind: "reimbursement", accounts, postingDate: org.date, actorId });
+    const overAllowable = (pattern: RegExp) => (error: unknown) =>
+      error instanceof NonprofitError && error.code === "grant_drawdown_over_allowable_spend" &&
+      pattern.test(`${error.message} ${error.remedy}`);
+    const lateGrant = await sharedGrant("GRANT-SHARED-LATE", "2026-08-01");
+    await assert.rejects(reimburse(lateGrant, "0.01"), overAllowable(/remaining of 0\.0000.*2026-08-01 to 2026-12-31/s));
+    const firstGrant = await sharedGrant("GRANT-SHARED-A", "2026-01-01");
+    const secondGrant = await sharedGrant("GRANT-SHARED-B", "2026-01-01");
+    await reimburse(firstGrant, "100.00");
+    await assert.rejects(
+      reimburse(secondGrant, "100.00"),
+      overAllowable(/remaining of 0\.0000.*Fund GRANT-SHARED is shared.*GRANT-SHARED-A \(100\.0000\).*no more than 0\.0000/s),
+    );
+    const secondBudget = await getGrantBudget(org.orgId, secondGrant);
+    assert.deepEqual(
+      [secondBudget.allowableDirectCosts, secondBudget.reimbursedByOtherGrants, secondBudget.remainingAllowableSpend],
+      ["100.0000", "100.0000", "0.0000"],
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
