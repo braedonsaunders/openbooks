@@ -2223,6 +2223,17 @@
       "absorptionNoAccount": "No overhead application account is configured — set one in Setup → Overhead.",
       "absorptionNoPostings": "The configured overhead application account has no applied postings in this period."
     },
+    "refusals": {
+      "mixedUnits": "Cannot blend {formats} in one composite ({categories}) — give every included category the same rate format, or exclude the odd ones from the composite in Setup → Overhead Model.",
+      "cascadingNoLabor": "The cascading composite needs a labor rate, but the period has no costed labor and the profile sets no base labor rate — approve costed time for the period, or set a base labor rate in Setup → Overhead Model → Configuration.",
+      "cascadingNoLaborDept": "The cascading composite needs a labor rate for {dept}, but the period has no costed labor there and the profile sets no base labor rate — approve costed time for the period, or set a base labor rate in Setup → Overhead Model → Configuration.",
+      "perFteNoHours": "“{category}” uses Currency/FTE, but no annual FTE hours resolve — record annual hours on the employees’ labor cost rates, or weekly hours on their work schedules.",
+      "perFteNoHoursDept": "“{category}” uses Currency/FTE, but no annual FTE hours resolve for {dept} — record annual hours on that department’s labor cost rates, or weekly hours on their work schedules.",
+      "missingBase": "“{category}” cannot calculate {format}: its {base} base is missing or not positive — check the category’s allocation base and the period’s postings.",
+      "formulaReference": "“{category}” refers to {reference}, which resolves to nothing — correct the formula or derivation in Setup → Overhead Model → Configuration.",
+      "formulaNegative": "“{category}” evaluates to {amount}, and a burden category cannot be negative — correct the formula in Setup → Overhead Model → Configuration.",
+      "unreadableAmount": "“{category}” contains an unreadable stored amount — correct the category amount in Setup → Overhead Model → Configuration."
+    },
     "formats": {
       "perHour": "{amount}/hr"
     },
@@ -2567,7 +2578,11 @@
       "howLabourRates": "Labour rates",
       "howLabourRatesBody": "per-entry time-sheet cost rates, not a single employee master field.",
       "howGapModeler": "Gap modeler",
-      "howGapModelerBody": "the four recovery levers work against the utilization-based gap; when the Overhead Burden GL account carries postings, absorption switches to actual applied amounts automatically."
+      "howGapModelerBody": "the four recovery levers work against the utilization-based gap; when the Overhead Burden GL account carries postings, absorption switches to actual applied amounts automatically.",
+      "baseLaborRate": "Base labor rate per hour",
+      "baseLaborRateHelp": "Fallback hourly rate when the period has no costed labor. Leave empty to refuse instead of assuming a rate.",
+      "baseLaborRatePlaceholder": "e.g. 45.00",
+      "baseLaborRateSave": "Save rate"
     },
     "custom": {
       "remove": "Remove",

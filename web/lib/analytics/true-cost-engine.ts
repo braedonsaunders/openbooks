@@ -299,7 +299,12 @@ export function calculateCompositeRate(
 
 /* ─────────────────────────────────── manual / derived / formula ── */
 
-/** Stored configuration must be readable; corrupt amounts cannot become zero. */
+/**
+ * Stored configuration must be readable; corrupt amounts cannot become
+ * zero. Absent values in a sparse per-department map mean no amount for
+ * that department (a normal map, not corruption); every other required
+ * amount must parse or the category refuses instead of zeroing.
+ */
 function exactConfigMoney(value: unknown): string {
   if (value === undefined || value === null) return "0.0000";
   try {
@@ -309,8 +314,23 @@ function exactConfigMoney(value: unknown): string {
   } catch {
     throw new OverheadCalculationError(
       `The overhead model contains an unreadable amount "${String(value)}". Correct the stored category amount before retrying.`,
+      "unreadableAmount",
     );
   }
+}
+
+/**
+ * A required stored amount: missing is corrupt, not zero. Sparse
+ * per-department entries keep the tolerant reader above; totals, rates and
+ * percentages fail closed so a half-saved category never prices at zero.
+ */
+function requiredConfigMoney(value: unknown): string {
+  if (value === undefined || value === null)
+    throw new OverheadCalculationError(
+      "The overhead model contains a category with a missing amount. Correct the stored category amount before retrying.",
+      "unreadableAmount",
+    );
+  return exactConfigMoney(value);
 }
 
 /**
@@ -351,7 +371,7 @@ export function calculateManualCategoryData(
   let expenseExact: Record<string, string> | undefined;
 
   if (entryMode === "fixed_total") {
-    const fixedTotalUnits = toUnits(exactConfigMoney(manualConfig.fixedTotal ?? 0));
+    const fixedTotalUnits = toUnits(requiredConfigMoney(manualConfig.fixedTotal));
     totalExpense = toChartNumber(fromUnits(fixedTotalUnits));
     const weightUnits = (value: number | string): bigint => {
       if (typeof value === "number" && (!Number.isFinite(value) || value < 0))
@@ -406,20 +426,26 @@ export function calculateManualCategoryData(
     totalExpense = toChartNumber(exactTotal);
   } else if (entryMode === "per_unit") {
     const unitType = manualConfig.unitType || "headcount";
-    const perUnitRate = exactConfigMoney(manualConfig.perUnitRate);
+    const perUnitRate = requiredConfigMoney(manualConfig.perUnitRate);
     const isPercent = unitType === "revenue" || unitType === "direct_cost";
     const rate = isPercent ? div(perUnitRate, "100") : perUnitRate;
     expenseExact = Object.fromEntries(deptIds.map((id) => [id, "0.0000"]));
     let exactTotal = "0.0000";
     for (const id of deptIds) {
-      let exp = "0.0000";
+      // A per-unit base that cannot be read is corrupt configuration, never
+      // a zero expense: the failure names the category at the loader, which
+      // attaches it before surfacing the refusal.
+      let exp: string;
       try {
         // The exact per-department unit count when the caller passes one; the
         // float bundle is only a fallback for callers without exact maps.
         const units = exactBases?.[unitType]?.[id] ?? quantizeOverheadMoney(getAllocationBaseValue(unitType, bases, id));
         exp = mulDecimal(units, rate);
       } catch {
-        exp = "0.0000";
+        throw new OverheadCalculationError(
+          "A per-unit category's department base is unreadable. Correct the stored category base before retrying.",
+          "unreadableAmount",
+        );
       }
       expenseExact[id] = exp;
       expense[id] = toChartNumber(exp);
@@ -449,8 +475,21 @@ export function calculateDerivedCategoryData(
   }
 
   const sourceId = derivedConfig.sourceCategory;
-  if (!sourceId || !categoryTotals[sourceId]) return { expense, expenseExact, totalExpense: 0 };
-  const percentage = exactConfigMoney(derivedConfig.percentage ?? "100");
+  // A derivation without a resolvable source is corrupt configuration, never
+  // an empty category: the loader names the category before surfacing it.
+  if (!sourceId || !categoryTotals[sourceId])
+    throw new OverheadCalculationError(
+      `A derived category refers to ${JSON.stringify(sourceId ?? null)}, which resolves to no category total. Correct the derivation source before retrying.`,
+      "formulaReference",
+      { reference: sourceId ?? "missing" },
+    );
+  if (derivedConfig.percentage === undefined || derivedConfig.percentage === null)
+    throw new OverheadCalculationError(
+      "A derived category is missing its percentage of the source category. Correct the derivation before retrying.",
+      "formulaReference",
+      { reference: "percentage" },
+    );
+  const percentage = exactConfigMoney(derivedConfig.percentage);
 
   const totalDerived = mulPercent(exactConfigMoney(categoryTotals[sourceId]!.expenseOverall), percentage);
   const base = derivedConfig.allocationBase && derivedConfig.allocationBase !== "same" ? derivedConfig.allocationBase : allocationBase;
@@ -478,9 +517,8 @@ export function calculateFormulaCategoryData(
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
-  strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
   exactBases?: Partial<Record<AllocationBase, Record<string, string>>>,
-): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number; error?: string } {
+): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number } {
   const expense: Record<string, number> = { Overall: 0 };
   const expenseExact: Record<string, string> = { Overall: "0.0000" };
   for (const id of deptIds) {
@@ -516,17 +554,52 @@ export function calculateFormulaCategoryData(
     revenue: exactOverall("revenue", bases.revenue.total),
     labor_dollars: exactOverall("labor_dollars", bases.laborDollars.total),
     direct_cost: exactOverall("direct_cost", bases.directCost.total),
+    square_feet: exactOverall("square_feet", bases.squareFeet.total),
+    units: exactOverall("units", bases.units.total),
+    custom: exactOverall("custom", bases.custom.total),
   };
 
+  // An unknown reference is corrupt configuration, never a zero: each
+  // substitution names the offending reference, and the loader names the
+  // category before surfacing the refusal.
+  const unknownRefs: string[] = [];
   let evalFormulaText = formula;
-  evalFormulaText = evalFormulaText.replace(/cat\["([^"]+)"\]/g, (_m, id) => catVals[id] ?? "0.0000");
-  evalFormulaText = evalFormulaText.replace(/cat\.([a-zA-Z0-9_]+)/g, (_m, id) => catVals[id] ?? "0.0000");
-  evalFormulaText = evalFormulaText.replace(/base\.([a-zA-Z0-9_]+)/g, (_m, id) => baseVals[id] ?? "0.0000");
+  evalFormulaText = evalFormulaText.replace(/cat\["([^"]+)"\]/g, (_m, id) => {
+    if (!(id in catVals)) unknownRefs.push(`cat["${id}"]`);
+    return catVals[id] ?? "0.0000";
+  });
+  evalFormulaText = evalFormulaText.replace(/cat\.([a-zA-Z0-9_]+)/g, (_m, id) => {
+    if (!(id in catVals)) unknownRefs.push(`cat.${id}`);
+    return catVals[id] ?? "0.0000";
+  });
+  evalFormulaText = evalFormulaText.replace(/base\.([a-zA-Z0-9_]+)/g, (_m, id) => {
+    if (!(id in baseVals)) unknownRefs.push(`base.${id}`);
+    return baseVals[id] ?? "0.0000";
+  });
+  if (unknownRefs.length > 0)
+    throw new OverheadCalculationError(
+      `A formula category refers to ${unknownRefs.map((r) => JSON.stringify(r)).join(", ")}, which resolve to nothing. Correct the formula before retrying.`,
+      "formulaReference",
+      { reference: unknownRefs[0]! },
+    );
 
   const calc = evaluateExactFormula(evalFormulaText);
-  if (calc === null) return { expense, expenseExact, totalExpense: 0, error: strings.formulaError };
+  if (calc === null)
+    throw new OverheadCalculationError(
+      "A formula category cannot be evaluated. Correct the formula before retrying.",
+      "formulaReference",
+      { reference: formula.length > 60 ? `${formula.slice(0, 60)}…` : formula },
+    );
 
-  const totalExpenseExact = cmp(calc, "0") < 0 ? "0.0000" : calc;
+  // A burden category cannot be negative: clamping would hide a sign error
+  // behind a zero total.
+  if (cmp(calc, "0") < 0)
+    throw new OverheadCalculationError(
+      `A formula category evaluates to ${calc}, and a burden category cannot be negative. Correct the formula before retrying.`,
+      "formulaNegative",
+      { amount: calc },
+    );
+  const totalExpenseExact = calc;
   for (const id of deptIds) {
     const exact = mulDecimal(totalExpenseExact, exactBaseShare(allocationBase, bases, id, exactBases));
     expenseExact[id] = exact;

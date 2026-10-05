@@ -18,12 +18,13 @@ import {
   overheadPublishBlockers,
   quantizeOverheadMoney,
   type OverheadPublishBlocker,
+  type OverheadRefusalCode,
 } from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
 import { overheadApplicationSettings } from "@openbooks/engine/allocations/overhead-application";
 import { resolveAnnualHoursMany } from "@openbooks/engine/projects/labor-costing";
-import { loadWorkSchedules, pickWorkSchedule, scheduledHoursPerWeek } from "@openbooks/engine/payroll/work-schedules";
+import { loadWorkSchedules, pickWorkSchedule } from "@openbooks/engine/payroll/work-schedules";
 import {
   type AllocationBase,
   type AllocationMethod,
@@ -67,6 +68,17 @@ import { englishCatalogMessage } from "./catalog-strings";
  * addressed separately.)
  */
 
+/**
+ * A composite/KPI-level refusal: the composite cannot blend, but every
+ * category, department and editor still renders. `code` is the typed catalog
+ * key suffix (`trueCost.refusals.<code>` in all seven locales); `message`
+ * is the request-locale rendering naming the remedy that exists.
+ */
+export interface TrueCostRefusal {
+  code: OverheadRefusalCode | "perFteNoHoursDept" | "cascadingNoLaborDept";
+  message: string;
+}
+
 export interface Dept {
   id: string;
   name: string;
@@ -74,7 +86,8 @@ export interface Dept {
   totalHours: number;
   /** Non-billable hours with no cost rate (display twin of the exact map). */
   unratedHours: number;
-  composite: number; // dept burden ÷ dept billed hours
+  /** Dept burden ÷ dept billed hours; null when this scope's blend refuses. */
+  composite: number | null; // dept burden ÷ dept billed hours
   /**
    * Exact 2dp department rate from the shared engine contract — the value
    * publication persists. Empty when the publish gate blocks (see
@@ -106,9 +119,11 @@ export interface BurdenCategory {
   /** The group's auto-match rule (editable in the category flyout). */
   match: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string };
   totalAmount: number;
-  rate: number; // the formatted rate value in the category's rate format
+  /** The formatted rate value in the category's rate format; null when this
+   * category's own rate refuses (the refusal is recorded, never thrown). */
+  rate: number | null; // the formatted rate value in the category's rate format
   /** Raw $/hr rate before formatting (totalAmount ÷ allocation base at Overall). */
-  rawRate: number;
+  rawRate: number | null;
   /** Allocation settings applied to this category (rate engine). */
   allocationBase: AllocationBase;
   allocationMethod: AllocationMethod;
@@ -117,8 +132,9 @@ export interface BurdenCategory {
   /** Locale- and currency-aware display string, or a percentage. */
   rateDisplay: string;
   accounts: BurdenAccount[];
-  /** deptId → { amount, rate } (allocated where untagged). */
-  byDept: Record<string, { amount: number; rate: number }>;
+  /** deptId → { amount, rate } (allocated where untagged); rate null when
+   * this department scope refuses. */
+  byDept: Record<string, { amount: number; rate: number | null }>;
   /**
    * Non-billable hours with no cost rate excluded from this category's cost
    * (exact string, set only on the native time category when greater than
@@ -193,8 +209,18 @@ export interface EmployeeRate {
 export interface TrueCostData {
   period: { from: string; to: string; label: string };
   departments: Dept[];
+  /**
+   * The composite-level refusal, when the composite cannot blend. The
+   * Overall headline refusal wins the slot; otherwise the first
+   * department-scope refusal in department order. Categories, departments
+   * and the profile config still render — the refusal never hides the
+   * screens that fix it.
+   */
+  compositeRefusal: TrueCostRefusal | null;
   kpis: {
-    compositeRate: number;
+    /** Overall composite; null when the Overall scope refuses (the refusal
+     * then holds the Overall slot of `compositeRefusal`). */
+    compositeRate: number | null;
     compositeRateChangePct: number | null; // vs immediately-preceding equal window
     totalOverhead: number;
     overheadAccounts: number;
@@ -211,7 +237,8 @@ export interface TrueCostData {
   };
   categories: BurdenCategory[];
   unassigned: BurdenAccount[];
-  totals: { byDept: Record<string, number>; overall: number };
+  /** Per-department and Overall composites; null wherever that scope refuses. */
+  totals: { byDept: Record<string, number | null>; overall: number | null };
   labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number; unratedHours: string };
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
@@ -668,11 +695,11 @@ export async function trueCostData(
   }
   // ---- annual FTE hours per scope -------------------------------------------
   // A per-FTE display multiplies an hourly rate by full-time annual hours.
-  // The divisor is measured, never assumed: per employee, weekly hours from
-  // the work schedule in force (annualized × 52, the payroll stub's own
-  // annualization) else the winning labor_cost_rates.annual_hours. Each scope
-  // takes the hours-weighted exact mean over its resolved employees; with
-  // nothing resolved the per-FTE category refuses by name below.
+  // The divisor is measured, never assumed: per employee, the work schedule
+  // in force annualized from its own cycle, else the winning
+  // labor_cost_rates.annual_hours. Each scope takes the hours-weighted exact
+  // mean over its resolved employees; with nothing resolved the per-FTE
+  // category refuses by name below.
   const annualHoursByDept = new Map<string, string>();
   let overallAnnualHours: string | null = null;
   {
@@ -698,8 +725,20 @@ export async function trueCostData(
           departmentId: keys?.department_id ?? null,
           subsidiaryId: keys?.subsidiary_id ?? null,
         }, to);
-        const weekly = schedule ? scheduledHoursPerWeek(schedule) : null;
-        const fromSchedule = weekly === null ? null : mulRatio(weekly, 52n, 1n);
+        // Annualize from the schedule's own cycle: its hours repeat every
+        // cycleDays days, so a common year carries 365 ÷ cycleDays repeats —
+        // never a bare ×52, which assumes a 7-day cycle and a 364-day year.
+        // A schedule with varying hours annualizes to nothing and refuses.
+        // The cycle total sums the resolved day hours exactly (the same sum
+        // the payroll cycle helper owns; only the public weekly figure is
+        // exported, so the loader totals its own divisor here).
+        const cycleHours = schedule && schedule.pattern === "cycle"
+          ? schedule.days.reduce((sum, day) => add(sum, day.hours), "0.0000")
+          : null;
+        const cycleDays = schedule?.cycleDays ?? null;
+        const fromSchedule = cycleHours === null || cycleDays === null || cycleDays <= 0 || cmp(cycleHours, "0") <= 0
+          ? null
+          : div(mulDecimal(cycleHours, "365"), String(cycleDays));
         const annual = fromSchedule !== null && cmp(fromSchedule, "0") > 0
           ? fromSchedule
           : (rateAnnual.get(id) ?? null);
@@ -1048,12 +1087,32 @@ export async function trueCostData(
 
   // Preview and publication share exact category rates; non-hourly units
   // remain explicitly blocked from the hourly publication card.
-  const exactRatesByCat = new Map<string, { rates: Record<string, string>;
-      overall: string;
+  const exactRatesByCat = new Map<string, { rates: Record<string, string | null>;
+      overall: string | null;
       expenses: Record<string, string> }>();
+
+  // Refusals recorded while building categories, keyed by scope. A refused
+  // rate is data, never an exception: the category still renders with its
+  // expense, and the composite decides from these maps whether it can blend.
+  const overallRefusals = new Map<string, TrueCostRefusal>();
+  const deptRefusals = new Map<string, Map<string, TrueCostRefusal>>();
+  const recordRefusal = (catId: string, deptId: string | null, refusal: TrueCostRefusal): null => {
+    if (deptId === null) {
+      if (!overallRefusals.has(catId)) overallRefusals.set(catId, refusal);
+    } else {
+      let byDept = deptRefusals.get(catId);
+      if (!byDept) { byDept = new Map(); deptRefusals.set(catId, byDept); }
+      if (!byDept.has(deptId)) byDept.set(deptId, refusal);
+    }
+    return null;
+  };
+  const deptNameOf = (deptId: string): string => departmentsBase.find((d) => d.id === deptId)?.name ?? deptId;
 
   // Apply the rate engine to one category's expense-by-dept: allocation
   // base × method → raw rate, then formatted per the category's rate format.
+  // A scope whose display rate cannot be derived records its refusal and
+  // yields a null rate — it never throws, so one refusing scope cannot hide
+  // the rest of the dashboard or its editors.
   function buildCategory(
     id: string, key: string, name: string, color: string | null,
     categoryType: BurdenCategory["categoryType"], match: BurdenCategory["match"],
@@ -1067,14 +1126,14 @@ export async function trueCostData(
     const rateFormat = s.rateFormat ?? "per_hour";
     const includeInComposite = s.includeInComposite ?? true;
     const baseExact = baseExactFor(allocationBase);
-    const byDept: Record<string, { amount: number; rate: number }> = {};
+    const byDept: Record<string, { amount: number; rate: number | null }> = {};
     const rateInput = {
         id, allocationMethod, allocationTiers: s.allocationTiers,
       allocationWeights: s.allocationWeights,
       expenseByDept: expenseExactByDept, baseByDept: baseExact,
       };
     const rawDeptRates = deriveOverheadCategoryDeptRates(rateInput);
-    const exactRates: Record<string, string> = {};
+    const exactRates: Record<string, string | null> = {};
     const sumExact = (values: Record<string, string>) =>
       Object.values(values).reduce(
         (total, value) => add(total, value),
@@ -1088,13 +1147,15 @@ export async function trueCostData(
       expense: string,
       deptId?: string,
     )
-      : string => {
+      : string | null => {
       if (rateFormat === "per_fte") {
-        const annual = (deptId ? annualHoursByDept.get(deptId) : undefined) ?? overallAnnualHours;
-        if (annual === null || annual === undefined)
-          throw new OverheadCalculationError(
-            `Category "${name}" uses Currency/FTE but no annual FTE hours resolve${deptId ? ` for department "${deptId}"` : ""} — record annual hours on the employees' labor cost rates or weekly hours on their work schedules.`,
-          );
+        // A department resolves its own annual FTE hours only — borrowing
+        // the org mean would price the department in hours it never worked.
+        const annual = deptId ? (annualHoursByDept.get(deptId) ?? null) : overallAnnualHours;
+        if (annual === null)
+          return recordRefusal(id, deptId ?? null, deptId
+            ? { code: "perFteNoHoursDept", message: strings.refusalPerFteNoHoursDept(name, deptNameOf(deptId)) }
+            : { code: "perFteNoHours", message: strings.refusalPerFteNoHours(name) });
       }
       const value = deriveOverheadDisplayRate({
         rawRate,
@@ -1103,12 +1164,13 @@ export async function trueCostData(
         laborDollars: deptId ? (laborBase[deptId] ?? "0") : sumExact(laborBase),
         directCost: deptId ? (costBase[deptId] ?? "0") : sumExact(costBase),
         units: deptId ? (unitBase[deptId] ?? "0") : sumExact(unitBase),
-        annualFteHours: ((deptId ? annualHoursByDept.get(deptId) : undefined) ?? overallAnnualHours) ?? undefined,
+        annualFteHours: (deptId ? (annualHoursByDept.get(deptId) ?? null) : overallAnnualHours) ?? undefined,
       });
       if (value === null)
-        throw new OverheadCalculationError(
-          `Category "${name}" cannot calculate ${rateFormat}${deptId ? ` for department "${deptId}"` : ""}: its base is missing or not positive. Check the category's allocation base and period before retrying.`,
-        );
+        return recordRefusal(id, deptId ?? null, {
+          code: "missingBase",
+          message: strings.refusalMissingBase(name, strings.rateFormatLabel(rateFormat), strings.allocationBaseLabel(allocationBase)),
+        });
       return value;
     };
     for (const d of departmentsBase) {
@@ -1118,7 +1180,7 @@ export async function trueCostData(
         d.id,
       );
       exactRates[d.id] = exact;
-      byDept[d.id] = { amount: expenseByDept[d.id] ?? 0, rate: toChartNumber(exact) };
+      byDept[d.id] = { amount: expenseByDept[d.id] ?? 0, rate: exact === null ? null : toChartNumber(exact) };
     }
     const overallExpense = sumExact(expenseExactByDept);
     const rawRateExact = deriveOverheadOverallRate(rateInput);
@@ -1126,6 +1188,16 @@ export async function trueCostData(
     exactRatesByCat.set(id, { rates: exactRates,
       overall,
       expenses: expenseExactByDept });
+    if (overall === null) {
+      const refusal = overallRefusals.get(id);
+      return {
+        id, key, name, color, categoryType, match,
+        totalAmount: total, rawRate: null, rate: null, rateDisplay: refusal?.message ?? "",
+        allocationBase, allocationMethod, rateFormat, includeInComposite,
+        accounts, byDept,
+        ...(unratedHours !== undefined && cmp(unratedHours, "0") > 0 ? { unratedHours } : {}),
+      };
+    }
     const rawRate = Number(rawRateExact);
     const formatted = formatRate(
       rawRateExact, rateFormat,
@@ -1144,15 +1216,60 @@ export async function trueCostData(
     };
   }
 
-  const expenseCategories: BurdenCategory[] = burdenGroups.groups.map((g) => {
+  // Render a coded engine refusal with the loader's category name attached.
+  const refuseFromValues = (
+    code: OverheadRefusalCode | "perFteNoHoursDept" | "cascadingNoLaborDept",
+    values: Record<string, string>,
+  ): TrueCostRefusal => {
+    const category = values["category"] ?? "";
+    switch (code) {
+      case "formulaReference":
+        return { code, message: strings.refusalFormulaReference(category, values["reference"] ?? "") };
+      case "formulaNegative":
+        return { code, message: strings.refusalFormulaNegative(category, values["amount"] ?? "") };
+      case "perFteNoHours":
+        return { code, message: strings.refusalPerFteNoHours(category) };
+      case "perFteNoHoursDept":
+        return { code, message: strings.refusalPerFteNoHoursDept(category, values["dept"] ?? "") };
+      case "cascadingNoLabor":
+        return { code, message: strings.refusalCascadingNoLabor() };
+      case "cascadingNoLaborDept":
+        return { code, message: strings.refusalCascadingNoLaborDept(values["dept"] ?? "") };
+      case "missingBase":
+        return {
+          code,
+          message: strings.refusalMissingBase(category, values["format"] ?? "", values["base"] ?? ""),
+        };
+      default:
+        return { code: "unreadableAmount", message: strings.refusalUnreadableAmount(category) };
+    }
+  };
+  // A category whose build throws records its refusal and leaves the list:
+  // corrupt configuration in one category never hides the others or the
+  // editors. The loader names the category from the stored config.
+  const refuseCategory = (error: unknown, catId: string, name: string): null => {
+    if (error instanceof OverheadCalculationError && error.code) {
+      recordRefusal(catId, null, refuseFromValues(error.code, { ...error.values, category: name }));
+    } else if (error instanceof OverheadCalculationError) {
+      recordRefusal(catId, null, { code: "unreadableAmount", message: strings.refusalUnreadableAmount(name) });
+    } else throw error;
+    return null;
+  };
+  const expenseCategories: BurdenCategory[] = [];
+  for (const g of burdenGroups.groups) {
     const c = cats.get(g.id)!;
     const exactByDept = Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact, settingsOf(g.id)?.allocationBase ?? "billed_hours"));
     // Display numerics cross from exact through Number at this boundary; the
     // exact maps flow separately for accumulation and the per-hour contract.
     const expenseByDept = Object.fromEntries(Object.entries(exactByDept).map(([k, v]): [string, number] => [k, Number(v)]));
-    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept,
+    try {
+      const built = buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept,
         toChartNumber(c.total), [...c.accounts.values()].sort((a, b) => cmp(b.amount, a.amount)), exactByDept);
-  }).filter((c) => c.totalAmount !== 0);
+      if (built.totalAmount !== 0) expenseCategories.push(built);
+    } catch (error) {
+      refuseCategory(error, c.id, c.name);
+    }
+  }
 
   // ---- native non-billable time category ---------------------------------------
   // A first-class burden category (not a hand-built custom one): the labour cost
@@ -1160,7 +1277,11 @@ export async function trueCostData(
   const timeCategories: BurdenCategory[] = [];
   if (cmp(timeTotalExact, "0") > 0 || cmp(unratedHoursExact, "0") > 0) {
     const timeExpenseByDept = Object.fromEntries([...timeExpenseExactByDept].map(([k, v]): [string, number] => [k, Number(v)]));
-    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, Number(timeTotalExact), [], Object.fromEntries(timeExpenseExactByDept), unratedHoursExact));
+    try {
+      timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, Number(timeTotalExact), [], Object.fromEntries(timeExpenseExactByDept), unratedHoursExact));
+    } catch (error) {
+      refuseCategory(error, TIME_ID, strings.timeCategoryName);
+    }
   }
 
   // ---- custom categories (manual / derived / formula) --------------------------
@@ -1186,29 +1307,37 @@ export async function trueCostData(
   };
   const customCategories: BurdenCategory[] = [];
   for (const cc of profile.customCategories) {
-    let calc: { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number };
-    if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases, basesExact);
-    else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, basesExact);
-    else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, strings, basesExact);
-    let customOverall = "0.0000";
-    for (const d of departmentsBase) customOverall = add(customOverall, calc.expenseExact?.[d.id] ?? "0.0000");
-    categoryTotals[cc.id] = { expenseOverall: customOverall };
-    // Custom category settings live on the category record itself.
-    profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
-    // Synthetic expenses cross from float-land through exact shortest-repr
-    // quantization (a no-op for ordinary config decimals like 100.50).
-    const customExpenseExact: Record<string, string> = {};
-    for (const d of departmentsBase) customExpenseExact[d.id] = calc.expenseExact?.[d.id] ?? quantizeOverheadMoney(calc.expense[d.id] ?? 0);
-    const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, [], customExpenseExact);
-    if (Math.abs(built.totalAmount) > 0) customCategories.push(built);
+    // A refusing custom category leaves the list and the totals: later
+    // customs referencing it refuse in turn, each naming its own break, and
+    // the stored record stays in the profile config for its editor.
+    try {
+      let calc: { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number };
+      if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases, basesExact);
+      else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, basesExact);
+      else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, basesExact);
+      let customOverall = "0.0000";
+      for (const d of departmentsBase) customOverall = add(customOverall, calc.expenseExact?.[d.id] ?? "0.0000");
+      categoryTotals[cc.id] = { expenseOverall: customOverall };
+      // Custom category settings live on the category record itself.
+      profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
+      // Synthetic expenses cross from float-land through exact shortest-repr
+      // quantization (a no-op for ordinary config decimals like 100.50).
+      const customExpenseExact: Record<string, string> = {};
+      for (const d of departmentsBase) customExpenseExact[d.id] = calc.expenseExact?.[d.id] ?? quantizeOverheadMoney(calc.expense[d.id] ?? 0);
+      const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, [], customExpenseExact);
+      if (Math.abs(built.totalAmount) > 0) customCategories.push(built);
+    } catch (error) {
+      refuseCategory(error, cc.id, cc.name);
+    }
   }
 
   const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
 
   // ---- composite rate via the configured method () ---
   // The labor rate is measured (costed time) or explicitly configured on the
-  // profile — never assumed. Cascading with neither refuses by name through
-  // deriveOverheadDeptComposite; other methods never read the rate.
+  // profile — never assumed. A scope with no rate records its refusal and
+  // yields a null composite; the blend never throws past this section, so a
+  // refusing scope cannot hide the rest of the payload or its editors.
   const typedEmployeeRows = empTranslated;
   const overallLaborRateExact: string | null =
     overallLaborRatedExact === "0.0000"
@@ -1216,30 +1345,79 @@ export async function trueCostData(
         ? null
         : quantizeOverheadMoney(profile.baseLaborRate))
       : div(overallLaborCostExact, overallLaborRatedExact);
-  const compositeRateExact = deriveOverheadDeptComposite({
-    compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact ?? undefined,
-    categories: categories.map((category) => ({
+  const compositeInputOf = (rateOf: (id: string) => string | null, expenseOf: (id: string) => string) =>
+    categories.map((category) => ({
       id: category.id,
       name: category.name,
-      rate: exactRatesByCat.get(category.id)!.overall,
-      expense: Object.values(exactRatesByCat.get(category.id)!.expenses).reduce(
-        (total, value) => add(total, value),
-        "0.0000",
-      ),
+      rate: rateOf(category.id) ?? "0.0000",
+      expense: expenseOf(category.id),
       rateFormat: category.rateFormat,
       includeInComposite: category.includeInComposite,
-    })),
-  });
-  const compositeRate = Number(compositeRateExact);
-  // A department without costed time uses the measured-or-explicit Overall
-  // rate — the same figure the headline shows, never a hidden default.
+    }));
+  const overallExpenseOf = (id: string): string =>
+    Object.values(exactRatesByCat.get(id)?.expenses ?? {}).reduce(
+      (total, value) => add(total, value),
+      "0.0000",
+    );
+  // An included category whose Overall rate refused voids the headline
+  // blend: the composite would price without it.
+  const blockedOverall = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.overall ?? null) === null);
+  // Translate a coded engine blend refusal with the loader's own names and
+  // translated format labels — the engine message stays the contract-test
+  // diagnostic, never user copy.
+  const blendRefusal = (error: OverheadCalculationError, deptName?: string): TrueCostRefusal | null => {
+    if (error.code === "mixedUnits") {
+      const byFormat = new Map<string, string[]>();
+      for (const c of categories) {
+        if (!c.includeInComposite) continue;
+        const list = byFormat.get(c.rateFormat) ?? [];
+        list.push(`"${c.name}"`);
+        byFormat.set(c.rateFormat, list);
+      }
+      const formats = [...byFormat.keys()].map((f) => strings.rateFormatLabel(f)).join(", ");
+      const names = [...byFormat.values()].flat().join(", ");
+      return { code: "mixedUnits", message: strings.refusalMixedUnits(formats, names) };
+    }
+    if (error.code === "cascadingNoLabor") {
+      return deptName
+        ? { code: "cascadingNoLaborDept", message: strings.refusalCascadingNoLaborDept(deptName) }
+        : { code: "cascadingNoLabor", message: strings.refusalCascadingNoLabor() };
+    }
+    return null;
+  };
+  let compositeRate: number | null = null;
+  let overallBlendRefusal: TrueCostRefusal | null = null;
+  if (blockedOverall) {
+    overallBlendRefusal = overallRefusals.get(blockedOverall.id)
+      ?? { code: "unreadableAmount", message: strings.refusalUnreadableAmount(blockedOverall.name) };
+  } else if (profile.compositeMethod === "cascading" && overallLaborRateExact === null) {
+    overallBlendRefusal = { code: "cascadingNoLabor", message: strings.refusalCascadingNoLabor() };
+  } else {
+    try {
+      const compositeRateExact = deriveOverheadDeptComposite({
+        compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact ?? undefined,
+        categories: compositeInputOf((id) => exactRatesByCat.get(id)?.overall ?? null, overallExpenseOf),
+      });
+      compositeRate = Number(compositeRateExact);
+    } catch (error) {
+      if (error instanceof OverheadCalculationError && error.code) {
+        const refusal = blendRefusal(error);
+        if (refusal) overallBlendRefusal = refusal;
+        else throw error;
+      } else throw error;
+    }
+  }
+  // A department without costed time has no department labor rate — it
+  // refuses by name for cascading scopes instead of borrowing the Overall
+  // figure, which would price the department in another's wage.
   const deptLaborRateExact = (deptId: string): string | null => {
     const leg = deptLaborExact.get(deptId);
-    if (!leg || leg.rated === "0.0000") return overallLaborRateExact;
+    if (!leg || cmp(leg.rated, "0") <= 0) return null;
     return div(leg.cost, leg.rated);
   };
 
-  const totalsByDept: Record<string, number> = {};
+  const totalsByDept: Record<string, number | null> = {};
+  const deptBlendRefusals = new Map<string, TrueCostRefusal>();
   // All preview composites use the exact contract. Non-hourly units still
   // refuse publication to an hourly rate card.
   const publishBlockers = overheadPublishBlockers(
@@ -1247,26 +1425,45 @@ export async function trueCostData(
   );
   const exactSupported = publishBlockers.length === 0;
   const departments: Dept[] = departmentsBase.map((d) => {
-    const composite4 = deriveOverheadDeptComposite({
-        compositeMethod: profile.compositeMethod,
-        baseLaborRate: deptLaborRateExact(d.id) ?? undefined,
-        categories: categories
-          .map((category) => ({
-            id: category.id,
-            name: category.name,
-            rate: exactRatesByCat.get(category.id)!.rates[d.id] ?? "0.0000",
-            expense: exactRatesByCat.get(category.id)!.expenses[d.id] ?? "0.0000",
-            rateFormat: category.rateFormat,
-            includeInComposite: category.includeInComposite,
-      })),
-      });
-    const compositeExact = exactSupported
-      ? formatOverheadPublishRate(composite4)
-      : "";
-    const composite = Number(exactSupported ? compositeExact : composite4);
+    let composite: number | null = null;
+    let compositeExact = "";
+    const blocked = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.rates[d.id] ?? null) === null);
+    if (blocked) {
+      const refusal = deptRefusals.get(blocked.id)?.get(d.id)
+        ?? { code: "unreadableAmount" as const, message: strings.refusalUnreadableAmount(blocked.name) };
+      deptBlendRefusals.set(d.id, refusal);
+    } else if (profile.compositeMethod === "cascading" && deptLaborRateExact(d.id) === null) {
+      const refusal: TrueCostRefusal = { code: "cascadingNoLaborDept", message: strings.refusalCascadingNoLaborDept(d.name) };
+      deptBlendRefusals.set(d.id, refusal);
+    } else {
+      try {
+        const composite4 = deriveOverheadDeptComposite({
+          compositeMethod: profile.compositeMethod,
+          baseLaborRate: deptLaborRateExact(d.id) ?? undefined,
+          categories: compositeInputOf(
+            (id) => exactRatesByCat.get(id)?.rates[d.id] ?? null,
+            (id) => exactRatesByCat.get(id)?.expenses[d.id] ?? "0.0000",
+          ),
+        });
+        compositeExact = exactSupported
+          ? formatOverheadPublishRate(composite4)
+          : "";
+        composite = Number(exactSupported ? compositeExact : composite4);
+      } catch (error) {
+        if (error instanceof OverheadCalculationError && error.code) {
+          const refusal = blendRefusal(error, d.name);
+          if (refusal) deptBlendRefusals.set(d.id, refusal);
+          else throw error;
+        } else throw error;
+      }
+    }
     totalsByDept[d.id] = composite;
     return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, unratedHours: toChartNumber(unratedHoursByDept.get(d.id) ?? "0.0000"), composite, compositeExact };
   });
+  // The Overall headline refusal wins the single slot; otherwise the first
+  // department-scope refusal in department order.
+  const firstDeptRefusal = departmentsBase.map((d) => deptBlendRefusals.get(d.id)).find((r) => r !== undefined) ?? null;
+  const compositeRefusal: TrueCostRefusal | null = overallBlendRefusal ?? firstDeptRefusal;
 
   // ---- absorption (actual applied burden only) ---------------------------------
   // With no applied postings there is nothing to compare against actuals:
@@ -1353,6 +1550,7 @@ export async function trueCostData(
   return {
     period,
     departments,
+    compositeRefusal,
     kpis: {
       compositeRate,
       compositeRateChangePct,

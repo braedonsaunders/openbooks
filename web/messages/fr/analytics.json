@@ -2223,6 +2223,17 @@
       "absorptionNoAccount": "Aucun compte d’application des frais généraux configuré — configurez-en un dans Setup → Overhead.",
       "absorptionNoPostings": "Le compte d’application des frais généraux configuré ne contient aucune écriture appliquée sur cette période."
     },
+    "refusals": {
+      "mixedUnits": "Impossible de combiner {formats} dans un même composite ({categories}) — donne à chaque catégorie incluse le même format de taux, ou exclus les autres du composite dans Setup → Overhead Model.",
+      "cascadingNoLabor": "Le composite en cascade exige un taux de main-d’œuvre, mais la période ne contient aucun temps chiffré et le profil ne définit aucun taux de base — approuve du temps chiffré pour la période ou définis un taux de base dans Setup → Overhead Model → Configuration.",
+      "cascadingNoLaborDept": "Le composite en cascade exige un taux de main-d’œuvre pour {dept}, mais la période ne contient aucun temps chiffré pour ce service et le profil ne définit aucun taux de base — approuve du temps chiffré pour la période ou définis un taux de base dans Setup → Overhead Model → Configuration.",
+      "perFteNoHours": "« {category} » utilise Devise/ETP, mais aucune heure ETP annuelle ne se résout — saisis les heures annuelles dans les taux de coût de main-d’œuvre des employés ou les heures hebdomadaires dans leurs horaires de travail.",
+      "perFteNoHoursDept": "« {category} » utilise Devise/ETP, mais aucune heure ETP annuelle ne se résout pour {dept} — saisis les heures annuelles dans les taux de coût de main-d’œuvre de ce service ou les heures hebdomadaires dans leurs horaires de travail.",
+      "missingBase": "« {category} » ne peut pas calculer {format} : sa base {base} est manquante ou non positive — vérifie la base de répartition de la catégorie et les écritures de la période.",
+      "formulaReference": "« {category} » fait référence à {reference}, qui ne se résout pas — corrige la formule ou la dérivation dans Setup → Overhead Model → Configuration.",
+      "formulaNegative": "« {category} » donne {amount}, et une catégorie de frais ne peut pas être négative — corrige la formule dans Setup → Overhead Model → Configuration.",
+      "unreadableAmount": "« {category} » contient un montant enregistré illisible — corrige le montant de la catégorie dans Setup → Overhead Model → Configuration."
+    },
     "formats": {
       "perHour": "{amount}/h"
     },
@@ -2567,7 +2578,11 @@
       "howLabourRates": "Taux de main-d’œuvre",
       "howLabourRatesBody": "taux de coût par saisie de temps, et non un champ unique dans la fiche du salarié.",
       "howGapModeler": "Modélisation de l’écart",
-      "howGapModelerBody": "Les quatre leviers de couverture agissent sur l’écart fondé sur l’utilisation ; lorsque le compte d’imputation des charges indirectes comporte des écritures, la couverture passe automatiquement aux montants réellement imputés."
+      "howGapModelerBody": "Les quatre leviers de couverture agissent sur l’écart fondé sur l’utilisation ; lorsque le compte d’imputation des charges indirectes comporte des écritures, la couverture passe automatiquement aux montants réellement imputés.",
+      "baseLaborRate": "Taux de base horaire",
+      "baseLaborRateHelp": "Taux horaire de repli quand la période ne contient aucun temps chiffré. Laisser vide pour refuser plutôt que supposer un taux.",
+      "baseLaborRatePlaceholder": "p. ex. 45,00",
+      "baseLaborRateSave": "Enregistrer le taux"
     },
     "custom": {
       "remove": "Supprimer",

@@ -2223,6 +2223,17 @@
       "absorptionNoAccount": "間接費適用勘定が設定されていません — Setup → Overhead で設定してください。",
       "absorptionNoPostings": "設定された間接費適用勘定には、この期間の適用仕訳がありません。"
     },
+    "refusals": {
+      "mixedUnits": "同一コンポジットに{formats}を混合できません（{categories}） — 含める全カテゴリに同一レート形式を設定し、異なるものをSetup → Overhead Modelでコンポジットから除外してください。",
+      "cascadingNoLabor": "カスケード型コンポジットには労働レートが必要ですが、期間にコスト化された労働時間がなく、プロファイルに基本労働レートがないため計算できません — 期間のコスト化済み時間を承認し、またはSetup → Overhead Model → Configurationで基本労働レートを設定してください。",
+      "cascadingNoLaborDept": "カスケード型コンポジットには{dept}の労働レートが必要ですが、期間にコスト化された労働時間がなく、プロファイルに基本労働レートがないため計算できません — 期間のコスト化済み時間を承認し、またはSetup → Overhead Model → Configurationで基本労働レートを設定してください。",
+      "perFteNoHours": "「{category}」は通貨/FTEを使用していますが、年間FTE時間が解決しません — 従業員の労働コストレートに年間時間を登録し、または勤務スケジュールに週時間を登録してください。",
+      "perFteNoHoursDept": "「{category}」は通貨/FTEを使用していますが、{dept}の年間FTE時間が解決しません — この部門の労働コストレートに年間時間を登録し、または勤務スケジュールに週時間を登録してください。",
+      "missingBase": "「{category}」は{format}を計算できません。{base}基準が不足か正ではありません — カテゴリの配賦基準と期間の仕訳を確認してください。",
+      "formulaReference": "「{category}」は{reference}を参照していますが、解決できません — Setup → Overhead Model → Configurationで数式または派生を修正してください。",
+      "formulaNegative": "「{category}」は{amount}となりますが、間接費カテゴリは負になれません — Setup → Overhead Model → Configurationで数式を修正してください。",
+      "unreadableAmount": "「{category}」に読み取れない保存済み金額があります — Setup → Overhead Model → Configurationでカテゴリ金額を修正してください。"
+    },
     "formats": {
       "perHour": "{amount}/時間"
     },
@@ -2567,7 +2578,11 @@
       "howLabourRates": "労務レート",
       "howLabourRatesBody": "単一の従業員マスターフィールドではなく、タイムシート入力ごとの原価レートを使用します。",
       "howGapModeler": "不足額モデラー",
-      "howGapModelerBody": "4つの回収施策は稼働率に基づく不足額に作用します。間接費負担 GL 勘定に転記がある場合、吸収額は実際の適用額へ自動的に切り替わります。"
+      "howGapModelerBody": "4つの回収施策は稼働率に基づく不足額に作用します。間接費負担 GL 勘定に転記がある場合、吸収額は実際の適用額へ自動的に切り替わります。",
+      "baseLaborRate": "基本労働レート（時間単価）",
+      "baseLaborRateHelp": "期間にコスト化された労働時間がない場合の代替時間単価。レートを想定せず拒否する場合は空欄にしてください。",
+      "baseLaborRatePlaceholder": "例：45.00",
+      "baseLaborRateSave": "レートを保存"
     },
     "custom": {
       "remove": "削除",

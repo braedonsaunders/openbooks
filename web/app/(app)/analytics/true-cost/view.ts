@@ -9,6 +9,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { trueCostData } from '../../../../lib/analytics/true-cost-data'
 import { trueCostStrings } from '../../../../lib/analytics/true-cost-strings'
+import { presentationCurrency } from '../../../../lib/fx-presentation'
 import type { TrueCostView } from './TrueCostView'
 
 /**
@@ -55,7 +56,11 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
-  const strings = trueCostStrings((key, values) => tc(key, values), locale);
+  const strings = trueCostStrings(
+    (key, values) => tc(key, values),
+    locale,
+    await presentationCurrency(authz.user.orgId),
+  );
   let refusal: string | null = null;
   const data = await trueCostData(
     authz.user.orgId,

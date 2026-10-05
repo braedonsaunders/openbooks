@@ -2223,6 +2223,17 @@
       "absorptionNoAccount": "Kein Overhead-Anwendungskonto konfiguriert — richten Sie eines unter Setup → Overhead ein.",
       "absorptionNoPostings": "Das konfigurierte Overhead-Anwendungskonto enthält in diesem Zeitraum keine angewendeten Buchungen."
     },
+    "refusals": {
+      "mixedUnits": "{formats} lassen sich nicht in einem Composite mischen ({categories}) — gib jeder einbezogenen Kategorie dasselbe Ratenformat oder schließe die abweichenden in Setup → Overhead Model vom Composite aus.",
+      "cascadingNoLabor": "Das kaskadierende Composite braucht einen Lohnsatz, aber der Zeitraum enthält keine kalkulierten Arbeitszeiten und das Profil setzt keinen Basislohnsatz — gib kalkulierte Zeiten für den Zeitraum frei oder setze einen Basislohnsatz in Setup → Overhead Model → Configuration.",
+      "cascadingNoLaborDept": "Das kaskadierende Composite braucht einen Lohnsatz für {dept}, aber der Zeitraum enthält dort keine kalkulierten Arbeitszeiten und das Profil setzt keinen Basislohnsatz — gib kalkulierte Zeiten für den Zeitraum frei oder setze einen Basislohnsatz in Setup → Overhead Model → Configuration.",
+      "perFteNoHours": "„{category}“ verwendet Währung/VZÄ, aber es werden keine jährlichen VZÄ-Stunden aufgelöst — erfasse jährliche Stunden in den Arbeitskostensätzen der Mitarbeitenden oder wöchentliche Stunden in ihren Arbeitszeitplänen.",
+      "perFteNoHoursDept": "„{category}“ verwendet Währung/VZÄ, aber für {dept} werden keine jährlichen VZÄ-Stunden aufgelöst — erfasse jährliche Stunden in den Arbeitskostensätzen dieser Abteilung oder wöchentliche Stunden in ihren Arbeitszeitplänen.",
+      "missingBase": "„{category}“ kann {format} nicht berechnen: die {base}-Basis fehlt oder ist nicht positiv — prüfe die Allokationsbasis der Kategorie und die Buchungen des Zeitraums.",
+      "formulaReference": "„{category}“ verweist auf {reference}, was sich nicht auflösen lässt — korrigiere die Formel oder Ableitung in Setup → Overhead Model → Configuration.",
+      "formulaNegative": "„{category}“ ergibt {amount}, und eine Umlagekategorie kann nicht negativ sein — korrigiere die Formel in Setup → Overhead Model → Configuration.",
+      "unreadableAmount": "„{category}“ enthält einen unlesbaren gespeicherten Betrag — korrigiere den Kategoriebetrag in Setup → Overhead Model → Configuration."
+    },
     "formats": {
       "perHour": "{amount}/Std."
     },
@@ -2567,7 +2578,11 @@
       "howLabourRates": "Arbeitskostensätze",
       "howLabourRatesBody": "Kostensätze je Zeiterfassungseintrag, nicht ein einzelnes Feld im Beschäftigtenstamm.",
       "howGapModeler": "Lückenmodell",
-      "howGapModelerBody": "Die vier Deckungshebel wirken auf die auslastungsbasierte Lücke; sobald das Gemeinkosten-Verrechnungskonto Buchungen enthält, wechselt die Deckung automatisch zu den tatsächlich verrechneten Beträgen."
+      "howGapModelerBody": "Die vier Deckungshebel wirken auf die auslastungsbasierte Lücke; sobald das Gemeinkosten-Verrechnungskonto Buchungen enthält, wechselt die Deckung automatisch zu den tatsächlich verrechneten Beträgen.",
+      "baseLaborRate": "Basislohnsatz pro Stunde",
+      "baseLaborRateHelp": "Ersatz-Stundensatz, wenn der Zeitraum keine kalkulierten Arbeitszeiten enthält. Leer lassen, um zu verweigern statt einen Satz anzunehmen.",
+      "baseLaborRatePlaceholder": "z. B. 45,00",
+      "baseLaborRateSave": "Satz speichern"
     },
     "custom": {
       "remove": "Entfernen",

@@ -43,7 +43,7 @@ test('true cost names and month labels render in the request locale', { skip: !e
                (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '10.0000', 'approved', false, ${dept}, '50.0000', 'CAD', ${org.subsidiaryId}, '{}'::jsonb)`)
     })
     await withOrgContext(org.orgId, async () => {
-      const fr = trueCostStrings(catalogTranslator('fr'), 'fr')
+      const fr = trueCostStrings(catalogTranslator('fr'), 'fr', 'CAD')
       const localized = await trueCostData(org.orgId, JULY, null, fr)
       const timeCatFr = localized.categories.find((c) => c.key === 'nonbillable_time')!
       assert.equal(timeCatFr.name, 'Temps non facturable')
@@ -52,5 +52,40 @@ test('true cost names and month labels render in the request locale', { skip: !e
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * Every composite-level refusal renders in all seven locales: the message
+ * carries the real category and department names (never UUIDs) and
+ * translated rate-format labels (never raw enum keys like `per_hour`).
+ */
+test('true cost refusals render translated names and format labels in every locale', () => {
+  const RAW_FORMAT_KEYS = ['per_hour', 'percent_labor', 'percent_cost', 'per_fte', 'per_unit']
+  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+    const strings = trueCostStrings(catalogTranslator(locale), locale, 'CAD')
+    const messages = [
+      strings.refusalMixedUnits(
+        [strings.rateFormatLabel('per_hour'), strings.rateFormatLabel('percent_labor')].join(', '),
+        '"Office rent", "Wages"',
+      ),
+      strings.refusalCascadingNoLabor(),
+      strings.refusalCascadingNoLaborDept('Atelier'),
+      strings.refusalPerFteNoHours('Office rent'),
+      strings.refusalPerFteNoHoursDept('Office rent', 'Atelier'),
+      strings.refusalMissingBase('Office rent', strings.rateFormatLabel('per_hour'), strings.allocationBaseLabel('labor_dollars')),
+      strings.refusalFormulaReference('Markup', 'cat.typo'),
+      strings.refusalFormulaNegative('Markup', '-5.0000'),
+      strings.refusalUnreadableAmount('Office rent'),
+    ]
+    assert.equal(messages.length, 9)
+    for (const message of messages) {
+      assert.ok(message.length > 0, `${locale}: refusal must render`)
+      assert.ok(!message.includes('{') && !message.includes('undefined'), `${locale}: no unfilled slots: ${message}`)
+      for (const raw of RAW_FORMAT_KEYS) assert.ok(!message.includes(raw), `${locale}: raw enum key leaks: ${message}`)
+    }
+    assert.ok(messages[0]!.includes('Office rent'), `${locale}: mixed-unit refusal names the categories`)
+    assert.ok(messages[3]!.includes('Office rent'), `${locale}: per-FTE refusal names the category`)
+    assert.ok(messages[4]!.includes('Atelier'), `${locale}: department refusal names the department`)
   }
 })

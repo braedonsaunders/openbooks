@@ -33,6 +33,7 @@ function fixture(): TrueCostData {
   return {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
     departments: [],
+    compositeRefusal: null,
     kpis: {
       compositeRate: 45,
       compositeRateChangePct: null,
@@ -69,7 +70,7 @@ function fixture(): TrueCostData {
     ],
     unassigned: [{ id: 'a-clean', number: '6100', name: 'Cleaning', amount: 50, pinned: false, deptAmounts: {}, untaggedAmount: 50 }],
     totals: { byDept: {}, overall: 950 },
-    labor: { employees: [], count: 0, min: 0, max: 0, weighted: 0 },
+    labor: { employees: [], count: 0, min: 0, max: 0, weighted: 0, unratedHours: '0.0000' },
     monthly: [],
     forecast: [],
     hasBurdenGL: true,
@@ -147,6 +148,26 @@ test('a failed assign toasts the server refusal, never a parse error', async () 
     host.remove()
     globalThis.fetch = priorFetch
   }
+})
+
+// A refused composite still renders the dashboard: the refusal reads in its
+// banner while the hero shows an em-dash and every tab stays mounted.
+test('a composite refusal renders its message without hiding the dashboard', () => {
+  const data = fixture()
+  data.compositeRefusal = { code: 'mixedUnits', message: 'Cannot blend the formats — fix them in Setup.' }
+  data.kpis.compositeRate = null
+  data.totals = { byDept: {}, overall: null }
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <MoneyProvider currency="USD">
+        <TrueCostView data={data} mode="analytics" />
+      </MoneyProvider>
+    </NextIntlClientProvider>,
+  )
+  assert.ok(html.includes('Cannot blend the formats'), 'the refusal message must render')
+  assert.ok(html.includes('—'), 'the refused composite tile must show an em-dash, never a zero')
+  assert.ok(html.includes('Absorption'), 'the absorption tab must stay rendered')
+  assert.ok(html.includes('Selling'), 'the selling tab must stay rendered')
 })
 
 // with no `burden`-dimension category the Assign picker is empty,
