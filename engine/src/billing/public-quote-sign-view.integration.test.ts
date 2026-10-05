@@ -141,6 +141,28 @@ test("public signing view renders terms and records typed names", { skip: !DB },
     const voidedView = await publicQuoteSignView(stale.token);
     assert.equal(voidedView.signature?.status, "voided");
     await assert.rejects(signQuoteSignature({ token: stale.token, name: "Ada C. Signer" }), /voided/);
+
+    // A resend mints a distinct invite: the old token still resolves its own
+    // voided request — never the newer identity, consent or expiry.
+    const resent = await withOrgContext(org.orgId, async () =>
+      requestQuoteSignature({
+        orgId: org.orgId,
+        actorId: actor,
+        quoteId: stale.quoteId,
+        signerName: "Zed Resend",
+        signerEmail: "zed@example.com",
+      }),
+    );
+    const oldView = await publicQuoteSignView(stale.token);
+    assert.equal(oldView.signature?.status, "voided");
+    assert.equal(oldView.signature?.signerName, "Ada Customer");
+    assert.equal(oldView.signature?.signerEmail, "ada@example.com");
+    const newView = await publicQuoteSignView(resent.token);
+    // Viewing marks the fresh request viewed — the identity stays the resend's.
+    assert.equal(newView.signature?.status, "viewed");
+    assert.equal(newView.signature?.signerName, "Zed Resend");
+    assert.equal(newView.signature?.signerEmail, "zed@example.com");
+    assert.notEqual(newView.signature?.expiresAt, oldView.signature?.expiresAt);
     await assert.rejects(publicQuoteSignView("not-a-token"), /invalid or expired/);
   } finally {
     await dropScratchOrg(org.orgId);

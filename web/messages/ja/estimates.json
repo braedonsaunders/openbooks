@@ -75,5 +75,29 @@
     "colQuantity": "数量",
     "colEscalator": "増額率%",
     "termNeedsLineAndPlan": "先に見積明細とプランを選択してください。"
+  },
+  "quoteSign": {
+    "unavailableTitle": "このリンクは使用できません",
+    "unavailable": "この署名リンクは利用できません。",
+    "signedTitle": "署名しました — ありがとうございます",
+    "signedBody": "署名が記録されました。",
+    "signedActiveBody": "署名が記録され、サブスクリプションが有効になりました。",
+    "signedAgainBody": "このリンクはすでに署名を記録しています。",
+    "declinedTitle": "この見積を辞退しました",
+    "declinedBody": "辞退が記録されました。変更がある場合は送信者に新しいリンクを依頼してください。",
+    "declinedConfirm": "この見積を辞退しました。辞退が記録されました — 変更がある場合は送信者に新しいリンクを依頼してください。",
+    "closedTitle": "このリンクはもう開いていません",
+    "missingTitle": "このリンクには有効な署名リクエストがありません",
+    "resendBody": "送信者に署名リンクの再送を依頼してください。",
+    "loading": "見積を読み込んでいます…",
+    "quoteEyebrow": "見積 {number}",
+    "quotedLine": "{count, plural, other {# 件のサブスクリプション}} · 見積日 {date}",
+    "startsBilled": "開始 {start} · 請求 {timing}",
+    "nameLabel": "氏名（署名として）",
+    "acceptLabel": "この見積および記載のサブスクリプションを、記載の開始日から受け入れます。",
+    "expiryNote": "リンクの有効期限は {date} で、一度だけ使用できます。",
+    "sign": "この見積に署名する",
+    "signing": "署名中…",
+    "decline": "辞退する"
   }
 }

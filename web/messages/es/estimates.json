@@ -75,5 +75,29 @@
     "colQuantity": "Cantidad",
     "colEscalator": "Escalado %",
     "termNeedsLineAndPlan": "Elija primero la línea y el plan."
+  },
+  "quoteSign": {
+    "unavailableTitle": "Este enlace no se puede usar",
+    "unavailable": "Este enlace de firma no está disponible.",
+    "signedTitle": "Firmado — gracias",
+    "signedBody": "Su firma queda registrada.",
+    "signedActiveBody": "Su firma queda registrada y su suscripción ya está activa.",
+    "signedAgainBody": "Este enlace ya registró una firma.",
+    "declinedTitle": "Rechazó esta cotización",
+    "declinedBody": "Su rechazo queda registrado. Pida al remitente un nuevo enlace si algo cambia.",
+    "declinedConfirm": "Rechazó esta cotización. Su rechazo queda registrado — pida al remitente un nuevo enlace si algo cambia.",
+    "closedTitle": "Este enlace ya no está abierto",
+    "missingTitle": "Este enlace no tiene una solicitud de firma activa",
+    "resendBody": "Pida al remitente que reenvíe el enlace de firma.",
+    "loading": "Cargando su cotización…",
+    "quoteEyebrow": "Cotización {number}",
+    "quotedLine": "{count, plural, one {# suscripción} other {# suscripciones}} · cotizado el {date}",
+    "startsBilled": "Inicia {start} · facturado {timing}",
+    "nameLabel": "Su nombre completo (como firma)",
+    "acceptLabel": "Acepto esta cotización y la suscripción que describe, a partir de la fecha indicada.",
+    "expiryNote": "El enlace vence el {date} y funciona una vez.",
+    "sign": "Firmar esta cotización",
+    "signing": "Firmando…",
+    "decline": "Rechazar"
   }
 }

@@ -75,5 +75,29 @@
     "colQuantity": "Quantidade",
     "colEscalator": "Reajuste %",
     "termNeedsLineAndPlan": "Escolha primeiro a linha e o plano."
+  },
+  "quoteSign": {
+    "unavailableTitle": "Este link não pode ser usado",
+    "unavailable": "Este link de assinatura não está disponível.",
+    "signedTitle": "Assinado — obrigado",
+    "signedBody": "Sua assinatura foi registrada.",
+    "signedActiveBody": "Sua assinatura foi registrada e sua subscrição já está ativa.",
+    "signedAgainBody": "Este link já registrou uma assinatura.",
+    "declinedTitle": "Você recusou este orçamento",
+    "declinedBody": "Sua recusa foi registrada. Peça ao remetente um novo link se algo mudar.",
+    "declinedConfirm": "Você recusou este orçamento. Sua recusa foi registrada — peça ao remetente um novo link se algo mudar.",
+    "closedTitle": "Este link não está mais aberto",
+    "missingTitle": "Este link não tem uma solicitação de assinatura ativa",
+    "resendBody": "Peça ao remetente para reenviar o link de assinatura.",
+    "loading": "Carregando seu orçamento…",
+    "quoteEyebrow": "Orçamento {number}",
+    "quotedLine": "{count, plural, one {# subscrição} other {# subscrições}} · orçado em {date}",
+    "startsBilled": "Inicia {start} · cobrado {timing}",
+    "nameLabel": "Seu nome completo (como assinatura)",
+    "acceptLabel": "Aceito este orçamento e a subscrição que ele descreve, a partir da data indicada.",
+    "expiryNote": "O link expira em {date} e funciona uma vez.",
+    "sign": "Assinar este orçamento",
+    "signing": "Assinando…",
+    "decline": "Recusar"
   }
 }

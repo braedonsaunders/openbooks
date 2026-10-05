@@ -75,5 +75,29 @@
     "colQuantity": "Quantité",
     "colEscalator": "Hausse %",
     "termNeedsLineAndPlan": "Choisissez d’abord la ligne et la formule."
+  },
+  "quoteSign": {
+    "unavailableTitle": "Ce lien ne peut pas être utilisé",
+    "unavailable": "Ce lien de signature n'est pas disponible.",
+    "signedTitle": "Signé — merci",
+    "signedBody": "Votre signature est enregistrée.",
+    "signedActiveBody": "Votre signature est enregistrée et votre abonnement est désormais actif.",
+    "signedAgainBody": "Ce lien a déjà enregistré une signature.",
+    "declinedTitle": "Vous avez refusé ce devis",
+    "declinedBody": "Votre refus est enregistré. Demandez à l'expéditeur un nouveau lien si quelque chose change.",
+    "declinedConfirm": "Vous avez refusé ce devis. Votre refus est enregistré — demandez à l'expéditeur un nouveau lien si quelque chose change.",
+    "closedTitle": "Ce lien n'est plus ouvert",
+    "missingTitle": "Ce lien n'a aucune demande de signature active",
+    "resendBody": "Demandez à l'expéditeur de renvoyer le lien de signature.",
+    "loading": "Chargement de votre devis…",
+    "quoteEyebrow": "Devis {number}",
+    "quotedLine": "{count, plural, one {# abonnement} other {# abonnements}} · devis du {date}",
+    "startsBilled": "Débute {start} · facturé {timing}",
+    "nameLabel": "Votre nom complet (comme signature)",
+    "acceptLabel": "J'accepte ce devis et l'abonnement qu'il décrit, à compter de la date indiquée.",
+    "expiryNote": "Le lien expire le {date} et fonctionne une fois.",
+    "sign": "Signer ce devis",
+    "signing": "Signature…",
+    "decline": "Refuser"
   }
 }
