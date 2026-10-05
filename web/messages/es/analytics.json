@@ -3595,7 +3595,7 @@
         "area": "Desviación Benford",
         "message": "La distribución del primer dígito se desvía significativamente"
       },
-      "trapUnavailable": "Sin límites de importe de aprobación en Flows — crea uno o ajusta la banda en Sentinel → Configuración.",
+      "trapUnavailable": "Sin límites de importe de aprobación en Flows — añade una condición de importe total a un flujo de gasto en Flows. La banda de Sentinel solo estrecha la ventana alrededor de un límite real.",
       "duplicateFloorUnset": "Define el mínimo de duplicados en Sentinel → Configuración.",
       "rsfFloorUnset": "Define el suelo base del tamaño relativo en Sentinel → Configuración.",
       "zscoreFloorUnset": "Define el suelo de ruido de la puntuación Z en Sentinel → Configuración."

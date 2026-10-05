@@ -3595,7 +3595,7 @@
         "area": "本福德偏离",
         "message": "首位数字分布显著偏离"
       },
-      "trapUnavailable": "Flows中没有审批金额条件——请添加，或在Sentinel→配置中调整区间。",
+      "trapUnavailable": "Flows中没有审批金额条件——请在支出主题流中添加总金额条件。Sentinel区间只会缩小真实限额周围的窗口。",
       "duplicateFloorUnset": "请在Sentinel→配置中设置重复下限。",
       "rsfFloorUnset": "请在Sentinel→配置中设置相对规模基线下限。",
       "zscoreFloorUnset": "请在Sentinel→配置中设置Z分数噪声下限。"

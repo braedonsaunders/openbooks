@@ -3595,7 +3595,7 @@
         "area": "Écart Benford",
         "message": "La distribution du premier chiffre dévie significativement"
       },
-      "trapUnavailable": "Aucune limite de montant d’approbation dans Flows — ajoutez-en une ou réglez la bande dans Sentinel → Configuration.",
+      "trapUnavailable": "Aucune limite de montant d’approbation dans Flows — ajoutez une condition de montant total à un flux de dépenses dans Flows. La bande Sentinel ne fait que resserrer la fenêtre autour d’une limite réelle.",
       "duplicateFloorUnset": "Définissez le minimum des doublons dans Sentinel → Configuration.",
       "rsfFloorUnset": "Définissez le plancher de base de la taille relative dans Sentinel → Configuration.",
       "zscoreFloorUnset": "Définissez le plancher de bruit du score Z dans Sentinel → Configuration."
