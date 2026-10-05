@@ -5,6 +5,7 @@ import { PartyReadOnlyField, PartySummary, SublistHeading, SublistEmpty, ReadOnl
 import { ContactForm, AddressForm } from './PartyContactForms'
 import { BankAccountsPanel } from './PartyBankAccountsPanel'
 import { PartyPaymentMethodsPanel } from './PartyPaymentMethodsPanel'
+import { PartyAutopayPanel } from './PartyAutopayPanel'
 import { EmployeeBenefitsPanel } from './EmployeeBenefitsPanel'
 import { ActivitySublist } from './PartyActivitySublist'
 import { TransactionSublist } from './PartyTransactionSublist'
@@ -270,6 +271,11 @@ export function PartyDrawer({
   // unsaved edits survive sub-tab switches. A ?partyTab=payroll deep link
   // lands on the tab with the General half showing.
   const [payrollSubTab, setPayrollSubTab] = useState<PayrollSubTab>('general')
+  // The Payment methods tab's own sub-tabs: stored methods and autopay
+  // enrollments are separate concepts, so each gets its own body behind
+  // the shared drawer strip (never stacked). Both panels stay mounted
+  // (hidden) so a switch never discards in-flight edits.
+  const [paymentMethodsSubTab, setPaymentMethodsSubTab] = useState<'methods' | 'autopay'>('methods')
   // Tabs visited this drawer session. The employee compensation panels stay
   // mounted once visited (see the keep-alive blocks below) so tab switches
   // never discard their local edits. The drawer remounts per party
@@ -1623,12 +1629,30 @@ export function PartyDrawer({
           />
         ) : null}
         {tab === 'paymentMethods' && showPaymentMethodsTab && !createMode ? (
-          <PartyPaymentMethodsPanel
-            partyId={String(p.id)}
-            canManageMethods={autopay?.canManageMethods ?? false}
-            canManageAutopay={autopay?.canManageAutopay ?? false}
-            defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
-          />
+          <div className="space-y-4">
+            <DrawerTabStrip
+              tabs={[
+                { key: 'methods', label: t('paymentMethodSubtabs.methods') },
+                { key: 'autopay', label: t('paymentMethodSubtabs.autopay') },
+              ]}
+              activeKey={paymentMethodsSubTab}
+              onSelect={(key) => setPaymentMethodsSubTab(key as 'methods' | 'autopay')}
+              ariaLabel={t('paymentMethodSubtabs.ariaLabel')}
+            />
+            <div hidden={paymentMethodsSubTab !== 'methods'}>
+              <PartyPaymentMethodsPanel
+                partyId={String(p.id)}
+                canManageMethods={autopay?.canManageMethods ?? false}
+                defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
+              />
+            </div>
+            <div hidden={paymentMethodsSubTab !== 'autopay'}>
+              <PartyAutopayPanel
+                partyId={String(p.id)}
+                canManageAutopay={autopay?.canManageAutopay ?? false}
+              />
+            </div>
+          </div>
         ) : null}
         {tab === 'store-credit' && showStoreCreditTab && storedValue ? (
           <StoreCreditPanel balances={storedValue.balances} />

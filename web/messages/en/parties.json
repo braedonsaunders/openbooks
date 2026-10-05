@@ -37,6 +37,11 @@
       "banks": "Pay banks",
       "accounts": "Bank accounts"
     },
+    "paymentMethodSubtabs": {
+      "ariaLabel": "Payment method sections",
+      "methods": "Stored methods",
+      "autopay": "Autopay"
+    },
     "tabs": {
       "ariaLabel": "Party record sections",
       "overview": "Overview",

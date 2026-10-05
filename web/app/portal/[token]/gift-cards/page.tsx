@@ -40,7 +40,7 @@ export default async function PortalGiftCardsPage({ params }: { params: Promise<
               <li key={grant.id} className="flex items-center justify-between text-sm">
                 <span className="text-slate-700 dark:text-slate-200">{t('giftCards.prepaid')}</span>
                 <span className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                  {decimalDisplay(grant.amount, grant.currency || 'USD', locale)}
+                  {decimalDisplay(grant.amount, grant.currency ?? '', locale)}
                 </span>
               </li>
             ))}
