@@ -9,7 +9,9 @@ export async function loadPaymentProviderConfig<T extends Record<string, unknown
 ): Promise<T | null> {
   const result = await runner.execute<T>(sql`
     select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
-           publishable_key, settings, surcharge_rule_id, secrets
+           publishable_key, settings, surcharge_rule_id, secrets, refund_policy,
+           default_disputed_funds_account_id, default_chargeback_loss_account_id,
+           default_dispute_fee_account_id
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${provider}
      limit 1

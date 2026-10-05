@@ -17,6 +17,7 @@ import { createPaymentDocument, updateDraftPayment } from "./payment-documents.t
 import { openItemsForParty } from "./payment-queries.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { paymentControlDeps } from "./payment-accounts.ts";
+import { validateSettlementPostingAccounts } from "./psp-settlement.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
@@ -1310,6 +1311,10 @@ export type ProviderConfigRow = {
   settings: Record<string, unknown>;
   surcharge_rule_id: string | null;
   secrets: string | null;
+  refund_policy: string;
+  default_disputed_funds_account_id: string | null;
+  default_chargeback_loss_account_id: string | null;
+  default_dispute_fee_account_id: string | null;
 };
 
 export function configSecrets(config: ProviderConfigRow, orgId: string): ProviderSecrets {
@@ -3091,6 +3096,10 @@ export async function saveAcceptanceConfig(
     settings?: Record<string, unknown>;
     apiKey?: string | null;
     webhookSecret?: string | null;
+    refundPolicy?: "automatic" | "review" | null;
+    defaultDisputedFundsAccountId?: string | null;
+    defaultChargebackLossAccountId?: string | null;
+    defaultDisputeFeeAccountId?: string | null;
   },
   /**
    * REQUIRED actor scope (explicit null only for system/test setup): provider
@@ -3105,6 +3114,23 @@ export async function saveAcceptanceConfig(
     await validateAcceptanceBankAccount(orgId, input.defaultBankAccountId);
   }
   await validateConfiguredSurchargeRule(orgId, input.provider, input.surchargeRuleId ?? null);
+  if (input.refundPolicy !== undefined && input.refundPolicy !== null &&
+      input.refundPolicy !== "automatic" && input.refundPolicy !== "review") {
+    throw new PaymentAcceptanceError(`unknown refund policy ${String(input.refundPolicy)}`);
+  }
+  // Dispute accounts post the automated refund/dispute journals: a foreign or
+  // unpostable reference must fail the save, not the first chargeback. The
+  // settlement validator raises the settlement domain error; reframe it as an
+  // acceptance error so setup callers keep one 422 contract.
+  try {
+    await validateSettlementPostingAccounts(orgId, [
+      { label: "disputed-funds", id: input.defaultDisputedFundsAccountId },
+      { label: "chargeback-loss", id: input.defaultChargebackLossAccountId },
+      { label: "dispute-fee", id: input.defaultDisputeFeeAccountId },
+    ]);
+  } catch (e) {
+    throw new PaymentAcceptanceError(e instanceof Error ? e.message : String(e));
+  }
   await db.transaction(async (tx) => {
     // Serialize creates and saves for this org/provider before reading, so
     // overlapping merges cannot drop each other's explicit changes.
@@ -3133,6 +3159,10 @@ export async function saveAcceptanceConfig(
             defaultBankAccountId: row.default_bank_account_id,
             publishableKey: row.publishable_key ?? null,
             surchargeRuleId: row.surcharge_rule_id,
+            refundPolicy: row.refund_policy ?? "automatic",
+            defaultDisputedFundsAccountId: row.default_disputed_funds_account_id ?? null,
+            defaultChargebackLossAccountId: row.default_chargeback_loss_account_id ?? null,
+            defaultDisputeFeeAccountId: row.default_dispute_fee_account_id ?? null,
             settings: row.settings,
             hasApiKey:
               row.secrets != null &&
@@ -3164,11 +3194,18 @@ export async function saveAcceptanceConfig(
     const savedRows = (await tx.execute<ConfigRow>(sql`
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
-         publishable_key, surcharge_rule_id, settings, secrets, created_by, updated_by)
+         publishable_key, surcharge_rule_id, settings, secrets, refund_policy,
+         default_disputed_funds_account_id, default_chargeback_loss_account_id,
+         default_dispute_fee_account_id, created_by, updated_by)
       values (${orgId}, ${input.provider}, ${input.displayName ?? input.provider}, ${input.isEnabled},
               ${input.acceptanceEnabled}, ${input.defaultBankAccountId ?? null},
               ${input.publishableKey ?? null}, ${input.surchargeRuleId ?? null},
-              ${JSON.stringify(settings)}::jsonb, ${secrets}, ${actorId}, ${actorId})
+              ${JSON.stringify(settings)}::jsonb, ${secrets},
+              coalesce(${input.refundPolicy ?? null}, 'automatic'),
+              ${input.defaultDisputedFundsAccountId ?? null}::uuid,
+              ${input.defaultChargebackLossAccountId ?? null}::uuid,
+              ${input.defaultDisputeFeeAccountId ?? null}::uuid,
+              ${actorId}, ${actorId})
       on conflict (org_id, provider) do update set
         display_name = excluded.display_name,
         is_enabled = excluded.is_enabled,
@@ -3178,10 +3215,28 @@ export async function saveAcceptanceConfig(
         surcharge_rule_id = excluded.surcharge_rule_id,
         settings = excluded.settings,
         secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
+        -- The setup form renders the automation policy and dispute accounts,
+        -- so a save that names them owns them (explicit null clears a
+        -- mapping); a save that omits them (older callers) keeps the stored
+        -- values instead of silently resetting review back to automatic.
+        refund_policy = case when ${input.refundPolicy === undefined}
+          then psp_provider_configs.refund_policy
+          else coalesce(${input.refundPolicy ?? null}, 'automatic') end,
+        default_disputed_funds_account_id = case when ${input.defaultDisputedFundsAccountId === undefined}
+          then psp_provider_configs.default_disputed_funds_account_id
+          else ${input.defaultDisputedFundsAccountId ?? null}::uuid end,
+        default_chargeback_loss_account_id = case when ${input.defaultChargebackLossAccountId === undefined}
+          then psp_provider_configs.default_chargeback_loss_account_id
+          else ${input.defaultChargebackLossAccountId ?? null}::uuid end,
+        default_dispute_fee_account_id = case when ${input.defaultDisputeFeeAccountId === undefined}
+          then psp_provider_configs.default_dispute_fee_account_id
+          else ${input.defaultDisputeFeeAccountId ?? null}::uuid end,
         updated_at = now(), updated_by = ${actorId}
       where psp_provider_configs.org_id = ${orgId}
       returning id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
-                publishable_key, surcharge_rule_id, settings, secrets
+                publishable_key, surcharge_rule_id, settings, secrets, refund_policy,
+                default_disputed_funds_account_id, default_chargeback_loss_account_id,
+                default_dispute_fee_account_id
     `));
     const saved = savedRows.rows[0];
     if (!saved) throw new PaymentAcceptanceError("provider config failed to persist");

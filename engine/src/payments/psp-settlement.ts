@@ -79,7 +79,7 @@ export class PspSettlementConflictError extends PspSettlementError {
  * after import/config accepted the reference. Fail closed here instead with
  * a domain error; a uniform refusal reveals nothing about other tenants.
  */
-async function validateSettlementPostingAccounts(
+export async function validateSettlementPostingAccounts(
   orgId: string,
   accounts: { label: string; id: string | null | undefined }[],
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
@@ -2430,7 +2430,7 @@ export async function savePspProviderConfig(
             ${input.defaultClearingAccountId ?? null},
             ${input.defaultDisputedFundsAccountId ?? null}, ${input.defaultChargebackLossAccountId ?? null},
             ${input.defaultDisputeFeeAccountId ?? null},
-            ${input.refundPolicy ?? "automatic"}, ${input.pullEnabled ?? false},
+            coalesce(${input.refundPolicy ?? null}, 'automatic'), coalesce(${input.pullEnabled ?? null}, false),
             ${secrets}, ${actorId}, ${actorId})
     on conflict (org_id, provider) do update set
       display_name = excluded.display_name,
@@ -2440,11 +2440,15 @@ export async function savePspProviderConfig(
       default_dispute_account_id = excluded.default_dispute_account_id,
       default_fx_account_id = excluded.default_fx_account_id,
       default_clearing_account_id = excluded.default_clearing_account_id,
-      default_disputed_funds_account_id = excluded.default_disputed_funds_account_id,
-      default_chargeback_loss_account_id = excluded.default_chargeback_loss_account_id,
-      default_dispute_fee_account_id = excluded.default_dispute_fee_account_id,
-      refund_policy = excluded.refund_policy,
-      pull_enabled = excluded.pull_enabled,
+      -- Automation fields are owned by the provider setup screen: an import
+      -- save that omits them (it renders only posting defaults) keeps the
+      -- stored policy instead of silently resetting review to automatic.
+      -- Insert defaults live in the values above; updates preserve them.
+      default_disputed_funds_account_id = coalesce(${input.defaultDisputedFundsAccountId ?? null}::uuid, psp_provider_configs.default_disputed_funds_account_id),
+      default_chargeback_loss_account_id = coalesce(${input.defaultChargebackLossAccountId ?? null}::uuid, psp_provider_configs.default_chargeback_loss_account_id),
+      default_dispute_fee_account_id = coalesce(${input.defaultDisputeFeeAccountId ?? null}::uuid, psp_provider_configs.default_dispute_fee_account_id),
+      refund_policy = coalesce(${input.refundPolicy ?? null}, psp_provider_configs.refund_policy),
+      pull_enabled = coalesce(${input.pullEnabled ?? null}::boolean, psp_provider_configs.pull_enabled),
       secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
       updated_at = now(), updated_by = ${actorId}
     where psp_provider_configs.org_id = ${orgId}
