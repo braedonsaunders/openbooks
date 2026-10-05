@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ReactElement } from 'react'
 import type { SpendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
+import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
 
 // Spend account CSVs must carry exact ledger amounts: current, prior,
 // two-back and projected pass through instead of being rounded.
@@ -37,8 +38,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 function fixture(): SpendVelocityData {
   return {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
+    config: { ...ANALYTICS_CONFIG.spendVelocity.defaults },
     summary: {
-      totalSpend: 5432.109,
+      totalSpend: '5432.1090',
       accountCount: 1,
       avgVelocity: 1.5,
       avgAcceleration: 0.2,
@@ -47,17 +49,18 @@ function fixture(): SpendVelocityData {
       highVelocityCount: 0,
       healthScore: 80,
       healthGrade: 'B',
-      billsTotal: 0,
-      expensesTotal: 0,
+      billsTotal: '0',
+      expensesTotal: '0',
       billsVelocity: 0,
-      savingsPotential: 0,
+      savingsPotential: '0',
       totalAlerts: 0,
     },
     anomalies: { summary: { count: 0, criticalCount: 0 }, items: [] },
-    boilingFrog: { summary: { count: 0, totalAnnualizedCreep: 0 }, accounts: [] },
-    zombies: { summary: { count: 0, totalAnnualCost: 0 }, items: [] },
-    fragmentation: { summary: { fragmentedCategories: 0, totalFragmentedSpend: 0 }, items: [] },
+    boilingFrog: { summary: { count: 0, totalAnnualizedCreep: '0' }, accounts: [] },
+    zombies: { summary: { count: 0, totalAnnualCost: '0' }, subscriptions: [] },
+    fragmentation: { summary: { fragmentedCategories: 0, totalFragmentedSpend: '0', configured: false, reason: 'Set the fragmentation size cap in Spend Velocity → Configuration' }, categories: [] },
     concentration: { summary: { top1Share: 10, top5Share: 40 }, accounts: [] },
+    shadowIT: { available: false, reason: 'Expense lines carry no payee vendor' },
     commitmentCliff: { summary: { velocityGap: 0, status: 'healthy', poVelocity: 0 } },
     seasonal: { insights: [], patterns: [] },
     accountVelocity: [],
@@ -65,10 +68,10 @@ function fixture(): SpendVelocityData {
     insights: [],
     periodComparison: {
       summary: {
-        currentTotal: 5432.109,
-        priorTotal: 5000,
-        twoBackTotal: 4800,
-        projectedTotal: 6100.445,
+        currentTotal: '5432.1090',
+        priorTotal: '5000.0000',
+        twoBackTotal: '4800.0000',
+        projectedTotal: '6100.4450',
         changePct: 8.6,
         twoBackLabel: 'May',
       },
@@ -76,11 +79,11 @@ function fixture(): SpendVelocityData {
         {
           accountId: 'a-rent',
           accountName: 'Office rent',
-          currentAmount: 5432.109,
-          priorAmount: 5000.25,
-          twoBackAmount: 4800.125,
+          currentAmount: '5432.1090',
+          priorAmount: '5000.2500',
+          twoBackAmount: '4800.1250',
           changePct: 8.6,
-          projectedAmount: 6100.445,
+          projectedAmount: '6100.4450',
           isNew: false,
           monthlyTrend: [],
           velocity: 2.5,
@@ -168,5 +171,30 @@ test('spend velocity CSV exports retain account amount decimals', async () => {
     host.remove()
     URL.createObjectURL = realCreateObjectURL
     URL.revokeObjectURL = realRevokeObjectURL
+  }
+})
+
+test('an unconfigured fragmentation detector names its remedy instead of scoring', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  try {
+    await act(async () => {
+      root.render(providers(<SpendVelocityView data={fixture()} />))
+      await tick()
+    })
+    await tick()
+    const detectorsTab = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Detectors'))
+    assert.ok(detectorsTab, 'the detectors tab must exist')
+    await click(detectorsTab)
+    assert.ok(
+      host.textContent?.includes('Set the fragmentation size cap in Spend Velocity → Configuration'),
+      `the fragmentation tile must name its remedy, got:\n${host.textContent}`,
+    )
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
   }
 })

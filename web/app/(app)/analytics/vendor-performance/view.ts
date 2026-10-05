@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { vendorData } from '../../../../lib/analytics/vendor-data'
@@ -34,6 +34,7 @@ export interface VendorPerformanceData {
   backLabel: string
   periodLabel: string
   data: ViewProps['data']
+  canConfigure: boolean
 }
 
 export async function loadVendorPerformance(sp: Record<string, string | undefined>): Promise<VendorPerformanceData> {
@@ -54,6 +55,7 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
     backLabel: t('backToHub'),
     periodLabel: period.label,
     data,
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
 
@@ -68,6 +70,6 @@ export function vendorPerformanceSpec(data: VendorPerformanceData): PageSpec {
         backLabel: data.backLabel,
       }),
     ],
-    body: [widgetBlock('vendor-view', { data: data.data })],
+    body: [widgetBlock('vendor-view', { data: data.data, canConfigure: data.canConfigure })],
   })
 }

@@ -5,9 +5,10 @@ import { RecordTabs } from '@/components/module-home/record-tabs'
 import { TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
+import { Truck, Coins, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
+import { ConfigEditor } from '../_ui/ConfigEditor'
 import { concentrationVerdict } from '../../../../lib/analytics/vendor-concentration'
 import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
@@ -16,10 +17,10 @@ import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
-import { escapeTooltipHtml, useAnalyticsMoney, fmtPct } from '../_ui/format'
+import { escapeTooltipHtml, useAnalyticsMoney, fmtPct, toChartNumber } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
-const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
+const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors', 'configuration'] as const
 type Tab = (typeof TABS)[number]
 
 const TIER_STYLE: Record<SpendTier, string> = {
@@ -40,6 +41,7 @@ const QUADRANT_COLOR: Record<Quadrant, string> = {
   commodity: '#ef4444',
   niche: '#0d9488',
   transactional: '#94a3b8',
+  unrated: '#a8a29e',
 }
 
 /** Sortable table header cell (module scope: defining it inside a tab remounts
@@ -62,18 +64,19 @@ function SortHeaderCell<K extends string>({
   )
 }
 
-export function VendorView({ data }: { data: VendorData }) {
+export function VendorView({ data, canConfigure }: { data: VendorData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: number | string) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const totals = data.totals
   const diversification = Math.max(0, Math.min(100, (1 - totals.hhi) * 100))
-  // OM-04: the gauge word shares its band with the HHI card below (one
-  // threshold source) — the score stays a 0–100 diversification number, but
-  // the word can never contradict the card's concentration verdict again.
-  const verdict = concentrationVerdict(totals.hhiScaled)
+  // The gauge word shares its band with the HHI card below (one threshold
+  // source, the org's own HHI levels) — the score stays a 0–100
+  // diversification number, but the word can never contradict the card's
+  // concentration verdict again.
+  const verdict = concentrationVerdict(totals.hhiScaled, data.config.hhiWarning, data.config.hhiCritical)
   const openVendor = (r: VendorRow) => setDrill({ kind: 'party', id: r.id, name: r.name, sub: t('drill.billsSpend', { bills: r.bills, spend: money(r.spend) }) })
 
   return (
@@ -83,8 +86,8 @@ export function VendorView({ data }: { data: VendorData }) {
           <Gauge value={diversification} label={t(verdict.gaugeKey)} size={132} thickness={12} showTicks={false} />
         </div>
         <KpiCard icon={Truck} accent="sky" label={t('kpi.activeVendors')} value={String(totals.vendors)} sub={t('sub.inPeriod')} />
-        <KpiCard icon={DollarSign} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: fmtPct(totals.yoyPct) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={Clock} accent={(totals.onTimePct ?? 0) >= 0.6 ? 'emerald' : 'amber'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? '—' : fmtPct(totals.onTimePct)} sub={t('sub.onTimeBills')} />
+        <KpiCard icon={Coins} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: fmtPct(totals.yoyPct) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={Clock} accent={(totals.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'amber'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : fmtPct(totals.onTimePct)} sub={t('sub.onTimeBills')} />
         <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.top5Share')} value={fmtPct(totals.top5SharePct)} sub={t('sub.top5Concentration')} />
       </div>
 
@@ -95,6 +98,7 @@ export function VendorView({ data }: { data: VendorData }) {
         {tab === 'scorecard' ? <ScorecardTab data={data} onDrill={openVendor} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} /> : null}
         {tab === 'vendors' ? <VendorsTab data={data} onDrill={openVendor} /> : null}
+        {tab === 'configuration' ? <ConfigEditor dashboard="vendorPerformance" canEdit={canConfigure === true} /> : null}
       </div>
       </RecordTabs>
 
@@ -107,15 +111,15 @@ export function VendorView({ data }: { data: VendorData }) {
 function OverviewTab({ data }: { data: VendorData }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: number | string) => fmtMoney(n, { compact: true })
   const totals = data.totals
   const top = data.rows.slice(0, 10)
   // Same band as the overview gauge above — one threshold source for both words.
-  const verdict = concentrationVerdict(totals.hhiScaled)
+  const verdict = concentrationVerdict(totals.hhiScaled, data.config.hhiWarning, data.config.hhiCritical)
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={DollarSign} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={t('sub.billsCount', { count: totals.bills })} />
+        <KpiCard icon={Coins} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={t('sub.billsCount', { count: totals.bills })} />
         <KpiCard icon={Trophy} accent="teal" label={t('kpi.topVendor')} value={top[0] ? money(top[0].spend) : '—'} sub={top[0]?.name ?? '—'} />
         <KpiCard icon={BarChart3} accent="sky" label={t('kpi.avgBill')} value={money(totals.avgBill)} sub={t('sub.perBill')} />
         <KpiCard icon={Layers} accent="amber" label={t('kpi.hhi')} value={totals.hhiScaled.toString()} sub={t(verdict.subKey)} />
@@ -123,15 +127,15 @@ function OverviewTab({ data }: { data: VendorData }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Panel title={t('panels.topBySpend')} icon={BarChart3}>
-            <DivergingBar labels={top.map((r) => r.name)} values={top.map((r) => r.spend)} height={Math.max(220, top.length * 28)} />
+            <DivergingBar labels={top.map((r) => r.name)} values={top.map((r) => toChartNumber(r.spend))} height={Math.max(220, top.length * 28)} />
           </Panel>
         </div>
         <Panel title={t('panels.spendByTier')} icon={PieIcon}>
-          <Donut data={data.tierBreakdown.filter((x) => x.spend > 0).map((x) => ({ name: t(`tier.${x.tier}`), value: x.spend }))} height={220} />
+          <Donut data={data.tierBreakdown.filter((x) => toChartNumber(x.spend) > 0).map((x) => ({ name: t(`tier.${x.tier}`), value: toChartNumber(x.spend) }))} height={220} />
         </Panel>
       </div>
       <Panel title={t('panels.spendTrend12mo')} icon={BarChart3}>
-        <TrendChart labels={data.monthly.map((m) => m.label)} area height={200} series={[{ name: t('chart.spend'), data: data.monthly.map((m) => m.spend), color: '#8b5cf6' }]} />
+        <TrendChart labels={data.monthly.map((m) => m.label)} area height={200} series={[{ name: t('chart.spend'), data: data.monthly.map((m) => toChartNumber(m.spend)), color: '#8b5cf6' }]} />
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
         <Info size={14} className="mt-0.5 shrink-0" />
@@ -147,20 +151,19 @@ function OverviewTab({ data }: { data: VendorData }) {
 function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: number | string) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<'spend' | 'avgDaysToPay' | 'onTimePct' | 'lateSpend'>('lateSpend')
   const totals = data.totals
   const paid = data.rows.filter((r) => r.paidBills > 0)
-  const rows = [...paid].sort((a, b) => {
-    if (sort === 'onTimePct') return (b.onTimePct ?? -1) - (a.onTimePct ?? -1)
-    return (b[sort] as number) - (a[sort] as number)
-  })
-  const worst = [...paid].filter((r) => r.lateSpend > 0).sort((a, b) => b.lateSpend - a.lateSpend).slice(0, 10)
+  const sortValue = (r: VendorRow, k: typeof sort): number =>
+    k === 'onTimePct' || k === 'avgDaysToPay' ? (r[k] ?? -1) : toChartNumber(r[k])
+  const rows = [...paid].sort((a, b) => sortValue(b, sort) - sortValue(a, sort))
+  const worst = [...paid].filter((r) => toChartNumber(r.lateSpend) > 0).sort((a, b) => toChartNumber(b.lateSpend) - toChartNumber(a.lateSpend)).slice(0, 10)
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Clock} accent={(totals.onTimePct ?? 0) >= 0.6 ? 'emerald' : 'red'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? '—' : fmtPct(totals.onTimePct)} sub={t('sub.onTimeBills')} tone={(totals.onTimePct ?? 0) >= 0.6 ? 'positive' : 'negative'} />
+        <KpiCard icon={Clock} accent={(totals.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'red'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : fmtPct(totals.onTimePct)} sub={t('sub.onTimeBills')} tone={(totals.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'positive' : 'negative'} />
         <KpiCard icon={TimerReset} accent="sky" label={t('kpi.avgDaysToPay')} value={totals.avgDaysToPay === null ? '—' : t('days', { days: Math.round(totals.avgDaysToPay) })} sub={t('sub.fromBillToPayment')} />
         <KpiCard icon={HandCoins} accent="amber" label={t('kpi.latePaidSpend')} value={money(totals.lateSpend)} sub={t('sub.paidAfterDue')} tone="negative" />
         <KpiCard icon={ClipboardList} accent="violet" label={t('kpi.vendorsPaid')} value={String(paid.length)} sub={t('sub.withPaymentHistory')} />
@@ -186,9 +189,9 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
                       <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.paidBills}</SharedTableCell>
-                      <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.avgDaysToPay ?? 0) > 45 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300')}>{r.avgDaysToPay === null ? '—' : t('days', { days: Math.round(r.avgDaysToPay) })}</SharedTableCell>
-                      <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', (r.onTimePct ?? 0) >= 0.6 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.lateSpend > 0 ? money(r.lateSpend) : '—'}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.avgDaysToPay ?? 0) > data.config.slowPayDays ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300')}>{r.avgDaysToPay === null ? '—' : t('days', { days: Math.round(r.avgDaysToPay) })}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', (r.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? t('labels.unrated') : fmtPct(r.onTimePct)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{toChartNumber(r.lateSpend) > 0 ? money(r.lateSpend) : '—'}</SharedTableCell>
                     </InteractiveTableRow>
                   ))}
                 </SharedTableBody>
@@ -197,7 +200,8 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
           </Panel>
         </div>
         <Panel title={t('panels.mostLatePaid')} icon={HandCoins}>
-          {worst.length ? <DivergingBar labels={worst.map((r) => r.name)} values={worst.map((r) => r.lateSpend)} height={Math.max(200, worst.length * 26)} /> : <p className="py-8 text-center text-xs text-slate-400">{t('empty.noLatePaid')}</p>}
+          {worst.length ? <DivergingBar labels={worst.map((r) => r.name)} values={worst.map((r) => toChartNumber(r.lateSpend))} height={Math.max(200, worst.length * 26)} /> : <p className="py-8 text-center text-xs text-slate-400">{t('empty.noLatePaid')}</p>}
+          {totals.undatedBills > 0 ? <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{t('payment.undatedNote', { count: totals.undatedBills })}</p> : null}
         </Panel>
       </div>
     </div>
@@ -208,7 +212,7 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
 function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: number | string) => fmtMoney(n, { compact: true })
   const rows = [...data.rows].sort((a, b) => b.score - a.score)
   return (
     <div className="space-y-5">
@@ -244,7 +248,7 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.bills}</SharedTableCell>
                   <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.yoyPct ?? 0) <= 0 ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')}>{r.yoyPct === null ? '—' : fmtPct(r.yoyPct)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? t('labels.unrated') : fmtPct(r.onTimePct)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-slate-800 dark:text-slate-200">{Math.round(r.score)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.grade])}>{r.grade}</span></SharedTableCell>
                 </InteractiveTableRow>
@@ -261,8 +265,9 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
 function MatrixTab({ data }: { data: VendorData }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const option = useMemo(() => matrixOption(data.rows, (n) => fmtMoney(n, { compact: true }), t), [data, fmtMoney, t])
+  const money = (n: number | string) => fmtMoney(n, { compact: true })
+  const option = useMemo(() => matrixOption(data.rows, (n) => fmtMoney(n, { compact: true }), t, data.config.highPerformanceScore), [data, fmtMoney, t])
+  const unrated = data.rows.filter((r) => r.quadrant === 'unrated').length
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -279,6 +284,7 @@ function MatrixTab({ data }: { data: VendorData }) {
       </div>
       <Panel title={t('panels.leverageMatrix')} icon={Grid2x2} hint={t('panels.leverageHint')}>
         <Chart option={option} height={420} />
+        {unrated > 0 ? <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{t('matrix.unratedNote', { count: unrated })}</p> : null}
       </Panel>
     </div>
   )
@@ -287,13 +293,14 @@ function MatrixTab({ data }: { data: VendorData }) {
 /** One quadrant-matrix datum, as built below: { name, value: [logSpend, performance, spend] }. */
 type MatrixPoint = { data: { name: string; value: [number, number, number] } }
 
-function matrixOption(rows: VendorRow[], money: (value: number) => string, t: ReturnType<typeof useTranslations>): Record<string, unknown> {
-  const maxSpend = Math.max(1, ...rows.map((r) => r.spend))
+function matrixOption(rows: VendorRow[], money: (value: number) => string, t: ReturnType<typeof useTranslations>, highPerformance: number): Record<string, unknown> {
+  const rated = rows.filter((r) => r.performance !== null)
+  const maxSpend = Math.max(1, ...rated.map((r) => toChartNumber(r.spend)))
   const byQuad = (q: Quadrant) =>
-    rows.filter((r) => r.quadrant === q).map((r) => ({
-      value: [Math.log10(Math.max(r.spend, 1)), r.performance, r.spend],
+    rated.filter((r) => r.quadrant === q).map((r) => ({
+      value: [Math.log10(Math.max(toChartNumber(r.spend), 1)), r.performance ?? 0, toChartNumber(r.spend)],
       name: r.name,
-      symbolSize: 8 + 34 * Math.sqrt(r.spend / maxSpend),
+      symbolSize: 8 + 34 * Math.sqrt(toChartNumber(r.spend) / maxSpend),
       itemStyle: { color: QUADRANT_COLOR[q], opacity: 0.75 },
     }))
   return {
@@ -306,7 +313,7 @@ function matrixOption(rows: VendorRow[], money: (value: number) => string, t: Re
       { type: 'scatter', data: byQuad('commodity'), name: t('quadrant.commodity.label') },
       { type: 'scatter', data: byQuad('niche'), name: t('quadrant.niche.label') },
       { type: 'scatter', data: byQuad('transactional'), name: t('quadrant.transactional.label') },
-      { type: 'line', markLine: { silent: true, symbol: 'none', lineStyle: { color: 'rgba(148,163,184,0.35)', type: 'dashed' }, data: [{ yAxis: 75 }] }, data: [] },
+      { type: 'line', markLine: { silent: true, symbol: 'none', lineStyle: { color: 'rgba(148,163,184,0.35)', type: 'dashed' }, data: [{ yAxis: highPerformance }] }, data: [] },
     ],
   }
 }
@@ -316,12 +323,14 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
   const t = useTranslations('analytics.vendor')
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: number | string) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<keyof Pick<VendorRow, 'spend' | 'bills' | 'avgBill' | 'recencyDays' | 'score'>>('spend')
   const rows = [...data.rows].sort((a, b) => {
-    const av = a[sort] ?? -1
-    const bv = b[sort] ?? -1
-    return sort === 'recencyDays' ? (av as number) - (bv as number) : (bv as number) - (av as number)
+    const num = (v: string | number | null | undefined): number =>
+      v === null || v === undefined ? -1 : typeof v === 'number' ? v : toChartNumber(v)
+    const av = num(a[sort])
+    const bv = num(b[sort])
+    return sort === 'recencyDays' ? av - bv : bv - av
   })
   return (
     <Panel
@@ -360,7 +369,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.bills}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.avgBill)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? t('labels.unrated') : fmtPct(r.onTimePct)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-700 dark:text-slate-300">{Math.round(r.score)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
               </InteractiveTableRow>

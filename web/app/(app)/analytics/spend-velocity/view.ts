@@ -41,7 +41,8 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
   const authz = await requirePermission('reports.read')
 
   const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  // The org id lets the org's fiscal calendar name the period, as on Vendor Performance.
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale (users.locale ?? org defaultLocale ?? en) — the same locale the
