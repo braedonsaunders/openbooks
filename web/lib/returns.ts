@@ -22,7 +22,7 @@ import {
   UnknownCurrencyPrecisionError,
   currencyPrecisionRemedy,
   resolveCurrencyQuantum,
-} from '@openbooks/engine/src/sales/currency-precision.ts'
+} from '@openbooks/engine/sales/currency-precision'
 import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { postedReturnEvidenceScope, SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/inventory'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -392,7 +392,7 @@ type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMino
  * policy amounts the same way); an unknown precision refuses before any
  * fee resolves instead of guessing hundredths.
  */
-async function creditQuantum(orgId: string, currency: string): Promise<number> {
+async function creditQuantum(currency: string): Promise<number> {
   try {
     return await resolveCurrencyQuantum(db, currency)
   } catch (error) {
@@ -451,7 +451,7 @@ export async function previewReturnRestockingFee(input: {
     select document_date::text, currency from documents
      where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
   if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
-  const quantum = await creditQuantum(input.orgId, header.currency)
+  const quantum = await creditQuantum(header.currency)
   const scale = quantumScale(quantum)
   const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
   const credited: CreditedReturnLine[] = []
@@ -592,7 +592,7 @@ export async function inspectReturnAuthorization(input: {
       select party_id, subsidiary_id, document_date::text, status, currency
         from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
     if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
-    const quantum = await creditQuantum(input.orgId, header.currency)
+    const quantum = await creditQuantum(header.currency)
     const scale = quantumScale(quantum)
     let creditId = current.customerCreditId
     let awaitingCreditApproval = false
