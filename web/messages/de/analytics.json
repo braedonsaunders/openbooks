@@ -421,10 +421,10 @@
         "interpret": "Ab 1,0× sind kurzfristige Verpflichtungen ohne Vorräte gedeckt."
       },
       "working_capital": {
-        "label": "Working Capital",
+        "label": "Nettoumlaufvermögen",
         "formula": "Umlaufvermögen − kurzfristige Verbindlichkeiten",
         "desc": "Die kurzfristigen Mittel, die nach Erfüllung der innerhalb eines Jahres fälligen Verpflichtungen verbleiben.",
-        "interpret": "Negatives Working Capital bedeutet, dass die kurzfristigen Verpflichtungen das Umlaufvermögen übersteigen."
+        "interpret": "Ein negatives Nettoumlaufvermögen bedeutet, dass die kurzfristigen Verpflichtungen das Umlaufvermögen übersteigen."
       },
       "debt_to_equity": {
         "label": "Verschuldungsgrad",
