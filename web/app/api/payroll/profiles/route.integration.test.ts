@@ -623,4 +623,52 @@ test('profile POST derives the PL birth year from the PESEL and refuses contradi
   }
 })
 
+test('profile save retains its native employment link and audits automatic linking of the single matching employment', async () => {
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const employmentId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employeeId}`)
+      await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id)
+        values (${employmentId},${org.orgId},${employeeId},${org.subsidiaryId})`)
+    })
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly' }
+    for (const additionalTaxPerPeriod of ['0', '10']) {
+      const saved = await post({ ...base, additionalTaxPerPeriod })
+      assert.equal(saved.status, 200, await saved.clone().text())
+      await withBypassContext(async () => {
+        const row = (await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${org.orgId}`)).rows[0]!
+        assert.equal(row.employment_id, employmentId)
+        const audit = (await db.execute<{ changes: { after: { employment_id: string } } }>(sql`select changes from audit_log
+          where org_id=${org.orgId} and table_name='employee_payroll_profiles' order by at desc limit 1`)).rows[0]!
+        assert.equal(audit.changes.after.employment_id, employmentId)
+      })
+    }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
+test('profile save returns the employment identity refusal without altering a conflicting profile', async () => {
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', additionalTaxPerPeriod: '0' }
+    assert.equal((await post(base)).status, 200)
+    await withBypassContext(async () => {
+      const otherEmployer = randomUUID(), wrongEmployment = randomUUID()
+      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employeeId}`)
+      await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id)
+        values (${wrongEmployment},${org.orgId},${employeeId},${org.subsidiaryId})`)
+      await db.execute(sql`update employee_payroll_profiles set employment_id=${wrongEmployment} where org_id=${org.orgId}`)
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values (${otherEmployer},${org.orgId},${org.subsidiaryId},'Another employer','CAD','CA')`)
+      await db.execute(sql`update parties set subsidiary_id=${otherEmployer} where org_id=${org.orgId} and id=${employeeId}`)
+    })
+    const response = await post({ ...base, additionalTaxPerPeriod: '99' })
+    assert.equal(response.status, 422)
+    assert.match((await response.json()).error, /does not belong to this employee and legal employer.*review/)
+    await withBypassContext(async () => {
+      assert.equal((await db.execute<{ amount: string }>(sql`select additional_tax_per_period::text as amount from employee_payroll_profiles where org_id=${org.orgId}`)).rows[0]!.amount, '0.0000')
+    })
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
 test.after(async () => { await pool.end() })

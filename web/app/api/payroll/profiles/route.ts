@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
-import { installedPayrollCountries } from '@openbooks/engine/payroll/setup'
+import { installedPayrollCountries, payrollProfileEmployment } from '@openbooks/engine/payroll/setup'
 import {
   employmentJurisdictionsOf,
   holidayOccupationClassesOf,
@@ -1001,6 +1001,10 @@ export const POST = defineRoute({
          where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
          for update
       `)).rows[0]
+      const employmentId = await payrollProfileEmployment(
+        db, orgId, body.employeePartyId, employeeSubsidiaryId,
+        typeof before?.employment_id === 'string' ? before.employment_id : null,
+      )
       // Pack-derived employee facts (0191): the pack reads its own
       // `deriveEmployeeFacts` hook generically — today only PL derives
       // anything (birth year off the PESEL). The effective identifier is what
@@ -1080,7 +1084,7 @@ export const POST = defineRoute({
       }
       const after = (await db.execute<Record<string, unknown>>(sql`
         insert into employee_payroll_profiles
-          (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, statutory_occupation_class, pay_basis,
+          (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, labour_jurisdiction, statutory_occupation_class, pay_basis,
            federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
            additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
            authorized_federal_credits, authorized_provincial_credits,
@@ -1093,7 +1097,7 @@ export const POST = defineRoute({
            sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
            paid_on_commission,
            created_by, updated_by)
-        values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province},
+        values (${orgId}, ${body.employeePartyId}, ${employmentId}, ${body.payScheduleId}, ${country}, ${province},
                 ${labourJurisdiction}, ${statutoryOccupationClass}, ${payBasis},
                 ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
                 ${money.additionalTaxPerPeriod}, ${money.prescribedZoneDeduction}, ${money.authorizedAnnualDeductions},
@@ -1115,7 +1119,8 @@ export const POST = defineRoute({
                 ${paidOnCommission},
                 ${userId}, ${userId})
         on conflict (org_id, employee_party_id)
-        do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
+        do update set employment_id = excluded.employment_id,
+                      pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
                       province = excluded.province,
                       labour_jurisdiction = excluded.labour_jurisdiction,
                       statutory_occupation_class = excluded.statutory_occupation_class,

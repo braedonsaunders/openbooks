@@ -160,7 +160,8 @@
           "noOpeningBalance": "{count, plural, one {# funcionário} other {# funcionários}} sem saldo inicial de {detail} do sistema de folha anterior; os tetos anuais obrigatórios recomeçam do zero nesta folha.",
           "noOpeningComponentYtd": "{count, plural, one {# funcionário} other {# funcionários}} sem acumulado inicial de {detail}, que tem teto anual — o teto recomeça do zero nesta folha, permitindo uma segunda contribuição integral do limite anual.",
           "noOpeningEntitlement": "{count, plural, one {# funcionário traz} other {# funcionários trazem}} saldo do sistema de folha anterior, mas sem saldo inicial de {detail}. Esta é a primeira folha que o movimenta, por isso o banco começa do zero.",
-          "missingFact": "{detail}"
+          "missingFact": "{detail}",
+          "noEmployment": "{count} funcionários não têm um vínculo entre a folha e seu contrato de trabalho. Revise o vínculo e salve as configurações de folha em Funcionários, ou importe os vínculos revisados."
         },
         "holiday": {
           "undeclaredJurisdiction": "O pagamento de feriado legal não pode ser calculado: {detail}",
