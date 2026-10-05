@@ -344,7 +344,16 @@
         "renewalAuto": "Automatisch verlängern",
         "renewalManual": "Manuell verlängern",
         "renewalNone": "Keine Verlängerung"
-      }
+      },
+      "retentionArr": "Jährlich wiederkehrender Umsatz",
+      "retentionNrr": "Netto-Umsatzbindung",
+      "retentionGrr": "Brutto-Umsatzbindung",
+      "retentionRevenueChurn": "Umsatzabwanderung",
+      "retentionLogoChurn": "Kundenabwanderung",
+      "retentionArpa": "Ø Umsatz pro Kunde",
+      "retentionQuickRatio": "Wachstumsquote",
+      "retentionUnavailable": "Bindungskennzahlen erscheinen nach der ersten SaaS-Kennzahlenberechnung.",
+      "retentionForMonth": "Für {month}"
     },
     "recurring": {
       "newSchedule": "Neuer wiederkehrender Zeitplan",

@@ -344,7 +344,16 @@
         "renewalAuto": "自动续订",
         "renewalManual": "手动续订",
         "renewalNone": "不续订"
-      }
+      },
+      "retentionArr": "年度经常性收入",
+      "retentionNrr": "净收入留存",
+      "retentionGrr": "总收入留存",
+      "retentionRevenueChurn": "收入流失",
+      "retentionLogoChurn": "客户流失",
+      "retentionArpa": "每账户平均收入",
+      "retentionQuickRatio": "增长比率",
+      "retentionUnavailable": "首次SaaS指标计算后将显示留存指标。",
+      "retentionForMonth": "{month}"
     },
     "recurring": {
       "newSchedule": "新建定期计划",

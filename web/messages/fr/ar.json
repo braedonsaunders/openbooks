@@ -344,7 +344,16 @@
         "renewalAuto": "Renouvellement auto",
         "renewalManual": "Renouvellement manuel",
         "renewalNone": "Sans renouvellement"
-      }
+      },
+      "retentionArr": "Revenus récurrents annuels",
+      "retentionNrr": "Rétention nette des revenus",
+      "retentionGrr": "Rétention brute des revenus",
+      "retentionRevenueChurn": "Attrition des revenus",
+      "retentionLogoChurn": "Attrition des clients",
+      "retentionArpa": "Revenu moyen par compte",
+      "retentionQuickRatio": "Ratio de croissance",
+      "retentionUnavailable": "Les indicateurs de rétention apparaissent après le premier calcul des métriques SaaS.",
+      "retentionForMonth": "Pour {month}"
     },
     "recurring": {
       "newSchedule": "Nouvelle planification récurrente",
