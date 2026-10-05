@@ -79,6 +79,7 @@
       "description": "Generated billing: recurring templates, subscription billing and advanced subscriptions.",
       "dependsOn": [
         "banking",
+        "delivery",
         "flows",
         "fx",
         "inventory",

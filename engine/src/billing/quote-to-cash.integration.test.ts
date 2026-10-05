@@ -17,6 +17,7 @@ import {
   QUOTE_SUBJECT_TABLE,
   requestQuoteSignature,
   resolveRampSchedule,
+  runSignatureReminderScan,
   signQuoteSignature,
   viewQuoteSignature,
   voidSignatureRequestsForSubject,
@@ -145,6 +146,34 @@ async function seedDeal(
     `);
   }
   return { quoteId, lineId, termId, planId };
+}
+
+/** Attach one flat list-price term to an already-seeded quote header. */
+async function attachFlatTerm(
+  org: ScratchOrg,
+  actor: string,
+  quoteId: string,
+  planId: string,
+  lineAmount: string,
+): Promise<void> {
+  const lineId = randomUUID();
+  await db.execute(sql`
+    insert into document_lines
+      (id, org_id, document_id, line_number, description, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+    values (${lineId}, ${org.orgId}, ${quoteId}, 1, 'Annual subscription', ${org.accounts.revenue},
+            '1', ${lineAmount}, ${lineAmount}, '0', ${lineAmount})
+  `);
+  const termId = randomUUID();
+  await db.execute(sql`
+    insert into quote_subscription_terms
+      (id, org_id, quote_id, quote_line_id, plan_id, term_months, start_rule, billing_timing, created_by)
+    values (${termId}, ${org.orgId}, ${quoteId}, ${lineId}, ${planId}, 12, 'quote_date', 'advance', ${actor})
+  `);
+  await db.execute(sql`
+    insert into quote_ramp_steps
+      (id, org_id, term_id, period_index, starts_after_months, unit_price, quantity, created_by)
+    values (${randomUUID()}, ${org.orgId}, ${termId}, 0, 0, '100.00', '1', ${actor})
+  `);
 }
 
 async function withDeal(
@@ -331,5 +360,74 @@ test("editing a sent quote voids the request and stale signatures refuse", DB, a
 test("unsigned quotes refuse activation by name", DB, async () => {
   await withDeal(async (org, actor, seed) => {
     await assert.rejects(activateQuote(org.orgId, actor, seed.quoteId, {}), /no signed signature/);
+  });
+});
+
+test("the reminder scan expires lapsed links and sends one reminder each", DB, async () => {
+  await withDeal(async (org, actor, seed) => {
+    const soon = await requestQuoteSignature({
+      orgId: org.orgId,
+      actorId: actor,
+      quoteId: seed.quoteId,
+      signerName: "Ada Customer",
+      signerEmail: "ada@example.com",
+    });
+    await db.execute(sql`
+      update signature_requests set expires_at = now() + interval '1 hour'
+       where id = ${soon.requestId}`);
+    const before = (
+      await db.execute<{ token_hash: string }>(sql`
+        select token_hash from signature_requests where id = ${soon.requestId}`)
+    ).rows[0]!.token_hash;
+
+    // A second quote carries the lapsed request the scan must expire.
+    const lapsedQuoteId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, party_id, document_date,
+         currency, subtotal, tax_total, total, created_by)
+      values (${lapsedQuoteId}, ${org.orgId}, 'quote', 'draft', 'Q-2', ${org.customerId}, ${org.date},
+              'CAD', '1200.0000', '0', '1200.0000', ${actor})`);
+    await attachFlatTerm(org, actor, lapsedQuoteId, seed.planId, "1200.0000");
+    const lapsed = await requestQuoteSignature({
+      orgId: org.orgId,
+      actorId: actor,
+      quoteId: lapsedQuoteId,
+      signerName: "Bo Customer",
+      signerEmail: "bo@example.com",
+    });
+    await db.execute(sql`
+      update signature_requests set expires_at = now() - interval '1 hour'
+       where id = ${lapsed.requestId}`);
+
+    const first = await runSignatureReminderScan();
+    assert.equal(first.expired, 1);
+    assert.equal(first.reminded, 1);
+    assert.deepEqual(first.orgErrors, []);
+
+    const lapsedRow = (
+      await db.execute<{ status: string }>(sql`
+        select status from signature_requests where id = ${lapsed.requestId}`)
+    ).rows[0]!;
+    assert.equal(lapsedRow.status, "expired");
+
+    // The reminder rotated the live link and queued exactly one email.
+    const rotated = (
+      await db.execute<{ token_hash: string }>(sql`
+        select token_hash from signature_requests where id = ${soon.requestId}`)
+    ).rows[0]!.token_hash;
+    assert.notEqual(rotated, before);
+    const queued = (
+      await db.execute<{ payload: { html: string } }>(sql`
+        select payload from scheduler_outbox
+         where kind = 'flow_email' and occurrence_key = ${`signature-reminder:${soon.requestId}`}`)
+    ).rows;
+    assert.equal(queued.length, 1);
+    assert.ok((queued[0]!.payload as { html: string }).html.includes("/sign/quotes/"));
+
+    // A second tick converges: nothing more expires, nothing re-sends.
+    const second = await runSignatureReminderScan();
+    assert.equal(second.expired, 0);
+    assert.equal(second.reminded, 0);
   });
 });
