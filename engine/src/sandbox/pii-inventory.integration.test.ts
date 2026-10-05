@@ -2183,6 +2183,13 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "sync_runs.stats",
   "sync_runs.status",
   "sync_runs.triggered_by",
+  // Tax-authority connection state: the authority and status are enumerations,
+  // the sealed blob is ciphertext without the data key, and the error names
+  // the connection failure, never a person.
+  "tax_authority_connections.authority",
+  "tax_authority_connections.last_error",
+  "tax_authority_connections.sealed_credentials",
+  "tax_authority_connections.status",
   "tax_codes.applies_to",
   "tax_codes.calculation_type",
   "tax_codes.code",
@@ -2262,6 +2269,12 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "tax_registrations.filing_frequency",
   "tax_registrations.registration_number",
   "tax_registrations.return_form_code",
+  // OSS translation evidence: the scheme, currency and rate source are
+  // enumerations and the digest is a one-way hash of the observation set.
+  "tax_oss_fx_evidence.currency",
+  "tax_oss_fx_evidence.evidence_digest",
+  "tax_oss_fx_evidence.rate_source",
+  "tax_oss_fx_evidence.scheme",
   // An OSS registration number is a business filing identity like a domestic
   // registration number; scheme and identification state are enumerations.
   "tax_oss_registrations.identification_state",

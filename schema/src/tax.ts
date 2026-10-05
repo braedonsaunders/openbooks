@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -357,4 +358,72 @@ export const marketplaceNexusStateRules = pgTable(
     source: text("source").notNull().default(""),
   },
   () => [],
+);
+
+/**
+ * Sealed tax-authority credentials per organization: the HMRC VAT API OAuth
+ * client and tokens, and the ABN Lookup GUID. Secrets stay sealed at rest;
+ * only connection status and failures are readable.
+ */
+export const taxAuthorityConnections = pgTable(
+  "tax_authority_connections",
+  {
+    id: id(),
+    orgId: orgRef(),
+    authority: text("authority", { enum: ["hmrc", "abn"] }).notNull(),
+    sealedCredentials: text("sealed_credentials"),
+    status: text("status", {
+      enum: ["missing", "ready", "error", "expired"],
+    })
+      .notNull()
+      .default("missing"),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_authority_connections_org_id_id_unique").on(
+      t.orgId,
+      t.id,
+    ),
+    unique("tax_authority_connections_org_authority_unique").on(
+      t.orgId,
+      t.authority,
+    ),
+  ],
+);
+
+/**
+ * ECB spot-rate evidence behind OSS returns translated into euro: one row
+ * per return period and source currency with the rate date and the digest
+ * that reproduces the filed figures after provider rows change.
+ */
+export const taxOssFxEvidence = pgTable(
+  "tax_oss_fx_evidence",
+  {
+    id: id(),
+    orgId: orgRef(),
+    scheme: text("scheme", {
+      enum: ["union", "non_union", "ioss"],
+    }).notNull(),
+    periodFrom: date("period_from").notNull(),
+    periodTo: date("period_to").notNull(),
+    currency: text("currency").notNull(),
+    rate: numeric("rate").notNull(),
+    rateAsOf: date("rate_as_of").notNull(),
+    rateSource: text("rate_source").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_oss_fx_evidence_org_id_id_unique").on(t.orgId, t.id),
+    unique("tax_oss_fx_evidence_period_currency_unique").on(
+      t.orgId,
+      t.scheme,
+      t.periodFrom,
+      t.periodTo,
+      t.currency,
+    ),
+  ],
 );
