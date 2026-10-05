@@ -58,6 +58,7 @@ test("gl history translates each subsidiary leg before adding", { skip: !process
       const june = await seedPeriod(org, 2026, 6);
       await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US')`);
+      // The USD row is org-shared reference data that parallel tests seed too: a conflict means an identical row already exists, so staying is correct.
       await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`);
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
         values (${org.orgId}, 'USD', 'CAD', '2026-06-01'::date, 'spot', 1.35, 'manual')`);

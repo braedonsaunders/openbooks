@@ -31,6 +31,7 @@ test('bank balances translate every functional at the as-of spot', { skip: !env.
         values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
       await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
         values (${usdBank}, ${org.orgId}, '1010', 'USD Cash', 'asset_bank', ${usSub}, false, true)`)
+      // The USD row is org-shared reference data that parallel tests seed too: a conflict means an identical row already exists, so staying is correct.
       await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
         values (${org.orgId},'USD','CAD','2026-07-15'::date,'spot',1.35,'manual')`)
