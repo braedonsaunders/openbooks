@@ -36,6 +36,7 @@ function VendorConcentrationTile({ data }: { data: WidgetCardProps['data'] }) {
   const share = data.concentrationTop5Share
   const period = data.vendorPeriodLabel
   if (!hhi.available || !share.available) {
+    const reason = !hhi.available ? hhi.reason : share.available === false ? share.reason : ''
     return (
       <MetricTile
         icon={<Scale size={15} />}
@@ -43,7 +44,7 @@ function VendorConcentrationTile({ data }: { data: WidgetCardProps['data'] }) {
         value="—"
         href="/analytics/vendor-performance"
         tone="slate"
-        hint={!hhi.available ? hhi.reason : share.reason}
+        hint={reason}
       />
     )
   }

@@ -16,10 +16,12 @@ test("vendorPerformance is a registered dashboard on the vendor-performance slug
 
 test("every dashboard's defaults satisfy its own ordered ladders", () => {
   for (const [name, spec] of Object.entries(ANALYTICS_CONFIG)) {
-    for (const ladder of spec.ordered ?? []) {
+    const ladders: readonly (readonly string[])[] = "ordered" in spec && spec.ordered ? spec.ordered : [];
+    const defaults: Record<string, number | string> = spec.defaults;
+    for (const ladder of ladders) {
       for (let i = 1; i < ladder.length; i++) {
-        const low = spec.defaults[ladder[i - 1]!];
-        const high = spec.defaults[ladder[i]!];
+        const low = defaults[ladder[i - 1]!];
+        const high = defaults[ladder[i]!];
         assert.ok(
           Number(high) > Number(low),
           `${name}: default ${ladder[i]} (${high}) must exceed ${ladder[i - 1]} (${low})`,
