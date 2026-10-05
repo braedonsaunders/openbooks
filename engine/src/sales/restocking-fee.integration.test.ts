@@ -163,12 +163,15 @@ test('waive requires the grant and a reason, and is audited', { skip: !DB }, asy
     assert.equal(restockingFeeCreditLines(waived).length, 0)
     const rmaId = randomUUID()
     await withOrg(org.orgId, () => recordRestockingFeeWaiver(db, org.orgId, actorId, rmaId, {
-      totalMinor: '1000', currency: 'CAD', reason: 'Damaged in transit',
+      totalMinor: '1000', currency: 'CAD', minorUnits: 2, reason: 'Damaged in transit',
     }))
-    const audit = (await db.execute<{ changes: { reason: string } }>(sql`
+    const audit = (await db.execute<{ changes: { reason: string; minorUnits: number; currency: string; totalMinor: string } }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and table_name = 'rma_documents' and row_id = ${rmaId}`)).rows
     assert.equal(audit.length, 1)
     assert.equal(audit[0]?.changes.reason, 'Damaged in transit')
+    assert.equal(audit[0]?.changes.minorUnits, 2)
+    assert.equal(audit[0]?.changes.currency, 'CAD')
+    assert.equal(audit[0]?.changes.totalMinor, '1000')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -326,8 +329,8 @@ test('fixed and percent fees price ISO fils on BHD', { skip: !DB }, async () => 
 
 test('percent fees price whole yen on JPY and refuse unknown precision', { skip: !DB }, async () => {
   // Ten percent of a 10000 yen credit is 1000 yen on a -1000.0000 line.
-  // An XX9 credit, absent from the registry, refuses before any fee
-  // resolves instead of guessing hundredths.
+  // A ZZZ credit, alphabetic but absent from the registry, refuses
+  // before any fee resolves instead of guessing hundredths.
   await ensureIsoRegistry()
   const org = await withBypassContext(() => createScratchOrg())
   try {
@@ -343,17 +346,44 @@ test('percent fees price whole yen on JPY and refuse unknown precision', { skip:
     assert.equal(yen.minorUnits, 0)
     assert.equal(restockingFeeCreditLines(yen)[0]!.amount, '-1000.0000')
     const absent = (await withBypassContext(() => db.execute<{ code: string }>(sql`
-      select code from currencies where code = 'XX9'`))).rows
+      select code from currencies where code = 'ZZZ'`))).rows
     assert.equal(absent.length, 0)
     await assert.rejects(
       withOrg(org.orgId, () => resolveRestockingFee(db, org.orgId, {
-        returnDate: '2026-06-01', currency: 'XX9',
+        returnDate: '2026-06-01', currency: 'ZZZ',
         lines: [{ key: 'l1', itemId: null, itemCategory: null, lineTotalMinor: 10000n }],
         waived: false, canWaive: false,
       })),
       (error: unknown) => error instanceof RestockingFeeRefusal && error.code === 'currency_precision_unknown'
         && error.status === 422 && /platform currency seed/.test(error.remedy ?? ''),
     )
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('a configured yen fee applies whole yen, never hundredths', { skip: !DB }, async () => {
+  // The operator configures 500 yen; Setup stores 500 whole yen. The fee
+  // applies 500 yen on a -500.0000 credit line: reading hundredths would
+  // charge 5 yen instead.
+  await ensureIsoRegistry()
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableReturns(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    await insertPolicy(org, actorId, {
+      kind: 'fixed', feeAmountMinor: '500', currency: 'JPY', effectiveFrom: '2020-01-01',
+    })
+    const fee = await withOrg(org.orgId, () => resolveRestockingFee(db, org.orgId, {
+      returnDate: '2026-06-01', currency: 'JPY',
+      lines: [{ key: 'l1', itemId: null, itemCategory: null, lineTotalMinor: 10000n }],
+      waived: false, canWaive: false,
+    }))
+    assert.equal(fee.totalMinor, '500')
+    assert.equal(fee.minorUnits, 0)
+    const lines = restockingFeeCreditLines(fee)
+    assert.equal(lines.length, 1)
+    assert.equal(lines[0]!.amount, '-500.0000')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

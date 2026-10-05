@@ -401,11 +401,14 @@ async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<n
   `)).rows[0];
   const quantum = row?.minor_units;
   if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
+    // No fx edge is declared on purpose: the registry row is the only thing
+    // consulted. A supported-but-missing row is restored by the platform
+    // seed; a code outside ISO 4217 never has a row to restore.
     throw refusal(
       `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
       "currency_precision_unknown",
       422,
-      "Ask your system administrator to restore the missing row with the platform currency seed",
+      `If ${currency} is a supported ISO 4217 code, ask your system administrator to restore the missing row with the platform currency seed; otherwise choose a supported currency code from the ISO currency registry`,
     );
   }
   return quantum;
@@ -490,6 +493,7 @@ export async function applyPromotion(
     discountMinor: total.toString(),
     ...(total < computedMinor ? { cappedFromMinor: computedMinor.toString() } : {}),
     currency: document.currency,
+    minorUnits: quantum,
     lineIds: inserted.map((line) => line.lineId),
   });
   return {
