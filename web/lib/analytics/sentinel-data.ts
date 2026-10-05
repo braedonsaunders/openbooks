@@ -302,6 +302,10 @@ export function extractFlowAmountLimits(
     }
   };
   for (const flow of flows) {
+    // Only spend subjects can gate a spend document: a limit on any other
+    // subject kind can never trip the threshold-trap detector, so counting
+    // it would report the detector configured when it is not.
+    if (!(SPEND_KINDS as readonly string[]).includes(flow.subjectKind)) continue;
     const graph = flow.graph as { nodes?: Array<{ data?: { kind?: string; rule?: LogicRuleLeaf } }> } | null;
     const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : [];
     for (const node of nodes) {

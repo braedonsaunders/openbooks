@@ -119,6 +119,30 @@ test("flow amount limits ignore non-limits and dedupe repeats", () => {
   assert.deepEqual(extractFlowAmountLimits([{ subjectKind: "x", graph: {} }]), []);
 });
 
+// A limit on a non-spend subject can never gate a spend document, so it
+// must not count as threshold-trap coverage — otherwise the detector would
+// report configured and scan nothing.
+test("flow amount limits ignore non-spend subject kinds", () => {
+  const graph = {
+    nodes: [
+      {
+        id: "c",
+        position: { x: 0, y: 0 },
+        data: { kind: "condition", rule: { op: "gte", field: "total", value: 5000 } },
+      },
+    ],
+    edges: [],
+  };
+  assert.deepEqual(extractFlowAmountLimits([{ subjectKind: "sales_order", graph }]), []);
+  assert.deepEqual(
+    extractFlowAmountLimits([
+      { subjectKind: "sales_order", graph },
+      { subjectKind: "vendor_bill", graph },
+    ]),
+    [{ subjectKind: "vendor_bill", limit: "5000" }],
+  );
+});
+
 test("vendor baseline window counts back whole months", () => {
   assert.equal(sentinelBaselineFrom("2026-07-31", 36), "2023-07-31");
   assert.equal(sentinelBaselineFrom("2026-07-31"), "2023-07-31");

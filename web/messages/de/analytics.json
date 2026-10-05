@@ -3595,7 +3595,7 @@
         "area": "Benford-Abweichung",
         "message": "Erste-Ziffer-Verteilung weicht erheblich ab"
       },
-      "trapUnavailable": "Keine Genehmigungs-Betragsgrenzen in Flows — lege eine an oder passe das Band unter Sentinel → Konfiguration an.",
+      "trapUnavailable": "Keine Genehmigungs-Betragsgrenzen in Flows — lege eine Gesamtbetrags-Bedingung in einem Ausgaben-Flow an. Das Sentinel-Band verengt nur das Fenster um eine echte Grenze.",
       "duplicateFloorUnset": "Lege das Duplikatminimum unter Sentinel → Konfiguration fest.",
       "rsfFloorUnset": "Lege die Basisuntergrenze der relativen Größe unter Sentinel → Konfiguration fest.",
       "zscoreFloorUnset": "Lege die Rauschuntergrenze des Z-Werts unter Sentinel → Konfiguration fest."

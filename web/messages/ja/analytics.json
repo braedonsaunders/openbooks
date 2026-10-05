@@ -3595,7 +3595,7 @@
         "area": "ベンフォード乖離",
         "message": "第一位の分布が大きく乖離しています"
       },
-      "trapUnavailable": "Flowsに承認金額の条件がありません — 条件を追加するか、Sentinel → 設定でバンドを調整してください。",
+      "trapUnavailable": "Flowsに承認金額の条件がありません — 支出対象のフローに合計金額の条件を追加してください。Sentinelバンドは実際の限度周辺の範囲を狭めるだけです。",
       "duplicateFloorUnset": "Sentinel → 設定で重複下限を設定してください。",
       "rsfFloorUnset": "Sentinel → 設定で相対サイズのベースライン下限を設定してください。",
       "zscoreFloorUnset": "Sentinel → 設定でZスコアのノイズ下限を設定してください。"
