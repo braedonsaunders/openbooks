@@ -43,7 +43,43 @@ export interface UserSqlResult {
 }
 
 const FORBIDDEN_PREFIX = /^\s*(insert|update|delete|create|alter|drop|grant|revoke|truncate|copy|vacuum|set|call|do)\b/i;
-const FORBIDDEN_BODY = /\b(?:pg_catalog\.)?set_config\s*\(/i;
+/**
+ * Functions user SQL may never name. set_config can reassign the session role
+ * or tenant setting; the others execute SQL supplied as a STRING, which the
+ * checker below cannot see (string literals are blanked) and which can call
+ * set_config('role', 'none') to leave openbooks_read for the application
+ * login. Matched as identifiers anywhere — schema-qualified or not, any case,
+ * quoted or unicode-escaped — never only before "(", so attribute-call
+ * notation cannot reach them either. Migration 0539 also withdraws EXECUTE on
+ * the SQL-string family, and beginGovernedReadTransaction refuses to run while
+ * openbooks_read can still execute any of them.
+ */
+export const SQL_TEXT_EXECUTING_FUNCTIONS = [
+  "query_to_xml", "query_to_xmlschema", "query_to_xml_and_xmlschema",
+  "cursor_to_xml", "cursor_to_xmlschema",
+  "table_to_xml", "table_to_xmlschema", "table_to_xml_and_xmlschema",
+  "schema_to_xml", "schema_to_xmlschema", "schema_to_xml_and_xmlschema",
+  "database_to_xml", "database_to_xmlschema", "database_to_xml_and_xmlschema",
+  "ts_stat", "ts_rewrite",
+] as const;
+const FORBIDDEN_FUNCTIONS = ["set_config", ...SQL_TEXT_EXECUTING_FUNCTIONS];
+const FORBIDDEN_BODY = new RegExp(
+  `(?<![A-Za-z0-9_$])(${FORBIDDEN_FUNCTIONS.join("|")})(?![A-Za-z0-9_$])`,
+  "i",
+);
+
+/**
+ * A refusal raised by the governed SQL path itself (not a PostgreSQL error):
+ * its message names the cause and the remedy and is safe to show the caller.
+ */
+export class UserSqlRefusal extends Error {
+  readonly status: number;
+  constructor(message: string, status = 403) {
+    super(message);
+    this.name = "UserSqlRefusal";
+    this.status = status;
+  }
+}
 const DOLLAR_TAG = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/;
 const UNCLOSED_SQL = "unclosed string, comment, or dollar-quote";
 
@@ -203,8 +239,9 @@ export function validateUserSql(sqlText: string): string {
   if (!stripped) throw new Error("empty query");
   if (stripped.replace(/;\s*$/, "").includes(";")) throw new Error("one statement per query");
   if (FORBIDDEN_PREFIX.test(stripped)) throw new Error("read-only: queries must be SELECT (or WITH … SELECT)");
-  if (FORBIDDEN_BODY.test(stripped)) {
-    throw new Error("read-only: set_config() is not allowed in user SQL");
+  const forbidden = FORBIDDEN_BODY.exec(stripped);
+  if (forbidden) {
+    throw new Error(`read-only: ${forbidden[1]!.toLowerCase()}() is not allowed in user SQL`);
   }
   if (!/^\s*(select|with)\b/i.test(stripped)) throw new Error("queries must start with SELECT or WITH");
   return sqlText.trim().replace(/;\s*$/, "");
@@ -278,6 +315,58 @@ async function clearQueryContext(client: import('pg').PoolClient): Promise<void>
   await client.query("truncate table pg_temp.openbooks_query_context");
 }
 
+/**
+ * The console's boundary is the openbooks_read role, and a role that can run
+ * SQL held in a string can leave it (set_config('role', 'none')). Migration
+ * 0539 withdraws those privileges; where the migration role could not (a
+ * constrained schema owner cannot change pg_catalog ACLs), the console stays
+ * closed until a superuser does, rather than relying on the text checker alone.
+ * Runs as openbooks_read, so has_function_privilege answers for that role.
+ */
+async function refuseTextExecutionPrivileges(client: import('pg').PoolClient): Promise<void> {
+  const executable = await client.query<{ fn: string }>(
+    `select p.oid::pg_catalog.regprocedure::pg_catalog.text as fn
+       from pg_catalog.pg_proc p
+      where p.pronamespace = 'pg_catalog'::pg_catalog.regnamespace
+        and p.proname::pg_catalog.text = any($1::pg_catalog.text[])
+        and pg_catalog.has_function_privilege(p.oid, 'EXECUTE')
+      order by 1`,
+    [[...SQL_TEXT_EXECUTING_FUNCTIONS]],
+  );
+  if (executable.rows.length === 0) return;
+  const names = executable.rows.map((row) => `pg_catalog.${row.fn}`);
+  throw new UserSqlRefusal(
+    `query console is unavailable: the read-only query role can still execute ${names.join(", ")}, `
+      + "which run SQL text outside the console's checks. A database superuser must run "
+      + `"revoke execute on function ${names[0]} from public" (and likewise for each function listed) before queries can run.`,
+    409,
+  );
+}
+
+/**
+ * Tripwire after user SQL: the statement must leave the session exactly as
+ * the governed transaction set it — still openbooks_read, still scoped to the
+ * caller's organization, bypass off. This is not the boundary (a statement
+ * able to change these could restore them before it ends); it withholds the
+ * result and discards the connection if anything unforeseen got through.
+ */
+async function assertGovernedSessionIntact(
+  client: import('pg').PoolClient,
+  orgId: string,
+): Promise<void> {
+  const check = await client.query<{ intact: boolean | null }>(
+    `select current_user::pg_catalog.text = 'openbooks_read'
+            and pg_catalog.current_setting('role') = 'openbooks_read'
+            and pg_catalog.current_setting('app.current_org', true) = $1::pg_catalog.text
+            and pg_catalog.current_setting('app.bypass_rls', true) = 'off'
+            and public.openbooks_query_org_id() = $1::pg_catalog.uuid as intact`,
+    [orgId],
+  );
+  if (check.rows[0]?.intact !== true) {
+    throw new UserSqlRefusal("query result withheld: the query changed the session role or organization scope");
+  }
+}
+
 async function beginGovernedReadTransaction(
   client: import('pg').PoolClient,
   orgId: string,
@@ -296,6 +385,7 @@ async function beginGovernedReadTransaction(
   );
   await client.query("set local role openbooks_read");
   await client.query("set local search_path = openbooks_query, pg_catalog");
+  await refuseTextExecutionPrivileges(client);
   await client.query(`set local statement_timeout = ${timeoutMs}`);
   // Governed views scope every table with `org_id = openbooks_query_org_id()`.
   // That function is STABLE, so its value is unknown at plan time and the
@@ -342,6 +432,8 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
 
   const client = await connectGovernedReadClient();
   const started = Date.now();
+  // A session that failed the post-statement check is never pooled again.
+  let poisoned: Error | undefined;
   try {
     await prepareQueryContext(client, opts.orgId);
     await beginGovernedReadTransaction(client, opts.orgId, timeoutMs);
@@ -349,6 +441,12 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
       text: wrapped,
       values: [maxRows + 1, maxBytes],
     });
+    try {
+      await assertGovernedSessionIntact(client, opts.orgId);
+    } catch (error) {
+      poisoned = error as Error;
+      throw error;
+    }
     await client.query("rollback");
     const bounded = collectMeasuredRows(
       res.rows as Record<string, unknown>[],
@@ -367,12 +465,16 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
     await client.query("rollback").catch(() => {});
     throw e;
   } finally {
-    try {
-      await clearQueryContext(client);
-      client.release();
-    } catch (error) {
-      client.release(error as Error);
-      throw error;
+    if (poisoned) {
+      client.release(poisoned);
+    } else {
+      try {
+        await clearQueryContext(client);
+        client.release();
+      } catch (error) {
+        client.release(error as Error);
+        throw error;
+      }
     }
   }
 }

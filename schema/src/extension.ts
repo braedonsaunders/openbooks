@@ -108,6 +108,13 @@ export const userScripts = pgTable(
     timeoutMs: integer("timeout_ms").notNull().default(2000),
     sortOrder: integer("sort_order").notNull().default(100),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * User whose LIVE permissions and entity scope govern privileged host
+     * calls (ob.query, ob.journal.create, custom GL lines) when no signed-in
+     * caller drives the run: scheduled, bulk and system-triggered runs. Set to
+     * whoever last saved or promoted the script; null refuses those calls.
+     */
+    runAsUserId: uuid("run_as_user_id"),
     ...auditColumns,
   },
   (t) => [

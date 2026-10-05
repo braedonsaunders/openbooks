@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import type { PoolClient } from 'pg'
 import { db, pool, withBypass, withOrgContext } from './db.ts'
 import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
-import { listSchema, runUserSql } from './sqlapi.ts'
+import { listSchema, runUserSql, SQL_TEXT_EXECUTING_FUNCTIONS } from './sqlapi.ts'
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 const PRIVATE_PROJECTION_MIGRATION = readFileSync(
@@ -191,6 +191,34 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
   } finally {
     await withBypass(() => dropScratchOrg(second.orgId))
     await withBypass(() => dropScratchOrg(first.orgId))
+  }
+})
+
+test('the read role cannot execute SQL text, so console SQL cannot return to the application login', { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    const escape = "select pg_catalog.query_to_xml('select pg_catalog.set_config(''role'', ''none'', true)', false, false, '') as x"
+    await assert.rejects(runUserSql(escape, { orgId: org.orgId }), /query_to_xml\(\) is not allowed in user SQL/)
+    // Beneath the text checker, PostgreSQL refuses the same statement in the
+    // exact session the governed transaction builds on the runtime login.
+    const client = await withOrgContext(org.orgId, () => pool.connect())
+    try {
+      await client.query('begin transaction read only')
+      await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [org.orgId])
+      await client.query('set local role openbooks_read')
+      await assert.rejects(client.query(escape), /permission denied for function query_to_xml/)
+      await client.query('rollback')
+    } finally {
+      client.release()
+    }
+    const executable = await withBypass(() => db.execute<{ fn: string }>(sql`
+      select p.oid::regprocedure::text as fn from pg_proc p
+       where p.pronamespace = 'pg_catalog'::regnamespace
+         and p.proname::text = any(${`{${SQL_TEXT_EXECUTING_FUNCTIONS.join(',')}}`}::text[])
+         and has_function_privilege('openbooks_read', p.oid, 'EXECUTE')`))
+    assert.deepEqual(executable.rows, [])
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
 

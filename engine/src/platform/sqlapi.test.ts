@@ -11,13 +11,20 @@ class GovernedPoolHarness {
   governedConnects = 0;
   requestConnects = 0;
   releases = 0;
+  discarded = 0;
   queries: LoggedQuery[] = [];
+  /** Catalog functions the read role can still execute, as has_function_privilege reports them. */
+  executableTextFunctions: string[] = [];
+  sessionIntact = true;
 
   reset(): void {
     this.governedConnects = 0;
     this.requestConnects = 0;
     this.releases = 0;
+    this.discarded = 0;
     this.queries = [];
+    this.executableTextFunctions = [];
+    this.sessionIntact = true;
   }
 
   async connectGovernedReadClient() {
@@ -66,13 +73,21 @@ class GovernedPoolHarness {
             rowCount: 1,
           };
         }
+        if (normalized.includes("has_function_privilege(p.oid, 'execute')")) {
+          const rows = this.executableTextFunctions.map((fn) => ({ fn }));
+          return { rows, fields: [], rowCount: rows.length };
+        }
+        if (normalized.includes(" as intact")) {
+          return { rows: [{ intact: this.sessionIntact }], fields: [], rowCount: 1 };
+        }
         if (normalized.includes("from pg_roles r")) {
           return { rows: [{ exists: 1 }], fields: [], rowCount: 1 };
         }
         return { rows: [], fields: [], rowCount: 0 };
       },
-      release: () => {
+      release: (error?: Error) => {
         this.releases += 1;
+        if (error) this.discarded += 1;
       },
     };
   }
@@ -120,6 +135,7 @@ const {
   listSchema,
   runUserSql,
   USER_SQL_MAX_RESULT_BYTES,
+  UserSqlRefusal,
   validateUserSql,
 } = await import(sqlapiUrl) as typeof import("./sqlapi.ts");
 hooks.deregister();
@@ -185,6 +201,44 @@ test("query validation refuses set_config hidden in a Unicode-escaped identifier
   );
   const unicodeString = `select U&'set_config(' as payload`;
   assert.equal(validateUserSql(unicodeString), unicodeString);
+});
+
+test("query validation refuses every function that executes SQL held in a string", () => {
+  const attempts: Array<[string, RegExp]> = [
+    ["select query_to_xml('select set_config(''role'',''none'',true)', false, false, '')", /query_to_xml\(\) is not allowed/],
+    [`select PG_CATALOG . "query_to_xml"('select 1', false, false, '')`, /query_to_xml\(\) is not allowed/],
+    [`select U&"\\0071uery_to_xml"('select 1', false, false, '')`, /query_to_xml\(\) is not allowed/],
+    ["select Query_To_Xml_And_XmlSchema('select 1', false, false, '')", /query_to_xml_and_xmlschema\(\) is not allowed/],
+    ["select * from ts_stat('select ''a''::tsvector')", /ts_stat\(\) is not allowed/],
+    ["select ts_rewrite('a'::tsquery, 'select ''a''::tsquery, ''b''::tsquery')", /ts_rewrite\(\) is not allowed/],
+    ["select s.ts_stat from (select 1) s", /ts_stat\(\) is not allowed/],
+    ["select database_to_xml(true, true, '')", /database_to_xml\(\) is not allowed/],
+  ];
+  for (const [sqlText, refusal] of attempts) assert.throws(() => validateUserSql(sqlText), refusal, sqlText);
+  // The names inside literals are data, and longer identifiers are not the functions.
+  assert.doesNotThrow(() => validateUserSql("select 'query_to_xml' as label, 1 as ts_stats"));
+});
+
+test("runUserSql stays closed while the read role can still execute SQL text, and runs no user SQL", async () => {
+  harness.reset();
+  harness.executableTextFunctions = ["query_to_xml(text,boolean,boolean,text)"];
+  await assert.rejects(
+    runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001" }),
+    (error: unknown) => error instanceof UserSqlRefusal && error.status === 409
+      && /pg_catalog\.query_to_xml\(text,boolean,boolean,text\)/.test(error.message)
+      && /revoke execute on function pg_catalog\.query_to_xml\(text,boolean,boolean,text\) from public/.test(error.message),
+  );
+  assert.equal(harness.queries.some(({ text }) => text.includes("__ob_row_bytes")), false);
+});
+
+test("runUserSql withholds the result and discards the connection when the statement left the governed session", async () => {
+  harness.reset();
+  harness.sessionIntact = false;
+  await assert.rejects(
+    runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001" }),
+    (error: unknown) => error instanceof UserSqlRefusal && /changed the session role or organization scope/.test(error.message),
+  );
+  assert.equal(harness.discarded, 1);
 });
 
 test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {
