@@ -33,7 +33,7 @@
     "codeTitle": "Apply promotion code",
     "codeLabel": "Promotion code",
     "applied": "{code} applied: {amount} off across {count, plural, one {# line} other {# lines}}",
-    "precisionUnknown": "The discount applied, but amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). Choose a supported currency code from the registry.",
+    "precisionUnknown": "The discount applied, but its amount cannot be shown for {currency}. Review the promotion lines on the document.",
     "loadFailed": "Could not load promotions",
     "applyFailed": "Could not apply the promotion"
   }

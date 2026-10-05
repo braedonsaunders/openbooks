@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { useAppAction } from '@/lib/use-app-action'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { createMoneyFormatter, displayMinorAmount } from '@/lib/money-format'
+import { createMoneyFormatter, displayMinorAmount, minorDisplayRefusal } from '@/lib/money-format'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { channelRequest } from './channel-client'
@@ -227,19 +227,24 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
   const { busy: refreshBusy, refusal: refreshRefusal, execute: executeRefresh } = useAppAction()
   const money = createMoneyFormatter(locale, drawer.currency)
   // Precision comes from the authoritative registry via currencyUnits. A
-  // missing, malformed, or out-of-range precision renders the named notice
-  // for that currency instead of guessing /100 or unmounting the drawer.
-  // The registry exponent rides as both fraction digits: Intl defaults
-  // would otherwise override it for private/custom codes.
+  // refusal renders the named notice for that currency instead of guessing
+  // /100 or unmounting the drawer; the notice names the true cause, never
+  // a channel teardown. The registry exponent rides as both fraction
+  // digits: Intl defaults would otherwise override it for private/custom
+  // codes.
   const amountIn = (minor: string, currency: string) => {
     const display = displayMinorAmount(minor, drawer.currencyUnits[currency])
-    if (display === null) return t('drawer.unknownPrecision', { currency })
-    const formatter = currency === drawer.currency ? money : createMoneyFormatter(locale, currency)
-    return formatter.money(display.major, {
-      currency,
-      minimumFractionDigits: display.digits,
-      maximumFractionDigits: display.digits,
-    })
+    if (display !== null) {
+      const formatter = currency === drawer.currency ? money : createMoneyFormatter(locale, currency)
+      return formatter.money(display.major, {
+        currency,
+        minimumFractionDigits: display.digits,
+        maximumFractionDigits: display.digits,
+      })
+    }
+    return minorDisplayRefusal(minor, drawer.currencyUnits[currency]) === 'unreadable-amount'
+      ? t('drawer.unreadableAmount', { currency })
+      : t('drawer.unknownPrecision', { currency })
   }
   const amount = (minor: string) => amountIn(minor, drawer.currency)
 

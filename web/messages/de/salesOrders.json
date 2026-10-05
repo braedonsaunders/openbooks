@@ -33,7 +33,7 @@
     "codeTitle": "Aktionscode anwenden",
     "codeLabel": "Aktionscode",
     "applied": "{code} angewendet: {amount} Rabatt auf {count, plural, one {# Zeile} other {# Zeilen}}",
-    "precisionUnknown": "Der Rabatt wurde angewendet, aber Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Wählen Sie einen unterstützten Währungscode aus dem Register.",
+    "precisionUnknown": "Der Rabatt wurde angewendet, aber sein Betrag kann für {currency} nicht angezeigt werden. Prüfen Sie die Rabattzeilen im Beleg.",
     "loadFailed": "Aktionen konnten nicht geladen werden",
     "applyFailed": "Die Aktion konnte nicht angewendet werden"
   }

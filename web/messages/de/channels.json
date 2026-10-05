@@ -63,7 +63,7 @@
     "marginTitle": "Auftragsmarge",
     "marginHint": "Deckungsbeitrag der letzten 30 Tage je Kanal, nach Versand und Gebühren",
     "marginEmpty": "Die Marge erscheint hier, sobald Kanalaufträge mit Kosten gebucht sind. Einen Auftrag aktualisieren, um sie sofort zu bilden.",
-    "marginPrecisionUnknown": "Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Falls der Code falsch ist, trennen Sie den Kanal und verbinden Sie ihn mit dem unterstützten dreistelligen ISO-Code erneut — die Währung eines live geschalteten Kanals kann nicht geändert werden.",
+    "marginPrecisionUnknown": "Die Marge in {currency} kann nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Beheben Sie die Ursache in den Ausnahmen und spielen Sie die betroffenen Bestellungen erneut ein.",
     "marginReport": "Margenbericht",
     "marginMeta": "{orders} Auftrag/Aufträge · {revenue} Umsatz · {adSpend} Werbeausgaben",
     "marginEstimated": "{count} geschätzt",
@@ -76,7 +76,8 @@
       "proofsTitle": "So wird Vollständigkeit nachgewiesen",
       "proofsSummary": "{count, plural, one {# Nachweis} other {# Nachweise}}",
       "proven": "Nachgewiesen"
-    }
+    },
+    "marginUnreadable": "Die Marge in {currency} kann nicht angezeigt werden: Ein gespeicherter Wert ist nicht lesbar. Importieren Sie das Quellereignis erneut oder spielen Sie es über die Aktivitätsregisterkarte des Kanals erneut ein."
   },
   "workspace": {
     "back": "Kanäle",
@@ -367,7 +368,7 @@
   },
   "drawer": {
     "lines": "Positionen",
-    "unknownPrecision": "Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Falls der Code falsch ist, trennen Sie den Kanal und verbinden Sie ihn mit dem unterstützten dreistelligen ISO-Code erneut — die Währung eines live geschalteten Kanals kann nicht geändert werden.",
+    "unknownPrecision": "Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Falls die Bestellung zurückgestellt ist, folgen Sie ihrer Ausnahmebehebung unter Ausnahmen und spielen Sie die Bestellung dann erneut ein.",
     "tenders": "Zahlungen",
     "activity": "Verlauf",
     "posting": "Buchung",
@@ -423,7 +424,8 @@
       "estimate": "Schätzung",
       "import": "Import",
       "manual": "Manuell"
-    }
+    },
+    "unreadableAmount": "Ein Betrag in {currency} kann nicht angezeigt werden: Der gespeicherte Wert ist nicht lesbar. Importieren Sie das Quellereignis erneut oder spielen Sie es über die Aktivitätsregisterkarte des Kanals erneut ein."
   },
   "assistance": {
     "loading": "Lösung wird gesucht…",

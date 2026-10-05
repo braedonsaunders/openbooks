@@ -1,8 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getChannelMarginSummary } from "@openbooks/engine/commerce";
+import { builtInReportDefinitionId } from "@/lib/custom-reports";
 import { guardUnrestrictedScope } from "@/lib/authz";
 
 export const runtime = "nodejs";
@@ -23,14 +22,12 @@ export const GET = defineRoute({
     const url = new URL(request.url);
     const days = Number(url.searchParams.get("days") ?? "30");
     const summary = await getChannelMarginSummary(gate.user.orgId, days);
-    // Direct reader metadata: the governed tenant definition id for the
-    // order-margin-by-channel built-in (keyed org + slug), never a guessed
-    // slug URL. Absent until the catalog seeds this org: the hub link stays.
-    const definition = (await db.execute<{ id: string }>(sql`
-      select id from report_definitions
-       where org_id = ${gate.user.orgId} and kind = 'built_in' and slug = 'order-margin-by-channel'
-    `)).rows[0];
-    const marginReportHref = definition ? `/reports/custom/run/${definition.id}` : "/reports";
+    // Direct reader metadata through the report catalog's public contract:
+    // the governed tenant definition id for the order-margin-by-channel
+    // built-in, never a guessed slug URL. The contract ensures the catalog
+    // first; null only when no such built-in exists, and the hub link stays.
+    const definitionId = await builtInReportDefinitionId(gate.user.orgId, "order-margin-by-channel");
+    const marginReportHref = definitionId ? `/reports/custom/run/${definitionId}` : "/reports";
     return NextResponse.json({
       marginReportHref,
       channels: summary.map((row) => ({

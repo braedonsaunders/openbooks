@@ -63,7 +63,7 @@
     "marginTitle": "Order margin",
     "marginHint": "Trailing 30-day contribution by channel, after fulfilment and fees",
     "marginEmpty": "Margin appears here once channel orders post with costs. Refresh an order to build it now.",
-    "marginPrecisionUnknown": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). If the code is wrong, disconnect and reconnect the channel with the supported three-letter ISO code — a live channel’s currency cannot be changed.",
+    "marginPrecisionUnknown": "Margin in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). Correct the cause in the Exceptions queue and replay the affected orders.",
     "marginReport": "Margin report",
     "marginMeta": "{orders} order(s) · {revenue} revenue · {adSpend} ad spend",
     "marginEstimated": "{count} estimated",
@@ -76,7 +76,8 @@
       "proofsTitle": "How completeness is proven",
       "proofsSummary": "{count, plural, one {# proof} other {# proofs}}",
       "proven": "Proven"
-    }
+    },
+    "marginUnreadable": "Margin in {currency} cannot be shown: a stored value is not readable. Re-import or replay the source event from the channel's Activity tab."
   },
   "workspace": {
     "back": "Channels",
@@ -367,7 +368,7 @@
   },
   "drawer": {
     "lines": "Lines",
-    "unknownPrecision": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). If the code is wrong, disconnect and reconnect the channel with the supported three-letter ISO code — a live channel’s currency cannot be changed.",
+    "unknownPrecision": "Amounts in {currency} cannot be shown: {currency} has no precision in the ISO currency registry (read-only reference data). If the order is parked, follow its exception remedy in Exceptions, then replay the order.",
     "tenders": "Tenders",
     "activity": "Activity",
     "posting": "Posting",
@@ -423,7 +424,8 @@
       "estimate": "Estimate",
       "import": "Import",
       "manual": "Manual"
-    }
+    },
+    "unreadableAmount": "An amount in {currency} cannot be shown: the stored value is not readable. Re-import or replay the source event from the channel's Activity tab."
   },
   "assistance": {
     "loading": "Finding the fix…",
