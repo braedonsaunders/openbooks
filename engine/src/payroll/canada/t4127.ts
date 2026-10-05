@@ -4,9 +4,13 @@
  * retroactive (non-periodic) method.
  *
  * Faithful to the guide's factor notation (A, C, C2, EI, F5, K1..K4, T1..T4,
- * V1, V2, S, TB…) and its rounding discipline: results round half-up to the
- * cent as each parenthesis resolves; rate ratios are never rounded; the CPP
- * per-period exemption truncates. All arithmetic is exact bigint via
+ * V1, V2, S, TB…) and its rounding rule: the guide rounds the deductions
+ * themselves (CPP, EI, the per-period tax) half-up to the cent and nothing
+ * in between, so F5, A and the annual tax keep full precision while the
+ * credits (K values) stay the cent amounts CRA tabulates; rate ratios are
+ * never rounded; the CPP per-period exemption truncates. Rounding F5 per
+ * period and annualizing it moved withholding by a cent on about one
+ * paycard in twenty against bureau payroll. All arithmetic is exact bigint via
  * money.ts primitives — no floats anywhere.
  *
  * Methods outside this calculator: TD1X commission employees, mid-year province-transfer credit
@@ -17,7 +21,7 @@
 import { PayrollError } from "../error.ts";
 import type { Money } from "../../money/brands.ts";
 import {
-  bmax, bmin, D, divIntCents, max0, mulInt, mulRatioCents, mulRateCents, r2, rate6, truncCents, U,
+  bmax, bmin, D, divIntCents, max0, mulInt, mulRatioCents, mulRatioUnits, mulRateCents, mulRateUnits, r2, rate6, truncCents, U,
 } from "../../money/payroll-decimal.ts";
 import {
   claimCodeAmount, CPP_EXEMPTION_BY_P, EditionRates, PensionPlanRates, Province, ratesForPayDate,
@@ -396,12 +400,15 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const creditCpp2 = input.cpp2Withheld === undefined ? C2 : U(input.cpp2Withheld);
   const creditEi = input.eiWithheld === undefined ? EI : U(input.eiWithheld);
   const creditQpip = input.qpipWithheld === undefined ? qpip : U(input.qpipWithheld);
-  const F5 = r2(mulRatioCents(creditCpp, rate6(plan.addlRate), rate6(plan.totalRate)) + creditCpp2);
+  // F5 only reduces the annualized income A, so it keeps full precision:
+  // rounding it to the cent per period and multiplying by P moves A by up to
+  // P/2 cents, enough to shift the withheld tax by a cent.
+  const F5 = mulRatioUnits(creditCpp, rate6(plan.addlRate), rate6(plan.totalRate)) + creditCpp2;
   let F5A = F5;
   let F5B = ZERO;
   const pensionableBonus=input.pensionableNonPeriodic===undefined?bonus:U(input.pensionableNonPeriodic);
   if (pensionableBonus > ZERO && PI > ZERO) {
-    F5A = mulRatioCents(F5, max0(PI - pensionableBonus), PI);
+    F5A = mulRatioUnits(F5, max0(PI - pensionableBonus), PI);
     F5B = F5 - F5A;
   }
   trace("F5", F5); trace("F5A", F5A); trace("F5B", F5B);
@@ -504,6 +511,10 @@ export function calculateT4127(input: T4127Input): T4127Result {
         (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0))
     : ZERO;
 
+  // The guide rounds only the deduction itself. The credits (K values) are
+  // the cent amounts CRA tabulates; everything built from A (bracket
+  // products, T1–T4, surtax, health premium) keeps full unit precision, and
+  // only the per-period legs round to the cent.
   const annualTax = (A: bigint): { t1: bigint; t2: bigint; parts: Record<string, bigint> } => {
     const parts: Record<string, bigint> = {};
     // Federal
@@ -514,11 +525,11 @@ export function calculateT4127(input: T4127Input): T4127Result {
       mulRateCents(max0(A), rates.federal.lowestRate),
       mulRateCents(U(rates.federal.cea), rates.federal.lowestRate),
     );
-    let T3 = max0(mulRateCents(A, fed.rate) - U(fed.k) - K1 - K2 - K3 - K4);
+    let T3 = max0(mulRateUnits(A, fed.rate) - U(fed.k) - K1 - K2 - K3 - K4);
     if (input.taxExempt) T3 = ZERO;
     let T1: bigint;
-    if (isQuebec) T1 = max0(T3 - LCF - mulRateCents(T3, rates.federal.abatementQc));
-    else if (isOutside) T1 = max0(T3 + mulRateCents(T3, rates.federal.outsideCanadaSurtax) - LCF);
+    if (isQuebec) T1 = max0(T3 - LCF - mulRateUnits(T3, rates.federal.abatementQc));
+    else if (isOutside) T1 = max0(T3 + mulRateUnits(T3, rates.federal.outsideCanadaSurtax) - LCF);
     else T1 = max0(T3 - LCF);
     parts.K1 = K1; parts.K2 = K2; parts.K4 = K4; parts.T3 = T3; parts.T1 = T1;
 
@@ -534,24 +545,24 @@ export function calculateT4127(input: T4127Input): T4127Result {
       const K5P = prov.k5p
         ? mulRateCents(max0(K1P + K2P - U(prov.k5p.threshold)), prov.k5p.rate)
         : ZERO;
-      let T4 = max0(mulRateCents(A, pb.rate) - U(pb.k) - K1P - K2P - K3P - K4P - K5P);
+      let T4 = max0(mulRateUnits(A, pb.rate) - U(pb.k) - K1P - K2P - K3P - K4P - K5P);
       if (input.taxExempt) T4 = ZERO;
 
       let V1 = ZERO;
       if (prov.surtax) {
         const [th1, th2] = prov.surtax.thresholds.map(U) as [bigint, bigint];
         const [r1, sr2] = prov.surtax.rates;
-        if (T4 > th1) V1 += mulRateCents(T4 - th1, r1);
-        if (T4 > th2) V1 += mulRateCents(T4 - th2, sr2);
+        if (T4 > th1) V1 += mulRateUnits(T4 - th1, r1);
+        if (T4 > th2) V1 += mulRateUnits(T4 - th2, sr2);
       }
 
       let V2 = ZERO;
       if (prov.healthPremium) {
-        if (A > U("200000")) V2 = bmin(U("900"), U("750") + mulRateCents(A - U("200000"), "0.25"));
-        else if (A > U("72000")) V2 = bmin(U("750"), U("600") + mulRateCents(A - U("72000"), "0.25"));
-        else if (A > U("48000")) V2 = bmin(U("600"), U("450") + mulRateCents(A - U("48000"), "0.25"));
-        else if (A > U("36000")) V2 = bmin(U("450"), U("300") + mulRateCents(A - U("36000"), "0.06"));
-        else if (A > U("20000")) V2 = bmin(U("300"), mulRateCents(A - U("20000"), "0.06"));
+        if (A > U("200000")) V2 = bmin(U("900"), U("750") + mulRateUnits(A - U("200000"), "0.25"));
+        else if (A > U("72000")) V2 = bmin(U("750"), U("600") + mulRateUnits(A - U("72000"), "0.25"));
+        else if (A > U("48000")) V2 = bmin(U("600"), U("450") + mulRateUnits(A - U("48000"), "0.25"));
+        else if (A > U("36000")) V2 = bmin(U("450"), U("300") + mulRateUnits(A - U("36000"), "0.06"));
+        else if (A > U("20000")) V2 = bmin(U("300"), mulRateUnits(A - U("20000"), "0.06"));
       }
 
       let S = ZERO;
@@ -562,7 +573,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
         const red = prov.bcReduction;
         if (A <= U(red.phaseStart)) S = bmin(T4, U(red.basic));
         else if (A <= U(red.phaseEnd)) {
-          S = bmin(T4, max0(U(red.basic) - mulRateCents(A - U(red.phaseStart), red.phaseRate)));
+          S = bmin(T4, max0(U(red.basic) - mulRateUnits(A - U(red.phaseStart), red.phaseRate)));
         }
       }
 
@@ -596,7 +607,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
     if (!averaging && aWithBonus <= U("5000")) {
       bonusTax = mulRateCents(bonus, isQuebec ? "0.10" : "0.15");
     } else {
-      bonusTax = max0(withBonus.t1 + withBonus.t2 - (withoutBonus.t1 + withoutBonus.t2));
+      bonusTax = r2(max0(withBonus.t1 + withBonus.t2 - (withoutBonus.t1 + withoutBonus.t2)));
     }
   }
   trace("L",L);
@@ -613,9 +624,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
     eiEmployer: D(eiEmployer) as Money,
     qpip: D(qpip) as Money,
     qpipEmployer: D(qpipEmployer) as Money,
-    f5: D(F5) as Money,
-    f5A: D(F5A) as Money,
-    f5B: D(F5B) as Money,
+    f5: D(r2(F5)) as Money,
+    f5A: D(r2(F5A)) as Money,
+    f5B: D(r2(F5) - r2(F5A)) as Money,
     periodicTax: D(periodicTax) as Money,
     bonusTax: D(bonusTax) as Money,
     totalTax: D(periodicTax + bonusTax) as Money,

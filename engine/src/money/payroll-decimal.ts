@@ -52,6 +52,21 @@ export function mulRatioCents(u: bigint, num: bigint, den: bigint): bigint {
   return roundDiv(u * num, den * CENT) * CENT;
 }
 
+/**
+ * amount × rate kept at full unit precision (1e-4), for an intermediate that
+ * is not itself withheld. Rounding such a value to the cent and then
+ * annualizing it multiplies the rounding by the pay periods.
+ */
+export function mulRateUnits(u: bigint, rate: string | number): bigint {
+  return roundDiv(u * rate6(rate), RATE6);
+}
+
+/** amount × (num/den) kept at full unit precision (1e-4); see mulRateUnits. */
+export function mulRatioUnits(u: bigint, num: bigint, den: bigint): bigint {
+  if (den <= 0n) throw new PayrollError("ratio denominator must be greater than zero");
+  return roundDiv(u * num, den);
+}
+
 /** amount × integer (e.g. P × per-period amount) — exact, no rounding needed. */
 export function mulInt(u: bigint, n: number): bigint {
   if (!Number.isInteger(n) || n < 0) throw new PayrollError(`not a non-negative integer: ${n}`);
