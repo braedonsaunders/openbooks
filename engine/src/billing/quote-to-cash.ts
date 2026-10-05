@@ -814,6 +814,13 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
   return withOrgTransaction(claims.orgId, async () => {
     const runner = db;
     const request = await loadRequestByToken(runner, input.token);
+    // The hosted page carries no session, so the engine fences the
+    // switched-off surface here: a signature (which can auto-activate the
+    // quote into live subscriptions) must refuse while quote-to-cash is
+    // off, in the signer's words rather than the operator's.
+    if (!(await lockAndCheckOrgFeature(runner, request.orgId, "quoteToCash"))) {
+      throw new QuoteToCashError("This signing link is no longer available — ask the sender to re-send it");
+    }
     if (await expireIfLapsed(runner, request)) {
       throw new QuoteToCashError("This signing link expired — ask the sender to re-send it");
     }
@@ -875,6 +882,11 @@ export async function declineQuoteSignature(input: { token: string; name: string
   return withOrgTransaction(claims.orgId, async () => {
     const runner = db;
     const request = await loadRequestByToken(runner, input.token);
+    // Same switched-off fence as signing: the decline is a quote-to-cash
+    // write, and the remedy (re-send after re-enabling) is the sender's.
+    if (!(await lockAndCheckOrgFeature(runner, request.orgId, "quoteToCash"))) {
+      throw new QuoteToCashError("This signing link is no longer available — ask the sender to re-send it");
+    }
     if (request.status !== "sent" && request.status !== "viewed") {
       throw new QuoteToCashError("This signing link is no longer open");
     }
@@ -1402,7 +1414,6 @@ export async function activateQuote(
   opts: ActivateQuoteOptions = {},
 ): Promise<ActivateQuoteResult> {
   return withOrgTransaction(orgId, async () => {
-    await assertQuoteToCashEnabled(db, orgId);
     return activateQuoteLocked(db, orgId, actorId, quoteId, opts);
   });
 }
@@ -1414,6 +1425,11 @@ async function activateQuoteLocked(
   quoteId: string,
   opts: ActivateQuoteOptions,
 ): Promise<ActivateQuoteResult> {
+  // The gate lives on the locked path, not the wrappers: signing a quote
+  // with auto-activation reaches this same function, and a disable racing
+  // the signature must refuse the activation rather than post subscriptions
+  // for a switched-off surface.
+  await assertQuoteToCashEnabled(runner, orgId);
   const quote = await loadQuote(runner, orgId, quoteId);
   if (quote.status === "voided" || quote.status === "posted") {
     throw new QuoteToCashError(`This quote is ${quote.status} and can no longer be activated`);

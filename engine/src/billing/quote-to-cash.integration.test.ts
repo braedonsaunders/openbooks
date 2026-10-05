@@ -13,6 +13,7 @@ import {
 } from "../testing/fixtures.ts";
 import {
   activateQuote,
+  declineQuoteSignature,
   discountPercent,
   QUOTE_SUBJECT_TABLE,
   requestQuoteSignature,
@@ -429,5 +430,37 @@ test("the reminder scan expires lapsed links and sends one reminder each", DB, a
     const second = await runSignatureReminderScan();
     assert.equal(second.expired, 0);
     assert.equal(second.reminded, 0);
+  });
+});
+
+test("signing and declining refuse while quote-to-cash is off", DB, async () => {
+  await withDeal(async (org, actor, seed) => {
+    const sent = await requestQuoteSignature({
+      orgId: org.orgId,
+      actorId: actor,
+      quoteId: seed.quoteId,
+      signerName: "Ada Customer",
+      signerEmail: "ada@example.com",
+    });
+    // The operator switches the surface off after the link goes out: the
+    // hosted page carries no session, so the engine fences both writes.
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features,quoteToCash}', 'false'::jsonb)
+       where id = ${org.orgId}`);
+    await assert.rejects(
+      signQuoteSignature({ token: sent.token, name: "Ada Customer" }),
+      /no longer available/,
+      "a signature that could auto-activate live subscriptions must refuse while the gate is off",
+    );
+    await assert.rejects(
+      declineQuoteSignature({ token: sent.token, name: "Ada Customer" }),
+      /no longer available/,
+      "a decline is a quote-to-cash write and refuses with the same fence",
+    );
+    const stored = (
+      await db.execute<{ status: string }>(sql`
+        select status from signature_requests where id = ${sent.requestId}`)
+    ).rows[0]!;
+    assert.equal(stored.status, "sent", "refused writes leave the request open for a re-sent link");
   });
 });
