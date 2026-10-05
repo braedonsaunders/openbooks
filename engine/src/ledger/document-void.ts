@@ -25,7 +25,6 @@ import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsi
 import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { reverseStoredValueForVoidedDocument } from "../stored-value/void-reversal.ts";
-import { listLiveSourcedAccounts } from "../stored-value/document-loads.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 
@@ -1059,16 +1058,6 @@ export async function completeRequestedDocumentVoid(
         if (incoming.rows.length > 0) {
           throw new DocumentVoidError(
             "this transaction has live payments or credits applied to it — unapply them before voiding",
-          );
-        }
-        // A sale, refund, or credit memo that minted stored value cannot
-        // void while that value is still live: the reversal below removes
-        // the ledger leg, but the spendable balance would survive it.
-        const liveSourced = await listLiveSourcedAccounts(tx, orgId, documentId);
-        if (liveSourced.length > 0) {
-          const codes = liveSourced.map((account) => `…${account.codeLast4}`).join(", ");
-          throw new DocumentVoidError(
-            `this document cannot be voided while the store credit it issued is still live (${codes}) — spend it down or adjust it to zero from the Stored value drawer, then void`,
           );
         }
         const dependentSubledger = (await tx.execute<{ inventory: boolean; revenue: boolean }>(sql`
