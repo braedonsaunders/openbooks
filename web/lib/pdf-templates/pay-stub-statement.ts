@@ -94,7 +94,7 @@ export function buildPayStubStatement(
     withholdings: new Map(),
     netAdjustments: new Map(),
   }
-  const rates = new Map<string, Set<string>>()
+  const rates = new Map<string, Set<string | null>>()
 
   for (const line of current) {
     const section = sectionOf(line, withholdingKeys)
@@ -118,11 +118,9 @@ export function buildPayStubStatement(
         ytdHours: hours,
       })
     }
-    if (line.rate != null) {
-      const seen = rates.get(key) ?? new Set<string>()
-      seen.add(line.rate)
-      rates.set(key, seen)
-    }
+    const seen = rates.get(key) ?? new Set<string | null>()
+    seen.add(line.rate)
+    rates.set(key, seen)
   }
 
   const priorOnly: Array<[Section, StatementRow]> = []

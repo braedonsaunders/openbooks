@@ -46,3 +46,15 @@ test('a component paid at two rates prints no single rate', () => {
   assert.equal(statement.earnings[0]!.rate, null)
   assert.equal(c(statement.earnings[0]!.current), '620.00')
 })
+
+test('hourly pay and a lump sum for one component print no misleading hourly rate', () => {
+  const statement = buildPayStubStatement([
+    line({ componentId: 'reg', description: 'Regular Wages', amount: '300.00', hours: '10', rate: '30.00' }),
+    line({ componentId: 'reg', description: 'Regular Wages', amount: '250.00' }),
+  ], [], WITHHOLDING)
+  const earning = statement.earnings[0]!
+  assert.equal(earning.rate, null)
+  assert.equal(c(earning.current), '550.00')
+  assert.equal(c(earning.ytd), '550.00')
+  assert.equal(c(earning.hours), '10.00')
+})
