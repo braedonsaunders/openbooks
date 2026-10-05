@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
@@ -24,6 +24,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { ListDrawerLink } from '../../../../components/list-drawer-link'
+import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { useMoney } from '../../../../components/money-provider'
 import { confirmDialog } from '../../../../lib/confirm'
 import type {
@@ -492,25 +493,26 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
   const { canReconcile, queue, batches, reportHref, queueAllHref, strings, emptyTitle, emptyDescription } = props
   const router = useRouter()
   const t = useTranslations('banking.payouts')
-  // The drawer opens from the `payout` URL parameter (deep-linkable, one
-  // shell per record) but reads it once on mount: no Suspense boundary is
-  // needed and closing always clears the parameter again.
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(() =>
-    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('payout'),
-  )
+  const searchParams = useSearchParams()
+  const activeView = searchParams.get('view') === 'batches' ? 'batches' : 'review'
+  const selectedBatchId = searchParams.get('payout')
+  const replaceParam = useCallback((key: string, value: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === null) params.delete(key)
+    else params.set(key, value)
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }, [router, searchParams])
   const [accrualDate, setAccrualDate] = useState('')
   const [accruing, setAccruing] = useState(false)
   const [accrueResult, setAccrueResult] = useState<string | null>(null)
 
   const openDrawer = useCallback((batchId: string) => {
-    setSelectedBatchId(batchId)
-    router.replace(`?payout=${encodeURIComponent(batchId)}`, { scroll: false })
-  }, [router])
+    replaceParam('payout', batchId)
+  }, [replaceParam])
 
   const closeDrawer = useCallback(() => {
-    setSelectedBatchId(null)
-    router.replace('?', { scroll: false })
-  }, [router])
+    replaceParam('payout', null)
+  }, [replaceParam])
 
   const refresh = useCallback(() => {
     router.refresh()
@@ -552,11 +554,20 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
 
   return (
     <div className="space-y-4">
+      <RecordTabs
+        label={t('title')}
+        active={activeView}
+        onChange={(view) => replaceParam('view', view)}
+        tabs={[
+          { key: 'review', label: strings.queueTitle },
+          { key: 'batches', label: strings.batchesTitle },
+        ]}
+      >
       {batches.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
         <>
-          {queue.length > 0 ? (
+          {activeView === 'review' && (queue.length > 0 ? (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between gap-3">
@@ -597,8 +608,8 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
             </Card>
           ) : (
             <EmptyState title={strings.queueEmpty} />
-          )}
-          <Card>
+          ))}
+          {activeView === 'batches' ? <Card>
             <CardHeader>
               <CardTitle>{strings.batchesTitle}</CardTitle>
             </CardHeader>
@@ -655,9 +666,10 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
                 </Table>
               )}
             </CardContent>
-          </Card>
+          </Card> : null}
         </>
       )}
+      </RecordTabs>
       {canReconcile ? (
         <DisclosureSection
           title={strings.accrueTitle}
