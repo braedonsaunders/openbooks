@@ -11,6 +11,7 @@ import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentDrawer, type OpenItemClient } from './PaymentDrawer'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { pickString } from '../../../lib/list-params'
+import { isFeatureEnabled } from '../../../lib/features'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
@@ -97,6 +98,27 @@ export async function PaymentsSection({
       !creating && openPayment && openPayment.doc.status === 'draft' && openPayment.doc.party_id
         ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds)
         : []
+    // Stored-value tenders (receipts only): already-saved snapshots from
+    // the draft plus the receipt party's verified credit for the picker.
+    // Null while the feature is off or unreadable, so the drawer section
+    // never renders without the read surface behind it.
+    const storedValueEnabled =
+      side === 'ar' &&
+      (await isFeatureEnabled(orgId, 'storedValue')) &&
+      can(authz, 'stored_value.read')
+    const storedValueTenders = storedValueEnabled && openPayment
+      ? (((openPayment.doc.custom ?? {}) as { storedValueTenders?: unknown }).storedValueTenders as
+        | { accountId: string; codeLast4: string; amount: string }[] ?? [])
+      : []
+    const storedValueCredits = storedValueEnabled && openPayment?.doc.party_id
+      ? (await db.execute<{ accountId: string; codeLast4: string; currency: string; balance: string }>(sql`
+          select id as "accountId", code_last4 as "codeLast4", currency,
+                 (balance_minor::numeric / 10000)::text as balance
+            from stored_value_accounts
+           where org_id = ${orgId} and customer_party_id = ${openPayment.doc.party_id as string}
+             and status in ('active', 'frozen') and balance_minor > 0
+           order by currency, code_last4`)).rows
+      : []
     const resolvedForm = await resolveFormLayout({
       orgId,
       userId,
@@ -149,6 +171,7 @@ export async function PaymentsSection({
         createMode={creating}
         closeHref={closeHref}
         createTitle={newLabel}
+        storedValue={storedValueEnabled ? { tenders: storedValueTenders, customerCredits: storedValueCredits } : null}
       />
     )
   }

@@ -56,6 +56,14 @@ const paymentPatchBody = z.object({
     amount: exactMoney(),
     sourceDocumentId: uuidId,
   })).optional(),
+  // Stored-value tenders (customer receipts only): fresh gift-card codes or
+  // already-resolved echoes (account id — the code is shown once at issue).
+  // The engine resolves codes and re-verifies every tender at save and
+  // posting; the route only shapes them.
+  storedValueTenders: z.array(z.union([
+    z.object({ code: z.string().min(1).max(64), amount: exactMoney() }),
+    z.object({ accountId: uuidId, amount: exactMoney() }),
+  ])).optional(),
 })
 
 /** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly.
@@ -153,6 +161,7 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
         memo: body.memo,
         allocations: body.allocations,
         creditAllocations: body.creditAllocations,
+        storedValueTenders: body.storedValueTenders,
       },
       gate.authz.user.id,
       gate.authz.user.orgId,

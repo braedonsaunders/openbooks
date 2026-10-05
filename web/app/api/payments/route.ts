@@ -17,7 +17,8 @@ import {
 import { loadPaymentDocument, openItemsForParty } from '@openbooks/engine/src/payments/payment-queries.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../lib/api/json'
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../lib/api/json'
+import { updateDraftPayment } from '@openbooks/engine/src/payments/payment-documents.ts'
 import { assertAllocationTargetsInScope, isPaymentKind, paymentErrorResponse, paymentPermission } from './lib'
 
 export const runtime = 'nodejs'
@@ -54,6 +55,13 @@ const paymentCreateBody = z.object({
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
+  // Stored-value tenders (customer receipts only): fresh gift-card codes or
+  // already-resolved echoes. Resolved and re-verified after insert (never
+  // persisted raw); part of the replay match as caller-controlled input.
+  storedValueTenders: z.array(z.union([
+    z.object({ code: z.string().min(1).max(64), amount: exactMoney() }),
+    z.object({ accountId: uuidId, amount: exactMoney() }),
+  ])).optional(),
 })
 
 function trimOrNull(v: unknown): string | null {
@@ -214,6 +222,7 @@ async function createPayment(request: Request) {
     referenceNumber: body.referenceNumber ?? null,
     memo: body.memo ?? null,
     allocations: body.allocations ?? [],
+    storedValueTenders: body.storedValueTenders ?? [],
   }
   // The persisted image is the full immutable create snapshot (derived
   // values included) plus the request match above, so audit evidence stays
@@ -302,6 +311,26 @@ async function createPayment(request: Request) {
       : String(error)
     if (message.includes('idempotency_key_conflict')) return bad('invalid_idempotency_key', undefined, 409)
     throw error
+  }
+
+  // Stored-value tenders resolve after the insert, never persisted raw: the
+  // patch replaces the tender set, so replaying an identical request (or a
+  // retry after a partial failure) converges on the same snapshots instead
+  // of duplicating them. Engine refusals (unknown code, over-tender, wrong
+  // customer) surface as named 4xx here.
+  if (body.storedValueTenders && body.storedValueTenders.length > 0) {
+    try {
+      await updateDraftPayment(
+        requestId,
+        { storedValueTenders: body.storedValueTenders },
+        user.id,
+        user.orgId,
+        { ...(gate.allowedSubsidiaryIds === null ? {} : { allowedSubsidiaryIds: gate.allowedSubsidiaryIds }) },
+      )
+    } catch (error) {
+      if (error instanceof PaymentError) return paymentErrorResponse(error)
+      throw error
+    }
   }
 
   const payment = await loadPaymentDocument(requestId, kind, user.orgId)

@@ -4,6 +4,7 @@ import { validateIdentifierUnit } from '@openbooks/engine/src/inventory/item-ide
 import { validateCustomerItemRef } from '@openbooks/engine/src/sales/customer-item-refs.ts'
 import { validateMarketplaceFacilitatorWrite as validateMarketplaceFacilitator } from '@openbooks/engine/tax'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
+import { validateStoredValueProgramWrite } from '../stored-value-validation'
 import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
 import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
 import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
@@ -61,6 +62,7 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   'promotions': validatePromotionWrite,
   'restocking-fee-policies': validateRestockingFeeWrite,
   'pay-component-department-expenses': validateDepartmentExpenseWrite,
+  'stored-value-programs': validateStoredValueProgramWrite,
 }
 
 /** Attach entity-owned validation to the shared setup write pipeline. */
