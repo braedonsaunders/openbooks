@@ -25,38 +25,11 @@ import { NewMenuButton } from "../../../components/new-menu-button";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { promptDialog } from "@/lib/prompt";
-
-interface ChannelAttention {
-  failed: number;
-  dead: number;
-  lastReceivedAt: string | null;
-}
-
-interface Channel {
-  id: string;
-  kind: string;
-  name: string;
-  status: string;
-  currency: string;
-  externalAccount: string;
-  lastSyncAt: string | null;
-  attention: ChannelAttention;
-}
+import { channelCards, type Channel, type MarginChannel } from "./channel-cards";
 
 interface Payload {
   channels: Channel[];
   kinds: string[];
-}
-
-interface MarginChannel {
-  channelId: string;
-  channelName: string;
-  currency: string;
-  orders: number;
-  revenueMinor: string;
-  cm2Minor: string;
-  estimatedOrders: number;
-  adSpendMinor: string;
 }
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
@@ -167,8 +140,9 @@ export function ChannelsConsole() {
   const channels = data?.channels ?? [];
   const kinds = data?.kinds ?? [];
   const active = channels.filter((c) => c.status === "active").length;
-  const attention = channels.filter((c) => c.attention.failed + c.attention.dead > 0);
-  const attentionCount = attention.reduce((sum, c) => sum + c.attention.failed + c.attention.dead, 0);
+  // One parent collection: every channel once, attention and margins inline.
+  const cards = channelCards(channels, margin);
+  const attentionCount = cards.reduce((sum, card) => sum + card.outstanding, 0);
   const lastDelivery = channels
     .map((c) => c.attention.lastReceivedAt)
     .filter((ts): ts is string => ts != null)
@@ -243,32 +217,17 @@ export function ChannelsConsole() {
             <StatTile label={t("home.tiles.lastDelivery")} value={fmt(lastDelivery)} icon={Layers} />
           </div>
           <CommerceCloseTile />
-          {attention.length > 0 ? (
-            <CockpitPanel title={t("home.attentionTitle")} hint={t("home.attentionHint")}>
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {attention.map((channel) => (
-                  <li key={channel.id} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{channel.name}</p>
-                      <p className="text-sm text-slate-500">
-                        {t("home.attentionReason", {
-                          failed: channel.attention.failed,
-                          dead: channel.attention.dead,
-                        })}
-                      </p>
-                    </div>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/channels/${channel.id}?tab=activity`}>{t("home.review")}</Link>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </CockpitPanel>
-          ) : null}
-          <CockpitPanel title={t("home.channelsTitle")} hint={t("home.channelsHint")}>
+          <CockpitPanel
+            title={t("home.channelsTitle")}
+            hint={t("home.channelsHint")}
+            actions={
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/reports">{t("home.marginReport")}</Link>
+              </Button>
+            }
+          >
             <ul className="grid gap-3 md:grid-cols-2">
-              {channels.map((channel) => {
-                const outstanding = channel.attention.failed + channel.attention.dead;
+              {cards.map(({ channel, outstanding, marginRows }) => {
                 return (
                   <li
                     key={channel.id}
@@ -289,11 +248,52 @@ export function ChannelsConsole() {
                         {statusLabel(channel.status)}
                       </Badge>
                     </div>
-                    <p className="mt-2 text-sm text-slate-500">
-                      {outstanding > 0
-                        ? t("home.cardAttention", { count: outstanding })
-                        : t("home.cardClear", { delivery: fmt(channel.attention.lastReceivedAt) })}
-                    </p>
+                    {outstanding > 0 ? (
+                      <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+                        {t("home.attentionReason", {
+                          failed: channel.attention.failed,
+                          dead: channel.attention.dead,
+                        })}{" "}
+                        <Link
+                          href={`/channels/${channel.id}?tab=activity`}
+                          className="font-normal text-teal-700 hover:underline dark:text-teal-300"
+                        >
+                          {t("home.review")}
+                        </Link>
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">
+                        {t("home.cardClear", { delivery: fmt(channel.attention.lastReceivedAt) })}
+                      </p>
+                    )}
+                    {marginRows.map((row) => {
+                      const money = createMoneyFormatter(locale, row.currency);
+                      const formatted = (minor: string) =>
+                        money.money(minorToMajorText(minor), { currency: row.currency });
+                      const revenue = BigInt(row.revenueMinor);
+                      const cm2 = BigInt(row.cm2Minor);
+                      const pct = revenue > 0n ? Number((cm2 * 10000n) / revenue) / 100 : null;
+                      return (
+                        <p key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-slate-500">
+                          {t("home.marginMeta", {
+                            orders: row.orders,
+                            revenue: formatted(row.revenueMinor),
+                            adSpend: formatted(row.adSpendMinor),
+                          })}{" "}
+                          <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                            {formatted(row.cm2Minor)}
+                          </span>
+                          {pct != null ? (
+                            <Badge variant="secondary">{t("home.marginPct", { pct: pct.toFixed(2) })}</Badge>
+                          ) : null}
+                          {row.estimatedOrders > 0 ? (
+                            <Badge variant="warning">
+                              {t("home.marginEstimated", { count: row.estimatedOrders })}
+                            </Badge>
+                          ) : null}
+                        </p>
+                      );
+                    })}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button asChild size="sm" variant="outline">
                         <Link href={`/channels/${channel.id}`}>{t("home.open")}</Link>
@@ -334,57 +334,6 @@ export function ChannelsConsole() {
               })}
             </ul>
           </CockpitPanel>
-          {margin ? (
-            <CockpitPanel
-              title={t("home.marginTitle")}
-              hint={t("home.marginHint")}
-              actions={
-                <Button size="sm" variant="outline" asChild>
-                  <Link href="/reports">{t("home.marginReport")}</Link>
-                </Button>
-              }
-            >
-              {margin.length === 0 ? (
-                <p className="text-sm text-slate-500">{t("home.marginEmpty")}</p>
-              ) : (
-                <ul className="space-y-3">
-                  {margin.map((row) => {
-                    const money = createMoneyFormatter(locale, row.currency);
-                    const formatted = (minor: string) =>
-                      money.money(minorToMajorText(minor), { currency: row.currency });
-                    const revenue = BigInt(row.revenueMinor);
-                    const cm2 = BigInt(row.cm2Minor);
-                    const pct = revenue > 0n ? Number((cm2 * 10000n) / revenue) / 100 : null;
-                    return (
-                      <li key={`${row.channelId}|${row.currency}`} className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{row.channelName}</p>
-                          <p className="text-sm text-slate-500">
-                            {t("home.marginMeta", {
-                              orders: row.orders,
-                              revenue: formatted(row.revenueMinor),
-                              adSpend: formatted(row.adSpendMinor),
-                            })}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {row.estimatedOrders > 0 ? (
-                            <Badge variant="warning">
-                              {t("home.marginEstimated", { count: row.estimatedOrders })}
-                            </Badge>
-                          ) : null}
-                          <span className="font-mono text-sm font-semibold">{formatted(row.cm2Minor)}</span>
-                          {pct != null ? (
-                            <Badge variant="secondary">{t("home.marginPct", { pct: pct.toFixed(2) })}</Badge>
-                          ) : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </CockpitPanel>
-          ) : null}
           <DisclosureSection title={t("home.advancedTitle")} summary={t("home.advancedSummary")}>
             <p className="text-sm text-slate-500">{t("home.advancedBody")}</p>
           </DisclosureSection>
