@@ -99,10 +99,15 @@ test('spend velocity translates every spend functional to presentation', { skip:
   try {
     await pinClock('2026-07-15', async () => {
       const data = await spendVelocityData(org.orgId, P, null)
-      assert.equal(data.summary.totalSpend, 235)
-      assert.equal(data.summary.billsTotal, 235)
-      assert.equal(data.monthlyTrends.find((m) => m.month === '2026-07')?.totalAmount, 235)
+      assert.equal(data.summary.totalSpend, "235.0000")
+      assert.equal(data.summary.billsTotal, "235.0000")
+      assert.equal(data.monthlyTrends.find((m) => m.month === '2026-07')?.totalAmount, "235.0000")
       assert.equal(data.commitmentCliff.summary.totalPO, '235.0000')
+      // No fragmentation size cap is configured out of the box: the detector
+      // reports itself unconfigured by name instead of scoring against a
+      // currency-blind default.
+      assert.equal(data.fragmentation.summary.configured, false)
+      assert.match(data.fragmentation.summary.reason, /Configuration/)
       // Revenue arrives as an exact decimal string.
       assert.equal(data.revenue.totalRevenue, '470.0000')
       // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual
@@ -138,13 +143,20 @@ test('period comparison reports unknown change when the prior window has no hist
     })
     await pinClock('2026-07-15', async () => {
       const data = await spendVelocityData(org.orgId, P, null)
-      const row = data.periodComparison.accounts.find((a) => a.currentAmount > 0)
+      const row = data.periodComparison.accounts.find((a) => Number(a.currentAmount) > 0)
       assert.ok(row, 'expected one spend row in the current window')
-      assert.equal(row.priorAmount, 0)
+      assert.equal(row.priorAmount, "0")
       assert.equal(row.isNew, true)
       assert.equal(row.changePct, null)
-      assert.equal(data.periodComparison.summary.priorTotal, 0)
+      assert.equal(data.periodComparison.summary.priorTotal, "0")
       assert.equal(data.periodComparison.summary.changePct, null)
+      // With no prior-year bucket either, the trend change is unknown — never
+      // a fabricated zero — and the spender change matches the comparison.
+      const trend = data.monthlyTrends.find((m) => m.month === '2026-07')!
+      assert.equal(trend.priorYearAmount, "0")
+      assert.equal(trend.yoyChange, null)
+      assert.equal(trend.velocity, null)
+      assert.equal(data.expenseAnalysis.summary.expenseReportTotal, "0")
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
