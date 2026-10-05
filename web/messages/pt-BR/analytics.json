@@ -1280,7 +1280,8 @@
       }
     },
     "payment": {
-      "undatedNote": "Exclui {count} faturas sem vencimento ou condições de pagamento"
+      "undatedNote": "Exclui {count} faturas sem vencimento ou condições de pagamento",
+      "noHistory": "Ainda sem histórico de pagamentos"
     },
     "matrix": {
       "unratedNote": "{count} fornecedores ainda não têm histórico de pagamentos e não aparecem no gráfico"

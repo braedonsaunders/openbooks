@@ -607,6 +607,33 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
+  'kpi-vendor-concentration': {
+    id: 'kpi-vendor-concentration',
+    category: 'analytics',
+    labelKey: 'widgets.kpiVendorConcentration',
+    descriptionKey: 'catalog.kpiVendorConcentration',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    analyticsSource: 'vendor-performance',
+  },
+  'kpi-vendor-payment-performance': {
+    id: 'kpi-vendor-payment-performance',
+    category: 'analytics',
+    labelKey: 'widgets.kpiVendorPayment',
+    descriptionKey: 'catalog.kpiVendorPayment',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    analyticsSource: 'vendor-performance',
+  },
+  'kpi-spend-velocity': {
+    id: 'kpi-spend-velocity',
+    category: 'analytics',
+    labelKey: 'widgets.kpiSpendVelocity',
+    descriptionKey: 'catalog.kpiSpendVelocity',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    analyticsSource: 'spend-velocity',
+  },
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
 

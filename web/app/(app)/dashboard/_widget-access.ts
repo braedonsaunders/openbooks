@@ -99,6 +99,9 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
+  'kpi-vendor-concentration': ['reports.read'],
+  'kpi-vendor-payment-performance': ['reports.read'],
+  'kpi-spend-velocity': ['reports.read'],
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
 
