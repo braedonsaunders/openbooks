@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
-import { Button, Input, Label, Switch } from '@openbooks/ui'
+import { Button, Input, Label } from '@openbooks/ui'
+import { Switch } from '@/components/switch'
 import { DisclosureSection } from '@openbooks/ui'
 
 interface ChannelSettings {
@@ -38,7 +39,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
     return fetch(`/api/channels/${channelId}`)
       .then(async (res) => {
         if (!res.ok) {
-          toast.error(await readApiErrorMessage(res))
+          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
           return
         }
         const body = (await res.json()) as {
@@ -67,7 +68,7 @@ export function SettingsTab({ channelId }: { channelId: string }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ settings }),
       })
-      if (!res.ok) toast.error(await readApiErrorMessage(res))
+      if (!res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
       else toast.success(tc('save'))
     } finally {
       setSaving(false)
@@ -86,21 +87,21 @@ export function SettingsTab({ channelId }: { channelId: string }) {
       <section className="space-y-4">
         <h2 className="text-base font-medium">{t('settings.title')}</h2>
         <label className="flex items-start gap-2">
-          <Switch checked={settings.autoImportProducts} onCheckedChange={(value) => setSettings((prev) => (prev ? { ...prev, autoImportProducts: value } : prev))} />
+          <Switch on={settings.autoImportProducts} onToggle={() => setSettings((prev) => (prev ? { ...prev, autoImportProducts: !prev.autoImportProducts } : prev))} disabled={saving} label={t('settings.autoImport')} />
           <span>
             <span className="block text-sm font-medium">{t('settings.autoImport')}</span>
             <span className="block text-sm text-slate-500">{t('settings.autoImportHint')}</span>
           </span>
         </label>
         <label className="flex items-start gap-2">
-          <Switch checked={settings.syncInventory} onCheckedChange={(value) => setSettings((prev) => (prev ? { ...prev, syncInventory: value } : prev))} />
+          <Switch on={settings.syncInventory} onToggle={() => setSettings((prev) => (prev ? { ...prev, syncInventory: !prev.syncInventory } : prev))} disabled={saving} label={t('settings.syncInventory')} />
           <span>
             <span className="block text-sm font-medium">{t('settings.syncInventory')}</span>
             <span className="block text-sm text-slate-500">{t('settings.syncInventoryHint')}</span>
           </span>
         </label>
         <label className="flex items-start gap-2">
-          <Switch checked={settings.pushCatalog} onCheckedChange={(value) => setSettings((prev) => (prev ? { ...prev, pushCatalog: value } : prev))} />
+          <Switch on={settings.pushCatalog} onToggle={() => setSettings((prev) => (prev ? { ...prev, pushCatalog: !prev.pushCatalog } : prev))} disabled={saving} label={t('settings.push')} />
           <span>
             <span className="block text-sm font-medium">{t('settings.push')}</span>
             <span className="block text-sm text-slate-500">{t('settings.pushHint')}</span>

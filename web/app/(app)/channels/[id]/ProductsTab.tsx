@@ -7,7 +7,8 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '@/lib/prompt'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
-import { Badge, Button, Drawer, EmptyState, Input, Label, SearchSelect, Switch } from '@openbooks/ui'
+import { Badge, Button, Drawer, EmptyState, Input, Label, SearchSelect } from '@openbooks/ui'
+import { Switch } from '@/components/switch'
 import { ContextMenu, useContextMenu } from '@openbooks/ui'
 
 interface QueueRow {
@@ -56,7 +57,6 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
   const tc = useTranslations('common')
   const { money } = useMoney(currency)
   const [rows, setRows] = useState<QueueRow[]>([])
-  const [total, setTotal] = useState(0)
   const [counts, setCounts] = useState({ queued: 0, matched: 0, ignored: 0 })
   const [status, setStatus] = useState<'queued' | 'matched' | 'ignored'>('queued')
   const [search, setSearch] = useState('')
@@ -80,12 +80,11 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
     return fetch(`/api/channels/${channelId}/catalog?${params}`)
       .then(async (res) => {
         if (!res.ok) {
-          toast.error(await readApiErrorMessage(res))
+          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
           return
         }
         const body = (await res.json()) as { rows: QueueRow[]; total: number; counts: { queued: number; matched: number; ignored: number } }
         setRows(body.rows)
-        setTotal(body.total)
         setCounts(body.counts)
         setSelected((prev) => prev.filter((id) => body.rows.some((row) => row.id === id)))
       })
@@ -137,7 +136,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
         body: JSON.stringify(entryIds.length === 1 ? { entryId: entryIds[0], decision } : { entryIds, decision }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res))
+        toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
         return false
       }
       const body = (await res.json()) as { failed?: { entryId: string; message: string }[] }
@@ -185,7 +184,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
     if (includeSimilar) {
       const res = await fetch(`/api/channels/${channelId}/catalog/similar?entryId=${drawer.row.id}`)
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res))
+        toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
         return
       }
       const body = (await res.json()) as { entryIds: string[] }
@@ -291,7 +290,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
             setBusy(true)
             try {
               const res = await fetch(`/api/channels/${channelId}/catalog`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
-              if (!res.ok) toast.error(await readApiErrorMessage(res))
+              if (!res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
               else await load()
             } finally {
               setBusy(false)
@@ -320,11 +319,11 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
       {rows.length === 0 && status === 'queued' ? (
         <EmptyState title={t('products.emptyTitle')} description={t('products.emptyHint')} />
       ) : (
-        <PagedTable
+        <PagedTable<QueueRow>
           columns={columns}
           rows={rows}
-          total={total}
-          empty={t('products.emptyTitle')}
+          rowKey={(row) => row.id}
+          empty={<EmptyState title={t('products.emptyTitle')} description={t('products.emptyHint')} />}
           selection={
             canManage
               ? {
@@ -393,7 +392,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
             ) : null}
             {similarCount > 0 ? (
               <label className="flex items-center gap-2 text-sm">
-                <Switch checked={includeSimilar} onCheckedChange={setIncludeSimilar} />
+                <Switch on={includeSimilar} onToggle={() => setIncludeSimilar((value) => !value)} disabled={busy} label={t('actions.applySimilar', { count: similarCount })} />
                 {t('actions.applySimilar', { count: similarCount })}
               </label>
             ) : null}

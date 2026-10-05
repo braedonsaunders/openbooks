@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '@/lib/prompt'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
-import { Badge, Button, Drawer, EmptyState, Label, SearchSelect, Switch } from '@openbooks/ui'
+import { Badge, Button, Drawer, EmptyState, Label, SearchSelect } from '@openbooks/ui'
+import { Switch } from '@/components/switch'
 
 interface LocationRow {
   id: string
@@ -40,7 +41,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
     return fetch(`/api/channels/${channelId}/locations`)
       .then(async (res) => {
         if (!res.ok) {
-          toast.error(await readApiErrorMessage(res))
+          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
           return
         }
         const body = (await res.json()) as { locations: LocationRow[] }
@@ -55,7 +56,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
     return fetch(`/api/channels/${channelId}/stock-locations`)
       .then(async (res) => {
         if (!res.ok) {
-          toast.error(await readApiErrorMessage(res))
+          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
           return
         }
         const body = (await res.json()) as { options: { value: string; label: string }[] }
@@ -103,7 +104,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
         }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res))
+        toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
         return
       }
       setMapping(null)
@@ -124,7 +125,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
         body: JSON.stringify({ action: 'unlink', externalLocationId: row.externalLocationId, reason }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res))
+        toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
         return
       }
       await load()
@@ -198,7 +199,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               setBusy(true)
               try {
                 const res = await fetch(`/api/channels/${channelId}/locations/import`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
-                if (!res.ok) toast.error(await readApiErrorMessage(res))
+                if (!res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
                 else await load()
               } finally {
                 setBusy(false)
@@ -212,7 +213,12 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       {rows.length === 0 ? (
         <EmptyState title={t('locations.emptyTitle')} description={t('locations.emptyHint')} />
       ) : (
-        <PagedTable columns={columns} rows={rows} total={rows.length} empty={t('locations.emptyTitle')} />
+        <PagedTable<LocationRow>
+          columns={columns}
+          rows={rows}
+          rowKey={(row) => row.id}
+          empty={<EmptyState title={t('locations.emptyTitle')} description={t('locations.unmappedHint')} />}
+        />
       )}
       <Drawer open={mapping !== null} onClose={() => setMapping(null)} title={mapping ? t('locations.mapTitle', { name: mapping.externalName }) : ''}>
         {mapping ? (
@@ -226,11 +232,11 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               )}
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <Switch checked={sync} onCheckedChange={setSync} />
+              <Switch on={sync} onToggle={() => setSync((value) => !value)} disabled={busy} label={t('locations.syncStock')} />
               {t('locations.syncStock')}
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <Switch checked={fulfils} onCheckedChange={setFulfils} />
+              <Switch on={fulfils} onToggle={() => setFulfils((value) => !value)} disabled={busy} label={t('locations.fulfils')} />
               {t('locations.fulfils')}
             </label>
             <div className="flex justify-end gap-2">
