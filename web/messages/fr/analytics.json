@@ -3184,6 +3184,14 @@
           "label": "Unité zombie",
           "help": "Déduction par abonnement zombie non critique"
         },
+        "hhiCritical": {
+          "label": "Niveau critique HHI",
+          "help": "La concentration de la catégorie au-delà est élevée"
+        },
+        "hhiWarning": {
+          "label": "Niveau d’avertissement HHI",
+          "help": "La concentration de la catégorie au-delà est modérée"
+        },
         "highVelocityAlert": {
           "label": "Alerte vélocité élevée (%/mois)",
           "help": "Les comptes au-delà déclenchent un signal de croissance"

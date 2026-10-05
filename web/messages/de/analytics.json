@@ -3184,6 +3184,14 @@
           "label": "Warn-Zombie-Stück",
           "help": "Abzug je nicht-kritischem Zombie-Abo"
         },
+        "hhiCritical": {
+          "label": "HHI-kritische Stufe",
+          "help": "Kategoriekonzentration darüber gilt als stark konzentriert"
+        },
+        "hhiWarning": {
+          "label": "HHI-Warnstufe",
+          "help": "Kategoriekonzentration darüber gilt als mäßig konzentriert"
+        },
         "highVelocityAlert": {
           "label": "Hochdynamik-Alarm (%/Mon.)",
           "help": "Konten über dieser Dynamik lösen einen Wachstumshinweis aus"

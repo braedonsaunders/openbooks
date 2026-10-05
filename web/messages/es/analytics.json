@@ -3184,6 +3184,14 @@
           "label": "Unidad zombi",
           "help": "Deducción por suscripción zombi no crítica"
         },
+        "hhiCritical": {
+          "label": "Nivel crítico HHI",
+          "help": "La concentración de la categoría sobre este nivel es alta"
+        },
+        "hhiWarning": {
+          "label": "Nivel de aviso HHI",
+          "help": "La concentración de la categoría sobre este nivel es moderada"
+        },
         "highVelocityAlert": {
           "label": "Alerta de alta velocidad (%/mes)",
           "help": "Las cuentas sobre esta velocidad generan un aviso"

@@ -3184,6 +3184,14 @@
           "label": "预警僵尸单项",
           "help": "每个非严重僵尸订阅的扣分"
         },
+        "hhiCritical": {
+          "label": "HHI严重线",
+          "help": "品类集中度超过该值即为高度集中"
+        },
+        "hhiWarning": {
+          "label": "HHI预警线",
+          "help": "品类集中度超过该值即为中度集中"
+        },
         "highVelocityAlert": {
           "label": "高速预警（%/月）",
           "help": "超过该增速的科目即触发增长提示"
