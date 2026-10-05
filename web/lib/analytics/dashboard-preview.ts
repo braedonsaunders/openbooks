@@ -58,17 +58,24 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
     }
     case 'customer-intelligence': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/customer-intelligence/view')).loadCustomerIntelligencePreview(sp)
-      chart = trend(t('customer.kpi.periodRevenue'), data.growth.monthly.map((month) => month.revenue), data.growth.monthly.map((month) => month.label))
+      // Monthly revenue arrives as floats from its loader (its dashboard's
+      // scope, not this preview's); the chart boundary below is the only
+      // crossing, through toChartNumber like every other preview sparkline.
+      chart = trend(t('customer.kpi.periodRevenue'), data.growth.monthly.map((month) => toChartNumber(String(month.revenue))), data.growth.monthly.map((month) => month.label))
       return result(periodLabel, [metric('customer.kpi.totalCustomers', number(data.kpis.totalCustomers)), metric('customer.kpi.periodRevenue', fmt.money(data.kpis.totalRevenue)), metric('customer.kpi.totalInvoiced', fmt.money(data.kpis.totalInvoiced)), metric('customer.kpi.atRisk', number(data.kpis.atRiskCount))])
     }
     case 'vendor-performance': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/vendor-performance/view')).loadVendorPerformance(sp)
-      chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => month.spend), data.monthly.map((month) => month.label))
+      // Monthly vendor spend arrives as floats from its loader (its
+      // dashboard's scope); the chart boundary is the only crossing.
+      chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => toChartNumber(String(month.spend))), data.monthly.map((month) => month.label))
       return result(periodLabel, [metric('vendor.kpi.activeVendors', number(data.totals.vendors)), metric('vendor.kpi.totalSpend', fmt.money(data.totals.spend)), metric('vendor.kpi.onTimeRate', percent(data.totals.onTimePct)), metric('vendor.kpi.top5Share', percent(data.totals.top5SharePct))])
     }
     case 'spend-velocity': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/spend-velocity/view')).loadSpendVelocity(sp)
-      chart = trend(t('spendVelocity.kpi.totalSpend'), data.monthlyTrends.map((month) => month.totalAmount), data.monthlyTrends.map((month) => month.month))
+      // Monthly velocity totals arrive as floats from their loader (its
+      // dashboard's scope); the chart boundary is the only crossing.
+      chart = trend(t('spendVelocity.kpi.totalSpend'), data.monthlyTrends.map((month) => toChartNumber(String(month.totalAmount))), data.monthlyTrends.map((month) => month.month))
       return result(periodLabel, [metric('spendVelocity.kpi.totalSpend', fmt.money(data.summary.totalSpend)), metric('spendVelocity.kpi.avgVelocity', percent(data.summary.avgVelocity)), metric('spendVelocity.kpi.savingsPotential', fmt.money(data.summary.savingsPotential)), metric('spendVelocity.kpi.alerts', number(data.summary.totalAlerts))])
     }
     case 'sentinel': {
