@@ -301,7 +301,7 @@ test("gift card tender redeems stored value", { skip: !DB }, async () => {
       liabilityAccountId: org.accounts.taxOutput, actorId: actor,
     }));
     const issued = await withBypass(() => issueStoredValue({
-      orgId: org.orgId, programId: program.id, amountMinor: 5000n, currency: "CAD",
+      orgId: org.orgId, programId: program.id, amountMinor: units4("50"), currency: "CAD",
       debitAccountId: org.accounts.bank, idempotencyKey: `test-gc-1004`, postingDate: org.date, actorId: actor,
     }));
     await withBypass(() => linkExternal(org.orgId, actor, {
@@ -333,7 +333,7 @@ test("gift card tender redeems stored value", { skip: !DB }, async () => {
     assert.equal(outcome.status, "posted");
     const card = (await withOrgContext(org.orgId, () => db.execute<{ balance_minor: string }>(sql`
       select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
-    assert.equal(card.balance_minor, "4000");
+    assert.equal(card.balance_minor, "400000");
     const entry = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; document_id: string | null }>(sql`
       select kind, document_id from stored_value_entries
        where account_id = ${issued.accountId} and org_id = ${org.orgId} and kind = 'redeem'`))).rows[0]!;
