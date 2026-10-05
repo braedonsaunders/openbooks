@@ -7,6 +7,7 @@ import { Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
 import { fetchAction, type ActionError } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
+import { StripeBillingImport } from "./StripeBillingImport";
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
 
@@ -307,6 +308,7 @@ function ProviderCard({
             {t("save")}
           </Button>
         </div>
+        {provider.key === "stripe" && config?.hasSecrets ? <StripeBillingImport /> : null}
       </CardContent>
     </Card>
   );
