@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
+import { installedPayrollCountries } from '@openbooks/engine/src/payroll/readiness.ts'
 import {
   employmentJurisdictionsOf,
   holidayOccupationClassesOf,
@@ -420,6 +421,26 @@ async function visibleFilingAccounts(gate: Parameters<typeof guardPayrollFilingA
   return visible.filter(({ denied }) => !denied).map(({ account }) => account)
 }
 
+/** The org's installed payroll packs, by the same resolver the setup wizard and pay-run readiness use. */
+async function installedProfileCountries(orgId: string): Promise<string[]> {
+  const settings = (await db.execute<{ payroll: Record<string, unknown> | null }>(sql`
+    select settings->'payroll' as payroll from orgs where id = ${orgId}`)).rows[0]?.payroll ?? {}
+  return (await installedPayrollCountries(orgId, settings)).filter((country) => country in PAYROLL_COUNTRY_PACKS)
+}
+
+/**
+ * The countries a profile may name: the installed packs, plus any country a
+ * stored profile already carries so its own value still renders after a pack
+ * is removed. Every declared pack only while none is installed, so an org that
+ * has not run payroll setup can still choose.
+ */
+function offeredProfileCountries(installed: readonly string[], stored: readonly (string | null | undefined)[]): string[] {
+  if (installed.length === 0) return Object.keys(PAYROLL_COUNTRY_PACKS)
+  const offered = new Set(installed)
+  for (const country of stored) if (country && country in PAYROLL_COUNTRY_PACKS) offered.add(country)
+  return [...offered]
+}
+
 export const GET = defineRoute({
   permission: 'payroll.manage',
   feature: 'payroll',
@@ -451,13 +472,7 @@ export const GET = defineRoute({
          order by root_sub.created_at limit 1
       `))
       const subsidiaryCountry = defaultCountryRes.rows[0]?.country ?? null
-      const installedRes = (await db.execute<{ countries: unknown }>(sql`
-        select coalesce(settings#>'{payroll,countries}', '[]'::jsonb) as countries
-          from orgs where id = ${gate.user.orgId}
-      `))
-      const installed = Array.isArray(installedRes.rows[0]?.countries)
-        ? (installedRes.rows[0]!.countries as unknown[]).map(String).filter((c) => c in PAYROLL_COUNTRY_PACKS)
-        : []
+      const installed = await installedProfileCountries(gate.user.orgId)
       const defaultCountry = subsidiaryCountry && subsidiaryCountry in PAYROLL_COUNTRY_PACKS
         ? subsidiaryCountry
         : installed.length === 1 ? installed[0]! : null
@@ -558,7 +573,7 @@ export const GET = defineRoute({
         filingAccounts: await visibleFilingAccounts(gate),
         labourJurisdictions: labourJurisdictionOptions(),
         defaultCountry,
-        countries: Object.keys(PAYROLL_COUNTRY_PACKS),
+        countries: offeredProfileCountries(installed, [(profileRes.rows[0] as { country?: string | null } | undefined)?.country]),
         packProfiles: packProfileDeclarations(),
         statutoryOccupationClasses: occupationClassOptions(),
       })
@@ -606,7 +621,10 @@ export const GET = defineRoute({
       profiles: profiles.rows,
       filingAccounts,
       labourJurisdictions: labourJurisdictionOptions(),
-      countries: Object.keys(PAYROLL_COUNTRY_PACKS),
+      countries: offeredProfileCountries(
+        await installedProfileCountries(gate.user.orgId),
+        profiles.rows.map((row) => (row as { country?: string | null }).country),
+      ),
       packProfiles: packProfileDeclarations(),
       statutoryOccupationClasses: occupationClassOptions(),
     })

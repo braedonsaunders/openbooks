@@ -902,6 +902,9 @@ export function ProfileEditor(props: {
               ))}
             </Select>
           </div>
+          {/* One installed pack and the profile already in it: there is no
+              choice to offer, so the field stays out of the form. */}
+          {!((props.countries ?? []).length === 1 && country === props.countries![0]) && (
           <div>
             <Label htmlFor="pp-country">{t('fields.country')}</Label>
             <Select
@@ -927,6 +930,7 @@ export function ProfileEditor(props: {
               ))}
             </Select>
           </div>
+          )}
           {pack && (
           <div>
             <Label htmlFor="pp-province">
