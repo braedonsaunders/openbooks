@@ -933,6 +933,26 @@
           "label": "集中度 — 上位区分（％）",
           "help": "主要集中指標の上位顧客区分"
         },
+        "concentrationHealthHigh": {
+          "label": "集中度 — 高健全性（点）",
+          "help": "集中度が高い場合のインテリジェンス点"
+        },
+        "concentrationHealthModerate": {
+          "label": "集中度 — 中健全性（点）",
+          "help": "集中度が中の場合のインテリジェンス点"
+        },
+        "concentrationHealthLow": {
+          "label": "集中度 — 低健全性（点）",
+          "help": "集中度が低い場合のインテリジェンス点"
+        },
+        "velocityUrgencyHighMultiple": {
+          "label": "流速 — 緊急度高の閾値（倍）",
+          "help": "注文周期のこの割合超の延滞は緊急度高と判定"
+        },
+        "velocityDueSoonDays": {
+          "label": "流速 — 期限間近（日）",
+          "help": "この日数以内の注文予定は期限間近と判定"
+        },
         "frictionPointsPerCredit": {
           "label": "摩擦 — クレジット1件の点数",
           "help": "クレジット1件ごとの摩擦点数"
@@ -1049,9 +1069,17 @@
           "label": "成長 — トレンド幅（％）",
           "help": "これを超える期間比較は増加・減少と判定"
         },
+        "growthTrendWindowMonths": {
+          "label": "成長 — トレンド期間（月）",
+          "help": "直近と前期を比較する片側の月数"
+        },
         "growthYoyWindowMonths": {
           "label": "成長 — 前年比較の期間（月）",
           "help": "前年比較の両側の末端月数"
+        },
+        "cohortActiveMonths": {
+          "label": "コホート — アクティブ期間（月）",
+          "help": "この月数以内に注文した顧客はアクティブ"
         },
         "overdueInsightCount": {
           "label": "通知 — 延滞の件数（件）",

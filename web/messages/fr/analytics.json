@@ -933,6 +933,26 @@
           "label": "Concentration — tranche haute (%)",
           "help": "Tranche haute de clients dans le chiffre principal"
         },
+        "concentrationHealthHigh": {
+          "label": "Concentration — santé haute (points)",
+          "help": "Points d’intelligence quand la concentration est haute"
+        },
+        "concentrationHealthModerate": {
+          "label": "Concentration — santé moyenne (points)",
+          "help": "Points d’intelligence quand la concentration est moyenne"
+        },
+        "concentrationHealthLow": {
+          "label": "Concentration — santé basse (points)",
+          "help": "Points d’intelligence quand la concentration est basse"
+        },
+        "velocityUrgencyHighMultiple": {
+          "label": "Rythme — très urgent dès (×)",
+          "help": "Un retard au-delà de cette part du cycle se lit comme très urgent"
+        },
+        "velocityDueSoonDays": {
+          "label": "Rythme — échéance proche (jours)",
+          "help": "Une commande attendue sous ce délai se lit comme proche"
+        },
         "frictionPointsPerCredit": {
           "label": "Friction — points par avoir",
           "help": "Points de friction par avoir"
@@ -1049,9 +1069,17 @@
           "label": "Croissance — bande de tendance (%)",
           "help": "Les comparaisons au-delà se lisent en hausse ou en baisse"
         },
+        "growthTrendWindowMonths": {
+          "label": "Croissance — fenêtre de tendance (mois)",
+          "help": "Mois par côté pour comparer la fenêtre récente à la précédente"
+        },
         "growthYoyWindowMonths": {
           "label": "Croissance — fenêtre annuelle (mois)",
           "help": "Derniers mois de chaque côté de la comparaison annuelle"
+        },
+        "cohortActiveMonths": {
+          "label": "Cohortes — actif sous (mois)",
+          "help": "Un client commandé sous ce délai compte comme actif"
         },
         "overdueInsightCount": {
           "label": "Signal — en retard au-delà (factures)",
