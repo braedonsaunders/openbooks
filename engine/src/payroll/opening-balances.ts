@@ -333,6 +333,7 @@ export interface DeclaredAccountOpeningBaseField {
   filingProgramType: string;
   requiresRegion: boolean;
   replacesLegacyField?: string;
+  replacesStateCarryIn?: boolean;
 }
 
 export async function declaredAccountOpeningBaseFields(): Promise<DeclaredAccountOpeningBaseField[]> {
@@ -342,6 +343,7 @@ export async function declaredAccountOpeningBaseFields(): Promise<DeclaredAccoun
       country, programKey: field.key, label: field.label, help: field.help,
       filingProgramType: field.filingProgramType, requiresRegion: field.requiresRegion,
       replacesLegacyField: field.replacesLegacyField,
+      replacesStateCarryIn: field.replacesStateCarryIn,
     })))
     .sort((a, b) => a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey));
 }
@@ -1185,7 +1187,10 @@ export async function saveOpeningBalances(input: {
             && cmp(storedBase.insurableYtd, base.insurableYtd) === 0);
           if (!declared || !account || account.country !== declared.country
             || account.program_type !== declared.filingProgramType
-            || account.subsidiary_id !== (subsidiaryById.get(row.employeePartyId) ?? null)
+            // An org-wide account (no subsidiary) files for every legal
+            // employer in the organization, the employee's included.
+            || (account.subsidiary_id !== null
+              && account.subsidiary_id !== (subsidiaryById.get(row.employeePartyId) ?? null))
             || (!account.is_active && !unchangedStored)
             || (declared.requiresRegion ? account.state_code !== base.region : base.region !== null)) {
             throw new PayrollError(
@@ -1208,6 +1213,14 @@ export async function saveOpeningBalances(input: {
               `${declared!.label} and the employee-only ${legacyLabel} carry-in both hold amounts, so the `
               + `prior-provider amount would count twice. Enter it once: keep it in ${declared!.label} for this `
               + `filing account and set ${legacyLabel} to zero.`,
+            );
+          }
+          if (declared?.replacesStateCarryIn && base.region !== null
+            && cmp(base.insurableYtd, "0") !== 0 && cmp(suiStates[base.region] ?? "0", "0") !== 0) {
+            throw new PayrollError(
+              `${declared.label} for ${base.region} and the ${base.region} state carry-in both hold amounts, so the `
+              + `prior-provider amount would count twice. Enter it once: keep it in ${declared.label} for this `
+              + `filing account and set the ${base.region} state carry-in to zero.`,
             );
           }
         }

@@ -25,7 +25,7 @@ import {
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import {
-  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS,
+  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS, US_SUI_ACCOUNT_BASE,
 } from "./opening-ytd.ts";
 import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
@@ -300,6 +300,20 @@ export async function usEmployeeYtd(
                  and tax_year = ${taxYear} and program_key = ${programKey}
                  and filing_account_id = ${scope.federalAccountId}::uuid
                  and region is null), 0)`;
+  // The state SUI carry-in: the per-state rows and the per-state-account
+  // bases are one amount entered in either place (the carry-in save refuses
+  // both for one state), so SUI reads their union.
+  const suiCarryIn = sql`(
+    select sw.state, sw.insurable_ytd as amount
+      from payroll_opening_sui_wages sw
+      join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
+     where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
+    union all
+    select ab.region as state, ab.insurable_ytd as amount
+      from payroll_opening_account_bases ab
+     where ab.org_id = ${orgId} and ab.employee_party_id = ${employeePartyId} and ab.tax_year = ${taxYear}
+       and ab.program_key = ${US_SUI_ACCOUNT_BASE} and ab.region is not null
+  )`;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
@@ -332,17 +346,11 @@ export async function usEmployeeYtd(
           ) prior
       ), '{}'::jsonb) as "suiOtherStateWages",
       coalesce((
-        select jsonb_object_agg(sw.state, sw.insurable_ytd::text)
-          from payroll_opening_sui_wages sw
-          join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
-         where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
+        select jsonb_object_agg(carried.state, carried.total::text)
+          from (select state, sum(amount) as total from ${suiCarryIn} c group by state) carried
       ), '{}'::jsonb) as "suiOpeningStates",
       coalesce((
-        select sum(sw.insurable_ytd)::text
-          from payroll_opening_sui_wages sw
-          join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
-         where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
-           and sw.state = ${region}
+        select sum(c.amount)::text from ${suiCarryIn} c where c.state = ${region}
       ), '0') as "suiOpeningCurrentRegion",
       ${einCarryIn("us_futa")}
       + coalesce(sum(s.insurable_earnings), 0) as "futaCurrentAccount",

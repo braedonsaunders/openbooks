@@ -522,6 +522,12 @@ export interface PayrollAccountOpeningBase {
    * account row as the place to keep it.
    */
   replacesLegacyField?: string;
+  /**
+   * True when this per-account base and the per-state carry-in row for the
+   * same region are one amount the pack's engine reads as their union. The
+   * carry-in screen refuses a save where both hold an amount for a region.
+   */
+  replacesStateCarryIn?: boolean;
 }
 
 /**
