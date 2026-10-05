@@ -88,8 +88,9 @@ function VendorPaymentTile({ data }: { data: WidgetCardProps['data'] }) {
   }
   const daysText = days.available ? Math.round(days.value) : null
   // The tile tone follows the organization's own on-time good mark: at or
-  // above it the book reads healthy, below it it reads poor.
-  const tone = rate.value * 100 >= data.vendorOnTimeGoodRate ? 'emerald' : 'rose'
+  // above it the book reads healthy, below it it reads poor. Compared in
+  // basis points so binary float dust at the boundary cannot flip the tone.
+  const tone = Math.round(rate.value * 100 * 100) / 100 >= data.vendorOnTimeGoodRate ? 'emerald' : 'rose'
   return (
     <MetricTile
       icon={<TimerReset size={15} />}

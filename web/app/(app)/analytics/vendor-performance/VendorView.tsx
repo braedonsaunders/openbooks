@@ -10,6 +10,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { formatPercent01 } from '@/lib/format'
 import { Truck, Coins, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
 import { cn } from '@openbooks/ui'
+import { cmp, div, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { concentrationVerdict } from '../../../../lib/analytics/vendor-concentration'
@@ -92,7 +93,7 @@ export function VendorView({ data: initialData, canConfigure }: { data: VendorDa
           <Gauge value={diversification} label={t(verdict.gaugeKey)} size={132} thickness={12} showTicks={false} bands={NEUTRAL_GAUGE_BANDS} />
         </div>
         <KpiCard icon={Truck} accent="sky" label={t('kpi.activeVendors')} value={String(totals.vendors)} sub={t('sub.inPeriod')} />
-        <KpiCard icon={Coins} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: formatPercent01(totals.yoyPct, locale, 1) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={Coins} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: formatPercent01(totals.yoyPct, locale, 1) })} tone={totals.yoyPct === null ? 'neutral' : totals.yoyPct <= 0 ? 'positive' : 'negative'} />
         <KpiCard icon={Clock} accent={totals.onTimePct === null ? 'slate' : totals.onTimePct >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'amber'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : formatPercent01(totals.onTimePct, locale, 1)} sub={t('sub.onTimeBills')} />
         <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.top5Share')} value={formatPercent01(totals.top5SharePct, locale, 1)} sub={t('sub.top5Concentration')} />
       </div>
@@ -339,6 +340,13 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<keyof Pick<VendorRow, 'spend' | 'bills' | 'avgBill' | 'recencyDays' | 'score'>>('spend')
+  // CSV shares derive from the exact spend strings, never the float
+  // quotient: binary multiplication on it prints tails like 14.4999999.
+  // The on-time figure is stored as a float, so it rounds to basis points.
+  const csvShare = (spend: string): string =>
+    cmp(data.totals.spend, '0') > 0 ? mulDecimal(div(spend, data.totals.spend), '100') : '0'
+  const csvOnTime = (v: number | null): string =>
+    v === null ? '' : String(Math.round(v * 100 * 10000) / 10000)
   const rows = [...data.rows].sort((a, b) => {
     const num = (v: string | number | null | undefined): number =>
       v === null || v === undefined ? -1 : typeof v === 'number' ? v : toChartNumber(v)
@@ -354,7 +362,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
       actions={
         <button
           type="button"
-          onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, r.spend, String(r.sharePct * 100), r.bills, r.avgBill, r.onTimePct === null ? '' : String(r.onTimePct * 100), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
+          onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, r.spend, csvShare(r.spend), r.bills, r.avgBill, csvOnTime(r.onTimePct), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
           className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           <Download size={11} /> {t('csv.export')}
