@@ -13,6 +13,7 @@ import { postChannelOrder } from "./order-posting.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { approvePayoutSuggestion, suggestPayoutLineFix } from "./exception-assistance.ts";
+import { matchPayoutLines } from "./payout-reconciliation.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { db, withBypass } from "../platform/db.ts";
@@ -379,9 +380,18 @@ test("a document of a visible but different entity is not a candidate", { skip: 
     const both = new Set([org.subsidiaryId, subB]);
     const hidden = await suggestPayoutLineFix(org.orgId, lines.hiddenOnly!, both);
     assert.equal(hidden.code, "links_dangling", "visibility alone does not make another entity's receipt a proposal");
-    for (const text of [hidden.explanation, ...hidden.candidates.flatMap((candidate) => candidate.evidence)]) {
+    const texts = [hidden.explanation, ...hidden.candidates.flatMap((candidate) => [candidate.detail, ...candidate.evidence])];
+    for (const text of texts) {
       assert.ok(!text.includes(docB.number), `other-entity receipt number leaks: ${text}`);
     }
+    // The receipt exists in another entity: the queue must never declare it
+    // gone or send the operator hunting a replacement — availability wording
+    // with the real remedy instead.
+    for (const text of texts) {
+      assert.doesNotMatch(text, /gone|no longer belongs|replacement/i, `never asserts deletion of a hidden receipt: ${text}`);
+    }
+    assert.match(hidden.explanation, /unavailable in this payout's legal entity/, "names availability, not deletion");
+    assert.match(hidden.candidates[0]!.detail, /authorized operator/, "the remedy names the real next step");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -552,6 +562,75 @@ test("a runtime restricted role resolves to the same refusal", { skip: !DB }, as
       () => suggestPayoutLineFix(org.orgId, lines.otherEntity!, resolved),
       /does not belong to this organization/,
       "the role-resolved scope refuses the other entity's line",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("matching a batch outside the caller's entity refuses without verdicts", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { batchB, lines } = await seed(org, actor);
+    await assert.rejects(
+      () => matchPayoutLines(org.orgId, batchB, actor, homeScope(org)),
+      (error: unknown) => {
+        assert.ok(error instanceof ScopeNotFoundError, `a hidden batch reads as missing, got: ${(error as Error)?.message}`);
+        assert.ok(
+          !String((error as Error)?.message ?? "").includes(lines.otherEntity!),
+          "the refusal carries no hidden line id",
+        );
+        return true;
+      },
+      "a hidden batch refuses before any line loads",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("matching with an empty or unknown scope refuses instead of running", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { batchA, batchB } = await seed(org, actor);
+    await assert.rejects(
+      () => matchPayoutLines(org.orgId, batchB, actor, new Set()),
+      (error: unknown) => error instanceof ScopeNotFoundError,
+      "an empty scope matches nothing, even a hidden batch",
+    );
+    await assert.rejects(
+      () => matchPayoutLines(org.orgId, batchA, actor, new Set()),
+      (error: unknown) => error instanceof ScopeNotFoundError,
+      "an empty scope matches nothing, even the home batch",
+    );
+    const unknown = undefined as unknown as ReadonlySet<string> | null;
+    await assert.rejects(
+      () => matchPayoutLines(org.orgId, batchB, actor, unknown),
+      (error: unknown) => error instanceof ScopeNotFoundError,
+      "an unknown scope never runs the matcher",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a runtime restricted role refuses a hidden batch at match", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { batchB } = await seed(org, actor);
+    const clerk = await withBypass(() => createScratchUser(org.orgId, "Entity clerk", "entity-clerk"));
+    await db.execute(sql`update app_roles set permissions = '["banking.read", "banking.reconcile"]'::jsonb,
+      subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id = ${org.orgId} and key = 'entity-clerk'`);
+    const resolved = await withBypass(() => actorAllowedSubsidiaryIds(db, org.orgId, clerk));
+    assert.ok(resolved instanceof Set, "a restricted role resolves to a finite scope");
+    await assert.rejects(
+      () => matchPayoutLines(org.orgId, batchB, clerk, resolved),
+      (error: unknown) => error instanceof ScopeNotFoundError,
+      "the role-resolved scope refuses the hidden batch",
     );
   } finally {
     await dropScratchOrg(org.orgId);

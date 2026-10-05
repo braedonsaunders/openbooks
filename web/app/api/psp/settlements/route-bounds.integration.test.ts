@@ -3,11 +3,11 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 
 /**
- * PSP reversal presence-checks reversalDate but never checks calendar
- * reality — so a September 31 sails through every named check into the
- * period lookup's ::date comparisons, dies in Postgres, and surfaces the
- * raw driver failure as the 500 body instead of failing closed with a
- * named error and nothing written.
+ * PSP reversal validates reversalDate calendar reality at the shared JSON
+ * boundary (isoDate refuses impossible days with a named field issue), so a
+ * September 31 fails closed as a 400 before the handler's period lookup —
+ * never as a raw driver 500 — with the batch still posted and no reversal
+ * journal written.
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __pspReverseBoundState: state });
@@ -85,22 +85,36 @@ const post = (batchId: string, reversalDate: string) =>
     ),
   );
 
-async function batchStatus(orgId: string, batchId: string): Promise<string> {
+async function batchState(orgId: string, batchId: string): Promise<{ status: string; reversalEntryId: string | null }> {
   const rows = (await withBypassContext(() =>
-    db.execute<{ status: string }>(
-      sql`select status from psp_settlement_batches where org_id = ${orgId} and id = ${batchId}`,
+    db.execute<{ status: string; reversalEntryId: string | null }>(
+      sql`select status, reversal_entry_id as "reversalEntryId" from psp_settlement_batches where org_id = ${orgId} and id = ${batchId}`,
     ))).rows;
-  return rows[0]!.status;
+  return { status: rows[0]!.status, reversalEntryId: rows[0]!.reversalEntryId };
+}
+
+async function journalCount(orgId: string): Promise<number> {
+  const rows = (await withBypassContext(() =>
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from journal_entries where org_id = ${orgId}`,
+    ))).rows;
+  return Number(rows[0]!.n);
 }
 
 test("psp reversal refuses a non-calendar reversal date without writing", async () => {
   const { orgId, batchId } = await fixture();
   try {
+    const journalsBefore = await journalCount(orgId);
     const response = await post(batchId, "2026-09-31");
-    const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    const json = (await response.json().catch(() => null)) as { error?: string; issues?: Array<{ path?: string; message?: string }> } | null;
+    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? "", /calendar date/, "the refusal names calendar reality");
+    assert.equal(json?.issues?.[0]?.path, "reversalDate", "the refusal names the offending field, not a blanket body error");
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
-    assert.equal(await batchStatus(orgId, batchId), "posted");
+    const after = await batchState(orgId, batchId);
+    assert.equal(after.status, "posted", "the batch remains posted");
+    assert.equal(after.reversalEntryId, null, "no reversal entry attaches");
+    assert.equal(await journalCount(orgId), journalsBefore, "no reversal journal writes");
   } finally {
     await dropScratchOrg(orgId);
   }
@@ -111,7 +125,7 @@ test("psp reversal still reverses on an ordinary date", async () => {
   try {
     const response = await post(batchId, date);
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
-    assert.equal(await batchStatus(orgId, batchId), "void");
+    assert.equal((await batchState(orgId, batchId)).status, "void");
   } finally {
     await dropScratchOrg(orgId);
   }
