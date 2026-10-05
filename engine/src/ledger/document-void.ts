@@ -21,6 +21,8 @@ import { add, cmp, neg } from "../money/money.ts";
 import { InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
+import { StoredValueError } from "../stored-value/errors.ts";
+import { reverseRedemptionsForVoidedDocument } from "../stored-value/void-redemptions.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
@@ -1001,6 +1003,28 @@ export async function completeRequestedDocumentVoid(
           reversalDate: String(doc.void_reversal_date),
           reason: String(doc.void_reason),
         });
+      }
+
+      // A voided document that spent stored value gives it back before its
+      // journal reverses: reversal entries restore each card's balance and
+      // the redemption's realized-FX journal is mirrored away, so neither
+      // the subledger nor P&L keeps an effect of a sale that never happened.
+      // Documents without redemptions pass through untouched.
+      try {
+        await reverseRedemptionsForVoidedDocument({
+          orgId,
+          documentId,
+          actorId: String(doc.void_requested_by),
+          reversalDate: String(doc.void_reversal_date),
+          reason: String(doc.void_reason),
+        });
+      } catch (error) {
+        if (error instanceof StoredValueError) {
+          throw new DocumentVoidError(
+            `this document cannot be voided yet — ${error.message}`,
+          );
+        }
+        throw error;
       }
 
       const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);
