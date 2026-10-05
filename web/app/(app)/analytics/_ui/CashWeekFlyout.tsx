@@ -1,7 +1,7 @@
 'use client'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { Button, Drawer, cn } from '@openbooks/ui'
@@ -28,6 +28,7 @@ import {
 import type { CategoryWeekly, ForecastEntry, WeekRow } from '../../../../lib/cash/core'
 import { TxnLink } from '../../reports/TxnLink'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { shortDateLabel } from '@/lib/format'
 import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
@@ -49,15 +50,35 @@ export function cashWeekEntriesUrl(weekStart: string, selectedSubsidiaryIds?: st
 type SortCol = 'docNumber' | 'partyName' | 'predictedDate' | 'amount'
 type TabKey = 'ar' | 'ap' | `cat:${string}`
 
-/** the method → accent colors for the category method pill. */
+/**
+ * The category method code → accent colors. Keyed on the stable method code
+ * the engine returns (gl_history_average, …), never on the translated label.
+ */
 const CAT_METHOD_TONE: Record<string, string> = {
-  'GL Average': 'text-sky-600 dark:text-sky-400',
-  'Vendor History (Median)': 'text-violet-600 dark:text-violet-400',
-  'Credit Card Cycle': 'text-pink-600 dark:text-pink-400',
-  'Manual Recurring': 'text-emerald-600 dark:text-emerald-400',
-  'Vendor Recurring (Auto)': 'text-amber-600 dark:text-amber-400',
-  'Bank Register History': 'text-cyan-600 dark:text-cyan-400',
-  'Calculated Formula': 'text-indigo-600 dark:text-indigo-400',
+  gl_history_average: 'text-sky-600 dark:text-sky-400',
+  vendor_payment_history: 'text-violet-600 dark:text-violet-400',
+  credit_card_cycle: 'text-pink-600 dark:text-pink-400',
+  manual_recurring: 'text-emerald-600 dark:text-emerald-400',
+  vendor_recurring_average: 'text-amber-600 dark:text-amber-400',
+  bank_register_history: 'text-cyan-600 dark:text-cyan-400',
+  formula_expression: 'text-indigo-600 dark:text-indigo-400',
+}
+
+/**
+ * Engine breakdown-row types (stable English codes) → catalog keys. Unknown
+ * future types render raw rather than blank.
+ */
+const BREAKDOWN_TYPE_KEYS: Record<string, string> = {
+  Scheduled: 'scheduled',
+  'Source Data': 'sourceData',
+  'Source Month': 'sourceMonth',
+  Historical: 'historical',
+  Projection: 'projection',
+  'Bank Register': 'bankRegister',
+  'This Week (Applied)': 'thisWeekApplied',
+  Formula: 'formula',
+  Info: 'info',
+  Note: 'note',
 }
 
 /** Human labels for the meta stats behind each estimate. */
@@ -106,6 +127,8 @@ export function CashWeekFlyout({
   const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
   const tCommon = useTranslations('common')
+  // The org business day behind every days-vs-due pill in this dialog.
+  const businessToday = useBusinessToday()
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>(initialSide)
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
@@ -122,32 +145,52 @@ export function CashWeekFlyout({
   // row already carries (analytics callers that still embed them).
   const [fetched, setFetched] = useState<{ ar: ForecastEntry[]; ap: ForecastEntry[] } | null>(week.arEntries.length || week.apEntries.length ? { ar: week.arEntries, ap: week.apEntries } : null)
   const [fetchState, setFetchState] = useState<'loading' | 'loaded' | 'failed'>(fetched ? 'loaded' : 'loading')
+  // The server's refusal (a missing FX rate, a denied week) in its own
+  // words — never a generic "load failed" that hides what to fix.
+  const [fetchMessage, setFetchMessage] = useState<string | null>(null)
   const [fetchAttempt, setFetchAttempt] = useState(0)
   useEffect(() => {
     if (fetched) return
     let cancelled = false
-    fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds, horizonWeeks))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
-      .then((d) => {
+    setFetchMessage(null)
+    ;(async () => {
+      try {
+        const r = await fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds, horizonWeeks))
+        if (cancelled) return
+        // The status is checked first: the error body is read for the
+        // server's message, never parsed as data.
+        if (!r.ok) {
+          setFetchMessage(await readApiErrorMessage(r, tCommon('feedback.loadFailed')))
+          setFetchState('failed')
+          return
+        }
+        const d = (await r.json()) as { arEntries?: ForecastEntry[]; apEntries?: ForecastEntry[] }
         if (!cancelled) {
           setFetched({ ar: d.arEntries ?? [], ap: d.apEntries ?? [] })
           setFetchState('loaded')
         }
-      })
-      .catch(() => {
-        if (!cancelled) setFetchState('failed')
-      })
+      } catch {
+        // A rejected fetch is a network failure, not a server refusal: the
+        // caller's own translated copy, never the browser's raw error.
+        if (!cancelled) {
+          setFetchMessage(tCommon('feedback.loadFailed'))
+          setFetchState('failed')
+        }
+      }
+    })()
     return () => {
       cancelled = true
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt])
   const weekCats = categories.filter((c) => compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
   const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')
-  const coverage = compareMoney(week.outflow, ZERO_MONEY) > 0 ? divideMoney(week.inflow, week.outflow) : '1.0000'
+  // No outflow is no coverage figure — never a fabricated 100%.
+  const coverage = compareMoney(week.outflow, ZERO_MONEY) > 0 ? divideMoney(week.inflow, week.outflow) : null
   // The gauge is visualization-only; the exact ratio remains the source for
   // text and all other decisions.
-  const coveragePercent = toChartNumber(mulDecimal(coverage, '100'))
+  const coveragePercent = coverage === null ? 0 : toChartNumber(mulDecimal(coverage, '100'))
 
   // Breakdown — the summary rows, straight off the shared WeekRow.
   const breakdown: { label: string; value: string; icon: typeof Wallet; tone: string }[] = [
@@ -245,7 +288,7 @@ export function CashWeekFlyout({
             <Gauge value={Math.max(0, Math.min(100, coveragePercent))} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" />
             <div>
               <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('coverageRatio')}</p>
-              <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{formatExactPercent(coverage)}</p>
+              <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{coverage === null ? '—' : formatExactPercent(coverage)}</p>
             </div>
           </div>
         </div>
@@ -320,7 +363,7 @@ export function CashWeekFlyout({
               <p className="px-6 py-10 text-center text-sm text-slate-400">{tCommon('feedback.loading')}</p>
             ) : fetchState === 'failed' ? (
               <div role="alert" className="px-6 py-10 text-center text-sm text-red-600 dark:text-red-400">
-                <p>{tCommon('feedback.loadFailed')}</p>
+                <p>{fetchMessage ?? tCommon('feedback.loadFailed')}</p>
                 <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => {
                   setFetchState('loading')
                   setFetchAttempt((attempt) => attempt + 1)
@@ -362,7 +405,7 @@ export function CashWeekFlyout({
                       </SharedTableCell>
                       <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.predictedDate)}</SharedTableCell>
                       <SharedTableCell className="px-3 py-2.5 text-center"><MethodPill method={e.method} /></SharedTableCell>
-                      <SharedTableCell className="px-3 py-2.5 text-center"><DaysPill entry={e} /></SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-center"><DaysPill entry={e} today={businessToday} /></SharedTableCell>
                       <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', side === 'ar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(e.amount)}</SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -419,20 +462,28 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
   const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
   const tMeta = useTranslations('analytics.cashWeek.meta')
+  // Method names live with the category editor's catalog (one translated set
+  // for the method codes, reused here instead of a second copy).
+  const tMethods = useTranslations('analytics.categoryManager')
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState<'name' | 'date' | 'amount' | 'type'>('amount')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
 
   const tone = cat.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-  const methodTone = CAT_METHOD_TONE[cat.meta.method] ?? 'text-slate-600 dark:text-slate-300'
+  const methodTone = CAT_METHOD_TONE[cat.method] ?? 'text-slate-600 dark:text-slate-300'
+  const methodLabel = tMethods(`${cat.method}.label`)
+  const breakdownType = useCallback((type: string) => {
+    const key = BREAKDOWN_TYPE_KEYS[type]
+    return key === undefined ? type : t(`breakdownTypes.${key}`)
+  }, [t])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return cat.breakdown
     return cat.breakdown.filter((r) =>
-      r.name.toLowerCase().includes(q) || r.type.toLowerCase().includes(q) || (r.date ?? '').toLowerCase().includes(q))
-  }, [cat.breakdown, search])
+      r.name.toLowerCase().includes(q) || breakdownType(r.type).toLowerCase().includes(q) || (r.date ?? '').toLowerCase().includes(q))
+  }, [cat.breakdown, search, breakdownType])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -472,7 +523,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
   const kpis: { label: string; value: string; cls?: string }[] = [
     { label: t('category.thisWeek'), value: money(weekAmount), cls: tone },
     { label: t('category.totalForecast'), value: money(cat.total), cls: tone },
-    { label: t('category.method'), value: cat.meta.method, cls: methodTone },
+    { label: t('category.method'), value: methodLabel, cls: methodTone },
     { label: t('category.sourceItems'), value: String(cat.breakdown.length) },
   ]
 
@@ -545,7 +596,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
                   </SharedTableCell>
                   <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.date ? fmtDate(r.date) : '—'}</SharedTableCell>
                   <SharedTableCell className="px-3 py-2.5 text-center">
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{r.type}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{breakdownType(r.type)}</span>
                   </SharedTableCell>
                   <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', tone)}>{money(r.amount)}</SharedTableCell>
                 </SharedTableRow>
@@ -613,7 +664,12 @@ function ActionBar({
 /** Prediction-method pill (classes: History / Terms / Average / Pushed). */
 function MethodPill({ method }: { method: string }) {
   const t = useTranslations('analytics.cashWeek.methods')
-  const base = method.replace(/\s*\(deferred.*$/, '')
+  // A deferred prediction carries its source week in an English suffix
+  // ("Global avg (deferred from 2026-08-30)"): the pill key strips it and
+  // the tooltip translates it, so neither the color nor the text depends on
+  // English.
+  const deferred = method.match(/\(deferred from (.*)\)$/)
+  const base = deferred ? method.slice(0, deferred.index).trimEnd() : method
   const map: Record<string, { key: string; cls: string }> = {
     Statistical: { key: 'history', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' },
     'Due date': { key: 'dueDate', cls: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' },
@@ -621,26 +677,36 @@ function MethodPill({ method }: { method: string }) {
     'Overdue push': { key: 'pushed', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
   }
   const m = map[base]
+  const label = m ? t(m.key) : base
   return (
-    <span title={method} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
-      {m ? t(m.key) : base}
+    <span title={deferred?.[1] !== undefined ? `${label} (${t('deferredFrom', { date: deferred[1] })})` : label} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+      {label}
     </span>
   )
 }
 
 /** Whole days between now and a due date (module scope, like `daysSince` in AccountsRoster). */
-function daysVsDue(dueDate: string): number {
-  return Math.round((Date.now() - new Date(dueDate + 'T00:00:00Z').getTime()) / 86_400_000)
+/**
+ * Whole days from the org business day to the due date (positive = overdue).
+ * The business day rides the prop the dialog received from its server loader
+ * — never the browser UTC clock, which can sit a day off the org.
+ */
+function daysVsDue(dueDate: string, todayIso: string): number {
+  return Math.round((new Date(todayIso + 'T00:00:00Z').getTime() - new Date(dueDate + 'T00:00:00Z').getTime()) / 86_400_000)
 }
 
 /** Days-vs-due pill: overdue red (+Nd), due within a week amber, comfortable green. */
-function DaysPill({ entry }: { entry: ForecastEntry }) {
+function DaysPill({ entry, today }: { entry: ForecastEntry; today: string }) {
+  const locale = useLocale()
   if (!entry.dueDate) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
-  const days = daysVsDue(entry.dueDate)
+  const days = daysVsDue(entry.dueDate, today)
+  // Localized narrow day counts ("+5d" in en, the locale's own narrow form
+  // elsewhere) instead of a hardcoded English suffix.
+  const dayCount = new Intl.NumberFormat(locale, { style: 'unit', unit: 'day', unitDisplay: 'narrow' }).format(Math.abs(days))
   const cls = days > 0
     ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300'
     : days >= -7
       ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
       : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-  return <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums whitespace-nowrap', cls)}>{days > 0 ? `+${days}d` : `${days}d`}</span>
+  return <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums whitespace-nowrap', cls)}>{days > 0 ? `+${dayCount}` : `-${dayCount}`}</span>
 }

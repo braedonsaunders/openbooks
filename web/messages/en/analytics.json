@@ -3203,7 +3203,20 @@
       "history": "History",
       "dueDate": "Due Date",
       "average": "Average",
-      "pushed": "Pushed"
+      "pushed": "Pushed",
+      "deferredFrom": "deferred from {date}"
+    },
+    "breakdownTypes": {
+      "scheduled": "Scheduled",
+      "sourceData": "Source Data",
+      "sourceMonth": "Source Month",
+      "historical": "Historical",
+      "projection": "Projection",
+      "bankRegister": "Bank Register",
+      "thisWeekApplied": "This Week (Applied)",
+      "formula": "Formula",
+      "info": "Info",
+      "note": "Note"
     }
   },
   "categoryManager": {

@@ -3211,7 +3211,8 @@
       "average": "平均",
       "dueDate": "期日",
       "history": "履歴",
-      "pushed": "プッシュ"
+      "pushed": "プッシュ",
+      "deferredFrom": "{date}から繰延"
     },
     "netChange": "純変動額",
     "pagination": {
@@ -3239,6 +3240,18 @@
     "tabs": {
       "apOutflows": "AP出金",
       "arInflows": "AR入金"
+    },
+    "breakdownTypes": {
+      "scheduled": "予定",
+      "sourceData": "ソースデータ",
+      "sourceMonth": "ソース月",
+      "historical": "履歴",
+      "projection": "予測",
+      "bankRegister": "銀行明細",
+      "thisWeekApplied": "今週（適用済み）",
+      "formula": "計算式",
+      "info": "情報",
+      "note": "メモ"
     }
   },
   "categoryManager": {

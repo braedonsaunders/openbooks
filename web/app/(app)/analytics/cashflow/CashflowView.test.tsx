@@ -60,8 +60,8 @@ function week(): WeekRow {
   }
 }
 
-function side(outstanding: string) {
-  return { outstanding, scheduled: '1000.0000', pctCurrent: '0.8000', avgDays: 20, buckets: [] }
+function side(outstanding: string, unplaced = { count: 0, total: '0.0000' }) {
+  return { outstanding, scheduled: '1000.0000', pctCurrent: '0.8000', avgDays: 20, buckets: [], unplaced }
 }
 
 function fixture(): CashflowData {
@@ -112,6 +112,19 @@ test('the lowest-week date follows the operator locale', () => {
   const html = renderFr(<CashflowView data={fixture()} />)
   assert.match(html, /19 sept\./, 'the lowest week renders in French date order')
   assert.doesNotMatch(html, /Sep 19/, 'the US-English date must not leak')
+})
+
+test('unplaced items are named with their count and total, never silently excluded', () => {
+  const data = fixture()
+  data.ar = side('5000.0000', { count: 3, total: '450.0000' })
+  const html = renderFr(<CashflowView data={data} />)
+  assert.match(html, /3 factures/, 'the French note names the unplaced invoice count')
+  assert.doesNotMatch(html, /3 invoices/, 'the English sentence must not leak')
+})
+
+test('the settlement figure is labelled as an average, not a cycle', () => {
+  const html = renderFr(<CashflowView data={fixture()} />)
+  assert.match(html, /Jours moyens de règlement/, 'the figure carries its French average-days label')
 })
 
 test('the horizon selector renders from the catalog', () => {
