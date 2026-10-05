@@ -26,6 +26,7 @@
       "employees": "À la paie",
       "employeesSub": "dossiers de paie actifs",
       "periodsRan": "Périodes de paie {year}",
+      "periodsRanYears": "Périodes de paie {years}",
       "periodsOf": "{ran} sur {total}",
       "periodsRanSub": "comptabilisées cette année d'imposition",
       "ytdGross": "Brut cumulé",

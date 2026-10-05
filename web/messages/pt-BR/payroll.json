@@ -26,6 +26,7 @@
       "employees": "Na folha",
       "employeesSub": "perfis de folha ativos",
       "periodsRan": "Períodos de folha {year}",
+      "periodsRanYears": "Períodos de folha {years}",
       "periodsOf": "{ran} de {total}",
       "periodsRanSub": "lançados neste ano fiscal",
       "ytdGross": "Bruto acumulado",
