@@ -305,7 +305,12 @@ export function WidgetCard({
         ? <PersonaEmpty title={t('widgets.teamHeadcount')} icon={<Users size={14} />} />
         : <MetricTile icon={<Users size={15} />} label={t('widgets.teamHeadcount')} value={String(data.teamHeadcount)} href="/hrm" tone="teal" />
     case 'team-quals':
-      return <PersonaRows title={t('widgets.teamQuals')} icon={<BookOpen size={14} />} href="/hrm" rows={[]} empty={t('persona.noExpiringQuals')} />
+      // Until the qualification source exists the tile refuses by name — it
+      // must never assert "No expiring qualifications" without reading
+      // anything. With a source, an empty roster honestly reports none.
+      return data.teamQuals === null
+        ? <PersonaRows title={t('widgets.teamQuals')} icon={<BookOpen size={14} />} href="/hrm" rows={[]} empty={t('persona.unavailable')} />
+        : <PersonaRows title={t('widgets.teamQuals')} icon={<BookOpen size={14} />} href="/hrm" rows={data.teamQuals.map((q) => ({ label: q.name, detail: q.detail }))} empty={t('persona.noExpiringQuals')} />
     case 'admin-attention':
       return <PersonaRows title={t('widgets.adminAttention')} icon={<AlertTriangle size={14} />} rows={(data.adminAttention ?? []).map((a) => ({ label: a.label, detail: a.unavailable ? t('persona.unavailable') : String(a.count), href: a.href }))} empty={t('persona.allClear')} />
     case 'workflow-errors':
