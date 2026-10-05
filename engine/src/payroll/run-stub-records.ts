@@ -59,6 +59,12 @@ export interface Line {
   description: string; hours?: string; rate?: string; amount: Money;
   /** Civil dates that substantiate when an earning amount was earned. */
   earnedFrom?: string | null; earnedTo?: string | null;
+  /** Covered configuration dates for a recurring component or elected benefit; independent of when wages were earned. */
+  sourceEffectiveFrom?: string; sourceEffectiveTo?: string;
+  /** Only fixed amounts use the configuration window as their monetary denominator. */
+  sourceProratedByCoverage?: boolean;
+  /** Native one-off input identity distinguishes a top-up from recurring configuration. */
+  runAdjustmentId?: string;
   projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
   /** Service item the hours were worked on; only time-driven earning lines
    * carry one. Absent everywhere else — never inferred, never defaulted. */

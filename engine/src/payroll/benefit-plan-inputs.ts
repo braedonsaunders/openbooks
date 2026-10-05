@@ -6,9 +6,10 @@ import { computePlanMovement, type EntitlementMovement } from './entitlements-mo
 import { sql } from 'drizzle-orm';
 import type { db } from '../platform/db.ts';
 import { parseMoney } from '../money/brands.ts';
-import { add, sum, mulRatio, cmp } from '../money/money.ts';
+import { add, sum, cmp } from '../money/money.ts';
 import { canonicalJson } from './run-calculation-evidence.ts';
 import { assignmentCoveredDays } from './assignment-windows.ts';
+import { coveredPayrollLines } from './covered-payroll-lines.ts';
 import { PayrollError } from './error.ts';
 import { cappableHourLines, programApplicabilityFromExclusions, type Line } from './run-stub-records.ts';
 import { benefitCoverageRecoveryAmount, recurringBenefitAmount, type BenefitRecoveryLedgerEntry, type RecurringBenefitRule, type RecurringBenefitTerm, type BenefitContributionTier } from './benefit-plan-math.ts';
@@ -97,13 +98,8 @@ export async function recurringBenefitSource(tx: Executor, args: {
 }
 
 function coveredBaseLines(lines: readonly Line[], from: string, to: string, periodStart: string, periodEnd: string): Line[] {
-  return lines.filter(l => l.kind === 'earning' && !l.accrualOnly && l.paymentKind !== 'non_cash').flatMap(l => {
-    const window = assignmentCoveredDays({ effectiveFrom: l.earnedFrom ?? periodStart, effectiveTo: l.earnedTo ?? periodEnd, periodStart: from, periodEnd: to });
-    if (window.coveredDays === 0) return [];
-    const ownDays = assignmentCoveredDays({ effectiveFrom: from, effectiveTo: to, periodStart: l.earnedFrom ?? periodStart, periodEnd: l.earnedTo ?? periodEnd });
-    return [{ ...l, amount: parseMoney(mulRatio(l.amount, BigInt(ownDays.coveredDays), BigInt(ownDays.periodDays))),
-      hours: l.hours === undefined ? undefined : mulRatio(l.hours, BigInt(ownDays.coveredDays), BigInt(ownDays.periodDays)) }];
-  });
+  return coveredPayrollLines(lines.filter(l => l.kind === 'earning' && !l.accrualOnly && l.paymentKind !== 'non_cash'),
+    from, to, periodStart, periodEnd);
 }
 
 /** Native lines land before statutory calculation; allocations preserve the exact elected source. */

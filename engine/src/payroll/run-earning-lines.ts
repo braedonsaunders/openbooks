@@ -461,6 +461,9 @@ export async function applyAssignedComponentLines(
     lines.push({
       componentId: c.id as string, kind: c.kind as Line["kind"],
       description: c.name as string, amount, sequence: Number(c.sequence),
+      sourceProratedByCoverage: c.basis === 'fixed_amount',
+      sourceEffectiveFrom: [periodStart, String(c.effective_from)].sort().at(-1)!,
+      sourceEffectiveTo: [periodEnd, c.effective_to == null ? periodEnd : String(c.effective_to)].sort()[0]!,
       taxable: c.taxable as boolean, pensionable: c.pensionable as boolean,
       insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
       programApplicability: programApplicabilityFromExclusions(c.program_exclusions),
@@ -494,7 +497,7 @@ export async function applyRunLineAdjustments(
 ): Promise<void> {
   const { orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines } = args;
   const adjustments = (await tx.execute<Record<string, unknown>>(sql`
-    select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
+    select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_run_adjustments a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
@@ -527,6 +530,7 @@ export async function applyRunLineAdjustments(
     const quantityUnits = (adj.unit_of_measure as string | null) === "quantity";
     lines.push({
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
+      runAdjustmentId: String(adj.adjustment_id),
       description: (adj.note as string | null) || (adj.name as string),
       hours: quantityUnits || adj.adj_hours == null ? undefined : String(adj.adj_hours),
       amount, sequence: Number(adj.sequence),
