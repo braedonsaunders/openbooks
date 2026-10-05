@@ -675,6 +675,7 @@
       "seller_country": "Nacional — {country}",
       "export": "Fuera de ámbito — {country}"
     },
-    "vatId": "NIF-IVA {id}"
+    "vatId": "NIF-IVA {id}",
+    "correctsInvoice": "Corrige la factura {number}"
   }
 }

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeOssReturn, ossReturnToCsv } from "./oss-return.ts";
+import { recordSupplyEvidence } from "../tax/cross-border-records.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 // Union OSS from posted B2C digital invoices: DE and FR sales aggregate by
@@ -190,14 +191,21 @@ test("a credit in a later quarter becomes a correction line for the original qua
       values (${org.orgId}, ${creditLineId}, ${deCode}, 1, '19.0000', '1000.0000',
               '190.0000', '0.0000', '190.0000', 'standard', false, false, 2,
               ${org.accounts.taxOutput}, null, null, false, ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into document_supply_evidence (org_id, document_id, kind, country_code, source, observed_on, created_by)
-      values (${org.orgId}, ${creditId}, 'billing_address', 'DE', 'checkout', '2026-10-05', ${actorId}),
-             (${org.orgId}, ${creditId}, 'ip_country', 'DE', 'gateway', '2026-10-05', ${actorId})`);
-    await db.execute(sql`
-      update documents
-         set custom = jsonb_set(custom, '{crossBorder,correctsDocument}', ${JSON.stringify(invoiceId)}::jsonb)
-       where id = ${creditId} and org_id = ${org.orgId}`);
+    // The corrected invoice is named through the product path, which records
+    // a `corrects` relationship — never an identifier string in custom JSON.
+    await recordSupplyEvidence(
+      db,
+      org.orgId,
+      creditId,
+      {
+        election: { supplyKind: "digital_service", customerKind: "consumer", correctsDocumentId: invoiceId },
+        evidence: [
+          { kind: "billing_address", country: "DE", source: "checkout" },
+          { kind: "ip_country", country: "DE", source: "gateway" },
+        ],
+      },
+      actorId,
+    );
     await approveDocument(org, creditId);
     await postDocument(creditId, { control: CONTROL(org) });
 

@@ -675,6 +675,7 @@
       "seller_country": "Domestic — {country}",
       "export": "Out of scope — {country}"
     },
-    "vatId": "VAT ID {id}"
+    "vatId": "VAT ID {id}",
+    "correctsInvoice": "Corrects invoice {number}"
   }
 }

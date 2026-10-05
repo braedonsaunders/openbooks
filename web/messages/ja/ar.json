@@ -675,6 +675,7 @@
       "seller_country": "国内 — {country}",
       "export": "対象外 — {country}"
     },
-    "vatId": "VAT ID {id}"
+    "vatId": "VAT ID {id}",
+    "correctsInvoice": "請求書{number}の訂正"
   }
 }
