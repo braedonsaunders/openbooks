@@ -32,6 +32,7 @@ interface ScopeFixture {
   secondId: string;
   date: string;
   bank: string;
+  bank2: string;
   actorId: string;
   giftProgram: string;
   expiringProgram: string;
@@ -48,6 +49,9 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
   );
   const breakageIncome = await withBypass(() =>
     seedPostingAccount(org.orgId, "4900", "Breakage income", "income_other"),
+  );
+  const bank2 = await withBypass(() =>
+    seedPostingAccount(org.orgId, "1090", "Scope second bank", "bank"),
   );
   await withBypass(async () => {
     await db.execute(sql`
@@ -119,6 +123,7 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
     secondId,
     date: org.date,
     bank: org.accounts.bank,
+    bank2,
     actorId,
     giftProgram: giftProgram.id,
     expiringProgram: expiringProgram.id,
@@ -522,7 +527,15 @@ test("a reused issuance key with a changed body is refused, while an unchanged r
       }),
     );
     assert.ok(first.code && !first.replayed);
-    const retry = (over: { amountMinor?: bigint; programId?: string }) =>
+    const retry = (over: {
+      amountMinor?: bigint;
+      programId?: string;
+      debitAccountId?: string;
+      expiresOn?: string | null;
+      postingDate?: string;
+      sourceDocumentId?: string | null;
+      sourceLineId?: string | null;
+    }) =>
       withOrgContext(fx.orgId, () =>
         issueStoredValue({
           orgId: fx.orgId,
@@ -538,15 +551,45 @@ test("a reused issuance key with a changed body is refused, while an unchanged r
           ...over,
         }),
       );
+    const conflict = (error: unknown) =>
+      error instanceof StoredValueError && error.code === "stored_value_idempotency_conflict";
     await assert.rejects(
       retry({ amountMinor: toUnits("41") }),
-      (error: unknown) => error instanceof StoredValueError && error.code === "stored_value_idempotency_conflict",
+      conflict,
       "a changed amount reuses the key and must not receive the first receipt",
     );
     await assert.rejects(
       retry({ programId: fx.expiringProgram }),
-      (error: unknown) => error instanceof StoredValueError && error.code === "stored_value_idempotency_conflict",
+      conflict,
       "a changed program reuses the key and must not receive the first receipt",
+    );
+    await assert.rejects(
+      retry({ debitAccountId: fx.bank2 }),
+      conflict,
+      "a changed funding account reuses the key and must not receive the first receipt",
+    );
+    await assert.rejects(
+      retry({ expiresOn: "2027-05-01" }),
+      conflict,
+      "a changed expiry reuses the key and must not receive the first receipt",
+    );
+    await assert.rejects(
+      retry({ sourceDocumentId: randomUUID() }),
+      conflict,
+      "a changed source document reuses the key and must not receive the first receipt",
+    );
+    await assert.rejects(
+      retry({ sourceLineId: randomUUID() }),
+      conflict,
+      "a changed source line reuses the key and must not receive the first receipt",
+    );
+    // A different calendar day in the same month: derived defaults never
+    // collide with it, so only an explicit change trips the conflict.
+    const otherDate = fx.date.endsWith("-02") ? `${fx.date.slice(0, -2)}03` : `${fx.date.slice(0, -2)}02`;
+    await assert.rejects(
+      retry({ postingDate: otherDate }),
+      conflict,
+      "a changed posting date reuses the key and must not receive the first receipt",
     );
     // Deactivating the program afterwards must not rewrite history: the
     // unchanged retry still replays the recorded effect.
@@ -554,6 +597,35 @@ test("a reused issuance key with a changed body is refused, while an unchanged r
       update stored_value_programs set is_active = false where id = ${fx.giftProgram} and org_id = ${fx.orgId}`));
     const replayed = await retry({});
     assert.equal(replayed.replayed, true);
+    assert.equal(replayed.code, null, "a replay never mints a second code");
+    assert.equal(replayed.accountId, first.accountId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("an unchanged default retry replays without restating derived dates", { skip: !DB }, async () => {
+  const fx = await seedScopeOrg();
+  try {
+    const scope = await liveScope(fx.orgId, fx.rootActor);
+    const key = `scope-default-${randomUUID()}`;
+    // No expiry, source, or posting date stated: all three derive from
+    // clock and config at mint time, and the retry states none either.
+    const body = {
+      orgId: fx.orgId,
+      allowedSubsidiaryIds: scope,
+      subsidiaryId: fx.subsidiaryId,
+      programId: fx.giftProgram,
+      amountMinor: toUnits("22"),
+      currency: "CAD",
+      debitAccountId: fx.bank,
+      idempotencyKey: key,
+      actorId: fx.rootActor,
+    };
+    const first = await withOrgContext(fx.orgId, () => issueStoredValue(body));
+    assert.ok(first.code && !first.replayed);
+    const replayed = await withOrgContext(fx.orgId, () => issueStoredValue(body));
+    assert.equal(replayed.replayed, true, "omitted defaults must not false-conflict on retry");
     assert.equal(replayed.code, null, "a replay never mints a second code");
     assert.equal(replayed.accountId, first.accountId);
   } finally {
