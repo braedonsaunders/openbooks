@@ -113,6 +113,13 @@ export interface T4127Input {
   labourFundsCreditFederal?: string;
   /** LCP — provincial analogue. */
   labourFundsCreditProvincial?: string;
+  /**
+   * Employer EI multiple for this employee's payroll program account: 1.4
+   * unless a CRA-approved reduced rate (wage-loss plan) applies. Entered as
+   * a decimal with up to 4 places, validated 1.0000–1.4000. Absent prices
+   * the statutory 1.4.
+   */
+  eiEmployerMultiple?: string;
 
   /** TC — federal TD1 total claim. Omit to use the BPAF formula default. */
   federalClaim?: string;
@@ -262,6 +269,36 @@ function bpamb(netIncome: bigint): bigint {
   return cap - mulRatioCents(netIncome - U("200000"), 15780n, 200000n);
 }
 
+/**
+ * The employer EI multiple for one payroll program account: the statutory
+ * 1.4 unless a CRA-approved reduced rate (wage-loss plan) was entered.
+ * Entered rates carry up to 4 decimal places inside 1.0000–1.4000; anything
+ * else refuses by name rather than pricing a guessed multiple.
+ */
+function assertEiEmployerMultiple(value: string | undefined, fallback: string): string {
+  if (value === undefined) return fallback;
+  const raw = value.trim();
+  const inRange = (candidate: string): boolean => {
+    const multiple = rate6(candidate);
+    return multiple >= rate6("1") && multiple <= rate6("1.4");
+  };
+  let valid = /^\d(\.\d{1,4})?$/.test(raw);
+  if (valid) {
+    try {
+      valid = inRange(raw);
+    } catch {
+      valid = false;
+    }
+  }
+  if (!valid) {
+    throw new PayrollError(
+      `employer EI multiple "${value}" must be a decimal with up to 4 places from 1.0000 to 1.4000 `
+      + "— enter the CRA-approved reduced rate for the payroll program account, or omit it for the statutory 1.4",
+    );
+  }
+  return raw;
+}
+
 function cppExemptionForP(periods: number): bigint {
   const canonical = CPP_EXEMPTION_BY_P[periods];
   if (canonical) return U(canonical);
@@ -330,7 +367,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const eiMax = U(isQuebec ? rates.ei.qcMaxEmployee : rates.ei.maxEmployee);
   const priorEi = opt(ytd.ei);
   const EI = input.eiExempt ? ZERO : max0(bmin(eiMax - priorEi, mulRateCents(IE, eiRate)));
-  const eiEmployer = mulRateCents(EI, rates.ei.employerMultiple);
+  const eiEmployer = mulRateCents(EI, assertEiEmployerMultiple(input.eiEmployerMultiple, rates.ei.employerMultiple));
   trace("EI", EI);
 
   // ---- QPIP (Quebec) -------------------------------------------------------

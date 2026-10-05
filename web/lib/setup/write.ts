@@ -17,7 +17,7 @@ import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/e
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { nonCashOffsetProblem } from '@openbooks/engine/payroll/setup'
-import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
+import { PAYROLL_COUNTRY_PACKS, defaultLevyExclusionsForNewComponent } from '@openbooks/engine/src/payroll/packs.ts'
 import { recognitionRulePolicyProblem } from '@openbooks/engine/src/revenue/recognition-limits.ts'
 import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
 // HR-18 begin: recruiting-depth Setup validation runs through the engine
@@ -449,6 +449,28 @@ function foldRecruitingSetupCreate(
   return rawBody
 }
 // HR-18 end
+
+// Create-time program-exclusion default for pay components. A non-taxable
+// earning created without an explicit exclusion list defaults to excluded
+// from every employer levy in its scope (a per-diem is not assessable);
+// folded before coercion like the recruiting default above. An explicitly
+// empty list is an operator's choice to assess and is left alone, and edits
+// never rewrite stored exclusions.
+export function foldPayComponentSetupCreate(
+  entityKey: string,
+  rawBody: Record<string, unknown>,
+): Record<string, unknown> {
+  if (entityKey !== 'pay-components') return rawBody
+  if (rawBody.kind !== 'earning') return rawBody
+  if (rawBody.programExclusions !== undefined) return rawBody
+  const exclusions = defaultLevyExclusionsForNewComponent({
+    kind: 'earning',
+    taxable: rawBody.taxable === undefined ? true : coerceBoolean(rawBody.taxable),
+    country: rawBody.country ? String(rawBody.country) : null,
+    programExclusions: undefined,
+  })
+  return exclusions ? { ...rawBody, programExclusions: exclusions } : rawBody
+}
 
 /** Domain checks that cannot be expressed by the generic field coercer. */
 export async function validateEntityIntegrity(
@@ -1958,7 +1980,8 @@ export async function createSetupRecord(
   }
 
   // HR-18: recruiting-depth create defaults fold before the generic coercion.
-  const recruitingBody = foldRecruitingSetupCreate(entity.key, rawBody)
+  // Pay-component levy exclusions fold on the same boundary.
+  const recruitingBody = foldPayComponentSetupCreate(entity.key, foldRecruitingSetupCreate(entity.key, rawBody))
   // The review-template fold is the one input boundary that refuses: a
   // scale bound no decimal reading accepts fails here as a 400 before
   // buildRow or the storage CHECK ever sees it.

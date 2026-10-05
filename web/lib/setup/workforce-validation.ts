@@ -102,3 +102,45 @@ export const validateServiceTier: SetupEntityValidationHook = async ({ body, org
   try { await validateEntitlementServiceTierConfiguration(executor, orgId, body, rowId); return null }
   catch (error) { if (error instanceof PayrollError) return error.message; throw error }
 }
+
+/**
+ * One active department expense mapping per component, department and date.
+ * An overlapping active window refuses with the remedy (close the existing
+ * window first) rather than storing two accounts for one posting. The
+ * range-exclusion constraint is the backstop for writers around this hook.
+ */
+export const validateDepartmentExpenseWrite: SetupEntityValidationHook = async ({ body, orgId, rowId, executor }) => {
+  const { sql } = await import('drizzle-orm')
+  const current = rowId
+    ? (await executor.execute<{
+      pay_component_id: string | null; department_id: string | null;
+      effective_from: string | null; effective_to: string | null;
+    }>(
+      sql`select pay_component_id, department_id, effective_from::text, effective_to::text
+            from pay_component_department_expenses where id = ${rowId} and org_id = ${orgId}`,
+    )).rows[0]
+    : null
+  if (rowId && !current) return 'Department expense mapping no longer exists; reopen pay-component setup'
+  const componentId = body.payComponentId === undefined || body.payComponentId === null
+    ? current?.pay_component_id : String(body.payComponentId)
+  const departmentId = body.departmentId === undefined || body.departmentId === null
+    ? current?.department_id : String(body.departmentId)
+  const from = body.effectiveFrom === undefined || body.effectiveFrom === null
+    ? current?.effective_from : String(body.effectiveFrom)
+  const through = body.effectiveTo === undefined
+    ? current?.effective_to ?? null
+    : body.effectiveTo === null ? null : String(body.effectiveTo)
+  if (!componentId || !departmentId || !from) return null
+  const clashes = (await executor.execute<{ id: string }>(sql`
+    select id from pay_component_department_expenses
+     where org_id = ${orgId} and is_active
+       and pay_component_id = ${componentId}::uuid and department_id = ${departmentId}::uuid
+       and daterange(effective_from, coalesce(effective_to, 'infinity'::date), '[]')
+         && daterange(${from}::date, coalesce(${through}::date, 'infinity'::date), '[]')
+       and (${rowId ?? null}::uuid is null or id <> ${rowId ?? null}::uuid)
+  `)).rows
+  if (clashes.length > 0) {
+    return 'This component and department already have an active expense mapping overlapping those dates — close the existing window first (set its effective-to), then add the new one.'
+  }
+  return null
+}

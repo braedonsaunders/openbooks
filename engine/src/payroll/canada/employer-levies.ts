@@ -114,6 +114,25 @@ const CNT_RATE_2026 = "0.06";
 const CNT_MAX_2026 = "103000";
 
 /**
+ * One levy key's assessable base: the earning lines assessable for it.
+ * Applicability rides the lines from the component's `program_exclusions`
+ * (absent key means assessable, matching the sibling flags' default-true);
+ * a non-taxable earning type defaults to excluded through its STORED
+ * exclusions, never through a rule here. Accrual-only lines accrue no
+ * premium. Pure, so the exclusion semantics are verifiable without a
+ * database.
+ */
+export function levyAssessableBase(
+  lines: readonly Pick<PayrollEmployerLevyContext["lines"][number],
+    "kind" | "amount" | "accrualOnly" | "programApplicability">[],
+  programKey: string,
+): string {
+  return sum(lines.filter((l) =>
+    l.kind === "earning" && !l.accrualOnly
+    && (l.programApplicability?.[programKey] ?? true)).map((l) => l.amount));
+}
+
+/**
  * Phase 8 — CA pack earnings-assessed employer levies: WCB/WSIB, provincial
  * EHT, the Québec health services fund (TP-1015.F-V s. 5), and the Québec
  * contribution related to labour standards (CNT).
@@ -126,8 +145,9 @@ export async function applyCaEmployerLevies(
   } = ctx;
   const config = await caPayrollConfig(orgId, taxYear, ctx.payDate ?? null);
 
-  const grossEarnings = () =>
-    sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+  // Each levy assesses its OWN earnings base (see `levyAssessableBase`
+  // below): the earning lines assessable for that levy key.
+  const assessableFor = (programKey: string) => levyAssessableBase(lines, programKey);
 
   // Kernel-exact legs throughout (sum / add / mulPercent outputs, or zero):
   // typed Money so the factors struct is proven at every assignment.
@@ -170,22 +190,25 @@ export async function applyCaEmployerLevies(
          and (r.run_status = 'committed'
               or s.pay_run_document_id = ${documentId})
     `))).rows[0]!.prior;
-    const gross = grossEarnings();
+    const assessable = assessableFor("wcb");
     const room = wcb.max_assessable
       ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
-      : gross;
-    wcbAssessable = (cmp(gross, room) <= 0 ? gross : room) as Money;
+      : assessable;
+    wcbAssessable = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
     if (cmp(wcbAssessable, "0") > 0) {
       wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2) as Money;
-      // Aggregate tagged earning lines by costing target (project + department):
-      // hourly earnings post one line per DAY since dated lookbacks, but WSIB
-      // assesses earnings and the stub allocates the premium by project — one
-      // split per day-line would multiply WCB lines (four for two projects)
-      // while the premium total stays identical. First-appearance order is
-      // kept so the last-project remainder rule below stays stable.
+      // Aggregate tagged ASSESSABLE earning lines by costing target (project +
+      // department): hourly earnings post one line per DAY since dated
+      // lookbacks, but WSIB assesses earnings and the stub allocates the
+      // premium by project — one split per day-line would multiply WCB lines
+      // (four for two projects) while the premium total stays identical.
+      // Excluded earning types carry no premium, so they carry no allocation
+      // either. First-appearance order is kept so the last-project remainder
+      // rule below stays stable.
       const byTarget = new Map<string, { amount: string; projectId: string; departmentId: string | null }>();
       for (const line of lines) {
         if (line.kind !== "earning" || line.accrualOnly || !line.projectId) continue;
+        if (!(line.programApplicability?.["wcb"] ?? true)) continue;
         const key = `${line.projectId}|${line.departmentId ?? ""}`;
         const seen = byTarget.get(key);
         if (seen) seen.amount = add(seen.amount, line.amount);
@@ -198,14 +221,14 @@ export async function applyCaEmployerLevies(
         }
       }
       const splits = [...byTarget.values()];
-      const grossUnits = toUnits(gross);
+      const assessableUnits = toUnits(assessable);
       const allocations: StatutoryAllocation[] = [];
       let allocated = "0";
-      const allTagged = cmp(sum(splits.map((s) => s.amount)), gross) === 0;
+      const allTagged = cmp(sum(splits.map((s) => s.amount)), assessable) === 0;
       for (const [index, split] of splits.entries()) {
         const share = index === splits.length - 1 && allTagged
           ? add(wcbAmount, neg(allocated))
-          : roundMoney(mulRatio(wcbAmount, toUnits(split.amount), grossUnits), 2);
+          : roundMoney(mulRatio(wcbAmount, toUnits(split.amount), assessableUnits), 2);
         if (cmp(share, "0") === 0) continue;
         allocated = add(allocated, share);
         allocations.push({
@@ -231,7 +254,7 @@ export async function applyCaEmployerLevies(
 
   const eht = config.eht(region);
   if (eht) {
-    ehtEarnings = grossEarnings() as Money;
+    ehtEarnings = assessableFor("eht") as Money;
     if (cmp(ehtEarnings, "0") > 0) {
       // Committed runs only (see `ehtExemptionConsumedByRunStatus`, which
       // this literal mirrors — SQL cannot call it): a calculated run is a
@@ -295,8 +318,8 @@ export async function applyCaEmployerLevies(
   }
 
   // Québec health services fund (TP-1015.F-V s. 5): employment income is
-  // generally subject, so the stub's gross earnings, with no exemption and
-  // no cap. QC-gated twice: the region check below, and the ca_hsf slot
+  // generally subject, so the stub's assessable earnings, with no exemption
+  // and no cap. QC-gated twice: the region check below, and the ca_hsf slot
   // which refuses a rate row for any other province at the write boundary.
   // The statutory formula prices the employer's year-to-date rate and each
   // Stub books the cumulative true-up: crossing $1M mid-year
@@ -305,7 +328,7 @@ export async function applyCaEmployerLevies(
   if (region === "QC") {
     const hsf = config.hsf(region);
     if (hsf) {
-      hsfEarnings = grossEarnings() as Money;
+      hsfEarnings = assessableFor("hsf") as Money;
       if (cmp(hsfEarnings, "0") > 0) {
         const classes = (hsf.sectorOther ? 1 : 0)
           + (hsf.sectorPublic ? 1 : 0)
@@ -377,7 +400,7 @@ export async function applyCaEmployerLevies(
   // Québec contribution related to labour standards (CNT): 0.06% of the
   // remuneration subject to $103,000 per employee per year for 2026, minus
   // the statutory exemption classes (LE-39.0.2-V; RQ contribution page).
-  // Employment income is generally subject, so the stub's gross earnings.
+  // Employment income is generally subject, so the stub's assessable earnings.
   // The cap binds committed stubs plus the run being calculated (WCB shape:
   // committed-only counting lets two drafts each claim the full room).
   // Pre-adoption remuneration has no CNT carry-in column yet: a mid-year
@@ -413,9 +436,9 @@ export async function applyCaEmployerLevies(
            and (r.run_status = 'committed'
                 or s.pay_run_document_id = ${documentId})
       `))).rows[0]!.prior;
-      const gross = grossEarnings();
+      const assessable = assessableFor("cnt");
       const room = cmp(CNT_MAX_2026, priorCnt) > 0 ? add(CNT_MAX_2026, neg(priorCnt)) : "0";
-      cntEarnings = (cmp(gross, room) <= 0 ? gross : room) as Money;
+      cntEarnings = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
       if (cmp(cntEarnings, "0") > 0) {
         cntAmount = mulPercent(cntEarnings, CNT_RATE_2026, 2) as Money;
         pushStatutory("cnt", "employer_contribution", "Contribution related to labour standards (CNT)", cntAmount, 285);

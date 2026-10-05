@@ -2666,6 +2666,10 @@
         "title": "Groupes accidents du travail",
         "description": "Groupes de taux d'indemnisation des accidentés du travail pour le coût de la main-d'œuvre."
       },
+      "pay-component-department-expenses": {
+        "title": "Comptes de charge par service",
+        "description": "Comptes de charge par composante et par service : un même gain est comptabilisé sur des comptes différents selon le service du salarié."
+      },
       "asset-categories": {
         "title": "Catégories d'actifs",
         "description": "Méthode d'amortissement et comptes par défaut pour les immobilisations."

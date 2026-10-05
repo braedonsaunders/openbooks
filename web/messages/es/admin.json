@@ -2666,6 +2666,10 @@
         "title": "Grupos de compensación laboral",
         "description": "Grupos de tasas de compensación laboral para el costeo de mano de obra."
       },
+      "pay-component-department-expenses": {
+        "title": "Cuentas de gasto por departamento",
+        "description": "Cuentas de gasto por componente y departamento: la misma percepción se contabiliza en distintas cuentas según el departamento del trabajador."
+      },
       "asset-categories": {
         "title": "Categorías de activos",
         "description": "Método de depreciación y cuentas predeterminados para activos fijos."

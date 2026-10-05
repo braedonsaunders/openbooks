@@ -1369,7 +1369,11 @@ export async function payRunStaleness(
            -- read them fresh on every statutory pass, so an edit after
            -- Calculate restates the levies. Scoped to the countries on the
            -- run's schedule: a US rate edit is not a Canadian run's news.
-           exists (
+           -- Pack-declared employer facts ride the same arm: the EI employer
+           -- multiple, the CNT exemption class and every other effective-dated
+           -- fact are read fresh on every pass, so an edit after Calculate
+           -- restates the stub exactly like a rate edit does.
+           (exists (
              select 1 from payroll_statutory_rates sr
               where sr.org_id = r.org_id and sr.updated_at > r.calculated_at
                 and exists (
@@ -1377,7 +1381,16 @@ export async function payRunStaleness(
                    where prof.org_id = r.org_id
                      and prof.pay_schedule_id = r.pay_schedule_id
                      and prof.is_active and prof.country = sr.country)
-           ) as statutory_rates_changed,
+           )
+           or exists (
+             select 1 from payroll_employer_facts ef
+              where ef.org_id = r.org_id and ef.updated_at > r.calculated_at
+                and exists (
+                  select 1 from employee_payroll_profiles prof
+                   where prof.org_id = r.org_id
+                     and prof.pay_schedule_id = r.pay_schedule_id
+                     and prof.is_active and prof.country = ef.country)
+           )) as statutory_rates_changed,
            -- Union agreements and fringe rates price stub lines fresh on
            -- every pass, and a pure rate change touches only the fringe row
            -- (the component-definition arm never fires). Scoped to the
@@ -1426,10 +1439,16 @@ export async function payRunStaleness(
               where epc.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
                 and epc.updated_at > r.calculated_at) as components_changed,
            -- The component DEFINITIONS themselves (rate, taxability,
-           -- pensionable/insurable flags, liability account).
-           exists (
+           -- pensionable/insurable flags, liability account), and the
+           -- per-component department expense mapping: a mapping edited
+           -- after Calculate restates the GL projection, which the line
+           -- stamp froze at calculate time.
+           (exists (
              select 1 from pay_components c
               where c.org_id = r.org_id and c.updated_at > r.calculated_at)
+           or exists (
+             select 1 from pay_component_department_expenses m
+              where m.org_id = r.org_id and m.updated_at > r.calculated_at))
              as component_definitions_changed,
            exists (
              select 1 from pay_derived_rules dr

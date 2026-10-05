@@ -317,6 +317,35 @@ for (const row of GOLDENS) {
   });
 }
 
+test("a reduced employer EI multiple prices the employee premium times the multiple", () => {
+  // The 2024 Ontario biweekly $2,000 hand-worked stub prices EI 33.20 and
+  // 46.48 at the statutory 1.4. At a CRA-approved 1.167 the same premium
+  // prices 33.20 x 1.167 = 38.7444, half-up to 38.74.
+  const reduced = calculateT4127({
+    payDate: "2024-02-13", ...on26, income: "2000.00", eiEmployerMultiple: "1.167",
+  });
+  assert.equal(reduced.ei, money("33.20"));
+  assert.equal(reduced.eiEmployer, money("38.74"));
+  const standard = calculateT4127({ payDate: "2024-02-13", ...on26, income: "2000.00" });
+  assert.equal(standard.eiEmployer, money("46.48"));
+});
+
+test("an employer EI multiple outside 1.0000-1.4000 or past 4 places refuses", () => {
+  const bad: [string, string][] = [
+    ["1.16755", "five places"],
+    ["1.5", "above the statutory multiple"],
+    ["0.9999", "below one"],
+    ["abc", "not a number"],
+  ];
+  for (const [multiple, label] of bad) {
+    assert.throws(
+      () => calculateT4127({ payDate: "2024-02-13", ...on26, income: "2000.00", eiEmployerMultiple: multiple }),
+      /employer EI multiple/,
+      label,
+    );
+  }
+});
+
 test("edition resolution by pay date", () => {
   const EDITIONS: [string, Edition][] = [
     ["2024-01-01", 119], ["2024-12-31", 119], ["2025-01-01", 120], ["2025-06-30", 120],

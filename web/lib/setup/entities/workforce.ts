@@ -374,14 +374,18 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'taxable', kind: 'boolean', defaultValue: true },
       { key: 'pensionable', kind: 'boolean', defaultValue: true },
       { key: 'insurable', kind: 'boolean', defaultValue: true },
-      // Contribution programs this earning does NOT feed, as program keys
-      // (engine/src/payroll/packs.ts `contributionPrograms` — today only the
-      // CA pack's `qpip`). Empty feeds every declared program, matching the
-      // sibling flags' default-true; a key no pack declares is inert on runs.
-      // Chip input with type-ahead over the packs' declared programs (free
-      // entry for the rest). Earnings-only: the accumulation reads
-      // applicability on earning lines alone, so offering it on a deduction
-      // would be a setting that changes nothing (the protection precedent).
+      // Contribution programs and employer levies this earning does NOT feed,
+      // as program keys (the packs' `contributionPrograms`, e.g. the CA
+      // pack's `qpip`, plus their `employerLevyPrograms`: `wcb`, `eht`,
+      // `hsf`, `cnt` for Canada). Empty feeds every declared program,
+      // matching the sibling flags' default-true; a key no pack declares
+      // is inert on runs. A non-taxable earning created without exclusions
+      // defaults to excluded from every levy in its scope; a taxable
+      // earning — cash or non-cash — defaults to assessable. Chip input
+      // with type-ahead over the packs' declared programs (free entry for
+      // the rest). Earnings-only: the accumulation reads applicability on
+      // earning lines alone, so offering it on a deduction would be a
+      // setting that changes nothing (the protection precedent).
       {
         key: 'programExclusions', kind: 'stringArray', arrayStorage: 'text',
         optionsSource: 'payroll-contribution-programs',
@@ -459,6 +463,40 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'remittancePartyId', kind: 'ref', ref: 'vendors' },
       { key: 'sequence', kind: 'integer', keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Per-component department expense accounts: the same earning, levy or
+    // benefit posts to different expense accounts by worker department.
+    // A child list of the pay-component surface — one active mapping per
+    // component, department and date — rehomed onto the Payroll setup
+    // workspace beside Components. Overlapping windows refuse here with
+    // the remedy; the range exclusion is the backstop for direct writers.
+    key: 'pay-component-department-expenses',
+    table: 'pay_component_department_expenses',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    rehomed: true, // child list of the Payroll setup workspace Components tab
+    iconKey: 'coins',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'effective_from desc',
+    hasActive: true,
+    columns: [
+      { key: 'payComponentId', kind: 'ref', ref: 'pay-components' },
+      { key: 'departmentId', kind: 'ref', ref: 'departments' },
+      { key: 'expenseAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'payComponentId', kind: 'ref', ref: 'pay-components', required: true },
+      { key: 'departmentId', kind: 'ref', ref: 'departments', required: true },
+      { key: 'expenseAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'effectiveFrom', kind: 'date', required: true },
+      { key: 'effectiveTo', kind: 'date' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },

@@ -2749,6 +2749,10 @@
         "title": "工伤保险组",
         "description": "用于人工成本核算的工伤补偿费率组。"
       },
+      "pay-component-department-expenses": {
+        "title": "部门费用科目",
+        "description": "按组成部分和部门设置的费用科目：同一项收入按员工所在部门计入不同科目。"
+      },
       "asset-categories": {
         "title": "资产类别",
         "description": "固定资产的默认折旧方法和科目。"

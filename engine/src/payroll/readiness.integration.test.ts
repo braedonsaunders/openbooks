@@ -147,6 +147,80 @@ describe("readiness-levy-scope", () => {
     }
   });
 
+  test("an employer fact recorded after Calculate stales the run like a rate edit", { skip: !DB }, async () => {
+    // Pack-declared employer facts (the EI employer multiple, the CNT
+    // exemption class) price fresh on every statutory pass, so a value
+    // recorded after Calculate restates the stub: the commit must refuse
+    // until the run recalculates.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await setup(org.orgId, actorId);
+      const schedule = await makeSchedule(org.orgId, actorId);
+      await makeEmployee(org.orgId, actorId, schedule, "Amy CA", "CA", "ON");
+      const run = await makeRun(org.orgId, actorId, schedule);
+      const { calculatePayRun } = await import("./run-calculation.ts");
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const before = await payRunStaleness(org.orgId, run.documentId);
+      assert.ok(!before.reasons.includes("statutoryRates"));
+      const accountId = randomUUID();
+      await db.execute(sql`
+        insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
+                                             remitter_type, is_default, is_active, created_by, updated_by)
+        values (${accountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'RP account', 'regular',
+                true, true, ${actorId}, ${actorId})`);
+      const { upsertPayrollEmployerFact } = await import("./employer-fact-store.ts");
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId, actorId, country: "CA", factKey: "ei_employer_multiplier",
+        filingAccountId: accountId, effectiveFrom: "2026-01-01", value: "1.167",
+        changeReason: "CRA-approved reduced rate for the account wage-loss plan.",
+      });
+      const after = await payRunStaleness(org.orgId, run.documentId);
+      assert.ok(after.reasons.includes("statutoryRates"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
+
+  test("a department expense mapping edited after Calculate stales the run", { skip: !DB }, async () => {
+    // The line stamp froze the GL projection at calculate time, so a
+    // mapping edit after Calculate restates it: the commit must refuse
+    // until the run recalculates.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await setup(org.orgId, actorId);
+      const schedule = await makeSchedule(org.orgId, actorId);
+      await makeEmployee(org.orgId, actorId, schedule, "Amy CA", "CA", "ON");
+      const run = await makeRun(org.orgId, actorId, schedule);
+      const { calculatePayRun } = await import("./run-calculation.ts");
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const fresh = await payRunStaleness(org.orgId, run.documentId);
+      assert.ok(!fresh.reasons.includes("componentDefinitions"));
+      const componentId = (await db.execute<{ id: string }>(sql`
+        select id from pay_components
+         where org_id = ${org.orgId} and code = 'BASE' and country is null`)).rows[0]!.id;
+      const departmentId = (await db.execute<{ id: string }>(sql`
+        insert into departments (id, org_id, code, name, is_active)
+        values (gen_random_uuid(), ${org.orgId}, 'OVERHEAD', 'Overhead', true) returning id`)).rows[0]!.id;
+      const accountId = (await db.execute<{ id: string }>(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                              reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (gen_random_uuid(), ${org.orgId}, '8010', 'Overhead wages', 'expense', false, true,
+                false, false, '[]'::jsonb, '{}'::jsonb, true) returning id`)).rows[0]!.id;
+      await db.execute(sql`
+        insert into pay_component_department_expenses
+               (org_id, pay_component_id, department_id, expense_account_id,
+                effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${componentId}, ${departmentId}, ${accountId},
+                '2026-01-01', true, ${actorId}, ${actorId})`);
+      const stale = await payRunStaleness(org.orgId, run.documentId);
+      assert.ok(stale.reasons.includes("componentDefinitions"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
+
   test("a terminated roster arms nothing, so a later CA commit does not stale it", { skip: !DB }, async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;

@@ -2,6 +2,24 @@ import type { PayrollEmployerFact } from "../employer-facts.ts";
 
 export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
   {
+    key: "ei_employer_multiplier",
+    kind: "decimal",
+    scale: 4,
+    min: "1",
+    max: "1.4",
+    label: "Employer EI rate multiple",
+    refusalReason:
+      "the employer share prices at 1.4 times the employee premium unless the CRA approved a reduced "
+      + "rate for this payroll program account — without the account's multiple the share cannot be priced",
+    legalBasis:
+      "CRA payroll: employers with a qualifying wage-loss replacement plan pay a CRA-approved reduced "
+      + "employer EI rate; every other employer pays 1.4 times the employee premium",
+    required: false,
+    effectivePeriod: "date",
+    scope: "filing_account",
+    filingProgramType: "ca_rp",
+  },
+  {
     key: "cnt_exemption",
     kind: "choice",
     label: "Québec CNT contribution exemption class",
