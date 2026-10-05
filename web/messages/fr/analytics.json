@@ -3596,7 +3596,9 @@
         "message": "La distribution du premier chiffre dévie significativement"
       },
       "trapUnavailable": "Aucune limite de montant d’approbation dans Flows — ajoutez-en une ou réglez la bande dans Sentinel → Configuration.",
-      "duplicateFloorUnset": "Définissez le minimum des doublons dans Sentinel → Configuration."
+      "duplicateFloorUnset": "Définissez le minimum des doublons dans Sentinel → Configuration.",
+      "rsfFloorUnset": "Définissez le plancher de base de la taille relative dans Sentinel → Configuration.",
+      "zscoreFloorUnset": "Définissez le plancher de bruit du score Z dans Sentinel → Configuration."
     },
     "analysis": {
       "calendar": "Calendrier",
@@ -3749,7 +3751,11 @@
     "detectors": {
       "auditEvents": "Événements d’audit",
       "duplicates": "Doublons",
-      "ghostVendors": "Fournisseurs fantômes"
+      "ghostVendors": "Fournisseurs fantômes",
+      "trap": "Piège-99",
+      "rsf": "RSF",
+      "zscore": "Score Z",
+      "amountTiers": "Paliers de montants"
     },
     "drill": {
       "documentsTotal": "{count} documents · {total}",
@@ -3854,7 +3860,8 @@
       "elevated": "ÉLEVÉ",
       "high": "RISQUE ÉLEVÉ",
       "low": "RISQUE FAIBLE",
-      "moderate": "MODÉRÉ"
+      "moderate": "MODÉRÉ",
+      "excludedNote": "Le score exclut les entrées non configurées : {detectors}. Configurez-les dans Sentinel → Configuration pour une couverture complète."
     },
     "sequential": {
       "indicatorNote1": " si les numéros de facture d’un fournisseur à votre égard sont parfaitement séquentiels sur des semaines ou des mois, vous êtes probablement son ",

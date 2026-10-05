@@ -88,14 +88,15 @@ function fixture(): SentinelData {
       benford2DConformity: 'acceptable',
       approvalLimitRisk: false,
       topRiskAreas: [],
+      excludedDetectors: [],
     },
     duplicates: { total: 0, pairs: [], groups: [], unavailable: null },
     benford1D: { totalTransactions: 1, digits: [], mad: 0, conformity: 'acceptable', message: '', byCurrency: [] },
     benford2D: { totalTransactions: 1, digits: [], anomalies: [], mad: 0, conformity: 'acceptable', byCurrency: [] },
     thresholdTrap: { total: 0, totalAmount: '0.0000', byTrap: [], items: [], unavailable: null },
     weekend: { total: 0, totalAmount: '0.0000', saturday: 0, sunday: 0, items: [] },
-    rsf: { total: 0, items: [] },
-    zscore: { total: 0, items: [] },
+    rsf: { total: 0, items: [], unavailable: null },
+    zscore: { total: 0, items: [], unavailable: null },
     sequential: [],
     ghosts: [],
     auditTrail: { total: 0, deletes: 0, sensitiveChanges: 0, events: [] },
@@ -276,6 +277,35 @@ test('duplicate tab names the missing floor', async () => {
     assert.ok(
       (host.textContent ?? '').includes('Set the duplicate minimum in Sentinel → Configuration.'),
       'the duplicate refusal and its remedy must reach the operator',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+// Unset noise floors exclude their detectors by name — never a silent zero —
+// and the score names every skipped source.
+test('analysis tabs name the missing floors and the score names exclusions', async () => {
+  const data = fixture()
+  data.rsf.unavailable = 'Set the relative-size baseline floor in Sentinel → Configuration.'
+  data.zscore.unavailable = 'Set the z-score noise floor in Sentinel → Configuration.'
+  data.summary.excludedDetectors = ['Duplicates', '99-Trap', 'RSF', 'Z-Score', 'Amount tiers']
+  const { host, unmount } = await mount(data)
+  try {
+    assert.ok(
+      (host.textContent ?? '').includes('Score excludes unconfigured inputs: Duplicates, 99-Trap, RSF, Z-Score, Amount tiers.'),
+      'the score must name every skipped scoring source',
+    )
+    await clickButton(host, (text) => text.startsWith('Analysis'), 'the analysis tab')
+    await clickButton(host, (text) => text.includes('Relative Size'), 'the rsf sub-tab')
+    assert.ok(
+      (host.textContent ?? '').includes('Set the relative-size baseline floor in Sentinel → Configuration.'),
+      'the rsf refusal and its remedy must reach the operator',
+    )
+    await clickButton(host, (text) => text.includes('Z-Score'), 'the zscore sub-tab')
+    assert.ok(
+      (host.textContent ?? '').includes('Set the z-score noise floor in Sentinel → Configuration.'),
+      'the zscore refusal and its remedy must reach the operator',
     )
   } finally {
     await unmount()

@@ -288,6 +288,12 @@ export function SentinelView({ data: initialData, canConfigure }: { data: Sentin
         <KpiCard icon={BarChart3} accent={s.benfordConformity === 'nonConforming' ? 'red' : s.benfordConformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.benford')} value={conformLabel(s.benfordConformity)} sub={t('sub.twoD', { value: conformLabel(s.benford2DConformity) })} />
         <KpiCard icon={ShieldAlert} accent={s.ghostCount + s.sequentialGroups > 0 ? 'red' : 'emerald'} label={t('kpi.shellSignals')} value={num(s.ghostCount + s.sequentialGroups)} sub={t('sub.ghostsSequential', { ghosts: s.ghostCount, sequential: s.sequentialGroups })} tone={s.ghostCount + s.sequentialGroups > 0 ? 'negative' : 'positive'} />
       </div>
+      {s.excludedDetectors.length > 0 ? (
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>{t('risk.excludedNote', { detectors: s.excludedDetectors.join(', ') })}</span>
+        </p>
+      ) : null}
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detection' ? s.flaggedCount : undefined }))} active={tab} onChange={setTab}>
       <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
@@ -669,6 +675,12 @@ function AnalysisTab({ data }: { data: SentinelData }) {
             <Info size={14} className="mt-0.5 shrink-0" />
             <span><span className="font-semibold">{t('flag.rsf')}</span>{t('analysis.rsfNote', { months: data.config.baselineMonths, threshold: data.config.rsfThreshold })}</span>
           </p>
+          {data.rsf.unavailable ? (
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{data.rsf.unavailable}</span>
+            </p>
+          ) : null}
           <Panel title={t('panels.rsfAnomalies', { count: num(data.rsf.total) })} icon={Scale} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
               <SharedTable className="w-full text-sm">
@@ -710,6 +722,12 @@ function AnalysisTab({ data }: { data: SentinelData }) {
             <Info size={14} className="mt-0.5 shrink-0" />
             <span><span className="font-semibold">{t('analysis.zscoreWord')}</span>{t('analysis.zscoreNote', { months: data.config.baselineMonths, threshold: data.config.zscoreThreshold })}</span>
           </p>
+          {data.zscore.unavailable ? (
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{data.zscore.unavailable}</span>
+            </p>
+          ) : null}
           <Panel title={t('panels.zscoreAnomalies', { count: num(data.zscore.total) })} icon={Sigma} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
               <SharedTable className="w-full text-sm">

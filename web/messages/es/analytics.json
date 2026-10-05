@@ -3596,7 +3596,9 @@
         "message": "La distribución del primer dígito se desvía significativamente"
       },
       "trapUnavailable": "Sin límites de importe de aprobación en Flows — crea uno o ajusta la banda en Sentinel → Configuración.",
-      "duplicateFloorUnset": "Define el mínimo de duplicados en Sentinel → Configuración."
+      "duplicateFloorUnset": "Define el mínimo de duplicados en Sentinel → Configuración.",
+      "rsfFloorUnset": "Define el suelo base del tamaño relativo en Sentinel → Configuración.",
+      "zscoreFloorUnset": "Define el suelo de ruido de la puntuación Z en Sentinel → Configuración."
     },
     "analysis": {
       "calendar": "Calendario",
@@ -3749,7 +3751,11 @@
     "detectors": {
       "auditEvents": "Eventos de auditoría",
       "duplicates": "Duplicados",
-      "ghostVendors": "Proveedores fantasma"
+      "ghostVendors": "Proveedores fantasma",
+      "trap": "Trampa-99",
+      "rsf": "RSF",
+      "zscore": "Punt. Z",
+      "amountTiers": "Tramos de importe"
     },
     "drill": {
       "documentsTotal": "{count} documentos · {total}",
@@ -3854,7 +3860,8 @@
       "elevated": "ELEVADO",
       "high": "RIESGO ALTO",
       "low": "RIESGO BAJO",
-      "moderate": "MODERADO"
+      "moderate": "MODERADO",
+      "excludedNote": "La puntuación excluye las entradas sin configurar: {detectors}. Configúralas en Sentinel → Configuración para una cobertura completa."
     },
     "sequential": {
       "indicatorNote1": " si los números de factura de un proveedor hacia ti son perfectamente secuenciales durante semanas o meses, probablemente seas su ",

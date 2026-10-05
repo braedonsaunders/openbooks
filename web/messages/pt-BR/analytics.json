@@ -3596,7 +3596,9 @@
         "message": "A distribuição do primeiro dígito desvia significativamente"
       },
       "trapUnavailable": "Sem limites de valor de aprovação no Flows — adicione um ou ajuste a faixa em Sentinel → Configuração.",
-      "duplicateFloorUnset": "Defina o mínimo de duplicados em Sentinel → Configuração."
+      "duplicateFloorUnset": "Defina o mínimo de duplicados em Sentinel → Configuração.",
+      "rsfFloorUnset": "Defina o piso de referência do tamanho relativo em Sentinel → Configuração.",
+      "zscoreFloorUnset": "Defina o piso de ruído do Z-score em Sentinel → Configuração."
     },
     "analysis": {
       "calendar": "Calendário",
@@ -3749,7 +3751,11 @@
     "detectors": {
       "auditEvents": "Eventos de auditoria",
       "duplicates": "Duplicados",
-      "ghostVendors": "Fornecedores fantasmas"
+      "ghostVendors": "Fornecedores fantasmas",
+      "trap": "Armadilha 99",
+      "rsf": "RSF",
+      "zscore": "Z-score",
+      "amountTiers": "Faixas de valor"
     },
     "drill": {
       "documentsTotal": "{count} documentos · {total}",
@@ -3854,7 +3860,8 @@
       "elevated": "ELEVADO",
       "high": "ALTO RISCO",
       "low": "BAIXO RISCO",
-      "moderate": "MODERADO"
+      "moderate": "MODERADO",
+      "excludedNote": "A pontuação exclui entradas não configuradas: {detectors}. Configure-as em Sentinel → Configuração para cobertura total."
     },
     "sequential": {
       "indicatorNote1": " se as notas de um fornecedor para você forem perfeitamente sequenciais por semanas ou meses, você provavelmente é o ",
