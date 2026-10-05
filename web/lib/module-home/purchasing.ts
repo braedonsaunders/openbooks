@@ -343,10 +343,10 @@ export async function purchasingHome(
   // open-line count over the same as-of item set.
   const apSummary = summariseSide(apItems, parseISO(today), '0.0000', 0)
   const apOutstanding = apSummary.outstanding
-  // Buckets match by index, never by label: summariseSide builds Current
-  // first by construction, so a relabelled "Current" bucket cannot hide
-  // past-due money in the current column here.
-  const apCurrent = apSummary.buckets[0]?.amount ?? '0'
+  // Buckets match by declared index, never by array position or label:
+  // summariseSide stamps index 0 = Current, so a reordered or relabelled
+  // bucket cannot hide past-due money in the current column here.
+  const apCurrent = apSummary.buckets.find((bucket) => bucket.index === 0)?.amount ?? '0'
   const apOverdue = cmp(apOutstanding, apCurrent) > 0 ? add(apOutstanding, mulDecimal(apCurrent, '-1')) : '0'
   let openBills = 0
   let dueNext7 = '0'

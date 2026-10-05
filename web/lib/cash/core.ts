@@ -95,6 +95,13 @@ export type Side = "ar" | "ap";
 export interface Bucket {
   label: string;
   amount: Money;
+  /**
+   * Position in the fixed aging ladder (0 = Current, 1 = 1–30, 2 = 31–60,
+   * 3 = 61–90, 4 = 90+): readers select the bucket they mean by index,
+   * never by position in the array or by matching the label, so a
+   * relabelled bucket cannot hide past-due money in the current column.
+   */
+  index: number;
 }
 export interface ForecastEntry {
   id: string;
@@ -1476,7 +1483,7 @@ export function summariseSide(items: OpenItem[], asOf: Date, scheduled: Money, a
     scheduled,
     pctCurrent: compareMoney(outstanding, ZERO_MONEY) > 0 ? divideMoney(current, outstanding) : ZERO_MONEY,
     avgDays,
-    buckets: [...buckets.entries()].map(([label, amount]) => ({ label, amount })),
+    buckets: [...buckets.entries()].map(([label, amount], index) => ({ label, amount, index })),
   };
 }
 
