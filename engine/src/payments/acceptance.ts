@@ -421,7 +421,10 @@ export interface OffSessionChargeRequest {
   amount: string;
   currency: string;
   description: string;
-  /** The collection attempt id: charges are idempotent per attempt. */
+  /**
+   * Stable per collection position (invoice and retry position), so a replay
+   * after an interrupted run returns the first charge instead of a second.
+   */
   idempotencyKey: string;
 }
 
