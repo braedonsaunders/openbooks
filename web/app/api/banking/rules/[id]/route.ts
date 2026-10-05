@@ -22,7 +22,7 @@ export const DELETE = defineRoute({
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
     const missing = await db.transaction(async (tx) => {
-        await lockBankMatchRuleSet(user.orgId)
+        await lockBankMatchRuleSet(tx, user.orgId)
         // Snapshot the rule first: deletion removes the record of what used to
         // auto-categorize bank lines.
         const existing = (await tx.execute<Record<string, unknown>>(sql`

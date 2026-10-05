@@ -60,7 +60,7 @@ export const POST = defineRoute({
     const prio = priority(body)
     if ('error' in prio) return NextResponse.json({ error: prio.error }, { status: 400 })
     const created = await db.transaction(async (tx) => {
-        await lockBankMatchRuleSet(user.orgId)
+        await lockBankMatchRuleSet(tx, user.orgId)
         const row = (await tx.execute<Record<string, unknown>>(sql`
           insert into bank_match_rules (org_id, name, criteria, outcome, priority, is_active, created_by)
           values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
@@ -103,7 +103,7 @@ export const PATCH = defineRoute({
     const prio = priority(body)
     if ('error' in prio) return NextResponse.json({ error: prio.error }, { status: 400 })
     const missing = await db.transaction(async (tx) => {
-        await lockBankMatchRuleSet(user.orgId)
+        await lockBankMatchRuleSet(tx, user.orgId)
         // Serialize rule edits from the row snapshot that supplies the audit
         // before-image. A concurrent PATCH waits here, then PostgreSQL's
         // READ COMMITTED snapshot is refreshed to the winner's committed row

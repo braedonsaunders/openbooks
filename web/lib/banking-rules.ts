@@ -171,7 +171,7 @@ async function applyRuleIfStillCurrent(
     // The rule-set advisory lock serializes product-path edits against bulk
     // scans. The re-read below is lock-free on purpose (see
     // above): locking the row would pin it for the whole outer transaction.
-    await lockBankMatchRuleSet(orgId)
+    await lockBankMatchRuleSet(db, orgId)
     const current = (await db.execute<RuleRow>(sql`
       select id, name, criteria, outcome, priority, is_active
         from bank_match_rules
@@ -215,7 +215,7 @@ export async function applyRulesToAccount(
     // Rule create/edit/delete takes this same tenant lock. Keep it from the
     // candidate snapshot through the final line so a new higher-priority rule
     // cannot appear between scan and apply.
-    await lockBankMatchRuleSet(orgId)
+    await lockBankMatchRuleSet(db, orgId)
     requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
     const rules = await loadActiveRules(orgId)
     if (rules.length === 0) return result
