@@ -1154,7 +1154,7 @@
       },
       "unrated": {
         "label": "Sin calificar",
-        "desc": "Aún sin historial de pagos; liquide facturas para calificar"
+        "desc": "Aún sin historial de pagos, o las facturas liquidadas no tienen vencimiento"
       }
     },
     "sub": {
@@ -1284,7 +1284,8 @@
       "noHistory": "Aún sin historial de pagos"
     },
     "matrix": {
-      "unratedNote": "{count} proveedores aún no tienen historial de pagos y no se grafican"
+      "unratedNoPaymentsNote": "{count, plural, one {# proveedor aún no tiene historial de pagos y no se grafica; liquide facturas para calificar} other {# proveedores aún no tienen historial de pagos y no se grafican; liquide facturas para calificar}}",
+      "unratedUndatedNote": "{count, plural, one {las facturas liquidadas de # proveedor no tienen fecha de vencimiento y no se grafican; agregue vencimientos o condiciones de pago para calificar} other {las facturas liquidadas de # proveedores no tienen fecha de vencimiento y no se grafican; agregue vencimientos o condiciones de pago para calificar}}"
     }
   },
   "cashflow": {
