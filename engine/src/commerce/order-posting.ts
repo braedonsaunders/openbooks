@@ -885,7 +885,10 @@ export async function postCashSaleDraft(
       amount: tender.amount,
       reference: tender.reference,
     }));
-  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor });
+  // Order automation on its own just-created draft: the order — not an actor
+  // entity set — is the authority, named here as unrestricted. Tender
+  // accounts still scope-gate neutrally and must match the document entity.
+  await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
   let lineNumber = 0;
   const giftLineIds: string[] = [];
   for (const line of draft.lines) {

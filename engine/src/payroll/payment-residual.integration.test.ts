@@ -93,7 +93,9 @@ async function ordinaryPayment(fx: Awaited<ReturnType<typeof postedRun>>, amount
         settlementRate: "1.25", settlementRateSource: "manual", settlementRateReference: "Agreed partial settlement",
       } : sameCurrencyAllocation(fx.source.id, amount)],
       controlAccountId: fx.source.account_id,
-    }, fx.actorId, fx.orgId);
+    }, fx.actorId, fx.orgId,
+  { allowedSubsidiaryIds: null },
+);
     const submission = await submitAndReleaseIfUngated("vendor_payment", payment.id, fx.actorId);
     assert.equal(submission.autoApproved, true);
     const posted = await postPaymentWithApplications(payment.id, undefined, fx.actorId, "ui");
@@ -166,7 +168,9 @@ test("payroll liability cannot masquerade as the credit; the run pays the full l
           controlAccountId: fx.source.account_id,
           allocations: [sameCurrencyAllocation(target.id, "50")],
           creditAllocations: [{ fromLineId: fx.source.id, toLineId: target.id, amount: "50", sourceDocumentId: fx.input.documentId }],
-        }, fx.actorId, fx.orgId);
+        }, fx.actorId, fx.orgId,
+  { allowedSubsidiaryIds: null },
+);
       }),
       (error: unknown) =>
         error instanceof PaymentError && /must be a posted customer_credit line/.test(error.message),

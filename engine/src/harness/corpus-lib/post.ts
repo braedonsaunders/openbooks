@@ -184,7 +184,7 @@ async function replayPayment(
     currency: world.currency,
     memo: event.memo ?? `Corpus payment ${event.id} (${sum(event.allocations.map((a) => a.amount))})`,
   });
-  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actor, world.orgId);
+  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actor, world.orgId, { allowedSubsidiaryIds: null });
   await releaseDraftIfUngated(world, payment.id, actor);
   await postPaymentWithApplications(payment.id, undefined, actor);
 }

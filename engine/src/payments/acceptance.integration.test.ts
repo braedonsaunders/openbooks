@@ -689,7 +689,9 @@ test("a stale provider session after another channel payment enters discrepancy 
       partyId: org.customerId,
       bankAccountId: org.accounts.bank,
       allocations: [sameCurrencyAllocation(openLineId, "20")],
-    }, userId, org.orgId);
+    }, userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`
       update documents set status = 'approved', submitted_by = ${userId}, submitted_at = now()
        where id = ${first.id} and org_id = ${org.orgId}`);
@@ -1249,7 +1251,9 @@ test("checkout refuses a frozen link quote after a partial payment", { skip: !DB
       partyId: org.customerId,
       bankAccountId: org.accounts.bank,
       allocations: [sameCurrencyAllocation(openLineId, "50")],
-    }, fx.userId, org.orgId);
+    }, fx.userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`
       update documents set status = 'approved', submitted_by = ${fx.userId}, submitted_at = now()
        where id = ${partial.id} and org_id = ${org.orgId}
@@ -1318,7 +1322,9 @@ test("a live checkout session collected after a partial payment enters settlemen
     await updateDraftPayment(partial.id, {
       partyId: org.customerId, bankAccountId: org.accounts.bank,
       allocations: [sameCurrencyAllocation(openLineId, "50")],
-    }, fx.userId, org.orgId);
+    }, fx.userId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await db.execute(sql`update documents set status = 'approved', submitted_by = ${fx.userId}, submitted_at = now() where id = ${partial.id} and org_id = ${org.orgId}`);
     await postPaymentWithApplications(partial.id, undefined, fx.userId);
     assert.equal(expirationAttempted, true, "invoice balance changes should expire stale Stripe sessions when possible");

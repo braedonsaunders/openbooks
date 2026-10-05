@@ -104,6 +104,7 @@ test(
         { allocations: [sameCurrencyAllocation(open[0]!.lineId, "123.45")], bankAccountId: org.accounts.bank },
         actorId,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       );
       await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
       await postPaymentWithApplications(payment.id, undefined, actorId);

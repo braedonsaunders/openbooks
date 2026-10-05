@@ -192,7 +192,7 @@ test("draft tenders refuse another customer's account before posting", { skip: !
       withBypass(() =>
         replaceDocumentTenders(db, org.orgId, refundId, [
           { kind: "stored_value", storedValueAccountId: setup.accountB, amount: "25" },
-        ], {}),
+        ], { allowedSubsidiaryIds: null }),
       ),
       (error: unknown) => error instanceof TenderRefusal && /same customer/.test(error.message),
     );

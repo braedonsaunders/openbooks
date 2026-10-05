@@ -2183,6 +2183,7 @@ async function payInFull(
       },
       actorId,
       org.orgId,
+      { allowedSubsidiaryIds: null },
     );
     await db.execute(sql`
       update documents set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
@@ -2620,6 +2621,7 @@ const consolidatedRows = [
               },
               actorId,
               org.orgId,
+              { allowedSubsidiaryIds: null },
             );
             await db.execute(sql`
               update documents set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
@@ -2988,7 +2990,9 @@ const currencyRegistryCases = [{ label: "currency registry document to statement
       const paymentDocument = await withBypassContext(() => createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: 'customer_payment', createdBy: actor,
         partyId: org.customerId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency, fxRate }));
       await withBypassContext(() => updateDraftPayment(paymentDocument.id, { bankAccountId: org.accounts.bank, allocations: [{ openLineId: line,
-        sourceTransactionAmount: paid, targetTransactionAmount: paid, settlementRate: '1', settlementRateSource: 'same_currency', settlementRateReference: 'CURRENCY-E2E' }] }, actor, org.orgId));
+        sourceTransactionAmount: paid, targetTransactionAmount: paid, settlementRate: '1', settlementRateSource: 'same_currency', settlementRateReference: 'CURRENCY-E2E' }] }, actor, org.orgId,
+  { allowedSubsidiaryIds: null },
+));
       await withBypassContext(() => db.execute(sql`update documents set status='approved',submitted_by=${actor},submitted_at=now() where id=${paymentDocument.id}`));
       await withBypassContext(() => postPaymentWithApplications(paymentDocument.id, undefined, actor));
       const balances = await withBypassContext(() => db.execute<{ id: string; open_balance: string }>(sql`select id,open_balance::text as open_balance from documents where id in (${invoice},${paymentDocument.id})`));

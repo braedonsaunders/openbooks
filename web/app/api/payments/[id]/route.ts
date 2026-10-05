@@ -170,9 +170,9 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
       // locked payment row; the earlier lookup is only a permission gate.
       {
         expectedRevision,
-        ...(gate.authz.allowedSubsidiaryIds === null
-          ? {}
-          : { allowedSubsidiaryIds: gate.authz.allowedSubsidiaryIds }),
+        // Forward the authoritative scope as-is: explicit null is the
+        // unrestricted grant, and omitting it would fail closed above.
+        allowedSubsidiaryIds: gate.authz.allowedSubsidiaryIds,
       },
     )
     return NextResponse.json(payment)

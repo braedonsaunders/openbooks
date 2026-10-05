@@ -76,6 +76,7 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
       },
       actor,
       org.orgId,
+      { allowedSubsidiaryIds: null },
     );
     await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
     await postDocument(payment.id, {

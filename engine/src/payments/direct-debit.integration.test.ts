@@ -283,7 +283,9 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
         partyId: org.customerId,
         bankAccountId: org.accounts.bank,
         allocations: [sameCurrencyAllocation(ids.openLineId, "0.1")],
-      }, ids.actorId, org.orgId);
+      }, ids.actorId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
       await db.execute(sql`
         update documents set status = 'approved', submitted_by = ${ids.actorId}, submitted_at = now()
          where id = ${receipt.id} and org_id = ${org.orgId}`);

@@ -516,7 +516,9 @@ test("voids reverse card effects: a receipt returns its tender, a sale takes bac
         partyId: org.customerId, bankAccountId: org.accounts.bank,
         allocations: [sameCurrencyAllocation(invoiceLine, "30")],
         storedValueTenders: [{ accountId: cardId, amount: "20" }],
-      }, actorId, org.orgId);
+      }, actorId, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
       await db.execute(sql`update documents set status = 'approved' where id = ${receipt.id} and org_id = ${org.orgId}`);
       await postPaymentWithApplications(receipt.id, undefined, actorId);
       return receipt.id;

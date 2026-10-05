@@ -65,6 +65,7 @@ test("vendor payment analytics counts an installment bill once and uses final se
         },
         null,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       ));
       await withBypass(() => db.execute(sql`
         update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`));

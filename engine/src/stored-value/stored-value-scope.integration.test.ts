@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "../platform/db.ts";
+import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
@@ -35,6 +35,7 @@ interface ScopeFixture {
   actorId: string;
   giftProgram: string;
   expiringProgram: string;
+  creditProgram: string;
   rootActor: string;
   multiActor: string;
 }
@@ -88,6 +89,17 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
       actorId,
     }),
   );
+  const creditProgram = await withBypass(() =>
+    createProgram({
+      orgId: org.orgId,
+      name: "Scope store credit",
+      kind: "store_credit",
+      liabilityAccountId: liability,
+      breakageIncomeAccountId: breakageIncome,
+      breakagePolicy: "none",
+      actorId,
+    }),
+  );
   async function scopedActor(name: string, key: string, subsidiaryIds: string[]): Promise<string> {
     const user = await withBypass(() => createScratchUser(org.orgId, name, key));
     await withBypass(async () => {
@@ -110,29 +122,45 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
     actorId,
     giftProgram: giftProgram.id,
     expiringProgram: expiringProgram.id,
+    creditProgram: creditProgram.id,
     rootActor,
     multiActor,
   };
 }
 
-/** The actor's live scope, resolved through the canonical contract — never hand-built. */
+/**
+ * The actor's live scope through the canonical contract — never hand-built.
+ * The grant read rides bypass exactly like the web grant reader
+ * (allowedSubsidiaryIds): it resolves stored role grants, while every
+ * operation under test below runs tenant-scoped.
+ */
 async function liveScope(orgId: string, userId: string): Promise<Set<string> | null> {
   return withBypass(() => actorAllowedSubsidiaryIds(db, orgId, userId));
 }
 
-/** Mint one account in the named entity as the system (explicit null sentinel). */
-async function mintIn(fx: ScopeFixture, subsidiaryId: string, amount = "100"): Promise<{ accountId: string; code: string }> {
-  const issued = await withBypass(() =>
+/**
+ * Mint one account in the named entity under tenant context with explicit
+ * null — the unrestricted grant named outright. Seeding the fixture this
+ * way exercises the same RLS path production system writes take.
+ */
+async function mintIn(
+  fx: ScopeFixture,
+  subsidiaryId: string,
+  amount = "100",
+  key = `scope-${randomUUID()}`,
+  programId?: string,
+): Promise<{ accountId: string; code: string }> {
+  const issued = await withOrgContext(fx.orgId, () =>
     issueStoredValue({
       orgId: fx.orgId,
       allowedSubsidiaryIds: null,
       subsidiaryId,
-      programId: fx.giftProgram,
+      programId: programId ?? fx.giftProgram,
       amountMinor: toUnits(amount),
       currency: "CAD",
       debitAccountId: fx.bank,
       postingDate: fx.date,
-      idempotencyKey: `scope-${randomUUID()}`,
+      idempotencyKey: key,
       actorId: fx.actorId,
     }),
   );
@@ -140,8 +168,17 @@ async function mintIn(fx: ScopeFixture, subsidiaryId: string, amount = "100"): P
   return { accountId: issued.accountId, code: issued.code! };
 }
 
+/** Seed one customer party in the named entity (null = shared org-wide party). */
+async function seedParty(fx: ScopeFixture, name: string, subsidiaryId: string | null): Promise<string> {
+  const id = randomUUID();
+  await withBypass(() => db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${id}, ${fx.orgId}, 'customer', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`));
+  return id;
+}
+
 async function balanceOf(orgId: string, accountId: string): Promise<{ balance: string; status: string; entries: number }> {
-  return (await withBypass(() => db.execute<{ balance: string; status: string; entries: number }>(sql`
+  return (await withOrgContext(orgId, () => db.execute<{ balance: string; status: string; entries: number }>(sql`
     select a.balance_minor::text as balance, a.status,
       (select count(*)::int from stored_value_entries where org_id = ${orgId} and account_id = ${accountId}) as entries
       from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`))).rows[0]!;
@@ -155,7 +192,7 @@ test("a restricted actor's adjustment of a foreign-entity account reads as missi
     const scope = await liveScope(fx.orgId, fx.rootActor);
     assert.ok(scope !== null && scope.has(fx.subsidiaryId) && !scope.has(fx.secondId));
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         adjustStoredValue({
           orgId: fx.orgId,
           accountId: foreign.accountId,
@@ -185,7 +222,7 @@ test("a restricted actor's status change of a foreign-entity account reads as mi
     // Closing a nonzero card would otherwise refuse close_nonzero by name —
     // the scope denial must come first so the balance never leaks.
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         setStoredValueStatus({
           orgId: fx.orgId,
           accountId: foreign.accountId,
@@ -209,7 +246,7 @@ test("a restricted actor's redemption of a foreign-entity account reads as missi
     const before = await balanceOf(fx.orgId, foreign.accountId);
     const scope = await liveScope(fx.orgId, fx.rootActor);
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         redeemStoredValue({
           orgId: fx.orgId,
           accountId: foreign.accountId,
@@ -233,22 +270,22 @@ test("code lookups hide foreign-entity accounts and fail closed on unknown scope
     const foreign = await mintIn(fx, fx.secondId);
     const scope = await liveScope(fx.orgId, fx.rootActor);
     assert.equal(
-      await withBypass(() => lookupStoredValueByCode(fx.orgId, foreign.code, scope)),
+      await withOrgContext(fx.orgId, () => lookupStoredValueByCode(fx.orgId, foreign.code, scope)),
       null,
       "a foreign-entity code reads exactly like a wrong code",
     );
     assert.equal(
-      await withBypass(() => resolveStoredValueTender(fx.orgId, foreign.code, scope)),
+      await withOrgContext(fx.orgId, () => resolveStoredValueTender(fx.orgId, foreign.code, scope)),
       null,
       "tender resolution hides the foreign account too",
     );
     assert.equal(
-      await withBypass(() => lookupStoredValueByCode(fx.orgId, foreign.code, undefined as unknown as null)),
+      await withOrgContext(fx.orgId, () => lookupStoredValueByCode(fx.orgId, foreign.code, undefined as unknown as null)),
       null,
       "unknown scope never becomes unrestricted",
     );
-    const seen = await withBypass(() => lookupStoredValueByCode(fx.orgId, foreign.code, null));
-    assert.equal(seen?.accountId, foreign.accountId, "the explicit system sentinel still resolves");
+    const seen = await withOrgContext(fx.orgId, () => lookupStoredValueByCode(fx.orgId, foreign.code, null));
+    assert.equal(seen?.accountId, foreign.accountId, "explicit null still resolves");
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId));
   }
@@ -258,7 +295,7 @@ test("a single-entity actor issues into their entity by default, and is refused 
   const fx = await seedScopeOrg();
   try {
     const scope = await liveScope(fx.orgId, fx.rootActor);
-    const issued = await withBypass(() =>
+    const issued = await withOrgContext(fx.orgId, () =>
       issueStoredValue({
         orgId: fx.orgId,
         allowedSubsidiaryIds: scope,
@@ -271,11 +308,11 @@ test("a single-entity actor issues into their entity by default, and is refused 
         actorId: fx.rootActor,
       }),
     );
-    const home = (await withBypass(() => db.execute<{ subsidiary: string }>(sql`
+    const home = (await withOrgContext(fx.orgId, () => db.execute<{ subsidiary: string }>(sql`
       select subsidiary_id as subsidiary from stored_value_accounts where org_id = ${fx.orgId} and id = ${issued.accountId}`))).rows[0]!;
     assert.equal(home.subsidiary, fx.subsidiaryId, "the issue lands in the actor's single allowed entity");
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         issueStoredValue({
           orgId: fx.orgId,
           allowedSubsidiaryIds: scope,
@@ -303,7 +340,7 @@ test("a multi-entity actor naming no entity is asked to choose, and unknown scop
     const scope = await liveScope(fx.orgId, fx.multiActor);
     assert.equal(scope?.size, 2);
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         issueStoredValue({
           orgId: fx.orgId,
           allowedSubsidiaryIds: scope,
@@ -320,7 +357,7 @@ test("a multi-entity actor naming no entity is asked to choose, and unknown scop
       "no silent root default for a caller who must choose",
     );
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         issueStoredValue({
           orgId: fx.orgId,
           allowedSubsidiaryIds: undefined as unknown as null,
@@ -347,9 +384,9 @@ test("the permitted same-entity path still adjusts, freezes, and redeems", { ski
   try {
     const own = await mintIn(fx, fx.subsidiaryId, "50");
     const scope = await liveScope(fx.orgId, fx.rootActor);
-    const seen = await withBypass(() => lookupStoredValueByCode(fx.orgId, own.code, scope));
+    const seen = await withOrgContext(fx.orgId, () => lookupStoredValueByCode(fx.orgId, own.code, scope));
     assert.equal(seen?.accountId, own.accountId, "the own-entity code resolves");
-    await withBypass(() =>
+    await withOrgContext(fx.orgId, () =>
       adjustStoredValue({
         orgId: fx.orgId,
         accountId: own.accountId,
@@ -362,7 +399,7 @@ test("the permitted same-entity path still adjusts, freezes, and redeems", { ski
         actorId: fx.rootActor,
       }),
     );
-    await withBypass(() =>
+    await withOrgContext(fx.orgId, () =>
       setStoredValueStatus({
         orgId: fx.orgId,
         accountId: own.accountId,
@@ -372,7 +409,7 @@ test("the permitted same-entity path still adjusts, freezes, and redeems", { ski
       }),
     );
     assert.equal((await balanceOf(fx.orgId, own.accountId)).status, "frozen");
-    await withBypass(() =>
+    await withOrgContext(fx.orgId, () =>
       setStoredValueStatus({
         orgId: fx.orgId,
         accountId: own.accountId,
@@ -381,7 +418,7 @@ test("the permitted same-entity path still adjusts, freezes, and redeems", { ski
         actorId: fx.rootActor,
       }),
     );
-    const redeemed = await withBypass(() =>
+    const redeemed = await withOrgContext(fx.orgId, () =>
       redeemStoredValue({
         orgId: fx.orgId,
         accountId: own.accountId,
@@ -400,7 +437,7 @@ test("the permitted same-entity path still adjusts, freezes, and redeems", { ski
 test("the scan's expiry of a foreign-entity account reads as missing under a restricted scope", { skip: !DB }, async () => {
   const fx = await seedScopeOrg();
   try {
-    const issued = await withBypass(() =>
+    const issued = await withOrgContext(fx.orgId, () =>
       issueStoredValue({
         orgId: fx.orgId,
         allowedSubsidiaryIds: null,
@@ -416,7 +453,7 @@ test("the scan's expiry of a foreign-entity account reads as missing under a res
     );
     const scope = await liveScope(fx.orgId, fx.rootActor);
     await assert.rejects(
-      withBypass(() =>
+      withOrgContext(fx.orgId, () =>
         expireStoredValueAccount({
           orgId: fx.orgId,
           accountId: issued.accountId,
@@ -428,6 +465,188 @@ test("the scan's expiry of a foreign-entity account reads as missing under a res
       (error: unknown) => error instanceof ScopeNotFoundError,
     );
     assert.equal((await balanceOf(fx.orgId, issued.accountId)).status, "active");
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("absent and hidden accounts refuse identically, before any lifecycle message", { skip: !DB }, async () => {
+  const fx = await seedScopeOrg();
+  try {
+    const foreign = await mintIn(fx, fx.secondId);
+    const scope = await liveScope(fx.orgId, fx.rootActor);
+    const attempt = (accountId: string) =>
+      withOrgContext(fx.orgId, () =>
+        adjustStoredValue({
+          orgId: fx.orgId,
+          accountId,
+          allowedSubsidiaryIds: scope,
+          deltaMinor: toUnits("5"),
+          reason: "Counting error on issue",
+          offsetAccountId: fx.bank,
+          postingDate: fx.date,
+          idempotencyKey: `scope-twin-${randomUUID()}`,
+          actorId: fx.rootActor,
+        }),
+      ).then(
+        () => null,
+        (error: unknown) => error,
+      );
+    const hidden = await attempt(foreign.accountId);
+    const missing = await attempt(randomUUID());
+    assert.ok(hidden instanceof ScopeNotFoundError && missing instanceof ScopeNotFoundError);
+    assert.equal(hidden.constructor, missing.constructor, "hidden and missing share one refusal shape");
+    assert.equal(hidden.message, missing.message, "hidden and missing share one neutral message");
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("a reused issuance key with a changed body is refused, while an unchanged retry replays after program deactivation", { skip: !DB }, async () => {
+  const fx = await seedScopeOrg();
+  try {
+    const scope = await liveScope(fx.orgId, fx.rootActor);
+    const key = `scope-replay-${randomUUID()}`;
+    const first = await withOrgContext(fx.orgId, () =>
+      issueStoredValue({
+        orgId: fx.orgId,
+        allowedSubsidiaryIds: scope,
+        subsidiaryId: fx.subsidiaryId,
+        programId: fx.giftProgram,
+        amountMinor: toUnits("40"),
+        currency: "CAD",
+        debitAccountId: fx.bank,
+        postingDate: fx.date,
+        idempotencyKey: key,
+        actorId: fx.rootActor,
+      }),
+    );
+    assert.ok(first.code && !first.replayed);
+    const retry = (over: { amountMinor?: bigint; programId?: string }) =>
+      withOrgContext(fx.orgId, () =>
+        issueStoredValue({
+          orgId: fx.orgId,
+          allowedSubsidiaryIds: scope,
+          subsidiaryId: fx.subsidiaryId,
+          programId: fx.giftProgram,
+          amountMinor: toUnits("40"),
+          currency: "CAD",
+          debitAccountId: fx.bank,
+          postingDate: fx.date,
+          idempotencyKey: key,
+          actorId: fx.rootActor,
+          ...over,
+        }),
+      );
+    await assert.rejects(
+      retry({ amountMinor: toUnits("41") }),
+      (error: unknown) => error instanceof StoredValueError && error.code === "stored_value_idempotency_conflict",
+      "a changed amount reuses the key and must not receive the first receipt",
+    );
+    await assert.rejects(
+      retry({ programId: fx.expiringProgram }),
+      (error: unknown) => error instanceof StoredValueError && error.code === "stored_value_idempotency_conflict",
+      "a changed program reuses the key and must not receive the first receipt",
+    );
+    // Deactivating the program afterwards must not rewrite history: the
+    // unchanged retry still replays the recorded effect.
+    await withBypass(() => db.execute(sql`
+      update stored_value_programs set is_active = false where id = ${fx.giftProgram} and org_id = ${fx.orgId}`));
+    const replayed = await retry({});
+    assert.equal(replayed.replayed, true);
+    assert.equal(replayed.code, null, "a replay never mints a second code");
+    assert.equal(replayed.accountId, first.accountId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("losing entity visibility refuses a replay without leaking the original receipt", { skip: !DB }, async () => {
+  const fx = await seedScopeOrg();
+  try {
+    const scope = await liveScope(fx.orgId, fx.rootActor);
+    const key = `scope-loss-${randomUUID()}`;
+    const first = await withOrgContext(fx.orgId, () =>
+      issueStoredValue({
+        orgId: fx.orgId,
+        allowedSubsidiaryIds: scope,
+        subsidiaryId: fx.subsidiaryId,
+        programId: fx.giftProgram,
+        amountMinor: toUnits("30"),
+        currency: "CAD",
+        debitAccountId: fx.bank,
+        postingDate: fx.date,
+        idempotencyKey: key,
+        actorId: fx.rootActor,
+      }),
+    );
+    // The actor's grant narrows to the other entity after issuance.
+    await withBypass(() => db.execute(sql`
+      update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [fx.secondId] })}::jsonb
+       where org_id = ${fx.orgId} and key = 'sv_root'`));
+    const narrowed = await liveScope(fx.orgId, fx.rootActor);
+    assert.ok(narrowed && !narrowed.has(fx.subsidiaryId));
+    // The retry names the actor's remaining entity so subsidiary resolution
+    // passes; the scoped lock on the now-hidden original still refuses.
+    const error = await withOrgContext(fx.orgId, () =>
+      issueStoredValue({
+        orgId: fx.orgId,
+        allowedSubsidiaryIds: narrowed,
+        subsidiaryId: fx.secondId,
+        programId: fx.giftProgram,
+        amountMinor: toUnits("30"),
+        currency: "CAD",
+        debitAccountId: fx.bank,
+        postingDate: fx.date,
+        idempotencyKey: key,
+        actorId: fx.rootActor,
+      }),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(error instanceof ScopeNotFoundError, "the replay reads as missing once visibility is lost");
+    assert.ok(!(error as { accountId?: unknown }).accountId, "no hidden account id rides the denial");
+    assert.equal((await balanceOf(fx.orgId, first.accountId)).balance, toUnits("30").toString());
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("store credit issues only to a visible customer; shared org-wide parties stay eligible", { skip: !DB }, async () => {
+  const fx = await seedScopeOrg();
+  try {
+    const scope = await liveScope(fx.orgId, fx.rootActor);
+    const foreignCustomer = await seedParty(fx, "Second Customer", fx.secondId);
+    const ownCustomer = await seedParty(fx, "Root Customer", fx.subsidiaryId);
+    const credit = (customerPartyId: string) =>
+      withOrgContext(fx.orgId, () =>
+        issueStoredValue({
+          orgId: fx.orgId,
+          allowedSubsidiaryIds: scope,
+          subsidiaryId: fx.subsidiaryId,
+          programId: fx.creditProgram,
+          amountMinor: toUnits("15"),
+          currency: "CAD",
+          customerPartyId,
+          debitAccountId: fx.bank,
+          postingDate: fx.date,
+          idempotencyKey: `scope-cust-${randomUUID()}`,
+          actorId: fx.rootActor,
+        }),
+      );
+    await assert.rejects(
+      credit(foreignCustomer),
+      (error: unknown) => error instanceof ScopeNotFoundError,
+      "a foreign-entity customer reads as missing, never by name",
+    );
+    const own = await credit(ownCustomer);
+    assert.ok(own.accountId, "the same-entity customer issues");
+    // Parties without an entity are org-wide identity: no customerPartyId
+    // scope check may exclude them, and the issue form keeps offering them.
+    const shared = await seedParty(fx, "Shared Customer", null);
+    const sharedIssue = await credit(shared);
+    assert.ok(sharedIssue.accountId, "the shared org-wide customer issues");
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId));
   }

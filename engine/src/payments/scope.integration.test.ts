@@ -146,6 +146,7 @@ test(
           { allocations: [sameCurrencyAllocation(duplicate, "25")] },
           actor,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         ),
         /open item|book/i,
       );
@@ -155,6 +156,7 @@ test(
         { allocations: [sameCurrencyAllocation(target, "25")] },
         actor,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       );
       await db.execute(
         sql`update documents set status='approved',custom=jsonb_set(custom,'{allocations}',${JSON.stringify([sameCurrencyAllocation(duplicate, "25")])}::jsonb) where id=${payment.id}`,
@@ -258,6 +260,7 @@ for (const variant of [
             { allocations, creditAllocations: credits },
             actor,
             org.orgId,
+            { allowedSubsidiaryIds: null },
           );
           await db.execute(
             sql`update documents set status='approved' where id=${payment.id}`,
@@ -282,6 +285,7 @@ for (const variant of [
               { allocations, creditAllocations: credits },
               actor,
               org.orgId,
+              { allowedSubsidiaryIds: null },
             ),
             expected,
           );
@@ -291,6 +295,7 @@ for (const variant of [
             { allocations },
             actor,
             org.orgId,
+            { allowedSubsidiaryIds: null },
           );
           await db.execute(
             sql`update documents set status='approved',custom=jsonb_set(custom,'{creditAllocations}',${JSON.stringify(credits)}::jsonb) where id=${payment.id}`,
@@ -336,6 +341,7 @@ for (const mode of ["inactive", "non-posting", "missing"] as const) {
             { allocations: [sameCurrencyAllocation(target, "25")] },
             actor,
             org.orgId,
+            { allowedSubsidiaryIds: null },
           ),
           /active primary posting book/,
         );
@@ -394,6 +400,7 @@ test(
         },
         actor,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       );
       await db.execute(
         sql`update documents set status='approved' where id=${payment.id}`,
@@ -443,6 +450,7 @@ test(
           },
           actor,
           org.orgId,
+          { allowedSubsidiaryIds: null },
         );
         await db.execute(
           sql`update documents set status='approved' where id=${candidate.id}`,
@@ -572,6 +580,7 @@ test(
         { allocations: [sameCurrencyAllocation(target, "0.3333")] },
         actor,
         org.orgId,
+        { allowedSubsidiaryIds: null },
       );
       await db.execute(
         sql`update documents set status='approved' where id=${payment.id}`,

@@ -26,7 +26,7 @@ import { storedValueRefusal } from "./errors.ts";
 
 export interface DocumentLoadInput {
   orgId: string;
-  /** REQUIRED actor scope; posting-commit steps pass explicit null — the refund document's entity was gated at draft creation and the top-up asserts it matches. */
+  /** REQUIRED actor scope; posting-commit steps name explicit null outright as the unrestricted grant — the refund document's entity was gated at draft creation and the top-up asserts it matches. */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Existing account to top up. Absent mints one from programId. */
   accountId?: string | null;

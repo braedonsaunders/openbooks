@@ -586,6 +586,9 @@ async function createPaymentRunWithinTransaction(
       },
       opts.createdBy,
       opts.orgId,
+      // Run assembly on the run's own draft: the run plan — not an actor
+      // entity set — is the authority, named here as unrestricted.
+      { allowedSubsidiaryIds: null },
     );
 
     // Latest approved, active bank account for the payee (may be none — the

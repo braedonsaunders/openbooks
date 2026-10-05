@@ -326,7 +326,9 @@ async function createPayment(request: Request) {
         { storedValueTenders: body.storedValueTenders },
         user.id,
         user.orgId,
-        { ...(gate.allowedSubsidiaryIds === null ? {} : { allowedSubsidiaryIds: gate.allowedSubsidiaryIds }) },
+        // Forward the authoritative scope as-is: explicit null is the
+        // unrestricted grant, and omitting it would fail closed above.
+        { allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
       )
     } catch (error) {
       if (error instanceof PaymentError) return paymentErrorResponse(error)

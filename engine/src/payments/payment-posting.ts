@@ -419,7 +419,7 @@ export async function postPaymentWithApplications(
           orgId: doc.orgId,
           accountId: tender.accountId,
           // Posting-commit step on the already-gated receipt: explicit null
-          // is the intentional system sentinel; same-entity is refused by name.
+          // is the unrestricted grant named outright; same-entity is refused by name.
           allowedSubsidiaryIds: null,
           amountMinor: toUnits(tender.amount),
           documentId: doc.id,

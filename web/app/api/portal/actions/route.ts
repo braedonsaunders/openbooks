@@ -19,6 +19,7 @@ import {
 import { createPaymentLink } from '@openbooks/engine/payments/acceptance'
 import { removeMethod, setDefaultMethod, startMethodSetup } from '@openbooks/engine/payments/autopay'
 import { lookupStoredValueByCode } from '@openbooks/engine/stored-value'
+import { storedValueAccountOwnedByCustomer } from '@openbooks/engine/src/stored-value/accounts.ts'
 import { appBaseUrl } from '@openbooks/engine/flows'
 
 export const runtime = 'nodejs'
@@ -101,11 +102,15 @@ export const POST = defineRoute({
         return NextResponse.json({ setupToken: setup.setupToken, setupUrl: `/pay/setup/${setupToken}`, redirectUrl: setup.redirectUrl })
       }
       case 'lookupGiftCard': {
-        // Customer portal code-Bearer [REDACTED] the secret code is the credential, and
-        // the session's party binding is asserted separately — there is no
-        // actor entity set to scope by, so explicit null is intentional here.
+        // Public token flow with no actor entity set: explicit null is the
+        // unrestricted grant, named outright because no actor scope exists to
+        // forward. The code is the credential only for Bearer [REDACTED] value —
+        // customer-bound value resolves solely for its own session party, so
+        // another party's credit reads exactly like a wrong code.
         const balance = await lookupStoredValueByCode(orgId, body.code, null)
-        if (!balance) return NextResponse.json({ error: 'No gift card or credit matches that code' }, { status: 404 })
+        if (!balance || !storedValueAccountOwnedByCustomer({ kind: balance.kind, customerPartyId: balance.customerPartyId }, partyId)) {
+          return NextResponse.json({ error: 'No gift card or credit matches that code' }, { status: 404 })
+        }
         return NextResponse.json({ kind: balance.kind, balanceMinor: balance.balanceMinor, currency: balance.currency, status: balance.status })
       }
     }

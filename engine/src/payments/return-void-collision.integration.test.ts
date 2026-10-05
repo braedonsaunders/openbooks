@@ -66,6 +66,7 @@ async function payment(org: ScratchOrg, actor: string, line: string) {
     },
     actor,
     org.orgId,
+    { allowedSubsidiaryIds: null },
   );
   await db.execute(
     sql`update documents set status = 'approved', submitted_by = ${actor}, submitted_at = now() where id = ${result.id}`,

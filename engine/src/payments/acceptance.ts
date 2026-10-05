@@ -3151,6 +3151,9 @@ async function settleAttempt(
         },
         actorId,
         orgId,
+        // Payment-link completion on the link's own draft: the link — not an
+        // actor entity set — is the authority, named here as unrestricted.
+        { allowedSubsidiaryIds: null },
       );
     }
     const submission = await submitAndReleaseIfUngated(

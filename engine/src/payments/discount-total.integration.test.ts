@@ -72,6 +72,7 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
       },
       actor,
       org.orgId,
+      { allowedSubsidiaryIds: null },
     );
     await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
     const entryId = await postDocument(payment.id, {

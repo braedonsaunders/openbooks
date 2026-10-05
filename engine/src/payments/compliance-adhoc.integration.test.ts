@@ -83,7 +83,9 @@ test("an ad-hoc payment cannot pay a compliance-blocked bill", { skip: !DB }, as
     });
     await updateDraftPayment(payment.id, {
       allocations: [sameCurrencyAllocation(line!.lineId, "100")],
-    }, actor, org.orgId);
+    }, actor, org.orgId,
+  { allowedSubsidiaryIds: null },
+);
     await submitAndReleaseIfUngated("vendor_payment", payment.id, actor);
     await assert.rejects(
       postPaymentWithApplications(payment.id, [sameCurrencyAllocation(line!.lineId, "100")], actor),
