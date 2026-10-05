@@ -82,11 +82,22 @@ export function validateRestockingFeePolicy(input: RestockingFeePolicyInput): vo
 }
 
 function parseMinor(value: unknown, label: string): bigint {
-  const text = typeof value === "bigint" ? value.toString() : typeof value === "number" ? String(Math.trunc(value)) : typeof value === "string" ? value.trim() : "";
-  if (!/^-?\d+$/.test(text)) {
+  // Storage minors arrive as bigint, safe-integer JSON numbers, or plain
+  // decimal text judged by the shared scale-zero grammar. Fractions and
+  // unsafe numbers are refused, never truncated: truncating 1.5 stored 1,
+  // a fee nobody typed.
+  const text = typeof value === "bigint"
+    ? value.toString()
+    : typeof value === "number"
+      ? (Number.isSafeInteger(value) ? String(value) : "")
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+  const exact = text === "" ? null : canonicalDecimal(text, 0);
+  if (exact === null || !/^-?\d+$/.test(exact)) {
     throw refusal(`${label} must be a whole number of minor units`, "invalid_input", 422, `Enter ${label.toLowerCase()} as whole minor units`);
   }
-  const minor = BigInt(text);
+  const minor = BigInt(exact);
   if (minor <= 0n) {
     throw refusal(`${label} must be greater than zero`, "invalid_input", 422, `Enter a positive ${label.toLowerCase()}`);
   }

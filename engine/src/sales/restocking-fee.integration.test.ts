@@ -13,6 +13,7 @@ import {
   resolveRestockingFee,
   restockingFeeCreditLines,
   RestockingFeeRefusal,
+  validateRestockingFeePolicy,
 } from './restocking-fees.ts'
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -271,5 +272,22 @@ test('inspected credit equals returned value minus fee and balances', { skip: !D
     assert.equal(unbalanced.length, 0)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('fractional and unsafe fee minors refuse instead of truncating', () => {
+  // Math.trunc(1.5) stored 1 minor: a fee nobody typed. Fractions, unsafe
+  // numbers and non-plain spellings refuse with the whole-minor remedy;
+  // safe integers, plain text and exact bigints validate.
+  const base = { kind: 'fixed', currency: 'USD', incomeAccountId: 'acc-1', effectiveFrom: '2026-01-01' } as const
+  for (const feeAmountMinor of [1.5, 0.5, Number.MAX_SAFE_INTEGER + 1, 1e21, '1e3', '0x10', '12.5']) {
+    assert.throws(
+      () => validateRestockingFeePolicy({ ...base, feeAmountMinor }),
+      (error: unknown) => error instanceof RestockingFeeRefusal && /whole number of minor units/.test(error.message),
+      `feeAmountMinor ${String(feeAmountMinor)} refuses`,
+    )
+  }
+  for (const feeAmountMinor of [500, 500n, '500', ' 500 ', '9007199254740993', Number.MAX_SAFE_INTEGER]) {
+    validateRestockingFeePolicy({ ...base, feeAmountMinor })
   }
 })

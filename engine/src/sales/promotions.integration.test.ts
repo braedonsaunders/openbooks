@@ -11,6 +11,7 @@ import {
   listPromotions,
   PromotionRefusal,
   setPromotionStatus,
+  validatePromotionFields,
 } from './promotions.ts'
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -277,5 +278,22 @@ test('a promotion applies once per document and stacked discounts never exceed t
     assert.equal(await withOrg(org.orgId, () => usageCount(org.orgId, promotions.TENMORE!)), 0)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('fractional and unsafe minor amounts refuse instead of truncating', () => {
+  // Math.trunc(1.5) stored 1 minor: a discount nobody typed. Fractions,
+  // unsafe numbers and non-plain spellings refuse with the whole-minor
+  // remedy; safe integers, plain text and exact bigints validate.
+  const base = { code: 'MINOR', name: 'Minor', kind: 'amount', currency: 'USD' } as const
+  for (const amountMinor of [1.5, 0.5, Number.MAX_SAFE_INTEGER + 1, 1e21, '1e3', '0x10', '12.5']) {
+    assert.throws(
+      () => validatePromotionFields({ ...base, amountMinor }),
+      (error: unknown) => error instanceof PromotionRefusal && /whole number of minor units/.test(error.message),
+      `amountMinor ${String(amountMinor)} refuses`,
+    )
+  }
+  for (const amountMinor of [500, 500n, '500', ' 500 ', '9007199254740993', Number.MAX_SAFE_INTEGER]) {
+    validatePromotionFields({ ...base, amountMinor })
   }
 })
