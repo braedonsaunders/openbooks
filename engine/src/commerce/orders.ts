@@ -432,7 +432,7 @@ export async function ingestChannelEvent(
       );
     }
     // Same expected-benign collision shape as the order store above.
-    const payload = event.refund ?? event.fulfilment ?? (event.cancellationReason ? { reason: event.cancellationReason } : null);
+    const payload = event.refund ?? event.fulfilment ?? event.outbound ?? (event.cancellationReason ? { reason: event.cancellationReason } : null);
     const inserted = await db.execute<{ id: string }>(sql`
       insert into channel_order_events
         (org_id, channel_id, order_id, kind, external_id,
@@ -468,8 +468,16 @@ export interface ChannelEventInput {
   externalId: string;
   refund?: ChannelRefund | null;
   fulfilment?: ChannelFulfilment | null;
+  outbound?: ChannelOutboundFulfilment | null;
   cancellationReason?: string | null;
   occurredAt: string;
+}
+
+/** An OpenBooks-side fulfilment waiting for its push to the storefront. */
+export interface ChannelOutboundFulfilment {
+  direction: "outbound";
+  shipmentId: string | null;
+  orderId: string;
 }
 
 /** A fulfilment or fulfilment cancellation against one channel order, in neutral terms. */

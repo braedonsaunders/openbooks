@@ -129,6 +129,8 @@ export interface ResolvedOrder {
   policy: ChannelPostingPolicy;
   documentDate: string;
   stockLocationId: string;
+  /** Who relieves the stock: OpenBooks at sale posting, or the storefront later through an inbound fulfilment. */
+  fulfilledBy: "openbooks" | "storefront";
   customerPartyId: string | null;
   lines: ResolvedLine[];
   tenders: ResolvedTender[];
@@ -170,21 +172,38 @@ async function loadPostChannel(
   return { name: row.name, kind: row.kind, externalAccount: row.external_account, currency: row.currency, subsidiaryId: row.subsidiary_id };
 }
 
-async function resolveStockLocation(orgId: string, channelId: string, channelName: string): Promise<string> {
-  const links = (await db.execute<{ stock_location_id: string | null }>(sql`
-    select stock_location_id from sales_channel_locations
-     where org_id = ${orgId} and channel_id = ${channelId} and fulfils_orders`)).rows;
+/**
+ * Resolve the shelf behind a channel sale, and who fulfils from it. When
+ * OpenBooks fulfils, the sale issues at posting as usual. When the
+ * storefront fulfils (a 3PL shelf with fulfils_orders off), the sale posts
+ * governed by a sales order instead: the cash carries the 3PL shelf on its
+ * lines for costing context, the kernel skips sale-time issue effects, and
+ * the inbound fulfilment later issues exactly the unrelieved remainder —
+ * so stock moves exactly once and a sale posted without issue is the
+ * normal shape, not an error. Zero shelves or several both park: the remedy
+ * names the Locations tab.
+ */
+async function resolveStockLocation(
+  orgId: string,
+  channelId: string,
+  channelName: string,
+): Promise<{ stockLocationId: string; fulfilledBy: "openbooks" | "storefront" }> {
+  const links = (await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
+    select stock_location_id, fulfils_orders from sales_channel_locations
+     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`)).rows;
+  const fulfil = links
+    .filter((link) => link.fulfils_orders && link.stock_location_id)
+    .map((link) => link.stock_location_id!);
+  if (fulfil.length === 1) return { stockLocationId: fulfil[0]!, fulfilledBy: "openbooks" };
   const mapped = links.map((link) => link.stock_location_id).filter((id): id is string => !!id);
-  if (mapped.length !== 1) {
-    park(
-      "unmapped_location",
-      mapped.length === 0
-        ? `Channel "${channelName}" has no fulfilment location, so order stock has nowhere to issue from.`
-        : `Channel "${channelName}" has ${mapped.length} fulfilment locations, so order stock has no single place to issue from.`,
-      "Map exactly one fulfilment location under Channels → Settings → Locations, then replay the order.",
-    );
-  }
-  return mapped[0]!;
+  if (fulfil.length === 0 && mapped.length === 1) return { stockLocationId: mapped[0]!, fulfilledBy: "storefront" };
+  park(
+    "unmapped_location",
+    mapped.length === 0
+      ? `Channel "${channelName}" has no fulfilment location, so order stock has nowhere to issue from.`
+      : `Channel "${channelName}" has no single shelf to relieve, so order stock has no single place to issue from.`,
+    "Map exactly one fulfilment location under Channels → Settings → Locations, then replay the order.",
+  );
 }
 
 async function resolveItem(
@@ -456,7 +475,7 @@ export async function resolveOrderForPosting(
       "Re-sync the order from the storefront so its tax lines agree with its tax total, then replay it.",
     );
   }
-  const stockLocationId = await resolveStockLocation(orgId, order.channelId, channel.name);
+  const { stockLocationId, fulfilledBy } = await resolveStockLocation(orgId, order.channelId, channel.name);
   const customerPartyId = await resolveCustomer(orgId, actor, {
     id: order.channelId,
     kind: channel.kind,
@@ -724,6 +743,7 @@ export async function resolveOrderForPosting(
     policy,
     documentDate,
     stockLocationId,
+    fulfilledBy,
     customerPartyId,
     lines,
     tenders,
@@ -792,6 +812,7 @@ export async function postCashSaleDraft(
   actor: string | null,
   draft: CashSaleDraft,
   idempotencyScope: string,
+  options: { governFromSalesOrderIds?: string[] } = {},
 ): Promise<BuiltDocument> {
   const currency = draft.currency;
   // The subtotal is exact bigint minor-unit math from resolution — never
@@ -801,9 +822,12 @@ export async function postCashSaleDraft(
   const merchantTotal = minorToLedger(draft.merchantTotalMinor, currency);
   const merchantSubtotalLedger = minorToLedger(subtotalMinor, currency);
 
+  // Idempotency is per kind: a governed sale's sibling sales order shares
+  // the storefront order identity, so the lookup must not observe it.
   const existing = (await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(sql`
     select id, status, posted_entry_id from documents
-     where org_id = ${orgId} and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`)).rows[0];
+     where org_id = ${orgId} and kind = 'cash_sale'
+       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`)).rows[0];
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, documentNumber: "", journalEntryId: existing.posted_entry_id };
   }
@@ -879,6 +903,17 @@ export async function postCashSaleDraft(
           ${componentTax}, '0', ${componentTax}, 'standard',
           ${tax.collectedBy}, ${tax.facilitatorName}, ${tax.liabilityAccountId}, ${actor}, ${actor})`);
     }
+  }
+  // Storefront-fulfilled sales post governed: a 'bills' edge from each
+  // sales order marks the cash fulfilment-governed, so the kernel skips
+  // sale-time issue effects and the inbound fulfilment issues the stock
+  // later. The edge is unique per (order, cash), so a replay re-observes
+  // it instead of duplicating the governance.
+  for (const salesOrderId of options.governFromSalesOrderIds ?? []) {
+    await db.execute(sql`
+      insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
+      values (${orgId}, ${salesOrderId}, ${documentId}, 'bills', ${actor}, ${actor})
+      on conflict (org_id, from_document_id, to_document_id, link_type) do nothing`);
   }
   const submission = await submitAndReleaseIfUngated("cash_sale", documentId, actor);
   if (submission.gated) {
@@ -1042,7 +1077,17 @@ export async function postChannelOrder(
             return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
           }
         }
-        const built = await postCashSaleDraft(orgId, actor, draftCashSaleForOrder(resolved), `channel-order:${orderId}`);
+        // A storefront-fulfilled sale posts governed by its own sales
+        // order: the draft carries the order's lines on the 3PL shelf, and
+        // the 'bills' edge tells the kernel to skip sale-time issue
+        // effects — the inbound fulfilment issues the stock later. A sale
+        // OpenBooks fulfils issues at posting, as before.
+        const governIds =
+          resolved.fulfilledBy === "storefront"
+            ? [(await buildSalesOrderDraft(orgId, actor, resolved, governedSalesOrderRef(resolved.order.externalId))).documentId]
+            : [];
+        const built = await postCashSaleDraft(orgId, actor, draftCashSaleForOrder(resolved), `channel-order:${orderId}`,
+          governIds.length > 0 ? { governFromSalesOrderIds: governIds } : undefined);
         if (!built.journalEntryId) {
           await linkOrderDocument(orgId, orderId, actor, built.documentId);
           return { status: "pending", documentId: built.documentId, effectsDocumentId: null as string | null };
@@ -1076,13 +1121,50 @@ export async function postChannelOrder(
 }
 
 /**
- * Create the sales order for an unpaid storefront order the merchant
- * fulfils. Draft, then issued through the engine-owned boundary: with no
- * customer credit role there is no credit decision to make, and a hold or
- * limit breach propagates for the operator instead of parking as a mapping
- * problem. Non-posting, so no journal and no period effect beyond dating.
+ * Find the sales order already governing a storefront order, if one
+ * survived an earlier attempt: the gated-cash path commits the order row
+ * before the operator approves the cash, so a replay must observe the
+ * draft instead of billing the order twice.
  */
-async function postUnpaidSalesOrder(orgId: string, actor: string, resolved: ResolvedOrder): Promise<string> {
+async function findGoverningSalesOrder(
+  orgId: string,
+  provider: string,
+  externalRef: string,
+): Promise<{ id: string; status: string } | null> {
+  const row = (await db.execute<{ id: string; status: string }>(sql`
+    select id, status from documents
+     where org_id = ${orgId} and kind = 'sales_order'
+       and external_source = ${provider} and external_ref = ${externalRef}
+       and status != 'voided'
+     order by created_at desc limit 1`)).rows[0];
+  return row ?? null;
+}
+
+/**
+ * External identity of the draft sales order governing a
+ * storefront-fulfilled sale: namespaced so it never collides with the
+ * sibling cash under the cross-kind (org, source, ref) unique key.
+ */
+export function governedSalesOrderRef(orderExternalId: string): string {
+  return `channel-sales-order:${orderExternalId}`;
+}
+
+/**
+ * Build the draft sales order behind a storefront order: the same lines,
+ * parties and tax the cash carries, on the order's own shelf. The caller
+ * decides what the draft governs — an unpaid order issues it as the open
+ * order under the storefront order identity, a paid storefront-fulfilled
+ * order leaves it draft under the governed ref and links it over its cash
+ * so the kernel skips sale-time issue effects.
+ */
+export async function buildSalesOrderDraft(
+  orgId: string,
+  actor: string | null,
+  resolved: ResolvedOrder,
+  externalRef: string,
+): Promise<{ documentId: string; preExisting: boolean }> {
+  const reuse = await findGoverningSalesOrder(orgId, resolved.provider, externalRef);
+  if (reuse) return { documentId: reuse.id, preExisting: true };
   const documentNumber = await allocateDocumentNumber(db, orgId, "sales_order", "SO-");
   const currency = resolved.order.shopCurrency;
   const docSubtotal = minorToLedger(resolved.lines.reduce((sum, line) => sum + line.amountMinor, 0n), currency);
@@ -1099,7 +1181,7 @@ async function postUnpaidSalesOrder(orgId: string, actor: string, resolved: Reso
     values (${orgId}, 'sales_order', ${documentNumber}, ${resolved.customerPartyId}, ${resolved.subsidiaryId},
       ${resolved.documentDate}, ${currency}, 'draft',
       ${docSubtotal}, ${docTax}, ${docTotal},
-      ${resolved.order.externalId}, ${resolved.provider}, ${resolved.order.channelId},
+      ${externalRef}, ${resolved.provider}, ${resolved.order.channelId},
       ${actor}, ${actor})
     returning id`);
   if (inserted.rows.length !== 1) throw new Error("Sales order insert returned an unexpected row count");
@@ -1135,11 +1217,29 @@ async function postUnpaidSalesOrder(orgId: string, actor: string, resolved: Reso
           ${tax.collectedBy}, ${tax.facilitatorName}, ${tax.liabilityAccountId}, ${actor}, ${actor})`);
     }
   }
+  return { documentId, preExisting: false };
+}
+
+/**
+ * Post the open sales order for an unpaid storefront order the merchant
+ * fulfils: build the draft (reusing one a replay left behind) and issue it
+ * through the engine-owned boundary. An already-issued order is observed,
+ * never issued twice.
+ */
+async function postUnpaidSalesOrder(orgId: string, actor: string, resolved: ResolvedOrder): Promise<string> {
+  // The open order keeps the storefront order identity: shipment chains
+  // match it back to the channel order through this ref.
+  const built = await buildSalesOrderDraft(orgId, actor, resolved, resolved.order.externalId);
+  if (built.preExisting) {
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${built.documentId} and org_id = ${orgId}`)).rows[0]?.status;
+    if (status && status !== "draft") return built.documentId;
+  }
   const token = (await db.execute<{ updated_at: string }>(sql`
-    select revision_seq::text as updated_at from documents where id = ${documentId} and org_id = ${orgId}`)).rows[0];
+    select revision_seq::text as updated_at from documents where id = ${built.documentId} and org_id = ${orgId}`)).rows[0];
   if (!token) throw new Error("Sales order left while it issued");
-  await issueSalesOrder({ orgId, salesOrderId: documentId, actorId: actor, expectedUpdatedAt: token.updated_at });
-  return documentId;
+  await issueSalesOrder({ orgId, salesOrderId: built.documentId, actorId: actor, expectedUpdatedAt: token.updated_at });
+  return built.documentId;
 }
 
 /** Post every pending order for one org, oldest first: posted, parked, or still waiting. */
