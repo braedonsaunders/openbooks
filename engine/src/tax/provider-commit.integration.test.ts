@@ -127,10 +127,10 @@ async function seedInvoice(org: Org, actorId: string, number: string, codeId: st
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, posting_date, currency, fx_rate, subtotal, tax_total, total,
-         created_by, updated_by)
+         ship_to_country, ship_to_region, created_by, updated_by)
       values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', ${number}, ${org.subsidiaryId},
               ${org.customerId}, ${org.date}, ${org.date}, 'CAD', '1',
-              '100.0000', '10.0000', '110.0000', ${actorId}, ${actorId})`);
+              '100.0000', '10.0000', '110.0000', 'US', 'WA', ${actorId}, ${actorId})`);
     await tx.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,

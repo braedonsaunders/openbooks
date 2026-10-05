@@ -40,6 +40,9 @@ async function seedSetup(org: Org, actorId: string): Promise<{ codeId: string; c
       (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active, created_by, updated_by)
     values (${codeId}, ${org.orgId}, 'SALES-10', 'Sales 10%', 'sales', 'standard',
             ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true, ${actorId}, ${actorId})`);
+  await db.execute(sql`
+    insert into tax_rates (id, org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
+    values (${randomUUID()}, ${org.orgId}, ${codeId}, '10.0000', '2020-01-01', ${actorId}, ${actorId})`);
   await withBypass(() =>
     saveMarketplaceFacilitator(db, org.orgId, {
       name: "Amazon",
@@ -58,10 +61,16 @@ async function seedMarketplaceInvoice(
   number: string,
   codeId: string,
   shipToRegion = "FL",
+  marketplace = true,
 ): Promise<string> {
   const documentId = randomUUID();
   const merchantLineId = randomUUID();
   const marketLineId = randomUUID();
+  // Evidence is immutable once the document leaves draft, so the marketplace
+  // line persists through the shared writer before approval.
+  const configs = await loadTaxProfileConfig(org.orgId, { taxCodeId: codeId, taxGroupId: null }, org.date);
+  const calculated = computeLineTaxes("200.0000", configs);
+  assert.equal(calculated.taxTotal, "20.0000");
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into documents
@@ -80,9 +89,11 @@ async function seedMarketplaceInvoice(
              (${marketLineId}, ${org.orgId}, ${documentId}, 2, ${org.accounts.revenue}, '200.0000',
               '200.0000', '20.0000', ${codeId}, '1', '200.0000', ${actorId}, ${actorId})`);
     // The marketplace toggle lives on the line; the component rows inherit it.
-    await tx.execute(sql`
-      update document_lines set marketplace_facilitator = 'Amazon'
-       where id = ${marketLineId} and org_id = ${org.orgId}`);
+    if (marketplace) {
+      await tx.execute(sql`
+        update document_lines set marketplace_facilitator = 'Amazon'
+         where id = ${marketLineId} and org_id = ${org.orgId}`);
+    }
     await tx.execute(sql`
       insert into document_line_tax_components
         (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
@@ -93,47 +104,61 @@ async function seedMarketplaceInvoice(
       values (${org.orgId}, ${merchantLineId}, ${codeId}, 1, '10.0000', '100.0000',
               '10.0000', '0.0000', '10.0000', 'standard', false, false, 2,
               ${org.accounts.taxOutput}, null, null, false, ${actorId}, ${actorId})`);
+    // The line flag stamps collected_by/facilitator_name on the evidence rows.
+    await persistLineTaxComponents(org.orgId, marketLineId, calculated.components, actorId, tx);
     await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
   });
-  // The marketplace line persists through the shared writer: the line flag
-  // stamps collected_by/facilitator_name on the evidence rows.
-  const configs = await loadTaxProfileConfig(org.orgId, { taxCodeId: codeId, taxGroupId: null }, org.date);
-  const calculated = computeLineTaxes("200.0000", configs);
-  assert.equal(calculated.taxTotal, "20.0000");
-  await persistLineTaxComponents(org.orgId, marketLineId, calculated.components, actorId);
   const stamped = (await db.execute<{ collectedBy: string; facilitatorName: string | null }>(sql`
     select collected_by as "collectedBy", facilitator_name as "facilitatorName"
       from document_line_tax_components
      where org_id = ${org.orgId} and document_line_id = ${marketLineId}`)).rows;
   assert.equal(stamped.length, 1);
-  assert.equal(stamped[0]!.collectedBy, "marketplace");
-  assert.equal(stamped[0]!.facilitatorName, "Amazon");
+  assert.equal(stamped[0]!.collectedBy, marketplace ? "marketplace" : "merchant");
+  assert.equal(stamped[0]!.facilitatorName, marketplace ? "Amazon" : null);
   return documentId;
 }
 
 const CONTROL = (org: Org) => ({ ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank });
 
-async function journalByAccount(org: Org, entryId: string): Promise<Map<string, string>> {
+async function journalByAccount(org: Org, entryId: string): Promise<{ legs: Map<string, string>; balanced: boolean }> {
   const rows = (await db.execute<{ accountId: string; amount: string }>(sql`
     select account_id as "accountId", amount::text as amount
       from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId}`)).rows;
-  const out = new Map<string, string>();
-  for (const row of rows) out.set(row.accountId, row.amount);
-  return out;
+  // Several legs can share an account: accumulate per account for the
+  // assertions and prove the entry balances over every leg.
+  const legs = new Map<string, bigint>();
+  let total = 0n;
+  for (const row of rows) {
+    const minor = BigInt(Math.round(Number(row.amount) * 10000));
+    total += minor;
+    legs.set(row.accountId, (legs.get(row.accountId) ?? 0n) + minor);
+  }
+  const format = (minor: bigint): string => (Number(minor) / 10000).toFixed(4);
+  return {
+    legs: new Map([...legs].map(([account, minor]) => [account, format(minor)])),
+    balanced: total === 0n,
+  };
 }
 
 test("marketplace tax posts to clearing, is excluded from due, and reported on the facilitator line", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Marketplace Controller", "admin");
+    // The invoice tenders in USD: measure the USD-base org so no conversion
+    // is needed to post or to report.
+    await db.execute(sql`
+      insert into currencies (code, name, minor_units)
+      values ('USD', 'US Dollar', 2)
+      on conflict (code) do nothing`);
+    await db.execute(sql`update orgs set base_currency = 'USD' where id = ${org.orgId}`);
+    await db.execute(sql`update subsidiaries set base_currency = 'USD' where id = ${org.subsidiaryId}`);
     const { codeId, clearingId } = await seedSetup(org, actorId);
     const documentId = await seedMarketplaceInvoice(org, actorId, "INV-MKT-1", codeId);
     const entryId = await postDocument(documentId, { control: CONTROL(org) });
 
     // The journal balances with the facilitator share in clearing, not liability.
-    const legs = await journalByAccount(org, entryId);
-    const total = [...legs.values()].reduce((acc, amount) => acc + BigInt(Math.round(Number(amount) * 10000)), 0n);
-    assert.equal(total, 0n);
+    const { legs, balanced } = await journalByAccount(org, entryId);
+    assert.equal(balanced, true);
     assert.equal(legs.get(org.accounts.taxOutput), "-10.0000");
     assert.equal(legs.get(clearingId), "-20.0000");
     assert.equal(legs.get(org.accounts.ar), "330.0000");
@@ -177,14 +202,7 @@ test("nexus excludes marketplace sales where the state rule excludes them and fl
     await postDocument(documentId, { control: CONTROL(org) });
     // A second invoice — merchant-only, shipping to a state with no
     // verified rule — proves the include-pending-review default on a real row.
-    const wyomingId = await seedMarketplaceInvoice(org, actorId, "INV-MKT-3", codeId, "WY");
-    await db.execute(sql`
-      update document_lines set marketplace_facilitator = null
-       where document_id = ${wyomingId} and org_id = ${org.orgId}`);
-    await db.execute(sql`
-      update document_line_tax_components set collected_by = 'merchant', facilitator_name = null
-       where org_id = ${org.orgId} and document_line_id in
-         (select id from document_lines where document_id = ${wyomingId} and org_id = ${org.orgId})`);
+    const wyomingId = await seedMarketplaceInvoice(org, actorId, "INV-MKT-3", codeId, "WY", false);
     await postDocument(wyomingId, { control: CONTROL(org) });
 
     // The invoice ships to Florida, whose seeded rule excludes facilitator
