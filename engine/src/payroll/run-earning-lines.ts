@@ -485,6 +485,7 @@ export async function applyAssignedComponentLines(
  * run. replaceComponent swaps out the component's derived lines (time,
  * salary, or recurring) before the one-off amount lands; either way the
  * statutory math below sees the adjusted inputs, never edited outputs.
+ * Returned identities retain zero replacements for earning phases that run later.
  */
 export async function applyRunLineAdjustments(
   tx: Pick<typeof db, "execute">,
@@ -494,8 +495,9 @@ export async function applyRunLineAdjustments(
     country: string;
     lines: Line[];
   },
-): Promise<void> {
+): Promise<ReadonlySet<string>> {
   const { orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines } = args;
+  const replacedComponentIds = new Set<string>();
   const adjustments = (await tx.execute<Record<string, unknown>>(sql`
     select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
@@ -514,6 +516,7 @@ export async function applyRunLineAdjustments(
       throw new PayrollError(`non-cash payroll component "${String(adj.name)}" is inactive — re-enable this component in Payroll components, then recalculate the editable run`);
     }
     if (adj.replace_component) {
+      replacedComponentIds.add(String(adj.id));
       for (let i = lines.length - 1; i >= 0; i--) {
         if (lines[i]!.componentId === adj.id) lines.splice(i, 1);
       }
@@ -562,6 +565,7 @@ export async function applyRunLineAdjustments(
       includeInDisposableEarnings: adj.include_in_disposable_earnings as boolean,
     });
   }
+  return replacedComponentIds;
 }
 
 /**

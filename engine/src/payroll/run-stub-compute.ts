@@ -326,7 +326,7 @@ export async function calculateStub(
   // run. replaceComponent swaps out the component's derived lines (time,
   // salary, or recurring) before the one-off amount lands; either way the
   // statutory math below sees the adjusted inputs, never edited outputs.
-  await applyRunLineAdjustments(tx, {
+  const replacedComponentIds = await applyRunLineAdjustments(tx, {
     orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines,
   });
 
@@ -393,7 +393,7 @@ export async function calculateStub(
   });
 
   const payVacationInCash = vacationMethod === "pay_each_period" || terminationRun;
-  await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines });
+  await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines, replacedComponentIds });
 
   // Work-triggered alternate-day grants: a statutory day off
   // banked as hours, never cash on this stub. Under the same gate as the

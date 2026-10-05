@@ -140,6 +140,38 @@ test('vacation paid as earned needs no bank balance while additional bank withdr
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
+test('a zero vacation replacement preserves supplied cash earnings without regenerating vacation pay', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId, employmentId } = await employee(fx, 'Vacation Replacement Employee');
+    const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+    await db.execute(sql`update payroll_vacation_terms set method='pay_each_period',updated_by=${fx.actorId},updated_at=now()
+      where org_id=${fx.orgId} and employment_id=${employmentId}`);
+    const suppliedVacation = await earningComponent(fx, 'EARNED-VACATION');
+    await db.execute(sql`update pay_components set vacationable=false where org_id=${fx.orgId} and id=${suppliedVacation}`);
+    await hours(fx, partyId, ['2026-07-13']);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,replace_component)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${plan.payout_component_id},'0',true),
+      (${fx.orgId},${run.documentId},${partyId},'line',${suppliedVacation},'9.60',false)`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, []);
+      const stub = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
+      assert.deepEqual(stub, { gross: '249.6000', vacation_accrued: '0.0000' }, 'the supplied vacation amount is paid exactly once');
+      const generated = (await db.execute(sql`select l.id from pay_stub_lines l join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
+        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${plan.payout_component_id}`)).rows;
+      assert.equal(generated.length, 0, 'zero replacement remains authoritative for the later vacation phase');
+      const movements = (await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
+        and plan_id=${plan.id} and employee_party_id=${partyId}`)).rows;
+      assert.equal(movements.length, 0);
+    }
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
 test('a vacation payout on a regular run withdraws from the bank without accruing on the payout', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {

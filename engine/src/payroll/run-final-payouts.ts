@@ -82,6 +82,8 @@ export function appendCashVacationPay(args: {
   payVacationInCash: boolean;
   need: (systemKey: string, kind: string) => Record<string, unknown>;
   lines: Line[];
+  /** Manual replacements remain authoritative even when their amount is zero. */
+  replacedComponentIds?: ReadonlySet<string>;
 }): void {
   const { vacationPercent, payVacationInCash, need, lines } = args;
   // Cash-out vacation policies bypass the bank entirely: the money is paid,
@@ -93,6 +95,7 @@ export function appendCashVacationPay(args: {
     const vacation = mulPercent(base, vacationPercent, 2) as Money;
     if (cmp(vacation, "0") > 0) {
       const c = need("vacation_payout", "earning");
+      if (args.replacedComponentIds?.has(c.id as string)) return;
       lines.push({
         componentId: c.id as string, kind: "earning", description: "Vacation pay",
         amount: vacation, sequence: 45, vacationable: false, fundedByEntitlementBank: false,
