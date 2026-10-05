@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { compileExpression, type ExpressionInput } from "../money/expression.ts";
+import { compileExpression as compileExactExpression, ExpressionError, type ExpressionInput } from "../money/expression.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
@@ -7,6 +7,11 @@ import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { assignmentCoveredDays } from "./assignment-windows.ts";
 import { compileCompensationRules, compensationRuleDefinitionHash, type CompensationRule, type CompensationRuleComponent, type CompensationRuleDefinition, type CompensationRuleResult } from "./compensation-rules.ts";
 import { PayrollError } from "./error.ts";
+
+function compileExpression(...args: Parameters<typeof compileExactExpression>): ReturnType<typeof compileExactExpression> {
+  try { return compileExactExpression(...args); }
+  catch (error) { if (error instanceof ExpressionError) throw new PayrollError(error.message); throw error; }
+}
 
 export interface CompensationPackageInput extends ExpressionInput {
   readonly source: "constant" | "assignment" | "period_gross" | "period_hours" | "hourly_wage";
@@ -58,7 +63,7 @@ export function validateCompensationPackage(definition: CompensationPackageDefin
     } else {
       for (const bound of ["minimum", "maximum"] as const) {
         if (canonicalDecimal(input[bound], 18) === null) throw new PayrollError(decimalNullRefusal(`Package input ${input.name} ${bound}`, "a decimal bound", input[bound], 18));
-        compileExpression(input.name, [input]).evaluate({ [input.name]: input[bound] }, { scale: 18, maxWholeDigits: 15, mode: "half_even" });
+        checkedInput({ ...input, minimum: input[bound], maximum: input[bound] }, input[bound]);
       }
       if (compareDecimal(input.minimum!, input.maximum!) > 0) throw new PayrollError(`Package input ${input.name} needs ordered exact decimal bounds — supply its minimum and maximum.`);
     }
@@ -70,6 +75,11 @@ export function validateCompensationPackage(definition: CompensationPackageDefin
   for (const rule of definition.rules) {
     if (!["none", "calendar_days"].includes(rule.proration)) throw new PayrollError(`Package rule ${rule.key} needs an explicit proration policy — choose no proration or calendar days.`);
     if (rule.proration === "none") continue;
+    try { compileExpression(`(${rule.expression}) * (9999999 / 9999999)`, declarations); }
+    catch (error) {
+      if (error instanceof PayrollError) throw new PayrollError(`Package rule ${rule.key} exceeds formula bounds with its declared calendar proration — shorten or simplify the expression before approving it. ${error.message}`);
+      throw error;
+    }
     const dependencies = new Set<string>();
     const collect = (key: string): void => {
       if (dependencies.has(key)) return;
@@ -98,7 +108,10 @@ export function compensationPackageDefinitionHash(definition: CompensationPackag
     })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0) })).digest("hex");
 }
 function checkedInput(input: CompensationPackageInput, raw: unknown): string | boolean {
-  const result = compileExpression(input.name, [input]).evaluate({ [input.name]: raw }, { scale: 18, maxWholeDigits: 15, mode: "half_even" });
+  const result = (() => {
+    try { return compileExpression(input.name, [input]).evaluate({ [input.name]: raw }, { scale: 18, maxWholeDigits: 15, mode: "half_even" }); }
+    catch (error) { if (error instanceof ExpressionError) throw new PayrollError(error.message); throw error; }
+  })();
   const value = result.inputs[input.name]!;
   if (typeof value === "string" && (compareDecimal(value, input.minimum!) < 0 || compareDecimal(value, input.maximum!) > 0)) throw new PayrollError(`Package input ${input.name} is outside its approved bounds (${input.minimum} through ${input.maximum}) — correct the assignment or approve a new version.`);
   return value;

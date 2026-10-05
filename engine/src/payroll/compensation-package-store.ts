@@ -76,6 +76,7 @@ async function packageTransaction<T>(orgId: string, action: () => Promise<T>): P
       const cause = detail as { code?: string; constraint?: string; where?: string; message?: string; cause?: unknown };
       if (cause.code === "P0001" && /PL\/pgSQL function (?:public\.)?payroll_compensation_(?:configuration|assignment|calculation)_guard\(\)/.test(cause.where ?? "") && typeof cause.message === "string") throw new PayrollError(cause.message);
       if (cause.constraint?.startsWith("payroll_compensation_")) {
+        if (cause.code === "23505" && cause.constraint.endsWith("_pkey")) throw new PayrollError("This compensation create request key is already in use — reopen the creation form to start a new request.");
         if (cause.code === "23505") throw new PayrollError("This package code or version already exists — reload the package register and choose a unique code or create a new version.");
         if (cause.code === "23P01") throw new PayrollError("The employment already has approved compensation for this window — end the existing assignment and use non-overlapping successor dates.");
         if (cause.code === "23503") throw new PayrollError("A compensation reference is no longer available — reload the package and choose its current native employer, employment and approved version.");
@@ -124,6 +125,22 @@ async function versionRecord(orgId: string, packageId: string, versionId: string
     where org_id=${orgId} and package_id=${packageId} and id=${identifier(versionId, "package version")} ${write ? sql`for update` : sql`for share`}`)).rows);
 }
 
+/** Native create keys identify the row; compare immutable insert evidence so later approvals or edits do not break retries. */
+async function createReplay<T extends Record<string, unknown>>(orgId: string, key: string | undefined,
+  table: "payroll_compensation_packages" | "payroll_compensation_versions" | "payroll_compensation_assignments",
+  columns: typeof PACKAGE_COLUMNS, match: Readonly<Record<string, unknown>>): Promise<T | null> {
+  if (key === undefined) return null;
+  identifier(key, "create request key");
+  const rows = (await db.execute<T>(sql`select ${columns} from ${sql.identifier(table)} where org_id=${orgId} and id=${key} for share`)).rows;
+  if (rows.length === 0) return null;
+  const original = (await db.execute<{ after: Record<string, unknown> }>(sql`select changes->'after' as after from audit_log
+    where org_id=${orgId} and table_name=${table} and row_id=${key} and action='insert' order by at,id limit 1`)).rows[0]?.after;
+  if (!original || Object.keys(match).some((name) => !Object.hasOwn(original, name) || canonicalJson(original[name]) !== canonicalJson(match[name]))) {
+    throw new PayrollError("This compensation create request was already saved with different details — reopen the creation form to start a new request, or reload the existing record.");
+  }
+  return one(rows) as T;
+}
+
 export async function listCompensationPackages(query: CompensationPackageActor): Promise<CompensationPackageRecord[]> {
   actor(query);
   return packageTransaction(query.orgId, async () => {
@@ -145,7 +162,7 @@ export async function getCompensationPackage(query: CompensationPackageActor & {
     return { package: pack, versions, assignments };
   });
 }
-export async function createCompensationPackage(query: CompensationPackageActor & { subsidiaryId: string; code: string; name: string; description?: string | null; country: string; currency: string; reason: string }): Promise<CompensationPackageRecord> {
+export async function createCompensationPackage(query: CompensationPackageActor & { subsidiaryId: string; code: string; name: string; description?: string | null; country: string; currency: string; reason: string; idempotencyKey?: string }): Promise<CompensationPackageRecord> {
   actor(query); identifier(query.subsidiaryId, "employer");
   const code = text(query.code, "Package code", 64), name = text(query.name, "Package name", 160), reason = text(query.reason, "Reason", 2000);
   if (!/^[A-Z]{2}$/.test(query.country) || !/^[A-Z]{3}$/.test(query.currency)) throw new PayrollError("Choose an ISO payroll country and currency for this package.");
@@ -154,12 +171,15 @@ export async function createCompensationPackage(query: CompensationPackageActor 
   return packageTransaction(query.orgId, async () => {
     await begin(query, "payroll.manage", true);
     await lockActorCommandAuthority(db, query.orgId, query.actorId, query.subsidiaryId, "payroll.manage");
+    const replay = await createReplay<CompensationPackageRecord>(query.orgId, query.idempotencyKey, "payroll_compensation_packages", PACKAGE_COLUMNS,
+      { subsidiary_id: query.subsidiaryId, code, name, description: query.description ?? null, country: query.country, currency: query.currency, reason, created_by: query.actorId });
+    if (replay) return replay;
     const employer = (await db.execute(sql`select id from subsidiaries where org_id=${query.orgId} and id=${query.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
     if (!employer) throw new ScopeNotFoundError();
     if (!await organizationCurrencyAvailable(db, query.orgId, query.currency, query.subsidiaryId)) throw new PayrollError("Choose an enabled currency for the package employer — foreign currencies require Company Settings → Features → Multi-currency.");
     return one((await db.execute<CompensationPackageRecord>(sql`insert into payroll_compensation_packages
-      (org_id,subsidiary_id,code,name,description,country,currency,reason,created_by,updated_by)
-      values(${query.orgId},${query.subsidiaryId},${code},${name},${query.description ?? null},${query.country},${query.currency},${reason},${query.actorId},${query.actorId}) returning ${PACKAGE_COLUMNS}`)).rows);
+      (id,org_id,subsidiary_id,code,name,description,country,currency,reason,created_by,updated_by)
+      values(coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${query.subsidiaryId},${code},${name},${query.description ?? null},${query.country},${query.currency},${reason},${query.actorId},${query.actorId}) returning ${PACKAGE_COLUMNS}`)).rows);
   });
 }
 export async function updateCompensationPackage(query: CompensationPackageActor & { packageId: string; expectedRevision: number; name: string; description: string | null; retire: boolean; reason: string }): Promise<CompensationPackageRecord> {
@@ -174,13 +194,18 @@ export async function updateCompensationPackage(query: CompensationPackageActor 
   });
 }
 export async function saveCompensationPackageVersion(query: CompensationPackageActor & { packageId: string; versionId?: string; expectedRevision?: number;
-  effectiveFrom: string; effectiveTo: string | null; definition: CompensationPackageDefinition; reason: string }): Promise<CompensationPackageVersion> {
+  effectiveFrom: string; effectiveTo: string | null; definition: CompensationPackageDefinition; reason: string; idempotencyKey?: string }): Promise<CompensationPackageVersion> {
   actor(query); const window = dates(query.effectiveFrom, query.effectiveTo), reason = text(query.reason, "Reason", 2000);
   return packageTransaction(query.orgId, async () => {
     const pack = await packageRecord(query, query.packageId, "payroll.manage", true);
-    if (pack.status !== "active") throw new PayrollError("The package is retired — create a new package before authoring future terms.");
     const hash = await checkedDefinition(query.orgId, pack, query.definition);
     const definition = canonicalJson(canonicalCompensationPackageDefinition(query.definition));
+    if (!query.versionId) {
+      const replay = await createReplay<CompensationPackageVersion>(query.orgId, query.idempotencyKey, "payroll_compensation_versions", VERSION_COLUMNS,
+        { package_id: pack.id, effective_from: window.effectiveFrom, effective_to: window.effectiveTo, definition_hash: hash, reason, created_by: query.actorId });
+      if (replay) return replay;
+    }
+    if (pack.status !== "active") throw new PayrollError("The package is retired — create a new package before authoring future terms.");
     if (query.versionId) {
       const version = await versionRecord(query.orgId, pack.id, query.versionId); revision(version, query.expectedRevision);
       if (version.status !== "draft") throw new PayrollError("This version is frozen — create a new draft version to change its terms.");
@@ -189,8 +214,8 @@ export async function saveCompensationPackageVersion(query: CompensationPackageA
         where org_id=${query.orgId} and id=${version.id} and revision=${query.expectedRevision} returning ${VERSION_COLUMNS}`)).rows);
     }
     return one((await db.execute<CompensationPackageVersion>(sql`insert into payroll_compensation_versions
-      (org_id,package_id,version,effective_from,effective_to,definition,definition_hash,reason,created_by,updated_by)
-      select ${query.orgId},${pack.id},coalesce(max(version),0)+1,${window.effectiveFrom}::date,${window.effectiveTo}::date,${definition}::jsonb,${hash},${reason},${query.actorId},${query.actorId}
+      (id,org_id,package_id,version,effective_from,effective_to,definition,definition_hash,reason,created_by,updated_by)
+      select coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${pack.id},coalesce(max(version),0)+1,${window.effectiveFrom}::date,${window.effectiveTo}::date,${definition}::jsonb,${hash},${reason},${query.actorId},${query.actorId}
       from payroll_compensation_versions where org_id=${query.orgId} and package_id=${pack.id} returning ${VERSION_COLUMNS}`)).rows);
   });
 }
@@ -221,17 +246,23 @@ export async function transitionCompensationPackageVersion(query: CompensationPa
   });
 }
 export async function saveCompensationPackageAssignment(query: CompensationPackageActor & { packageId: string; versionId: string; employmentId: string;
-  assignmentId?: string; expectedRevision?: number; effectiveFrom: string; effectiveTo: string | null; inputs: Readonly<Record<string, unknown>>; reason: string }): Promise<CompensationPackageAssignment> {
+  assignmentId?: string; expectedRevision?: number; effectiveFrom: string; effectiveTo: string | null; inputs: Readonly<Record<string, unknown>>; reason: string; idempotencyKey?: string }): Promise<CompensationPackageAssignment> {
   actor(query); identifier(query.employmentId, "employment"); const window = dates(query.effectiveFrom, query.effectiveTo), reason = text(query.reason, "Reason", 2000);
   return packageTransaction(query.orgId, async () => {
     const pack = await packageRecord(query, query.packageId, "payroll.manage", true);
-    if (pack.status !== "active") throw new PayrollError("The package is retired — choose an active package for future employee assignments.");
     const version = await versionRecord(query.orgId, pack.id, query.versionId);
     if (version.status !== "approved") throw new PayrollError("Choose an approved package version before assigning its employee terms.");
     if (await checkedDefinition(query.orgId, pack, version.definition) !== version.definitionHash) throw new PayrollError("The package definition does not match its approval evidence — choose a verified approved version.");
     const employment = one((await db.execute<{ workerPartyId: string }>(sql`select worker_party_id as "workerPartyId" from worker_employments
       where org_id=${query.orgId} and id=${query.employmentId} and employer_subsidiary_id=${pack.subsidiaryId} for share`)).rows);
     const inputs = compensationPackageAssignmentInputs(version.definition, query.inputs);
+    if (!query.assignmentId) {
+      const replay = await createReplay<CompensationPackageAssignment>(query.orgId, query.idempotencyKey, "payroll_compensation_assignments", ASSIGNMENT_COLUMNS,
+        { package_id: pack.id, version_id: version.id, employment_id: query.employmentId, effective_from: window.effectiveFrom,
+          effective_to: window.effectiveTo, inputs, reason, created_by: query.actorId });
+      if (replay) return replay;
+    }
+    if (pack.status !== "active") throw new PayrollError("The package is retired — choose an active package for future employee assignments.");
     await checkAssignmentSubject(query.orgId, pack, version, query.employmentId, employment.workerPartyId, window);
     if (query.assignmentId) {
       const assignment = one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id} and id=${identifier(query.assignmentId, "assignment")} for update`)).rows);
@@ -242,8 +273,8 @@ export async function saveCompensationPackageAssignment(query: CompensationPacka
         where org_id=${query.orgId} and id=${assignment.id} and revision=${query.expectedRevision} returning ${ASSIGNMENT_COLUMNS}`)).rows);
     }
     return one((await db.execute<CompensationPackageAssignment>(sql`insert into payroll_compensation_assignments
-      (org_id,package_id,version_id,employment_id,employee_party_id,subsidiary_id,effective_from,effective_to,inputs,reason,created_by,updated_by)
-      values(${query.orgId},${pack.id},${version.id},${query.employmentId},${employment.workerPartyId},${pack.subsidiaryId},${window.effectiveFrom},${window.effectiveTo},${canonicalJson(inputs)}::jsonb,${reason},${query.actorId},${query.actorId}) returning ${ASSIGNMENT_COLUMNS}`)).rows);
+      (id,org_id,package_id,version_id,employment_id,employee_party_id,subsidiary_id,effective_from,effective_to,inputs,reason,created_by,updated_by)
+      values(coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${pack.id},${version.id},${query.employmentId},${employment.workerPartyId},${pack.subsidiaryId},${window.effectiveFrom},${window.effectiveTo},${canonicalJson(inputs)}::jsonb,${reason},${query.actorId},${query.actorId}) returning ${ASSIGNMENT_COLUMNS}`)).rows);
   });
 }
 async function checkAssignmentSubject(orgId: string, pack: CompensationPackageRecord, version: CompensationPackageVersion, employmentId: string, workerPartyId: string, window: { effectiveFrom: string; effectiveTo: string | null }): Promise<void> {
