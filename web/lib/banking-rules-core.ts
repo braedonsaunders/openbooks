@@ -197,6 +197,18 @@ export function firstMatchingRule(line: BankLine, accountId: string, rules: Rule
   return rules.find((r) => ruleAppliesToAccount(r.criteria, accountId) && lineMatchesRule(line, r.criteria, now))
 }
 
+/**
+ * A bank-rule refusal the operator can act on. It is a named class with a 4xx
+ * status so the API boundary shows its message (and its remedy) instead of a
+ * generic server error.
+ */
+export class BankRuleRefusal extends Error {
+  override readonly name = 'BankRuleRefusal'
+  constructor(message: string, readonly status: number = 422) {
+    super(message)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Split maths
 // ---------------------------------------------------------------------------
@@ -245,7 +257,7 @@ export function resolveSplitAmounts(
   // numerically. Even dust-scale overruns refuse — controlled refusal at
   // preview/post time beats a wrong-sign posting of any size.
   if (cmp(remainderMagnitude, '0') < 0) {
-    throw new Error(
+    throw new BankRuleRefusal(
       `bank rule over-allocates the line total of ${formatMoney(absGross, 4)} by ${formatMoney(moneyAbs(remainderMagnitude), 4)} — reduce fixed or percent portions`,
     )
   }
@@ -253,7 +265,7 @@ export function resolveSplitAmounts(
   // remainder line at most half a unit per percent line may be left over.
   const percentLines = lines.filter((line) => line.portion.kind === 'percent').length
   if (remainderIdx < 0 && toUnits(remainderMagnitude) * 2n > BigInt(percentLines)) {
-    throw new Error(
+    throw new BankRuleRefusal(
       `bank rule allocates only ${formatMoney(sum(allocated), 4)} of the line total of ${formatMoney(absGross, 4)} and has no remainder line — make the portions total 100% or add a remainder line`,
     )
   }

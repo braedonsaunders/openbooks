@@ -1,7 +1,9 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, schema, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/platform/db.ts'
+import { PostingError } from '@openbooks/engine/src/journal/posting-contracts.ts'
+import { typedRefusal } from './api/error-response'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking/banking.ts'
@@ -11,6 +13,7 @@ import { can, resolveAuthzByUserId } from "./authz";
 import { nextDocumentNumber } from "./bills.ts";
 import { lockBankMatchRuleSet } from './banking-rule-set-lock'
 import {
+  BankRuleRefusal,
   type RuleCriteria,
   type RuleOutcome,
   type BankLine,
@@ -115,6 +118,23 @@ export interface ApplyResult {
   categorized: number
   suggested: number
   scanned: number
+  /**
+   * Lines a matching rule could not act on, each with the refusal that names
+   * its remedy. A refused line is left unmatched and untouched; the rest of
+   * the run still applies.
+   */
+  refused: { lineId: string; ruleId: string; ruleName: string; reason: string }[]
+}
+
+/**
+ * The operator-facing reason for a per-line refusal, or null when the error
+ * must abort the whole run: unexpected failures, and a missing gl.post grant,
+ * which is about the applier rather than any one line.
+ */
+function lineRefusalReason(error: unknown): string | null {
+  if (error instanceof JournalPostingDeniedError) return null
+  if (error instanceof PostingError) return error.message
+  return typedRefusal(error) ? error.message : null
 }
 
 async function loadActiveRules(orgId: string): Promise<RuleRow[]> {
@@ -210,7 +230,7 @@ export async function applyRulesToAccount(
   scope: ReadonlySet<string> | null,
 ): Promise<ApplyResult> {
   const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
-  const result: ApplyResult = { matched: 0, excluded: 0, categorized: 0, suggested: 0, scanned: 0 }
+  const result: ApplyResult = { matched: 0, excluded: 0, categorized: 0, suggested: 0, scanned: 0, refused: [] }
   return withOrgTransaction(orgId, async () => {
     // Rule create/edit/delete takes this same tenant lock. Keep it from the
     // candidate snapshot through the final line so a new higher-priority rule
@@ -230,9 +250,25 @@ export async function applyRulesToAccount(
     for (const line of lines) {
       const rule = firstMatchingRule(line, accountId, rules)
       if (!rule) continue
-      const applied = await applyRuleIfStillCurrent(
-        orgId, userId, accountId, line, rule, ctx, ensureReconciliation,
-      )
+      // Each line applies inside its own savepoint: a refusal on one line
+      // (an unpostable split, a closed period, an approval-gated journal)
+      // rolls back that line's writes only and is reported by line, so one
+      // ineligible line never aborts the whole run. Unexpected failures still
+      // abort it. A reconciliation opened inside a rolled-back savepoint is
+      // gone, so its cached id is forgotten with it.
+      const reconciliationBefore = reconciliationId
+      let applied: RuleApplyOutcome
+      try {
+        applied = await withTransactionSavepoint(db, () => applyRuleIfStillCurrent(
+          orgId, userId, accountId, line, rule, ctx, ensureReconciliation,
+        ))
+      } catch (error) {
+        const reason = lineRefusalReason(error)
+        if (reason === null) throw error
+        reconciliationId = reconciliationBefore
+        result.refused.push({ lineId: line.id, ruleId: rule.id, ruleName: rule.name, reason })
+        continue
+      }
       if (applied === 'excluded') result.excluded++
       if (applied === 'categorized') {
         result.categorized++
@@ -260,10 +296,10 @@ export async function applyRuleToLine(
       from bank_match_rules where id = ${opts.ruleId} and org_id = ${orgId}
   `))
   const rule = ruleRes.rows[0]
-  if (!rule) throw new Error('Rule not found')
+  if (!rule) throw new BankRuleRefusal('Rule not found', 404)
   // A disabled rule must never post: without this, deactivation is enforced
   // only by the UI hiding the rule while the API still fires it.
-  if (!rule.is_active) throw new Error('Rule is not active')
+  if (!rule.is_active) throw new BankRuleRefusal(`Rule "${rule.name}" is not active; activate it on the Rules page before applying it`, 409)
   const lineRes = (await db.execute<(BankLine & { account_id: string; subsidiaryId: string | null })>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id,
            a.subsidiary_id as "subsidiaryId"
@@ -273,7 +309,7 @@ export async function applyRuleToLine(
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
   `))
   const line = lineRes.rows[0]
-  if (!line) throw new Error('Statement line not found or already matched')
+  if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
   requireBankAccountInScope(line.subsidiaryId, scope)
   if (rule.outcome.action === 'exclude') {
     await excludeStatementLine(
@@ -339,6 +375,8 @@ export interface PreviewMatch {
   stolenBy?: string | null
   /** Resolved split preview (categorize outcomes only). */
   splitPreview?: { accountId: string; amount: string }[]
+  /** Why the rule's split cannot post on this line, when it cannot. */
+  splitRefusal?: string
 }
 
 export interface PreviewResult {
@@ -405,7 +443,7 @@ export async function previewRules(
           ruleId: opts.draftRule.id ?? null,
           ruleName: null,
           stolenBy: stealer?.name ?? null,
-          splitPreview: previewSplit(line, opts.draftRule.outcome),
+          ...previewSplit(line, opts.draftRule.outcome),
         })
       } else {
         const rule = firstMatchingRule(line, accountId, saved)
@@ -416,7 +454,7 @@ export async function previewRules(
           ruleName: rule.name,
           action: rule.outcome.action,
           ruleMode: isCategorizeOutcome(rule.outcome) ? rule.outcome.mode : null,
-          splitPreview: previewSplit(line, rule.outcome),
+          ...previewSplit(line, rule.outcome),
         })
       }
       if (opts.limit && matches.length >= opts.limit) break
@@ -437,9 +475,19 @@ function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'
   }
 }
 
-function previewSplit(line: BankLine, outcome: RuleOutcome): { accountId: string; amount: string }[] | undefined {
-  if (outcome.action !== 'categorize') return undefined
-  return resolveSplitAmounts(line.amount, outcome.lines).map((r) => ({ accountId: r.line.accountId, amount: r.amount }))
+/**
+ * The split a rule would post for one line. A split the line cannot carry is
+ * reported on that line (`splitRefusal`) instead of failing the whole preview,
+ * so one misconfigured rule does not hide every other rule's matches.
+ */
+function previewSplit(line: BankLine, outcome: RuleOutcome): Pick<PreviewMatch, 'splitPreview' | 'splitRefusal'> {
+  if (outcome.action !== 'categorize') return {}
+  try {
+    return { splitPreview: resolveSplitAmounts(line.amount, outcome.lines).map((r) => ({ accountId: r.line.accountId, amount: r.amount })) }
+  } catch (error) {
+    if (error instanceof BankRuleRefusal) return { splitRefusal: error.message }
+    throw error
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -537,13 +585,19 @@ export async function createCategorizingJournal(
   const submission = await withOrgTransaction(orgId, async () => {
     const inner = await submitAndReleaseIfUngated('journal', doc!.id, userId)
     if (inner.flowError) {
-      throw new Error(`approval could not be routed: ${inner.flowError}`)
+      throw new BankRuleRefusal(`the categorizing journal's approval could not be routed: ${inner.flowError}`)
     }
     return inner
   })
+  // An approval-gated journal cannot be posted and matched in this one
+  // step, and this whole unit (journal included) rolls back on refusal, so
+  // nothing is left pending. The remedy is the manual path that exists:
+  // record the journal, let it route for approval, then match the posted
+  // line in Match Bank Data.
   if (submission.gated) {
-    throw new Error(
-      'the categorizing journal was submitted for approval; match it after approval',
+    throw new BankRuleRefusal(
+      'journal entries require approval in this organization, so this line cannot be categorized automatically and nothing was posted; record the journal from Journals, and once it is approved and posted, match it to this line in Match Bank Data',
+      409,
     )
   }
   const entryId = await postDocument(doc!.id, deps)
@@ -578,7 +632,7 @@ export async function addJournalMatchFromLine(
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
   `))
   const line = lineRes.rows[0]
-  if (!line) throw new Error('Statement line not found or already matched')
+  if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
   // Both legs stay inside the caller's boundary: the bank leg's account and
   // the chosen offset account. The session itself is gated again inside
   // createMatchWithJournal.

@@ -215,6 +215,7 @@
       "or": "oder"
     },
     "runSuggested": "{suggested, plural, one {# Zeile zur Prüfung vorgeschlagen} other {# Zeilen zur Prüfung vorgeschlagen}}",
+    "runRefused": "{count, plural, one {# Zeile wurde abgelehnt und bleibt offen} other {# Zeilen wurden abgelehnt und bleiben offen}}: {reason}",
     "modeSuggest": "Vorschlagen",
     "modeAuto": "Auto-Buchung",
     "assignPayee": "Zahlungsempfänger zuweisen",

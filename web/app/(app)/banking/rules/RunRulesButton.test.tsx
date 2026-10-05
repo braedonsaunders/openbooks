@@ -176,3 +176,15 @@ test('a clean dry run toasts the match summary', async (t) => {
   await click(run)
   assert.deepEqual(script.errors, [], 'a successful run toasts nothing as an error')
 })
+
+test('lines a rule refused are reported with the refusal, not hidden behind the match summary', async (t) => {
+  await mount(t, () => Response.json({
+    matched: 1, excluded: 0, suggested: 0, scanned: 3,
+    refused: [{ lineId: 'l2', ruleId: 'r1', ruleName: 'Meals', reason: 'no open accounting period for 2026-01-31' }],
+  }))
+  await openDialog()
+  const run = findDialogButton('Run rules')
+  assert.ok(run, 'Run must render')
+  await click(run)
+  assert.deepEqual(script.errors, ['1 line was refused and left unmatched: no open accounting period for 2026-01-31'])
+})

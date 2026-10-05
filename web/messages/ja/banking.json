@@ -215,6 +215,7 @@
       "or": "または"
     },
     "runSuggested": "{suggested, plural, one {確認対象の提案 # 件} other {確認対象の提案 # 件}}",
+    "runRefused": "{count, plural, one {# 件の明細は拒否され、未照合のままです} other {# 件の明細は拒否され、未照合のままです}}: {reason}",
     "modeSuggest": "提案",
     "modeAuto": "自動記帳",
     "assignPayee": "受取人を割当",

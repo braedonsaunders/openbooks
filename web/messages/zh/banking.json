@@ -215,6 +215,7 @@
       "or": "或"
     },
     "runSuggested": "{suggested, plural, one {有 # 条待复核建议} other {有 # 条待复核建议}}",
+    "runRefused": "{count, plural, one {# 条明细被拒绝，仍未匹配} other {# 条明细被拒绝，仍未匹配}}：{reason}",
     "modeSuggest": "建议",
     "modeAuto": "自动过账",
     "assignPayee": "指定收款方",
