@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { CommerceError, importShopifyLocations } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       return NextResponse.json(await importShopifyLocations(gate.user.orgId, gate.user.id, id));
     } catch (error) {

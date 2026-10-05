@@ -8,6 +8,8 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { loadChannelOrderDrawer } from '../order-detail'
+import { guardChannelOrderScope } from '../../../../lib/channel-scope'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import type { ChannelTab } from '../ChannelWidgets'
 
 /**
@@ -30,13 +32,19 @@ export interface ChannelOrdersData {
  * Everything waiting in the needs-attention queues: parked orders plus
  * parked refund, cancellation and fulfilment events.
  */
-export async function countChannelExceptions(orgId: string): Promise<number> {
+export async function countChannelExceptions(orgId: string, allowed: ReadonlySet<string> | null): Promise<number> {
+  // Only channels the reader may see count: a channel's queue belongs to its subsidiary.
+  const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowed)
   const [orders, events] = await Promise.all([
     db.execute<{ count: string }>(
-      sql`select count(*)::text as count from channel_orders where org_id = ${orgId} and posting_status = 'exception'`,
+      sql`select count(*)::text as count from channel_orders o
+            join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
+           where o.org_id = ${orgId} and o.posting_status = 'exception'${scope}`,
     ),
     db.execute<{ count: string }>(
-      sql`select count(*)::text as count from channel_order_events where org_id = ${orgId} and posting_status = 'exception'`,
+      sql`select count(*)::text as count from channel_order_events e
+            join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
+           where e.org_id = ${orgId} and e.posting_status = 'exception'${scope}`,
     ),
   ])
   return Number(orders.rows[0]?.count ?? '0') + Number(events.rows[0]?.count ?? '0')
@@ -59,10 +67,12 @@ export async function loadChannelOrders(
   const orgId = authz.user.orgId
   const canManage = can(authz, 'channels.manage')
 
-  const exceptionCount = await countChannelExceptions(orgId)
+  const exceptionCount = await countChannelExceptions(orgId, authz.allowedSubsidiaryIds)
 
   const orderId = typeof sp.order === 'string' && isUuid(sp.order) ? sp.order : null
-  const drawer = orderId ? await loadChannelOrderDrawer(orgId, orderId, canManage) : null
+  const drawer = orderId && !(await guardChannelOrderScope(authz, orderId))
+    ? await loadChannelOrderDrawer(orgId, orderId, canManage)
+    : null
 
   return {
     title: t('title'),

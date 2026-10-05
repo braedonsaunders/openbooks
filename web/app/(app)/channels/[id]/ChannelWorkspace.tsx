@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { can, getAuthz } from "../../../../lib/authz";
+import { can, getAuthz, subsidiaryScopeAllows, type Authz } from "../../../../lib/authz";
 import {
   CommerceError,
   getChannel,
@@ -25,9 +25,12 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "dest
   error: "destructive",
 };
 
-async function loadChannel(orgId: string, channelId: string) {
+/** A channel assigned outside the reader's subsidiaries reads as missing. */
+async function loadChannel(authz: Authz, channelId: string) {
   try {
-    return await getChannel(orgId, channelId);
+    const channel = await getChannel(authz.user.orgId, channelId);
+    if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, channel.subsidiaryId)) notFound();
+    return channel;
   } catch (error) {
     if (error instanceof CommerceError && error.code === "channel_not_found") notFound();
     throw error;
@@ -54,7 +57,7 @@ export async function ChannelWorkspace({
   if (!authz) notFound();
   if (!can(authz, "channels.read")) notFound();
   const t = await getTranslations("channels");
-  const channel = await loadChannel(authz.user.orgId, channelId);
+  const channel = await loadChannel(authz, channelId);
   const canManage = can(authz, "channels.manage");
   // Connector-contributed tabs arrive through the channel adapter's
   // `workspaceTabs()`; a kind with no adapter contributes none, so the
@@ -118,7 +121,7 @@ async function WorkspaceOverview({ channelId }: { channelId: string }) {
   const authz = await getAuthz();
   if (!authz) notFound();
   const t = await getTranslations("channels");
-  const channel = await loadChannel(authz.user.orgId, channelId);
+  const channel = await loadChannel(authz, channelId);
   const events = await listInboundEvents(authz.user.orgId, channelId, 5);
   const healthEntries = Object.entries(channel.health ?? {});
   const outstanding = events.filter((event) => event.status === "failed" || event.status === "dead").length;

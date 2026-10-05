@@ -10,6 +10,7 @@ import {
   suggestExceptionFix,
 } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelOrderScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
+    const outOfScope = await guardChannelOrderScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       const suggestion = await suggestExceptionFix(gate.user.orgId, id);
       const ranking = await explainWithModel(gate.user.orgId, suggestion.explanation);

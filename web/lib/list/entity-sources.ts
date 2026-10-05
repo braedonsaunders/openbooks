@@ -1773,8 +1773,13 @@ const SOURCES: Record<string, EntityListSource> = {
 const channelOrderBaseJoins = sql`join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
   left join documents d on d.org_id = o.org_id and d.id = o.posting_document_id`;
 
-function channelOrderWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, exceptionOnly: boolean) {
-  const parts: SQL[] = [sql`o.org_id = ${orgId}`]
+/** A channel's orders are visible only to callers who can see the subsidiary it posts into. */
+function channelScopeFilter(allowed: Set<string> | null | undefined): SQL {
+  return subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowed === undefined ? new Set<string>() : allowed)
+}
+
+function channelOrderWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, exceptionOnly: boolean, allowed?: Set<string> | null) {
+  const parts: SQL[] = [sql`o.org_id = ${orgId}`, channelScopeFilter(allowed)]
   if (exceptionOnly) parts.push(sql`and o.posting_status = 'exception'`)
   if (adhoc.q) {
     parts.push(sql`and (o.external_number ilike ${`%${adhoc.q}%`} or coalesce(o.customer_email, '') ilike ${`%${adhoc.q}%`} or coalesce(o.customer_name, '') ilike ${`%${adhoc.q}%`})`)
@@ -1798,8 +1803,8 @@ const CHANNEL_EVENT_EXCEPTION_CODES = [
   'insufficient_stock', 'cancellation_blocked',
 ];
 
-function channelEventExceptionWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string) {
-  const parts: SQL[] = [sql`e.org_id = ${orgId}`, sql`and e.posting_status = 'exception'`]
+function channelEventExceptionWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: Set<string> | null) {
+  const parts: SQL[] = [sql`e.org_id = ${orgId}`, sql`and e.posting_status = 'exception'`, channelScopeFilter(allowed)]
   if (adhoc.q) {
     parts.push(sql`and (o.external_number ilike ${`%${adhoc.q}%`} or coalesce(o.customer_email, '') ilike ${`%${adhoc.q}%`} or coalesce(o.customer_name, '') ilike ${`%${adhoc.q}%`})`)
   }
@@ -1842,7 +1847,7 @@ const CHANNEL_ORDER_SOURCES: Record<string, EntityListSource> = {
     defaultSort: sql`o.ordered_at`,
     statusExpr: sql`o.posting_status`,
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
-    where: (view, adhoc, orgId) => channelOrderWhere(view, adhoc, orgId, false),
+    where: (view, adhoc, orgId, allowed) => channelOrderWhere(view, adhoc, orgId, false, allowed),
     drawerParam: 'order', basePath: '/channels/orders',
     currencyField: 'shop_currency',
     statusVariant: (_row, value) =>
@@ -1870,7 +1875,7 @@ const CHANNEL_ORDER_SOURCES: Record<string, EntityListSource> = {
     defaultSort: sql`o.ordered_at`,
     statusExpr: sql`o.exception_code`,
     quickFilters: [{ paramKey: 'code', filterKey: 'code' }],
-    where: (view, adhoc, orgId) => channelOrderWhere(view, adhoc, orgId, true),
+    where: (view, adhoc, orgId, allowed) => channelOrderWhere(view, adhoc, orgId, true, allowed),
     drawerParam: 'order', basePath: '/channels/exceptions',
     currencyField: 'shop_currency',
     statusVariant: () => 'destructive',
@@ -1894,7 +1899,7 @@ const CHANNEL_ORDER_SOURCES: Record<string, EntityListSource> = {
     defaultSort: sql`e.occurred_at`,
     statusExpr: sql`e.exception_code`,
     quickFilters: [{ paramKey: 'code', filterKey: 'code' }],
-    where: (view, adhoc, orgId) => channelEventExceptionWhere(view, adhoc, orgId),
+    where: (view, adhoc, orgId, allowed) => channelEventExceptionWhere(view, adhoc, orgId, allowed),
     // An event opens its order: the drawer shows the order with the event in
     // its timeline, so the fix happens where the order lives.
     drawerParam: 'order', basePath: '/channels/exceptions',

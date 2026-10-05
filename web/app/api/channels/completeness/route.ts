@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
 import { commerceCloseChecks } from "@openbooks/engine/close/commerce";
+import { guardUnrestrictedScope } from "@/lib/authz";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,10 @@ export const GET = defineRoute({
   permission: "channels.read",
   feature: "salesChannels",
   handler: async ({ request: req, authz: gate }) => {
+    // Spans every channel of the organization, including ones assigned to
+    // subsidiaries outside a restricted caller's scope.
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
     const day = new URL(req.url).searchParams.get("day") ?? todayUtc();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
       return NextResponse.json({ error: "day must be a YYYY-MM-DD calendar date" }, { status: 400 });

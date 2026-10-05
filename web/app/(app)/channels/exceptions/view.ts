@@ -6,6 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { loadChannelOrderDrawer } from '../order-detail'
+import { guardChannelOrderScope } from '../../../../lib/channel-scope'
 import { channelTabs, countChannelExceptions } from '../orders/view'
 
 /**
@@ -35,10 +36,12 @@ export async function loadChannelExceptions(
   const orgId = authz.user.orgId
   const canManage = can(authz, 'channels.manage')
 
-  const exceptionCount = await countChannelExceptions(orgId)
+  const exceptionCount = await countChannelExceptions(orgId, authz.allowedSubsidiaryIds)
 
   const orderId = typeof sp.order === 'string' && isUuid(sp.order) ? sp.order : null
-  const drawer = orderId ? await loadChannelOrderDrawer(orgId, orderId, canManage) : null
+  const drawer = orderId && !(await guardChannelOrderScope(authz, orderId))
+    ? await loadChannelOrderDrawer(orgId, orderId, canManage)
+    : null
 
   return {
     title: t('exceptionsTitle'),

@@ -8,6 +8,7 @@ import {
   listChannels,
   registeredChannelKinds,
 } from "@openbooks/engine/commerce";
+import { channelAssignmentRefusal, channelsInScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,8 @@ export const GET = defineRoute({
   permission: "channels.read",
   feature: "salesChannels",
   handler: async ({ authz: gate }) => {
-    const channels = await listChannels(gate.user.orgId);
+    // Channels assigned to a subsidiary outside the caller's scope stay hidden.
+    const channels = channelsInScope(gate, await listChannels(gate.user.orgId));
     const attention = await channelAttention(gate.user.orgId);
     return NextResponse.json({
       channels: channels.map((channel) => ({
@@ -45,6 +47,8 @@ export const POST = defineRoute({
   feature: "salesChannels",
   body: createBodySchema,
   handler: async ({ authz: gate, body }) => {
+    const refused = channelAssignmentRefusal(gate, body.subsidiaryId);
+    if (refused) return refused;
     const { channel, webhookSecret } = await createChannel(gate.user.orgId, gate.user.id, {
       kind: body.kind,
       name: body.name,

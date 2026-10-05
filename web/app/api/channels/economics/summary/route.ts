@@ -1,6 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { getChannelMarginSummary } from "@openbooks/engine/commerce";
+import { guardUnrestrictedScope } from "@/lib/authz";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,10 @@ export const GET = defineRoute({
   permission: "channels.read",
   feature: "salesChannels",
   handler: async ({ request, authz: gate }) => {
+    // Spans every channel of the organization, including ones assigned to
+    // subsidiaries outside a restricted caller's scope.
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
     const url = new URL(request.url);
     const days = Number(url.searchParams.get("days") ?? "30");
     const summary = await getChannelMarginSummary(gate.user.orgId, days);

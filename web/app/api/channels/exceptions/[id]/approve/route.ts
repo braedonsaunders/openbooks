@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { CommerceError, approveExceptionSuggestion } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelOrderScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
+    const outOfScope = await guardChannelOrderScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       return NextResponse.json(
         await approveExceptionSuggestion(gate.user.orgId, gate.user.id, id, {

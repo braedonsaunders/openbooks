@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CommerceError, replayEvent } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id, eventId } = await params;
     if (!isUuid(id) || !isUuid(eventId)) return notFound("event");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       const event = await replayEvent(gate.user.orgId, gate.user.id, eventId, body.reason, id);
       return NextResponse.json({ event });

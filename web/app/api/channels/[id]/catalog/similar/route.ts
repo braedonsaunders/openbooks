@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { CommerceError, similarCatalogEntries } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,8 @@ export const GET = defineRoute({
   handler: async ({ request, authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     const entryId = new URL(request.url).searchParams.get("entryId") ?? "";
     if (!isUuid(entryId)) return notFound("record");
     try {

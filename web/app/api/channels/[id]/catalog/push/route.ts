@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { CommerceError, pushItemToShopify } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       return NextResponse.json(
         await pushItemToShopify(gate.user.orgId, gate.user.id, id, body.itemId, { fields: body.fields }),

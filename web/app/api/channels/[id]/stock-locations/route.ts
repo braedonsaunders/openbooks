@@ -5,6 +5,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { db, withOrgContext } from "@openbooks/engine/platform/database";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     const rows = (
       await withOrgContext(gate.user.orgId, () =>
         db.execute<{ value: string; label: string }>(sql`

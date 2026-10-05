@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { listInboundEvents } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,8 @@ export const GET = defineRoute({
   handler: async ({ request, authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     // An unknown channel reads as an empty activity list: the channel GET
     // above already answers 404, so this list never oracles existence.
     const events = await listInboundEvents(gate.user.orgId, id, readLimit(request));
