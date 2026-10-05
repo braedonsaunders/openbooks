@@ -13,7 +13,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, "Replay Grant Controller", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Replay Grant Controller", "admin"));
     const connectionId = randomUUID();
     const requestId = randomUUID();
     const tag = randomUUID().slice(0, 8);
