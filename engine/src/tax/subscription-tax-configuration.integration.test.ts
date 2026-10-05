@@ -120,3 +120,33 @@ test("untaxed subscription generation is unchanged", enabled, () => fixture(asyn
     assert.equal(doc.total, "100.0000");
   }
 }));
+
+test("a tax-inclusive subscription price carves the tax out instead of adding it", enabled, () => fixture(async (f) => {
+  const inclusiveCodeId = randomUUID();
+  await db.execute(sql`insert into tax_codes (id,org_id,code,name,collected_account_id,paid_account_id,price_includes_tax)
+    values (${inclusiveCodeId},${f.org.orgId},'SUB-INCL','Subscription price includes tax',${f.org.accounts.taxOutput},${f.org.accounts.taxInput},true)`);
+  await db.execute(sql`insert into tax_rates (org_id,tax_code_id,rate_percent,effective_from)
+    values (${f.org.orgId},${inclusiveCodeId},'13','2026-01-01')`);
+  const read = async (invoiceId: string) => (await db.execute<Record<string, string>>(sql`
+    select d.subtotal::text as subtotal, d.tax_total::text as "taxTotal", d.total::text as total,
+           l.amount::text as amount, l.tax_amount::text as "taxAmount", l.tax_input_amount::text as "taxInputAmount",
+           l.unit_price::text as "unitPrice"
+      from documents d join document_lines l on l.document_id = d.id and l.org_id = d.org_id
+     where d.id = ${invoiceId} and d.org_id = ${f.org.orgId}`)).rows[0];
+
+  // A 113.00 plan on a 13% price-includes-tax code charges 113.00 in total:
+  // 100.00 of revenue and 13.00 of tax, never 113.00 + 13.00.
+  const inclusive = await createSubscriptionInvoice(spec(f, { taxCodeId: inclusiveCodeId, unitPrice: "113.00" }));
+  assert.equal(inclusive.total, "113.0000");
+  assert.deepEqual(await read(inclusive.invoiceId), {
+    subtotal: "100.0000", taxTotal: "13.0000", total: "113.0000",
+    amount: "100.0000", taxAmount: "13.0000", taxInputAmount: "113.0000", unitPrice: "113.00000000",
+  });
+
+  // The same price on a tax-exclusive code still adds the tax on top.
+  const exclusive = await createSubscriptionInvoice(spec(f, { unitPrice: "113.00" }));
+  assert.deepEqual(await read(exclusive.invoiceId), {
+    subtotal: "113.0000", taxTotal: "14.6900", total: "127.6900",
+    amount: "113.0000", taxAmount: "14.6900", taxInputAmount: "113.0000", unitPrice: "113.00000000",
+  });
+}));

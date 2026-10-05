@@ -702,6 +702,7 @@ async function createSubscriptionInvoiceInTransaction(
   const prepared: Array<{
     input: AdvancedBillingLine;
     amount: string;
+    taxInputAmount: string | null;
     taxAmount: string;
     accountId: string;
     taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"];
@@ -727,6 +728,12 @@ async function createSubscriptionInvoiceInTransaction(
     }
     const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
     let lineTax = "0.0000";
+    // The line's net (revenue) amount. A price-includes-tax code carves the
+    // tax out of the charged amount, so the stored line amount is the net
+    // and the charged amount is kept as the tax input, exactly as recurring
+    // documents and entered invoices store inclusive lines.
+    let lineAmount = amount;
+    let taxInputAmount: string | null = null;
     let taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"] = [];
     if (applyTax) {
       const taxCodeId = input.taxCodeId!;
@@ -752,12 +759,14 @@ async function createSubscriptionInvoiceInTransaction(
         );
       }
       const res = computeLineTaxes(amount, cfg, {});
+      lineAmount = res.netAmount;
+      taxInputAmount = res.inputAmount;
       lineTax = res.taxTotal;
       taxComponents = res.components;
     }
-    netAmount = add(netAmount, amount);
+    netAmount = add(netAmount, lineAmount);
     taxTotal = add(taxTotal, lineTax);
-    prepared.push({ input: { ...input, quantity, unitPrice }, amount, taxAmount: lineTax, accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId), taxComponents });
+    prepared.push({ input: { ...input, quantity, unitPrice }, amount: lineAmount, taxInputAmount, taxAmount: lineTax, accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId), taxComponents });
   }
   const total = add(netAmount, taxTotal);
 
@@ -795,10 +804,10 @@ async function createSubscriptionInvoiceInTransaction(
     const linePartyId = spec.servicePartyId ?? null;
     const line = await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
-            unit_price, amount, tax_code_id, tax_amount, subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
+            unit_price, amount, tax_code_id, tax_input_amount, tax_amount, subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
       values (${spec.orgId}, ${invoiceId}, ${index + 1}, ${preparedLine.input.itemId}, ${preparedLine.accountId},
             ${preparedLine.input.description}, ${preparedLine.input.quantity}, ${preparedLine.input.unitPrice},
-            ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxAmount},
+            ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxInputAmount}, ${preparedLine.taxAmount},
             ${preparedLine.input.subsidiaryId ?? spec.lineSubsidiaryId ?? null},
             ${linePartyId},
             ${linePartyId},
