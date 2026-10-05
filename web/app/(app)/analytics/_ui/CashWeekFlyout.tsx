@@ -149,10 +149,18 @@ export function CashWeekFlyout({
   // words — never a generic "load failed" that hides what to fix.
   const [fetchMessage, setFetchMessage] = useState<string | null>(null)
   const [fetchAttempt, setFetchAttempt] = useState(0)
+  // A new request supersedes the old fetch lifecycle: clear its failure
+  // message while rendering (the request key identifies the fetch, not the
+  // loading phase), never with a synchronous setState inside the effect.
+  const requestKey = `${week.weekStart}|${(selectedSubsidiaryIds ?? []).join(',')}|${horizonWeeks ?? ''}`
+  const [seenRequest, setSeenRequest] = useState(requestKey)
+  if (seenRequest !== requestKey) {
+    setSeenRequest(requestKey)
+    setFetchMessage(null)
+  }
   useEffect(() => {
     if (fetched) return
     let cancelled = false
-    setFetchMessage(null)
     ;(async () => {
       try {
         const r = await fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds, horizonWeeks))
