@@ -66,6 +66,7 @@ import {
 } from '@openbooks/engine/src/billing/usage/records.ts'
 import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
 import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
+import { EntitlementError, createSaasFeature, updateSaasFeature, type SaasFeatureType } from '@openbooks/engine/src/billing/entitlements.ts'
 import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
@@ -2114,7 +2115,7 @@ export async function createSetupRecord(
   // the duplicate row IS this key's own row, the claim inside the transaction
   // replays an exact retry (200) or refuses a changed payload (409) instead
   // of misreporting the retry as a natural-key duplicate.
-  if (entity.naturalKey && entity.key !== 'usage-meters' && entity.key !== 'usage-rating-plans') {
+  if (entity.naturalKey && entity.key !== 'usage-meters' && entity.key !== 'usage-rating-plans' && entity.key !== 'saas-features') {
     const col = toSnake(entity.naturalKey)
     const val = String(body[entity.naturalKey] ?? '')
     const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
@@ -2189,7 +2190,7 @@ export async function createSetupRecord(
     sql`, `,
   )
 
-  if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans') {
+  if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans' || entity.key === 'saas-features') {
     const match = setupCreateMatch()
     const claimMatch = { orgId, table: entity.table, key: requestId, match, orgScoped: entity.orgScoped }
     try {
@@ -2202,9 +2203,18 @@ export async function createSetupRecord(
             aggregation: body.aggregation as UsageAggregation,
             itemId: body.itemId == null || body.itemId === '' ? null : String(body.itemId),
           })
-          : await createUsageRatingPlan(orgId, actorId, {
-            name: String(body.name), currency: String(body.currency),
-          })
+          : entity.key === 'saas-features'
+            ? await createSaasFeature(orgId, actorId, {
+              key: String(body.key), name: String(body.name),
+              description: body.description == null || body.description === '' ? null : String(body.description),
+              type: body.featureType as SaasFeatureType,
+              unit: body.unit == null || body.unit === '' ? null : String(body.unit),
+              meterKey: body.meterKey == null || body.meterKey === '' ? null : String(body.meterKey),
+              isActive: body.isActive === undefined ? undefined : coerceBoolean(body.isActive),
+            })
+            : await createUsageRatingPlan(orgId, actorId, {
+              name: String(body.name), currency: String(body.currency),
+            })
         const rowId = String(created.id)
         if (entity.key === 'usage-meters' && body.isActive !== undefined && !coerceBoolean(body.isActive)) {
           await deactivateUsageMeter(orgId, actorId, rowId)
@@ -2224,6 +2234,9 @@ export async function createSetupRecord(
       if (error instanceof SetupWriteRefusal) return { status: error.status, body: { error: error.message } }
       if (error instanceof SetupCreateConflict) return { status: error.status, body: { error: error.message, code: error.code } }
       if (error instanceof UsageBillingError) {
+        return { status: error.status, body: { error: error.message, code: error.code, remedy: error.remedy, field: error.field } }
+      }
+      if (error instanceof EntitlementError) {
         return { status: error.status, body: { error: error.message, code: error.code, remedy: error.remedy, field: error.field } }
       }
       if (pgErrorCode(error) === '23505') return duplicateConflict(entity.key)
@@ -2513,12 +2526,40 @@ export async function updateSetupRecord(
     }
   }
 
-  if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans') {
+  if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans' || entity.key === 'saas-features') {
     try {
       await withOrgTransaction(orgId, () => setupWriteTransaction(entity, orgId, body, id, async (tx) => {
         const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
         if (!before) throw new SetupWriteRefusal('not found', 404)
-        if (entity.key === 'usage-meters') {
+        if (entity.key === 'saas-features') {
+          // The feature type prices every grant ever written: changing it
+          // would reinterpret history, so the engine refuses it and the
+          // operator creates a new feature instead.
+          if (body.featureType !== undefined && String(body.featureType) !== String(before.feature_type)) {
+            throw new EntitlementError(
+              'entitlement_type_immutable',
+              'A feature type cannot change after creation.',
+              'Create a new feature with the desired type.',
+              { field: 'featureType', status: 409 },
+            )
+          }
+          const input = {
+            ...(body.name === undefined ? {} : { name: String(body.name) }),
+            ...(body.description === undefined ? {} : { description: body.description == null || body.description === '' ? null : String(body.description) }),
+            ...(body.unit === undefined ? {} : { unit: body.unit == null || body.unit === '' ? null : String(body.unit) }),
+            ...(body.meterKey === undefined ? {} : { meterKey: body.meterKey == null || body.meterKey === '' ? null : String(body.meterKey) }),
+          }
+          if (Object.keys(input).length) await updateSaasFeature(orgId, actorId, id, input)
+          if (body.isActive !== undefined) {
+            const active = coerceBoolean(body.isActive)
+            if (active !== Boolean(before.is_active)) {
+              await updateSaasFeature(orgId, actorId, id, { isActive: active })
+            }
+          }
+          if (Object.keys(input).length === 0 && body.isActive === undefined) {
+            await updateSaasFeature(orgId, actorId, id, {})
+          }
+        } else if (entity.key === 'usage-meters') {
           const input = {
             ...(body.key === undefined ? {} : { key: String(body.key) }),
             ...(body.name === undefined ? {} : { name: String(body.name) }),
@@ -2556,6 +2597,9 @@ export async function updateSetupRecord(
     } catch (error) {
       if (error instanceof SetupWriteRefusal) return { status: error.status, body: { error: error.message } }
       if (error instanceof UsageBillingError) {
+        return { status: error.status, body: { error: error.message, code: error.code, remedy: error.remedy, field: error.field } }
+      }
+      if (error instanceof EntitlementError) {
         return { status: error.status, body: { error: error.message, code: error.code, remedy: error.remedy, field: error.field } }
       }
       return { status: 400, body: { error: describeDbError(error) } }

@@ -2652,6 +2652,11 @@
         "singular": "Plano de tarifas de uso",
         "description": "Configure a moeda e o ciclo de vida dos planos de tarifas de uso."
       },
+      "saas-features": {
+        "title": "Recursos de assinatura",
+        "singular": "Recurso de assinatura",
+        "description": "As capacidades tarifadas que os planos concedem às assinaturas: chaves, quantidades incluídas, uso medido e valores personalizados."
+      },
       "warehouses": {
         "title": "Armazéns",
         "singular": "Armazém",
@@ -3437,6 +3442,7 @@
       "regime": "Regime",
       "classCode": "Código da classe",
       "rate": "Taxa",
+      "meterKey": "Medidor de uso",
       "method": "Método",
       "firstYearFraction": "Fração do primeiro ano",
       "allowRecapture": "Permite recaptura",
@@ -3902,6 +3908,7 @@
       "contractCostBasisLabel": "Base de amortização",
       "contractCostAssetAccount": "Conta de ativo de custos do contrato",
       "amountMinor": "Desconto (unidades menores)",
+      "featureType": "Tipo de recurso",
       "feeAmountMinor": "Valor da taxa (unidades menores)",
       "feePercent": "Percentual da taxa",
       "itemCategory": "Categoria do item",
@@ -3942,6 +3949,8 @@
       "storedValueExpiryMonths": "Meses inteiros após a emissão antes que o valor não resgatado expire, onde legal. Vazio para sem expiração.",
       "storedValueInactivityMonths": "Meses sem atividade antes de reconhecer como breakage um saldo da política por inatividade.",
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
+      "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
+"saasFeatureMeter": "Chave do medidor para recursos medidos, resolve o uso pelo faturamento de uso. Vazio para outros tipos.",
       "putawayItem": "Deixe em branco para aplicar a regra a todos os itens.",
       "putawayCapacity": "O máximo que o destino pode conter do item. Obrigatório em uma zona a granel; deixe em branco em uma posição fixa para não haver limite.",
       "carrierServices": "Os níveis de serviço que esta transportadora oferece, como Econômico ou Expresso. Cada remessa escolhe um deles.",
@@ -4101,6 +4110,12 @@
       "usageRatingPlanStatus": {
         "active": "Ativo",
         "retired": "Retirado"
+      },
+      "saasFeatureType": {
+        "boolean": "Sim/não",
+        "quantity": "Quantidade",
+        "metered": "Medido",
+        "custom": "Personalizado"
       },
       "warehouseStatus": {
         "draft": "Rascunho",

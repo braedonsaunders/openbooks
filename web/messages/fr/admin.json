@@ -2607,6 +2607,11 @@
         "singular": "Plan tarifaire d’usage",
         "description": "Configurez la devise et le cycle de vie des plans tarifaires d’usage."
       },
+      "saas-features": {
+        "title": "Fonctions d’abonnement",
+        "singular": "Fonction d’abonnement",
+        "description": "Les capacités tarifées que les plans accordent aux abonnements : interrupteurs, quantités incluses, usage mesuré et valeurs personnalisées."
+      },
       "warehouses": {
         "title": "Entrepôts",
         "singular": "Entrepôt",
@@ -3383,6 +3388,7 @@
       "regime": "Régime",
       "classCode": "Code de catégorie",
       "rate": "Taux",
+      "meterKey": "Compteur d’usage",
       "method": "Méthode",
       "firstYearFraction": "Fraction de première année",
       "allowRecapture": "Autoriser la reprise",
@@ -3857,6 +3863,7 @@
       "contractCostBasisLabel": "Base d'amortissement",
       "contractCostAssetAccount": "Compte d'actif des coûts du contrat",
       "amountMinor": "Montant de la remise (sous-unités)",
+      "featureType": "Type de fonction",
       "feeAmountMinor": "Montant des frais (sous-unités)",
       "feePercent": "Pourcentage de frais",
       "itemCategory": "Catégorie d'article",
@@ -3897,6 +3904,8 @@
       "storedValueExpiryMonths": "Mois entiers après l’émission avant expiration de la valeur non rachetée, là où c’est légal. Vide pour aucune expiration.",
       "storedValueInactivityMonths": "Mois sans activité avant de constater en breakage un solde de la règle sur inactivité.",
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
+      "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
+"saasFeatureMeter": "Clé du compteur pour les fonctions mesurées, résout l’usage via la facturation à l’usage. Vide pour les autres types.",
       "putawayItem": "Laissez vide pour appliquer la règle à tous les articles.",
       "putawayCapacity": "Quantité maximale de l’article dans la cible. Obligatoire pour une zone de vrac ; laissez vide sur un emplacement fixe pour ne pas fixer de limite.",
       "carrierServices": "Les niveaux de service proposés par ce transporteur, par exemple Standard ou Express. Chaque expédition en choisit un.",
@@ -4056,6 +4065,12 @@
       "usageRatingPlanStatus": {
         "active": "Actif",
         "retired": "Retiré"
+      },
+      "saasFeatureType": {
+        "boolean": "Oui/non",
+        "quantity": "Quantité",
+        "metered": "Mesuré",
+        "custom": "Personnalisé"
       },
       "warehouseStatus": {
         "draft": "Brouillon",
