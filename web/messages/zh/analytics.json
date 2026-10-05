@@ -2931,7 +2931,8 @@
         "title": "采购与销售增速失衡",
         "message": "采购订单增速（{po}%/月）超过销售订单增速（{so}%/月）{gap}%——采购/销售比率：{ratio}倍",
         "actionWithMonths": "约{months}个月后存在现金压力风险，请复核采购承诺。",
-        "actionMonitor": "请监控采购增速并与销售管道保持一致。"
+        "actionMonitor": "请监控采购增速并与销售管道保持一致。",
+        "messageNoVelocity": "采购/销售比率为{ratio}倍，但没有可测量的速率"
       },
       "seasonalHigh": "支出通常在{months}偏高",
       "seasonalLow": "支出通常在{months}偏低",
@@ -3340,7 +3341,8 @@
       "fragmentation": "{txns}笔/月，均值{avg}",
       "frog": "{months}个月+{rate}%/月",
       "seasonal": "较平均月{deviation}%",
-      "zombie": "{months}个月{amount}/月不变"
+      "zombie": "{months}个月{amount}/月不变",
+      "cliffNoVelocity": "比率{ratio}倍——速率不可测"
     },
     "detectors": {
       "anomaly": {
@@ -3351,7 +3353,8 @@
       "cliff": {
         "desc": "采购与销售速率差",
         "label": "承诺断崖",
-        "sub": "采购速率"
+        "sub": "采购速率",
+        "insufficientHistory": "速率不可测"
       },
       "concentration": {
         "desc": "过度依赖单一类别",

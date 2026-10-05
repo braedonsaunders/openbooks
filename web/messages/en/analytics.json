@@ -3039,7 +3039,8 @@
       "cliff": {
         "label": "Commit. Cliff",
         "sub": "PO velocity",
-        "desc": "PO vs SO velocity gap"
+        "desc": "PO vs SO velocity gap",
+        "insufficientHistory": "Velocity not measurable"
       },
       "seasonal": {
         "label": "Seasonal",
@@ -3060,7 +3061,8 @@
       "fragmentation": "{txns} txns/mo, avg {avg}",
       "seasonal": "{deviation}% vs average month",
       "cliffItem": "PO vs SO velocity",
-      "cliff": "gap {gap}%, ratio {ratio}×"
+      "cliff": "gap {gap}%, ratio {ratio}×",
+      "cliffNoVelocity": "ratio {ratio}× — velocities not measurable"
     },
     "severity": {
       "critical": "Critical",
@@ -3518,7 +3520,8 @@
         "title": "Purchase-Sales Velocity Imbalance",
         "message": "PO velocity ({po}%/mo) exceeds SO velocity ({so}%/mo) by {gap}% — PO/SO ratio: {ratio}×",
         "actionWithMonths": "Cash pressure risk in ~{months} months. Review purchase commitments.",
-        "actionMonitor": "Monitor purchase velocity and align with sales pipeline."
+        "actionMonitor": "Monitor purchase velocity and align with sales pipeline.",
+        "messageNoVelocity": "PO/SO ratio is {ratio}× with no measurable velocities"
       },
       "seasonalHigh": "Higher spending typically occurs in {months}",
       "seasonalLow": "Lower spending typically occurs in {months}",

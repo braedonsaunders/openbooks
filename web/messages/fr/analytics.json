@@ -2931,7 +2931,8 @@
         "title": "Déséquilibre des vélocités achats-ventes",
         "message": "Vélocité des commandes fournisseurs ({po} %/mois) supérieure à celle des commandes clients ({so} %/mois) de {gap} % — ratio CF/CC : {ratio}×",
         "actionWithMonths": "Risque de tension de trésorerie dans ~{months} mois. Revoir les engagements d'achat.",
-        "actionMonitor": "Surveiller la vélocité des achats et l'aligner avec le pipeline des ventes."
+        "actionMonitor": "Surveiller la vélocité des achats et l'aligner avec le pipeline des ventes.",
+        "messageNoVelocity": "ratio CF/CC : {ratio}× sans vélocités mesurables"
       },
       "seasonalHigh": "Les dépenses élevées se concentrent généralement en {months}",
       "seasonalLow": "Les dépenses faibles se concentrent généralement en {months}",
@@ -3340,7 +3341,8 @@
       "fragmentation": "{txns} trans./mois, moy. {avg}",
       "frog": "+{rate} %/mois pendant {months} mois",
       "seasonal": "{deviation} % vs mois moyen",
-      "zombie": "{amount}/mois inchangé pendant {months} mois"
+      "zombie": "{amount}/mois inchangé pendant {months} mois",
+      "cliffNoVelocity": "ratio {ratio}× — vélocités non mesurables"
     },
     "detectors": {
       "anomaly": {
@@ -3351,7 +3353,8 @@
       "cliff": {
         "desc": "Écart de vélocité commandes fournisseurs vs clients",
         "label": "Falaise d’engagements",
-        "sub": "Vélocité commandes"
+        "sub": "Vélocité commandes",
+        "insufficientHistory": "Vélocité non mesurable"
       },
       "concentration": {
         "desc": "Dépendance excessive à une catégorie",

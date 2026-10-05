@@ -2931,7 +2931,8 @@
         "title": "Ungleichgewicht Einkaufs- vs. Verkaufsdynamik",
         "message": "Bestelldynamik ({po} %/Mo.) übersteigt die Auftragsdynamik ({so} %/Mo.) um {gap} % — Bestell/Auftrags-Verhältnis: {ratio}×",
         "actionWithMonths": "Liquiditätsrisiko in ~{months} Monaten. Einkaufsverpflichtungen prüfen.",
-        "actionMonitor": "Einkaufsdynamik beobachten und mit der Vertriebspipeline abstimmen."
+        "actionMonitor": "Einkaufsdynamik beobachten und mit der Vertriebspipeline abstimmen.",
+        "messageNoVelocity": "Bestell/Auftrags-Verhältnis: {ratio}× ohne messbare Dynamik"
       },
       "seasonalHigh": "Höhere Ausgaben fallen typischerweise in {months}",
       "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}",
@@ -3340,7 +3341,8 @@
       "fragmentation": "{txns} Trans./Mon., Ø {avg}",
       "frog": "+{rate} %/Mon. über {months} Monate",
       "seasonal": "{deviation} % vs Ø-Monat",
-      "zombie": "{amount}/Mon. unverändert über {months} Monate"
+      "zombie": "{amount}/Mon. unverändert über {months} Monate",
+      "cliffNoVelocity": "Verhältnis {ratio}× — Dynamik nicht messbar"
     },
     "detectors": {
       "anomaly": {
@@ -3351,7 +3353,8 @@
       "cliff": {
         "desc": "Dynamiklücke Bestellungen vs Aufträge",
         "label": "Klippe",
-        "sub": "Bestelldynamik"
+        "sub": "Bestelldynamik",
+        "insufficientHistory": "Dynamik nicht messbar"
       },
       "concentration": {
         "desc": "Übermäßige Kategorieabhängigkeit",

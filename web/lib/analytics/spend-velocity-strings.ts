@@ -46,7 +46,7 @@ export interface SpendVelocityStrings {
   zombies(count: number, annualCost: string): SpendVelocityInsightText;
   fragmentation(categories: number): SpendVelocityInsightText;
   opexRatio(pct: number): SpendVelocityInsightText;
-  cliff(po: number, so: number, gap: number, ratio: number): SpendVelocityInsightText;
+  cliff(po: number | null, so: number | null, gap: number | null, ratio: number): SpendVelocityInsightText;
   cliffAction(monthsToCliff: number | null): string;
   seasonalHigh(monthNames: string[]): string;
   seasonalLow(monthNames: string[]): string;
@@ -119,7 +119,10 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     }),
     cliff: (po, so, gap, ratio) => ({
       title: t("spendVelocity.insights.cliff.title"),
-      message: t("spendVelocity.insights.cliff.message", { po, so, gap, ratio }),
+      message:
+        po === null || so === null || gap === null
+          ? t("spendVelocity.insights.cliff.messageNoVelocity", { ratio })
+          : t("spendVelocity.insights.cliff.message", { po, so, gap, ratio }),
       action: "",
     }),
     cliffAction: (monthsToCliff) =>

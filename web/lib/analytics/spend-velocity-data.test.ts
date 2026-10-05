@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { getSpendVelocityComparisonWindows, velocityAndAcceleration } = await import(
+const { getSpendVelocityComparisonWindows, moneyCagr, velocityAndAcceleration } = await import(
   "./spend-velocity-data.ts"
 );
 
@@ -71,6 +71,28 @@ test("falling spend retains the acceleration signal from disjoint halves", () =>
     acceleration: 36.8,
     trend: "declining",
   });
+});
+
+test("a zero first bucket measures from the first positive month, not zero", () => {
+  const thresholds = { velocityHighThreshold: 15, velocityMediumThreshold: 5, minBaseAmount: "" };
+  // 0 → 100 → 200 scores the measurable 100 → 200 leg instead of a flat 0.
+  assert.deepEqual(velocityAndAcceleration([0, 100, 200], thresholds), {
+    velocity: 100,
+    acceleration: 0,
+    trend: "high",
+  });
+  // Exact-string twin: a zero first bucket divides nothing and measures 100%.
+  assert.equal(moneyCagr(["0.0000", "100.0000", "200.0000"], ""), 100);
+  // A measured collapse to zero still reads −100.
+  assert.equal(moneyCagr(["100.0000", "0.0000"], ""), -100);
+});
+
+test("a zero-only or single-bucket history has no velocity to report", () => {
+  assert.equal(moneyCagr(["0.0000", "0.0000"], ""), null);
+  assert.equal(moneyCagr(["100.0000"], ""), null);
+  assert.equal(moneyCagr([], ""), null);
+  // Every bucket below the configured floor is dust, not a base.
+  assert.equal(moneyCagr(["5.0000", "8.0000"], "100.0000"), null);
 });
 
 test("an unset minimum base scores dust series from their first month", () => {
