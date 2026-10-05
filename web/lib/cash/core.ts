@@ -1242,10 +1242,20 @@ export async function categoryWeekly(
     }
 
     const dailyBurnRate = divideMoney(grandTotalSpend, String(lookbackDays));
+    // A card without history and without a configured threshold has no cycle
+    // to forecast from: refuse by name instead of falling back to a
+    // currency-blind 10000 that silently reports "30 days since last payment".
     const configuredThreshold = cat.significantPaymentThreshold;
-    const effectiveThreshold = configuredThreshold !== undefined && compareMoney(configuredThreshold, ZERO_MONEY) > 0
-      ? normalizeMoneyValue(configuredThreshold)
-      : compareMoney(medianPayment, ZERO_MONEY) > 0 ? multiplyMoney(medianPayment, "0.5") : normalizeMoneyValue("10000");
+    let effectiveThreshold: Money;
+    if (configuredThreshold !== undefined && compareMoney(configuredThreshold, ZERO_MONEY) > 0) {
+      effectiveThreshold = normalizeMoneyValue(configuredThreshold);
+    } else if (compareMoney(medianPayment, ZERO_MONEY) > 0) {
+      effectiveThreshold = multiplyMoney(medianPayment, "0.5");
+    } else {
+      throw new Error(
+        `credit card category "${cat.name}" has no payment history and no significant payment threshold — set one in the category editor so the forecast knows which payments count as the last payment`,
+      );
+    }
     const significantPayments = days.filter((d) => compareMoney(d.paid, effectiveThreshold) > 0).sort((a, b) => b.date.getTime() - a.date.getTime());
     const lastPaymentDate = significantPayments[0]?.date ?? null;
     const daysSinceLastPayment = lastPaymentDate ? Math.ceil((asOf.getTime() - lastPaymentDate.getTime()) / MS_DAY) : model.cardStalePaymentDays;

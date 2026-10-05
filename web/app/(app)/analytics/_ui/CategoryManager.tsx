@@ -7,6 +7,7 @@ import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { Button, Select, cn } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { ForecastCategory, ForecastCategoryMethod } from '../../../../lib/cash/core'
+import { useMoney } from '../../../../components/money-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { Panel } from './Panel'
 
@@ -191,6 +192,9 @@ export function CategoryManager({
     }
   }
 
+  // Manual amounts and card thresholds are forecast (presentation currency)
+  // amounts: label them with the currency code instead of a bare "$".
+  const { currency: presentationCode } = useMoney()
   const openEditor = (idx: number) => {
     setEditIdx(idx)
     // A new draft names its frequency explicitly: the select shows Weekly
@@ -371,7 +375,7 @@ export function CategoryManager({
                   <input type="number" min={1} max={24} value={draft.historyMonths ?? 6} onChange={(e) => set({ historyMonths: Number(e.target.value) })} className={numCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>{tForm('threshold')}</label>
+                  <label className={labelCls}>{tForm('threshold')} ({presentationCode})</label>
                   <input type="number" min={0} step="0.0001" value={draft.significantPaymentThreshold ?? '0'} onChange={(e) => set({ significantPaymentThreshold: e.target.value })} className={numCls} />
                   <span className={helpCls}>{tForm('thresholdHelp')}</span>
                 </div>
@@ -381,7 +385,7 @@ export function CategoryManager({
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>{tForm('amount')}</label>
+                  <label className={labelCls}>{tForm('amount')} ({presentationCode})</label>
                   <input type="number" min={0} step="0.0001" value={draft.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} className={numCls} />
                 </div>
                 <div>
