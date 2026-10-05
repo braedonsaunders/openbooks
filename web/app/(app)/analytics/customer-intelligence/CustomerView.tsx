@@ -54,9 +54,9 @@ import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
-import { useAnalyticsMoney, fmtPct } from '../_ui/format'
+import { useAnalyticsMoney, fmtPct, ratioNumber, toChartNumber } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
@@ -180,19 +180,21 @@ export function CustomerView({
       // Waterfall-signed rows (recognized = invoiced + rows): the bridge
       // stores gap contributions (invoiced − recognized), so the display
       // negates each leg. Deferrals subtract from invoiced; recognition adds back.
+      // The shared drawer renders signed numbers only: this single Number
+      // crossing is the presentation boundary (no arithmetic follows).
       recon: {
         title: t('recon.title'),
         invoicedLabel: t('table.invoiced'),
-        invoiced: r.invoicedRevenue,
+        invoiced: Number(r.invoicedRevenue),
         recognizedLabel: t('table.revenue'),
-        recognized: r.revenue,
+        recognized: Number(r.revenue),
         rows: [
-          { label: t('recon.tax'), amount: -r.recon.tax },
-          { label: t('recon.credits'), amount: -r.recon.credits },
-          { label: t('recon.deferred'), amount: -r.recon.timingDeferred },
-          { label: t('recon.recognized'), amount: r.recon.timingRecognized },
-          { label: t('recon.voids'), amount: -r.recon.voids },
-          { label: t('recon.other'), amount: -r.recon.other },
+          { label: t('recon.tax'), amount: -Number(r.recon.tax) },
+          { label: t('recon.credits'), amount: -Number(r.recon.credits) },
+          { label: t('recon.deferred'), amount: -Number(r.recon.timingDeferred) },
+          { label: t('recon.recognized'), amount: Number(r.recon.timingRecognized) },
+          { label: t('recon.voids'), amount: -Number(r.recon.voids) },
+          { label: t('recon.other'), amount: -Number(r.recon.other) },
         ],
       },
     })
@@ -242,10 +244,10 @@ const INSIGHT_ICON: Record<Insight['type'], { icon: typeof Info; cls: string }> 
 function OverviewTab({ data }: { data: CustomerData }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const k = data.kpis
-  const top = [...data.rows].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
-  const maxSegRevenue = Math.max(1, ...data.segments.map((s) => s.totalRevenue))
+  const top = [...data.rows].sort((a, b) => cmp(b.revenue, a.revenue)).slice(0, 10)
+  const maxSegRevenue = data.segments.reduce((max, s) => (cmp(s.totalRevenue, max) > 0 ? s.totalRevenue : max), "1")
 
   const metric = (label: string, value: string, sub?: string) => (
     <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
@@ -272,13 +274,13 @@ function OverviewTab({ data }: { data: CustomerData }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Panel title={t('panels.topByRevenue')} icon={BarChart3}>
-            <DivergingBar labels={top.map((r) => r.name)} values={top.map((r) => r.revenue)} height={Math.max(220, top.length * 28)} />
+            <DivergingBar labels={top.map((r) => r.name)} values={top.map((r) => toChartNumber(r.revenue))} height={Math.max(220, top.length * 28)} />
           </Panel>
         </div>
         <Panel title={t('panels.revenueByTier')} icon={PieIcon}>
           <Donut
-            data={data.tierBreakdown.filter((x) => x.revenue > 0).map((x) => ({ name: t(`tier.${x.tier}`), value: x.revenue }))}
-            colors={data.tierBreakdown.filter((x) => x.revenue > 0).map((x) => TIER_COLOR[x.tier])}
+            data={data.tierBreakdown.filter((x) => cmp(x.revenue, "0") > 0).map((x) => ({ name: t(`tier.${x.tier}`), value: toChartNumber(x.revenue) }))}
+            colors={data.tierBreakdown.filter((x) => cmp(x.revenue, "0") > 0).map((x) => TIER_COLOR[x.tier])}
             height={220}
           />
         </Panel>
@@ -292,7 +294,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
               <li key={s.segment} className="flex items-center gap-3 px-4 py-2">
                 <span className={cn('w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold', SEGMENT_STYLE[s.segment])}>{t(`segment.${s.segment}`)}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className="h-full rounded-full" style={{ width: `${(s.totalRevenue / maxSegRevenue) * 100}%`, backgroundColor: SEGMENT_COLOR[s.segment] }} />
+                  <div className="h-full rounded-full" style={{ width: `${ratioNumber(s.totalRevenue, maxSegRevenue, 0) * 100}%`, backgroundColor: SEGMENT_COLOR[s.segment] }} />
                 </div>
                 <span className="w-14 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{s.count} · {s.percentage}%</span>
                 <span className="w-16 text-right text-xs font-medium text-slate-700 tabular-nums dark:text-slate-300">{money(s.totalRevenue)}</span>
@@ -336,7 +338,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const t = useTranslations('analytics.customer')
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [page, setPage] = useState(1)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -369,7 +371,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
     <InteractiveTableRow onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
       <SharedTableCell className="px-4 py-2">
         <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitle')}> ⚠️</span> : null}</p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('lastActive', { days: r.recencyDays >= 9999 ? '—' : t('daysAgo', { days: r.recencyDays }) })}</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('lastActive', { days: r.recencyDays === null ? '—' : t('daysAgo', { days: r.recencyDays }) })}</p>
       </SharedTableCell>
       <SharedTableCell className="px-4 py-2 text-center">
         <span className={cn('mr-1.5 rounded-full px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.healthGrade])}>{r.healthGrade}</span>
@@ -441,7 +443,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
               {groups
                 ? groups.map(([label, set]) => {
                     const isCollapsed = collapsed.has(label)
-                    const rev = set.reduce((a, r) => a + r.revenue, 0)
+                    const rev = sum(set.map((r) => r.revenue))
                     return (
                       <GroupRows key={label}>
                         <InteractiveTableRow
@@ -520,13 +522,13 @@ function Pager({ page, totalPages, total, pageSize, onPage, noun }: { page: numb
 function SegmentationTab({ data }: { data: CustomerData }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [segment, setSegment] = useState<Segment | 'all'>('all')
   const [page, setPage] = useState(1)
-  const totalRevenue = data.kpis.totalRevenue || 1
+  const totalRevenue = cmp(data.kpis.totalRevenue, "0") === 0 ? "1" : data.kpis.totalRevenue
 
   const filtered = segment === 'all' ? data.rows : data.rows.filter((r) => r.segment === segment)
-  const bySegRevenue = [...filtered].sort((a, b) => b.revenue - a.revenue)
+  const bySegRevenue = [...filtered].sort((a, b) => cmp(b.revenue, a.revenue))
   const totalPages = Math.max(1, Math.ceil(bySegRevenue.length / 25))
   const pageNo = Math.min(page, totalPages)
   const pageRows = bySegRevenue.slice((pageNo - 1) * 25, pageNo * 25)
@@ -576,7 +578,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
                     <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{s.count}</SharedTableCell>
                     <SharedTableCell className="px-4 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(s.totalRevenue)}</SharedTableCell>
                     <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{s.count ? money(s.avgRevenue) : '—'}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(s.totalRevenue / totalRevenue)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(ratioNumber(s.totalRevenue, totalRevenue, 0))}</SharedTableCell>
                   </SharedTableRow>
                 ))}
               </SharedTableBody>
@@ -623,7 +625,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.invoices}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : `${r.recencyDays}d`}</SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -647,10 +649,10 @@ function LifetimeTab({
 }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
-  const byClv = [...data.rows].sort((a, b) => b.clv - a.clv)
+  const byClv = [...data.rows].sort((a, b) => cmp(b.clv, a.clv))
   const totalPages = Math.max(1, Math.ceil(byClv.length / 25))
   const pageNo = Math.min(page, totalPages)
   const pageRows = byClv.slice((pageNo - 1) * 25, pageNo * 25)
@@ -680,7 +682,7 @@ function LifetimeTab({
                   <div className="h-full rounded-full" style={{ width: `${(tb.count / maxTier) * 100}%`, backgroundColor: TIER_COLOR[tb.tier] }} />
                 </div>
                 <span className="w-24 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{tb.count} · {money(tb.revenue)}</span>
-                <span className="w-20 text-right text-[11px] text-slate-400 tabular-nums dark:text-slate-500">{tb.threshold > 0 ? `≥ ${money(tb.threshold)}` : '—'}</span>
+                <span className="w-20 text-right text-[11px] text-slate-400 tabular-nums dark:text-slate-500">{cmp(tb.threshold, "0") > 0 ? `≥ ${money(tb.threshold)}` : '—'}</span>
               </li>
             ))}
           </ul>
@@ -696,7 +698,7 @@ function LifetimeTab({
             <GroupedBar
               labels={data.tierBreakdown.map((tb) => t(`tier.${tb.tier}`))}
               height={180}
-              series={[{ name: t('chart.projectedClv'), data: data.tierBreakdown.map((tb) => data.rows.filter((r) => r.tier === tb.tier).reduce((a, r) => a + r.clv, 0)), color: '#0d9488' }]}
+              series={[{ name: t('chart.projectedClv'), data: data.tierBreakdown.map((tb) => toChartNumber(sum(data.rows.filter((r) => r.tier === tb.tier).map((r) => r.clv)))), color: '#0d9488' }]}
             />
           </div>
         </Panel>
@@ -743,11 +745,11 @@ function LifetimeTab({
 function ChurnTab({ data }: { data: CustomerData }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
   // List critical, high, and medium risk customers in the at-risk table.
-  const atRisk = data.rows.filter((r) => r.churnLevel !== 'low').sort((a, b) => b.churnScore - a.churnScore || b.revenue - a.revenue)
+  const atRisk = data.rows.filter((r) => r.churnLevel !== 'low').sort((a, b) => b.churnScore - a.churnScore || cmp(b.revenue, a.revenue))
   const totalPages = Math.max(1, Math.ceil(atRisk.length / 25))
   const pageNo = Math.min(page, totalPages)
   const pageRows = atRisk.slice((pageNo - 1) * 25, pageNo * 25)
@@ -859,7 +861,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
                       <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{r.churnScore}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays === null ? '—' : `${r.recencyDays}d`}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionProbability} /></SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">{r.churnFactors.join(' · ') || '—'}</SharedTableCell>
@@ -880,7 +882,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
 function GrowthTab({ data }: { data: CustomerData }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const g = data.growth
   const k = data.kpis
   const growthCls = (v: number | null) => (v === null ? 'text-slate-400 dark:text-slate-500' : v > 0 ? 'text-emerald-600 dark:text-emerald-400' : v < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
@@ -906,7 +908,7 @@ function GrowthTab({ data }: { data: CustomerData }) {
         <GroupedBar
           labels={g.monthly.map((m) => m.label)}
           height={240}
-          series={[{ name: t('table.revenue'), data: g.monthly.map((m) => m.revenue), color: '#0d9488' }]}
+          series={[{ name: t('table.revenue'), data: g.monthly.map((m) => toChartNumber(m.revenue)), color: '#0d9488' }]}
         />
       </Panel>
 

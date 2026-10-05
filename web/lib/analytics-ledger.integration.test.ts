@@ -383,7 +383,7 @@ test('the customer view echoes each calendar range with zero customers', async (
         const result = await customerData({ ...range, label: 'Calendar review' }, org.orgId, null);
         assert.deepEqual(result.period, { ...range, label: 'Calendar review' });
         assert.deepEqual(result.rows, []);
-        assert.equal(result.kpis.totalRevenue, 0);
+        assert.equal(result.kpis.totalRevenue, '0.0000');
         assert.equal(result.kpis.totalCustomers, 0);
       }
     });
@@ -630,7 +630,10 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             }
             const expectedRevenue = mode === 'all' ? 1099 : mode === 'empty' ? 0 : 100;
             const expected = surface === 'customer' ? expectedRevenue : mode === 'all' ? 1121 : mode === 'empty' ? 0 : 102;
-            assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, expected);
+            // Customer-loader money is exact decimal strings on the service
+            // and page boundaries (the tool boundary serializes numbers).
+            const want = surface === 'customer' && boundary !== 'tool' ? expectedRevenue.toFixed(4) : expected;
+            assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, want);
             assert.equal(JSON.stringify(data).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             if (surface === 'spend') {
               // Cliff totals are exact money strings.
@@ -641,7 +644,7 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
               assert.equal((Array.isArray(spenders) ? spenders : spenders.items).reduce((total,row) => total + row.totalSpend,0), mode === 'all' ? 22 : mode === 'empty' ? 0 : 2);
             }
             if (surface === 'customer') {
-              assert.equal((profitability as { summary: { totalRevenue: number } }).summary.totalRevenue, expectedRevenue.toFixed(4));
+              assert.equal((profitability as { summary: { totalRevenue: string } }).summary.totalRevenue, expectedRevenue.toFixed(4));
               assert.equal(JSON.stringify(profitability).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             }
           });

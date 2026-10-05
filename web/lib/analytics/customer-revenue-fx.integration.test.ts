@@ -46,9 +46,9 @@ test('customer revenue translates foreign-currency invoices at document FX', { s
     })
     const data = await withOrgContext(scratch.orgId, () => customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null))
     const byName = new Map(data.rows.map((r) => [r.name, r]))
-    assert.equal(byName.get('Acme Customer')?.revenue, 100)
-    assert.equal(byName.get('Euro Customer')?.revenue, 120)
-    assert.equal(data.kpis.totalRevenue, 220)
+    assert.equal(byName.get('Acme Customer')?.revenue, '100.0000')
+    assert.equal(byName.get('Euro Customer')?.revenue, '120.0000')
+    assert.equal(data.kpis.totalRevenue, '220.0000')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

@@ -15,7 +15,7 @@ import { englishCatalogMessage } from "./catalog-strings";
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
-import { add, cmp, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
 import { exactMarginPercent, exactProfit } from "./customer-profitability-money";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
@@ -110,29 +110,35 @@ export type Recommendation = "resolve-issues" | "reactivate" | "win-back" | "nur
  * explain why recognized exceeds invoiced.
  */
 export interface CustomerRevenueRecon {
+  /**
+   * Exact decimal strings in presentation currency. The bridge identity is
+   * money arithmetic (invoiced − recognized = tax + credits +
+   * (timingDeferred − timingRecognized) + voids + other) and stays in
+   * strings: float subtraction on ledger amounts leaves dust in `other`.
+   */
   /** Sales tax inside invoiced document totals: collected-tax postings on
    *  invoice-sourced, non-reversed entries. Credit-memo tax relief is in NO
    *  row — it touches neither invoiced nor recognized — and reversed entries
    *  ride with voids. */
-  tax: number;
+  tax: string;
   /** Credit memos: income-leg relief (debit postings to income accounts) on
    *  credit-sourced, non-reversed entries. The sales-tax relief on those same
    *  memos is deliberately NOT here — it touches neither invoiced nor
    *  recognized, so including it would break the bridge identity. */
-  credits: number;
+  credits: string;
   /** Billed but not yet earned: invoice net routed to a deferred-liability
    *  account instead of income this period (ASC 606 timing). */
-  timingDeferred: number;
+  timingDeferred: string;
   /** Earned but not billed this period: revenue-recognition schedule postings
    *  attributed through the contract customer (those legs carry no party_id). */
-  timingRecognized: number;
+  timingRecognized: string;
   /** Income effect of reversals that have no corresponding document billing
    *  movement in the same period. */
-  voids: number;
+  voids: string;
   /** Residual: manual-journal income with a party tag and FX/rounding dust —
    *  anything outside the buckets above. Persistently large `other` for a
    *  customer means a posting path the recon does not model yet. */
-  other: number;
+  other: string;
 }
 
 export interface CustomerRow {
@@ -145,9 +151,10 @@ export interface CustomerRow {
    * (REVENUE_TYPES, statement book, posted/reversed entries), net of credit
    * memos. Compare with `invoicedRevenue`; the `recon` bridge explains the gap.
    */
-  revenue: number;
+  /** Exact decimal string in presentation currency. */
+  revenue: string;
   /** Prior-period recognized revenue (YoY base for `revenue`). */
-  priorRevenue: number;
+  priorRevenue: string;
   /**
    * INVOICED revenue (billings): customer-invoice document totals translated
    * at the document rate, with voids recorded in their reversal period. Gross
@@ -155,22 +162,25 @@ export interface CustomerRow {
    * cash/AR/sales-comp question, kept as the explicitly labelled reconciling
    * column, never the headline.
    */
-  invoicedRevenue: number;
+  invoicedRevenue: string;
   /** The invoiced→recognized bridge; see CustomerRevenueRecon. */
   recon: CustomerRevenueRecon;
   yoyPct: number | null;
   invoices: number;
-  avgInvoice: number;
+  /** Exact decimal string: translated invoiced revenue per invoice. */
+  avgInvoice: string;
   firstInvoice: string | null;
   lastInvoice: string | null;
-  recencyDays: number;
+  /** Days since last order, null when the customer has no dated activity. */
+  recencyDays: number | null;
   tenureDays: number;
   // RFM
   rfm: { r: number; f: number; m: number; score: number; code: string };
   segment: Segment;
   // CLV
-  annualValue: number;
-  clv: number; // projected
+  /** Exact decimal strings in presentation currency (statistical projection). */
+  annualValue: string;
+  clv: string; // projected
   retentionFactor: number; // 0–100
   tier: Tier;
   clvRank: number;
@@ -191,7 +201,8 @@ export interface CustomerRow {
   daysOverdue: number;
   urgency: "critical" | "high" | "medium" | "due-soon" | "on-track";
   // payment
-  paymentScore: number;
+  /** Null when the customer has no payment history: no term is scored. */
+  paymentScore: number | null;
   paymentRating: "excellent" | "good" | "fair" | "poor" | "unknown";
   avgDaysToPay: number | null;
   overdueCount: number;
@@ -217,19 +228,19 @@ export interface SegmentStat {
   count: number;
   percentage: number;
   /** Recognized revenue in the period (ledger, net of credit memos). */
-  totalRevenue: number;
-  avgRevenue: number;
+  totalRevenue: string;
+  avgRevenue: string;
   /** Invoiced revenue in the period (billings, reconciling column). */
-  totalInvoiced: number;
+  totalInvoiced: string;
 }
 
 export interface MonthlyGrowth {
   month: string;
   label: string;
   /** Recognized revenue in the month (ledger, net of credit memos). */
-  revenue: number;
+  revenue: string;
   /** Invoiced revenue in the month (billings, reconciling series). */
-  invoiced: number;
+  invoiced: string;
   uniqueCustomers: number;
   transactionCount: number;
   newCustomers: number;
@@ -243,10 +254,10 @@ export interface Cohort {
   activeCustomers: number;
   retentionRate: number;
   /** Lifetime recognized revenue (ledger, net of credit memos). */
-  totalRevenue: number;
-  avgRevenue: number;
+  totalRevenue: string;
+  avgRevenue: string;
   /** Lifetime invoiced revenue (billings, reconciling column). */
-  totalInvoiced: number;
+  totalInvoiced: string;
 }
 
 export interface Insight {
@@ -265,15 +276,15 @@ export interface CustomerData {
   kpis: {
     totalCustomers: number;
     /** Period recognized revenue across all customers (ties to P&L revenue). */
-    totalRevenue: number;
+    totalRevenue: string;
     /** Period invoiced revenue across all customers (reconciling total). */
-    totalInvoiced: number;
-    avgCustomerValue: number;
-    projectedClv: number;
-    avgClv: number;
+    totalInvoiced: string;
+    avgCustomerValue: string;
+    projectedClv: string;
+    avgClv: string;
     champions: number;
     atRiskCount: number;
-    atRiskRevenue: number;
+    atRiskRevenue: string;
     retentionRate: number; // avg retention probability
     paymentRate: number;
     avgDaysToPay: number;
@@ -292,12 +303,12 @@ export interface CustomerData {
     fakeChampions: number | null;
   };
   segments: SegmentStat[];
-  tierBreakdown: { tier: Tier; count: number; revenue: number; invoiced: number; threshold: number }[];
+  tierBreakdown: { tier: Tier; count: number; revenue: string; invoiced: string; threshold: string }[];
   growth: {
     monthly: MonthlyGrowth[];
     yoyGrowth: number | null;
     avgMonthlyGrowth: number;
-    medianMonthlyRevenue: number;
+    medianMonthlyRevenue: string;
     totalNewCustomers: number;
     trend: "growing" | "declining" | "stable";
   };
@@ -606,9 +617,22 @@ export async function customerProfitability(
 }
 
 /* -------------------------------------------------------------- utilities */
+/** Year-on-year growth as a ratio (0.056, not 5.6): exact through the ratio kernel. */
+function yoyOf(revenue: string, priorRevenue: string): number | null {
+  if (cmp(priorRevenue, "0") <= 0) return null;
+  const text = evaluateAnalyticsRatio(add(revenue, neg(priorRevenue)), priorRevenue, "ratio", 4);
+  return text === null ? null : Number(text);
+}
+
 /** the percentile: value at fraction p of a pre-sorted ascending array. */
 function percentile(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
+}
+
+/** the percentile over exact decimal strings, compared — never subtracted. */
+function percentileExact(sorted: string[], p: number): string {
+  if (!sorted.length) return "0";
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
 }
 
@@ -1034,10 +1058,10 @@ async function readCustomerData(
 
   /* ---- base metrics ---- */
   interface Base {
-    id: string; name: string; revenue: number; priorRevenue: number;
-    invoicedRevenue: number; recon: CustomerRevenueRecon;
-    txns: number; avgValue: number;
-    first: string | null; last: string | null; recency: number; tenure: number;
+    id: string; name: string; revenue: string; priorRevenue: string;
+    invoicedRevenue: string; recon: CustomerRevenueRecon;
+    txns: number; avgValue: string;
+    first: string | null; last: string | null; recency: number | null; tenure: number;
   }
   // Invoiced revenue arrives per (party, functional) at the posted document
   // rate; translate each leg to presentation at its latest posting date, then
@@ -1061,11 +1085,12 @@ async function readCustomerData(
     // Headline money is RECOGNIZED (ledger); invoiced stays alongside as the
     // reconciling column. Population, counts and dates stay document-based:
     // they describe billing activity, not earned value.
-    // The invoiced→recognized bridge identity is money arithmetic, so it
-    // stays in exact decimal strings: float subtraction on ledger amounts
-    // leaves dust in `other`, which the durable recon test pins to zero for
-    // pure document flows. Each leg converts to Number once below, at this
-    // presentation boundary.
+    // The invoiced→recognized bridge identity is money arithmetic, so every
+    // leg stays an exact decimal string from the ledger to the tile: float
+    // subtraction on ledger amounts leaves dust in `other`, which the
+    // durable recon test pins to zero for pure document flows. Numbers
+    // cross only at chart coordinates (toChartNumber) and display percents
+    // (evaluateAnalyticsRatio, rounded once).
     const led = ledgerByParty.get(id);
     const invoicedExact = c.revenue;
     const recognizedExact = led?.recognized ?? "0";
@@ -1079,60 +1104,57 @@ async function readCustomerData(
       add(add(timingDeferredExact, neg(timingRecognizedExact)), voidsExact),
     );
     const otherExact = add(add(invoicedExact, neg(recognizedExact)), neg(explainedExact));
-    const invoicedRevenue = Number(invoicedExact);
-    const revenue = Number(recognizedExact);
-    const tax = Number(taxExact);
-    const credits = Number(creditsExact);
-    const timingDeferred = Number(timingDeferredExact);
-    const timingRecognized = Number(timingRecognizedExact);
-    const voids = Number(voidsExact);
     return {
       id,
       name: c.name,
-      revenue,
-      priorRevenue: led ? Number(led.priorRecognized) : 0,
-      invoicedRevenue,
+      revenue: recognizedExact,
+      priorRevenue: led?.priorRecognized ?? "0",
+      invoicedRevenue: invoicedExact,
       recon: {
-        tax,
-        credits,
-        timingDeferred,
-        timingRecognized,
-        voids,
+        tax: taxExact,
+        credits: creditsExact,
+        timingDeferred: timingDeferredExact,
+        timingRecognized: timingRecognizedExact,
+        voids: voidsExact,
         // Residual, not a plug target: manual-journal income with a party tag
         // and FX/rounding dust land here. The durable recon test pins it to
         // zero for pure document flows and to the manual amount when seeded.
-        other: Number(otherExact),
+        other: otherExact,
       },
       txns: c.txns,
       // Billing behavior (average invoice size), not earned value — pairs with
       // invoice counts, which are document-based too.
-      avgValue: c.txns > 0 ? invoicedRevenue / c.txns : 0,
+      avgValue: c.txns > 0 ? div(invoicedExact, String(c.txns)) : "0",
       first: c.first,
       last: c.last,
-      recency: c.last ? Math.max(0, calendarDaysBetween(c.last, ref)) : 9999,
+      recency: c.last ? Math.max(0, calendarDaysBetween(c.last, ref)) : null,
       tenure: c.first && c.last ? calendarDaysBetween(c.first, c.last) : 0,
     };
   });
 
   /* ---- RFM () ---- */
   const freqSorted = base.map((c) => c.txns).sort((a, b) => a - b);
-  const monSorted = base.map((c) => c.revenue).sort((a, b) => a - b);
+  const monSorted = base.map((c) => c.revenue).sort(cmp);
   const freqP33 = percentile(freqSorted, 0.33);
   const freqP66 = percentile(freqSorted, 0.66);
-  const monP33 = percentile(monSorted, 0.33);
-  const monP66 = percentile(monSorted, 0.66);
+  const monP33 = percentileExact(monSorted, 0.33);
+  const monP66 = percentileExact(monSorted, 0.66);
 
   const rfmOf = (c: Base) => {
+    // Unknown recency never reads as fresh: it scores the stalest band so an
+    // undated customer flags for attention instead of looking like a champion.
+    // (Movement rows always carry dates, so this is defensive, not a live path.)
+    const recency = c.recency ?? Number.MAX_SAFE_INTEGER;
     let r = 1;
-    if (c.recency <= RECENCY_GOOD) r = 5;
-    else if (c.recency <= RECENCY_WARNING) r = 3;
-    else if (c.recency <= RECENCY_CRITICAL) r = 2;
+    if (recency <= RECENCY_GOOD) r = 5;
+    else if (recency <= RECENCY_WARNING) r = 3;
+    else if (recency <= RECENCY_CRITICAL) r = 2;
     let f = 1;
     if (c.txns > freqP66) f = 5;
     else if (c.txns > freqP33) f = 3;
     let m = 1;
-    if (c.revenue > monP66) m = 5;
-    else if (c.revenue > monP33) m = 3;
+    if (cmp(c.revenue, monP66) > 0) m = 5;
+    else if (cmp(c.revenue, monP33) > 0) m = 3;
 
     let segment: Segment = "regular";
     if (r >= 4 && f >= 4 && m >= 4) segment = "champions";
@@ -1147,23 +1169,36 @@ async function readCustomerData(
 
   /* ---- CLV () ---- */
   const clvOf = (c: Base) => {
+    // Annualized from invoiced revenue directly (average value × frequency
+    // per year reduces to invoiced ÷ years): the money never crosses into a
+    // float. The retention curve is statistical by nature; it rounds once to
+    // the integer retention factor, and the projection multiplies exact legs.
     const yearsActive = Math.max(0.25, c.tenure / 365);
-    const freqPerYear = c.txns / yearsActive;
-    const annualValue = c.avgValue * freqPerYear;
-    const retention = Math.max(0.1, Math.min(0.95, 0.95 * Math.exp(-c.recency / 120)));
-    return { annualValue: Math.round(annualValue), clv: Math.round(annualValue * clvYears * retention), retentionFactor: Math.round(retention * 100) };
+    const annualValue = div(c.invoicedRevenue, yearsActive.toFixed(10));
+    const recency = c.recency ?? Number.MAX_SAFE_INTEGER;
+    const retention = Math.max(0.1, Math.min(0.95, 0.95 * Math.exp(-recency / 120)));
+    const retentionFactor = Math.round(retention * 100);
+    const clv = mulDecimal(mulDecimal(annualValue, String(clvYears)), div(String(retentionFactor), "100"));
+    return { annualValue, clv, retentionFactor };
   };
 
   /* ---- churn () ---- */
   const churnOf = (c: Base) => {
+    // Unknown recency scores the critical inactivity points (see rfmOf): an
+    // undated customer flags for attention instead of reading as healthy.
+    // (Movement rows always carry dates, so this is defensive, not a live path.)
+    const recency = c.recency;
     let score = 0;
     const factors: string[] = [];
-    if (c.recency > CHURN_HIGH_DAYS) { score += 40; factors.push(strings.churnInactive(c.recency)); }
-    else if (c.recency > CHURN_MEDIUM_DAYS) { score += 25; factors.push(strings.churnDeclining); }
-    else if (c.recency > 30) score += 10;
+    if (recency === null) { score += 40; factors.push(strings.churnDeclining); }
+    else if (recency > CHURN_HIGH_DAYS) { score += 40; factors.push(strings.churnInactive(recency)); }
+    else if (recency > CHURN_MEDIUM_DAYS) { score += 25; factors.push(strings.churnDeclining); }
+    else if (recency > 30) score += 10;
     const avgDaysBetween = c.tenure / Math.max(1, c.txns);
-    if (c.recency > avgDaysBetween * 2) { score += 30; factors.push(strings.churnBelowPattern); }
-    else if (c.recency > avgDaysBetween * 1.5) score += 15;
+    const stale = recency === null || recency > avgDaysBetween * 2;
+    const slowing = recency !== null && recency > avgDaysBetween * 1.5;
+    if (stale) { score += 30; factors.push(strings.churnBelowPattern); }
+    else if (slowing) score += 15;
     if (c.txns <= 1) { score += 30; factors.push(strings.churnSingle); }
     else if (c.txns <= 3) { score += 15; factors.push(strings.churnLowFrequency); }
     score = Math.min(100, score);
@@ -1173,9 +1208,12 @@ async function readCustomerData(
 
   /* ---- velocity () ---- */
   const velocityOf = (c: Base) => {
+    // Unknown recency shows no lateness: velocity measures overdue evidence
+    // and unknown is not evidence (churn already flags undated customers).
+    const recency = c.recency ?? 0;
     const cycle = c.tenure > 0 && c.txns > 1 ? c.tenure / (c.txns - 1) : 30;
-    const nextIn = Math.max(0, cycle - c.recency);
-    const overdue = Math.max(0, c.recency - cycle);
+    const nextIn = Math.max(0, cycle - recency);
+    const overdue = Math.max(0, recency - cycle);
     let urgency: CustomerRow["urgency"] = "on-track";
     if (overdue > cycle) urgency = "critical";
     else if (overdue > cycle * 0.5) urgency = "high";
@@ -1242,7 +1280,7 @@ async function readCustomerData(
     return { c, rfm, clv, churn, vel };
   });
   // Tier assignment ranks by projected CLV.
-  const byClv = [...enriched].sort((a, b) => b.clv.clv - a.clv.clv);
+  const byClv = [...enriched].sort((a, b) => cmp(b.clv.clv, a.clv.clv));
   const nAll = byClv.length;
   const platinumCutoff = Math.ceil(nAll * 0.1);
   const goldCutoff = Math.ceil(nAll * 0.3);
@@ -1252,24 +1290,25 @@ async function readCustomerData(
     const tier: Tier = i < platinumCutoff ? "platinum" : i < goldCutoff ? "gold" : i < silverCutoff ? "silver" : "bronze";
     tierByCustomer.set(e.c.id, { tier, rank: i + 1 });
   });
-  const tierThresholds: Record<Tier, number> = {
-    platinum: byClv[platinumCutoff - 1]?.clv.clv ?? 0,
-    gold: byClv[goldCutoff - 1]?.clv.clv ?? 0,
-    silver: byClv[silverCutoff - 1]?.clv.clv ?? 0,
-    bronze: 0,
+  const tierThresholds: Record<Tier, string> = {
+    platinum: byClv[platinumCutoff - 1]?.clv.clv ?? "0",
+    gold: byClv[goldCutoff - 1]?.clv.clv ?? "0",
+    silver: byClv[silverCutoff - 1]?.clv.clv ?? "0",
+    bronze: "0",
   };
 
   /* ---- concentration () ---- */
   const totalRevenueExact = sum([...baseByParty.keys()].map((id) => ledgerByParty.get(id)?.recognized ?? "0"));
   const totalInvoicedExact = sum([...baseByParty.values()].map((customer) => customer.revenue));
-  const totalRevenue = Number(totalRevenueExact);
-  const byRevenue = [...enriched].sort((a, b) => b.c.revenue - a.c.revenue);
+  const totalRevenuePositive = cmp(totalRevenueExact, "0") > 0;
+  const byRevenue = [...enriched].sort((a, b) => cmp(b.c.revenue, a.c.revenue));
   const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
   let cumulative = "0";
   let customersFor80Pct = 0;
+  const shareTexts = new Map<string, string>();
   byRevenue.forEach((e, i) => {
-    const shareText = totalRevenue > 0
-      ? evaluateAnalyticsRatio(String(e.c.revenue), totalRevenueExact, "percent", 2)
+    const shareText = totalRevenuePositive
+      ? evaluateAnalyticsRatio(e.c.revenue, totalRevenueExact, "percent", 2)
       : "0.00";
     if (shareText === null) throw new Error("CUSTOMER_REVENUE_SHARE_UNDEFINED");
     const sharePct = Number(shareText);
@@ -1280,13 +1319,17 @@ async function readCustomerData(
     cumulative = add(cumulative, shareText);
     if (cmp(cumulative, "80") <= 0) customersFor80Pct = i + 1;
     shareMap.set(e.c.id, { sharePct, risk });
+    shareTexts.set(e.c.id, shareText);
   });
-  const hhiScaled = Math.round(byRevenue.reduce((a, e) => a + ((totalRevenue > 0 ? e.c.revenue / totalRevenue : 0) * 100) ** 2, 0));
+  // HHI is a dimensionless index, not money: each share squares exactly and
+  // the single float crossing rounds once for the displayed integer.
+  const hhiExact = sum([...shareTexts.values()].map((share) => mulDecimal(share, share)));
+  const hhiScaled = Math.round(Number(hhiExact));
   const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= hhiCritical ? "high" : hhiScaled >= hhiWarning ? "moderate" : "low";
   const top10PctCount = Math.ceil(nAll * 0.1);
-  const top10ShareText = totalRevenue > 0
+  const top10ShareText = totalRevenuePositive
     ? evaluateAnalyticsRatio(
-      sum(byRevenue.slice(0, top10PctCount).map((e) => String(e.c.revenue))),
+      sum(byRevenue.slice(0, top10PctCount).map((e) => e.c.revenue)),
       totalRevenueExact,
       "percent",
       0,
@@ -1351,7 +1394,7 @@ async function readCustomerData(
       priorRevenue: c.priorRevenue,
       invoicedRevenue: c.invoicedRevenue,
       recon: c.recon,
-      yoyPct: c.priorRevenue > 0 ? (c.revenue - c.priorRevenue) / c.priorRevenue : null,
+      yoyPct: yoyOf(c.revenue, c.priorRevenue),
       invoices: c.txns,
       avgInvoice: c.avgValue,
       firstInvoice: c.first,
@@ -1402,14 +1445,14 @@ async function readCustomerData(
   const SEGMENTS: Segment[] = ["champions", "loyal", "potential", "new", "regular", "hibernating", "at-risk", "lost"];
   const segments: SegmentStat[] = SEGMENTS.map((segment) => {
     const set = rows.filter((r) => r.segment === segment);
-    const rev = set.reduce((a, r) => a + r.revenue, 0);
+    const rev = sum(set.map((r) => r.revenue));
     return {
       segment,
       count: set.length,
       percentage: rows.length ? Math.round((set.length / rows.length) * 100) : 0,
       totalRevenue: rev,
-      avgRevenue: set.length ? rev / set.length : 0,
-      totalInvoiced: set.reduce((a, r) => a + r.invoicedRevenue, 0),
+      avgRevenue: set.length ? div(rev, String(set.length)) : "0",
+      totalInvoiced: sum(set.map((r) => r.invoicedRevenue)),
     };
   });
 
@@ -1456,28 +1499,28 @@ async function readCustomerData(
       revenue: gRecognized.get(month) ?? "0",
       counts: gCounts.get(month),
     }));
-  const revenues = gRows.map((r) => Number(r.revenue)).sort((a, b) => a - b);
-  const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : 0;
-  const minRevenueThreshold = medianRevenue * 0.1;
-  let prevRevenue: number | null = null;
+  const revenues = gRows.map((r) => r.revenue).sort(cmp);
+  const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : "0";
+  const minRevenueThreshold = mulDecimal(medianRevenue, "0.1");
+  let prevRevenue: string | null = null;
   const monthly: MonthlyGrowth[] = gRows.map((r) => {
-    const revenue = Number(r.revenue);
-    const isMature = revenue >= minRevenueThreshold;
+    const revenue = r.revenue;
+    const isMature = cmp(revenue, minRevenueThreshold) >= 0;
     let growthRate: number | null = 0;
-    if (prevRevenue !== null && prevRevenue > minRevenueThreshold) {
-      growthRate = ((revenue - prevRevenue) / prevRevenue) * 100;
+    if (prevRevenue !== null && cmp(prevRevenue, minRevenueThreshold) > 0) {
+      const rateText = evaluateAnalyticsRatio(add(revenue, neg(prevRevenue)), prevRevenue, "percent", 1);
+      growthRate = rateText === null ? 0 : Number(rateText);
       if (growthRate > 200) growthRate = 200;
       if (growthRate < -80) growthRate = -80;
-      growthRate = Math.round(growthRate * 10) / 10;
-    } else if (prevRevenue !== null && prevRevenue > 0 && revenue > minRevenueThreshold) {
+    } else if (prevRevenue !== null && cmp(prevRevenue, "0") > 0 && cmp(revenue, minRevenueThreshold) > 0) {
       growthRate = null; // ramp-up period
     }
     prevRevenue = revenue;
     return {
       month: r.month,
       label: strings.monthLabel(r.month),
-      revenue: Math.round(revenue),
-      invoiced: Math.round(Number(r.invoiced)),
+      revenue,
+      invoiced: r.invoiced,
       uniqueCustomers: Number(r.counts?.unique_customers ?? 0),
       transactionCount: Number(r.counts?.txn_count ?? 0),
       newCustomers: Number(r.counts?.new_customers ?? 0),
@@ -1502,9 +1545,12 @@ async function readCustomerData(
 
   let yoyGrowth: number | null = null;
   if (monthly.length >= 15) {
-    const recent3 = monthly.slice(-3).reduce((a, m) => a + m.revenue, 0);
-    const prior3 = monthly.slice(-15, -12).reduce((a, m) => a + m.revenue, 0);
-    if (prior3 > minRevenueThreshold) yoyGrowth = Math.round(((recent3 - prior3) / prior3) * 100);
+    const recent3 = sum(monthly.slice(-3).map((m) => m.revenue));
+    const prior3 = sum(monthly.slice(-15, -12).map((m) => m.revenue));
+    if (cmp(prior3, minRevenueThreshold) > 0) {
+      const yoyText = evaluateAnalyticsRatio(add(recent3, neg(prior3)), prior3, "percent", 0);
+      yoyGrowth = yoyText === null ? null : Number(yoyText);
+    }
   }
   const matureGrowthRates = monthly.filter((m) => m.isMature && m.growthRate !== null).map((m) => m.growthRate!) ;
   const avgMonthlyGrowth = matureGrowthRates.length ? Math.round((matureGrowthRates.reduce((a, r) => a + r, 0) / matureGrowthRates.length) * 10) / 10 : 0;
@@ -1516,9 +1562,13 @@ async function readCustomerData(
     const windowSize = Math.min(6, Math.floor(monthly.length / 2));
     const recentWindow = monthly.slice(-windowSize);
     const priorWindow = monthly.slice(-windowSize * 2, -windowSize);
-    const recentAverage = recentWindow.reduce((a, m) => a + m.revenue, 0) / windowSize;
-    const priorAverage = priorWindow.reduce((a, m) => a + m.revenue, 0) / windowSize;
-    const pct = priorAverage > 0 ? ((recentAverage - priorAverage) / priorAverage) * 100 : 0;
+    // Both windows share their size, so comparing sums compares averages.
+    const recentSum = sum(recentWindow.map((m) => m.revenue));
+    const priorSum = sum(priorWindow.map((m) => m.revenue));
+    const trendText = cmp(priorSum, "0") > 0
+      ? evaluateAnalyticsRatio(add(recentSum, neg(priorSum)), priorSum, "percent", 2)
+      : null;
+    const pct = trendText === null ? 0 : Number(trendText);
     if (pct > 10) trend = "growing";
     else if (pct < -10) trend = "declining";
   }
@@ -1570,19 +1620,19 @@ async function readCustomerData(
     lifetimeCustomers++;
     if (isActive) lifetimeActive++;
     let c = cohortMap.get(year);
-    if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: 0, avgRevenue: 0, totalInvoiced: 0 }; cohortMap.set(year, c); }
+    if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: "0", avgRevenue: "0", totalInvoiced: "0" }; cohortMap.set(year, c); }
     c.totalCustomers++;
     if (isActive) c.activeCustomers++;
-    c.totalRevenue += Number(p.revenue);
-    c.totalInvoiced += Number(p.invoiced);
+    c.totalRevenue = add(c.totalRevenue, p.revenue);
+    c.totalInvoiced = add(c.totalInvoiced, p.invoiced);
   }
   const cohortList = [...cohortMap.values()]
     .map((c) => ({
       ...c,
       retentionRate: c.totalCustomers ? Math.round((c.activeCustomers / c.totalCustomers) * 100) : 0,
-      avgRevenue: c.totalCustomers ? Math.round(c.totalRevenue / c.totalCustomers) : 0,
-      totalRevenue: Math.round(c.totalRevenue),
-      totalInvoiced: Math.round(c.totalInvoiced),
+      avgRevenue: c.totalCustomers ? div(c.totalRevenue, String(c.totalCustomers)) : "0",
+      totalRevenue: c.totalRevenue,
+      totalInvoiced: c.totalInvoiced,
     }))
     .sort((a, b) => a.year.localeCompare(b.year));
   const overallRetention = lifetimeCustomers ? Math.round((lifetimeActive / lifetimeCustomers) * 100) : 0;
@@ -1597,14 +1647,14 @@ async function readCustomerData(
 
   /* ---- aggregates + insights ---- */
   const atRisk = rows.filter((r) => r.churnLevel === "critical" || r.churnLevel === "high");
-  const atRiskRevenue = Math.round(atRisk.reduce((a, r) => a + r.revenue, 0));
-  const totalProjectedClv = rows.reduce((a, r) => a + r.clv, 0);
+  const atRiskRevenue = sum(atRisk.map((r) => r.revenue));
+  const totalProjectedClv = sum(rows.map((r) => r.clv));
   const overdueOrders = rows.filter((r) => r.daysOverdue > 0).length;
   const topCustomerShare = byRevenue[0] ? shareMap.get(byRevenue[0].c.id)!.sharePct : 0;
 
   const insights: Insight[] = [];
-  const fmtM = (n: number) => moneyCompact(n);
-  if (totalProjectedClv > 0)
+  const fmtM = (n: string) => moneyCompact(n);
+  if (cmp(totalProjectedClv, "0") > 0)
     insights.push({ type: "info", category: "lifetime-value", ...strings.projectedClv(fmtM(totalProjectedClv), clvYears, rows.length), impact: "high" });
   if (atRisk.length > 0)
     insights.push({ type: "warning", category: "churn", ...strings.churnRisk(atRisk.length, fmtM(atRiskRevenue)), impact: "high" });
@@ -1626,11 +1676,11 @@ async function readCustomerData(
     intelligence: { score: intelligenceScore, label: scoreLabel, grade: scoreGrade },
     kpis: {
       totalCustomers: rows.length,
-      totalRevenue: Math.round(totalRevenue),
-      totalInvoiced: Math.round(Number(totalInvoicedExact)),
-      avgCustomerValue: Math.round(totalRevenue / Math.max(1, rows.length)),
-      projectedClv: Math.round(totalProjectedClv),
-      avgClv: rows.length ? Math.round(totalProjectedClv / rows.length) : 0,
+      totalRevenue: totalRevenueExact,
+      totalInvoiced: totalInvoicedExact,
+      avgCustomerValue: rows.length ? div(totalRevenueExact, String(rows.length)) : "0",
+      projectedClv: totalProjectedClv,
+      avgClv: rows.length ? div(totalProjectedClv, String(rows.length)) : "0",
       champions: championsStat.count,
       atRiskCount: atRisk.length,
       atRiskRevenue,
@@ -1654,9 +1704,9 @@ async function readCustomerData(
     segments,
     tierBreakdown: TIERS.map((tier) => {
       const set = rows.filter((r) => r.tier === tier);
-      return { tier, count: set.length, revenue: set.reduce((a, r) => a + r.revenue, 0), invoiced: set.reduce((a, r) => a + r.invoicedRevenue, 0), threshold: tierThresholds[tier] };
+      return { tier, count: set.length, revenue: sum(set.map((r) => r.revenue)), invoiced: sum(set.map((r) => r.invoicedRevenue)), threshold: tierThresholds[tier] };
     }),
-    growth: { monthly, yoyGrowth, avgMonthlyGrowth, medianMonthlyRevenue: Math.round(medianRevenue), totalNewCustomers, trend },
+    growth: { monthly, yoyGrowth, avgMonthlyGrowth, medianMonthlyRevenue: medianRevenue, totalNewCustomers, trend },
     cohorts: { list: cohortList, overallRetention },
     insights,
     config: cfg,
