@@ -1186,54 +1186,156 @@ async function collectCandidate(
     return;
   }
   const amount = invoice.open_balance;
-  // Idempotent per (invoice, schedule position): a concurrent tick that won
-  // the race owns the charge, so this tick stands down. The conflict is
-  // expected under concurrency and benign — exactly one attempt charges.
+  // Backup methods, ordered after the enrollment method: the default first,
+  // then the customer's other active methods by fallback priority. At most
+  // three backups charge per tick — a customer with more simply keeps the
+  // rest for the next retry, so one invoice can never fan out into a charge
+  // storm.
+  const backups = (await db.execute<{
+    methodId: string;
+    provider: AcceptanceProvider;
+    providerCustomerId: string | null;
+    providerMethodId: string | null;
+  }>(sql`
+    select id as "methodId", provider,
+           provider_customer_id as "providerCustomerId",
+           provider_method_id as "providerMethodId"
+      from customer_payment_methods
+     where org_id = ${orgId} and party_id = ${candidate.partyId}
+       and status = 'active' and id <> ${candidate.methodId}
+     order by fallback_priority asc, created_at asc
+     limit 3
+  `)).rows;
+  const chain = [{
+    methodId: candidate.methodId,
+    provider: candidate.provider,
+    providerCustomerId: candidate.providerCustomerId,
+    providerMethodId: candidate.providerMethodId,
+    fallbackOf: null as string | null,
+  }, ...backups.map((backup) => ({ ...backup, fallbackOf: candidate.methodId as string | null }))];
+  let fallbackPosition = position;
+  for (const link of chain) {
+    if (!link.providerMethodId) {
+      result.skipped += 1;
+      result.notices.push({
+        invoiceId: candidate.invoiceId,
+        attemptId: null,
+        status: "skipped",
+        detail: "a backup method has no provider token yet; finish its setup first",
+      });
+      continue;
+    }
+    // Idempotent per (invoice, schedule position): a concurrent tick that
+    // won the race owns the charge, so this tick stands down. The conflict
+    // is expected under concurrency and benign — exactly one attempt
+    // charges. Fallback rows consume later positions, so the retry ladder
+    // keeps bounding total attempts.
+    const attemptId = await insertCollectionAttempt(
+      orgId, candidate, link.methodId, link.provider, link.fallbackOf,
+      amount, invoice.currency, fallbackPosition, actorId,
+    );
+    if (!attemptId) {
+      result.skipped += 1;
+      result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: "another tick is already collecting this position" });
+      return;
+    }
+    result.charged += 1;
+    const outcome = await charge(link.provider, {
+      providerCustomerId: link.providerCustomerId,
+      providerMethodId: link.providerMethodId,
+      amount,
+      currency: invoice.currency,
+      description: `Autopay — invoice ${invoice.document_number}`,
+      idempotencyKey: attemptId,
+    });
+    if (outcome.status === "succeeded") {
+      await db.execute(sql`
+        update collection_attempts set provider_ref = ${outcome.providerRef}, updated_at = now()
+         where id = ${attemptId} and org_id = ${orgId}
+      `);
+      await postCollectionReceipt(orgId, attemptId);
+      result.succeeded += 1;
+      result.reactivated += await reactivateScopeSubscriptions(orgId, candidate, null);
+      result.notices.push({
+        invoiceId: candidate.invoiceId,
+        attemptId,
+        status: "succeeded",
+        detail: link.fallbackOf
+          ? `collected ${amount} ${invoice.currency} on the backup method after the primary declined`
+          : `collected ${amount} ${invoice.currency}`,
+      });
+      return;
+    }
+    if (outcome.status === "processing") {
+      await db.execute(sql`
+        update collection_attempts
+           set status = 'processing', provider_ref = ${outcome.providerRef}, updated_at = now()
+         where id = ${attemptId} and org_id = ${orgId}
+      `);
+      result.notices.push({ invoiceId: candidate.invoiceId, attemptId, status: "processing", detail: "provider is still collecting; the webhook settles this attempt" });
+      return;
+    }
+    if (outcome.status === "requires_action") {
+      await recordDecline(orgId, candidate, attemptId, fallbackPosition, today, policy,
+        outcome.declineCode ?? "authentication_required", result, { authUrl: outcome.authUrl });
+      return;
+    }
+    const kind = classifyDecline(outcome.declineCode) ?? "soft";
+    const lastLink = link === chain[chain.length - 1];
+    if (kind === "hard" && !lastLink) {
+      // The primary is dead but a backup is on file: park this row as a
+      // hard failure without running the final action, and charge the next
+      // method immediately. The final action runs only when every method on
+      // file has declined hard.
+      const parked = (await db.execute<{ id: string }>(sql`
+        update collection_attempts
+           set status = 'failed', decline_code = ${outcome.declineCode}, decline_kind = 'hard',
+               next_retry_on = null, updated_at = now()
+         where id = ${attemptId} and org_id = ${orgId} and status = 'initiated'
+         returning id
+      `));
+      if (!parked.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+      result.failed += 1;
+      result.notices.push({
+        invoiceId: candidate.invoiceId,
+        attemptId,
+        status: "failed",
+        detail: `primary method declined (${outcome.declineCode ?? "unknown reason"}); trying the backup method`,
+      });
+      fallbackPosition += 1;
+      continue;
+    }
+    await recordDecline(orgId, candidate, attemptId, fallbackPosition, today, policy, outcome.declineCode ?? null, result);
+    return;
+  }
+}
+
+/**
+ * Insert one collection attempt row, returning its id — or null when a
+ * concurrent tick already owns this (invoice, position). The conflict is
+ * expected under concurrency and benign.
+ */
+async function insertCollectionAttempt(
+  orgId: string,
+  candidate: CollectionCandidate,
+  methodId: string,
+  provider: AcceptanceProvider,
+  fallbackOf: string | null,
+  amount: string,
+  currency: string,
+  retryPosition: number,
+  actorId: string | null,
+): Promise<string | null> {
   const attempt = (await db.execute<{ id: string }>(sql`
     insert into collection_attempts
-      (org_id, invoice_id, enrollment_id, payment_method_id, amount, currency,
+      (org_id, invoice_id, enrollment_id, payment_method_id, fallback_method_id, amount, currency,
        provider, status, retry_position, created_by, updated_by)
-    values (${orgId}, ${candidate.invoiceId}, ${candidate.enrollmentId}, ${candidate.methodId},
-            ${amount}, ${invoice.currency}, ${candidate.provider}, 'initiated', ${position}, ${actorId}, ${actorId})
+    values (${orgId}, ${candidate.invoiceId}, ${candidate.enrollmentId}, ${methodId}, ${fallbackOf},
+            ${amount}, ${currency}, ${provider}, 'initiated', ${retryPosition}, ${actorId}, ${actorId})
     on conflict (org_id, invoice_id, retry_position) do nothing
     returning id
   `));
-  const attemptId = attempt.rows[0]?.id;
-  if (!attemptId) {
-    result.skipped += 1;
-    result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: "another tick is already collecting this position" });
-    return;
-  }
-  result.charged += 1;
-  const outcome = await charge(candidate.provider, {
-    providerCustomerId: candidate.providerCustomerId,
-    providerMethodId: candidate.providerMethodId!,
-    amount,
-    currency: invoice.currency,
-    description: `Autopay — invoice ${invoice.document_number}`,
-    idempotencyKey: attemptId,
-  });
-  if (outcome.status === "succeeded") {
-    await db.execute(sql`
-      update collection_attempts set provider_ref = ${outcome.providerRef}, updated_at = now()
-       where id = ${attemptId} and org_id = ${orgId}
-    `);
-    await postCollectionReceipt(orgId, attemptId);
-    result.succeeded += 1;
-    result.reactivated += await reactivateScopeSubscriptions(orgId, candidate, null);
-    result.notices.push({ invoiceId: candidate.invoiceId, attemptId, status: "succeeded", detail: `collected ${amount} ${invoice.currency}` });
-    return;
-  }
-  if (outcome.status === "processing") {
-    await db.execute(sql`
-      update collection_attempts
-         set status = 'processing', provider_ref = ${outcome.providerRef}, updated_at = now()
-       where id = ${attemptId} and org_id = ${orgId}
-    `);
-    result.notices.push({ invoiceId: candidate.invoiceId, attemptId, status: "processing", detail: "provider is still collecting; the webhook settles this attempt" });
-    return;
-  }
-  await recordDecline(orgId, candidate, attemptId, position, today, policy, outcome.declineCode ?? null, result);
+  return attempt.rows[0]?.id ?? null;
 }
 
 /**
@@ -1404,6 +1506,377 @@ async function recordDecline(
   const acted = await applyFinalAction(orgId, candidate, policy, null);
   result.suspended += acted.suspended;
   result.canceled += acted.canceled;
+}
+
+// ---------------------------------------------------------------------------
+// Revenue recovery: card updater, pre-expiry outreach, fallback order, metrics
+// ---------------------------------------------------------------------------
+
+export interface CardUpdaterDetail {
+  providerMethodId: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+}
+
+/**
+ * Refresh a stored method off a card account updater event: the network
+ * reissued or corrected the card, so brand/last4/expiry move without any
+ * customer action. Unknown methods stay unknown (the provider retries an
+ * informational event harmlessly); an unchanged card still stamps the
+ * refresh time as proof the updater sees it. Moving the expiry clears the
+ * pre-expiry outreach guard so the new date notifies on its own.
+ */
+export async function recordCardUpdaterEvent(
+  orgId: string,
+  provider: AcceptanceProvider,
+  detail: CardUpdaterDetail,
+): Promise<"card_refreshed" | "card_unchanged" | "unknown_method"> {
+  if (detail.expMonth != null && (detail.expMonth < 1 || detail.expMonth > 12)) {
+    throw new AutopayError("the card updater reported an impossible expiry month; the event is quarantined until the provider resends it");
+  }
+  if (detail.expYear != null && (detail.expYear < 2000 || detail.expYear > 2100)) {
+    throw new AutopayError("the card updater reported an impossible expiry year; the event is quarantined until the provider resends it");
+  }
+  return withOrg(orgId, async () => {
+    const locked = (await db.execute<{
+      id: string;
+      brand: string | null;
+      last4: string | null;
+      exp_month: number | null;
+      exp_year: number | null;
+    }>(sql`
+      select id, brand, last4, exp_month, exp_year from customer_payment_methods
+       where org_id = ${orgId} and provider = ${provider}
+         and provider_method_id = ${detail.providerMethodId} and status = 'active'
+       for update
+    `)).rows[0];
+    if (!locked) return "unknown_method";
+    const expiryMoved = (locked.exp_month ?? null) !== detail.expMonth || (locked.exp_year ?? null) !== detail.expYear;
+    const updated = (await db.execute<{ id: string }>(sql`
+      update customer_payment_methods
+         set brand = ${detail.brand}, last4 = ${detail.last4},
+             exp_month = ${detail.expMonth}, exp_year = ${detail.expYear},
+             last_updater_refresh_at = now(),
+             expiry_notified_on = case when ${expiryMoved} then null else expiry_notified_on end,
+             updated_at = now()
+       where id = ${locked.id} and org_id = ${orgId}
+       returning id
+    `));
+    if (!updated.rows[0]) throw new AutopayError("payment method changed underfoot; refusing to record over it");
+    const changed = (locked.brand ?? null) !== detail.brand || (locked.last4 ?? null) !== detail.last4 || expiryMoved;
+    if (!changed) return "card_unchanged";
+    await auditAutopay(orgId, "customer_payment_methods", locked.id, {
+      event: "card_updater_refresh",
+      before: { brand: locked.brand, last4: locked.last4 ? `•••• ${locked.last4}` : null },
+      after: { brand: detail.brand, last4: detail.last4 ? `•••• ${detail.last4}` : null },
+      reason: "The card network refreshed the stored card; the method stays collectible without customer action.",
+    }, null);
+    return "card_refreshed";
+  });
+}
+
+export interface ExpiringCard {
+  methodId: string;
+  partyId: string;
+  partyName: string | null;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number;
+  expYear: number;
+  /** End-of-month expiry date (civil). */
+  expiresOn: string;
+}
+
+/**
+ * Cards whose end-of-month expiry falls inside the outreach window — from
+ * today through today + the policy's notice days — that have not been
+ * notified yet. The queue feeds pre-expiry outreach: the operator sends each
+ * customer a setup link to replace the card before it declines.
+ */
+export async function findCardsExpiringSoon(
+  orgId: string,
+  opts?: { asOf?: string; withinDays?: number },
+): Promise<ExpiringCard[]> {
+  return withOrg(orgId, async () => {
+    const asOf = opts?.asOf ?? (await businessToday(orgId));
+    const withinDays = opts?.withinDays === undefined
+      ? (await resolveAutopayPolicy(orgId)).expiryNoticeDays
+      : parseExpiryNoticeDays(opts.withinDays);
+    const rows = (await db.execute<{
+      methodId: string;
+      partyId: string;
+      partyName: string | null;
+      brand: string | null;
+      last4: string | null;
+      expMonth: number;
+      expYear: number;
+      expiresOn: string;
+    }>(sql`
+      select m.id as "methodId", m.party_id as "partyId", p.display_name as "partyName",
+             m.brand, m.last4, m.exp_month as "expMonth", m.exp_year as "expYear",
+             ((make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date)::text as "expiresOn"
+        from customer_payment_methods m
+        join parties p on p.id = m.party_id and p.org_id = m.org_id
+       where m.org_id = ${orgId} and m.status = 'active'
+         and m.exp_month is not null and m.exp_year is not null
+         and m.expiry_notified_on is null
+         and (make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date
+             between ${asOf}::date and (${asOf}::date + ${withinDays}::integer)
+       order by (make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date, p.display_name
+    `)).rows;
+    return rows.map((row) => ({
+      methodId: row.methodId,
+      partyId: row.partyId,
+      partyName: row.partyName,
+      brand: row.brand,
+      last4: row.last4,
+      expMonth: row.expMonth,
+      expYear: row.expYear,
+      expiresOn: row.expiresOn,
+    }));
+  });
+}
+
+/**
+ * Stamp outreach as sent for the given cards. Every id must still be an
+ * active, un-notified method — a short count means cards left the queue
+ * (removed or already notified) and the operator refreshes it instead of
+ * recording outreach nobody can act on.
+ */
+export async function markExpiryOutreachSent(
+  orgId: string,
+  methodIds: string[],
+  sentOn: string,
+  actorId: string | null = null,
+): Promise<void> {
+  if (methodIds.length === 0) throw new AutopayError("no cards were selected; pick the expiring cards first");
+  return withOrg(orgId, async () => {
+    await requireAutopayFeature(orgId);
+    let stamped = 0;
+    for (const methodId of methodIds) {
+      const row = (await db.execute<{ id: string }>(sql`
+        update customer_payment_methods
+           set expiry_notified_on = ${sentOn}::date, updated_at = now(), updated_by = ${actorId}
+         where id = ${methodId} and org_id = ${orgId} and status = 'active' and expiry_notified_on is null
+         returning id
+      `));
+      stamped += row.rows.length;
+    }
+    if (stamped !== methodIds.length) {
+      throw new AutopayError("some cards left the queue before outreach went out (removed or already notified); refresh the expiring-cards queue and retry");
+    }
+  });
+}
+
+/**
+ * Order one stored method in the backup chain: lower priority charges
+ * earlier once the default has declined hard. The default method itself
+ * needs no order — it always charges first.
+ */
+export async function setMethodFallbackPriority(
+  orgId: string,
+  methodId: string,
+  priority: number,
+  actorId: string | null = null,
+): Promise<void> {
+  if (!Number.isInteger(priority) || priority < 0 || priority > 999) {
+    throw new AutopayError(`backup order ${JSON.stringify(priority)} is not a whole number between 0 and 999; fix it on the payment method`);
+  }
+  return withOrg(orgId, async () => {
+    await requireAutopayFeature(orgId);
+    const locked = (await db.execute<{ status: string; is_default: boolean }>(sql`
+      select status, is_default from customer_payment_methods
+       where id = ${methodId} and org_id = ${orgId}
+       for update
+    `)).rows[0];
+    if (!locked) throw new AutopayError("payment method not found");
+    if (locked.status !== "active") throw new AutopayError("only an active method can join the backup chain; finish its setup first");
+    const flipped = (await db.execute<{ id: string }>(sql`
+      update customer_payment_methods
+         set fallback_priority = ${priority}, updated_at = now(), updated_by = ${actorId}
+       where id = ${methodId} and org_id = ${orgId} and status = 'active'
+       returning id
+    `));
+    if (!flipped.rows[0]) throw new AutopayError("payment method is no longer active; finish its setup first");
+    await auditAutopay(orgId, "customer_payment_methods", methodId, {
+      event: "fallback_order_changed",
+      after: { fallbackPriority: priority, wasDefault: locked.is_default },
+      reason: locked.is_default
+        ? "The default method always charges first; its backup order applies if it ever stops being the default."
+        : "Operator ordered this method in the backup chain.",
+    }, actorId);
+  });
+}
+
+export interface RecoverySliceMetrics {
+  failedAttempts: number;
+  invoices: number;
+  recoveredInvoices: number;
+  recoveredAmount: string;
+  recoveryRate: number | null;
+}
+
+export interface RecoveryMetrics {
+  attempts: number;
+  invoicesWithFailures: number;
+  recoveredInvoices: number;
+  recoveredAmount: string;
+  recoveryRate: number | null;
+  byDeclineClass: (RecoverySliceMetrics & { declineClass: string })[];
+  byProvider: (RecoverySliceMetrics & { provider: string })[];
+  churnPrevented: number;
+  awaitingAuthentication: number;
+}
+
+function recoveryRate(recoveredInvoices: number, invoices: number): number | null {
+  return invoices === 0 ? null : recoveredInvoices / invoices;
+}
+
+/**
+ * Recovery facts for a window, read off stored attempts — never sampled or
+ * extrapolated. `from` is inclusive, `to` exclusive. A failure counts in the
+ * window it happened in; its recovery is a success at a later schedule
+ * position, whenever it lands, so crossing recoveries are not lost at the
+ * boundary. Positions — not timestamps — carry the causal order, because
+ * attempts charged in one tick share the transaction's clock. Involuntary
+ * churn prevented counts subscriptions the engine reactivated after a
+ * collection succeeded.
+ */
+export async function getRecoveryMetrics(
+  orgId: string,
+  window: { from: string; to: string },
+): Promise<RecoveryMetrics> {
+  return withOrg(orgId, async () => {
+    const totals = (await db.execute<{
+      attempts: number;
+      invoices: number;
+      recovered: number;
+      amount: string | null;
+    }>(sql`
+      with failed as (
+        select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position
+          from collection_attempts a
+         where a.org_id = ${orgId} and a.status = 'failed'
+           and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
+         order by a.invoice_id, a.retry_position
+      ),
+      recovered as (
+        select distinct on (a.invoice_id) a.invoice_id, a.amount
+          from collection_attempts a
+          join failed f on f.invoice_id = a.invoice_id
+         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         order by a.invoice_id, a.retry_position
+      )
+      select (select count(*)::integer from collection_attempts
+               where org_id = ${orgId}
+                 and created_at >= ${window.from}::timestamptz and created_at < ${window.to}::timestamptz) as attempts,
+             (select count(*)::integer from failed) as invoices,
+             (select count(*)::integer from recovered) as recovered,
+             (select coalesce(sum(amount), 0)::text from recovered) as amount
+    `)).rows[0];
+    if (!totals) throw new AutopayError("recovery metrics could not be read; try again");
+    const byClass = (await db.execute<{
+      declineClass: string;
+      failedAttempts: number;
+      invoices: number;
+      recovered: number;
+      amount: string | null;
+    }>(sql`
+      with failed as (
+        select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position,
+               coalesce(a.decline_kind, 'soft') as decline_kind
+          from collection_attempts a
+         where a.org_id = ${orgId} and a.status = 'failed'
+           and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
+         order by a.invoice_id, a.retry_position
+      ),
+      recovered as (
+        select distinct on (a.invoice_id) a.invoice_id, a.amount
+          from collection_attempts a
+          join failed f on f.invoice_id = a.invoice_id
+         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         order by a.invoice_id, a.retry_position
+      )
+      select f.decline_kind as "declineClass",
+             count(*)::integer as "failedAttempts",
+             count(distinct f.invoice_id)::integer as invoices,
+             count(r.invoice_id)::integer as recovered,
+             coalesce(sum(r.amount), 0)::text as amount
+        from failed f
+        left join recovered r on r.invoice_id = f.invoice_id
+       group by f.decline_kind
+       order by f.decline_kind
+    `)).rows;
+    const byProvider = (await db.execute<{
+      provider: string;
+      failedAttempts: number;
+      invoices: number;
+      recovered: number;
+      amount: string | null;
+    }>(sql`
+      with failed as (
+        select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position, a.provider
+          from collection_attempts a
+         where a.org_id = ${orgId} and a.status = 'failed'
+           and a.created_at >= ${window.from}::timestamptz and a.created_at < ${window.to}::timestamptz
+         order by a.invoice_id, a.retry_position
+      ),
+      recovered as (
+        select distinct on (a.invoice_id) a.invoice_id, a.amount
+          from collection_attempts a
+          join failed f on f.invoice_id = a.invoice_id
+         where a.org_id = ${orgId} and a.status = 'succeeded' and a.retry_position > f.failed_position
+         order by a.invoice_id, a.retry_position
+      )
+      select f.provider,
+             count(*)::integer as "failedAttempts",
+             count(distinct f.invoice_id)::integer as invoices,
+             count(r.invoice_id)::integer as recovered,
+             coalesce(sum(r.amount), 0)::text as amount
+        from failed f
+        left join recovered r on r.invoice_id = f.invoice_id
+       group by f.provider
+       order by f.provider
+    `)).rows;
+    const churn = (await db.execute<{ n: number }>(sql`
+      select count(*)::integer as n from audit_log
+       where org_id = ${orgId} and table_name = 'subscriptions'
+         and changes ->> 'event' = 'autopay_reactivated'
+         and at >= ${window.from}::timestamptz and at < ${window.to}::timestamptz
+    `)).rows[0]?.n ?? 0;
+    const awaiting = (await db.execute<{ n: number }>(sql`
+      select count(*)::integer as n from collection_attempts
+       where org_id = ${orgId} and status = 'failed'
+         and decline_kind = 'needs_authentication' and next_retry_on is null
+    `)).rows[0]?.n ?? 0;
+    return {
+      attempts: totals.attempts,
+      invoicesWithFailures: totals.invoices,
+      recoveredInvoices: totals.recovered,
+      recoveredAmount: totals.amount ?? "0",
+      recoveryRate: recoveryRate(totals.recovered, totals.invoices),
+      byDeclineClass: byClass.map((row) => ({
+        declineClass: row.declineClass,
+        failedAttempts: row.failedAttempts,
+        invoices: row.invoices,
+        recoveredInvoices: row.recovered,
+        recoveredAmount: row.amount ?? "0",
+        recoveryRate: recoveryRate(row.recovered, row.invoices),
+      })),
+      byProvider: byProvider.map((row) => ({
+        provider: row.provider,
+        failedAttempts: row.failedAttempts,
+        invoices: row.invoices,
+        recoveredInvoices: row.recovered,
+        recoveredAmount: row.amount ?? "0",
+        recoveryRate: recoveryRate(row.recovered, row.invoices),
+      })),
+      churnPrevented: churn,
+      awaitingAuthentication: awaiting,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

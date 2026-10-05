@@ -227,9 +227,10 @@ test("a soft decline retries on schedule; a hard decline stops without retry", {
     const softId = await seedInvoice(fixture, "INV-AUTO-SOFT", "50", org.date);
     const hardId = await seedInvoice(fixture, "INV-AUTO-HARD", "60", org.date);
 
-    // The 50 invoice declines soft, the 60 invoice declines hard (stolen card).
+    // The 50 invoice declines soft (do_not_honor retries on the generic
+    // cadence), the 60 invoice declines hard (stolen card).
     const mixed = fakeCharge(({ amount }) =>
-      amount.startsWith("60") ? { status: "failed", declineCode: "stolen_card" } : { status: "failed", declineCode: "insufficient_funds" },
+      amount.startsWith("60") ? { status: "failed", declineCode: "stolen_card" } : { status: "failed", declineCode: "do_not_honor" },
     );
     const first = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: mixed.charge });
     assert.equal(first.charged, 2);
@@ -308,7 +309,9 @@ test("exhausting the schedule suspends the subscription; a later success reactiv
     `);
     const invoiceId = await seedInvoice(fixture, "INV-AUTO-SUB", "70", org.date);
 
-    const failing = fakeCharge(() => ({ status: "failed", declineCode: "insufficient_funds" }));
+    // A generic-cadence decline: the single-rung [1] ladder exhausts on the
+    // retry day and the suspend action fires.
+    const failing = fakeCharge(() => ({ status: "failed", declineCode: "do_not_honor" }));
     const day0 = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: failing.charge });
     assert.equal(day0.charged, 1);
     assert.equal(day0.retried, 1);

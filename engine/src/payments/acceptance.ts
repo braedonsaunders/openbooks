@@ -90,6 +90,19 @@ export interface WebhookEvent {
   setupRef?: string | null;
   /** Provider customer the setup belongs to (when the provider reports it). */
   setupCustomerRef?: string | null;
+  /**
+   * Card account updater refresh (Stripe `payment_method.automatically_updated`
+   * and equivalents): the provider reissued or corrected the stored card, so
+   * the autopay engine refreshes brand/last4/expiry off this detail. Claimed
+   * before any payment path — no money moved.
+   */
+  cardUpdaterRefresh?: {
+    providerMethodId: string;
+    brand: string | null;
+    last4: string | null;
+    expMonth: number | null;
+    expYear: number | null;
+  } | null;
   /** True when a refund event is a provider chargeback/dispute rather than a
    *  voluntary refund. Persisted onto the attempt so autopay never
    *  auto-charges an invoice under dispute. */
@@ -415,7 +428,13 @@ export interface OffSessionChargeRequest {
 export type OffSessionChargeOutcome =
   | { status: "succeeded"; providerRef: string }
   | { status: "processing"; providerRef: string }
-  | { status: "failed"; providerRef: string | null; declineCode: string | null };
+  | { status: "failed"; providerRef: string | null; declineCode: string | null }
+  /**
+   * The charge needs the customer to verify (3DS / issuer authentication).
+   * The attempt records needs_authentication and keeps the link — it never
+   * retries automatically.
+   */
+  | { status: "requires_action"; providerRef: string | null; authUrl: string | null; declineCode: string | null };
 
 export interface DetachMethodRequest {
   providerCustomerId?: string | null;
@@ -514,6 +533,33 @@ function normalizeStripeNotification(event: unknown): WebhookEvent | null {
       intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
       linkToken,
       status: "failed",
+      raw: root,
+    };
+  }
+  if (type === "payment_method.automatically_updated") {
+    // The card network reissued or corrected the stored card: refresh the
+    // stored display detail off exactly what the provider reports. A missing
+    // method id or a non-numeric expiry cannot be normalized exactly and is
+    // quarantined by the caller instead of settling on coerced data.
+    if (typeof obj.id !== "string" || obj.id === "") {
+      throw new PaymentAcceptanceError("card updater event carries no payment method id");
+    }
+    const card = isJsonRecord(obj.card) ? obj.card : {};
+    for (const key of ["exp_month", "exp_year"] as const) {
+      if (card[key] != null && typeof card[key] !== "number") {
+        throw new PaymentAcceptanceError("card updater event carries a non-numeric card expiry");
+      }
+    }
+    return {
+      externalRef: obj.id,
+      status: "succeeded",
+      cardUpdaterRefresh: {
+        providerMethodId: obj.id,
+        brand: typeof card.brand === "string" ? card.brand : null,
+        last4: typeof card.last4 === "string" ? card.last4 : null,
+        expMonth: typeof card.exp_month === "number" ? card.exp_month : null,
+        expYear: typeof card.exp_year === "number" ? card.exp_year : null,
+      },
       raw: root,
     };
   }
@@ -741,6 +787,15 @@ const stripeAdapter: PaymentProviderAdapter = {
     if (json.status === "processing") return { status: "processing", providerRef: id };
     const lastError = jsonObject(json.last_payment_error);
     const code = typeof lastError.decline_code === "string" ? lastError.decline_code : typeof lastError.code === "string" ? lastError.code : "payment_intent_requires_action";
+    if (json.status === "requires_action") {
+      // The issuer wants the customer, not another blind charge: hand back
+      // the hosted verification URL when Stripe offers one (redirect-based
+      // flows) so the attempt can keep an actionable link.
+      const nextAction = jsonObject(json.next_action);
+      const redirect = jsonObject(nextAction.redirect_to_url);
+      const authUrl = typeof redirect.url === "string" && redirect.url !== "" ? redirect.url : null;
+      return { status: "requires_action", providerRef: id || null, authUrl, declineCode: code };
+    }
     return { status: "failed", providerRef: id || null, declineCode: code };
   },
   async detachMethod(secrets, req, fetchFn = defaultFetch) {
@@ -1036,6 +1091,18 @@ const adyenAdapter: PaymentProviderAdapter = {
     if (json.resultCode === "Authorised") return { status: "succeeded", providerRef: pspReference };
     if (json.resultCode === "Received" || json.resultCode === "Pending") return { status: "processing", providerRef: pspReference };
     const refusal = typeof json.refusalReason === "string" ? json.refusalReason : typeof json.resultCode === "string" ? json.resultCode : null;
+    if (
+      json.resultCode === "ChallengeShopper" ||
+      json.resultCode === "IdentifyShopper" ||
+      json.resultCode === "RedirectShopper" ||
+      json.resultCode === "PresentToShopper"
+    ) {
+      // Adyen asks the shopper to verify through the action URL: same
+      // treatment as Stripe's requires_action — keep the link, never retry.
+      const action = jsonObject(json.action);
+      const authUrl = typeof action.url === "string" && action.url !== "" ? action.url : null;
+      return { status: "requires_action", providerRef: pspReference || null, authUrl, declineCode: refusal };
+    }
     return { status: "failed", providerRef: pspReference || null, declineCode: refusal };
   },
   async detachMethod(secrets, req, fetchFn = defaultFetch) {
@@ -2432,6 +2499,13 @@ async function processWebhookEvent(
   provider: AcceptanceProvider,
   event: WebhookEvent,
 ): Promise<WebhookEventOutcome> {
+  // Card updater refreshes never touch payment attempts: the autopay engine
+  // claims them first by stored method id, and an unknown method stays
+  // unknown (a 200 the provider may retry) rather than mis-settling money.
+  if (event.cardUpdaterRefresh) {
+    const { recordCardUpdaterEvent } = await import("./autopay.ts");
+    return await recordCardUpdaterEvent(orgId, provider, event.cardUpdaterRefresh);
+  }
   // Stored-method setups never touch payment attempts: the autopay engine
   // claims them first, and an unclaimed one stays unknown (a 200 the
   // provider retries) rather than mis-settling as a payment.
