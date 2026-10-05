@@ -1,4 +1,6 @@
 import 'server-only'
+import { getTranslations } from 'next-intl/server'
+import { compareMoney } from '@/lib/cash/core'
 import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
 
@@ -27,21 +29,30 @@ export type CashBurn = {
   horizonWeeks: number
 }
 
+export type CashCoverage = {
+  /** (cash + AR outstanding) / AP outstanding on the 0..n scale. */
+  ratio: string
+  /** At or above 1 the on-hand cash and receivables cover the payables. */
+  covered: boolean
+}
+
 export type CashWidgetMetrics = {
   cashLowest: WidgetValue<CashLowestPoint> | null
   cashBurn: WidgetValue<CashBurn> | null
+  cashCoverage: WidgetValue<CashCoverage> | null
 }
 
 export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
   cashLowest: null,
   cashBurn: null,
+  cashCoverage: null,
 }
 
 export async function loadCashWidgetMetrics(
   ctx: DashboardWidgetContext,
   need: (...fields: (keyof CashWidgetMetrics)[]) => boolean,
 ): Promise<Partial<CashWidgetMetrics>> {
-  if (!need('cashLowest', 'cashBurn')) return {}
+  if (!need('cashLowest', 'cashBurn', 'cashCoverage')) return {}
   const read = ctx.cashPosition
   if (!read) return {}
   let position
@@ -56,6 +67,7 @@ export async function loadCashWidgetMetrics(
       const out: Partial<CashWidgetMetrics> = {}
       if (need('cashLowest')) out.cashLowest = refused
       if (need('cashBurn')) out.cashBurn = refused
+      if (need('cashCoverage')) out.cashCoverage = refused
       return out
     }
     throw error
@@ -81,6 +93,17 @@ export async function loadCashWidgetMetrics(
         horizonWeeks: position.horizonWeeks,
       },
     }
+  }
+  if (need('cashCoverage')) {
+    // No AP outstanding means no coverage ratio exists — the tile names
+    // that instead of dividing by zero or rendering 0× as a fact.
+    out.cashCoverage =
+      position.arCoverage === null
+        ? { available: false, reason: (await getTranslations('dashboard'))('analytics.noPayables') }
+        : {
+            available: true,
+            value: { ratio: position.arCoverage, covered: compareMoney(position.arCoverage, '1') >= 0 },
+          }
   }
   return out
 }

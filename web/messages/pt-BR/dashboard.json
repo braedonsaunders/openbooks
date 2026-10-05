@@ -49,6 +49,7 @@
     "runway": "Autonomia de caixa",
     "cashLowestPoint": "Caixa mínimo projetado",
     "cashBurn": "Queima semanal de caixa",
+    "cashCoverage": "Cobertura de caixa",
     "cashBurnNet": "Líquido {net} no horizonte",
     "inboxList": "Minhas tarefas",
     "payTile": "Folha",
@@ -160,6 +161,7 @@
     "runway": "Saldo projetado e autonomia das próximas semanas, na moeda base.",
     "cashLowestPoint": "Caixa mínimo projetado no horizonte de previsão e a semana em que ocorre.",
     "cashBurn": "Saída média semanal no horizonte de previsão, com a variação líquida projetada.",
+    "cashCoverage": "Caixa mais recebíveis sobre contas a pagar, da previsão de caixa.",
     "inboxList": "Suas principais tarefas com link para a caixa.",
     "payTile": "Próximo pagamento e último holerite.",
     "balanceTile": "Saldos com link de solicitação.",
@@ -335,6 +337,7 @@
   "churnScore": "pontuação de evasão {score}",
   "analytics": {
     "loading": "Os números ainda não estão disponíveis.",
+    "noPayables": "Sem contas a pagar em aberto — nada a cobrir.",
     "nothingFlagged": "Nada sinalizado neste período.",
     "grade": "Nota {grade}",
     "target": "Meta {target}",

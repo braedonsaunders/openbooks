@@ -49,6 +49,7 @@
     "runway": "資金繰り期間",
     "cashLowestPoint": "予測最低現金残高",
     "cashBurn": "週間資金燃焼",
+    "cashCoverage": "資金カバレッジ",
     "cashBurnNet": "期間純変動 {net}",
     "inboxList": "自分のタスク",
     "payTile": "給与",
@@ -160,6 +161,7 @@
     "runway": "今後数週間の予測残高と資金繰り期間（基軸通貨）。",
     "cashLowestPoint": "予測期間中の最低現金残高とその週。",
     "cashBurn": "予測期間中の週平均流出額と予測純変動。",
+    "cashCoverage": "キャッシュフロー予測による、現金＋売掛金の買掛金に対する倍率。",
     "inboxList": "受信箱へのリンク付きの主要タスク。",
     "payTile": "次回給与日と最新明細。",
     "balanceTile": "申請リンク付き休暇残高。",
@@ -335,6 +337,7 @@
   "churnScore": "離反スコア {score}",
   "analytics": {
     "loading": "数値はまだ利用できません。",
+    "noPayables": "未払いの買掛金がありません。",
     "nothingFlagged": "この期間に指摘事項はありません。",
     "grade": "評価 {grade}",
     "target": "目標 {target}",

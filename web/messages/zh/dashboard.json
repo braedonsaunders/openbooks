@@ -49,6 +49,7 @@
     "runway": "现金可维持",
     "cashLowestPoint": "预测最低现金",
     "cashBurn": "每周现金消耗",
+    "cashCoverage": "现金覆盖率",
     "cashBurnNet": "范围内净 {net}",
     "inboxList": "我的任务",
     "payTile": "薪酬",
@@ -160,6 +161,7 @@
     "runway": "未来几周的预计现金与可维持期（本位币）。",
     "cashLowestPoint": "预测范围内最低的预计现金及其所在周。",
     "cashBurn": "预测范围内周均流出及预计净变动。",
+    "cashCoverage": "现金加应收账款相对应付账款的倍数，来自现金预测。",
     "inboxList": "您的主要任务，附收件箱链接。",
     "payTile": "下次发薪日与上期工资单。",
     "balanceTile": "休假余额与申请链接。",
@@ -335,6 +337,7 @@
   "churnScore": "流失评分 {score}",
   "analytics": {
     "loading": "数据尚不可用。",
+    "noPayables": "没有未结应付款。",
     "nothingFlagged": "本期无发现。",
     "grade": "等级 {grade}",
     "target": "目标 {target}",

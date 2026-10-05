@@ -49,6 +49,7 @@
     "runway": "Cash runway",
     "cashLowestPoint": "Lowest projected cash",
     "cashBurn": "Weekly cash burn",
+    "cashCoverage": "Cash coverage",
     "cashBurnNet": "Net {net} over the horizon",
     "inboxList": "My tasks",
     "payTile": "Pay",
@@ -160,6 +161,7 @@
     "runway": "Projected cash and runway over the coming weeks, in base currency.",
     "cashLowestPoint": "Lowest projected cash in the forecast horizon and the week it occurs.",
     "cashBurn": "Average weekly outflow over the forecast horizon, with the projected net change.",
+    "cashCoverage": "Cash plus receivables over payables, from the cash forecast.",
     "inboxList": "Your top tasks with a link to the inbox.",
     "payTile": "Next pay date and last payslip.",
     "balanceTile": "Time-off balances with a request link.",
@@ -335,6 +337,7 @@
   "churnScore": "churn score {score}",
   "analytics": {
     "loading": "Figures are not available yet.",
+    "noPayables": "No payables outstanding — nothing to cover.",
     "nothingFlagged": "Nothing flagged for this period.",
     "grade": "Grade {grade}",
     "target": "Target {target}",
