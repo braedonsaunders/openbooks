@@ -1280,7 +1280,8 @@
       }
     },
     "payment": {
-      "undatedNote": "Hors {count} factures sans échéance ni conditions de paiement"
+      "undatedNote": "Hors {count} factures sans échéance ni conditions de paiement",
+      "noHistory": "Pas encore d’historique de paiement"
     },
     "matrix": {
       "unratedNote": "{count} fournisseurs n’ont pas encore d’historique de paiement et ne sont pas tracés"

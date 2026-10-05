@@ -1280,7 +1280,8 @@
       }
     },
     "payment": {
-      "undatedNote": "Excludes {count} bills with no due date or payment terms"
+      "undatedNote": "Excludes {count} bills with no due date or payment terms",
+      "noHistory": "No payment history yet"
     },
     "matrix": {
       "unratedNote": "{count} vendors have no payment history yet and are not plotted"
