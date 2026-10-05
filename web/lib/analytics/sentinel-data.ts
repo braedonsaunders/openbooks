@@ -426,6 +426,8 @@ export interface SentinelData {
     benford2DConformity: string;
     approvalLimitRisk: boolean;
     topRiskAreas: { area: string; severity: "critical" | "high" | "medium"; count: number; message: string }[];
+    /** Translated names of skipped scoring sources (unset floors/limits/tiers). */
+    excludedDetectors: string[];
   };
   duplicates: {
     total: number;
@@ -438,8 +440,8 @@ export interface SentinelData {
   benford2D: { totalTransactions: number; digits: BenfordDigit[]; anomalies: BenfordDigit[]; mad: number; conformity: string; byCurrency: BenfordCurrencySlice[] };
   thresholdTrap: { total: number; totalAmount: string; byTrap: { trap: string; count: number; amount: string }[]; items: FlaggedDoc[]; unavailable: string | null };
   weekend: { total: number; totalAmount: string; saturday: number; sunday: number; items: FlaggedDoc[] };
-  rsf: { total: number; items: (FlaggedDoc & { rsf: number; secondLargest: string; baselineCount: number })[] };
-  zscore: { total: number; items: (FlaggedDoc & { zScore: number; vendorAvg: string; vendorStdDev: string; baselineCount: number })[] };
+  rsf: { total: number; items: (FlaggedDoc & { rsf: number; secondLargest: string; baselineCount: number })[]; unavailable: string | null };
+  zscore: { total: number; items: (FlaggedDoc & { zScore: number; vendorAvg: string; vendorStdDev: string; baselineCount: number })[]; unavailable: string | null };
   sequential: SequentialGroup[];
   ghosts: GhostVendor[];
   auditTrail: { total: number; deletes: number; sensitiveChanges: number; events: AuditEvent[] };
@@ -523,6 +525,11 @@ export async function sentinelData(
   // comparing against an invented figure would mean different money per
   // currency. The duplicate widget reads the same flag.
   const duplicateFloor = cfg.duplicateMinAmount === "" ? null : (cfg.duplicateMinAmount as string);
+  // An unset RSF or z-score floor excludes the whole detector by name: a
+  // noise gate without a figure cannot tell dust from signal. Tiers work the
+  // same way per comparison below — empty tiers skip their points.
+  const rsfFloor = cfg.rsfBaselineFloor === "" ? null : (cfg.rsfBaselineFloor as string);
+  const zscoreFloor = cfg.zscoreSigmaFloor === "" ? null : (cfg.zscoreSigmaFloor as string);
   // A duplicate pair must fall within the threshold of each other, so a
   // candidate further outside the window than that can never join to one
   // inside it. Widening the candidate scan by exactly the threshold is
@@ -894,6 +901,9 @@ export async function sentinelData(
       ), rsf as (
         -- The baseline floor is a noise gate in presentation money: a
         -- near-zero historical 2nd-largest turns the multiple into noise.
+        -- An unset floor refuses the detector: the bound NULL makes every
+        -- comparison unknown, the join admits no rows, and rsfUnavailable
+        -- names the exclusion in the score and sections.
         -- No LIMIT: outlier sets are inherently small, and the flagged union
         -- below needs every flagged id — display slices cap client-side.
         select pd.*, s.second_amount::text as second_amount, s.cnt as baseline_count,
@@ -901,16 +911,18 @@ export async function sentinelData(
           pd.pres_amt / s.second_amount as metric
         from period pd
         join stats s on s.party_id = pd.party_id and s.currency = pd.currency
-          and s.second_amount >= ${cfg.rsfBaselineFloor}::numeric
+          and s.second_amount >= ${rsfFloor}::numeric
         where pd.pres_amt / s.second_amount >= ${cfg.rsfThreshold}
         order by metric desc
       ), zs as (
+        -- An unset floor refuses the detector the same way: NULL comparisons
+        -- match nothing and zscoreUnavailable names the exclusion.
         select pd.*, null::text as second_amount, s.cnt as baseline_count,
           s.avg_amount::text as avg_amount, s.std_amount::text as std_amount,
           (pd.pres_amt - s.avg_amount) / s.std_amount as metric
         from period pd
         join stats s on s.party_id = pd.party_id and s.currency = pd.currency
-          and s.cnt >= ${cfg.zscoreMinBaseline} and s.std_amount > ${cfg.zscoreSigmaFloor}::numeric
+          and s.cnt >= ${cfg.zscoreMinBaseline} and s.std_amount > ${zscoreFloor}::numeric
         where abs((pd.pres_amt - s.avg_amount) / s.std_amount) >= ${cfg.zscoreThreshold}
         order by abs((pd.pres_amt - s.avg_amount) / s.std_amount) desc
       )
@@ -1324,13 +1336,21 @@ export async function sentinelData(
   }
   const trapTotal = trapByTrap.reduce((s, t) => s + t.count, 0);
   const trapUnavailable = flowLimits.length === 0 ? strings.trapUnavailable : null;
+  const rsfUnavailable = rsfFloor === null ? strings.rsfFloorUnset : null;
+  const zscoreUnavailable = zscoreFloor === null ? strings.zscoreFloorUnset : null;
+  const amountTierUnset =
+    cfg.moderateRiskAmount === "" || cfg.highRiskAmount === "" || cfg.criticalRiskAmount === "" ||
+    cfg.aggregateHighAmount === "" || cfg.aggregateCriticalAmount === "";
 
   // ---- Duplicates: one finding per natural-key group ---------------------------------
   const dupRules = RISK_SCORING.duplicate.rules;
   const dupTierBump = (translated: string): number => {
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) return dupRules.tierCritical!.points!;
-    if (cmp(translated, cfg.highRiskAmount) >= 0) return dupRules.tierHigh!.points!;
-    if (cmp(translated, cfg.moderateRiskAmount) >= 0) return dupRules.tierModerate!.points!;
+    // Empty tiers skip their points: awarding against an unset figure would
+    // mean different money per currency. Skipped tiers are named in the
+    // score's exclusion note.
+    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) return dupRules.tierCritical!.points!;
+    if (cfg.highRiskAmount !== "" && cmp(translated, cfg.highRiskAmount) >= 0) return dupRules.tierHigh!.points!;
+    if (cfg.moderateRiskAmount !== "" && cmp(translated, cfg.moderateRiskAmount) >= 0) return dupRules.tierModerate!.points!;
     return 0;
   };
   const dupSpanBump = (spanDays: number): number => {
@@ -1419,8 +1439,8 @@ export async function sentinelData(
     const translated = translatedOf(r);
     const isSunday = Number(r.dow) === 0;
     let score = weekendRules.base!.points!;
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += weekendRules.tierCritical!.points!;
-    else if (cmp(translated, cfg.highRiskAmount) >= 0) score += weekendRules.tierHigh!.points!;
+    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) score += weekendRules.tierCritical!.points!;
+    else if (cfg.highRiskAmount !== "" && cmp(translated, cfg.highRiskAmount) >= 0) score += weekendRules.tierHigh!.points!;
     if (isSunday) score += weekendRules.sunday!.points!;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
@@ -1449,8 +1469,8 @@ export async function sentinelData(
     else if (rsf >= rsfRules.ratio20!.ratio!) score += rsfRules.ratio20!.points!;
     else if (rsf >= rsfRules.ratio15!.ratio!) score += rsfRules.ratio15!.points!;
     else score += rsfRules.ratioBase!.points!;
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += rsfRules.tierCritical!.points!;
-    else if (cmp(translated, cfg.highRiskAmount) >= 0) score += rsfRules.tierHigh!.points!;
+    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) score += rsfRules.tierCritical!.points!;
+    else if (cfg.highRiskAmount !== "" && cmp(translated, cfg.highRiskAmount) >= 0) score += rsfRules.tierHigh!.points!;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1473,7 +1493,7 @@ export async function sentinelData(
     let score = zRules.base!.points!;
     if (Math.abs(z) >= zRules.z5!.z!) score += zRules.z5!.points!;
     else if (Math.abs(z) >= zRules.z4!.z!) score += zRules.z4!.points!;
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += zRules.tierCritical!.points!;
+    if (cfg.criticalRiskAmount !== "" && cmp(translated, cfg.criticalRiskAmount) >= 0) score += zRules.tierCritical!.points!;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1500,9 +1520,9 @@ export async function sentinelData(
     const totalAmount = sum(invoices.length > 0 ? invoices.map((inv) => inv.funcAmount) : ["0.0000"]);
     let score = spanDays >= seqHighDays ? seqRules.highSpan!.points! : seqRules.baseSpan!.points!;
     score += Math.min(count * seqRules.perInvoice!.perUnit!, seqRules.perInvoice!.cap!);
-    if (cmp(totalAmount, cfg.aggregateCriticalAmount) > 0) score += seqRules.tierCritical!.points!;
-    else if (cmp(totalAmount, cfg.aggregateHighAmount) > 0) score += seqRules.tierHigh!.points!;
-    else if (cmp(totalAmount, cfg.criticalRiskAmount) > 0) score += seqRules.tierModerate!.points!;
+    if (cfg.aggregateCriticalAmount !== "" && cmp(totalAmount, cfg.aggregateCriticalAmount) > 0) score += seqRules.tierCritical!.points!;
+    else if (cfg.aggregateHighAmount !== "" && cmp(totalAmount, cfg.aggregateHighAmount) > 0) score += seqRules.tierHigh!.points!;
+    else if (cfg.criticalRiskAmount !== "" && cmp(totalAmount, cfg.criticalRiskAmount) > 0) score += seqRules.tierModerate!.points!;
     const level: "high" | "medium" = spanDays >= seqHighDays ? "high" : "medium";
     return {
       partyId: r.party_id, partyName: r.party_name, count, totalAmount,
@@ -1625,9 +1645,9 @@ export async function sentinelData(
   }
   // Composite vendor score from the severity model, capped at 100.
   for (const v of vendorMap.values()) {
-    const amountTier = cmp(v.totalAmount, cfg.aggregateHighAmount) >= 0
+    const amountTier = cfg.aggregateHighAmount !== "" && cmp(v.totalAmount, cfg.aggregateHighAmount) >= 0
       ? vendorRules.tierCritical!.points!
-      : cmp(v.totalAmount, cfg.highRiskAmount) >= 0
+      : cfg.highRiskAmount !== "" && cmp(v.totalAmount, cfg.highRiskAmount) >= 0
         ? vendorRules.tierHigh!.points!
         : vendorRules.tierBase!.points!;
     v.compositeScore = Math.min(100, Math.round(Math.min(v.flagCount * vendorRules.perFlag!.perUnit!, vendorRules.perFlag!.cap!) + amountTier + v.flagTypes.length * vendorRules.perType!.points! + v.maxRiskScore * vendorRules.worstShare!.share!));
@@ -1639,8 +1659,8 @@ export async function sentinelData(
   let risk = 0;
   if (flaggedCount >= cfg.summaryFlaggedHigh) risk += summaryRules.flaggedHigh!.points!;
   else if (flaggedCount >= cfg.summaryFlaggedMedium) risk += summaryRules.flaggedMedium!.points!;
-  if (cmp(dupAmount, cfg.aggregateCriticalAmount) > 0) risk += summaryRules.dupCritical!.points!;
-  else if (cmp(dupAmount, cfg.aggregateHighAmount) > 0) risk += summaryRules.dupHigh!.points!;
+  if (cfg.aggregateCriticalAmount !== "" && cmp(dupAmount, cfg.aggregateCriticalAmount) > 0) risk += summaryRules.dupCritical!.points!;
+  else if (cfg.aggregateHighAmount !== "" && cmp(dupAmount, cfg.aggregateHighAmount) > 0) risk += summaryRules.dupHigh!.points!;
   if (ghostCount > 0) risk += summaryRules.ghostAny!.points!;
   if (sequentialGroups > 0) risk += summaryRules.sequentialAny!.points!;
   if (deviating1D.length > 0) risk += summaryRules.benford!.points!;
@@ -1683,14 +1703,21 @@ export async function sentinelData(
       benford2DConformity: b2Top.conformity,
       approvalLimitRisk: flowLimits.length > 0 && trapTotal > 0,
       topRiskAreas,
+      excludedDetectors: [
+        ...(duplicateUnavailable !== null ? [strings.detectorDuplicate] : []),
+        ...(trapUnavailable !== null ? [strings.detectorTrap] : []),
+        ...(rsfUnavailable !== null ? [strings.detectorRsf] : []),
+        ...(zscoreUnavailable !== null ? [strings.detectorZscore] : []),
+        ...(amountTierUnset ? [strings.detectorAmountTiers] : []),
+      ],
     },
     duplicates: { total: dupTotal, pairs: dupPairsCapped, groups: dupGroups, unavailable: duplicateUnavailable },
     benford1D: { totalTransactions: total1D, digits: digits1D, mad: mad1D, conformity: b1Top.conformity, message: benfordMessage, byCurrency: b1Slices },
     benford2D: { totalTransactions: total2D, digits: digits2D, anomalies: anomalies2D, mad: mad2D, conformity: b2Top.conformity, byCurrency: b2Slices },
     thresholdTrap: { total: trapTotal, totalAmount: trapTotalAmount, byTrap: trapByTrap, items: trapItems, unavailable: trapUnavailable },
     weekend: { total: weekendTotal, totalAmount: weekendTotalAmount, saturday: satCount, sunday: sunCount, items: weekendItems },
-    rsf: { total: rsfFull.length, items: rsfDisplay },
-    zscore: { total: zFull.length, items: zDisplay },
+    rsf: { total: rsfFull.length, items: rsfDisplay, unavailable: rsfUnavailable },
+    zscore: { total: zFull.length, items: zDisplay, unavailable: zscoreUnavailable },
     sequential,
     ghosts,
     auditTrail: { total: auditTotal, deletes: auditDeletes, sensitiveChanges: auditSensitive, events: auditEvents },

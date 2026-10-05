@@ -3596,7 +3596,9 @@
         "message": "首位数字分布显著偏离"
       },
       "trapUnavailable": "Flows中没有审批金额条件——请添加，或在Sentinel→配置中调整区间。",
-      "duplicateFloorUnset": "请在Sentinel→配置中设置重复下限。"
+      "duplicateFloorUnset": "请在Sentinel→配置中设置重复下限。",
+      "rsfFloorUnset": "请在Sentinel→配置中设置相对规模基线下限。",
+      "zscoreFloorUnset": "请在Sentinel→配置中设置Z分数噪声下限。"
     },
     "analysis": {
       "calendar": "日历",
@@ -3749,7 +3751,11 @@
     "detectors": {
       "auditEvents": "审计事件",
       "duplicates": "重复",
-      "ghostVendors": "幽灵供应商"
+      "ghostVendors": "幽灵供应商",
+      "trap": "99陷阱",
+      "rsf": "RSF",
+      "zscore": "Z分数",
+      "amountTiers": "金额层级"
     },
     "drill": {
       "documentsTotal": "{count}份单据 · {total}",
@@ -3854,7 +3860,8 @@
       "elevated": "升高",
       "high": "高风险",
       "low": "低风险",
-      "moderate": "中等"
+      "moderate": "中等",
+      "excludedNote": "评分不含未配置的输入:{detectors}。请在Sentinel→配置中进行配置以实现全面覆盖。"
     },
     "sequential": {
       "indicatorNote1": " 如果某供应商开给您的发票号在数周或数月内完全连续，您很可能是其 ",

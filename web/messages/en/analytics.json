@@ -3508,7 +3508,8 @@
       "elevated": "ELEVATED",
       "moderate": "MODERATE",
       "low": "LOW RISK",
-      "caption": "integrity risk"
+      "caption": "integrity risk",
+      "excludedNote": "Score excludes unconfigured inputs: {detectors}. Configure them in Sentinel → Configuration for full coverage."
     },
     "kind": {
       "vendor_bill": "Bill",
@@ -3703,7 +3704,11 @@
     "detectors": {
       "duplicates": "Duplicates",
       "ghostVendors": "Ghost Vendors",
-      "auditEvents": "Audit Events"
+      "auditEvents": "Audit Events",
+      "trap": "99-Trap",
+      "rsf": "RSF",
+      "zscore": "Z-Score",
+      "amountTiers": "Amount tiers"
     },
     "empty": {
       "nothingFlagged": "Nothing flagged",
@@ -3775,7 +3780,9 @@
         "message": "First-digit distribution deviates significantly"
       },
       "trapUnavailable": "No approval amount limits in Flows — add one, or tune the band in Sentinel → Configuration.",
-      "duplicateFloorUnset": "Set the duplicate minimum in Sentinel → Configuration."
+      "duplicateFloorUnset": "Set the duplicate minimum in Sentinel → Configuration.",
+      "rsfFloorUnset": "Set the relative-size baseline floor in Sentinel → Configuration.",
+      "zscoreFloorUnset": "Set the z-score noise floor in Sentinel → Configuration."
     },
     "config": {
       "duplicatesNote": "Same vendor, kind, currency, amount and reference within the window; credits excluded; one finding per group",

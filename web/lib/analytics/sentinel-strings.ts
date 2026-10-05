@@ -28,6 +28,17 @@ export interface SentinelStrings {
   trapUnavailable: string;
   /** Duplicate-detector refusal when the duplicate floor is not configured. */
   duplicateFloorUnset: string;
+  /** Relative-size refusal when its noise floor is not configured. */
+  rsfFloorUnset: string;
+  /** Z-score refusal when its noise floor is not configured. */
+  zscoreFloorUnset: string;
+  /** Translated names of detectors the score had to skip, for the exclusion note. */
+  detectorDuplicate: string;
+  detectorTrap: string;
+  detectorRsf: string;
+  detectorZscore: string;
+  /** "Amount tiers" as a skipped scoring source when any tier is unset. */
+  detectorAmountTiers: string;
   benfordClose: string;
   benfordReasonable: string;
   benfordSomeDeviation: string;
@@ -134,6 +145,13 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
     benfordInsufficient: (total, minimum) => t("sentinel.forensics.benfordInsufficient", { total, minimum }),
     trapUnavailable: t("sentinel.forensics.trapUnavailable"),
     duplicateFloorUnset: t("sentinel.forensics.duplicateFloorUnset"),
+    rsfFloorUnset: t("sentinel.forensics.rsfFloorUnset"),
+    zscoreFloorUnset: t("sentinel.forensics.zscoreFloorUnset"),
+    detectorDuplicate: t("sentinel.detectors.duplicates"),
+    detectorTrap: t("sentinel.detectors.trap"),
+    detectorRsf: t("sentinel.detectors.rsf"),
+    detectorZscore: t("sentinel.detectors.zscore"),
+    detectorAmountTiers: t("sentinel.detectors.amountTiers"),
     benfordClose: t("sentinel.forensics.benfordClose"),
     benfordReasonable: t("sentinel.forensics.benfordReasonable"),
     benfordSomeDeviation: t("sentinel.forensics.benfordSomeDeviation"),

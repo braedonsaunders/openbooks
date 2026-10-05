@@ -3596,7 +3596,9 @@
         "message": "第一位の分布が大きく乖離しています"
       },
       "trapUnavailable": "Flowsに承認金額の条件がありません — 条件を追加するか、Sentinel → 設定でバンドを調整してください。",
-      "duplicateFloorUnset": "Sentinel → 設定で重複下限を設定してください。"
+      "duplicateFloorUnset": "Sentinel → 設定で重複下限を設定してください。",
+      "rsfFloorUnset": "Sentinel → 設定で相対サイズのベースライン下限を設定してください。",
+      "zscoreFloorUnset": "Sentinel → 設定でZスコアのノイズ下限を設定してください。"
     },
     "analysis": {
       "calendar": "カレンダー",
@@ -3749,7 +3751,11 @@
     "detectors": {
       "auditEvents": "監査イベント",
       "duplicates": "重複",
-      "ghostVendors": "ゴースト仕入先"
+      "ghostVendors": "ゴースト仕入先",
+      "trap": "99トラップ",
+      "rsf": "RSF",
+      "zscore": "Zスコア",
+      "amountTiers": "金額段階"
     },
     "drill": {
       "documentsTotal": "{count}件の書類 · {total}",
@@ -3854,7 +3860,8 @@
       "elevated": "上昇",
       "high": "高リスク",
       "low": "低リスク",
-      "moderate": "中程度"
+      "moderate": "中程度",
+      "excludedNote": "スコアは未設定の入力を除外しています: {detectors}。Sentinel → 設定で設定すると完全にカバーできます。"
     },
     "sequential": {
       "indicatorNote1": " ある仕入先の請求書番号が数週間・数か月にわたり完全に連続している場合、あなたはその仕入先の ",
