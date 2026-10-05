@@ -109,6 +109,7 @@ export const HOME_WIDGETS = {
     <HealthHero
       gaugeValue={typeof props.gaugeValue === 'number' ? props.gaugeValue : 0}
       gaugeLabel={str(props, 'gaugeLabel') ?? ''}
+      bands={(props.gaugeBands as ComponentProps<typeof HealthHero>['bands'] | null) ?? null}
       categories={props.categories as ComponentProps<typeof HealthHero>['categories']}
       ratios={props.ratios as ComponentProps<typeof HealthHero>['ratios']}
       ratioLabels={props.ratioLabels as ComponentProps<typeof HealthHero>['ratioLabels']}

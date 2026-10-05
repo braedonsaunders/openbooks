@@ -71,6 +71,8 @@ export interface AccountingData {
   heroHint: string
   gaugeValue: number
   gaugeLabel: string
+  /** The organization's own gauge bands, threaded to the hero gauge. Null without reports.read, where the hero never renders. */
+  gaugeBands: { excellent: number; good: number; average: number } | null
   categories: HealthCategoryRow[]
   ratios: HealthRatioRow[]
   ratioLabels: { ratio: string; value: string; benchmark: string; grade: string }
@@ -241,6 +243,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     heroHint: period.label,
     gaugeValue: health?.overallScore ?? 0,
     gaugeLabel: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
+    gaugeBands: health ? health.benchmarks.labels : null,
     categories: (health?.categoryScores ?? [])
       .filter((c): c is { key: typeof c.key; score: number } => c.score !== null)
       .map((c) => ({
@@ -359,6 +362,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
               widgetBlock('health-hero', {
                 gaugeValue: data.gaugeValue,
                 gaugeLabel: data.gaugeLabel,
+                gaugeBands: data.gaugeBands,
                 categories: data.categories,
                 ratios: data.ratios,
                 ratioLabels: data.ratioLabels,

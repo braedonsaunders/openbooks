@@ -194,7 +194,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'grant-acting-cell': { props: ['email', 'name'] },
   'grant-control-cell': { props: ['grantId', 'isActive'] },
   'grant-drawer': { props: ['drawer'] },
-  'health-hero': { props: ['categories', 'fullAnalysisLabel', 'gaugeLabel', 'gaugeValue', 'ratioLabels', 'ratios', 'showFullAnalysisLink'] },
+  'health-hero': { props: ['categories', 'fullAnalysisLabel', 'gaugeBands', 'gaugeLabel', 'gaugeValue', 'ratioLabels', 'ratios', 'showFullAnalysisLink'] },
   'hiring-pipeline-builder': { props: [], open: true },
   'hiring-pipeline-index': { props: [], open: true },
   'hrm-ai-draft-drawer': { props: ['draft'] },

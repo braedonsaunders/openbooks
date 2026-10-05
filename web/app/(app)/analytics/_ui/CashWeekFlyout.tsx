@@ -30,7 +30,7 @@ import { TxnLink } from '../../reports/TxnLink'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { shortDateLabel } from '@/lib/format'
-import { Gauge, NEUTRAL_GAUGE_BANDS } from './Gauge'
+import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
 import { exportCsv } from './exportCsv'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
@@ -293,7 +293,8 @@ export function CashWeekFlyout({
             </div>
           </div>
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-            <Gauge value={Math.max(0, Math.min(100, coveragePercent))} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" bands={NEUTRAL_GAUGE_BANDS} />
+            {/* Coverage is a ratio, not a health score: the ring stays untoned rather than grading against a scale nobody configured. */}
+            <Gauge value={Math.max(0, Math.min(100, coveragePercent))} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" bands={null} />
             <div>
               <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('coverageRatio')}</p>
               <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{coverage === null ? '—' : formatExactPercent(coverage)}</p>

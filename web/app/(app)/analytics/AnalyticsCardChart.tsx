@@ -3,7 +3,7 @@ import { Sparkline } from '@openbooks/ui'
 import { useFormatter } from 'next-intl'
 import type { AnalyticsPreviewChart } from '../../../lib/analytics/dashboard-catalog'
 import { Donut } from './_ui/charts'
-import { Gauge, NEUTRAL_GAUGE_BANDS } from './_ui/Gauge'
+import { Gauge } from './_ui/Gauge'
 
 /** Compact previews compose the same visuals as the owning dashboards. */
 export function AnalyticsCardChart({ chart }: { chart: AnalyticsPreviewChart }) {
@@ -15,7 +15,8 @@ export function AnalyticsCardChart({ chart }: { chart: AnalyticsPreviewChart }) 
     <span className="mt-0.5 block truncate text-right text-[9px] text-slate-400">{chart.label}</span>
   </div>
   if (chart.kind === 'gauge') return <div title={`${chart.label}: ${chart.value}/100`}>
-    <Gauge value={chart.value} size={64} thickness={7} showTicks={false} showValue={false} goodWhenHigh={chart.goodWhenHigh} ariaLabel={`${chart.label}: ${chart.value}/100`} bands={NEUTRAL_GAUGE_BANDS} />
+    {/* Generic previews carry no health scale of their own: untoned, never graded against a fixed scale. */}
+    <Gauge value={chart.value} size={64} thickness={7} showTicks={false} showValue={false} goodWhenHigh={chart.goodWhenHigh} ariaLabel={`${chart.label}: ${chart.value}/100`} bands={null} />
   </div>
   return <div className="w-14" role="img" aria-label={`${chart.label}: ${chart.slices.map((slice) => `${slice.name} ${slice.value}`).join(', ')}`}>
     <Donut compact data={chart.slices} height={40} valueFormat={(value) => format.number(value, { maximumFractionDigits: 1 })} />

@@ -2,7 +2,8 @@ import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as Sha
 import { cn } from '@openbooks/ui'
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
-import { Gauge, NEUTRAL_GAUGE_BANDS } from '../analytics/_ui/Gauge'
+import { Gauge } from '../analytics/_ui/Gauge'
+import type { ScoreBands } from '../analytics/_ui/format'
 
 /**
  * The accounting cockpit's bespoke panel bodies, extracted from page.tsx.
@@ -52,6 +53,7 @@ function toneClass(tone: HealthTone, kind: 'text' | 'bar' | 'chip'): string {
 export function HealthHero({
   gaugeValue,
   gaugeLabel,
+  bands,
   categories,
   ratios,
   ratioLabels,
@@ -60,6 +62,8 @@ export function HealthHero({
 }: {
   gaugeValue: number
   gaugeLabel: string
+  /** The organization's own gauge bands; null renders the ring untoned. */
+  bands: ScoreBands | null
   categories: HealthCategoryRow[]
   ratios: HealthRatioRow[]
   ratioLabels: { ratio: string; value: string; benchmark: string; grade: string }
@@ -71,7 +75,7 @@ export function HealthHero({
   return (
     <>
       <div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 py-5 sm:flex-row sm:gap-8 dark:border-slate-800">
-        <Gauge value={gaugeValue} label={gaugeLabel} size={150} thickness={13} showTicks={false} className="shrink-0" bands={NEUTRAL_GAUGE_BANDS} />
+        <Gauge value={gaugeValue} label={gaugeLabel} size={150} thickness={13} showTicks={false} className="shrink-0" bands={bands} />
         <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-1.5 sm:grid-cols-3">
           {categories.map((c) => (
             <div key={c.key}>

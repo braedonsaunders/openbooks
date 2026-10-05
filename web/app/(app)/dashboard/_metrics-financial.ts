@@ -25,6 +25,8 @@ export type FinancialSummary = {
   overallScore: number | null
   scoreLabel: ScoreLabel | null
   categoryScores: CategoryScore[]
+  /** The organization's own gauge bands: the widget grades by these, never a fixed scale. */
+  bands: { excellent: number; good: number; average: number }
 }
 
 export type FinancialTrendPoint = {
@@ -32,9 +34,9 @@ export type FinancialTrendPoint = {
   revenue: string
   grossProfit: string
   operatingIncome: string
-  /** Display ratios (dimensionless), already computed by the engine's monthly series. */
-  grossMarginPct: number
-  operatingMarginPct: number
+  /** Display ratios (dimensionless), already computed by the engine's monthly series. Null without revenue. */
+  grossMarginPct: number | null
+  operatingMarginPct: number | null
 }
 
 export type BudgetSummary = {
@@ -111,6 +113,7 @@ export async function loadFinancialWidgetMetrics(
             overallScore: h.overallScore,
             scoreLabel: h.scoreLabel,
             categoryScores: h.categoryScores,
+            bands: h.benchmarks.labels,
           },
         }
       }
