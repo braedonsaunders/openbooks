@@ -3587,6 +3587,8 @@
       "accrualValue": "Valor provisionado",
       "accrualComponentId": "Componente de provisão",
       "payoutComponentId": "Componente de pagamento",
+      "depositComponentId": "Componente de depósito",
+      "allowNegativeBalance": "Permitir saldo negativo",
       "capBehavior": "Ao atingir o limite",
       "planId": "Plano",
       "employeePartyId": "Funcionário",
@@ -3842,6 +3844,10 @@
       "entitlementDirection": "Provisionar: o empregador deve ao funcionário. Dever: o funcionário deve ao empregador — o saldo fica negativo e é pago com salários futuros até chegar a exatamente zero.",
       "entitlementAccrualValue": "Um percentual para planos de percentual de ganhos (4 = 4%), senão um valor por hora ou por período de pagamento.",
       "entitlementPayoutComponent": "O provento que paga o banco. Para um plano de 'dever', é o desconto que o recupera.",
+      "entitlementDepositComponent": "O provento cujas linhas de horas negativas depositam tempo em vez de pagá-lo. Linhas positivas pagam o tempo depositado.",
+      "entitlementAllowNegativeBalance": "Quando ativado, saques podem deixar o banco negativo. Quando não, um pagamento acima do saldo é recusado.",
+      "entitlementDepositComponent": "O provento cujas linhas de horas negativas alimentam um banco de horas a partir de uma folha. Deixe vazio salvo quando o tempo trabalhado for guardado em vez de pago.",
+      "entitlementAllowNegativeBalance": "Permite que os pagamentos deixem o banco negativo. Caso contrário, um pagamento maior que o saldo disponível é recusado.",
       "entitlementLiabilityAccount": "Onde o banco fica no balanço. Vazio para manter o plano só em relatório.",
       "entitlementCapBehavior": "Avisar registra a provisão e sinaliza. Bloquear para a folha daquele funcionário. Pagamento auto limita o banco e paga o excesso.",
       "entitlementScope": "Defina no máximo um escopo. Deixe todos vazios para o padrão do plano.",
@@ -5530,6 +5536,7 @@
       "electionHint": "A eleição fixa não aumenta com os limites. Seguir política usa a taxa e limites vigentes.",
       "electedRateHint": "Informe a taxa realmente eleita, distinta da oferta máxima.",
       "arrearsHint": "Use banco monetário de dívida, acúmulo manual e este desconto. Informe períodos de recuperação.",
+      "countedComponentsHint": "Somente componentes de proventos contêm horas contáveis. Unidades baseadas em quantidade, como viagens ou refeições, não contêm horas e nunca contam.",
       "options": {
         "kind": {
           "employee_deduction": "Desconto do funcionário",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "Todas as horas pagas",
           "regular_paid": "Horas regulares pagas",
-          "scheduled_paid": "Horas programadas pagas"
+          "scheduled_paid": "Horas programadas pagas",
+          "selected_components": "Horas de componentes selecionados"
         },
         "pay": {
           "all_cash_earnings": "Todos os rendimentos monetários",

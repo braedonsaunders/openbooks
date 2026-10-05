@@ -243,6 +243,7 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_benefit_contribution_classes": "clone:catalog-uuid-rebase",
   "hrm_benefit_contribution_tiers": "clone:catalog-uuid-rebase",
   "hrm_benefit_contribution_rules": "clone:catalog-uuid-rebase",
+  "hrm_benefit_contribution_rule_components": "clone:catalog-uuid-rebase",
   "hrm_benefit_recovery_sources": "clone:catalog-uuid-rebase",
   "hrm_benefit_enrollment_terms": "clone:catalog-uuid-rebase",
   "pay_run_benefit_allocations": "clone:catalog-uuid-rebase",

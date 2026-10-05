@@ -48,6 +48,7 @@ test('record-owned setup collections leave the rail and declare their parent bin
     'benefit-contribution-classes': ['benefit-plans'],
     'benefit-contribution-tiers': ['benefit-plans'],
     'benefit-recovery-sources': ['benefit-plans'],
+    'benefit-contribution-rule-components': ['benefit-contribution-rules'],
     'benefit-enrollment-terms': ['benefit-enrollment-configuration'],
     'leave-policies': ['leave-types'],
     'hrm-competencies': ['hrm-competency-frameworks'],

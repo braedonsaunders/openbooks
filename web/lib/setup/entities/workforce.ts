@@ -547,6 +547,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'accrualValue', kind: 'decimal', helpTextKey: 'fieldHelp.entitlementAccrualValue' },
       { key: 'accrualComponentId', kind: 'ref', ref: 'pay-components' },
       { key: 'payoutComponentId', kind: 'ref', ref: 'pay-components', helpTextKey: 'fieldHelp.entitlementPayoutComponent' },
+      { key: 'depositComponentId', kind: 'ref', ref: 'pay-components', helpTextKey: 'fieldHelp.entitlementDepositComponent' },
+      { key: 'allowNegativeBalance', kind: 'boolean', helpTextKey: 'fieldHelp.entitlementAllowNegativeBalance' },
       { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts', helpTextKey: 'fieldHelp.entitlementLiabilityAccount' },
       {
         key: 'capBehavior', kind: 'select', keepDefault: true,

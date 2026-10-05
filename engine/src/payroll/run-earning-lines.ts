@@ -347,11 +347,15 @@ export async function appendStatutoryHolidayEarningLines(
       lines.push({
         componentId: line.componentId,
         kind: "earning",
-        // Deliberately no `hours`: a paid day off is not worked hours, and
-        // carrying them would pay per-hour components and union fringes
-        // twice. The component's own flags (taxable, pensionable, insurable,
-        // vacationable — all true) classify the amount: holiday pay is wages.
+        // Hours the holiday engine priced from its inputs (a paid day's
+        // length) travel with the line so an explicit counted-components
+        // benefit basis can see them. Premium and percent-of-wages lines
+        // never carry hours — they price hours the timesheet already paid —
+        // so carrying cannot pay per-hour components twice. The component's
+        // own flags (taxable, pensionable, insurable, vacationable — all
+        // true) classify the amount: holiday pay is wages.
         description: line.description,
+        hours: line.hours,
         // Cross-struct boundary, re-parsed like the retro lines above.
         amount: parseMoney(line.amount),
         sequence: line.sequence,
@@ -691,11 +695,17 @@ export async function applyEntitlementPlanMovements(
     const bankablePlans = (payVacationInCash || args.excludeVacationAccrual) && vacationPlan
       ? plans.filter((p) => p.id !== vacationPlan.id)
       : plans;
+    // A payout-component line is a bank settlement, never earnings: the
+    // payout component is not vacationable even when its flags say otherwise,
+    // so paying out of the bank accrues no further bank. Deposit-component
+    // funding lines stay in the basis — their cash reversal nets the earnings
+    // they bank away.
+    const payoutComponents = new Set(plans.map((p) => p.payoutComponentId).filter((id) => id !== null));
     const { movements, warnings } = await planMovementsForStub(tx, {
       orgId, employeePartyId, employmentId: args.employmentId, policyDate: args.policyDate, movementDate: payDate,
       payRunDocumentId: documentId,
       earnings: lines
-        .filter((l) => l.kind === "earning" && !l.accrualOnly)
+        .filter((l) => l.kind === "earning" && !l.accrualOnly && !payoutComponents.has(l.componentId ?? ""))
         .map((l) => ({
           componentId: l.componentId, amount: l.amount,
           hours: l.hours ?? null, bankable: l.vacationable ?? true,

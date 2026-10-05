@@ -1,0 +1,1 @@
+Widens the contribution-rule hours-basis check with an additional permitted value and adds an empty counted-components table. Existing rules keep their effective basis, no tenant rows are updated or reinterpreted, and the new table starts empty in every organization.

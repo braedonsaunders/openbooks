@@ -19,7 +19,7 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
       { key: 'basis', labelKey: 'benefitContributions.fields.basis', kind: 'select', required: true, options: options('basis', ['per_hour', 'per_period', 'per_month', 'per_year', 'percent_of_eligible_pay']) },
       { key: 'rateFormula', kind: 'select', required: true, options: options('formula', ['elected_rate', 'hourly_wage_percent', 'matching_election']), helpTextKey: 'benefitContributions.formulaHint' },
       { key: 'rate', labelKey: 'benefitContributions.fields.rate', kind: 'decimal', required: true, helpTextKey: 'benefitContributions.rateHint' },
-      { key: 'hoursBasis', kind: 'select', required: true, options: options('hours', ['all_paid', 'regular_paid', 'scheduled_paid']), showWhen: { field: 'basis', in: ['per_hour'] } },
+      { key: 'hoursBasis', kind: 'select', required: true, options: options('hours', ['all_paid', 'regular_paid', 'scheduled_paid', 'selected_components']), showWhen: { field: 'basis', in: ['per_hour'] } },
       { key: 'payBasis', kind: 'select', required: true, options: options('pay', ['all_cash_earnings', 'regular_cash_earnings']), showWhen: { field: 'basis', in: ['percent_of_eligible_pay'] } },
       { key: 'monthsPerYear', kind: 'integer', required: true, min: 1, max: 12, showWhen: { field: 'basis', in: ['per_month'] } },
       { key: 'periodsPerYear', kind: 'integer', min: 1, max: 366, helpTextKey: 'benefitContributions.annualizationHint', showWhen: { field: 'basis', in: ['per_month', 'per_year'] } },
@@ -35,6 +35,17 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
       { key: 'effectiveFrom', kind: 'date', required: true }, { key: 'effectiveTo', kind: 'date' },
       { key: 'isActive', kind: 'boolean', defaultValue: true },
     ],
+  },
+  {
+    // Counted earning components behind a per-hour selected-components rule.
+    // One row per (rule, component); the write validator refuses non-earning
+    // components and duplicates, and plan activation refuses an empty list.
+    ...common, key: 'benefit-contribution-rule-components', table: 'hrm_benefit_contribution_rule_components', parentRecords: [{ entityKey: 'benefit-contribution-rules', fieldKey: 'ruleId' }],
+    hasActive: false, orderBy: 'id',
+    columns: [{ key: 'ruleId', labelKey: 'benefitContributions.fields.ruleId', kind: 'ref', ref: 'benefit-contribution-rules' }, { key: 'payComponentId', labelKey: 'benefitContributions.fields.payComponentId', kind: 'ref', ref: 'pay-components' }],
+    fields: [planField,
+      { key: 'ruleId', labelKey: 'benefitContributions.fields.ruleId', kind: 'ref', ref: 'benefit-contribution-rules', refScopeField: 'planId', required: true, helpTextKey: 'benefitContributions.countedComponentsHint' },
+      { key: 'payComponentId', labelKey: 'benefitContributions.fields.payComponentId', kind: 'ref', ref: 'pay-components', required: true, helpTextKey: 'benefitContributions.countedComponentsHint' }],
   },
   {
     ...common, key: 'benefit-recovery-sources', table: 'hrm_benefit_recovery_sources', parentRecords: parent,

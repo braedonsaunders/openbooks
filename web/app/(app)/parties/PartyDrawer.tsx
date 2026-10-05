@@ -28,6 +28,7 @@ import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { SendButton } from '../../../components/send-button'
 import { EmployeeWageRates } from './EmployeeWageRates'
+import { EmployeePayComponents } from './EmployeePayComponents'
 import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollProfileTab'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { EmploymentTab } from '../hrm/EmploymentTab'
@@ -450,6 +451,7 @@ export function PartyDrawer({
   // Nested payroll profile / certificate drafts keep their own local state
   // outside savePayload; the tab reports their dirtiness here.
   const [payrollDirty, setPayrollDirty] = useState(false)
+  const [payComponentsDirty, setPayComponentsDirty] = useState(false)
   if (prevSavePayload !== savePayload) {
     setPrevSavePayload(savePayload)
     if (skipDirty) setSkipDirty(false)
@@ -466,7 +468,7 @@ export function PartyDrawer({
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || (!dirty && !payrollDirty)) return true
+    if (mode !== 'edit' || (!dirty && !payrollDirty && !payComponentsDirty)) return true
     return confirmDialog({
       message: tc('feedback.unsavedChanges'),
       confirmLabel: tc('confirm.discardChanges'),
@@ -1780,6 +1782,17 @@ export function PartyDrawer({
             section={payrollSubTab}
             onDirtyChange={setPayrollDirty}
           />
+          {/* Recurring pay components: fixed deductions, taxable benefits and
+              premiums priced every regular run — the write side of the rows
+              run-stub-compute prices. General section only: they are neither
+              tax answers nor bank accounts. */}
+          <div hidden={payrollSubTab !== 'general'}>
+            <EmployeePayComponents
+              partyId={String(p.id)}
+              readOnly={!editable}
+              onDirtyChange={setPayComponentsDirty}
+            />
+          </div>
           {/* Direct deposit: the same approval-gated bank accounts the AP
               side uses — the pay-run bank file only pays approved accounts. */}
           <div hidden={payrollSubTab !== 'accounts'}>

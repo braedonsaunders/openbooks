@@ -3676,6 +3676,8 @@
       "observedOn": "日付",
       "packKey": "法定祝日",
       "payoutComponentId": "払出項目",
+      "depositComponentId": "積立項目",
+      "allowNegativeBalance": "マイナス残高を許可",
       "planId": "プラン",
       "programType": "口座種別",
       "protectionBase": "保護対象の所得基準",
@@ -3907,6 +3909,10 @@
       "entitlementMaxBalance": "プランの単位での上限額です。",
       "entitlementNotifyBalance": "上限接近として従業員にフラグを立てる緩やかなしきい値です。",
       "entitlementPayoutComponent": "バンクを払い出す支給項目です。立替プランでは回収する控除が該当します。",
+      "entitlementDepositComponent": "マイナス時間の明細が支払いではなく積立となる支給項目です。プラス明細は積立時間を払い出します。",
+      "entitlementAllowNegativeBalance": "オンの場合、引出しで残高がマイナスになることがあります。オフの場合、残高を超える払出しは拒否されます。",
+      "entitlementDepositComponent": "マイナス時間の明細で時間バンクに積み立てる支給項目です。勤務時間を支払わずに積み立てる場合以外は空にします。",
+      "entitlementAllowNegativeBalance": "払い出しで残高をマイナスにすることを許可します。無効の場合、利用可能残高を超える払い出しは拒否されます。",
       "entitlementScope": "範囲は最大1つ設定します。プラン全体の既定値にする場合はすべての範囲を空欄にします。",
       "entitlementTierTarget": "プラン（積立率を引き上げます）または給与項目（対象にします）のいずれかを設定してください。両方は不可です。",
       "entitlementUnit": "金額を強く推奨します。時間建てのバンクは昇給のたびに再評価され、差額がひそかに会社の負担になります。",
@@ -5530,6 +5536,7 @@
       "electionHint": "固定選択は上限が増えても変わりません。制度方針を選ぶと有効な料率と上限を使用します。",
       "electedRateHint": "実際の選択料率を入力します。最大提示額とは別です。",
       "arrearsHint": "金額の負債残高口座を使用し、手動発生とこの控除項目を設定します。回収期数を指定します。",
+      "countedComponentsHint": "カウント可能な時間が含まれるのは支給項目のみです。出張や食事などの数量単位には時間が含まれず、カウントされません。",
       "options": {
         "kind": {
           "employee_deduction": "従業員控除",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "全有給時間",
           "regular_paid": "通常有給時間",
-          "scheduled_paid": "予定有給時間"
+          "scheduled_paid": "予定有給時間",
+          "selected_components": "選択した支給項目の時間"
         },
         "pay": {
           "all_cash_earnings": "全現金賃金",

@@ -55,6 +55,10 @@ export interface EntitlementPlan {
   accrualValue: string | null;
   accrualComponentId: string | null;
   payoutComponentId: string | null;
+  /** Hours-bank funding component: negative-hours lines deposit, positive lines pay out. */
+  depositComponentId: string | null;
+  /** Withdrawals may drive the bank below zero when true; otherwise they refuse. */
+  allowNegativeBalance: boolean;
   liabilityAccountId: string | null;
   capBehavior: EntitlementCapBehavior;
 }

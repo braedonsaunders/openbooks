@@ -3587,6 +3587,8 @@
       "accrualValue": "Accrual value",
       "accrualComponentId": "Accrual component",
       "payoutComponentId": "Payout component",
+      "depositComponentId": "Deposit component",
+      "allowNegativeBalance": "Allow negative balance",
       "capBehavior": "When the limit is reached",
       "planId": "Plan",
       "employeePartyId": "Employee",
@@ -3842,6 +3844,10 @@
       "entitlementDirection": "Accrue: the employer owes the employee. Owe: the employee owes the employer — the balance runs negative and is repaid from future pay until it reaches exactly zero.",
       "entitlementAccrualValue": "A percentage for percent-of-earnings plans (4 = 4%), otherwise an amount per hour or per pay period.",
       "entitlementPayoutComponent": "The earning that pays the bank out. For an 'owe' plan this is the deduction that recoups it.",
+      "entitlementDepositComponent": "The earning whose negative-hours lines bank time instead of paying it. Positive lines on it pay banked time out.",
+      "entitlementAllowNegativeBalance": "When on, withdrawals may drive the bank below zero. When off, a payout beyond the balance is refused.",
+      "entitlementDepositComponent": "The earning whose negative-hours lines fund an hours bank from a run. Leave empty unless worked time is banked instead of paid.",
+      "entitlementAllowNegativeBalance": "Allow payouts to drive the bank below zero. Otherwise a payout larger than the available balance refuses.",
       "entitlementLiabilityAccount": "Where the bank sits on the balance sheet. Leave empty to keep the plan report-only.",
       "entitlementCapBehavior": "Warn records the accrual and flags it. Block stops the pay run for that employee. Auto payout caps the bank and pays the excess.",
       "entitlementScope": "Set at most one scope. Leave every scope empty for the plan-wide default.",
@@ -5530,6 +5536,7 @@
       "electionHint": "A fixed election stays fixed when service limits increase. Follow policy explicitly uses the effective plan rate and service limits.",
       "electedRateHint": "Enter the employee’s actual elected rate in the contribution’s unit. This is distinct from the maximum available offer.",
       "arrearsHint": "Use a native money bank with direction Owe, manual accrual and this employee deduction as its payout component. Declare the recovery periods explicitly.",
+      "countedComponentsHint": "Only earning components carry countable hours. Quantity-based units such as trips or meals carry no hours and never count.",
       "options": {
         "kind": {
           "employee_deduction": "Employee deduction",
@@ -5551,7 +5558,8 @@
         "hours": {
           "all_paid": "All paid hours",
           "regular_paid": "Regular paid hours",
-          "scheduled_paid": "Scheduled paid hours"
+          "scheduled_paid": "Scheduled paid hours",
+          "selected_components": "Selected components hours"
         },
         "pay": {
           "all_cash_earnings": "All cash earnings",

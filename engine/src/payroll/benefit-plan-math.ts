@@ -9,7 +9,9 @@ export interface RecurringBenefitRule {
   id: string; planId: string; ruleKey: string; name: string; kind: BenefitContributionKind;
   payComponentId: string; basis: BenefitContributionBasis; rate: string;
   rateFormula: 'elected_rate' | 'hourly_wage_percent' | 'matching_election';
-  hoursBasis: 'all_paid' | 'regular_paid' | 'scheduled_paid' | null;
+  hoursBasis: 'all_paid' | 'regular_paid' | 'scheduled_paid' | 'selected_components' | null;
+  /** Earning components whose signed stub hours count, when hoursBasis is 'selected_components'. */
+  selectedComponentIds?: readonly string[];
   payBasis: 'all_cash_earnings' | 'regular_cash_earnings' | null;
   monthsPerYear: number | null; periodsPerYear: number | null;
   proration: 'none' | 'calendar_days'; matchRuleId: string | null;
@@ -71,7 +73,8 @@ export function recurringBenefitAmount(rule: RecurringBenefitRule, term: Recurri
   let amount: string;
   switch (rule.basis) {
     case 'per_hour':
-      if (!rule.hoursBasis) refuse('eligible hours are undeclared — choose all paid or regular paid hours');
+      if (!rule.hoursBasis) refuse('eligible hours are undeclared — choose all paid, regular paid, scheduled paid, or selected-components hours');
+      if (rule.hoursBasis === 'selected_components' && (rule.selectedComponentIds?.length ?? 0) === 0) refuse('no counted earning components are selected — list the earning components whose hours count');
       amount = mulDecimalFactors('1', [canonicalRate, basis.hours]);
       break;
     case 'percent_of_eligible_pay':

@@ -1,0 +1,1 @@
+Adds a nullable deposit component and a defaulted overdraw flag to entitlement plans. Existing plans keep no deposit component and refuse overdraws, no ledger rows are written, and no tenant configuration is reinterpreted.

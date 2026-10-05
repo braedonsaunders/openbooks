@@ -46,6 +46,8 @@ const plan = (over: Partial<EntitlementPlan> = {}): EntitlementPlan => ({
   accrualValue: "4.0000",
   accrualComponentId: "cmp-accrual",
   payoutComponentId: "cmp-payout",
+  depositComponentId: null,
+  allowNegativeBalance: false,
   liabilityAccountId: "acct-liability",
   capBehavior: "warn",
   ...over,

@@ -6,7 +6,7 @@ import { HrmAuthorizationError, requireHrmBenefitsManageOnEmployment } from '../
 import { BenefitsError } from './errors.ts';
 import { assertHrmEnabled, db, withOrgTransaction, requireActorId, requireOrgId, requireId, requireCivilDate, requireOneRow, type SqlExecutor } from './shared.ts';
 
-export type BenefitContributionConfigurationEntity = 'benefit-contribution-rules' | 'benefit-contribution-classes' | 'benefit-contribution-tiers' | 'benefit-recovery-sources' | 'benefit-enrollment-terms';
+export type BenefitContributionConfigurationEntity = 'benefit-contribution-rules' | 'benefit-contribution-classes' | 'benefit-contribution-tiers' | 'benefit-recovery-sources' | 'benefit-enrollment-terms' | 'benefit-contribution-rule-components';
 export type { RecurringBenefitRule, RecurringBenefitTerm };
 const refuse = (message: string): never => { throw new BenefitsError('REFUSED', message); };
 function decimal(body: Record<string, unknown>, field: string, required = true): string | null {
@@ -60,6 +60,22 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
     if (overlap.length) refuse('An insured premium already has a recovery owner during these dates — close the prior recovery rule before linking its successor');
     return;
   }
+  if (entity === 'benefit-contribution-rule-components') {
+    const ruleId = requireId(body.ruleId, 'ruleId');
+    const componentId = requireId(body.payComponentId, 'payComponentId');
+    const rule = requireOneRow((await exec.execute<{ plan_id: string; hours_basis: string | null; basis: string }>(sql`select plan_id,hours_basis,basis
+      from hrm_benefit_contribution_rules where org_id=${orgId} and id=${ruleId} for update`)).rows, 'Counted contribution rule');
+    if (String(body.planId ?? rule.plan_id) !== rule.plan_id) refuse('Counted components belong to the rule plan — choose a rule from this plan');
+    if (rule.basis !== 'per_hour' || rule.hours_basis !== 'selected_components') refuse('Counted components belong to a per-hour selected-components rule — choose a rule that counts selected components');
+    const component = requireOneRow((await exec.execute<{ kind: string; is_active: boolean; code: string; name: string }>(sql`select kind,is_active,code,name
+      from pay_components where org_id=${orgId} and id=${componentId}`)).rows, 'Counted payroll component');
+    if (!component.is_active) refuse(`Payroll component ${component.code} is inactive — re-enable it before counting its hours`);
+    if (component.kind !== 'earning') refuse(`Payroll component ${component.code} (${component.name}) is not an earning component — only earning components carry countable hours`);
+    const duplicate = (await exec.execute(sql`select id from hrm_benefit_contribution_rule_components where org_id=${orgId} and rule_id=${ruleId}
+      and pay_component_id=${componentId} and (${typeof body.id === 'string' ? body.id : null}::uuid is null or id<>${typeof body.id === 'string' ? body.id : null}::uuid) limit 1`)).rows;
+    if (duplicate.length) refuse(`Payroll component ${component.code} is already counted by this rule — each component is listed once`);
+    return;
+  }
   if (entity === 'benefit-contribution-classes') {
     if (typeof body.classKey !== 'string' || !body.classKey.trim() || typeof body.name !== 'string' || !body.name.trim()) refuse('A contribution class needs a stable class key and a name');
     return;
@@ -84,7 +100,20 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
   const basis = body.basis;
   if (!['per_hour','per_period','per_month','per_year','percent_of_eligible_pay'].includes(String(basis))) refuse('Declare a contribution basis: per hour, per period, per month, per year, or percent of eligible pay');
   decimal(body, 'rate');
-  if (basis === 'per_hour' && !['all_paid','regular_paid','scheduled_paid'].includes(String(body.hoursBasis))) refuse('Per-hour contributions need a declared eligible hours basis — choose all paid, regular paid, or scheduled paid hours');
+  if (basis === 'per_hour' && !['all_paid','regular_paid','scheduled_paid','selected_components'].includes(String(body.hoursBasis))) refuse('Per-hour contributions need a declared eligible hours basis — choose all paid, regular paid, scheduled paid, or selected-components hours');
+  if (basis === 'per_hour' && String(body.hoursBasis ?? '') === 'selected_components' && typeof body.id === 'string') {
+    // Links are owned rows, so a component retired or converted after linking
+    // must not silently shrink the counted basis — the rule refuses until the
+    // list names earning components again. A rule under creation has no links
+    // yet; plan activation and the pay run refuse the empty list, not this save.
+    const links = (await exec.execute<{ code: string; name: string; kind: string; is_active: boolean }>(sql`select c.code,c.name,c.kind,c.is_active
+      from hrm_benefit_contribution_rule_components rc join pay_components c on c.org_id=rc.org_id and c.id=rc.pay_component_id
+      where rc.org_id=${orgId} and rc.plan_id=${planId} and rc.rule_id=${body.id}::uuid
+      order by c.code`)).rows;
+    const bad = links.find(l => l.kind !== 'earning' || !l.is_active);
+    if (bad) refuse(`Counted component ${bad.code} (${bad.name}) is no longer an active earning component — replace it before saving this rule`);
+  }
+
   if (basis === 'percent_of_eligible_pay' && !['all_cash_earnings','regular_cash_earnings'].includes(String(body.payBasis))) refuse('Percent contributions need a declared cash earnings basis — choose all cash earnings or regular cash earnings');
   if (body.kind === 'taxable_non_cash' && component.vacationable === true && basis === 'percent_of_eligible_pay' && body.payBasis === 'all_cash_earnings') refuse('This contribution creates a circular vacation-pay basis — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium');
   if (basis === 'per_month' && (!Number.isSafeInteger(body.monthsPerYear) || (body.monthsPerYear as number) <= 0 || (body.monthsPerYear as number) > 12)) refuse('Monthly annualization requires explicit months per year from 1 through 12');
@@ -123,6 +152,11 @@ export async function validateBenefitPlanActivation(exec: SqlExecutor, orgId: st
   for (const rule of rules) {
     const values = Object.fromEntries(Object.entries(rule).map(([key,value]) => [key.replace(/_([a-z])/g,(_,letter: string) => letter.toUpperCase()),value]));
     await validateBenefitContributionConfiguration(exec, orgId, 'benefit-contribution-rules', values);
+    if (String(rule.basis) === 'per_hour' && String(rule.hours_basis ?? '') === 'selected_components') {
+      const links = (await exec.execute(sql`select id from hrm_benefit_contribution_rule_components
+        where org_id=${orgId} and plan_id=${planId} and rule_id=${String(rule.id)}::uuid limit 1`)).rows;
+      if (!links.length) refuse(`Contribution rule ${String(rule.rule_key)} counts selected components but lists none — list the earning components whose hours count before activating this plan`);
+    }
   }
 }
 

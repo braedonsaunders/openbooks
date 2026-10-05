@@ -461,12 +461,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     if (input.simulate) await tx.execute(sql`set constraints pay_run_benefit_allocations_line_tenant_fkey deferred`);
     if (!input.simulate) await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     // Movements are deleted with the stubs that produced them, on the same
     // key, so an employee who has dropped OFF the run (excluded, terminated,
     // moved schedule) leaves no orphaned bank movement behind. Per-employee
     // replacement inside calculateStub cannot see someone who is no longer
-    // being calculated.
+    // being calculated. The ledger goes BEFORE the stubs: ledger rows carry
+    // the stub line that evidenced them, and deleting the stub first would
+    // null that link out — an UPDATE the append-only guard refuses.
     //
     // A SIMULATION writes no entitlement movements at all, and therefore
     // deletes none. Not an optimization: `entitlement_ledger` is append-only
@@ -481,6 +482,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         delete from entitlement_ledger
          where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     }
+    await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
 
     // Run-level input adjustments: exclusions drop the employee entirely;
     // 'line' rows are merged into the stub's inputs inside calculateStub.

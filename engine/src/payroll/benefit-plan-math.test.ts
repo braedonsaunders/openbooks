@@ -36,8 +36,19 @@ test('hour and earnings bases scale only once over partial periods', () => {
   assert.equal(recurringBenefitAmount({...rule,proration:'calendar_days'},{...term,electedRate:'2'},{...basis,hours:'16',coveredDays:3}).amount,'32.0000');
   assert.equal(recurringBenefitAmount({...rule,basis:'percent_of_eligible_pay',payBasis:'all_cash_earnings',proration:'calendar_days'},{...term,electedRate:'5'},{...basis,eligiblePay:'600',coveredDays:3}).amount,'30.0000');
 });
+test('selected-components hours price the elected rate over the counted signed hours', () => {
+  const selected = { ...rule, hoursBasis: 'selected_components' as const, selectedComponentIds: ['regular', 'overtime', 'double_time', 'stat', 'deposit'] };
+  // 30 + 6 + 4 + 8 − 10 counted hours; trips and meals carry no stub hours.
+  assert.equal(recurringBenefitAmount(selected, { ...term, electedRate: '1.54' }, { ...basis, hours: '38' }).amount, '58.5200');
+  assert.equal(recurringBenefitAmount(selected, { ...term, electedRate: '11.00' }, { ...basis, hours: '38' }).amount, '418.0000');
+  assert.throws(() => recurringBenefitAmount({ ...selected, selectedComponentIds: [] }, term, basis), /no counted earning components are selected — list the earning components whose hours count/);
+  assert.throws(() => recurringBenefitAmount({ ...selected, selectedComponentIds: undefined }, term, basis), /no counted earning components are selected/);
+});
+test('an undeclared hours basis names every lawful choice', () => {
+  assert.throws(() => recurringBenefitAmount({ ...rule, hoursBasis: null }, term, basis), /choose all paid, regular paid, scheduled paid, or selected-components hours/);
+});
 test('unpaid coverage uses the native owe bank and recovers the declared prior periods plus current coverage', () => {
-  const plan: EntitlementPlan = {id:'recovery',code:'RECOVERY',systemKey:null,name:'Benefit recovery',unit:'money',direction:'owe',accrualMethod:'manual',accrualValue:null,accrualComponentId:null,payoutComponentId:'deduction',liabilityAccountId:null,capBehavior:'warn'};
+  const plan: EntitlementPlan = {id:'recovery',code:'RECOVERY',systemKey:null,name:'Benefit recovery',unit:'money',direction:'owe',accrualMethod:'manual',accrualValue:null,accrualComponentId:null,payoutComponentId:'deduction',depositComponentId:null,allowNegativeBalance:false,liabilityAccountId:null,capBehavior:'warn'};
   const input={plan,employeePartyId:'employee',movementDate:'2026-07-01',openingBalance:'0',earnings:'0',hours:'0',limit:null};
   const carried=computePlanMovement({...input,unpaidCoverageValue:'10'});
   assert.equal(carried.closingBalance,'-10.0000');
