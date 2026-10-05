@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "Ajustements transporteur",
         "description": "Corrections de facturation appliquées après l’achat, avec motif et état de comptabilisation."
+      },
+      "stored_value_movements": {
+        "label": "Mouvements de cartes cadeaux et avoirs",
+        "description": "Une ligne par écriture — émission, utilisation, ajustement, expiration et non-utilisation — avec le programme, le code masqué, le client et le solde. Regroupez par programme et par mois pour la justification du passif."
+      },
+      "stored_value_balances": {
+        "label": "Soldes de cartes cadeaux et avoirs",
+        "description": "Une ligne par compte avec son solde, la région du client et la dernière activité. Filtrez par statut et regroupez par région et mois d’activité pour la revue des avoirs en déshérence."
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "État de comptabilisation",
         "occurred_at": "Survenu le",
         "entry_id": "Écriture d’ajustement (id)"
+      },
+      "stored_value_movements": {
+        "id": "Clé d’écriture",
+        "program": "Programme",
+        "program_kind": "Type de programme",
+        "account_code": "Compte",
+        "customer": "Client",
+        "kind": "Mouvement",
+        "amount": "Montant",
+        "balance_after": "Solde après",
+        "currency": "Devise",
+        "entered_on": "Saisi le",
+        "reason": "Motif",
+        "document_id": "Clé de pièce"
+      },
+      "stored_value_balances": {
+        "account_code": "Compte",
+        "customer": "Client",
+        "customer_region": "Région du client",
+        "program": "Programme",
+        "program_kind": "Type de programme",
+        "status": "Statut",
+        "balance": "Solde ouvert",
+        "currency": "Devise",
+        "last_activity_on": "Dernière activité",
+        "expires_on": "Expire le",
+        "inactivity_months": "Seuil d’inactivité du programme (mois)"
       }
     },
     "enumValues": {

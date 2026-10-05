@@ -1010,6 +1010,14 @@
       "shipping_adjustments": {
         "label": "Carrier adjustments",
         "description": "Billing corrections the carrier applied after purchase, with reason and posting state."
+      },
+      "stored_value_movements": {
+        "label": "Stored-value movements",
+        "description": "One row per stored-value ledger entry — issue, redemption, correction, expiry and breakage — with the program, masked code, customer and running account balance. Group by program and month for the liability roll-forward."
+      },
+      "stored_value_balances": {
+        "label": "Stored-value balances",
+        "description": "One row per stored-value account with its open balance, customer region and last activity. Filter to open statuses and group by region and activity month for unclaimed-property (escheat) review."
       }
     },
     "columns": {
@@ -2481,6 +2489,33 @@
         "status": "Posting state",
         "occurred_at": "Occurred",
         "entry_id": "Adjustment journal (id)"
+      },
+      "stored_value_movements": {
+        "id": "Entry key",
+        "program": "Program",
+        "program_kind": "Program kind",
+        "account_code": "Account",
+        "customer": "Customer",
+        "kind": "Movement",
+        "amount": "Amount",
+        "balance_after": "Account balance after",
+        "currency": "Currency",
+        "entered_on": "Entered on",
+        "reason": "Reason",
+        "document_id": "Document key"
+      },
+      "stored_value_balances": {
+        "account_code": "Account",
+        "customer": "Customer",
+        "customer_region": "Customer region",
+        "program": "Program",
+        "program_kind": "Program kind",
+        "status": "Status",
+        "balance": "Open balance",
+        "currency": "Currency",
+        "last_activity_on": "Last activity",
+        "expires_on": "Expires on",
+        "inactivity_months": "Program inactivity threshold (months)"
       }
     },
     "enumValues": {
