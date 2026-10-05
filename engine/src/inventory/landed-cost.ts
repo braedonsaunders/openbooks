@@ -2,7 +2,7 @@ import { reverseInventoryJournal } from "./reversal.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { apportion, cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
+import { apportion, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import { extendCost } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type InventoryProfile } from "./contracts.ts";
@@ -110,6 +110,7 @@ export async function postLandedCostVoucher(
       shareWeight: string;
       manualAmount: string | null;
       weightsByLayer: Map<string, string> | undefined;
+      receipt: SourceReceipt | null;
     }[] = [];
     for (const target of input.targets) {
       const profile = await resolveProfile(orgId, target.itemId, tx, true);
@@ -123,6 +124,16 @@ export async function postLandedCostVoucher(
       );
       // Capitalize only onto the voucher entity's own layers — freight on
       // another legal entity's stock is another form of taking its value.
+      const receipt = input.sourceDocumentLineId
+        ? await sourceReceipt(tx, orgId, input.sourceDocumentLineId, target, input.subsidiaryId, profile)
+        : null;
+      // A voucher tied to a receipt line capitalizes onto the layers that
+      // receipt created; only an unattributed voucher spreads across every
+      // open layer of the item and location. A moving-average receipt has
+      // been blended into its pool, so the pool is what carries it.
+      const receiptLayerFilter = receipt && profile.costingMethod !== "moving_average"
+        ? sql`and source_movement_id in (${joinIds(receipt.movementIds)})`
+        : sql``;
       const layers = (
         (await tx.execute<OpenLayer>(sql`
         select id, subsidiary_id, source_movement_id, received_at::text, original_quantity,
@@ -132,10 +143,15 @@ export async function postLandedCostVoucher(
            and stock_location_id = ${target.stockLocationId}
            and subsidiary_id = ${input.subsidiaryId}
            and remaining_quantity > 0
+           ${receiptLayerFilter}
          order by received_at, id
          for update`))
       ).rows;
-    if (layers.length === 0) {
+    if (receipt) {
+      const onHand = sum(layers.map((layer) => layer.remaining_quantity));
+      receipt.onHandQuantity = cmp(onHand, receipt.quantity) > 0 ? receipt.quantity : onHand;
+    }
+    if (layers.length === 0 && !receipt) {
       throw new InventoryError(
         `no on-hand layers for item ${target.itemId} at location ${target.stockLocationId}`,
       );
@@ -147,6 +163,20 @@ export async function postLandedCostVoucher(
       if (!manualAmount || cmp(manualAmount, "0") <= 0) {
         throw new InventoryError(
           "manual-basis vouchers require a positive manual amount per target",
+        );
+      }
+    } else if (receipt) {
+      // The receipt carries its share whether or not its units are still on
+      // hand, so it is weighed by what it received, not by what remains.
+      if (input.basis === "weight") {
+        throw new InventoryError(
+          `weight-basis landed cost cannot be measured on receipt line ${input.sourceDocumentLineId} for item ${target.itemId} — choose a value, quantity, or manual basis instead`,
+        );
+      }
+      shareWeight = input.basis === "quantity" ? receipt.quantity : receipt.value;
+      if (isZero(shareWeight)) {
+        throw new InventoryError(
+          `target item ${target.itemId} has no ${input.basis} basis to apportion on`,
         );
       }
     } else {
@@ -186,7 +216,7 @@ export async function postLandedCostVoucher(
         );
       }
     }
-    resolved.push({ target, profile, layers, shareWeight, manualAmount, weightsByLayer });
+    resolved.push({ target, profile, layers, shareWeight, manualAmount, weightsByLayer, receipt });
     }
 
     const shares =
@@ -252,6 +282,8 @@ export async function postLandedCostVoucher(
 
     const entryLines: JournalLineInput[] = [];
     const allocationIds: string[] = [];
+    const capitalizedShares = new Map<number, bigint>();
+    const consumedLegs: { accountId: string; amount: string }[] = [];
     for (let i = 0; i < resolved.length; i++) {
       const r = resolved[i]!;
       const share = shares[i]!;
@@ -281,9 +313,30 @@ export async function postLandedCostVoucher(
              basis, amount, journal_entry_id, created_by, updated_by)
           values
             (${allocationId}, ${orgId}, ${voucherId}, ${input.sourceDocumentLineId ?? null},
-             ${r.layers[0]!.id}, 'standard_variance', ${shareAmount}, null,
+             ${r.layers[0]?.id ?? r.receipt!.evidenceLayerId}, 'standard_variance', ${shareAmount}, null,
              ${actorId}, ${actorId})`);
       } else {
+        // Freight on a receipt whose units have already left stock cannot be
+        // capitalized onto them: that portion is cost of goods sold now.
+        const capitalized = r.receipt
+          ? roundDiv(share * toUnits(r.receipt.onHandQuantity), toUnits(r.receipt.quantity))
+          : share;
+        const consumed = share - capitalized;
+        if (consumed !== 0n) {
+          const allocationId = randomUUID();
+          allocationIds.push(allocationId);
+          await tx.execute(sql`
+            insert into landed_cost_allocations
+              (id, org_id, voucher_id, source_document_line_id, target_cost_layer_id,
+               basis, amount, journal_entry_id, created_by, updated_by)
+            values
+              (${allocationId}, ${orgId}, ${voucherId}, ${input.sourceDocumentLineId ?? null},
+               ${r.receipt!.evidenceLayerId}, 'consumed', ${fromUnits(consumed)}, null,
+               ${actorId}, ${actorId})`);
+          consumedLegs.push({ accountId: r.profile.cogsAccountId, amount: fromUnits(consumed) });
+        }
+        capitalizedShares.set(i, capitalized);
+        const share2 = capitalized;
         // Sub-apportion the share across the target's own layers on the same
         // basis, reusing the weight evidence loaded before any mutation —
         // the decision and its execution read the same snapshot.
@@ -306,12 +359,12 @@ export async function postLandedCostVoucher(
         // Every unit of the target's share must land on a layer before the
         // matching asset debit is written: GL = Σ layers is the invariant
         // the voucher exists to keep, and the reversal needs the evidence.
-        if (share !== 0n && isZero(sum(subWeights))) {
+        if (share2 !== 0n && isZero(sum(subWeights))) {
           throw new InventoryError(
-            `landed cost share ${shareAmount} for item ${r.target.itemId} at location ${r.target.stockLocationId} cannot be apportioned across its on-hand layers on the ${input.basis} basis`,
+            `landed cost share ${fromUnits(share2)} for item ${r.target.itemId} at location ${r.target.stockLocationId} cannot be apportioned across its on-hand layers on the ${input.basis} basis`,
           );
         }
-        const subShares = apportion(share, subWeights.map(toUnits));
+        const subShares = share2 === 0n ? subWeights.map(() => 0n) : apportion(share2, subWeights.map(toUnits));
         for (let j = 0; j < r.layers.length; j++) {
           const layerShare = subShares[j]!;
           if (layerShare === 0n) continue;
@@ -341,15 +394,20 @@ export async function postLandedCostVoucher(
       // that stock location's business location — otherwise location-sliced
       // statements could not tie a location's inventory GL to its layers.
       const targetLocationId = await stockLocationDim(tx, orgId, r.target.stockLocationId, null);
-      entryLines.push({
+      const assetAmount = capitalizedShares.has(i) ? fromUnits(capitalizedShares.get(i)!) : shareAmount;
+      if (!isZero(assetAmount)) entryLines.push({
         accountId:
           r.profile.costingMethod === "standard"
             ? r.profile.varianceAccountId!
             : r.profile.assetAccountId,
-        amount: shareAmount,
+        amount: assetAmount,
         locationId: targetLocationId,
         memo: input.memo ?? `Landed cost ${documentNumber}`,
       });
+      for (const leg of consumedLegs.splice(0)) {
+        entryLines.push({ accountId: leg.accountId, amount: leg.amount, locationId: targetLocationId,
+          memo: input.memo ?? `Landed cost ${documentNumber} on units already sold` });
+      }
       // The freight offset splits across the same targets, so every leg of
       // the entry stays location-stamped even for multi-location vouchers.
       // Target shares apportion the voucher amount exactly, hence so do these.
@@ -475,7 +533,7 @@ export async function reverseLandedCostVoucher(
     const allocations = (await tx.execute<{
         id: string;
         target_cost_layer_id: string;
-        basis: "value" | "quantity" | "weight" | "manual" | "standard_variance";
+        basis: "value" | "quantity" | "weight" | "manual" | "standard_variance" | "consumed";
         amount: string;
         source_document_line_id: string | null;
         subsidiary_id: string;
@@ -528,7 +586,7 @@ export async function reverseLandedCostVoucher(
     }
 
     for (const allocation of allocations.rows) {
-      if (allocation.basis === "standard_variance") {
+      if (allocation.basis === "standard_variance" || allocation.basis === "consumed") {
         // The voucher never embedded value in the layer (booked to variance
         // under standard costing), so there is no subledger value to remove:
         // the mirrored journal below alone unwinds the GL.
@@ -607,6 +665,57 @@ export async function reverseLandedCostVoucher(
 }
 
 /** SQL list literal for a non-empty uuid array. */
+type SourceReceipt = {
+  movementIds: string[];
+  quantity: string;
+  value: string;
+  onHandQuantity: string;
+  /** A layer the receipt created, kept as allocation evidence even when drained. */
+  evidenceLayerId: string;
+};
+
+/**
+ * The live receipts a source document line posted for one voucher target.
+ * Reversed receipts are excluded; a line that received nothing here refuses.
+ */
+async function sourceReceipt(
+  tx: Parameters<typeof revalueLayerExactly>[0], orgId: string, sourceDocumentLineId: string,
+  target: LandedCostVoucherTargetInput, subsidiaryId: string, profile: InventoryProfile,
+): Promise<SourceReceipt> {
+  const receipts = (await tx.execute<{ id: string; quantity: string; total_value: string | null }>(sql`
+    select movement.id, movement.quantity::text, movement.total_value::text
+      from inventory_movements movement
+     where movement.org_id = ${orgId} and movement.document_line_id = ${sourceDocumentLineId}
+       and movement.item_id = ${target.itemId} and movement.stock_location_id = ${target.stockLocationId}
+       and movement.subsidiary_id = ${subsidiaryId} and movement.status = 'posted' and movement.quantity > 0
+       and not exists (select 1 from inventory_movements reversal
+          where reversal.org_id = movement.org_id and reversal.reverses_movement_id = movement.id)
+     order by movement.id`)).rows;
+  if (receipts.length === 0) {
+    throw new InventoryError(
+      `source line ${sourceDocumentLineId} received no item ${target.itemId} at location ${target.stockLocationId} — choose the receipt line that brought this stock in, or post the voucher without a source line`,
+    );
+  }
+  const movementIds = receipts.map((row) => row.id);
+  const evidence = (await tx.execute<{ id: string }>(sql`
+    select id from cost_layers
+     where org_id = ${orgId} and item_id = ${target.itemId} and stock_location_id = ${target.stockLocationId}
+       and ${profile.costingMethod === "moving_average" ? sql`true` : sql`source_movement_id in (${joinIds(movementIds)})`}
+     order by received_at desc, id limit 1`)).rows[0];
+  if (!evidence) {
+    throw new InventoryError(
+      `the receipt from source line ${sourceDocumentLineId} has no cost layer at location ${target.stockLocationId} to anchor landed cost on`,
+    );
+  }
+  return {
+    movementIds,
+    quantity: sum(receipts.map((row) => row.quantity)),
+    value: sum(receipts.map((row) => row.total_value ?? "0")),
+    onHandQuantity: "0",
+    evidenceLayerId: evidence.id,
+  };
+}
+
 function joinIds(ids: string[]) {
   if (ids.length === 0) throw new InventoryError("internal: empty id list");
   return sql.join(
