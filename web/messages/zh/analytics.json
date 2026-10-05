@@ -1832,7 +1832,8 @@
     },
     "csv": {
       "onTimePct": "按时率",
-      "sharePct": "占比"
+      "sharePct": "占比",
+      "export": "CSV"
     },
     "days": "{days}天",
     "drill": {
@@ -3197,7 +3198,8 @@
       },
       "fragmentation": {
         "label": "碎片化",
-        "note": "月交易数 / 平均交易金额"
+        "note": "月交易数 / 平均交易金额",
+        "value": ">{txns}/月 & <{max}"
       },
       "velocityEngine": {
         "label": "速率引擎",
@@ -3234,7 +3236,8 @@
       "prior": "上期",
       "projected": "预测",
       "twoBack": "前两期",
-      "velocityPctMo": "速率%/月"
+      "velocityPctMo": "速率%/月",
+      "export": "CSV"
     },
     "details": {
       "anomaly": "{month}偏离均值{sigma}σ",

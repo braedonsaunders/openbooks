@@ -7,7 +7,7 @@ import { RecordTabs } from '@/components/module-home/record-tabs'
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { countLabel } from '@/lib/format'
+import { countLabel, decimalLabel, formatPercent01 } from '@/lib/format'
 import {
   AlertTriangle, ArrowDown, ArrowUp, BarChart3, Bolt, Bug, CalendarRange, ChartArea,
   CheckCircle2, Coins, Flame, Ghost, Info, Layers, Lightbulb, Mountain,
@@ -31,8 +31,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 // 'expenses' moved out: the expense-report analysis now lives on the /expenses dashboard.
 const TABS = ['overview', 'velocity', 'detectors', 'accounts', 'trends', 'config'] as const
-const pct1 = (v: number, d = 1) => `${v.toFixed(d)}%`
-
+type Tab = (typeof TABS)[number]
 /** Velocity pill colouring from the org's own high/medium thresholds. */
 function velTone(v: number, hi: number, med: number) {
   if (v > hi) return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
@@ -42,20 +41,22 @@ function velTone(v: number, hi: number, med: number) {
 }
 
 function VelocityPill({ v, hi, med }: { v: number | null; hi: number; med: number }) {
+  const locale = useLocale()
   if (v === null) return <span className="text-xs text-slate-300">—</span>
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums', velTone(v, hi, med))}>
       {v >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
-      {Math.abs(v).toFixed(1)}%
+      {formatPercent01(Math.abs(v) / 100, locale, 1)}
     </span>
   )
 }
 
 /** Acceleration indicator from the org's own mild/strong thresholds. */
 function Accel({ a, mild, strong }: { a: number; mild: number; strong: number }) {
+  const locale = useLocale()
   const tone = a > strong ? 'text-rose-600 dark:text-rose-400' : a > mild ? 'text-amber-600 dark:text-amber-400'
     : a < -strong ? 'text-emerald-600 dark:text-emerald-400' : a < -mild ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'
-  return <span className={cn('text-xs font-semibold tabular-nums', tone)}>{a >= 0 ? '+' : '−'}{Math.abs(a).toFixed(1)}%</span>
+  return <span className={cn('text-xs font-semibold tabular-nums', tone)}>{a >= 0 ? '+' : '−'}{formatPercent01(Math.abs(a) / 100, locale, 1)}</span>
 }
 
 const TREND_BADGE_CLS: Record<VelocityRow['trend'], string> = {
@@ -111,6 +112,7 @@ type Drill = { kind: 'account' | 'vendor'; id: string; name: string } | null
 
 export function SpendVelocityView({ data: initialData, canConfigure }: { data: SpendVelocityData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.spendVelocity')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const read = useAnalyticsTab('spend-velocity', { data: initialData }, TABS)
@@ -125,7 +127,7 @@ export function SpendVelocityView({ data: initialData, canConfigure }: { data: S
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} />
         <KpiCard icon={Coins} accent="sky" label={t('kpi.totalSpend')} value={money(s.totalSpend)} sub={t('sub.accountsCount', { count: s.accountCount })} />
-        <KpiCard icon={GaugeIcon} accent={vel > data.config.velocityMediumThreshold ? 'red' : vel < -data.config.velocityMediumThreshold ? 'emerald' : 'slate'} label={t('kpi.avgVelocity')} value={`${vel > 0 ? '↑' : vel < 0 ? '↓' : ''} ${Math.abs(vel).toFixed(1)}%`} sub={t('sub.acceleratingCount', { count: s.acceleratingCount })} tone={vel > data.config.velocityMediumThreshold ? 'negative' : vel < -data.config.velocityMediumThreshold ? 'positive' : 'neutral'} />
+        <KpiCard icon={GaugeIcon} accent={vel > data.config.velocityMediumThreshold ? 'red' : vel < -data.config.velocityMediumThreshold ? 'emerald' : 'slate'} label={t('kpi.avgVelocity')} value={`${vel > 0 ? '↑' : vel < 0 ? '↓' : ''} ${formatPercent01(Math.abs(vel) / 100, locale, 1)}`} sub={t('sub.acceleratingCount', { count: s.acceleratingCount })} tone={vel > data.config.velocityMediumThreshold ? 'negative' : vel < -data.config.velocityMediumThreshold ? 'positive' : 'neutral'} />
         <KpiCard icon={PiggyBank} accent="violet" label={t('kpi.savingsPotential')} value={money(s.savingsPotential)} sub={toChartNumber(s.savingsPotential) > 0 ? t('sub.creepAndZombies') : t('sub.noIssues')} />
         <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : 'positive'} />
       </div>
@@ -160,6 +162,7 @@ type ScatterPoint = { data: [number, number, number, string] }
 
 function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number | string) => fmtMoney(n)
   const accounts = data.accountVelocity
@@ -186,7 +189,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
       xAxis: { type: 'value' as const, name: t('scatter.xAxis'), nameLocation: 'middle' as const, nameGap: 24, min: vMin - vPad, max: vMax + vPad },
       yAxis: { type: 'value' as const, name: t('scatter.yAxis'), min: aMin - aPad, max: aMax + aPad },
       tooltip: {
-        formatter: (p: ScatterPoint) => `<b>${escapeTooltipHtml(p.data[3])}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
+        formatter: (p: ScatterPoint) => `<b>${escapeTooltipHtml(p.data[3])}</b><br/>${t('scatter.tooltipVelocity', { pct: formatPercent01(p.data[0] / 100, locale, 1) })}<br/>${t('scatter.tooltipAccel', { pct: formatPercent01(p.data[1] / 100, locale, 1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
       },
       series: [{
         type: 'scatter' as const,
@@ -202,7 +205,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         },
       }],
     }
-  }, [accounts, data.config, fmtMoney, t])
+  }, [accounts, data.config, fmtMoney, locale, t])
 
   return (
     <div className="space-y-5">
@@ -419,6 +422,7 @@ interface Alert {
 
 function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number | string) => fmtMoney(n)
   const [selected, setSelected] = useState('all')
@@ -427,10 +431,10 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
     const out: Alert[] = []
     const want = (k: string) => selected === 'all' || selected === k
     const c = data.config
-    if (want('frog')) for (const v of data.boilingFrog.accounts) out.push({ detector: 'frog', label: t('detectors.frog.label'), item: v.accountName, severity: v.totalCreep > c.boilingFrogCriticalCreep ? 'High' : 'Medium', impact: v.annualizedCreep, details: t('details.frog', { rate: v.avgMonthlyIncrease.toFixed(1), months: v.monthCount }), accountId: v.accountId })
-    if (want('anomaly')) for (const a of data.anomalies.items) out.push({ detector: 'anomaly', label: t('detectors.anomaly.label'), item: a.accountName, severity: a.severity === 'critical' ? 'Critical' : 'High', impact: a.amount, details: t('details.anomaly', { sigma: a.zScore.toFixed(1), month: a.month }), accountId: a.accountId })
+    if (want('frog')) for (const v of data.boilingFrog.accounts) out.push({ detector: 'frog', label: t('detectors.frog.label'), item: v.accountName, severity: v.totalCreep > c.boilingFrogCriticalCreep ? 'High' : 'Medium', impact: v.annualizedCreep, details: t('details.frog', { rate: formatPercent01(v.avgMonthlyIncrease / 100, locale, 1), months: v.monthCount }), accountId: v.accountId })
+    if (want('anomaly')) for (const a of data.anomalies.items) out.push({ detector: 'anomaly', label: t('detectors.anomaly.label'), item: a.accountName, severity: a.severity === 'critical' ? 'Critical' : 'High', impact: a.amount, details: t('details.anomaly', { sigma: decimalLabel(a.zScore, locale, 1, 1), month: a.month }), accountId: a.accountId })
     if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost, details: t('details.zombie', { amount: fmtMoney(z.amount), months: z.monthCount }), vendorId: z.vendorId })
-    if (want('concentration')) for (const cc of data.concentration.accounts) out.push({ detector: 'concentration', label: t('detectors.concentration.label'), item: cc.name, severity: cc.spendShare > c.concentrationHighShare ? 'High' : 'Medium', impact: cc.totalSpend, details: t('details.concentration', { share: cc.spendShare.toFixed(1), trend: cc.trend }), accountId: cc.id })
+    if (want('concentration')) for (const cc of data.concentration.accounts) out.push({ detector: 'concentration', label: t('detectors.concentration.label'), item: cc.name, severity: cc.spendShare > c.concentrationHighShare ? 'High' : 'Medium', impact: cc.totalSpend, details: t('details.concentration', { share: formatPercent01(cc.spendShare / 100, locale, 1), trend: cc.trend }), accountId: cc.id })
     if (want('fragmentation')) for (const f of data.fragmentation.categories) out.push({ detector: 'fragmentation', label: t('detectors.fragmentation.label'), item: f.accountName, severity: f.txnsPerMonth > c.fragmentationHighTxns ? 'High' : 'Medium', impact: f.totalSpend, details: t('details.fragmentation', { txns: f.txnsPerMonth, avg: fmtMoney(f.avgTransactionSize) }), accountId: f.accountId })
     if (want('seasonal')) for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow)) out.push({ detector: 'seasonal', label: t('detectors.seasonal.label'), item: p.monthName, severity: Math.abs(p.deviation) > c.seasonalCriticalDeviation ? 'High' : 'Low', impact: p.totalSpend, details: t('details.seasonal', { deviation: `${p.deviation > 0 ? '+' : ''}${p.deviation}` }) })
     if (want('cliff') && data.commitmentCliff.summary.status !== 'healthy') {
@@ -439,7 +443,7 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
     }
     // Impacts are canonical money strings: exact comparison, no float round-trip.
     return out.sort((a, b) => compareMoney(b.impact, a.impact))
-  }, [data, selected, fmtMoney, t])
+  }, [data, selected, fmtMoney, locale, t])
 
   const total = data.summary.totalAlerts
   return (
@@ -499,6 +503,7 @@ type AcctFilter = 'all' | 'increases' | 'decreases' | 'highvel' | 'new'
 
 function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
+  const locale = useLocale()
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
@@ -531,7 +536,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={CalendarRange} accent="sky" label={t('period.current')} value={money(cmp.summary.currentTotal)} sub={data.period.label} />
-        <KpiCard icon={CalendarRange} accent="slate" label={t('period.prior')} value={money(cmp.summary.priorTotal)} sub={cmp.summary.changePct == null ? '—' : `${cmp.summary.changePct > 0 ? '↑' : '↓'} ${Math.abs(cmp.summary.changePct).toFixed(1)}%`} tone={cmp.summary.changePct != null && cmp.summary.changePct > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={CalendarRange} accent="slate" label={t('period.prior')} value={money(cmp.summary.priorTotal)} sub={cmp.summary.changePct == null ? '—' : `${cmp.summary.changePct > 0 ? '↑' : '↓'} ${formatPercent01(Math.abs(cmp.summary.changePct) / 100, locale, 1)}`} tone={cmp.summary.changePct != null && cmp.summary.changePct > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={CalendarRange} accent="slate" label={t('period.twoBack')} value={money(cmp.summary.twoBackTotal)} sub={cmp.summary.twoBackLabel} />
         <KpiCard icon={TrendingUp} accent="violet" label={t('period.projectedNext')} value={money(cmp.summary.projectedTotal)} sub={t('period.basedOnTrend')} />
       </div>
@@ -564,10 +569,10 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         actions={
           <button
             type="button"
-            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, a.currentAmount, a.priorAmount, a.twoBackAmount, a.changePct?.toFixed(1) ?? '', a.projectedAmount, a.velocity.toFixed(1), a.acceleration.toFixed(1), t(`trend.${a.trend}`)]), today)}
+            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, a.currentAmount, a.priorAmount, a.twoBackAmount, a.changePct ?? '', a.projectedAmount, String(a.velocity), String(a.acceleration), t(`trend.${a.trend}`)]), today)}
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            <Download size={11} /> CSV
+            <Download size={11} /> {t('csv.export')}
           </button>
         }
       >
@@ -594,7 +599,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.currentAmount)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{money0(a.priorAmount)}</SharedTableCell>
                   <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', (a.changePct ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (a.changePct ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
-                    {a.changePct == null ? '—' : <>{a.changePct > 0 ? '+' : ''}{pct1(a.changePct)}</>}
+                    {a.changePct == null ? '—' : <>{a.changePct > 0 ? '+' : ''}{formatPercent01(a.changePct / 100, locale, 1)}</>}
                   </SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(a.projectedAmount)}</SharedTableCell>
@@ -696,7 +701,7 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
                 <SharedTableCell className="px-4 py-2 font-medium tabular-nums text-slate-800 dark:text-slate-200">{m.label}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(m.totalAmount)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{m.yoyChange === null ? '—' : money0(m.priorYearAmount)}</SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', (m.yoyChange ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (m.yoyChange ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{m.yoyChange === null ? '—' : `${m.yoyChange > 0 ? '+' : ''}${pct1(m.yoyChange)}`}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', (m.yoyChange ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (m.yoyChange ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{m.yoyChange === null ? '—' : `${m.yoyChange > 0 ? '+' : ''}${formatPercent01(m.yoyChange / 100, locale, 1)}`}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={m.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{countLabel(m.transactionCount, locale)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{m.vendorCount}</SharedTableCell>
@@ -747,7 +752,7 @@ function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolea
     { label: t('config.anomalyThreshold.label'), value: `${c.anomalyStdDevThreshold}σ`, note: t('config.anomalyThreshold.note', { critical: c.anomalyStdDevThreshold + c.anomalyCriticalOffset }) },
     { label: t('config.boilingFrog.label'), value: `${c.boilingFrogMonths} ${t('unit.months')}`, note: t('config.boilingFrog.note') },
     { label: t('config.zombieWindow.label'), value: `${c.zombieMinMonths} ${t('unit.months')}`, note: t('config.zombieWindow.note') },
-    { label: t('config.fragmentation.label'), value: c.fragmentationMaxAvgSize === '' ? t('config.unsetMinimum') : `>${c.fragmentationMinTxns}/mo & <${fmtMoney(c.fragmentationMaxAvgSize)}`, note: t('config.fragmentation.note') },
+    { label: t('config.fragmentation.label'), value: c.fragmentationMaxAvgSize === '' ? t('config.unsetMinimum') : t('config.fragmentation.value', { txns: c.fragmentationMinTxns, max: fmtMoney(c.fragmentationMaxAvgSize) }), note: t('config.fragmentation.note') },
     { label: t('config.velocityEngine.label'), value: t('config.velocityEngine.value'), note: t('config.velocityEngine.note', { minBase: c.minBaseAmount === '' ? t('config.unsetMinimum') : fmtMoney(c.minBaseAmount) }) },
   ]
   return (
