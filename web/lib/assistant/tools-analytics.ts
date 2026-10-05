@@ -358,18 +358,24 @@ const vendorPerformanceTool: AssistantToolDef = {
 const cashflowTool: AssistantToolDef = {
   name: "analytics_cashflow",
   description:
-    "Cash forecast over 4/8/12 weeks (default 4): predicted AR, scheduled AP, recurring flows — runway, burn, lowest-cash week, DSO/DPO. Read-only.",
+    "Cash forecast over 1–52 weeks (default the org's configured cashflow horizon): predicted AR, scheduled AP, recurring flows — runway, burn, lowest-cash week, DSO/DPO. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    horizonWeeks: z.union([z.literal(4), z.literal(8), z.literal(12)]).optional()
-      .describe("Forecast horizon in weeks: 4, 8, or 12 (default 4)"),
+    horizonWeeks: z.number().int().min(1).max(MAX_CASH_HORIZON_WEEKS).optional()
+      .describe("Forecast horizon in weeks, 1–52 (default the org's configured cashflow horizon)"),
     asOfDate: dateInput.optional().describe("Forecast start date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { horizonWeeks?: 4 | 8 | 12; asOfDate?: string };
-    const horizon = a.horizonWeeks ?? 4;
-    const r = await withOrg(authz.user.orgId, () => cashflowData(authz.user.orgId, horizon, a.asOfDate, authz.allowedSubsidiaryIds));
+    const a = raw as { horizonWeeks?: number; asOfDate?: string };
+    const r = await withOrg(authz.user.orgId, async () => {
+      const cfg = await analyticsConfig(authz.user.orgId, "cashflow");
+      const horizon = Math.min(
+        MAX_CASH_HORIZON_WEEKS,
+        Math.max(1, Math.trunc(a.horizonWeeks ?? cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks)),
+      );
+      return cashflowData(authz.user.orgId, horizon, a.asOfDate, authz.allowedSubsidiaryIds);
+    });
     return {
       ok: true,
       data: {
