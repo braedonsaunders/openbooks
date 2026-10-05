@@ -1591,7 +1591,7 @@ export interface BalanceView {
 export async function lookupStoredValueByCode(
   orgId: string,
   code: string,
-  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright by code-Bearer [REDACTED] flows where the code itself is the credential. */
+  /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright by public lookups for unassigned gift cards where the code itself is the credential. */
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<BalanceView | null> {
   const normalized = normalizeStoredValueCode(code);

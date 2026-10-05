@@ -103,7 +103,7 @@ export const POST = defineRoute({
       case 'lookupGiftCard': {
         // Public token flow with no actor entity set: explicit null is the
         // unrestricted grant, named outright because no actor scope exists to
-        // forward. The code is the credential only for Bearer [REDACTED] value —
+        // forward. The code is the credential only for unassigned gift cards —
         // customer-bound value resolves solely for its own session party, so
         // another party's credit reads exactly like a wrong code.
         const balance = await lookupStoredValueByCode(orgId, body.code, null)
