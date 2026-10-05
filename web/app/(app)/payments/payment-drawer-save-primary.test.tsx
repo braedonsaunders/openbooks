@@ -149,3 +149,56 @@ test("edit mode offers Save as a primary button, not inside the Actions menu", a
   );
   assert.equal(saves[0]!.disabled, false, "the primary action is enabled after the refusal");
 });
+
+test("stored-value tenders replace allocations and retain drafts while unreadable amounts refuse precisely", async () => {
+  const prior = globalThis.fetch;
+  const writes: string[] = [];
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    if (init?.method && init.method !== 'GET') writes.push(String(input));
+    return Response.json({ rows: [], credits: [], attachments: [] });
+  }) as typeof fetch;
+  globalThis.__payRouter = { push() {}, refresh() {} };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><PaymentDrawer
+        payment={{ doc: DRAFT_RECEIPT(), bankAccountId: null, allocations: [], applied: [] }} initialOpenItems={[]} parties={[]} bankAccounts={[]} side="ar" basePath="/receipts" initialMode="edit"
+        storedValue={{ customerCredits: [], tenders: [{ accountId: 'gift-a', codeLast4: '1234', amount: '1.23456' }] }}
+      /></MoneyProvider></NextIntlClientProvider>);
+      await tick();
+    });
+    await act(async () => { await tick(); await tick(); });
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const code = dialog.querySelector<HTMLInputElement>('#sv-tender-code')!;
+    assert.ok(code.closest('[hidden]'), 'tenders cannot stack below invoice allocations');
+    async function panel(label: string) {
+      const button = [...dialog.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].find(node => node.textContent?.trim() === label);
+      assert.ok(button, `the native ${label} panel must remain reachable`);
+      await act(async () => { button.click(); await tick(); });
+    }
+    await panel(messages.storedValue.payment.tenderLabel);
+    assert.equal(code.closest('[hidden]'), null);
+    assert.match(dialog.querySelector('[role="alert"]')?.textContent ?? '', /1234.*at most 4 decimal places.*5/s, 'excess precision cannot silently truncate into a valid total');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(code, 'draft-gift-code');
+      code.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await tick();
+    });
+    await panel(messages.common.auditTrail.tabs.details);
+    await panel(messages.storedValue.payment.tenderLabel);
+    assert.equal(document.querySelector('[role="dialog"]'), dialog);
+    assert.equal(dialog.querySelector('#sv-tender-code'), code);
+    assert.equal(code.value, 'draft-gift-code');
+    const amount = dialog.querySelector<HTMLInputElement>('input[aria-label="' + messages.storedValue.labels.amount + '"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(amount, '12,34');
+      amount.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await tick();
+    });
+    assert.match(dialog.querySelector('[role="alert"]')?.textContent ?? '', /12,34.*12\.34/s, 'a decimal comma must name its decimal remedy without changing the typed value');
+    assert.equal(amount.value, '12,34');
+    assert.deepEqual(writes, [], 'tab switching and invalid typed amounts cannot save or post');
+  } finally { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior; }
+});

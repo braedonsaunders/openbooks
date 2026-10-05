@@ -3,25 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, SearchSelect } from '@openbooks/ui'
+import { sum } from '@openbooks/engine/src/money/money.ts'
+import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { useMoney } from '../../../components/money-provider'
-
-/** Exact decimal addition for display totals — never float math on money. */
-function addExact(a: string, b: string): string {
-  const scale = 4
-  const toInt = (s: string): bigint => {
-    const [whole = '0', frac = ''] = s.trim().split('.')
-    const sign = whole.startsWith('-') ? -1n : 1n
-    const digits = `${whole.replace('-', '')}${(frac + '0000').slice(0, scale)}`
-    return sign * BigInt(digits || '0')
-  }
-  const total = toInt(a) + toInt(b)
-  const negative = total < 0n
-  const abs = negative ? -total : total
-  const str = abs.toString().padStart(scale + 1, '0')
-  const whole = str.slice(0, -scale)
-  const frac = str.slice(-scale).replace(/0+$/, '')
-  return `${negative ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`
-}
 
 /**
  * One applied tender per row: a gift-card code or the customer's store
@@ -65,7 +50,11 @@ export function StoredValueTendersSection({ currency, receiptTotal, partyId, dra
   const [creditId, setCreditId] = useState('')
   const [customerCredits, setCustomerCredits] = useState<CustomerCreditOption[]>(initialCredits)
   const [creditsParty, setCreditsParty] = useState(partyId)
-  const tendered = drafts.reduce((sum, d) => addExact(sum, d.amount || '0'), '0')
+  const canonicalAmounts = drafts.map((draft) => canonicalDecimal(draft.amount, 4))
+  const unreadableIndex = canonicalAmounts.findIndex((value) => value === null)
+  const tenderRefusal = unreadableIndex < 0 ? null : moneyRefusal(`${t('labels.amount')} (••••-${drafts[unreadableIndex]!.codeLast4})`, drafts[unreadableIndex]!.amount)
+  const tendered = tenderRefusal === null ? sum(canonicalAmounts.filter((value): value is string => value !== null)) : null
+  const amountRefusal = amount.trim() && canonicalDecimal(amount, 4) === null ? moneyRefusal(t('labels.amount'), amount) : null
 
   // The picker follows the receipt's party: changing the customer drops the
   // previous customer's credit at render (never offered against the wrong
@@ -93,7 +82,7 @@ export function StoredValueTendersSection({ currency, receiptTotal, partyId, dra
 
   function addCode() {
     const trimmed = code.trim()
-    if (!trimmed || !amount.trim()) return
+    if (!trimmed || !amount.trim() || amountRefusal !== null) return
     onChange([...drafts, {
       key: `code-${Date.now()}`,
       code: trimmed,
@@ -165,8 +154,9 @@ export function StoredValueTendersSection({ currency, receiptTotal, partyId, dra
               <Label htmlFor="sv-tender-amount">{t('labels.amount')}</Label>
               <Input id="sv-tender-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
-            <Button onClick={addCode} disabled={!code.trim() || !amount.trim()}>{t('payment.apply')}</Button>
+            <Button onClick={addCode} disabled={!code.trim() || !amount.trim() || amountRefusal !== null}>{t('payment.apply')}</Button>
           </div>
+          {amountRefusal ? <p role="alert" className="text-sm text-destructive">{amountRefusal}</p> : null}
           {customerCredits.length > 0 && (
             <div className="grid grid-cols-[1fr_auto] items-end gap-2">
               <div>
@@ -187,7 +177,8 @@ export function StoredValueTendersSection({ currency, receiptTotal, partyId, dra
           )}
         </div>
       )}
-      {drafts.length > 0 && (
+      {tenderRefusal ? <p role="alert" className="text-sm text-destructive">{tenderRefusal}</p> : null}
+      {drafts.length > 0 && tendered !== null && (
         <p className="text-sm text-slate-500">
           {t('payment.tenderedOf', { tendered: money(tendered, { currency }), total: money(receiptTotal, { currency }) })}
         </p>
