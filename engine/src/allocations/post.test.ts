@@ -136,6 +136,25 @@ const expenseLine: PostSourceLine = {
   departmentId: "dept-src",
 };
 
+test("payroll expense routing preserves every liability and apportions custom dimensions exactly", async () => {
+  const rule = ruleFixture({ version: {
+    documentKinds: ["pay_run"], dimensionFilters: { payrollExpensesOnly: true, payComponentIds: ["wages"] }, impact: "reclass",
+  }, targets: [
+    target({ id: "north", sequence: 1, fixedPercent: "60", extraDims: { crew: "north" } }),
+    target({ id: "south", sequence: 2, fixedPercent: "40", extraDims: { crew: "south" } }),
+  ] });
+  const result = await collectPostContributions(emptyRunner, { ...docFixture, kind: "pay_run" }, [
+    { ...expenseLine, amount: "100.0001", payrollExpense: true, payComponentId: "wages" },
+    { accountId: "net-payable", amount: "-75.0001", payrollExpense: false },
+    { accountId: "withholding", amount: "-25", payrollExpense: false },
+  ], { rulesOverride: [rule], featureGate: gateOn }, { postingDate: "2026-07-15" });
+  assertContributorBalance(result.lines);
+  assert.equal(result.lines.length, 3);
+  assert.ok(result.lines.every(row => row.sourceKernelIndex === 0));
+  assert.deepEqual(result.lines.filter(row => row.amount.startsWith("-")).map(row => row.amount), ["-100.0001"]);
+  assert.deepEqual(result.lines.filter(row => !row.amount.startsWith("-")).map(row => [row.extraDims?.crew, row.amount]), [["north", "60.0001"], ["south", "40.0000"]]);
+});
+
 function weights(keys: string[], values: string[]): WeightedTarget[] {
   return keys.map((key, i) => ({ key, weight: values[i]! }));
 }

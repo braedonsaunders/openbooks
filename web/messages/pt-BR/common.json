@@ -100,7 +100,8 @@
     "fulfillment": "Atendimento",
     "fulfillmentShort": "Atend.",
     "returnAuthorization": "Autorização de devolução",
-    "returnAuthorizationShort": "RMA"
+    "returnAuthorizationShort": "RMA",
+    "payRun": "Folha de pagamento"
   },
   "labels": {
     "name": "Nome",

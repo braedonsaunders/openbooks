@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
 import { fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnits } from "../money/money.ts";
 import { resolveAccountGroups } from "../records/account-groups.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
 import { resolveDriverVintage } from "./driver-asof.ts";
 import { selectRule, type AccountGroupResolver } from "./match.ts";
@@ -31,6 +32,8 @@ export type PostRunner = Pick<typeof db, "execute">;
 
 /** Structural subset of posting.ts KernelLine this module reads. */
 export interface PostSourceLine {
+  payrollExpense?: boolean;
+  payComponentId?: string | null;
   accountId: string;
   amount: string;
   subsidiaryId?: string | null;
@@ -96,27 +99,18 @@ export interface PostContributionResult {
 }
 
 // ---------------------------------------------------------------------------
-// Feature gate (defensive until A10 registers the keys)
+// Authoritative organization feature gate
 // ---------------------------------------------------------------------------
 
 /**
- * Post-mode fires only when BOTH `allocations` and `allocationsAtPosting`
- * are explicitly true. Unknown keys read back null and refuse — feature off
- * means no rule fires anywhere and posted data is kept as-is.
+ * Post-mode uses the Features switchboard's defaults and parent dependency.
+ * A disabled parent or posting capability contributes no allocation lines.
  */
 export async function allocationsAtPostingEnabled(
   runner: PostRunner,
   orgId: string,
 ): Promise<boolean> {
-  // Explicit-'true' reads (never a ::boolean cast): a non-boolean stored
-  // value refuses instead of throwing 22P02 like the previous casts did on
-  // import artifacts. The explicit conjunction is the allocationsAtPosting
-  // parentKey ['allocations'] chain.
-  const r = await runner.execute<{ a: boolean; p: boolean }>(sql`
-    select case (settings->'features'->>'allocations') when 'true' then true else false end as a,
-           case (settings->'features'->>'allocationsAtPosting') when 'true' then true else false end as p
-      from orgs where id = ${orgId}`);
-  return r.rows[0]?.a === true && r.rows[0]?.p === true;
+  return lockAndCheckOrgFeature(runner, orgId, "allocationsAtPosting");
 }
 
 // ---------------------------------------------------------------------------
@@ -706,6 +700,8 @@ export async function collectPostContributions(
       partyId: kernelLine.partyId ?? null,
       extraDims: kernelLine.extraDims ?? {},
       documentKind: doc.kind,
+      payrollExpense: kernelLine.payrollExpense,
+      payComponentId: kernelLine.payComponentId,
       itemId: null,
       amount: kernelLine.amount,
     };

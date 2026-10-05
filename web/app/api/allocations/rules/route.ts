@@ -20,6 +20,7 @@ const createRuleSchema = z.object({
   mode: z.enum(['entry', 'post', 'period']),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
+  payrollExpenses: z.boolean().optional(),
 })
 
 /** Rules tab list + create. Read needs allocations.read; writes need allocations.manage. */
@@ -41,6 +42,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   const gate = injectedGate as Authz;
   const parsed = await parseJsonBody(req, createRuleSchema)
   if (!parsed.ok) return parsed.response
+  if (parsed.data.payrollExpenses && parsed.data.mode !== 'post') return NextResponse.json({ error: 'Payroll expense allocations must run at posting.' }, { status: 400 })
   // The initial draft names no subsidiaries, so it is org-wide policy from
   // the first row: restricted callers get the named 403 with no write at all.
   const scope = guardUnrestrictedScope(gate)
@@ -55,6 +57,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
         mode: parsed.data.mode,
         sortOrder: parsed.data.sortOrder,
         isActive: parsed.data.isActive,
+        payrollExpenses: parsed.data.payrollExpenses,
         effectiveFrom: await businessToday(gate.user.orgId),
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       },

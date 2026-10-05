@@ -714,7 +714,8 @@
       "rates": "Alíquotas oficiais",
       "workSchedules": "Escalas de trabalho",
       "serviceCredits": "Tempo de serviço reconhecido",
-      "vacationTerms": "Condições de férias"
+      "vacationTerms": "Condições de férias",
+      "expenses": "Distribuição de despesas"
     },
     "packs": {
       "installed": "Instalado",

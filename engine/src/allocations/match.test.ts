@@ -93,6 +93,18 @@ test("matchLine matches an unconstrained version with zero specificity", () => {
   assert.deepEqual(matchLine(version(), line()), { matched: true, specificity: 0 });
 });
 
+test("payroll expense rules require an expense leg and every selected component and dimension", () => {
+  const rule = version({ documentKinds: ["pay_run"], dimensionFilters: {
+    payrollExpensesOnly: true, payComponentIds: ["wages"], departmentIds: ["field"], extraDims: { crew: ["north"] },
+  } });
+  const source = line({ documentKind: "pay_run", payrollExpense: true, payComponentId: "wages", departmentId: "field", extraDims: { crew: "north" } });
+  assert.equal(matchLine(rule, source).matched, true);
+  for (const changed of [
+    { payrollExpense: false }, { payrollExpense: undefined }, { payComponentId: "benefit" },
+    { documentKind: "journal" }, { departmentId: "office" }, { extraDims: { crew: "south" } },
+  ]) assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
+});
+
 test("matchLine document_kinds: null matches any kind, list requires membership", () => {
   const v = version({ documentKinds: ["vendor_bill", "card_charge"] });
   assert.equal(matchLine(v, line({ documentKind: "vendor_bill" })).matched, true);

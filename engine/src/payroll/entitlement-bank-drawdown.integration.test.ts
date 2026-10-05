@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { cmp } from "../money/money.ts";
 import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
@@ -117,6 +118,8 @@ test('a vacation payout on a regular run withdraws from the bank without accruin
     const { partyId } = await employee(fx, 'Vacation Drawdown Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
       from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+    await db.execute(sql`update pay_components set expense_account_id=${fx.accounts.vacationPayable}
+      where org_id=${fx.orgId} and id=${plan.payout_component_id}`);
     await opening(fx, plan.id, partyId, '1000', null);
     await hours(fx, partyId, ['2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17']);
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
@@ -143,6 +146,14 @@ test('a vacation payout on a regular run withdraws from the bank without accruin
     assert.equal(repayout.length, 1);
     assert.equal(repayout[0]!.amount, '-600.0000');
     assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '448.0000');
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    const bankDebit = (await db.execute<{ amount: string; custom: { payrollExpense: boolean } }>(sql`
+      select amount::text, custom from document_lines where org_id=${fx.orgId}
+        and document_id=${run.documentId} and account_id=${fx.accounts.vacationPayable}
+        and amount > 0`)).rows;
+    assert.equal(bankDebit.length, 1);
+    assert.equal(bankDebit[0]!.amount, '600.0000');
+    assert.equal(bankDebit[0]!.custom.payrollExpense, false, 'withdrawing an accrued liability must not enter payroll expense allocation');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 

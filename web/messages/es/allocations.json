@@ -63,7 +63,12 @@
       "active": "Activa",
       "searchPlaceholder": "Buscar reglas…",
       "emptyDescription": "Cree la primera regla para empezar a distribuir costos.",
-      "blurb": "Reglas versionadas que actúan al registrar, al contabilizar o como reparto del periodo. Una regla nueva abre una configuración guiada."
+      "blurb": "Reglas versionadas que actúan al registrar, al contabilizar o como reparto del periodo. Una regla nueva abre una configuración guiada.",
+      "payrollBlurb": "Distribuya gastos de nómina por departamento, proyecto, ubicación, clase, entidad jurídica o dimensión personalizada. Use porcentajes, proporciones o un inductor; los pagos y las retenciones no cambian.",
+      "payrollEnabled": "Las reglas publicadas se aplican al contabilizar la nómina.",
+      "payrollDisabled": "Las distribuciones al contabilizar están desactivadas. Actívelas en Configuración de la empresa → Funciones para aplicar estas reglas.",
+      "features": "Funciones de la empresa",
+      "departmentDefaults": "Cuentas predeterminadas por departamento"
     },
     "modes": {
       "entry": "Al registrar",
@@ -204,7 +209,8 @@
         "project": "Proyectos",
         "subsidiary": "Subsidiarias",
         "party": "Terceros",
-        "item": "Artículos"
+        "item": "Artículos",
+        "payComponent": "Componentes de nómina"
       },
       "partyRoles": {
         "vendor": "Proveedores",
@@ -307,7 +313,8 @@
       "subsidiary": "Subsidiaria",
       "party": "Tercero",
       "item": "Artículo",
-      "testing": "Probando…"
+      "testing": "Probando…",
+      "payrollExpense": "Línea de gasto de nómina"
     },
     "errors": {
       "load": "No se pudieron cargar las reglas de distribución.",
@@ -555,7 +562,7 @@
       "pickValue": "Elegir un valor…",
       "add": "Agregar destino",
       "noValues": "Aún no hay valores activos para esa dimensión.",
-      "needOne": "Elija al menos dos destinos con porción positiva.",
+      "needOne": "Elija un destino y una proporción positiva para cada parte.",
       "example": "Una línea de 1 000,00 pasaría a ser {amounts}.",
       "driverDynamic": "{driver} se dividirá entre cada {dimension} con peso.",
       "driverDynamicHint": "No hace falta listar destinos — el vector de la clave es el conjunto objetivo."
@@ -591,7 +598,9 @@
       "splitPercent": "División {percents}",
       "splitDriver": "División por clave {driver}",
       "targets": "Hacia {dimension}: {names}"
-    }
+    },
+    "payrollTitle": "Distribución de gastos de nómina",
+    "payrollSource": "Asigne un nombre a la regla y elija los gastos de nómina que desea distribuir. Deje un filtro en Cualquiera para incluir todos los gastos correspondientes. Los pagos y las retenciones del personal no cambian."
   },
   "lineage": {
     "title": "Origen del reparto",

@@ -24,6 +24,7 @@ import { SplitLinesEditor } from '../../../../../components/allocations/SplitLin
 import type { AllocationLine } from '../../../../../components/allocations/split-lines-model'
 import type { AllocationRuleTarget, AllocationRuleVersion } from '@openbooks/engine/src/allocations/types.ts'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { ApiResponseError, throwApiErrorIfNotOk } from '../../../../../lib/api-error'
 import {
   apiError,
   blankDefinitionForm,
@@ -87,6 +88,17 @@ interface Option {
 async function fetchJson(url: string, init?: RequestInit): Promise<{ status: number; body: unknown }> {
   try {
     const res = await fetch(url, { ...init, headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) } })
+    if (!res.ok) {
+      try {
+        await throwApiErrorIfNotOk(res, 'Request failed')
+      } catch (error) {
+        if (error instanceof ApiResponseError) {
+          const body = error.body !== null && typeof error.body === 'object' && !Array.isArray(error.body) ? error.body : {}
+          return { status: error.status, body: { ...body, error: error.message } }
+        }
+        throw error
+      }
+    }
     let body: unknown = null
     try {
       body = await res.json()
@@ -234,8 +246,8 @@ function ErrorBox({ message, onRetry, retryLabel }: { message: string; onRetry?:
  */
 const TABS: DrawerTab[] = ['general', 'definition', 'versions', 'test']
 
-export function RuleDrawerHost({ ruleParam, closeHref }: { ruleParam: string; closeHref: string }) {
-  if (ruleParam === 'new') return <AllocationRuleWizard closeHref={closeHref} />
+export function RuleDrawerHost({ ruleParam, closeHref, payrollExpenses = false }: { ruleParam: string; closeHref: string; payrollExpenses?: boolean }) {
+  if (ruleParam === 'new') return <AllocationRuleWizard closeHref={closeHref} payrollExpenses={payrollExpenses} />
   return <RuleEditDrawer key={ruleParam} ruleId={ruleParam} closeHref={closeHref} />
 }
 
@@ -266,6 +278,7 @@ interface SegmentOption {
 
 interface PickerOptions {
   accounts: Option[]
+  payComponents: Option[]
   departments: Option[]
   locations: Option[]
   classes: Option[]
@@ -319,6 +332,7 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       const rawSegments = (payload['segments'] ?? []) as unknown as SegmentOption[]
       setOptions({
         accounts: payload['accounts'] ?? [],
+        payComponents: payload['payComponents'] ?? [],
         departments: payload['departments'] ?? [],
         locations: payload['locations'] ?? [],
         classes: payload['classes'] ?? [],
@@ -807,6 +821,17 @@ function DefinitionTab({
                   onChange={(next) => set('filterItemIds', next)}
                 />
               </div>
+              {form.payrollExpensesOnly && (
+                <div>
+                  <Label>{t('rules.definition.filters.payComponent')}</Label>
+                  <MultiCheck
+                    ariaLabel={t('rules.definition.filters.payComponent')}
+                    options={(options.payComponents ?? []).map((item) => ({ value: item.id, label: item.label }))}
+                    values={form.filterPayComponentIds}
+                    onChange={(next) => set('filterPayComponentIds', next)}
+                  />
+                </div>
+              )}
               {options.segments.map((segment) => (
                 <div key={segment.key}>
                   <Label>{segment.label}</Label>
@@ -942,6 +967,7 @@ function DefinitionTab({
               </Select>
             </Field>
             {form.targetKind === 'explicit' ? (
+              <fieldset disabled={!isDraft}>
               <SplitLinesEditor
                 lines={lines}
                 onChange={(next) => {
@@ -949,7 +975,7 @@ function DefinitionTab({
                   setSaved(false)
                 }}
                 accountOptions={accountOptions}
-                codings={(['department', 'location', 'class', 'project'] as const).map((dim) => ({
+                codings={[...(['department', 'location', 'class', 'project', 'subsidiary'] as const).filter((dim) => dim !== 'subsidiary' || options.subsidiaries.length > 1).map((dim) => ({
                   key: dim,
                   label: filterLabels[dim] ?? dim,
                   options: {
@@ -957,8 +983,9 @@ function DefinitionTab({
                     location: options.locations,
                     class: options.classes,
                     project: options.projects,
+                    subsidiary: options.subsidiaries,
                   }[dim].map((item) => ({ value: item.id, label: item.label })),
-                }))}
+                })), ...options.segments.map((segment) => ({ key: `extra:${segment.key}` as const, label: segment.label, options: segment.values.map((item) => ({ value: item.id, label: item.label })) }))]}
                 portionKinds={['remainder', 'percent', 'weight']}
                 allowEmptyAccount
                 showLabel
@@ -974,6 +1001,7 @@ function DefinitionTab({
                   labelPlaceholder: t('rules.targets.labelPlaceholder'),
                 }}
               />
+              </fieldset>
             ) : (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1319,6 +1347,10 @@ function TestTab({
   options: PickerOptions
 }) {
   const t = useTranslations('allocations')
+  const payrollExpenses = detail.versions.some((entry) => {
+    const filters = entry.version['dimensionFilters']
+    return typeof filters === 'object' && filters !== null && (filters as { payrollExpensesOnly?: unknown }).payrollExpensesOnly === true
+  })
   const [versionId, setVersionId] = useState(
     (detail.rule as { currentVersionId?: string | null }).currentVersionId
       ?? detail.versions.find((entry) => entry.version.status === 'published')?.version.id
@@ -1326,7 +1358,8 @@ function TestTab({
       ?? '',
   )
   const [accountId, setAccountId] = useState('')
-  const [documentKind, setDocumentKind] = useState('')
+  const [documentKind, setDocumentKind] = useState(payrollExpenses ? 'pay_run' : '')
+  const [payrollExpense, setPayrollExpense] = useState(true)
   const [dims, setDims] = useState<Record<string, string>>({})
   const [periodId, setPeriodId] = useState(options.periods[0]?.id ?? '')
   const [bookId, setBookId] = useState(options.books[0]?.id ?? '')
@@ -1347,6 +1380,8 @@ function TestTab({
     { key: 'subsidiaryId', label: t('rules.test.subsidiary'), values: options.subsidiaries },
     { key: 'partyId', label: t('rules.test.party'), values: options.parties },
     { key: 'itemId', label: t('rules.test.item'), values: options.items },
+    ...(payrollExpenses ? [{ key: 'payComponentId', label: t('rules.definition.filters.payComponent'), values: options.payComponents ?? [] }] : []),
+    ...options.segments.map((segment) => ({ key: `extra:${segment.key}`, label: segment.label, values: segment.values })),
   ]
 
   const run = async () => {
@@ -1381,7 +1416,7 @@ function TestTab({
     const { status, body } = await fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}/test-match`, {
       method: 'POST',
       body: JSON.stringify(
-        { versionId: versionId === '' ? undefined : versionId, line: testLinePayload({ accountId, documentKind, dims }) },
+        { versionId: versionId === '' ? undefined : versionId, line: testLinePayload({ accountId, documentKind, dims, ...(payrollExpenses ? { payrollExpense } : {}) }) },
       ),
     })
     setTesting(false)
@@ -1466,6 +1501,7 @@ function TestTab({
             />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
+            {payrollExpenses && <Check checked={payrollExpense} onChange={setPayrollExpense}>{t('rules.test.payrollExpense')}</Check>}
             <Field label={t('rules.test.documentKind')}>
               <Input value={documentKind} aria-label={t('rules.test.documentKind')} onChange={(e) => setDocumentKind(e.target.value)} />
             </Field>

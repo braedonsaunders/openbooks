@@ -63,7 +63,12 @@
       "active": "有効",
       "searchPlaceholder": "ルールを検索…",
       "emptyDescription": "最初のルールを作成して原価配分を始めます。",
-      "blurb": "計上時・転記時・期間配賦のいずれかで発動する版管理ルールです。新規ルールはガイド付きセットアップで開きます。"
+      "blurb": "計上時・転記時・期間配賦のいずれかで発動する版管理ルールです。新規ルールはガイド付きセットアップで開きます。",
+      "payrollBlurb": "給与費用を部門、プロジェクト、拠点、クラス、法人またはカスタムディメンションで配賦します。割合、比率または配賦基準を使用でき、支給額と源泉控除額は変わりません。",
+      "payrollEnabled": "公開済みルールは給与の転記時に適用されます。",
+      "payrollDisabled": "転記時の配賦は無効です。ルールを適用するには会社設定 → 機能で有効にしてください。",
+      "features": "会社の機能",
+      "departmentDefaults": "部門別の既定勘定"
     },
     "modes": {
       "entry": "計上時",
@@ -204,7 +209,8 @@
         "project": "プロジェクト",
         "subsidiary": "子会社",
         "party": "取引先",
-        "item": "品目"
+        "item": "品目",
+        "payComponent": "給与項目"
       },
       "partyRoles": {
         "vendor": "仕入先",
@@ -307,7 +313,8 @@
       "subsidiary": "子会社",
       "party": "取引先",
       "item": "品目",
-      "testing": "テスト中…"
+      "testing": "テスト中…",
+      "payrollExpense": "給与費用の明細"
     },
     "errors": {
       "load": "配賦ルールを読み込めませんでした。",
@@ -555,7 +562,7 @@
       "pickValue": "値を選択…",
       "add": "配賦先を追加",
       "noValues": "そのディメンションの有効な値はまだありません。",
-      "needOne": "正の割合を持つ配賦先を2つ以上選んでください。",
+      "needOne": "各配賦先と正の配賦割合を選択してください。",
       "example": "金額1,000.00の明細は{amounts}になります。",
       "driverDynamic": "{driver}は重みのあるすべての{dimension}に分割します。",
       "driverDynamicHint": "配賦先の列挙は不要です — 基準ベクトルが対象集合です。"
@@ -591,7 +598,9 @@
       "splitPercent": "{percents}で分割",
       "splitDriver": "基準{driver}で分割",
       "targets": "{dimension}へ：{names}"
-    }
+    },
+    "payrollTitle": "給与費用の配賦",
+    "payrollSource": "ルールに名前を付け、配賦する給与費用を選択します。フィルターを「すべて」のままにすると、該当するすべての費用が含まれます。従業員の給与と控除額は変わりません。"
   },
   "lineage": {
     "title": "配賦の追跡",

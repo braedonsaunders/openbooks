@@ -63,7 +63,12 @@
       "active": "Actif",
       "searchPlaceholder": "Rechercher des règles…",
       "emptyDescription": "Créez la première règle pour commencer à répartir les coûts.",
-      "blurb": "Des règles versionnées qui se déclenchent à la saisie, à la comptabilisation ou en balai de période. Une nouvelle règle ouvre une configuration guidée."
+      "blurb": "Des règles versionnées qui se déclenchent à la saisie, à la comptabilisation ou en balai de période. Une nouvelle règle ouvre une configuration guidée.",
+      "payrollBlurb": "Répartissez les charges de paie par service, projet, emplacement, classe, entité juridique ou dimension personnalisée. Utilisez des pourcentages, des ratios ou un inducteur ; la paie et les retenues restent inchangées.",
+      "payrollEnabled": "Les règles publiées s’appliquent à la comptabilisation de la paie.",
+      "payrollDisabled": "La répartition à la comptabilisation est désactivée. Activez-la dans Paramètres de l’entreprise → Fonctionnalités pour appliquer ces règles.",
+      "features": "Fonctionnalités de l’entreprise",
+      "departmentDefaults": "Comptes par défaut par service"
     },
     "modes": {
       "entry": "À la saisie",
@@ -204,7 +209,8 @@
         "project": "Projets",
         "subsidiary": "Filiales",
         "party": "Tiers",
-        "item": "Articles"
+        "item": "Articles",
+        "payComponent": "Composantes de paie"
       },
       "partyRoles": {
         "vendor": "Fournisseurs",
@@ -307,7 +313,8 @@
       "subsidiary": "Filiale",
       "party": "Tiers",
       "item": "Article",
-      "testing": "Test en cours…"
+      "testing": "Test en cours…",
+      "payrollExpense": "Ligne de charge de paie"
     },
     "errors": {
       "load": "Impossible de charger les règles de répartition.",
@@ -555,7 +562,7 @@
       "pickValue": "Choisir une valeur…",
       "add": "Ajouter un destinataire",
       "noValues": "Aucune valeur active pour cette dimension pour l’instant.",
-      "needOne": "Choisissez au moins deux destinataires avec une quote-part positive.",
+      "needOne": "Choisissez une destination et une part positive pour chaque répartition.",
       "example": "Une ligne de 1 000,00 deviendrait {amounts}.",
       "driverDynamic": "{driver} ventilera sur chaque {dimension} avec un poids.",
       "driverDynamicHint": "Inutile de lister les destinataires — le vecteur de la clé est l’ensemble cible."
@@ -591,7 +598,9 @@
       "splitPercent": "Ventilation {percents}",
       "splitDriver": "Ventilation par clé {driver}",
       "targets": "Vers {dimension} : {names}"
-    }
+    },
+    "payrollTitle": "Répartition des charges de paie",
+    "payrollSource": "Nommez la règle et choisissez les charges de paie à répartir. Laissez un filtre sur Tous pour inclure toutes les charges correspondantes. La rémunération et les retenues des employés restent inchangées."
   },
   "lineage": {
     "title": "Traçabilité des répartitions",

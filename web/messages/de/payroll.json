@@ -714,7 +714,8 @@
       "rates": "Gesetzliche Sätze",
       "workSchedules": "Arbeitszeitpläne",
       "serviceCredits": "Angerechnete Dienstzeit",
-      "vacationTerms": "Urlaubsbedingungen"
+      "vacationTerms": "Urlaubsbedingungen",
+      "expenses": "Aufwandsverteilung"
     },
     "packs": {
       "installed": "Installiert",

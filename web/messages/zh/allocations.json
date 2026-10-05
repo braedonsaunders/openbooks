@@ -63,7 +63,12 @@
       "active": "启用",
       "searchPlaceholder": "搜索规则…",
       "emptyDescription": "创建第一条规则，开始分摊成本。",
-      "blurb": "在录入、过账或期间统分时触发的版本化规则。新建规则将打开向导式设置。"
+      "blurb": "在录入、过账或期间统分时触发的版本化规则。新建规则将打开向导式设置。",
+      "payrollBlurb": "按部门、项目、地点、类别、法人实体或自定义维度分配工资费用。可使用百分比、比例或分配动因；员工实发工资和扣缴金额保持不变。",
+      "payrollEnabled": "已发布规则在工资过账时生效。",
+      "payrollDisabled": "过账分配已关闭。请在公司设置 → 功能中启用后再应用这些规则。",
+      "features": "公司功能",
+      "departmentDefaults": "部门默认科目"
     },
     "modes": {
       "entry": "录入时",
@@ -204,7 +209,8 @@
         "project": "项目",
         "subsidiary": "子公司",
         "party": "往来单位",
-        "item": "物料"
+        "item": "物料",
+        "payComponent": "工资组成项"
       },
       "partyRoles": {
         "vendor": "供应商",
@@ -307,7 +313,8 @@
       "subsidiary": "子公司",
       "party": "往来",
       "item": "物料",
-      "testing": "测试中…"
+      "testing": "测试中…",
+      "payrollExpense": "工资费用分录"
     },
     "errors": {
       "load": "无法加载分摊规则。",
@@ -555,7 +562,7 @@
       "pickValue": "选择值…",
       "add": "添加对象",
       "noValues": "该维度尚无有效值。",
-      "needOne": "请至少选择两个份额为正的对象。",
+      "needOne": "为每个分摊部分选择目标和正数份额。",
       "example": "金额1,000.00的明细将变为{amounts}。",
       "driverDynamic": "{driver}将拆分至每个有权重的{dimension}。",
       "driverDynamicHint": "无需列出对象 — 动因向量即目标集。"
@@ -591,7 +598,9 @@
       "splitPercent": "按{percents}拆分",
       "splitDriver": "按动因{driver}拆分",
       "targets": "分摊至{dimension}：{names}"
-    }
+    },
+    "payrollTitle": "工资费用分摊",
+    "payrollSource": "为规则命名并选择要分摊的工资费用。将筛选条件保留为“任意”可包含所有匹配费用。员工工资和代扣金额保持不变。"
   },
   "lineage": {
     "title": "分摊溯源",

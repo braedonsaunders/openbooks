@@ -80,6 +80,8 @@ export interface DefinitionForm {
   filterSubsidiaryIds: string[]
   filterPartyIds: string[]
   filterItemIds: string[]
+  filterPayComponentIds: string[]
+  payrollExpensesOnly: boolean
   /** Custom-segment key → selected value ids. */
   filterExtraDims: Record<string, string[]>
   requireUntagged: UntaggableDimension[]
@@ -125,6 +127,8 @@ export function blankDefinitionForm(): DefinitionForm {
     filterSubsidiaryIds: [],
     filterPartyIds: [],
     filterItemIds: [],
+    filterPayComponentIds: [],
+    payrollExpensesOnly: false,
     filterExtraDims: {},
     requireUntagged: [],
     applyPolicy: 'automatic',
@@ -213,6 +217,8 @@ export function definitionFormFromVersion(version: {
     filterSubsidiaryIds: ids(filters.subsidiaryIds),
     filterPartyIds: ids(filters.partyIds),
     filterItemIds: ids(filters.itemIds),
+    filterPayComponentIds: ids(filters.payComponentIds),
+    payrollExpensesOnly: filters.payrollExpensesOnly === true,
     filterExtraDims: Object.fromEntries(
       Object.entries(filters.extraDims ?? {}).map(([segment, values]) => [segment, [...values]]),
     ),
@@ -265,6 +271,8 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
   put('subsidiaryIds', form.filterSubsidiaryIds)
   put('partyIds', form.filterPartyIds)
   put('itemIds', form.filterItemIds)
+  put('payComponentIds', form.filterPayComponentIds)
+  if (form.payrollExpensesOnly) filters['payrollExpensesOnly'] = true
   const extraDims: Record<string, string[]> = {}
   for (const [segment, values] of Object.entries(form.filterExtraDims)) {
     if (values.length > 0) extraDims[segment] = [...values]
@@ -334,6 +342,8 @@ export function targetToLine(target: {
   locationId?: string | null
   classId?: string | null
   projectId?: string | null
+  subsidiaryId?: string | null
+  extraDims?: Record<string, string>
   fixedPercent?: string | null
   weight?: string | null
   isRemainder?: boolean
@@ -351,6 +361,8 @@ export function targetToLine(target: {
     departmentId: target.departmentId ?? null,
     locationId: target.locationId ?? null,
     classId: target.classId ?? null,
+    subsidiaryId: target.subsidiaryId,
+    extraDims: target.extraDims === undefined ? undefined : { ...target.extraDims },
     projectId: target.projectId ?? null,
     label: target.label ?? null,
   }
@@ -393,8 +405,8 @@ export function mergeLinesToTargets(
       locationId: line.locationId ?? null,
       classId: line.classId ?? null,
       projectId: line.projectId ?? null,
-      subsidiaryId: kept.subsidiaryId ?? null,
-      extraDims: kept.extraDims ?? {},
+      subsidiaryId: line.subsidiaryId === undefined ? kept.subsidiaryId ?? null : line.subsidiaryId,
+      extraDims: line.extraDims ?? kept.extraDims ?? {},
       fixedPercent: basis.fixedPercent,
       weight: basis.weight,
       isRemainder: basis.isRemainder,
@@ -407,15 +419,23 @@ export function mergeLinesToTargets(
 export function testLinePayload(form: {
   accountId: string
   documentKind: string
-  dims: Partial<Record<'departmentId' | 'locationId' | 'classId' | 'projectId' | 'subsidiaryId' | 'partyId' | 'itemId', string>>
+  payrollExpense?: boolean
+  dims: Partial<Record<'departmentId' | 'locationId' | 'classId' | 'projectId' | 'subsidiaryId' | 'partyId' | 'itemId' | 'payComponentId' | `extra:${string}`, string>>
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     accountId: form.accountId,
     documentKind: form.documentKind === '' ? null : form.documentKind,
   }
   for (const [key, value] of Object.entries(form.dims)) {
-    if (value !== undefined && value !== '') body[key] = value
+    if (value !== undefined && value !== '') {
+      if (key.startsWith('extra:')) {
+        const extraDims = (body['extraDims'] ?? {}) as Record<string, string>
+        extraDims[key.slice(6)] = value
+        body['extraDims'] = extraDims
+      } else body[key] = value
+    }
   }
+  if (form.payrollExpense !== undefined) body['payrollExpense'] = form.payrollExpense
   return body
 }
 

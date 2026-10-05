@@ -37,6 +37,7 @@ const DIMENSION_ID_KEYS = [
   "subsidiaryIds",
   "partyIds",
   "itemIds",
+  "payComponentIds",
 ] as const;
 
 type DimensionIdKey = (typeof DIMENSION_ID_KEYS)[number];
@@ -57,6 +58,8 @@ function lineValueFor(line: LineCoordinate, key: DimensionIdKey): string | null 
       return line.partyId;
     case "itemIds":
       return line.itemId;
+    case "payComponentIds":
+      return line.payComponentId;
   }
 }
 
@@ -124,6 +127,10 @@ export function matchLine(
   if (version.accountScope.kind !== "any") specificity += 1;
 
   const filters: DimensionFilters = version.dimensionFilters ?? {};
+  if (filters.payrollExpensesOnly === true) {
+    if (line.documentKind !== "pay_run" || line.payrollExpense !== true) return { matched: false, specificity: 0 };
+    specificity += 1;
+  }
   for (const key of DIMENSION_ID_KEYS) {
     const ids = filters[key];
     if (!nonEmptyStrings(ids)) continue;

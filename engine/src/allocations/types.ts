@@ -58,6 +58,9 @@ export type UntaggableDimension = "department" | "location" | "class" | "project
 
 /** AND of present keys; an absent key matches anything. */
 export interface DimensionFilters {
+  /** Restrict payroll rules to expense legs, excluding employee payables and withholdings. */
+  payrollExpensesOnly?: boolean;
+  payComponentIds?: string[];
   departmentIds?: string[];
   locationIds?: string[];
   classIds?: string[];
@@ -82,6 +85,8 @@ export interface DynamicTarget {
 
 /** What the matcher sees for one document line or kernel line. */
 export interface LineCoordinate extends Coordinate {
+  payrollExpense?: boolean;
+  payComponentId?: string | null;
   documentKind?: string | null;
   itemId?: string | null;
   /** Signed canonical decimal (debit +). */

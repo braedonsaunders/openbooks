@@ -100,7 +100,8 @@
     "fulfillment": "Auftragserfüllung",
     "fulfillmentShort": "Erfüllung",
     "returnAuthorization": "Rückgabegenehmigung",
-    "returnAuthorizationShort": "RMA"
+    "returnAuthorizationShort": "RMA",
+    "payRun": "Lohnlauf"
   },
   "labels": {
     "name": "Name",

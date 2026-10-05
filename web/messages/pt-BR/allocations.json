@@ -63,7 +63,12 @@
       "active": "Ativa",
       "searchPlaceholder": "Pesquisar regras…",
       "emptyDescription": "Crie a primeira regra para começar a ratear custos.",
-      "blurb": "Regras versionadas que disparam no lançamento, na contabilização ou como varredura do período. Regra nova abre uma configuração guiada."
+      "blurb": "Regras versionadas que disparam no lançamento, na contabilização ou como varredura do período. Regra nova abre uma configuração guiada.",
+      "payrollBlurb": "Distribua despesas da folha por departamento, projeto, local, classe, entidade jurídica ou dimensão personalizada. Use percentuais, proporções ou um direcionador; pagamentos e retenções permanecem inalterados.",
+      "payrollEnabled": "As regras publicadas são aplicadas ao contabilizar a folha.",
+      "payrollDisabled": "As distribuições na contabilização estão desativadas. Ative-as em Configurações da empresa → Recursos para aplicar estas regras.",
+      "features": "Recursos da empresa",
+      "departmentDefaults": "Contas padrão por departamento"
     },
     "modes": {
       "entry": "No lançamento",
@@ -204,7 +209,8 @@
         "project": "Projetos",
         "subsidiary": "Subsidiárias",
         "party": "Partes",
-        "item": "Itens"
+        "item": "Itens",
+        "payComponent": "Componentes da folha"
       },
       "partyRoles": {
         "vendor": "Fornecedores",
@@ -307,7 +313,8 @@
       "subsidiary": "Subsidiária",
       "party": "Contraparte",
       "item": "Item",
-      "testing": "Testando…"
+      "testing": "Testando…",
+      "payrollExpense": "Linha de despesa da folha"
     },
     "errors": {
       "load": "Não foi possível carregar as regras de rateio.",
@@ -555,7 +562,7 @@
       "pickValue": "Escolher um valor…",
       "add": "Adicionar destino",
       "noValues": "Ainda não há valores ativos para essa dimensão.",
-      "needOne": "Escolha ao menos dois destinos com parcela positiva.",
+      "needOne": "Escolha um destino e uma participação positiva para cada parte.",
       "example": "Uma linha de 1.000,00 viraria {amounts}.",
       "driverDynamic": "{driver} vai dividir entre cada {dimension} com peso.",
       "driverDynamicHint": "Sem listar destinos — o vetor do critério é o conjunto-alvo."
@@ -591,7 +598,9 @@
       "splitPercent": "Divisão {percents}",
       "splitDriver": "Divisão pelo critério {driver}",
       "targets": "Para {dimension}: {names}"
-    }
+    },
+    "payrollTitle": "Rateio de despesas da folha",
+    "payrollSource": "Dê um nome à regra e escolha as despesas da folha a ratear. Deixe um filtro em Qualquer para incluir todas as despesas correspondentes. Os pagamentos e descontos dos funcionários permanecem inalterados."
   },
   "lineage": {
     "title": "Origem do rateio",

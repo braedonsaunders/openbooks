@@ -8,10 +8,21 @@ import { SplitLinesEditor } from './SplitLinesEditor.tsx'
 import {
   allocationPortionFromInput,
   allocationTargetBasisFromLine,
+  allocationCodingValue,
+  allocationCodingPatch,
   type AllocationLine,
 } from './split-lines-model.ts'
 
 Object.assign(globalThis, { React })
+
+test('custom-dimension edits preserve other assignments and support explicit clearing', () => {
+  const line: AllocationLine = { accountId: '', portion: { kind: 'percent', value: '100' }, extraDims: { crew: 'north', region: 'east' } }
+  const changed = { ...line, ...allocationCodingPatch(line, 'extra:crew', 'south') }
+  assert.equal(allocationCodingValue(changed, 'extra:crew'), 'south')
+  assert.deepEqual(changed.extraDims, { crew: 'south', region: 'east' })
+  assert.deepEqual(allocationCodingPatch(changed, 'extra:crew', null), { extraDims: { region: 'east' } })
+  assert.equal(allocationCodingValue(line, 'extra:missing'), null)
+})
 
 test('weight input preserves exact decimal text', () => {
   assert.deepEqual(

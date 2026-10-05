@@ -714,7 +714,8 @@
       "rates": "法定税率",
       "workSchedules": "工作时间表",
       "serviceCredits": "认可工龄",
-      "vacationTerms": "休假条款"
+      "vacationTerms": "休假条款",
+      "expenses": "费用分配"
     },
     "packs": {
       "installed": "已安装",

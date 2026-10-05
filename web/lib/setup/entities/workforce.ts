@@ -469,9 +469,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   {
     // Per-component department expense accounts: the same earning, levy or
     // benefit posts to different expense accounts by worker department.
-    // A child list of the pay-component surface — one active mapping per
-    // component, department and date — rehomed onto the Payroll setup
-    // workspace beside Components. Overlapping windows refuse here with
+    // One active default per component, department and date, accessible from
+    // Payroll setup → Expense allocations. Overlapping windows refuse with
     // the remedy; the range exclusion is the backstop for direct writers.
     key: 'pay-component-department-expenses',
     table: 'pay_component_department_expenses',
