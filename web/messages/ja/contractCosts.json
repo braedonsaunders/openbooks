@@ -18,6 +18,10 @@
     "noPolicy": "有効なポリシーがありません。資産化の前に設定で作成してください。",
     "openPolicy": "ポリシーを開く"
   },
+  "views": {
+    "attention": "要対応",
+    "assets": "資産"
+  },
   "policy": {
     "basis": {
       "contract_term": "契約期間",

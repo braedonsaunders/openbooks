@@ -18,6 +18,10 @@
     "noPolicy": "当前没有有效政策。请先在设置中创建，再进行资本化。",
     "openPolicy": "打开政策"
   },
+  "views": {
+    "attention": "需要注意",
+    "assets": "资产"
+  },
   "policy": {
     "basis": {
       "contract_term": "合同期",

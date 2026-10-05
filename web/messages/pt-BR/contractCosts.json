@@ -18,6 +18,10 @@
     "noPolicy": "Nenhuma política em vigor. Crie uma em Configurações antes de capitalizar.",
     "openPolicy": "Abrir a política"
   },
+  "views": {
+    "attention": "Precisa de atenção",
+    "assets": "Ativos"
+  },
   "policy": {
     "basis": {
       "contract_term": "o prazo do contrato",

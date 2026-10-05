@@ -18,6 +18,10 @@
     "noPolicy": "Aucune méthode en vigueur. Créez-en une dans Paramètres avant de capitaliser.",
     "openPolicy": "Ouvrir la méthode"
   },
+  "views": {
+    "attention": "À traiter",
+    "assets": "Actifs"
+  },
   "policy": {
     "basis": {
       "contract_term": "la durée du contrat",

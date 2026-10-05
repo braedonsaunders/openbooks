@@ -18,6 +18,10 @@
     "noPolicy": "Keine Richtlinie in Kraft. Legen Sie eine in den Einstellungen an, bevor Sie aktivieren.",
     "openPolicy": "Richtlinie öffnen"
   },
+  "views": {
+    "attention": "Erfordert Aufmerksamkeit",
+    "assets": "Vermögenswerte"
+  },
   "policy": {
     "basis": {
       "contract_term": "die Vertragslaufzeit",

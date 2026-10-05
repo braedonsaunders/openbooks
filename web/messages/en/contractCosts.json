@@ -18,6 +18,10 @@
     "noPolicy": "No policy is in effect. Create one in Setup before capitalizing.",
     "openPolicy": "Open the policy"
   },
+  "views": {
+    "attention": "Needs attention",
+    "assets": "Assets"
+  },
   "policy": {
     "basis": {
       "contract_term": "the contract term",
