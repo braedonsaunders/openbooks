@@ -5926,7 +5926,11 @@
       "addRetry": "Añadir reintento",
       "retryOffsetsHelp": "Días después de cada cobro fallido para volver a intentarlo. Al agotar la lista se aplica la acción final.",
       "finalAction": "Cuando se agotan los reintentos",
-      "finalActionHelp": "Suspender detiene la facturación pero mantiene el contrato; un pago posterior lo reanuda. Cancelar finaliza la suscripción."
+      "finalActionHelp": "Suspender detiene la facturación pero mantiene el contrato; un pago posterior lo reanuda. Cancelar finaliza la suscripción.",
+      "insufficientFundsOffsetsDays": "Reintento por fondos insuficientes (días)",
+      "insufficientFundsOffsetsHelp": "Días después de un rechazo por fondos insuficientes para reintentar, cerca de los días de pago habituales, cuando la cuenta probablemente tenga fondos.",
+      "expiryNoticeDays": "Aviso de vencimiento de tarjeta (días)",
+      "expiryNoticeHelp": "Cuántos días antes del vencimiento de una tarjeta guardada aparece en la cola para contactar al cliente con un enlace de reemplazo."
     },
     "storedValueProgramFields": {
       "description": "Configure dónde se registran los saldos no canjeados y cuándo vencen o se reconocen como ingreso por breakage.",

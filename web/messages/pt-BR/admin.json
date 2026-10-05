@@ -5926,7 +5926,11 @@
       "addRetry": "Adicionar tentativa",
       "retryOffsetsHelp": "Dias após cada cobrança com falha para tentar de novo. Ao esgotar a lista, aplica-se a ação final abaixo.",
       "finalAction": "Quando as tentativas se esgotarem",
-      "finalActionHelp": "Suspender interrompe o faturamento, mas mantém o contrato; um pagamento posterior o retoma. Cancelar encerra a assinatura."
+      "finalActionHelp": "Suspender interrompe o faturamento, mas mantém o contrato; um pagamento posterior o retoma. Cancelar encerra a assinatura.",
+      "insufficientFundsOffsetsDays": "Repetir por fundos insuficientes (dias)",
+      "insufficientFundsOffsetsHelp": "Dias após uma recusa por fundos insuficientes para tentar de novo — próximos aos dias de pagamento típicos, quando a conta provavelmente tem saldo.",
+      "expiryNoticeDays": "Aviso de vencimento do cartão (dias)",
+      "expiryNoticeHelp": "Quantos dias antes do vencimento de um cartão salvo ele aparece na fila para contato com um link de substituição."
     },
     "storedValueProgramFields": {
       "description": "Configure onde os saldos não resgatados ficam e quando expiram ou viram receita de breakage.",

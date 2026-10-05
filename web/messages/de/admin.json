@@ -5926,7 +5926,11 @@
       "addRetry": "Wiederholung hinzufügen",
       "retryOffsetsHelp": "Tage nach jeder fehlgeschlagenen Abbuchung bis zum nächsten Versuch. Nach dem letzten Eintrag gilt die untenstehende Endaktion.",
       "finalAction": "Wenn die Wiederholungen aufgebraucht sind",
-      "finalActionHelp": "Sperren stoppt die Abrechnung, der Vertrag bleibt bestehen; eine spätere erfolgreiche Zahlung setzt sie fort. Kündigen beendet das Abonnement."
+      "finalActionHelp": "Sperren stoppt die Abrechnung, der Vertrag bleibt bestehen; eine spätere erfolgreiche Zahlung setzt sie fort. Kündigen beendet das Abonnement.",
+      "insufficientFundsOffsetsDays": "Wiederholung bei knapper Deckung (Tage)",
+      "insufficientFundsOffsetsHelp": "Tage nach einer Ablehnung wegen unzureichender Deckung bis zum nächsten Versuch — gestaffelt um typische Zahltage, wenn das Konto am wahrscheinlichsten gedeckt ist.",
+      "expiryNoticeDays": "Kartenvorwarnung vor Ablauf (Tage)",
+      "expiryNoticeHelp": "Wie viele Tage vor Ablauf einer gespeicherten Karte sie zur Kontaktaufnahme mit einem Ersatz-Link in der Warteschlange erscheint."
     },
     "storedValueProgramFields": {
       "description": "Legen Sie fest, wo nicht eingelöste Guthaben geführt werden und wann sie verfallen oder als Breakage-Ertrag erfasst werden.",

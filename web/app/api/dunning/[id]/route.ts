@@ -11,7 +11,7 @@ import { isUuid } from "../../../../lib/list-params";
 import { isValidEmailAddress } from "@openbooks/emails";
 import { dunningStageIdentities } from '@/lib/dunning-stage-identity'
 import { notFound } from "@/lib/api/responses";
-import { autopayFieldError, normalizeFinalAction, normalizeRetryOffsets, requireAutopayWrite, retryOffsetsSql } from '../autopay-fields'
+import { autopayFieldError, normalizeExpiryNoticeDays, normalizeFinalAction, normalizeRetryOffsets, requireAutopayWrite, retryOffsetsSql } from '../autopay-fields'
 const stageSchema = z.object({
   id: z.string().uuid().optional(),
   sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
@@ -25,11 +25,14 @@ const PATCHBodySchema1 = z.object({
   minBalance: z.string().nullable().optional(), name: z.string().trim().min(1).optional(),
   replyTo: z.string().email().nullable().optional(), stages: z.array(stageSchema).optional(),
   retryOffsetsDays: z.array(z.unknown()).optional(),
+  insufficientFundsOffsetsDays: z.array(z.unknown()).optional(),
+  expiryNoticeDays: z.union([z.number().int(), z.string().regex(/^\d+$/), z.null()]).optional(),
   finalAction: z.string().nullable().optional(),
 }).refine((body) => body.name !== undefined || body.appliesToKind !== undefined ||
   body.gracePeriodDays !== undefined || body.isActive !== undefined || body.minBalance !== undefined ||
   body.replyTo !== undefined || body.stages !== undefined ||
-  body.retryOffsetsDays !== undefined || body.finalAction !== undefined, { message: "At least one field must be provided." });
+  body.retryOffsetsDays !== undefined || body.insufficientFundsOffsetsDays !== undefined ||
+  body.expiryNoticeDays !== undefined || body.finalAction !== undefined, { message: "At least one field must be provided." });
 
 
 
@@ -186,12 +189,19 @@ export const PATCH = defineRoute({
     // The autopay schedule moves money: it needs its own duty even though it
     // rides on this policy.
     let retryOffsets: number[] | undefined;
+    let insufficientFundsOffsets: number[] | undefined;
+    let expiryNoticeDays: number | undefined;
     let finalAction: 'none' | 'suspend' | 'cancel' | undefined;
-    if ("retryOffsetsDays" in body || "finalAction" in body) {
+    if ("retryOffsetsDays" in body || "insufficientFundsOffsetsDays" in body ||
+        "expiryNoticeDays" in body || "finalAction" in body) {
       const denied = await requireAutopayWrite(authz);
       if (denied) return denied;
       try {
         if ("retryOffsetsDays" in body) retryOffsets = normalizeRetryOffsets(body.retryOffsetsDays);
+        if ("insufficientFundsOffsetsDays" in body) insufficientFundsOffsets = normalizeRetryOffsets(body.insufficientFundsOffsetsDays);
+        if ("expiryNoticeDays" in body && body.expiryNoticeDays !== null) {
+          expiryNoticeDays = normalizeExpiryNoticeDays(typeof body.expiryNoticeDays === 'string' ? Number(body.expiryNoticeDays) : body.expiryNoticeDays);
+        }
         if ("finalAction" in body && body.finalAction !== null) finalAction = normalizeFinalAction(body.finalAction);
       } catch (e) {
         const refusal = autopayFieldError(e);
@@ -223,6 +233,8 @@ export const PATCH = defineRoute({
         if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
         if ("isActive" in body) sets.push(sql`is_active = ${body.isActive as boolean}`);
         if (retryOffsets !== undefined) sets.push(sql`autopay_retry_offsets_days = ${retryOffsetsSql(retryOffsets)}`);
+        if (insufficientFundsOffsets !== undefined) sets.push(sql`autopay_insufficient_funds_offsets_days = ${retryOffsetsSql(insufficientFundsOffsets)}`);
+        if (expiryNoticeDays !== undefined) sets.push(sql`autopay_expiry_notice_days = ${expiryNoticeDays}`);
         if (finalAction !== undefined) sets.push(sql`autopay_final_action = ${finalAction}`);
         let afterPolicy: Record<string, unknown> | undefined;
         if (sets.length || stages !== undefined) {

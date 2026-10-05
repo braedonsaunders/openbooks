@@ -53,7 +53,7 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     formSections: [
       { titleKey: 'collectionPolicyFields.details', fields: ['name', 'isActive'] },
       { titleKey: 'collectionPolicyFields.criteria', fields: ['gracePeriodDays', 'minBalance', 'replyTo'] },
-      { titleKey: 'collectionPolicyFields.autopay', fields: ['retryOffsetsDays', 'finalAction'] },
+      { titleKey: 'collectionPolicyFields.autopay', fields: ['retryOffsetsDays', 'insufficientFundsOffsetsDays', 'expiryNoticeDays', 'finalAction'] },
     ],
     columns: [
       { key: 'name', kind: 'text' }, { key: 'gracePeriodDays', labelKey: 'collectionPolicyFields.gracePeriodDays', kind: 'number' },
@@ -70,6 +70,13 @@ export const BILLING_ENTITIES: SetupEntity[] = [
         itemTitleKey: 'collectionPolicyFields.retryDay', itemTitleField: 'days', addLabelKey: 'collectionPolicyFields.addRetry', fields: [
         { key: 'days', labelKey: 'collectionPolicyFields.retryDay', kind: 'integer', required: true, min: 1, max: 90 },
       ] },
+      { key: 'insufficientFundsOffsetsDays', labelKey: 'collectionPolicyFields.insufficientFundsOffsetsDays', kind: 'objectArray',
+        helpTextKey: 'collectionPolicyFields.insufficientFundsOffsetsHelp',
+        itemTitleKey: 'collectionPolicyFields.retryDay', itemTitleField: 'days', addLabelKey: 'collectionPolicyFields.addRetry', fields: [
+        { key: 'days', labelKey: 'collectionPolicyFields.retryDay', kind: 'integer', required: true, min: 1, max: 90 },
+      ] },
+      { key: 'expiryNoticeDays', labelKey: 'collectionPolicyFields.expiryNoticeDays', kind: 'integer',
+        helpTextKey: 'collectionPolicyFields.expiryNoticeHelp', min: 1, max: 90, defaultValue: 30 },
       { key: 'finalAction', labelKey: 'collectionPolicyFields.finalAction', kind: 'select', defaultValue: 'none',
         helpTextKey: 'collectionPolicyFields.finalActionHelp', options: [
         { value: 'none', labelKey: 'options.autopayFinalAction.none' },

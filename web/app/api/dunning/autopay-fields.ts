@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import {
   AutopayError,
+  parseExpiryNoticeDays,
   parseFinalAction,
   parseRetryOffsetsDays,
 } from '@openbooks/engine/payments/autopay'
@@ -41,6 +42,14 @@ export function normalizeRetryOffsets(raw: unknown): number[] {
 
 export function normalizeFinalAction(raw: unknown): 'none' | 'suspend' | 'cancel' {
   return parseFinalAction(raw)
+}
+
+/**
+ * Normalize the pre-expiry outreach window (whole days, 1–90). Throws
+ * AutopayError naming the fix; the routes translate it to a 422.
+ */
+export function normalizeExpiryNoticeDays(raw: unknown): number {
+  return parseExpiryNoticeDays(raw)
 }
 
 /** SQL fragment for the integer[] column from a validated offset list. */

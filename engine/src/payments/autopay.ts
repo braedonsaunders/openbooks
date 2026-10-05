@@ -1684,6 +1684,7 @@ export interface ExpiringCard {
   methodId: string;
   partyId: string;
   partyName: string | null;
+  provider: AcceptanceProvider;
   brand: string | null;
   last4: string | null;
   expMonth: number;
@@ -1711,6 +1712,7 @@ export async function findCardsExpiringSoon(
       methodId: string;
       partyId: string;
       partyName: string | null;
+      provider: AcceptanceProvider;
       brand: string | null;
       last4: string | null;
       expMonth: number;
@@ -1718,7 +1720,7 @@ export async function findCardsExpiringSoon(
       expiresOn: string;
     }>(sql`
       select m.id as "methodId", m.party_id as "partyId", p.display_name as "partyName",
-             m.brand, m.last4, m.exp_month as "expMonth", m.exp_year as "expYear",
+             m.provider, m.brand, m.last4, m.exp_month as "expMonth", m.exp_year as "expYear",
              ((make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date)::text as "expiresOn"
         from customer_payment_methods m
         join parties p on p.id = m.party_id and p.org_id = m.org_id
@@ -1733,6 +1735,7 @@ export async function findCardsExpiringSoon(
       methodId: row.methodId,
       partyId: row.partyId,
       partyName: row.partyName,
+      provider: row.provider,
       brand: row.brand,
       last4: row.last4,
       expMonth: row.expMonth,

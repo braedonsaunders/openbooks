@@ -5926,7 +5926,11 @@
       "addRetry": "Add retry",
       "retryOffsetsHelp": "Days after each failed charge to try again. When the list runs out, the final action below applies.",
       "finalAction": "When retries run out",
-      "finalActionHelp": "Suspend stops billing but keeps the contract; a later successful payment resumes it. Cancel ends the subscription."
+      "finalActionHelp": "Suspend stops billing but keeps the contract; a later successful payment resumes it. Cancel ends the subscription.",
+      "insufficientFundsOffsetsDays": "Retry when funds are short (days)",
+      "insufficientFundsOffsetsHelp": "Days after an insufficient-funds decline to try again — spaced near typical paydays, when the account is most likely funded.",
+      "expiryNoticeDays": "Card expiry notice (days)",
+      "expiryNoticeHelp": "How many days before a stored card expires the queue lists it for outreach with a replacement link."
     },
     "storedValueProgramFields": {
       "description": "Configure where unredeemed balances sit and when they expire or become breakage revenue.",

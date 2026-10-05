@@ -13,6 +13,8 @@ export const runtime = 'nodejs'
 const policyBody = z.object({
   policyId: uuidId,
   retryOffsetsDays: z.array(z.number()),
+  insufficientFundsOffsetsDays: z.array(z.number()).optional(),
+  expiryNoticeDays: z.number().int().optional(),
   finalAction: z.enum(['none', 'suspend', 'cancel']),
 })
 
@@ -29,6 +31,8 @@ export const POST = defineRoute({
       const policy = await saveAutopayPolicy(authz.user.orgId, {
         policyId: body.policyId,
         retryOffsetsDays: body.retryOffsetsDays,
+        insufficientFundsOffsetsDays: body.insufficientFundsOffsetsDays,
+        expiryNoticeDays: body.expiryNoticeDays,
         finalAction: body.finalAction,
         actorId: authz.user.id,
       })

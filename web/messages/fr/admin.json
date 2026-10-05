@@ -5926,7 +5926,11 @@
       "addRetry": "Ajouter une relance",
       "retryOffsetsHelp": "Jours après chaque prélèvement échoué avant de réessayer. Une fois la liste épuisée, l’action finale ci-dessous s’applique.",
       "finalAction": "Quand les relances sont épuisées",
-      "finalActionHelp": "Suspendre arrête la facturation mais conserve le contrat ; un paiement ultérieur le reprend. Résilier met fin à l’abonnement."
+      "finalActionHelp": "Suspendre arrête la facturation mais conserve le contrat ; un paiement ultérieur le reprend. Résilier met fin à l’abonnement.",
+      "insufficientFundsOffsetsDays": "Nouvelle tentative en cas de fonds insuffisants (jours)",
+      "insufficientFundsOffsetsHelp": "Jours après un refus pour fonds insuffisants avant de réessayer — espacés autour des jours de paie habituels, quand le compte est le plus susceptible d'être approvisionné.",
+      "expiryNoticeDays": "Préavis d'expiration de carte (jours)",
+      "expiryNoticeHelp": "Combien de jours avant l'expiration d'une carte enregistrée elle apparaît dans la file pour un rappel avec un lien de remplacement."
     },
     "storedValueProgramFields": {
       "description": "Configurez où sont suivis les soldes non utilisés et quand ils expirent ou deviennent des produits de breakage.",
