@@ -239,6 +239,7 @@
   "kit": {
     "tab": "構成品",
     "loading": "キットのレシピを読み込み中…",
+    "availabilityLoading": "在庫状況を読み込み中…",
     "loadFailed": "キットのレシピを読み込めませんでした。",
     "noRecipeSummary": "レシピがまだありません。構成品を追加するまで販売できません。",
     "recipeSummary": "{count}点セット：{parts}",

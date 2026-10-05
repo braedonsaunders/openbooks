@@ -362,6 +362,7 @@
   "kit": {
     "tab": "Components",
     "loading": "Loading the kit recipe…",
+    "availabilityLoading": "Loading availability…",
     "loadFailed": "The kit recipe could not be loaded.",
     "noRecipeSummary": "No recipe yet — the kit cannot be sold until it has components.",
     "recipeSummary": "Bundle of {count}: {parts}",

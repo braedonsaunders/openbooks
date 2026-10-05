@@ -239,6 +239,7 @@
   "kit": {
     "tab": "Componentes",
     "loading": "Carregando a receita do kit…",
+    "availabilityLoading": "Carregando a disponibilidade…",
     "loadFailed": "Não foi possível carregar a receita do kit.",
     "noRecipeSummary": "Ainda sem receita — o kit não pode ser vendido até ter componentes.",
     "recipeSummary": "Pacote de {count}: {parts}",

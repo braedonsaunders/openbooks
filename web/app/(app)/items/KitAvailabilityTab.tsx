@@ -102,7 +102,7 @@ export function KitAvailabilityTab({ itemId }: { itemId: string }) {
   )
 
   if (loading) {
-    return <p role="status" className="py-4 text-sm text-slate-600 dark:text-slate-300">{t('kit.loading')}</p>
+    return <p role="status" className="py-4 text-sm text-slate-600 dark:text-slate-300">{t('kit.availabilityLoading')}</p>
   }
   if (loadError || !availability) {
     return (
