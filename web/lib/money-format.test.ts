@@ -3,7 +3,8 @@ import { globSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createMoneyFormatter, formatDecimal, minorToMajorText, minorToMajorTextUnits } from './money-format.ts'
+import { createMoneyFormatter, formatDecimal, minorToMajorText, minorToMajorTextUnits, tryMinorToMajorTextUnits } from './money-format.ts'
+import { minorToMajor } from './setup/money-fields.ts'
 import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -69,6 +70,13 @@ test('registry precision converts per currency without guessing hundredths', () 
   assert.equal(minorToMajorTextUnits('5', 0), '5')
 })
 
+test('registry conversion reuses the shared setup primitive', () => {
+  for (const [minor, units] of [['10450', 2], ['1234', 3], ['1234', 0], ['-250', 3], ['5', 4]] as const) {
+    assert.equal(minorToMajorTextUnits(minor, units), minorToMajor(minor, units))
+  }
+  assert.equal(minorToMajorText('10450'), minorToMajor('10450', 2))
+})
+
 test('unknown currency precision refuses by name with the remedy', () => {
   for (const units of [Number.NaN, 1.5, -1, 5]) {
     assert.throws(() => minorToMajorTextUnits('100', units), /unsupported currency precision/)
@@ -77,6 +85,32 @@ test('unknown currency precision refuses by name with the remedy', () => {
     () => minorToMajorTextUnits('100', Number.NaN),
     /Setup → Currencies/,
   )
+  assert.throws(() => minorToMajorTextUnits('100', Number.NaN, 'bhd'), /BHD/)
+})
+
+test('malformed stored amounts refuse with the replay remedy', () => {
+  assert.throws(() => minorToMajorTextUnits('12x', 2, 'USD'), /unreadable minor-unit amount "12x"/)
+  assert.throws(() => minorToMajorTextUnits('12x', 2, 'USD'), /replay/)
+})
+
+test('display conversion returns null instead of guessing or throwing', () => {
+  // Valid registry precisions convert, including the 0..4 edges.
+  assert.equal(tryMinorToMajorTextUnits('10450', 2), '104.50')
+  assert.equal(tryMinorToMajorTextUnits('1234', 0), '1234')
+  // Missing, out-of-range, or non-numeric precision refuses as null: the
+  // caller renders its named notice for the currency.
+  assert.equal(tryMinorToMajorTextUnits('100', null), null)
+  assert.equal(tryMinorToMajorTextUnits('100', undefined), null)
+  assert.equal(tryMinorToMajorTextUnits('100', Number.NaN), null)
+  assert.equal(tryMinorToMajorTextUnits('100', 1.5), null)
+  assert.equal(tryMinorToMajorTextUnits('100', -1), null)
+  assert.equal(tryMinorToMajorTextUnits('100', 5), null)
+  assert.equal(tryMinorToMajorTextUnits('100', '2'), null)
+  // Missing or malformed discount totals never become a zero-value success.
+  assert.equal(tryMinorToMajorTextUnits(undefined, 2), null)
+  assert.equal(tryMinorToMajorTextUnits(null, 2), null)
+  assert.equal(tryMinorToMajorTextUnits('', 2), null)
+  assert.equal(tryMinorToMajorTextUnits('12x', 2), null)
 })
 
 test('decimal strings never cross the binary floating-point boundary', () => {
