@@ -279,6 +279,11 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   { table: "crm_opportunities", reason: "CRM remit; account counterparty." },
   { table: "revenue_contracts", reason: "commercial contracts; customer counterparty." },
+  {
+    table: "contract_cost_assets",
+    reason:
+      "capitalized sales costs; the customer is a counterparty and the sales-rep link is commission attribution in the finance record, not HR file data.",
+  },
   { table: "saas_metrics_monthly", reason: "derived revenue metrics; customer counterparty." },
   { table: "usage_records", reason: "usage evidence; customer counterparty." },
   { table: "subcontracts", reason: "vendor remit." },

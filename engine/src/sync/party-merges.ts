@@ -69,6 +69,11 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["compliance_release_checks", "party_id"],
   ["compliance_waivers", "party_id"],
   ["contacts", "party_id"],
+  // Capitalized contract costs follow the surviving party wholesale: the
+  // rep and the customer are counterparty references, and uniqueness on
+  // the asset table is id-only, so re-pointing cannot collide.
+  ["contract_cost_assets", "customer_party_id"],
+  ["contract_cost_assets", "rep_party_id"],
   ["crm_opportunities", "party_id"],
   ["customer_roles", "sales_rep_id"],
   ["document_lines", "employee_id"],

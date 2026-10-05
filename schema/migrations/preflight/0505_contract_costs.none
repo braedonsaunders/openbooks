@@ -1,0 +1,3 @@
+New tables only (contract_cost_policies, contract_cost_assets,
+contract_cost_amortization). No existing tenant rows are read, rewritten or
+deleted, so there is nothing to probe.

@@ -42,6 +42,7 @@ export * from "./api";
 export * from "./custom-records";
 export * from "./scheduler-outbox";
 export * from "./saas-metrics";
+export * from "./contract-costs";
 export * from "./insights";
 export * from "./views";
 export * from "./file-cabinet";
