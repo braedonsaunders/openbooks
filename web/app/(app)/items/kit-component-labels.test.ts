@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { componentLabel, effectiveWindowKind, isComponentIdentityMissing, strictIsCurrent } from './kit-component-labels'
+import { componentLabel, effectiveWindowKind, isComponentIdentityMissing, strictIsCurrent, trimKitQty } from './kit-component-labels'
 
 test('a component with code and name reads as code then name', () => {
   assert.equal(
@@ -49,4 +49,10 @@ test('only a real boolean counts as current: missing metadata refuses', () => {
   assert.equal(strictIsCurrent(null), null)
   assert.equal(strictIsCurrent('yes'), null)
   assert.equal(strictIsCurrent(1), null)
+})
+
+test('ledger decimals trim for display without touching stored scale', () => {
+  assert.equal(trimKitQty('12.5000'), '12.5')
+  assert.equal(trimKitQty('7'), '7')
+  assert.equal(trimKitQty('3.000'), '3')
 })
