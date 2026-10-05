@@ -1140,6 +1140,42 @@ const INVENTORY_MOVEMENT: RecordTypeMeta = {
   ],
 };
 
+const DEMAND_SUGGESTION: RecordTypeMeta = {
+  key: "demand_suggestion",
+  labelKey: "customization.recordTypes.demand_suggestion",
+  category: "entity",
+  featureKey: "demandPlanning",
+  supportsForms: false,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "item_name", labelKey: "planning.columns.item", kind: "reference", sortable: true, sortKey: "item", locked: true },
+    { key: "location_code", labelKey: "planning.columns.location", kind: "text", sortable: true, sortKey: "location" },
+    { key: "subsidiary_name", labelKey: "common.labels.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary" },
+    { key: "action", labelKey: "planning.columns.action", kind: "status", sortable: true, sortKey: "action" },
+    { key: "quantity", labelKey: "planning.columns.quantity", kind: "text", sortable: true, sortKey: "quantity" },
+    { key: "supplier_name", labelKey: "planning.columns.supplier", kind: "text", sortable: true, sortKey: "supplier" },
+    { key: "due_date", labelKey: "planning.columns.due", kind: "date", sortable: true, sortKey: "due" },
+    { key: "days_of_cover", labelKey: "planning.columns.cover", kind: "text", sortable: true, sortKey: "cover" },
+    { key: "trend", labelKey: "planning.columns.trend", kind: "text", sortable: false },
+    { key: "status", labelKey: "planning.columns.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "forecast_qty", labelKey: "planning.columns.forecast", kind: "text", sortable: false, defaultHidden: true },
+    { key: "projected_supply", labelKey: "planning.columns.supply", kind: "text", sortable: false, defaultHidden: true },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "planning.columns.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["suggested", "confirmed", "converted", "dismissed"].map((value) => ({ value, labelKey: `planning.status.${value}` })),
+    },
+    {
+      key: "action", labelKey: "planning.columns.action", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["buy", "transfer"].map((value) => ({ value, labelKey: `planning.actions.${value}` })),
+    },
+    { key: "item_id", labelKey: "planning.columns.item", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "item" },
+    { key: "stock_location_id", labelKey: "planning.columns.location", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "stock_location" },
+  ],
+};
+
 const BUDGET_SCENARIO: RecordTypeMeta = {
   key: "budget_scenario",
   labelKey: "customization.recordTypes.budget_scenario",
@@ -2620,6 +2656,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   BANK_TRANSACTION,
   INVENTORY_ONHAND,
   INVENTORY_MOVEMENT,
+  DEMAND_SUGGESTION,
   WEBHOOK_ENDPOINT,
   BUDGET_SCENARIO,
   HRM_PROCESS_TEMPLATE,

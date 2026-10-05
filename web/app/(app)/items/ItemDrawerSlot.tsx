@@ -2,10 +2,14 @@ import 'server-only'
 
 import type { ComponentProps } from 'react'
 import { getTranslations } from 'next-intl/server'
-import { can, getAuthz } from '../../../lib/authz'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/platform/database'
+import { can, getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled, resolvedFeatureState } from '../../../lib/features'
 import { setupChildEntities, resolveSetupEntityGate } from '../../../lib/setup/registry'
 import { pickString } from '../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { partyOptions } from '../../../lib/documents'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
 import { ItemVariantsTab } from './ItemVariantsTab'
@@ -13,6 +17,51 @@ import { KitComponentsTab } from './KitComponentsTab'
 import { externalLinkUnlinkColumn } from '../channels/external-links-column'
 import { listLinksByNative } from '@openbooks/engine/src/commerce/external-links.ts'
 import { withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { PlanningTab } from '../inventory/planning/PlanningTab'
+
+/**
+ * A stocked item's Planning tab: days of cover, the next suggestion and the
+ * planning policy beside them. Rides both drawer paths like the kit tab —
+ * planners read cover without the setup grant, and only inventory.plan
+ * holders may save the policy.
+ */
+async function itemPlanningTab(
+  authz: Authz,
+  props: ComponentProps<typeof ItemDrawer>,
+  sp: Record<string, string | string[] | undefined>,
+) {
+  if (props.createMode) return null
+  if (!(await isFeatureEnabled(authz.user.orgId, 'demandPlanning'))) return null
+  const itemId = String(props.payload.item.id)
+  const stocked = (await db.execute<{ id: string }>(sql`
+    select item_id as id from item_inventory_profiles
+     where org_id = ${authz.user.orgId} and item_id = ${itemId} limit 1`)).rows[0]
+  if (!stocked) return null
+  if (pickString(sp.itemSetup) !== 'planning') {
+    const t = await getTranslations('planning')
+    return { key: 'planning', label: t('itemTab.title'), content: null }
+  }
+  const t = await getTranslations('planning')
+  const subsidiaries = (await db.execute<{ id: string }>(sql`
+    select s.id from subsidiaries s
+     where s.org_id = ${authz.user.orgId} and s.is_active and not s.is_elimination
+       ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
+     order by s.name limit 1`)).rows
+  if (subsidiaries.length === 0) return null
+  const vendors = await partyOptions('vendor', authz.user.orgId, authz.allowedSubsidiaryIds)
+  return {
+    key: 'planning',
+    label: t('itemTab.title'),
+    content: (
+      <PlanningTab
+        itemId={itemId}
+        subsidiaryId={subsidiaries[0]!.id}
+        canManage={can(authz, 'inventory.plan')}
+        vendors={vendors.map((vendor) => ({ id: vendor.id, name: vendor.label ?? vendor.id }))}
+      />
+    ),
+  }
+}
 
 /** Item-owned configuration uses the same scoped list and drawer as setup records. */
 export async function ItemDrawerSlot({ drawer, sp }: {
@@ -24,10 +73,14 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   const authz = await getAuthz()
   if (!authz || !can(authz, 'items.read')) return null
   // A kit's Components tab is operational, not setup: operators without the
-  // setup grant pick and sell kits, so it rides both drawer paths.
+  // setup grant pick and sell kits, so it rides both drawer paths. Planning
+  // is operational the same way: a stocked item's cover and policy belong
+  // to the planner, not to setup administration.
   const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'items.manage'), props, sp)
+  const planningTab = await itemPlanningTab(authz, props, sp)
+  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(planningTab ? [planningTab] : [])]
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
-    return <ItemDrawer key={remountKey} {...props} recordTabs={kitTab ? [kitTab] : []} />
+    return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} />
   }
   const features = await resolvedFeatureState(authz.user.orgId)
   const [t, tFamilies] = await Promise.all([getTranslations('admin.setup'), getTranslations('items.families')])
@@ -57,7 +110,7 @@ export async function ItemDrawerSlot({ drawer, sp }: {
     : new Set<string>()
   const canUnlinkExternal = showExternalLinks && can(authz, 'channels.manage')
   const recordTabs = [
-    ...(kitTab ? [kitTab] : []),
+    ...operationalTabs,
     ...variantsTab,
     ...setupChildEntities('items')
       .filter((entity) => resolveSetupEntityGate(entity, features).enabled)

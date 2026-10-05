@@ -29,6 +29,7 @@
     "item_family": "Famille de produits",
     "account": "Compte",
     "bank_transaction": "Opération bancaire",
+    "demand_suggestion": "Suggestion de planification",
     "inventory_onhand": "Stock disponible",
     "inventory_movement": "Mouvement de stock",
     "webhook_endpoint": "Destinataire de webhook",

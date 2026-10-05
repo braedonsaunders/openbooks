@@ -1708,6 +1708,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/inventory/planning': {
+    route: '/inventory/planning',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/inventory/planning/view')
+      return {
+        load: (input) => m.loadPlanning(input.searchParams ?? {}),
+        spec: (data) => m.planningSpec(data as never),
+      }
+    },
+  },
   '/items': {
     route: '/items',
     segments: [],

@@ -13,7 +13,8 @@
     "movements": "Bewegungen",
     "locations": "Lagerorte",
     "bom": "Stückliste",
-    "counts": "Zählungen"
+    "counts": "Zählungen",
+    "planning": "Planung"
   },
   "bom": {
     "columns": {

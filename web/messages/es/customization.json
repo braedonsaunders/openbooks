@@ -29,6 +29,7 @@
     "item_family": "Familia de productos",
     "account": "Cuenta",
     "bank_transaction": "Transacción bancaria",
+    "demand_suggestion": "Sugerencia de planificación",
     "inventory_onhand": "Inventario disponible",
     "inventory_movement": "Movimiento de inventario",
     "webhook_endpoint": "Extremo de webhook",

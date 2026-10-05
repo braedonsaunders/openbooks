@@ -36,6 +36,8 @@ import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
 import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
 import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
 import Link from 'next/link'
+import { DemandPlanActions } from '../../app/(app)/inventory/planning/DemandPlanActions'
+import { DemandSuggestionDrawer } from '../../app/(app)/inventory/planning/DemandSuggestionDrawer'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Commerce adapters. Compose native components without changing their props or boundaries. */
@@ -352,6 +354,32 @@ export const COMMERCE_WIDGETS = {
     const issue = props.issue as ComponentProps<typeof StoredValueIssueDrawer>['issue'] | null
     if (!issue) return null
     return <StoredValueIssueDrawer issue={issue} />
+  },
+  /* --- demand planning ------------------------------------------------------ */
+  /** Header remedies for the planning work queue: run, confirm-all and
+   *  grouped purchase-order creation are client state over the planning API. */
+  'demand-plan-actions': (props) => (
+    <DemandPlanActions
+      subsidiaryId={str(props, 'subsidiaryId') ?? ''}
+      subsidiaries={(props.subsidiaries as ComponentProps<typeof DemandPlanActions>['subsidiaries']) ?? []}
+    />
+  ),
+  /** One suggestion's shell: chart, explanation and its confirm / dismiss /
+   *  convert step, fetched client-side so the shell survives loading,
+   *  refusal and retry without remounting. */
+  'demand-suggestion-drawer': (props) => {
+    const suggestionId = str(props, 'suggestionId')
+    if (!suggestionId) return null
+    return (
+      <DemandSuggestionDrawer
+        key={suggestionId}
+        suggestionId={suggestionId}
+        closeHref={str(props, 'closeHref') ?? '/inventory/planning'}
+        vendors={(props.vendors as ComponentProps<typeof DemandSuggestionDrawer>['vendors']) ?? []}
+        locations={(props.locations as ComponentProps<typeof DemandSuggestionDrawer>['locations']) ?? []}
+        locale={str(props, 'locale') ?? 'en'}
+      />
+    )
   },
 
   /* --- projects ----------------------------------------------------------- */

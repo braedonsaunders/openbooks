@@ -13,7 +13,8 @@
     "movements": "Movimentações",
     "locations": "Locais de estoque",
     "bom": "Lista de materiais",
-    "counts": "Contagens"
+    "counts": "Contagens",
+    "planning": "Planejamento"
   },
   "bom": {
     "columns": {
