@@ -2,7 +2,7 @@
   "list": {
     "title": "Itens e Serviços",
     "description": "O catálogo por trás de cada linha de documento — serviços, mão de obra, encargos e descontos.",
-    "searchPlaceholder": "Buscar nome, código, categoria…",
+    "searchPlaceholder": "Buscar nome, código, categoria, família…",
     "kindFilter": "Tipo",
     "emptyTitle": "Nenhum item ainda",
     "emptyDescription": "Adicione o primeiro serviço, mão de obra ou encargo para iniciar o catálogo.",
@@ -10,7 +10,8 @@
     "createDraftFailed": "Não foi possível criar um item rascunho",
     "view": "Visão",
     "viewCatalog": "Catálogo",
-    "viewRateBooks": "Tabelas de preços"
+    "viewRateBooks": "Tabelas de preços",
+    "viewFamilies": "Famílias"
   },
   "labels": {
     "code": "Código",
@@ -23,7 +24,8 @@
     "incomeAccount": "Conta de receita",
     "expenseAccount": "Conta de despesa",
     "payrollCostingAccount": "Conta de custo de folha",
-    "taxCode": "Código de imposto"
+    "taxCode": "Código de imposto",
+    "family": "Família"
   },
   "kinds": {
     "service": "Serviço",
@@ -272,5 +274,101 @@
     "effectiveTo": "Vigente até",
     "empty": "Ainda sem preços de valor justo — o SSP único acima é usado.",
     "confirmDelete": "Remover este preço de valor justo?"
+  },
+  "families": {
+    "title": "Famílias de produtos",
+    "description": "Uma linha por matriz de opções — tamanhos e cores que vendem como itens individuais.",
+    "empty": "Ainda não há famílias de produtos",
+    "newFamily": "Nova família",
+    "drawerTitle": "Família de produtos",
+    "created": "Família criada",
+    "creating": "Criando…",
+    "create": "Criar família",
+    "createHint": "Descreva o produto uma vez, adicione suas opções e gere cada combinação como seu próprio item.",
+    "loadFailed": "Não foi possível carregar esta família",
+    "notFound": "Esta família não pertence a esta organização",
+    "summary": "{options} opções · {variants} variações",
+    "fields": {
+      "code": "Código da família",
+      "status": "Status"
+    },
+    "variants": {
+      "title": "Variações",
+      "description": "Cada combinação vende, estoca e precifica como seu próprio item. Edite preço ou código de barras inline, ou selecione linhas para alterações em massa."
+    },
+    "grid": {
+      "code": "Código",
+      "price": "Preço",
+      "cost": "Custo",
+      "barcode": "Código de barras",
+      "onHand": "Em estoque",
+      "empty": "Ainda não há variações — gere as combinações faltantes para preencher esta matriz.",
+      "selected": "{count} selecionadas",
+      "setPrice": "Definir preço",
+      "setCost": "Definir custo",
+      "setBarcode": "Definir código",
+      "activate": "Ativar",
+      "deactivate": "Desativar",
+      "activateTitle": "Ativar {count} variações?",
+      "deactivateTitle": "Desativar {count} variações?",
+      "activateBody": "Elas voltam a ficar disponíveis nos documentos.",
+      "deactivateBody": "Elas permanecem no histórico, mas não podem mais ser vendidas.",
+      "bulkSaved": "{count} variações atualizadas",
+      "priceFor": "Preço de {name}",
+      "barcodeFor": "Código de {name}"
+    },
+    "generate": {
+      "action": "Gerar variações faltantes",
+      "working": "Gerando…",
+      "nothingMissing": "Cada combinação já existe",
+      "confirmTitle": "Criar {count} variações?",
+      "confirmBody": "Primeiros códigos: {sample}. Os códigos nunca são renomeados depois.",
+      "confirm": "Gerar",
+      "done": "{count} variações criadas"
+    },
+    "options": {
+      "title": "Opções",
+      "description": "A matriz de opções da qual cada variação é construída. A ordem define a ordem de códigos e nomes.",
+      "empty": "Ainda não há opções",
+      "emptyHint": "Adicione a primeira opção, por exemplo Tamanho com P, M, G.",
+      "addOption": "Adicionar opção",
+      "namePlaceholder": "Nome da opção, ex. Tamanho",
+      "nameLabel": "Nome da opção {position}",
+      "position": "Opção {position}",
+      "removeOption": "Remover opção {name}",
+      "unnamed": "opção sem nome",
+      "valuesLabel": "Valores de {name}",
+      "valuesPlaceholder": "Digite um valor e pressione Enter",
+      "saveOptions": "Salvar opções",
+      "saving": "Salvando…",
+      "saved": "Opções salvas",
+      "renameTitle": "Renomear {from} para {to}?",
+      "renameBody": "{count} nomes de variação são atualizados; os códigos permanecem.",
+      "renameConfirm": "Renomear"
+    },
+    "defaults": {
+      "title": "Padrões da família",
+      "summary": "{kind} · {rate} por {unit}",
+      "noRate": "sem preço",
+      "noUnit": "unidade",
+      "description": "Novas variações herdam estes valores. Alterá-los nunca reescreve as variações existentes.",
+      "save": "Salvar padrões",
+      "saving": "Salvando…",
+      "saved": "Padrões salvos"
+    },
+    "itemTab": {
+      "title": "Variações",
+      "openFamily": "Abrir família",
+      "loadFailed": "Não foi possível carregar as variações",
+      "siblingCount": "{count} em {family}"
+    },
+    "convert": {
+      "action": "Converter em família",
+      "optionTitle": "Qual opção este item carrega?",
+      "optionLabel": "Nome da opção",
+      "valueTitle": "Qual {option} é este item?",
+      "valueLabel": "Valor da opção",
+      "done": "Família {family} criada"
+    }
   }
 }

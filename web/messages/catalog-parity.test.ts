@@ -2975,6 +2975,13 @@ const COGNATES = new Set<string>([
   'de:items.costing.methods.fifo|FIFO',
   'de:items.drawer.codePlaceholder|SVC-01',
   'de:items.labels.code|Code',
+  // Product families: Code, Barcode, Status and Option are identical German
+  // spellings; "{count} in {family}" reads the same in German.
+  'de:items.families.fields.status|Status',
+  'de:items.families.grid.barcode|Barcode',
+  'de:items.families.grid.code|Code',
+  'de:items.families.itemTab.siblingCount|{count} in {family}',
+  'de:items.families.options.position|Option {position}',
   'de:items.revrec.allocationOptions.normal|Normal',
   'es:items.drawer.codePlaceholder|SVC-01',
   'es:items.kinds.kit|Kit',
@@ -2986,12 +2993,18 @@ const COGNATES = new Set<string>([
   'fr:items.kinds.absence|Absence',
   'fr:items.kinds.service|Service',
   'fr:items.labels.code|Code',
+  // Product families: Code, Options and Option are identical French spellings.
+  'fr:items.families.grid.code|Code',
+  'fr:items.families.options.position|Option {position}',
+  'fr:items.families.options.title|Options',
   'fr:items.rates.documentation|Documentation',
   'fr:items.rates.tierAuto|auto',
   'ja:items.drawer.codePlaceholder|SVC-01',
   'pt-BR:items.costing.methods.fifo|FIFO',
   'pt-BR:items.drawer.codePlaceholder|SVC-01',
   'pt-BR:items.kinds.kit|Kit',
+  // Product families: Status is the established Brazilian Portuguese loanword.
+  'pt-BR:items.families.fields.status|Status',
   'pt-BR:items.revrec.allocationOptions.normal|Normal',
   'pt-BR:items.revrec.allocationOptions.software|Software (residual)',
   'zh:items.drawer.codePlaceholder|SVC-01',

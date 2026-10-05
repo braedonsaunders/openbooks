@@ -2,7 +2,7 @@
   "list": {
     "title": "品目とサービス",
     "description": "すべての書類明細の基となるカタログ — サービス、労務、料金、値引き。",
-    "searchPlaceholder": "名称、コード、カテゴリを検索…",
+    "searchPlaceholder": "名称、コード、カテゴリ、ファミリーを検索…",
     "kindFilter": "種別",
     "emptyTitle": "品目はまだありません",
     "emptyDescription": "最初のサービス、労務、または料金を追加してカタログを開始します。",
@@ -10,7 +10,8 @@
     "createDraftFailed": "下書き品目を作成できませんでした",
     "view": "表示",
     "viewCatalog": "カタログ",
-    "viewRateBooks": "料金表"
+    "viewRateBooks": "料金表",
+    "viewFamilies": "ファミリー"
   },
   "labels": {
     "code": "コード",
@@ -23,7 +24,8 @@
     "incomeAccount": "収益勘定",
     "expenseAccount": "費用勘定",
     "payrollCostingAccount": "給与原価勘定",
-    "taxCode": "税コード"
+    "taxCode": "税コード",
+    "family": "ファミリー"
   },
   "kinds": {
     "service": "サービス",
@@ -272,5 +274,101 @@
     "effectiveTo": "適用終了日",
     "empty": "公正価値単価はまだありません — 上の単一SSPを使用します。",
     "confirmDelete": "この公正価値単価を削除しますか？"
+  },
+  "families": {
+    "title": "商品ファミリー",
+    "description": "オプションマトリクスごとに1行 — サイズや色を独立した品目として販売します。",
+    "empty": "商品ファミリーはまだありません",
+    "newFamily": "新規ファミリー",
+    "drawerTitle": "商品ファミリー",
+    "created": "ファミリーを作成しました",
+    "creating": "作成中…",
+    "create": "ファミリーを作成",
+    "createHint": "商品を一度だけ説明し、オプションを追加して、各組み合わせを独立した品目として生成します。",
+    "loadFailed": "このファミリーを読み込めませんでした",
+    "notFound": "このファミリーはこの組織にありません",
+    "summary": "オプション{options}件 · バリエーション{variants}件",
+    "fields": {
+      "code": "ファミリーコード",
+      "status": "ステータス"
+    },
+    "variants": {
+      "title": "バリエーション",
+      "description": "各組み合わせは独立した品目として販売・在庫・価格管理されます。価格やバーコードを直接編集するか、行を選択して一括変更します。"
+    },
+    "grid": {
+      "code": "コード",
+      "price": "価格",
+      "cost": "原価",
+      "barcode": "バーコード",
+      "onHand": "在庫数",
+      "empty": "バリエーションはまだありません — 不足する組み合わせを生成してマトリクスを埋めます。",
+      "selected": "{count}件選択中",
+      "setPrice": "価格を設定",
+      "setCost": "原価を設定",
+      "setBarcode": "バーコードを設定",
+      "activate": "有効化",
+      "deactivate": "無効化",
+      "activateTitle": "{count}件のバリエーションを有効化しますか？",
+      "deactivateTitle": "{count}件のバリエーションを無効化しますか？",
+      "activateBody": "伝票で再び利用可能になります。",
+      "deactivateBody": "履歴には残りますが、販売できなくなります。",
+      "bulkSaved": "{count}件のバリエーションを更新しました",
+      "priceFor": "{name}の価格",
+      "barcodeFor": "{name}のバーコード"
+    },
+    "generate": {
+      "action": "不足バリエーションを生成",
+      "working": "生成中…",
+      "nothingMissing": "すべての組み合わせが存在します",
+      "confirmTitle": "{count}件のバリエーションを作成しますか？",
+      "confirmBody": "先頭コード: {sample}。コードは後から変更されません。",
+      "confirm": "生成",
+      "done": "{count}件のバリエーションを作成しました"
+    },
+    "options": {
+      "title": "オプション",
+      "description": "各バリエーションの元になるオプションマトリクス。順序がコードと名称の順序になります。",
+      "empty": "オプションはまだありません",
+      "emptyHint": "最初のオプションを追加します。例: サイズ (S、M、L)。",
+      "addOption": "オプションを追加",
+      "namePlaceholder": "オプション名 (例: サイズ)",
+      "nameLabel": "オプション{position}の名称",
+      "position": "オプション{position}",
+      "removeOption": "オプション{name}を削除",
+      "unnamed": "名称未設定のオプション",
+      "valuesLabel": "{name}の値",
+      "valuesPlaceholder": "値を入力してEnter",
+      "saveOptions": "オプションを保存",
+      "saving": "保存中…",
+      "saved": "オプションを保存しました",
+      "renameTitle": "{from}を{to}に変更しますか？",
+      "renameBody": "{count}件のバリエーション名が更新されます。コードは変わりません。",
+      "renameConfirm": "変更"
+    },
+    "defaults": {
+      "title": "ファミリーの既定値",
+      "summary": "{kind} · {unit}あたり{rate}",
+      "noRate": "価格なし",
+      "noUnit": "単位",
+      "description": "新しいバリエーションはこれらを継承します。変更しても既存バリエーションは書き換えられません。",
+      "save": "既定値を保存",
+      "saving": "保存中…",
+      "saved": "既定値を保存しました"
+    },
+    "itemTab": {
+      "title": "バリエーション",
+      "openFamily": "ファミリーを開く",
+      "loadFailed": "バリエーションを読み込めませんでした",
+      "siblingCount": "{family}に{count}件"
+    },
+    "convert": {
+      "action": "ファミリーに変換",
+      "optionTitle": "この品目が持つオプションは？",
+      "optionLabel": "オプション名",
+      "valueTitle": "この品目はどの{option}ですか？",
+      "valueLabel": "オプション値",
+      "done": "ファミリー{family}を作成しました"
+    }
   }
 }

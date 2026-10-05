@@ -21,6 +21,7 @@
     "opportunity": "商机",
     "activity": "活动",
     "item": "物料",
+    "item_family": "产品系列",
     "account": "科目",
     "bank_transaction": "银行交易",
     "inventory_onhand": "现有库存",

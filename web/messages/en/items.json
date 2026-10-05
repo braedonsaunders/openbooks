@@ -2,7 +2,7 @@
   "list": {
     "title": "Items & Services",
     "description": "The catalog behind every document line — services, labor, charges, and discounts.",
-    "searchPlaceholder": "Search name, code, category…",
+    "searchPlaceholder": "Search name, code, category, family…",
     "kindFilter": "Kind",
     "emptyTitle": "No items yet",
     "emptyDescription": "Add the first service, labor, or charge to start the catalog.",
@@ -10,7 +10,8 @@
     "createDraftFailed": "Could not create a draft item",
     "view": "View",
     "viewCatalog": "Catalog",
-    "viewRateBooks": "Rate books"
+    "viewRateBooks": "Rate books",
+    "viewFamilies": "Families"
   },
   "labels": {
     "code": "Code",
@@ -23,7 +24,8 @@
     "incomeAccount": "Income account",
     "expenseAccount": "Expense account",
     "payrollCostingAccount": "Payroll costing account",
-    "taxCode": "Tax code"
+    "taxCode": "Tax code",
+    "family": "Family"
   },
   "kinds": {
     "service": "Service",
@@ -326,5 +328,101 @@
     "onHand": "On hand",
     "committed": "Committed",
     "available": "Available"
+  },
+  "families": {
+    "title": "Product families",
+    "description": "One row per option matrix — sizes and colors that sell as individual items.",
+    "empty": "No product families yet",
+    "newFamily": "New family",
+    "drawerTitle": "Product family",
+    "created": "Family created",
+    "creating": "Creating…",
+    "create": "Create family",
+    "createHint": "Describe the product once, add its options, and generate every combination as its own item.",
+    "loadFailed": "Could not load this family",
+    "notFound": "This family is not in this organization",
+    "summary": "{options} options · {variants} variants",
+    "fields": {
+      "code": "Family code",
+      "status": "Status"
+    },
+    "variants": {
+      "title": "Variants",
+      "description": "Every combination sells, stocks, and prices as its own item. Edit price or barcode inline, or select rows for bulk changes."
+    },
+    "grid": {
+      "code": "Code",
+      "price": "Price",
+      "cost": "Cost",
+      "barcode": "Barcode",
+      "onHand": "On hand",
+      "empty": "No variants yet — generate the missing combinations to fill this matrix.",
+      "selected": "{count} selected",
+      "setPrice": "Set price",
+      "setCost": "Set cost",
+      "setBarcode": "Set barcode",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "activateTitle": "Activate {count} variants?",
+      "deactivateTitle": "Deactivate {count} variants?",
+      "activateBody": "They become available on documents again.",
+      "deactivateBody": "They stay in history but can no longer be sold.",
+      "bulkSaved": "{count} variants updated",
+      "priceFor": "Price for {name}",
+      "barcodeFor": "Barcode for {name}"
+    },
+    "generate": {
+      "action": "Generate missing variants",
+      "working": "Working…",
+      "nothingMissing": "Every combination already exists",
+      "confirmTitle": "Create {count} variants?",
+      "confirmBody": "First codes: {sample}. Codes are never renamed afterwards.",
+      "confirm": "Generate",
+      "done": "{count} variants created"
+    },
+    "options": {
+      "title": "Options",
+      "description": "The option matrix every variant is built from. Order sets the code and name order.",
+      "empty": "No options yet",
+      "emptyHint": "Add the first option, for example Size with Small, Medium, Large.",
+      "addOption": "Add option",
+      "namePlaceholder": "Option name, e.g. Size",
+      "nameLabel": "Option {position} name",
+      "position": "Option {position}",
+      "removeOption": "Remove option {name}",
+      "unnamed": "unnamed option",
+      "valuesLabel": "Values for {name}",
+      "valuesPlaceholder": "Type a value and press Enter",
+      "saveOptions": "Save options",
+      "saving": "Saving…",
+      "saved": "Options saved",
+      "renameTitle": "Rename {from} to {to}?",
+      "renameBody": "{count} variant names update; codes stay as they are.",
+      "renameConfirm": "Rename"
+    },
+    "defaults": {
+      "title": "Family defaults",
+      "summary": "{kind} · {rate} per {unit}",
+      "noRate": "no price",
+      "noUnit": "unit",
+      "description": "New variants inherit these. Changing them never rewrites existing variants.",
+      "save": "Save defaults",
+      "saving": "Saving…",
+      "saved": "Defaults saved"
+    },
+    "itemTab": {
+      "title": "Variants",
+      "openFamily": "Open family",
+      "loadFailed": "Could not load the variants",
+      "siblingCount": "{count} in {family}"
+    },
+    "convert": {
+      "action": "Convert to family",
+      "optionTitle": "Which option does this item carry?",
+      "optionLabel": "Option name",
+      "valueTitle": "Which {option} is this item?",
+      "valueLabel": "Option value",
+      "done": "Family {family} created"
+    }
   }
 }

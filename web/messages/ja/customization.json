@@ -21,6 +21,7 @@
     "opportunity": "商談",
     "activity": "アクティビティ",
     "item": "品目",
+    "item_family": "商品ファミリー",
     "account": "勘定科目",
     "bank_transaction": "銀行取引",
     "inventory_onhand": "手持在庫",

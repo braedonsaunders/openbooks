@@ -2,7 +2,7 @@
   "list": {
     "title": "物料与服务",
     "description": "每一行单据背后的目录 — 服务、人工、费用与折扣。",
-    "searchPlaceholder": "搜索名称、编码、类别…",
+    "searchPlaceholder": "搜索名称、编码、类别、系列…",
     "kindFilter": "种类",
     "emptyTitle": "暂无物料",
     "emptyDescription": "添加第一个服务、人工或费用以创建目录。",
@@ -10,7 +10,8 @@
     "createDraftFailed": "无法创建草稿物料",
     "view": "视图",
     "viewCatalog": "目录",
-    "viewRateBooks": "价格手册"
+    "viewRateBooks": "价格手册",
+    "viewFamilies": "系列"
   },
   "labels": {
     "code": "编码",
@@ -23,7 +24,8 @@
     "incomeAccount": "收入科目",
     "expenseAccount": "费用科目",
     "payrollCostingAccount": "工资成本科目",
-    "taxCode": "税码"
+    "taxCode": "税码",
+    "family": "系列"
   },
   "kinds": {
     "service": "服务",
@@ -272,5 +274,101 @@
     "effectiveTo": "有效至",
     "empty": "尚无公允价值单价——将使用上方的单一SSP。",
     "confirmDelete": "删除该公允价值单价？"
+  },
+  "families": {
+    "title": "产品系列",
+    "description": "每个选项矩阵一行 — 尺码和颜色作为独立物料销售。",
+    "empty": "暂无产品系列",
+    "newFamily": "新建系列",
+    "drawerTitle": "产品系列",
+    "created": "系列已创建",
+    "creating": "创建中…",
+    "create": "创建系列",
+    "createHint": "描述一次产品，添加其选项，并将每个组合生成为独立物料。",
+    "loadFailed": "无法加载此系列",
+    "notFound": "此系列不属于本组织",
+    "summary": "{options} 个选项 · {variants} 个变体",
+    "fields": {
+      "code": "系列编码",
+      "status": "状态"
+    },
+    "variants": {
+      "title": "变体",
+      "description": "每个组合都作为独立物料进行销售、库存和定价。可直接编辑价格或条码，或选择多行进行批量更改。"
+    },
+    "grid": {
+      "code": "编码",
+      "price": "价格",
+      "cost": "成本",
+      "barcode": "条码",
+      "onHand": "库存",
+      "empty": "暂无变体 — 生成缺失的组合以填充此矩阵。",
+      "selected": "已选 {count} 行",
+      "setPrice": "设定价格",
+      "setCost": "设定成本",
+      "setBarcode": "设定条码",
+      "activate": "启用",
+      "deactivate": "停用",
+      "activateTitle": "启用 {count} 个变体？",
+      "deactivateTitle": "停用 {count} 个变体？",
+      "activateBody": "它们将重新可用于单据。",
+      "deactivateBody": "它们保留在历史中，但不可再销售。",
+      "bulkSaved": "已更新 {count} 个变体",
+      "priceFor": "{name} 的价格",
+      "barcodeFor": "{name} 的条码"
+    },
+    "generate": {
+      "action": "生成缺失变体",
+      "working": "生成中…",
+      "nothingMissing": "所有组合均已存在",
+      "confirmTitle": "创建 {count} 个变体？",
+      "confirmBody": "前几个编码：{sample}。编码此后永不更名。",
+      "confirm": "生成",
+      "done": "已创建 {count} 个变体"
+    },
+    "options": {
+      "title": "选项",
+      "description": "每个变体据以构建的选项矩阵。顺序决定编码与名称的顺序。",
+      "empty": "暂无选项",
+      "emptyHint": "添加第一个选项，例如尺码 (S、M、L)。",
+      "addOption": "添加选项",
+      "namePlaceholder": "选项名称，例如尺码",
+      "nameLabel": "选项 {position} 的名称",
+      "position": "选项 {position}",
+      "removeOption": "删除选项 {name}",
+      "unnamed": "未命名选项",
+      "valuesLabel": "{name} 的取值",
+      "valuesPlaceholder": "输入取值后按回车",
+      "saveOptions": "保存选项",
+      "saving": "保存中…",
+      "saved": "选项已保存",
+      "renameTitle": "将 {from} 改名为 {to}？",
+      "renameBody": "将更新 {count} 个变体名称；编码保持不变。",
+      "renameConfirm": "改名"
+    },
+    "defaults": {
+      "title": "系列默认值",
+      "summary": "{kind} · 每 {unit} {rate}",
+      "noRate": "无价格",
+      "noUnit": "单位",
+      "description": "新建变体将继承这些值。更改它们绝不会重写现有变体。",
+      "save": "保存默认值",
+      "saving": "保存中…",
+      "saved": "默认值已保存"
+    },
+    "itemTab": {
+      "title": "变体",
+      "openFamily": "打开系列",
+      "loadFailed": "无法加载变体",
+      "siblingCount": "{family} 中有 {count} 个"
+    },
+    "convert": {
+      "action": "转为系列",
+      "optionTitle": "此物料属于哪个选项？",
+      "optionLabel": "选项名称",
+      "valueTitle": "此物料是哪个 {option}？",
+      "valueLabel": "选项值",
+      "done": "系列 {family} 已创建"
+    }
   }
 }

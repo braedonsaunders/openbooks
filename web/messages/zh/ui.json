@@ -100,6 +100,8 @@
   },
   "lineGrid": {
     "lineNumberHeader": "行",
+    "selectAll": "全选",
+    "selectRow": "选择第 {row} 行",
     "addLine": "添加行",
     "keyboardHint": "Enter 添加/下移 · Alt+↑/↓ 重排 · ⌘D 复制 · ⌘⌫ 移除",
     "lineActionsAria": "第 {number} 行操作",
