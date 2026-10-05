@@ -39,6 +39,7 @@ export function ListTable<T>({
   rowLabel,
   rowRole,
   rowSelected,
+  contained = false,
 }: {
   rows: T[]
   columns: ListTableColumn<T>[]
@@ -54,9 +55,11 @@ export function ListTable<T>({
   rowLabel?: (row: T) => string
   rowRole?: 'link' | 'button'
   rowSelected?: (row: T) => boolean
+  /** Keep scrolling inside the table while its host toolbar stays fixed. */
+  contained?: boolean
 }) {
   return (
-    <Table>
+    <Table containerClassName={contained ? 'app-scroll min-h-0 flex-1 overflow-auto' : undefined}>
       <TableHeader>
         <TableRow>
           {selectionHeader}

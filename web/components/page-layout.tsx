@@ -45,6 +45,7 @@ export function ListPageLayout({
   header,
   children,
   className,
+  contained = false,
 }: {
   header: React.ReactNode
   children: React.ReactNode
@@ -53,6 +54,8 @@ export function ListPageLayout({
    * for app-feel pages that fit the viewport and scroll only inside panels.
    */
   className?: string
+  /** Fill the available workspace; each work area owns its scrolling. */
+  contained?: boolean
 }) {
   const section = useContext(PagePresentationContext) === 'section'
   if (section) {
@@ -65,13 +68,13 @@ export function ListPageLayout({
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
+      <div className="shrink-0 border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
+        <FadeInHeader className={cn('space-y-2 sm:space-y-2.5', !contained && 'mx-auto max-w-screen-2xl')}>
           <PageHeaderNavigationProvider navigation={<PageViewTabs />}>{header}</PageHeaderNavigationProvider>
         </FadeInHeader>
       </div>
-      <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className={cn('mx-auto max-w-screen-2xl p-3 sm:p-6', className)}>
+      <div className={cn('min-h-0 flex-1', contained ? 'overflow-hidden' : 'app-scroll overflow-y-auto')}>
+        <FadeInBody className={cn('p-3 sm:p-6', contained ? 'flex min-h-0 flex-col overflow-hidden' : 'mx-auto max-w-screen-2xl', className)}>
           {children}
         </FadeInBody>
       </div>

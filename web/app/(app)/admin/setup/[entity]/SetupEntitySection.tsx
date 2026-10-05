@@ -170,6 +170,7 @@ export async function SetupEntitySection({
   groupRuleTabs = false,
   ruleDetailsLabel,
   childTabIntroductions,
+  contained = false,
 }: {
   entity: SetupEntity;
   /** Host program work areas share the persisted native record's drawer shell. */
@@ -216,6 +217,8 @@ export async function SetupEntitySection({
   mutationBasePath?: string
   /** A server-authorized reference filter keeps record links within the native list. */
   fixedFilter?: { fieldKey: string; value: string }
+  /** A module work area pins its controls and scrolls only the records. */
+  contained?: boolean
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -437,7 +440,7 @@ export async function SetupEntitySection({
     : null
 
   return (
-    <div className="space-y-4">
+    <div className={contained ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
       {!hideHeader && !drawerOnly ? (
         <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -466,7 +469,7 @@ export async function SetupEntitySection({
       ) : null}
 
       {!drawerOnly ? <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <SearchInput placeholder={t('searchPlaceholder')} paramKey={qParam} pageParamKey={pageParam} />
         {(entity.filters ?? []).map((filter) => (
           <ListFilterSelect
@@ -484,8 +487,8 @@ export async function SetupEntitySection({
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <Table>
+      <div className={contained ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900' : 'rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}>
+        <Table containerClassName={contained ? 'app-scroll min-h-0 flex-1 overflow-auto' : undefined}>
           <TableHeader>
             <TableRow>
               {entity.columns.map((c) => (

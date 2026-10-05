@@ -31,6 +31,7 @@ export function RegisteredListTable<T>({
   searchable = true,
   paging = true,
   showPerPage,
+  contained = false,
 }: {
   source: PreparedListSourceKey
   rows: T[]
@@ -53,6 +54,7 @@ export function RegisteredListTable<T>({
   searchable?: boolean
   paging?: boolean
   showPerPage?: boolean
+  contained?: boolean
 }) {
   const definition = preparedListSource(source)
   const ids = rows.map(rowKey)
@@ -66,6 +68,7 @@ export function RegisteredListTable<T>({
       throw new Error('Missing server pagination for record list: ' + source)
     return (
       <ServerPagedTable
+        contained={contained}
         source={source}
         rows={rows}
         columns={columns}
@@ -94,6 +97,7 @@ export function RegisteredListTable<T>({
   return (
     <PreparedPagedTable
       source={source}
+      contained={contained}
       rows={rows.map((row, index) => ({
         id: rowKey(row, index),
         cells: columns.map((column) => column.cell(row)),

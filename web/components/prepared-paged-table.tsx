@@ -23,6 +23,7 @@ export function PreparedPagedTable({
   footer,
   toolbarAfter,
   searchable = true,
+  contained = false,
 }: {
   source: PreparedListSourceKey
   rows: PreparedTableRow[]
@@ -32,10 +33,12 @@ export function PreparedPagedTable({
   footer?: ReactNode
   toolbarAfter?: ReactNode
   searchable?: boolean
+  contained?: boolean
 }) {
   return (
     <PagedTable<PreparedTableRow>
       source={source}
+      contained={contained}
       rows={rows}
       rowKey={(row) => row.id}
       columns={columns.map((column, index) => ({
