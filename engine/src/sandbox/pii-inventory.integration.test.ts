@@ -335,6 +335,15 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "channel_ad_spend.source",
   "channel_daily_summaries.currency",
   "channel_daily_summaries.status",
+  // Storefront inventory push: Shopify-assigned inventory item ids, push
+  // quantities, policy states and operator-authored error prose. No person
+  // data: pairs are keyed by item and stock location, never by customer.
+  "channel_inventory_conflicts.resolution",
+  "channel_inventory_conflicts.status",
+  "channel_inventory_push_states.last_error",
+  "channel_inventory_push_states.last_inventory_policy",
+  "channel_inventory_push_states.last_status",
+  "channel_inventory_push_states.shopify_inventory_item_id",
   "channel_order_economics.component",
   "channel_order_economics.currency",
   "channel_order_economics.line_key",

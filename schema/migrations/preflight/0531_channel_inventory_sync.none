@@ -1,0 +1,1 @@
+Adds columns with defaults to one mapping table and creates three empty push-state tables. No tenant rows are read, rewritten or deleted: existing location rows gain their safe defaults in place, and every new table starts empty.
