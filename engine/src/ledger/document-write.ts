@@ -40,7 +40,7 @@ export class DocumentDraftError extends Error {
 }
 import { canonicalDecimal } from '../money/exact-decimal.ts'
 import { activeStockLocations, profiledItemIds } from '../inventory/stock-locations.ts'
-import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind, type DocKindConfig } from '../records/document-kinds.ts'
+import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind } from '../records/document-kinds.ts'
 import { featureEnabled } from '../organization/feature-registry.ts'
 import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '../organization/feature-state.ts'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../records/custom-fields.ts'
