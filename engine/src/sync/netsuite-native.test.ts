@@ -71,26 +71,49 @@ const header: NsHeader = {
   postingperiod: "17",
 };
 
+/**
+ * One NetSuite source line with the wire defaults every journal-shaped test
+ * repeats: transaction 123, non-mainline, non-tax. Each test names its own
+ * id and states only the fields its behavior turns on, so the field under
+ * test (account vs expenseaccount, taxcode, cleared markers) stays visible.
+ */
+function nsLine(id: string, fields: Omit<Partial<NsLine>, "id"> = {}): NsLine {
+  return { transaction: "123", id, mainline: "F", taxline: "F", ...fields };
+}
+
+/**
+ * The vendor-payment context both payment tests wire: the payables control
+ * account behind ref 30 with the AR/AP/bank control triple. Callers list
+ * the id-to-ref entries their legs resolve.
+ */
+function paymentContextFor(accountRefById: Array<[string, string]>): NativeContext {
+  return {
+    ...context,
+    accountByRef: new Map([
+      ...context.accountByRef,
+      [
+        "30",
+        {
+          id: "account-ap",
+          number: "2000",
+          name: "Accounts Payable",
+          type: "liability_payable",
+        },
+      ],
+    ]),
+    accountRefById: new Map(accountRefById),
+    control: {
+      ar: "account-ar",
+      ap: "account-ap",
+      bank: "account-a",
+    },
+  } as unknown as NativeContext;
+}
+
 test("NetSuite journals retain header and line subsidiary identity", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "10",
-      netamount: "-100",
-      subsidiary: "1",
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
-      account: "20",
-      netamount: "100",
-      subsidiary: "2",
-    },
+    nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+    nsLine("2", { account: "20", netamount: "100", subsidiary: "2" }),
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.ok(!("skip" in built));
@@ -107,24 +130,8 @@ test("NetSuite journals retain header and line subsidiary identity", () => {
 
 test("NetSuite posting transactions fail closed without an exact source period", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "10",
-      netamount: "-100",
-      subsidiary: "1",
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
-      account: "20",
-      netamount: "100",
-      subsidiary: "1",
-    },
+    nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+    nsLine("2", { account: "20", netamount: "100", subsidiary: "1" }),
   ];
   assert.deepEqual(
     buildNativeFromNetSuite(context, { ...header, postingperiod: null }, lines),
@@ -137,56 +144,15 @@ test("NetSuite posting transactions fail closed without an exact source period",
 });
 
 test("NetSuite payments preserve additional non-control GL legs", () => {
-  const paymentContext = {
-    ...context,
-    accountByRef: new Map([
-      ...context.accountByRef,
-      [
-        "30",
-        {
-          id: "account-ap",
-          number: "2000",
-          name: "Accounts Payable",
-          type: "liability_payable",
-        },
-      ],
-    ]),
-    accountRefById: new Map([
-      ["account-ap", "30"],
-      ["account-a", "10"],
-      ["account-b", "20"],
-    ]),
-    control: {
-      ar: "account-ar",
-      ap: "account-ap",
-      bank: "account-a",
-    },
-  } as unknown as NativeContext;
+  const paymentContext = paymentContextFor([
+    ["account-ap", "30"],
+    ["account-a", "10"],
+    ["account-b", "20"],
+  ]);
   const lines: NsLine[] = [
-    {
-      transaction: "5001",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "30",
-      netamount: "100",
-    },
-    {
-      transaction: "5001",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
-      account: "10",
-      netamount: "-95",
-    },
-    {
-      transaction: "5001",
-      id: "3",
-      mainline: "F",
-      taxline: "F",
-      account: "20",
-      netamount: "-5",
-    },
+    nsLine("1", { transaction: "5001", mainline: "T", account: "30", netamount: "100" }),
+    nsLine("2", { transaction: "5001", account: "10", netamount: "-95" }),
+    nsLine("3", { transaction: "5001", account: "20", netamount: "-5" }),
   ];
 
   const built = buildNativeFromNetSuite(
@@ -217,30 +183,10 @@ test("NetSuite payments preserve additional non-control GL legs", () => {
 });
 
 test("NetSuite two-leg payments retain their payment kind", () => {
-  const paymentContext = {
-    ...context,
-    accountByRef: new Map([
-      ...context.accountByRef,
-      [
-        "30",
-        {
-          id: "account-ap",
-          number: "2000",
-          name: "Accounts Payable",
-          type: "liability_payable",
-        },
-      ],
-    ]),
-    accountRefById: new Map([
-      ["account-ap", "30"],
-      ["account-a", "10"],
-    ]),
-    control: {
-      ar: "account-ar",
-      ap: "account-ap",
-      bank: "account-a",
-    },
-  } as unknown as NativeContext;
+  const paymentContext = paymentContextFor([
+    ["account-ap", "30"],
+    ["account-a", "10"],
+  ]);
   const built = buildNativeFromNetSuite(
     paymentContext,
     {
@@ -252,22 +198,8 @@ test("NetSuite two-leg payments retain their payment kind", () => {
       postingperiod: "17",
     },
     [
-      {
-        transaction: "5002",
-        id: "1",
-        mainline: "T",
-        taxline: "F",
-        account: "30",
-        netamount: "100",
-      },
-      {
-        transaction: "5002",
-        id: "2",
-        mainline: "F",
-        taxline: "F",
-        account: "10",
-        netamount: "-100",
-      },
+      nsLine("1", { transaction: "5002", mainline: "T", account: "30", netamount: "100" }),
+      nsLine("2", { transaction: "5002", account: "10", netamount: "-100" }),
     ],
   );
 
@@ -309,32 +241,24 @@ test("pending NetSuite expense reports remain pending native expense reports", (
     taxByRate: new Map([["13", { id: "hst-code", rate: "13" }]]),
   } as unknown as NativeContext;
   const lines: NsLine[] = [
-    {
+    nsLine("0", {
       transaction: "4001",
-      id: "0",
       mainline: "T",
-      taxline: "F",
       expenseaccount: "10",
       foreignamount: "0",
       entity: "501",
       subsidiary: "1",
-    },
-    {
+    }),
+    nsLine("1", {
       transaction: "4001",
-      id: "1",
-      mainline: "F",
-      taxline: "F",
       expenseaccount: "448",
       foreignamount: "-1311.15",
       settlementamount: "-1311.15",
       entity: "501",
       subsidiary: "1",
-    },
-    {
+    }),
+    nsLine("2", {
       transaction: "4001",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
       expenseaccount: "222",
       foreignamount: "1160.31",
       taxrate1: "0.13",
@@ -344,16 +268,14 @@ test("pending NetSuite expense reports remain pending native expense reports", (
       isbillable: "T",
       markup: "15",
       memo: "Equipment rental",
-    },
-    {
+    }),
+    nsLine("6", {
       transaction: "4001",
-      id: "6",
-      mainline: "F",
       taxline: "T",
       expenseaccount: "20",
       foreignamount: "150.84",
       subsidiary: "1",
-    },
+    }),
   ];
 
   const built = buildNativeFromNetSuite(
@@ -445,24 +367,8 @@ test("NetSuite commercial amounts use exact percentages and refund face value", 
 
 test("NetSuite preserves source date independently from exact posting period", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "10",
-      netamount: "-100",
-      subsidiary: "1",
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
-      account: "20",
-      netamount: "100",
-      subsidiary: "1",
-    },
+    nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+    nsLine("2", { account: "20", netamount: "100", subsidiary: "1" }),
   ];
   const late = buildNativeFromNetSuite(
     context,
@@ -491,24 +397,8 @@ test("NetSuite preserves source date independently from exact posting period", (
 
 test("zero-value NetSuite journals remain source documents without an invented GL entry", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "10",
-      netamount: "0",
-      subsidiary: "1",
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "T",
-      taxline: "F",
-      account: "20",
-      netamount: "0",
-      subsidiary: "1",
-    },
+    nsLine("1", { mainline: "T", account: "10", netamount: "0", subsidiary: "1" }),
+    nsLine("2", { mainline: "T", account: "20", netamount: "0", subsidiary: "1" }),
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.ok(!("skip" in built));
@@ -522,16 +412,13 @@ test("posting-flagged source transactions with no accounting impact are classifi
     context,
     { ...header, ttype: "ItemShip", posting: "T" },
     [
-      {
-        transaction: "123",
-        id: "1",
+      nsLine("1", {
         mainline: "T",
-        taxline: "F",
         account: null,
         expenseaccount: null,
         netamount: null,
         foreignamount: null,
-      },
+      }),
     ],
   );
   assert.deepEqual(zero, { skip: "non-ledger source transaction ItemShip" });
@@ -539,17 +426,7 @@ test("posting-flagged source transactions with no accounting impact are classifi
   const financial = buildNativeFromNetSuite(
     context,
     { ...header, ttype: "ItemShip", posting: "T" },
-    [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "T",
-        taxline: "F",
-        account: "10",
-        netamount: "1",
-        foreignamount: "1",
-      },
-    ],
+    [nsLine("1", { mainline: "T", account: "10", netamount: "1", foreignamount: "1" })],
   );
   assert.deepEqual(financial, {
     skip: "unsupported posting type ItemShip has ledger impact",
@@ -558,15 +435,7 @@ test("posting-flagged source transactions with no accounting impact are classifi
 
 test("NetSuite transactions fail closed when a subsidiary was not loaded", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "10",
-      netamount: "0",
-      subsidiary: "99",
-    },
+    nsLine("1", { mainline: "T", account: "10", netamount: "0", subsidiary: "99" }),
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.deepEqual(built, { skip: "unmapped subsidiary 99" });
@@ -577,11 +446,7 @@ test("NetSuite invoice lines preserve item, quantity, unit, rate, amount, and so
     context,
     { ...header, ttype: "CustInvc" },
     [
-      {
-        transaction: "123",
-        id: "7",
-        mainline: "F",
-        taxline: "F",
+      nsLine("7", {
         account: "20",
         item: "item-1",
         quantity: "-2",
@@ -589,7 +454,7 @@ test("NetSuite invoice lines preserve item, quantity, unit, rate, amount, and so
         units: "Hour",
         foreignamount: "-191.4",
         subsidiary: "1",
-      },
+      }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -618,24 +483,8 @@ test("NetSuite sales orders normalize source credit-side detail into document di
     context,
     { ...header, ttype: "SalesOrd", posting: "F" },
     [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "2",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "5",
-        subsidiary: "1",
-      },
+      nsLine("1", { account: "20", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", { account: "20", netamount: "5", subsidiary: "1" }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -656,17 +505,13 @@ test("NetSuite orders retain exact source-code tax in document direction", () =>
     taxContext,
     { ...header, ttype: "SalesOrd", posting: "F" },
     [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
+      nsLine("1", {
         account: "20",
         netamount: "-100",
         taxrate1: "0.13",
         taxcode: "2529",
         subsidiary: "1",
-      },
+      }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -690,25 +535,8 @@ test("NetSuite zero-rate lines do not invent an ambiguous tax-code identity", ()
       ttype: "VendBill",
     },
     [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "T",
-        taxline: "F",
-        account: "10",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "2",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "100",
-        taxrate1: "0",
-        subsidiary: "1",
-      },
+      nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", { account: "20", netamount: "100", taxrate1: "0", subsidiary: "1" }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -731,35 +559,15 @@ test("NetSuite non-zero tax uses the exact source tax code before rate fallback"
       ttype: "CustInvc",
     },
     [
-      {
-        transaction: "123",
-        id: "0",
-        mainline: "T",
-        taxline: "F",
-        account: "10",
-        netamount: "113",
-        subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
+      nsLine("0", { mainline: "T", account: "10", netamount: "113", subsidiary: "1" }),
+      nsLine("1", {
         account: "20",
         netamount: "-100",
         taxrate1: "0.13",
         taxcode: "2529",
         subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "2",
-        mainline: "F",
-        taxline: "T",
-        account: "10",
-        netamount: "-13",
-        subsidiary: "1",
-      },
+      }),
+      nsLine("2", { taxline: "T", account: "10", netamount: "-13", subsidiary: "1" }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -775,17 +583,13 @@ test("NetSuite non-zero source tax codes fail closed when they were not loaded",
       ttype: "CustInvc",
     },
     [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
+      nsLine("1", {
         account: "20",
         netamount: "-100",
         taxrate1: "0.13",
         taxcode: "missing",
         subsidiary: "1",
-      },
+      }),
     ],
   );
   assert.deepEqual(built, { skip: "unmapped tax code missing" });
@@ -895,14 +699,11 @@ test("NetSuite credit balances use exact mainline less Payment-link arithmetic",
 });
 
 test("NetSuite transaction lines are ingested exactly once and conflicts fail closed", () => {
-  const row: NsLine = {
+  const row: NsLine = nsLine("1", {
     transaction: "4803",
-    id: "1",
-    mainline: "F",
-    taxline: "F",
     account: "53",
     netamount: "2473.89",
-  };
+  });
   assert.deepEqual(uniqueNetSuiteTransactionLines([row, { ...row }]), [row]);
   assert.throws(
     () =>
@@ -934,24 +735,14 @@ test("NetSuite hand-adjusted tax without a configured fallback fails closed", ()
     context,
     { ...header, ttype: "CustInvc", tranid: "INV-9001" },
     [
-      {
+      nsLine("1", { transaction: "9001", account: "20", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", {
         transaction: "9001",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "9001",
-        id: "2",
-        mainline: "F",
         taxline: "T",
         account: "10",
         netamount: "-13",
         subsidiary: "1",
-      },
+      }),
     ],
   );
   assert.deepEqual(built, {
@@ -968,24 +759,14 @@ test("NetSuite configured sales fallback resolves by source tax-code id", () => 
     taxContext,
     { ...header, ttype: "CustInvc", tranid: "INV-9001" },
     [
-      {
+      nsLine("1", { transaction: "9001", account: "20", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", {
         transaction: "9001",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "9001",
-        id: "2",
-        mainline: "F",
         taxline: "T",
         account: "10",
         netamount: "-13",
         subsidiary: "1",
-      },
+      }),
     ],
     { taxCodeFallbacks: { sales: "2529" } },
   );
@@ -1005,24 +786,14 @@ test("NetSuite configured fallback resolves by rate when no source id matches", 
     taxContext,
     { ...header, ttype: "CustInvc", tranid: "INV-9001" },
     [
-      {
+      nsLine("1", { transaction: "9001", account: "20", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", {
         transaction: "9001",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "9001",
-        id: "2",
-        mainline: "F",
         taxline: "T",
         account: "10",
         netamount: "-13",
         subsidiary: "1",
-      },
+      }),
     ],
     { taxCodeFallbacks: { sales: "7" } },
   );
@@ -1036,24 +807,14 @@ test("NetSuite purchase lines use the purchase fallback, not the sales one", () 
     taxCodeByRef: new Map([["77", "purchase-code"]]),
   } as unknown as NativeContext;
   const lines: NsLine[] = [
-    {
+    nsLine("1", { transaction: "9002", account: "20", netamount: "100", subsidiary: "1" }),
+    nsLine("2", {
       transaction: "9002",
-      id: "1",
-      mainline: "F",
-      taxline: "F",
-      account: "20",
-      netamount: "100",
-      subsidiary: "1",
-    },
-    {
-      transaction: "9002",
-      id: "2",
-      mainline: "F",
       taxline: "T",
       account: "10",
       netamount: "5",
       subsidiary: "1",
-    },
+    }),
   ];
   assert.deepEqual(
     buildNativeFromNetSuite(
@@ -1081,24 +842,14 @@ test("NetSuite configured fallback naming no tax code fails closed", () => {
     context,
     { ...header, ttype: "CustInvc", tranid: "INV-9001" },
     [
-      {
+      nsLine("1", { transaction: "9001", account: "20", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", {
         transaction: "9001",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "9001",
-        id: "2",
-        mainline: "F",
         taxline: "T",
         account: "10",
         netamount: "-13",
         subsidiary: "1",
-      },
+      }),
     ],
     { taxCodeFallbacks: { sales: "9999" } },
   );
@@ -1112,24 +863,14 @@ test("NetSuite penny-degenerate tax without a configured fallback fails closed",
     context,
     { ...header, ttype: "CustInvc", tranid: "INV-9003" },
     [
-      {
+      nsLine("1", { transaction: "9003", account: "20", netamount: "-10", subsidiary: "1" }),
+      nsLine("2", {
         transaction: "9003",
-        id: "1",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "-10",
-        subsidiary: "1",
-      },
-      {
-        transaction: "9003",
-        id: "2",
-        mainline: "F",
         taxline: "T",
         account: "10",
         netamount: "-0.01",
         subsidiary: "1",
-      },
+      }),
     ],
   );
   assert.deepEqual(built, {
@@ -1185,26 +926,19 @@ test("NetSuite foreign-currency documents carry their transaction currency and r
       exchangerate: "1.3687",
     },
     [
-      {
-        transaction: "123",
-        id: "1",
+      nsLine("1", {
         mainline: "T",
-        taxline: "F",
         account: "10",
         netamount: "-100",
         foreignamount: "-100",
         subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "2",
-        mainline: "F",
-        taxline: "F",
+      }),
+      nsLine("2", {
         account: "20",
         netamount: "100",
         foreignamount: "100",
         subsidiary: "1",
-      },
+      }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -1217,24 +951,8 @@ test("NetSuite base-currency documents omit currency and rate", () => {
     { ...context, baseCurrency: "CAD" } as unknown as NativeContext,
     { ...header, currencylabel: "CAN", exchangerate: "1" },
     [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "T",
-        taxline: "F",
-        account: "10",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "2",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "100",
-        subsidiary: "1",
-      },
+      nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", { account: "20", netamount: "100", subsidiary: "1" }),
     ],
   );
   assert.ok(!("skip" in built));
@@ -1247,24 +965,8 @@ test("NetSuite foreign documents with an unresolvable currency fail closed", () 
     { ...context, baseCurrency: "CAD" } as unknown as NativeContext,
     { ...header, currencylabel: "Martian Credits", exchangerate: "1.2" },
     [
-      {
-        transaction: "123",
-        id: "1",
-        mainline: "T",
-        taxline: "F",
-        account: "10",
-        netamount: "-100",
-        subsidiary: "1",
-      },
-      {
-        transaction: "123",
-        id: "2",
-        mainline: "F",
-        taxline: "F",
-        account: "20",
-        netamount: "100",
-        subsidiary: "1",
-      },
+      nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+      nsLine("2", { account: "20", netamount: "100", subsidiary: "1" }),
     ],
   );
   assert.ok("skip" in built, "an unstated foreign currency must not post as base");
@@ -1272,24 +974,8 @@ test("NetSuite foreign documents with an unresolvable currency fail closed", () 
 
 test("NetSuite foreign documents without a usable rate fail closed", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
-      mainline: "T",
-      taxline: "F",
-      account: "10",
-      netamount: "-100",
-      subsidiary: "1",
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
-      account: "20",
-      netamount: "100",
-      subsidiary: "1",
-    },
+    nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
+    nsLine("2", { account: "20", netamount: "100", subsidiary: "1" }),
   ];
   for (const hdr of [
     { ...header, currencylabel: "USD" },
@@ -1352,28 +1038,21 @@ test("NetSuite link mapping states stated terms and never converts", () => {
 
 test("NetSuite posting lines propagate cleared markers with a date fallback", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
+    nsLine("1", {
       mainline: "T",
-      taxline: "F",
       account: "10",
       netamount: "-100",
       subsidiary: "1",
       cleared: "T",
       cleareddate: "08/31/2026",
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
+    }),
+    nsLine("2", {
       account: "20",
       netamount: "100",
       subsidiary: "1",
       cleared: "T",
       cleareddate: null,
-    },
+    }),
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.ok(!("skip" in built));
@@ -1390,28 +1069,21 @@ test("NetSuite posting lines propagate cleared markers with a date fallback", ()
 
 test("NetSuite uncleared lines carry explicit negative evidence", () => {
   const lines: NsLine[] = [
-    {
-      transaction: "123",
-      id: "1",
+    nsLine("1", {
       mainline: "T",
-      taxline: "F",
       account: "10",
       netamount: "-100",
       subsidiary: "1",
       cleared: "F",
       cleareddate: null,
-    },
-    {
-      transaction: "123",
-      id: "2",
-      mainline: "F",
-      taxline: "F",
+    }),
+    nsLine("2", {
       account: "20",
       netamount: "100",
       subsidiary: "1",
       cleared: null,
       cleareddate: null,
-    },
+    }),
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.ok(!("skip" in built));
