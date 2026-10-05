@@ -226,6 +226,48 @@ test("declared future period names label the buckets", async () => {
   }
 });
 
+test("quiet trailing periods keep the end-anchored bucket names", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  // Activity stops after March but the window ends in June: bucket 1 is
+  // July, not the April the last active month would step to.
+  const data = decliningData();
+  (data.monthly as { revenue: string; grossProfit: string; operatingIncome: string; netIncome: string }[]).forEach((m, i) => {
+    const revenue = i < 3 ? '1000000' : '0';
+    m.revenue = revenue;
+    m.grossProfit = revenue;
+    m.operatingIncome = revenue;
+    m.netIncome = revenue;
+  });
+  const { host, unmount } = await mount(data);
+  try {
+    const firstCell = host.querySelector("tbody tr td");
+    assert.equal(firstCell?.textContent, "Jul '26");
+  } finally {
+    await unmount();
+  }
+});
+
+test("a window with fewer than 3 active periods refuses instead of modelling", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  // Two active months of six: smoothing zeros is not a forecast.
+  const data = decliningData();
+  (data.monthly as { revenue: string; grossProfit: string; operatingIncome: string; netIncome: string }[]).forEach((m, i) => {
+    const revenue = i < 2 ? '1000000' : '0';
+    m.revenue = revenue;
+    m.grossProfit = revenue;
+    m.operatingIncome = revenue;
+    m.netIncome = revenue;
+  });
+  const { host, unmount } = await mount(data);
+  try {
+    const text = host.textContent ?? "";
+    assert.match(text, /Not enough history/);
+    assert.doesNotMatch(text, /Projected Growth/);
+  } finally {
+    await unmount();
+  }
+});
+
 test("an in-domain projection shows no caveat", async () => {
   globalThis.__fcRouter = { push() {}, refresh() {} };
   const data = decliningData();
