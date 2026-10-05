@@ -1,48 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../../../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
 
 // jsdom first: the drawer reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/revenue",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
+await bootJsdomEnvironment({ url: "http://localhost:4800/revenue", matchMediaMatches: false });
+
+declare global {
+  var __recognitionToasts: { kind: string; message: string }[] | undefined;
 }
 
-Object.assign(globalThis, { __recognitionToasts: [] as [string, ...unknown[]][] });
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(...a){globalThis.__recognitionToasts.push(['success',...a])},error(...a){globalThis.__recognitionToasts.push(['error',...a])}}",
-      };
-    }
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
-      };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},replace(){},refresh(){}}};export function useSearchParams(){return new URLSearchParams()};export function usePathname(){return'/revenue'}",
-      };
-    }
-    return next(specifier, context);
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return{push(){},replace(){},refresh(){}}}' +
+      'export function useSearchParams(){return new URLSearchParams()}' +
+      "export function usePathname(){return'/revenue'}",
+  },
+  intl: true,
+  extra: {
+    'next/link':
+      "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
+    sonner:
+      "export const toast={success(m){(globalThis.__recognitionToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__recognitionToasts??=[]).push({kind:'error',message:String(m)})}}",
   },
 });
 
@@ -58,19 +38,11 @@ const { RunRecognitionDrawer } = await import("./RunRecognitionDrawer");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-type FetchStub = { ok: boolean; status: number; json: () => Promise<unknown>; clone: () => FetchStub };
-const stubRes = (body: unknown, status = 422): FetchStub => ({
-  ok: false,
-  status,
-  json: async () => body,
-  clone() {
-    return stubRes(body, status);
-  },
-});
-
-const realFetch = globalThis.fetch;
-function queueFetch(bodies: FetchStub[]) {
-  const queue = [...bodies];
+// Network is doubled but response handling stays native: real Response
+// objects enforce single body consumption, so the suite proves the drawer
+// reads a clone for its code check instead of parsing the body twice.
+function queueFetch(responses: Response[]) {
+  const queue = [...responses];
   globalThis.fetch = (async () => {
     const next = queue.shift();
     assert.ok(next, "no unexpected fetch leaves the drawer");
@@ -103,7 +75,7 @@ async function unmount(host: Element, root: { unmount(): void }) {
   host.remove();
 }
 
-function clickButton(_host: Element, label: string): HTMLButtonElement {
+function clickButton(label: string): HTMLButtonElement {
   // The drawer portals onto document.body, so buttons live outside the mount host.
   const button = [...document.querySelectorAll("button")].find((entry) =>
     entry.textContent?.includes(label),
@@ -121,7 +93,7 @@ async function click(button: HTMLButtonElement) {
   });
 }
 
-function errorBox(_host: Element): string {
+function errorBox(): string {
   return [...document.querySelectorAll("p")].map((p) => p.textContent ?? "").join("\n");
 }
 
@@ -131,19 +103,23 @@ function errorBox(_host: Element): string {
  * remedy instead of dropping everything but body.error.
  */
 test("an unnamed engine refusal surfaces its message and remedy", async (t) => {
+  const realFetch = globalThis.fetch;
   t.after(() => {
     globalThis.fetch = realFetch;
   });
   queueFetch([
-    stubRes({
-      error: "January 2026: GL period closed",
-      remedy: "Reopen January 2026 before running recognition.",
-    }),
+    Response.json(
+      {
+        error: "January 2026: GL period closed",
+        remedy: "Reopen January 2026 before running recognition.",
+      },
+      { status: 422 },
+    ),
   ]);
   const { host, root } = await renderDrawer();
   try {
-    await click(clickButton(host, "Preview"));
-    const text = errorBox(host);
+    await click(clickButton("Preview"));
+    const text = errorBox();
     assert.ok(text.includes("GL period closed"), "the server message reaches the drawer");
     assert.ok(text.includes("Reopen January 2026"), "the server remedy reaches the drawer");
   } finally {
@@ -156,14 +132,15 @@ test("an unnamed engine refusal surfaces its message and remedy", async (t) => {
  * as the scope remedy, never the raw code.
  */
 test("a known scope code keeps its localized remedy", async (t) => {
+  const realFetch = globalThis.fetch;
   t.after(() => {
     globalThis.fetch = realFetch;
   });
-  queueFetch([stubRes({ error: "book_not_found", field: "bookId" })]);
+  queueFetch([Response.json({ error: "book_not_found", field: "bookId" }, { status: 422 })]);
   const { host, root } = await renderDrawer();
   try {
-    await click(clickButton(host, "Preview"));
-    const text = errorBox(host);
+    await click(clickButton("Preview"));
+    const text = errorBox();
     assert.ok(
       text.includes("That scope is no longer available. Reopen the drawer."),
       "the localized scope remedy renders",
@@ -174,13 +151,47 @@ test("a known scope code keeps its localized remedy", async (t) => {
   }
 });
 
+const previewRow = {
+  lineId: "line-1",
+  amount: "10.00",
+  periodId: "period-1",
+  bookId: "book-1",
+  debitAccountId: "a-deferred",
+  creditAccountId: "a-earned",
+  subsidiaryId: null,
+  departmentId: null,
+  projectId: null,
+  locationId: null,
+  obligationId: "obl-1",
+  obligationDescription: "Mobilization",
+  contractNumber: "C-1042",
+  periodName: "Sep 2026",
+  periodEndsOn: "2026-09-30",
+  recognitionOn: "2026-09-30",
+  method: "straight_line",
+  bookName: "Primary",
+  subsidiaryName: null,
+  departmentName: null,
+  projectName: null,
+  plannedAmount: "10.00",
+  currency: "USD",
+  baseCurrency: "USD",
+  fxRate: "1",
+  debitAccountNumber: "2400",
+  debitAccountName: "Deferred revenue",
+  creditAccountNumber: "4000",
+  creditAccountName: "Earned revenue",
+  skipReason: null,
+  skipDetail: null,
+};
+
 const previewOk = {
   asOfDate: "2026-09-30",
   obligationId: null,
   contractId: null,
   bookId: null,
   periodId: null,
-  rows: [],
+  rows: [previewRow],
   postableCount: 1,
   skippedCount: 0,
   totalAmount: "10.00",
@@ -197,28 +208,30 @@ const previewOk = {
  * and refreshing the preview clears it so the operator can confirm again.
  */
 test("a stale confirm names its remedy and a refresh clears it", async (t) => {
+  const realFetch = globalThis.fetch;
   t.after(() => {
     globalThis.fetch = realFetch;
   });
   queueFetch([
-    { ok: true, status: 200, json: async () => previewOk, clone() { return this; } } as unknown as FetchStub,
-    stubRes({ error: "stale_preview" }, 409),
-    { ok: true, status: 200, json: async () => previewOk, clone() { return this; } } as unknown as FetchStub,
+    Response.json(previewOk),
+    Response.json({ error: "stale_preview" }, { status: 409 }),
+    Response.json(previewOk),
   ]);
   const { host, root } = await renderDrawer();
   try {
-    await click(clickButton(host, "Preview"));
-    await click(clickButton(host, "Confirm and post"));
+    await click(clickButton("Preview"));
     assert.ok(
-      errorBox(host).includes("The reviewed set changed. Preview again, then confirm."),
+      (document.body.textContent ?? "").includes("C-1042"),
+      "the populated review renders its line",
+    );
+    await click(clickButton("Confirm and post"));
+    assert.ok(
+      errorBox().includes("The reviewed set changed. Preview again, then confirm."),
       "the stale refusal names its remedy",
     );
-    await click(clickButton(host, "Refresh preview"));
-    assert.ok(
-      !errorBox(host).includes("The reviewed set changed"),
-      "a fresh preview clears the refusal",
-    );
-    assert.ok(clickButton(host, "Confirm and post"), "confirm is offered again after retry");
+    await click(clickButton("Refresh preview"));
+    assert.ok(!errorBox().includes("The reviewed set changed"), "a fresh preview clears the refusal");
+    assert.ok(clickButton("Confirm and post"), "confirm is offered again after retry");
   } finally {
     await unmount(host, root);
   }
@@ -229,48 +242,39 @@ test("a stale confirm names its remedy and a refresh clears it", async (t) => {
  * result — counts, amounts and per-entry journal links.
  */
 test("a confirmed run reads back its posted entries", async (t) => {
+  const realFetch = globalThis.fetch;
   t.after(() => {
     globalThis.fetch = realFetch;
   });
   queueFetch([
-    { ok: true, status: 200, json: async () => previewOk, clone() { return this; } } as unknown as FetchStub,
-    {
-      ok: true,
-      status: 200,
-      json: async () => ({
-        posted: 1,
-        skipped: 0,
-        totalAmount: "10.00",
-        entries: [
-          {
-            contract: "C-1042",
-            obligation: "Mobilization",
-            period: "Sep 2026",
-            amount: "10.00",
-            entryId: "entryid12345678",
-          },
-        ],
-        problems: [],
-      }),
-      clone() {
-        return this;
-      },
-    } as unknown as FetchStub,
+    Response.json(previewOk),
+    Response.json({
+      posted: 1,
+      skipped: 0,
+      totalAmount: "10.00",
+      entries: [
+        {
+          contract: "C-1042",
+          obligation: "Mobilization",
+          period: "Sep 2026",
+          amount: "10.00",
+          entryId: "entryid12345678",
+        },
+      ],
+      problems: [],
+    }),
   ]);
   const { host, root } = await renderDrawer();
   try {
-    await click(clickButton(host, "Preview"));
-    await click(clickButton(host, "Confirm and post"));
+    await click(clickButton("Preview"));
+    await click(clickButton("Confirm and post"));
     const text = document.body.textContent ?? "";
     assert.ok(text.includes("1 entry"), "the posted count reads back");
     assert.ok(text.includes("C-1042"), "the posted contract reads back");
     const entryLink = document.querySelector("a[href*='entryid12345678']");
     assert.ok(entryLink, "the posted entry links to its journal record");
     const labels = [...document.querySelectorAll("button")].map((b) => b.textContent ?? "");
-    assert.ok(
-      !labels.some((label) => label.includes("Confirm and post")),
-      "the preview confirm leaves with the result",
-    );
+    assert.ok(!labels.some((label) => label.includes("Confirm and post")), "the preview confirm leaves with the result");
   } finally {
     await unmount(host, root);
   }
