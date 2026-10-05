@@ -283,6 +283,14 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "contacts", columnName: "phone", transform: "faker_phone" },
   { tableName: "contacts", columnName: "mobile_phone", transform: "faker_phone" },
   { tableName: "contacts", columnName: "fax", transform: "faker_phone" },
+  // Quote-to-cash signature requests name a customer-side signer: fake the
+  // name and email like any other contact, and drop the network evidence
+  // (IP, user agent) a sandbox must never resolve delivery to.
+  { tableName: "signature_requests", columnName: "signer_name", transform: "faker_name" },
+  { tableName: "signature_requests", columnName: "signer_email", transform: "faker_email" },
+  { tableName: "signature_requests", columnName: "signer_ip", transform: "null_out" },
+  { tableName: "signature_requests", columnName: "signer_user_agent", transform: "null_out" },
+  { tableName: "signature_requests", columnName: "signature_svg", transform: "null_out" },
   // D2b: every other column that carries a real person's address. Faked
   // where the sandbox needs a plausible address (participant and
   // notification emails), emptied where delivery must simply not resolve.
