@@ -2233,10 +2233,6 @@
           "label": "Écart critique (pp)",
           "help": "L’écart de vélocité achats/ventes au-delà est critique"
         },
-        "cliffCriticalHorizon": {
-          "label": "Horizon critique (mois)",
-          "help": "Horizon affiché avec une falaise critique"
-        },
         "cliffCriticalPoints": {
           "label": "Points critiques",
           "help": "Déduction de santé avec falaise critique"
@@ -2248,10 +2244,6 @@
         "cliffWarningGap": {
           "label": "Écart d’avertissement (pp)",
           "help": "L’écart de vélocité achats/ventes au-delà est un avertissement"
-        },
-        "cliffWarningHorizon": {
-          "label": "Horizon d’avertissement (mois)",
-          "help": "Horizon affiché avec une falaise d’avertissement"
         },
         "cliffWarningPoints": {
           "label": "Points d’avertissement",

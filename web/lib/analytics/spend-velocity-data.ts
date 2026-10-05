@@ -242,6 +242,20 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  * series, and fewer than two measurable buckets — or no bucket above the
  * floor — yields null so the detector renders its named reason instead of a
  * fabricated 0. A measured collapse to zero still reads −100. */
+/**
+ * Periods until purchase commitments outrun sales coverage at the measured
+ * pace. PO growing `gap` points faster per period compounds the PO/SO ratio
+ * by (1 + gap/100) each period, so reaching `target` from `ratio` takes
+ * ln(target/ratio) / ln(1 + gap/100) periods — a horizon derived from the
+ * two figures shown, not a configured guess. Null when there is no positive
+ * pace or no sales base to compound against.
+ */
+export function monthsToCliffFor(gap: number, ratio: number, target: number): number | null {
+  if (!(gap > 0) || !(ratio > 0) || !(target > 0)) return null;
+  if (ratio >= target) return 1;
+  return Math.max(1, Math.round(Math.log(target / ratio) / Math.log(1 + gap / 100)));
+}
+
 export function moneyCagr(amounts: string[], minimum: string): number | null {
   let first = 0;
   while (first < amounts.length && cmp(amounts[first]!, "0") <= 0) first++;
@@ -932,10 +946,10 @@ export async function spendVelocityData(
   const gap = velocityGap;
   if ((gap !== null && gap > C.cliffCriticalGap) || ratio > C.cliffCriticalRatio) {
     status = "critical";
-    if (gap !== null && gap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffCriticalHorizon / (gap / 10)));
+    if (gap !== null && hasSales) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffCriticalRatio);
   } else if ((gap !== null && gap > C.cliffWarningGap) || ratio > C.cliffWarningRatio) {
     status = "warning";
-    if (gap !== null && gap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffWarningHorizon / (gap / 10)));
+    if (gap !== null && hasSales) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffWarningRatio);
   }
   const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO }, months: cliffSeries };
 

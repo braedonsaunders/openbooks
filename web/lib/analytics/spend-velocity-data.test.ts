@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { getSpendVelocityComparisonWindows, moneyCagr, velocityAndAcceleration } = await import(
+const { getSpendVelocityComparisonWindows, moneyCagr, monthsToCliffFor, velocityAndAcceleration } = await import(
   "./spend-velocity-data.ts"
 );
 
@@ -93,6 +93,17 @@ test("a zero-only or single-bucket history has no velocity to report", () => {
   assert.equal(moneyCagr([], ""), null);
   // Every bucket below the configured floor is dust, not a base.
   assert.equal(moneyCagr(["5.0000", "8.0000"], "100.0000"), null);
+});
+
+test("months to cliff compounds the measured gap to the breached ratio", () => {
+  // PO growing 10 points faster per period carries a 1.0 ratio past 1.5 in ~4 periods.
+  assert.equal(monthsToCliffFor(10, 1.0, 1.5), 4);
+  // An already-breached ratio is pressure now, not months out.
+  assert.equal(monthsToCliffFor(10, 1.6, 1.5), 1);
+  // No pace or no sales base compounds nothing.
+  assert.equal(monthsToCliffFor(0, 1.0, 1.5), null);
+  assert.equal(monthsToCliffFor(-5, 1.0, 1.5), null);
+  assert.equal(monthsToCliffFor(10, 0, 1.5), null);
 });
 
 test("an unset minimum base scores dust series from their first month", () => {
