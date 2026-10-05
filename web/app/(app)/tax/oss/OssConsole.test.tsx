@@ -112,6 +112,12 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
   return { host, root, restore };
 }
 
+async function selectTab(host: HTMLElement, label: string) {
+  const button = [...host.querySelectorAll('button')].find(node => node.getAttribute('role') === 'tab' && node.textContent?.startsWith(label));
+  assert.ok(button, `expected a reachable ${label} tab`);
+  await act(async () => button.click());
+}
+
 test("oss console shows the evidence-conflict queue with a document remedy link", async () => {
   const calls: string[] = [];
   const { host, root, restore } = await mount(calls);
@@ -125,6 +131,10 @@ test("oss console shows the evidence-conflict queue with a document remedy link"
     });
     for (let i = 0; i < 10; i++) await tick();
     assert.ok(calls.some((u) => u.startsWith("/api/tax/oss-returns/conflicts")), "expected a conflicts fetch");
+    assert.equal(host.querySelectorAll('table').length, 1, 'the prepared return must show only its lines table');
+    assert.ok(!host.textContent?.includes('INV-2041'), 'the independent conflict list must not stack below return lines');
+    await selectTab(host, messages.tax.oss.tabs.conflicts);
+    assert.equal(host.querySelectorAll('table').length, 0, 'conflicts replace the return lines');
     const link = host.querySelector('a[href*="/ar/invoices?doc="]');
     assert.ok(link, "expected a remedy link into the invoice drawer");
     assert.match(host.textContent ?? "", /INV-2041/);
@@ -148,11 +158,35 @@ test("oss console shows the threshold monitor and the fx evidence rate", async (
     });
     for (let i = 0; i < 10; i++) await tick();
     assert.ok(calls.some((u) => u.startsWith("/api/tax/oss-returns/turnover")), "expected a turnover fetch");
+    await selectTab(host, messages.tax.oss.tabs.threshold);
+    assert.equal(host.querySelectorAll('table').length, 0, 'threshold summary replaces all other lists');
     assert.match(host.textContent ?? "", /4[,.]?200\.01/);
+    await selectTab(host, messages.tax.oss.tabs.fx);
+    assert.equal(host.querySelectorAll('table').length, 1, 'translation evidence must show only its own table');
     assert.match(host.textContent ?? "", /1\.0843/);
+    assert.ok(!host.textContent?.includes('INV-2041'));
+    await selectTab(host, messages.tax.oss.tabs.return);
+    assert.equal(host.querySelectorAll('table').length, 1);
+    assert.ok(host.querySelector('a[download]'), 'return export remains reachable after inspecting evidence');
   } finally {
     restore();
     await act(async () => root.unmount());
     host.remove();
   }
+});
+
+test("OSS context refusals stay visible rather than reporting an empty conflict list", async () => {
+  const { host, root, restore } = await mount([]);
+  const seededFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => String(input).includes('/conflicts')
+    ? Response.json({ error: 'Country evidence is unavailable — retry the request.' }, { status: 503 })
+    : seededFetch(input as RequestInfo, init)) as typeof fetch;
+  try {
+    const prepare = [...host.querySelectorAll('button')].find(node => node.textContent === messages.tax.oss.prepare)!;
+    await act(async () => { prepare.click(); for (let i = 0; i < 10; i++) await tick(); });
+    await selectTab(host, messages.tax.oss.tabs.conflicts);
+    assert.match(host.querySelector('[role="alert"]')?.textContent ?? '', /Country evidence is unavailable.*retry/);
+    assert.ok(!host.textContent?.includes(messages.tax.oss.conflicts.clearTitle), 'a refused read cannot assert no conflicts');
+    assert.ok([...host.querySelectorAll('button')].some(node => node.textContent === messages.common.actions.retry));
+  } finally { restore(); await act(async () => root.unmount()); host.remove(); }
 });

@@ -293,7 +293,9 @@
       "title": "Evidence conflicts to fix before posting",
       "description": "These unposted documents claim cross-border treatment but their location signals name more than one country. Posting stays refused until the evidence agrees — fix each document where it lives.",
       "countries": "signals name {countries}",
-      "fix": "Open document"
+      "fix": "Open document",
+      "clearTitle": "No evidence conflicts",
+      "clearDescription": "No unposted document currently has conflicting country evidence."
     },
     "advanced": {
       "title": "Filing evidence and threshold",
@@ -316,6 +318,13 @@
       "status": "€{total} of €{threshold} posted B2C turnover in {year}, VAT excluded.",
       "translated": "{currency} base {base} at {rate} on {asOf}",
       "uncovered": "No ECB rate for {currencies} — the total excludes them. Add the rates before relying on this figure."
-    }
+    },
+    "tabs": {
+      "return": "Return",
+      "conflicts": "Evidence conflicts",
+      "fx": "Currency translation",
+      "threshold": "Sales threshold"
+    },
+    "contextUnavailable": "Filing evidence could not be loaded. Retry before relying on it."
   }
 }
