@@ -115,10 +115,11 @@
       ]
     },
     "close": {
-      "description": "Period close: calendars, module fences, close packages and automations, FX revaluation, posting-period assignment.",
+      "description": "Period close: calendars, module fences, close packages and automations, FX revaluation, posting-period assignment, commerce completeness proofs.",
       "dependsOn": [
         "allocations",
         "banking",
+        "commerce",
         "flows",
         "journal",
         "money",

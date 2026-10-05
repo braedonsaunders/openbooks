@@ -11,6 +11,7 @@ export type DefaultCloseFeatureContext = {
   revenueRecognition: boolean;
   multiCurrency: boolean;
   multiSubsidiary: boolean;
+  salesChannels: boolean;
 };
 
 /**
@@ -41,6 +42,7 @@ export async function defaultCloseFeatureContext(
     revenueRecognition: featureEnabled(features, "revenueRecognition"),
     multiCurrency: await dataDependentFeatureDefault(executor, orgId, "multiCurrency", features),
     multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
+    salesChannels: featureEnabled(features, "salesChannels"),
   };
 }
 
@@ -53,6 +55,7 @@ export function defaultCloseStepEnabled(
   }
   if (key === "financial-review") return !features.advancedClose;
   if (key === "bank-reconciled") return features.banking;
+  if (key === "commerce-complete") return features.salesChannels;
   if (key === "depreciation-posted") return features.fixedAssets;
   if (key === "recognition-posted") return features.revenueRecognition;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;

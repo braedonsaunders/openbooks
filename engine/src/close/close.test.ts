@@ -148,7 +148,7 @@ test("an explicitly disabled feature stays off in the close context even when it
   const stubExecutor = {
     execute: async (query: unknown) => {
       const text = textOf(query);
-      const features = { fixedAssets: false, revenueRecognition: false, multiCurrency: false };
+      const features = { fixedAssets: false, revenueRecognition: false, multiCurrency: false, salesChannels: true };
       if (/from orgs/.test(text)) {
         return { rows: [{ features }] };
       }
@@ -167,6 +167,8 @@ test("an explicitly disabled feature stays off in the close context even when it
   assert.equal(defaultCloseStepEnabled("recognition-posted", ctx), false);
   assert.equal(defaultCloseStepEnabled("fx-ready", ctx), false);
   assert.equal(defaultCloseStepEnabled("fx-revalued", ctx), false);
+  assert.equal(ctx.salesChannels, true, "an explicit on keeps the commerce proof");
+  assert.equal(defaultCloseStepEnabled("commerce-complete", ctx), true);
 });
 
 function errorChainMatches(error: unknown, pattern: RegExp): boolean {
