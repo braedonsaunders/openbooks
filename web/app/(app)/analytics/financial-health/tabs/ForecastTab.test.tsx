@@ -187,6 +187,30 @@ test("a non-monthly calendar without future periods refuses by name", async () =
   }
 });
 
+test("short future periods keep Settings with only fitting horizons", async () => {
+  globalThis.__fcRouter = { push() {}, refresh() {} };
+  const data = decliningData();
+  // Four declared names against the default 6-period horizon: the chart
+  // refuses by name, but Settings stay so the operator can pick 3 instead
+  // of only declaring more periods.
+  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames =
+    ["Q3 FY26", "Q4 FY26", "Q1 FY27", "Q2 FY27"];
+  const { host, unmount } = await mount(data);
+  try {
+    const text = host.textContent ?? "";
+    assert.match(text, /only 4 future periods/);
+    assert.match(text, /at most 4 periods in Forecast Settings/);
+    assert.match(text, /Forecast Settings/);
+    assert.match(text, /Declare periods/);
+    assert.doesNotMatch(text, /Projected Growth/);
+    // The second native select is the horizon: only covered horizons stay.
+    const horizon = host.querySelectorAll("select")[1];
+    assert.deepEqual([...(horizon?.querySelectorAll("option") ?? [])].map((o) => o.value), ["3"]);
+  } finally {
+    await unmount();
+  }
+});
+
 test("declared future period names label the buckets", async () => {
   globalThis.__fcRouter = { push() {}, refresh() {} };
   const data = decliningData();

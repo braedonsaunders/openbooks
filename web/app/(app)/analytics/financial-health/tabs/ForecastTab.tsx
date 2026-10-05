@@ -175,23 +175,13 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
   // Non-monthly calendars label each projected bucket with the declared
   // fiscal period names the server sent. Too few (or none) declared means
-  // the tab refuses by name — stepping calendar months would print buckets
-  // the organization cannot reconcile to its periods.
-  const declaredNames = fp.futurePeriodNames
-  if (declaredNames !== null && declaredNames !== undefined && declaredNames.length < horizon) {
-    const short = declaredNames.length > 0
-    return (
-      <Panel title={t('title')} icon={LineChart}>
-        <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <LineChart size={28} className="text-slate-300 dark:text-slate-600" />
-          <p className="max-w-lg text-sm text-slate-500 dark:text-slate-400">
-            {short ? t('shortFuturePeriods', { have: declaredNames.length, need: horizon }) : t('noFuturePeriods')}
-          </p>
-          <Link href="/admin/setup/period-close" className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800">{t('declarePeriods')}</Link>
-        </div>
-      </Panel>
-    )
-  }
+  // the chart refuses by name — stepping calendar months would print buckets
+  // the organization cannot reconcile to its periods. Settings stay on
+  // screen offering only the horizons the declaration covers, so the
+  // operator can pick a shorter horizon instead of only declaring periods.
+  const declaredCount = fp.futurePeriodNames?.length
+  const short = declaredCount !== undefined && declaredCount < horizon
+  const offeredHorizons = declaredCount === undefined ? fp.horizons : fp.horizons.filter((h) => h <= declaredCount)
 
   if (confidenceError) {
     return (
@@ -231,6 +221,23 @@ export function ForecastTab({ data }: { data: HealthData }) {
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
       <div className="space-y-5 lg:col-span-3">
+        {short && declaredCount !== undefined ? (
+          <Panel title={t('title')} icon={LineChart}>
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <LineChart size={28} className="text-slate-300 dark:text-slate-600" />
+              <p className="max-w-lg text-sm text-slate-500 dark:text-slate-400">
+                {declaredCount > 0 ? t('shortFuturePeriods', { have: declaredCount, need: horizon }) : t('noFuturePeriods')}
+              </p>
+              {declaredCount > 0 ? (
+                <p className="max-w-lg text-sm text-slate-500 dark:text-slate-400">
+                  {t('shortHorizonHint', { have: declaredCount })}
+                </p>
+              ) : null}
+              <Link href="/admin/setup/period-close" className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800">{t('declarePeriods')}</Link>
+            </div>
+          </Panel>
+        ) : (
+        <>
         <Panel
           title={t('title')}
           icon={LineChart}
@@ -302,6 +309,8 @@ export function ForecastTab({ data }: { data: HealthData }) {
             </p>
           ) : null}
         </Panel>
+        </>
+        )}
       </div>
 
       <div className="space-y-5">
@@ -313,8 +322,8 @@ export function ForecastTab({ data }: { data: HealthData }) {
               </Select>
             </Field>
             <Field label={t('field.horizon')}>
-              <Select value={String(horizon)} onChange={(e) => setHorizon(Number(e.target.value))} triggerClassName={SELECT}>
-                {fp.horizons.map((h) => <option key={h} value={String(h)}>{t('horizonMonths', { count: h })}</option>)}
+              <Select value={String(horizon)} onChange={(e) => setHorizon(Number(e.target.value))} triggerClassName={SELECT} disabled={offeredHorizons.length === 0}>
+                {offeredHorizons.map((h) => <option key={h} value={String(h)}>{t('horizonMonths', { count: h })}</option>)}
               </Select>
             </Field>
             <Field label={t('field.confidence')}>
