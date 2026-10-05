@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgTransaction } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createProgram, issueStoredValue, redeemStoredValue } from "./accounts.ts";
@@ -231,6 +232,56 @@ test("proportional breakage recognizes redemptions times r/(1-r) in minor units"
     const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
     assert.equal(byAccount.get(fx.liability), "10.0000");
     assert.equal(byAccount.get(fx.breakageIncome), "-10.0000");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a second scan in one period and a replayed redemption each move the balance at most once", { skip: !DB }, async () => {
+  const fx = await seedStoredValueOrg();
+  const { org, actorId } = fx;
+  try {
+    await withSimClock("2026-10-15T12:00:00Z", async () => {
+      const issued = await withBypass(() =>
+        issueStoredValue({
+          orgId: org.orgId,
+          programId: fx.giftProgram,
+          amountMinor: toUnits("100"),
+          currency: "CAD",
+          debitAccountId: org.accounts.bank,
+          postingDate: org.date,
+          idempotencyKey: `twice-${randomUUID()}`,
+          actorId,
+        }),
+      );
+      const redeem = (amount: string, key: string) =>
+        withBypass(() =>
+          redeemStoredValue({ orgId: org.orgId, accountId: issued.accountId, amountMinor: toUnits(amount), idempotencyKey: key, actorId }),
+        );
+      const scan = async () =>
+        (await runStoredValueBreakage()).orgErrors.filter((failure) => failure.orgId === org.orgId);
+      await redeem("45", `twice-a-${randomUUID()}`);
+      assert.deepEqual(await scan(), []);
+      const first = await accountState(org.orgId, issued.accountId);
+      assert.equal(first.balance, "500000");
+      assert.equal(first.recognized, "50000");
+      // A retried redemption returns the first result and moves nothing.
+      const key = `twice-b-${randomUUID()}`;
+      await redeem("18", key);
+      assert.equal((await redeem("18", key)).balanceMinor, toUnits("32"));
+      // The new redemption makes breakage due again, but this period's
+      // recognition is already recorded: the second scan moves nothing.
+      assert.deepEqual(await scan(), []);
+      const after = await accountState(org.orgId, issued.accountId);
+      assert.equal(after.balance, "320000");
+      assert.equal(after.recognized, "50000");
+      const counts = (await withBypass(() => db.execute<{ journals: number; breakage: number }>(sql`
+        select (select count(*)::int from journal_entries
+                 where org_id = ${org.orgId} and custom->>'idempotencyKey' like ${`stored-value:breakage:${issued.accountId}:%`}) as journals,
+               (select count(*)::int from stored_value_entries
+                 where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage') as breakage`))).rows[0]!;
+      assert.deepEqual(counts, { journals: 1, breakage: 1 });
+    });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

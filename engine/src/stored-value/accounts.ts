@@ -382,8 +382,10 @@ interface EntryInsert {
 /**
  * Append one ledger entry. The (org, idempotency_key) unique key makes every
  * mutation replay-safe: a retried effect finds the first write and reports
- * it instead of moving money twice. A conflict is therefore expected on
- * replay and benign — the row count below distinguishes replay from loss.
+ * it instead of moving money twice. A conflict is expected on replay — the
+ * row count below distinguishes replay from loss — but it is only benign
+ * when nothing else moved: callers that also update a balance check
+ * priorStoredValueEntry before the update and refuse a replayed insert after.
  */
 export async function insertStoredValueEntry(orgId: string, entry: EntryInsert): Promise<{ entryId: string; replayed: boolean }> {
   const inserted = (await db.execute<{ id: string }>(sql`
@@ -409,6 +411,76 @@ export async function insertStoredValueEntry(orgId: string, entry: EntryInsert):
     });
   }
   return { entryId: existing.id, replayed: true };
+}
+
+export interface PriorStoredValueEntry {
+  entryId: string;
+  accountId: string;
+  amountMinor: bigint;
+  balanceAfter: bigint;
+  journalEntryId: string | null;
+}
+
+/**
+ * The entry already written under an idempotency key, read BEFORE a mutation
+ * moves any balance. Every mutation checks this first: the entry insert
+ * absorbs a replay, but the balance update beside it does not, so a retry
+ * that reached the update would move the balance a second time with no
+ * entry and no journal behind it. A prior entry that is not this same effect
+ * (another account, kind or amount) is a reused key, refused by name rather
+ * than answered with the first effect's result.
+ */
+export async function priorStoredValueEntry(
+  orgId: string,
+  idempotencyKey: string,
+  expected: { accountId?: string; kind: StoredValueEntryKind; amountMinor?: bigint },
+): Promise<PriorStoredValueEntry | null> {
+  const row = (await db.execute<{
+    id: string; accountId: string; kind: StoredValueEntryKind; amountMinor: string; balanceAfter: string; journalEntryId: string | null;
+  }>(sql`
+    select id, account_id as "accountId", kind, amount_minor::text as "amountMinor",
+           balance_after::text as "balanceAfter", journal_entry_id as "journalEntryId"
+      from stored_value_entries
+     where org_id = ${orgId} and idempotency_key = ${idempotencyKey}
+  `)).rows[0];
+  if (!row) return null;
+  const amountMinor = BigInt(row.amountMinor);
+  const mismatches = [
+    expected.accountId !== undefined && row.accountId !== expected.accountId ? "account" : null,
+    row.kind !== expected.kind ? `kind (${row.kind}, not ${expected.kind})` : null,
+    expected.amountMinor !== undefined && amountMinor !== expected.amountMinor
+      ? `amount (${fromUnits(amountMinor)}, not ${fromUnits(expected.amountMinor)})`
+      : null,
+  ].filter((value): value is string => value !== null);
+  if (mismatches.length > 0) {
+    throw storedValueRefusal({
+      message: `Idempotency key ${idempotencyKey} already recorded a different stored-value effect: ${mismatches.join(", ")} differ.`,
+      code: "stored_value_idempotency_conflict",
+      remedy: "Retry with the original request unchanged, or send a new idempotency key for a different operation.",
+      status: 409,
+    });
+  }
+  return {
+    entryId: row.id,
+    accountId: row.accountId,
+    amountMinor,
+    balanceAfter: BigInt(row.balanceAfter),
+    journalEntryId: row.journalEntryId,
+  };
+}
+
+/** A mutation that already moved the balance must land its own entry: a
+ * conflict at this point is a concurrent writer under the same key, so the
+ * caller's transaction rolls back instead of keeping a balance move that no
+ * entry records. A retry then finds the winner's entry first. */
+function requireFreshEntry(entry: { replayed: boolean }, idempotencyKey: string): void {
+  if (!entry.replayed) return;
+  throw storedValueRefusal({
+    message: `Another request recorded idempotency key ${idempotencyKey} while this one was applying it.`,
+    code: "stored_value_idempotency_conflict",
+    remedy: "Retry the request unchanged; it returns the effect that was recorded.",
+    status: 409,
+  });
 }
 
 /**
@@ -573,6 +645,13 @@ export interface IssueResult {
  */
 export async function issueStoredValue(input: IssueInput): Promise<IssueResult> {
   await requireStoredValueFeature(db, input.orgId);
+  const prior = await priorStoredValueEntry(input.orgId, `stored-value:issue-entry:${input.idempotencyKey}`, {
+    kind: "issue",
+    amountMinor: input.amountMinor,
+  });
+  if (prior) {
+    return { accountId: prior.accountId, code: null, entryId: prior.entryId, journalEntryId: prior.journalEntryId, replayed: true };
+  }
   const program = await loadStoredValueProgram(input.orgId, input.programId);
   if (!program.isActive) {
     throw storedValueRefusal({
@@ -683,6 +762,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
       idempotencyKey: `stored-value:issue-entry:${input.idempotencyKey}`,
       actorId: input.actorId ?? null,
     });
+    requireFreshEntry(entry, input.idempotencyKey);
     return { accountId, code, entryId: entry.entryId, journalEntryId, replayed: false };
   }
   throw storedValueRefusal({
@@ -722,6 +802,14 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
     });
   }
   const account = await lockStoredValueAccount(input.orgId, input.accountId);
+  // Checked under the row lock, so a concurrent retry waits for the first
+  // write and then finds its entry instead of redeeming a second time.
+  const prior = await priorStoredValueEntry(input.orgId, `stored-value:redeem-entry:${input.idempotencyKey}`, {
+    accountId: account.id,
+    kind: "redeem",
+    amountMinor: -input.amountMinor,
+  });
+  if (prior) return { entryId: prior.entryId, balanceMinor: prior.balanceAfter };
   assertRedeemable(account, input.amountMinor, `…${account.codeLast4}`);
   if (account.expiresOn) {
     const today = await businessToday(input.orgId);
@@ -763,6 +851,7 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
     idempotencyKey: `stored-value:redeem-entry:${input.idempotencyKey}`,
     actorId: input.actorId ?? null,
   });
+  requireFreshEntry(entry, input.idempotencyKey);
   return { entryId: entry.entryId, balanceMinor };
 }
 
@@ -803,6 +892,21 @@ export async function adjustStoredValue(input: AdjustInput): Promise<{ entryId: 
     });
   }
   const account = await lockStoredValueAccount(input.orgId, input.accountId);
+  const prior = await priorStoredValueEntry(input.orgId, `stored-value:adjust-entry:${input.idempotencyKey}`, {
+    accountId: account.id,
+    kind: "adjust",
+    amountMinor: input.deltaMinor,
+  });
+  if (prior) {
+    if (!prior.journalEntryId) {
+      throw storedValueRefusal({
+        message: `The adjustment recorded under idempotency key ${input.idempotencyKey} names no journal entry.`,
+        code: "stored_value_entry_unrecorded",
+        remedy: "Have the stored-value entry history for this account reviewed before adjusting it again.",
+      });
+    }
+    return { entryId: prior.entryId, journalEntryId: prior.journalEntryId, balanceMinor: prior.balanceAfter };
+  }
   if (account.status === "closed" || account.status === "expired") {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} is ${account.status}; closed history is corrected by reversal, not adjustment.`,
@@ -871,6 +975,7 @@ export async function adjustStoredValue(input: AdjustInput): Promise<{ entryId: 
     reason,
     actorId: input.actorId ?? null,
   });
+  requireFreshEntry(entry, input.idempotencyKey);
   return { entryId: entry.entryId, journalEntryId, balanceMinor };
 }
 
