@@ -63,7 +63,7 @@
     "marginTitle": "Marge de la commande",
     "marginHint": "Contribution des 30 derniers jours par canal, après expédition et frais",
     "marginEmpty": "La marge apparaît ici dès que les commandes du canal sont comptabilisées avec leurs coûts. Actualisez une commande pour la calculer.",
-    "marginPrecisionUnknown": "La marge en {currency} ne peut pas être affichée : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Une ligne manquante pour un code ISO 4217 pris en charge est restaurée avec l''amorçage des devises de la plateforme ; tout autre code doit être remplacé par un code ISO 4217 pris en charge.",
+    "marginPrecisionUnknown": "La marge en {currency} ne peut pas être affichée : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Une ligne manquante pour un code ISO 4217 pris en charge est restaurée avec l''amorçage des devises de la plateforme ; tout autre code reste tel qu’enregistré — examinez les justificatifs dans la devise d’origine sans réinterpréter les valeurs comptabilisées.",
     "marginReport": "Rapport de marge",
     "marginMeta": "{orders} commande(s) · {revenue} de chiffre d’affaires · {adSpend} de publicité",
     "marginEstimated": "{count} estimé(s)",
@@ -368,7 +368,7 @@
   },
   "drawer": {
     "lines": "Lignes",
-    "unknownPrecision": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Si la commande est en exception, suivez son remède dans les exceptions puis rejouez la commande. Une ligne manquante pour un code ISO 4217 pris en charge est restaurée avec l''amorçage des devises de la plateforme ; tout autre code doit être remplacé par un code ISO 4217 pris en charge.",
+    "unknownPrecision": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Si la commande est en exception, suivez son remède dans les exceptions puis rejouez la commande. Une ligne manquante pour un code ISO 4217 pris en charge est restaurée avec l''amorçage des devises de la plateforme ; tout autre code reste tel qu’enregistré — examinez les justificatifs dans la devise d’origine sans réinterpréter les valeurs comptabilisées.",
     "tenders": "Encaissements",
     "activity": "Activité",
     "posting": "Comptabilisation",
@@ -426,7 +426,7 @@
       "manual": "Manuel"
     },
     "unreadableAmount": "Un montant en {currency} ne peut pas être affiché : la valeur enregistrée est illisible. Réimportez ou rejouez l''événement source depuis l''onglet Activité du canal.",
-    "unknownPrecisionFrozen": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). L''historique comptabilisé est immuable et le rejeu ne peut pas le réécrire. Une ligne manquante pour un code ISO 4217 pris en charge est restaurée avec l''amorçage des devises de la plateforme ; tout autre code doit être remplacé par un code ISO 4217 pris en charge.",
+    "unknownPrecisionFrozen": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). L''historique comptabilisé est immuable et le rejeu ne peut pas le réécrire. Une ligne manquante pour un code ISO 4217 pris en charge est restaurée avec l''amorçage des devises de la plateforme ; tout autre code reste tel qu’enregistré — examinez les justificatifs dans la devise d’origine sans réinterpréter les valeurs comptabilisées.",
     "unreadableAmountFrozen": "Un montant en {currency} ne peut pas être affiché : la valeur enregistrée est illisible. L''historique comptabilisé est immuable et le rejeu ne peut pas le réécrire ; demandez à votre administrateur système de vérifier l''enregistrement stocké."
   },
   "assistance": {
