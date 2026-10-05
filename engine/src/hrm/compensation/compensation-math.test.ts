@@ -15,6 +15,7 @@ import {
   ordinaryLeastSquares,
   resolveMatrixGuideline,
   solveLinearSystem,
+  type MatrixGuideline,
 } from "./compensation-math.ts";
 import { CompensationError } from "./errors.ts";
 
