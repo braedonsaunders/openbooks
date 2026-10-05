@@ -409,7 +409,9 @@ export function documentWhere(
   }
   if (adhoc.q)
     parts.push(
-      sql`and (d.document_number ilike ${"%" + adhoc.q + "%"} or p.display_name ilike ${"%" + adhoc.q + "%"} or d.reference_number ilike ${"%" + adhoc.q + "%"})`,
+      // The storefront reference answers the operator's "where is SHOP-1001"
+      // the same way the number and vendor reference do.
+      sql`and (d.document_number ilike ${"%" + adhoc.q + "%"} or p.display_name ilike ${"%" + adhoc.q + "%"} or d.reference_number ilike ${"%" + adhoc.q + "%"} or d.external_ref ilike ${"%" + adhoc.q + "%"} or d.external_source ilike ${"%" + adhoc.q + "%"})`,
     )
   return sql.join(parts, sql` `)
 }

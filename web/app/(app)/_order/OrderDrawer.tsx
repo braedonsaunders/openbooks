@@ -16,6 +16,7 @@ import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { optionalScanResolver } from '../../../lib/scan'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
+import { ExternalRefChip } from '../../../components/external-ref-chip'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
@@ -1450,6 +1451,7 @@ export function OrderDrawer({
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {statusLabel(doc.status)}
           </Badge>
+          <ExternalRefChip externalRef={doc.external_ref} externalSource={doc.external_source} />
           {converted.partial ? (
             <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
               {t('convertedProgress', {
