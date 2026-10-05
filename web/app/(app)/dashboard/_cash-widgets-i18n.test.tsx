@@ -117,6 +117,50 @@ test('coverage tile names it when no payables are outstanding', async () => {
   }
 })
 
+function settlementData() {
+  return {
+    baseCurrency: 'USD',
+    asOfDate: '2026-09-16',
+    cashCollectDays: { available: true, value: 38 },
+    cashPayDays: { available: true, value: 41 },
+  } as unknown as DashboardMetrics
+}
+
+// The settlement tile shows the mean days to collect and to pay side by
+// side — each from its own history — and names the side that has none.
+test('settlement tile renders both means from the catalog pattern', async () => {
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-settlement-days" data={settlementData()} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('Settlement days'), 'the tile title resolves through dashboard.widgets copy')
+    assert.ok(html.includes('Collect 38d · Pay 41d'), 'both means render in the catalog pattern')
+  } finally {
+    await unmount()
+  }
+})
+
+test('settlement tile names the side with no history', async () => {
+  const data = {
+    ...settlementData(),
+    cashCollectDays: { available: true, value: null },
+  } as unknown as DashboardMetrics
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-settlement-days" data={data} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('Pay 41d'), 'the side with history still renders')
+    assert.ok(html.includes('No collection history yet'), 'the missing side is named')
+    assert.ok(!html.includes('Collect 38d'), 'no invented collect figure renders')
+  } finally {
+    await unmount()
+  }
+})
+
 test('lowest-point tile refuses by name when the rate is missing', async () => {
   const data = {
     ...lowestData(),
