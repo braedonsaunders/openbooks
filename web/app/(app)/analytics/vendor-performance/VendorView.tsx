@@ -4,7 +4,8 @@ import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { formatPercent01 } from '@/lib/format'
 import { Truck, Coins, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
@@ -264,9 +265,10 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
 /* ---------------------------------------------------------- Leverage Matrix */
 function MatrixTab({ data }: { data: VendorData }) {
   const t = useTranslations('analytics.vendor')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
-  const option = useMemo(() => matrixOption(data.rows, (n) => fmtMoney(n, { compact: true }), t, data.config.highPerformanceScore), [data, fmtMoney, t])
+  const option = useMemo(() => matrixOption(data.rows, (n) => fmtMoney(n, { compact: true }), t, data.config.highPerformanceScore, locale), [data, fmtMoney, locale, t])
   const unratedNoPayments = data.rows.filter((r) => r.unratedReason === 'no-payments').length
   const unratedUndated = data.rows.filter((r) => r.unratedReason === 'undated').length
   return (
@@ -295,7 +297,7 @@ function MatrixTab({ data }: { data: VendorData }) {
 /** One quadrant-matrix datum, as built below: { name, value: [logSpend, performance, spend] }. */
 type MatrixPoint = { data: { name: string; value: [number, number, number] } }
 
-function matrixOption(rows: VendorRow[], money: (value: number) => string, t: ReturnType<typeof useTranslations>, highPerformance: number): Record<string, unknown> {
+function matrixOption(rows: VendorRow[], money: (value: number) => string, t: ReturnType<typeof useTranslations>, highPerformance: number, locale: string): Record<string, unknown> {
   const rated = rows.filter((r) => r.performance !== null)
   const maxSpend = Math.max(1, ...rated.map((r) => toChartNumber(r.spend)))
   const byQuad = (q: Quadrant) =>
@@ -307,7 +309,7 @@ function matrixOption(rows: VendorRow[], money: (value: number) => string, t: Re
     }))
   return {
     grid: { left: 8, right: 16, top: 16, bottom: 28, containLabel: true },
-    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: MatrixPoint) => `${escapeTooltipHtml(p.data.name)}<br/>${t('chart.tooltipSpend', { amount: money(p.data.value[2]) })}<br/>${t('chart.tooltipOnTime', { pct: p.data.value[1].toFixed(0) })}` },
+    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: MatrixPoint) => `${escapeTooltipHtml(p.data.name)}<br/>${t('chart.tooltipSpend', { amount: money(p.data.value[2]) })}<br/>${t('chart.tooltipOnTime', { pct: formatPercent01(p.data.value[1] / 100, locale, 0) })}` },
     xAxis: { type: 'value', name: t('chart.xAxis'), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }, axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (v: number) => money(Math.pow(10, v)) } },
     yAxis: { type: 'value', name: t('chart.yAxis'), min: 0, max: 100, axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }, axisLabel: { color: '#94a3b8', fontSize: 9 } },
     series: [
@@ -345,7 +347,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
           onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, r.spend, (r.sharePct * 100).toFixed(1), r.bills, r.avgBill, r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
           className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
-          <Download size={11} /> CSV
+          <Download size={11} /> {t('csv.export')}
         </button>
       }
     >
