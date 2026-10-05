@@ -190,6 +190,7 @@ export async function loadParties(
     requestedPartyTab === 'compliance' ||
     requestedPartyTab === 'relationship' ||
     requestedPartyTab === 'paymentMethods' ||
+    requestedPartyTab === 'billing' ||
     requestedPartyTab === 'wages'
       ? requestedPartyTab
       : 'overview'
@@ -272,6 +273,7 @@ export async function loadParties(
     crossBorderTaxOn,
     storedValueEnabled,
     storeCreditBalances,
+    consolidatedBillingEnabled,
   ] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
@@ -331,6 +333,7 @@ export async function loadParties(
              and status in ('active', 'frozen')
            group by currency`)
       : { rows: [] as { currency: string; total: string }[] },
+    isFeatureEnabled(orgId, 'consolidatedBilling'),
   ])
   const resolvedPartyForm =
     (openParty || creating) && pickers && role
@@ -440,6 +443,13 @@ export async function loadParties(
                 canManageMethods: can(authz, 'payment_methods.manage'),
                 canManageAutopay: can(authz, 'autopay.manage'),
               }
+            : null,
+          // Billing hierarchies ride the consolidatedBilling feature plus
+          // the parties read grant; null hides the tab even on a customer
+          // drawer.
+          consolidatedBilling: consolidatedBillingEnabled
+            && (role === 'customer' || (!role && openParty?.customer != null))
+            ? { canManage: can(authz, 'documents.manage') }
             : null,
           multiCurrency,
           complianceEnabled,

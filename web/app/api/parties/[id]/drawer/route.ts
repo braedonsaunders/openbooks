@@ -77,8 +77,15 @@ export const GET = defineRoute({
     explicitLayoutId: formId,
   })
 
+  // Payer-hierarchy billing resolves in the payload like Compliance:
+  // drawer-open customers only, so the tab never loads for other roles or
+  // a feature-off org.
+  const consolidatedBilling = role === 'customer' && await isFeatureEnabled(gate.user.orgId, 'consolidatedBilling')
+    ? { canManage: can(gate, 'documents.manage') }
+    : null
   return NextResponse.json({
     payload,
+    consolidatedBilling,
     paymentTerms: paymentTerms.rows,
     departments: departments.rows,
     trades: trades.rows,

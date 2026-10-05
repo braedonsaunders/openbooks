@@ -35,6 +35,7 @@ import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { EmploymentTab } from '../hrm/EmploymentTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { PartyTaxIdSection } from './PartyTaxIdSection'
+import { BillingRelationshipsSection } from './BillingRelationshipsSection'
 import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -76,6 +77,7 @@ export function PartyDrawer({
   externalIdsTab = null,
   role,
   autopay = null,
+  consolidatedBilling = null,
   initialTab = 'overview',
   initialMode = 'view',
   basePath = '/parties',
@@ -161,6 +163,10 @@ export function PartyDrawer({
    *  (the autopay feature is off or the viewer lacks payment_methods.read),
    *  so the tab never renders without the read surface behind it. */
   autopay?: { canManageMethods: boolean; canManageAutopay: boolean } | null
+  /** Payer-hierarchy billing for a customer drawer. Null = gated (the
+   *  consolidatedBilling feature is off or the record is not a customer),
+   *  so the tab never renders without the read surface behind it. */
+  consolidatedBilling?: { canManage: boolean } | null
   initialTab?: PartyTab
   initialMode?: DrawerMode
   basePath?: string
@@ -208,6 +214,10 @@ export function PartyDrawer({
   // feature is on and payment_methods.read holds, so the same predicate
   // gates the tab button and the deep-link like Compliance.
   const showPaymentMethodsTab = (role === 'customer' || (!role && payload.customer != null)) && autopay != null
+  // Billing hierarchies ride the same contract: the loader passes null
+  // unless consolidated billing is on for a customer record, so the tab
+  // (and the payer data behind it) stays hidden everywhere else.
+  const showBillingTab = (role === 'customer' || (!role && payload.customer != null)) && consolidatedBilling != null
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
   const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
@@ -250,6 +260,7 @@ export function PartyDrawer({
     (initialTab === 'compliance' && !showComplianceTab) ||
     (initialTab === 'paymentMethods' && !showPaymentMethodsTab) ||
     (initialTab === 'store-credit' && !showStoreCreditTab) ||
+    (initialTab === 'billing' && !showBillingTab) ||
     (initialTab === 'employment' && !showEmploymentTab)
       ? 'overview'
       : initialTab
@@ -977,6 +988,7 @@ export function PartyDrawer({
     // out of the crowded overview.
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
     ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pricing' as const, label: t('tabs.pricing') }] : []),
+    ...(showBillingTab && !createMode ? [{ key: 'billing' as const, label: t('tabs.billing') }] : []),
     ...(showPaymentMethodsTab ? [{ key: 'paymentMethods' as const, label: t('tabs.paymentMethods') }] : []),
     ...(showStoreCreditTab ? [{ key: 'store-credit' as const, label: tsv('customer.tabLabel') }] : []),
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
@@ -1603,6 +1615,12 @@ export function PartyDrawer({
         ) : null}
         {tab === 'pricing' && role === 'customer' && !isPlaceholderName ? (
           <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} editable={editable} />
+        ) : null}
+        {tab === 'billing' && showBillingTab && !createMode ? (
+          <BillingRelationshipsSection
+            partyId={String(p.id)}
+            editable={editable && (consolidatedBilling?.canManage ?? false)}
+          />
         ) : null}
         {tab === 'paymentMethods' && showPaymentMethodsTab && !createMode ? (
           <PartyPaymentMethodsPanel

@@ -57,7 +57,8 @@
       "pulse": "Pulso",
       "relationship": "Relacionamento",
       "paymentMethods": "Métodos de pagamento",
-      "externalIds": "IDs externos"
+      "externalIds": "IDs externos",
+      "billing": "Faturamento"
     },
     "autopay": {
       "heading": "Métodos de pagamento",
@@ -361,6 +362,48 @@
       "valid": "IVA válido ({scheme})",
       "invalid": "IVA inválido ({scheme})",
       "unverified": "IVA não verificado ({scheme})"
+    }
+  },
+  "billingRelationships": {
+    "heading": "Faturamento",
+    "invoicesGoTo": "As faturas vão para {name}",
+    "consolidatedLine": "Consolidado {cadence} · pagador {payer}",
+    "standalone": "Este cliente fatura para si mesmo — nenhuma relação de faturamento redireciona suas faturas.",
+    "childrenHeading": "Clientes faturados por meio deste cliente",
+    "child": "Cliente",
+    "window": "Período",
+    "relationshipsHeading": "Relações de faturamento",
+    "new": "Adicionar relação de faturamento",
+    "billTo": "Faturar para",
+    "payer": "Pagador",
+    "group": "Grupo de consolidação",
+    "groupNone": "Avulso (sem consolidação)",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente até",
+    "openEnded": "Sem data de término",
+    "consequence": "A partir de {from}, as faturas deste cliente vão para {billTo}.",
+    "advancedHeading": "Detalhes da consolidação",
+    "advancedSummary": "Agrupamento, dia de corte e entidade faturadora por grupo",
+    "groupDetail": "{code} · {name} · dia de corte {day}",
+    "billingEntity": "Faturado por {name}",
+    "billingEntityFallback": "Faturado pela entidade do pagador",
+    "empty": "Sem relações de faturamento — este cliente fatura para si mesmo.",
+    "loadFailed": "Não foi possível carregar as relações de faturamento.",
+    "created": "Relação de faturamento salva",
+    "updated": "Relação de faturamento atualizada",
+    "removed": "Relação de faturamento removida",
+    "confirmTitle": "Remover relação de faturamento",
+    "confirmDelete": "Remover esta relação de faturamento?",
+    "errors": {
+      "invalidRecord": "Escolha clientes e grupos válidos.",
+      "dates": "Escolha datas de vigência válidas.",
+      "dateOrder": "A data de término não pode ser anterior à data de início.",
+      "references": "Escolha clientes e um grupo desta organização.",
+      "noRedirect": "Escolha um destinatário ou pagador diferente do cliente.",
+      "group": "O grupo deve estar ativo e faturar para o pagador desta relação — escolha um dos grupos do pagador ou deixe em branco.",
+      "overlap": "Este cliente já fatura por meio de outro pagador em parte desse período — encerre primeiro a janela existente e depois adicione a nova.",
+      "featureOff": "O faturamento consolidado foi desativado — ative-o em Configurações da empresa, Recursos, e tente novamente.",
+      "save": "Não foi possível salvar a relação de faturamento."
     }
   }
 }

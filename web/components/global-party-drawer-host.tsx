@@ -40,6 +40,7 @@ interface DrawerPayload {
   complianceEnabled?: boolean
   canManageCompliance?: boolean
   compliance?: { classId: string | null; classes: Array<{ id: string; code: string; name: string }> } | null
+  consolidatedBilling?: { canManage: boolean } | null
 }
 
 function isRole(value: string | null): value is RelatedPartyRole {
@@ -48,7 +49,7 @@ function isRole(value: string | null): value is RelatedPartyRole {
 
 function isPartyTab(value: string | null): value is PartyTab {
   return value === 'benefits' || value === 'overview' || value === 'transactions' || value === 'activities' || value === 'contacts'
-    || value === 'addresses' || value === 'accounting' || value === 'wages' || value === 'compliance'
+    || value === 'addresses' || value === 'accounting' || value === 'wages' || value === 'compliance' || value === 'billing'
 }
 
 /** Shell-level related-party overlay. Its close URL is the exact page beneath it. */
@@ -138,6 +139,7 @@ export function GlobalPartyDrawerHost({
         complianceEnabled={data.complianceEnabled === true}
         canManageCompliance={data.canManageCompliance === true}
         compliance={data.compliance ?? null}
+        consolidatedBilling={data.consolidatedBilling ?? null}
         role={role}
         initialTab={initialTab}
         basePath={closeHref}

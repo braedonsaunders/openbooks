@@ -54,7 +54,8 @@
       "pulse": "Pulso",
       "relationship": "Relación",
       "paymentMethods": "Métodos de pago",
-      "externalIds": "ID externos"
+      "externalIds": "ID externos",
+      "billing": "Facturación"
     },
     "autopay": {
       "heading": "Métodos de pago",
@@ -361,6 +362,48 @@
       "valid": "NIF-IVA válido ({scheme})",
       "invalid": "NIF-IVA inválido ({scheme})",
       "unverified": "NIF-IVA sin verificar ({scheme})"
+    }
+  },
+  "billingRelationships": {
+    "heading": "Facturación",
+    "invoicesGoTo": "Las facturas van a {name}",
+    "consolidatedLine": "Consolidado {cadence} · pagador {payer}",
+    "standalone": "Este cliente se factura a sí mismo: ninguna relación de facturación redirige sus facturas.",
+    "childrenHeading": "Clientes facturados a través de este cliente",
+    "child": "Cliente",
+    "window": "Período",
+    "relationshipsHeading": "Relaciones de facturación",
+    "new": "Añadir relación de facturación",
+    "billTo": "Facturar a",
+    "payer": "Pagador",
+    "group": "Grupo de consolidación",
+    "groupNone": "Independiente (sin consolidación)",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
+    "openEnded": "Sin fecha de fin",
+    "consequence": "A partir del {from}, las facturas de este cliente van a {billTo}.",
+    "advancedHeading": "Detalles de consolidación",
+    "advancedSummary": "Agrupación, día de corte y entidad facturadora por grupo",
+    "groupDetail": "{code} · {name} · día de corte {day}",
+    "billingEntity": "Facturado por {name}",
+    "billingEntityFallback": "Facturado por la entidad del pagador",
+    "empty": "Sin relaciones de facturación: este cliente se factura a sí mismo.",
+    "loadFailed": "No se pudieron cargar las relaciones de facturación.",
+    "created": "Relación de facturación guardada",
+    "updated": "Relación de facturación actualizada",
+    "removed": "Relación de facturación eliminada",
+    "confirmTitle": "Eliminar relación de facturación",
+    "confirmDelete": "¿Eliminar esta relación de facturación?",
+    "errors": {
+      "invalidRecord": "Elija clientes y grupos válidos.",
+      "dates": "Elija fechas de vigencia válidas.",
+      "dateOrder": "La fecha de fin no puede ser anterior a la de inicio.",
+      "references": "Elija clientes y un grupo de esta organización.",
+      "noRedirect": "Elija un destinatario o pagador distinto del cliente.",
+      "group": "El grupo debe estar activo y facturar al pagador de esta relación: elija uno de los grupos del pagador o déjelo vacío.",
+      "overlap": "Este cliente ya factura a través de otro pagador durante parte de ese período: cierre primero la ventana existente y luego añada la nueva.",
+      "featureOff": "La facturación consolidada se desactivó: actívela en Ajustes de la empresa, Funciones, e inténtelo de nuevo.",
+      "save": "No se pudo guardar la relación de facturación."
     }
   }
 }

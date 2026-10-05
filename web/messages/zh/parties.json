@@ -57,7 +57,8 @@
       "pulse": "动态",
       "relationship": "关系",
       "paymentMethods": "付款方式",
-      "externalIds": "外部 ID"
+      "externalIds": "外部 ID",
+      "billing": "开票"
     },
     "autopay": {
       "heading": "付款方式",
@@ -361,6 +362,48 @@
       "valid": "增值税号有效 ({scheme})",
       "invalid": "增值税号无效 ({scheme})",
       "unverified": "增值税号未验证 ({scheme})"
+    }
+  },
+  "billingRelationships": {
+    "heading": "开票",
+    "invoicesGoTo": "发票开给 {name}",
+    "consolidatedLine": "{cadence}合并 · 付款方 {payer}",
+    "standalone": "该客户自行结算——其发票未被任何开票关系转移。",
+    "childrenHeading": "通过该客户开票的客户",
+    "child": "客户",
+    "window": "期间",
+    "relationshipsHeading": "开票关系",
+    "new": "添加开票关系",
+    "billTo": "开票给",
+    "payer": "付款方",
+    "group": "合并结算组",
+    "groupNone": "单独（不合并）",
+    "effectiveFrom": "生效自",
+    "effectiveTo": "生效至",
+    "openEnded": "无结束日期",
+    "consequence": "自 {from} 起，该客户的发票将开给 {billTo}。",
+    "advancedHeading": "合并详情",
+    "advancedSummary": "各组的行分组、截止日与开票实体",
+    "groupDetail": "{code} · {name} · 截止日 {day}",
+    "billingEntity": "开票方：{name}",
+    "billingEntityFallback": "由付款方所属实体开票",
+    "empty": "无开票关系——该客户自行结算。",
+    "loadFailed": "无法加载开票关系。",
+    "created": "开票关系已保存",
+    "updated": "开票关系已更新",
+    "removed": "开票关系已删除",
+    "confirmTitle": "删除开票关系",
+    "confirmDelete": "删除此开票关系？",
+    "errors": {
+      "invalidRecord": "请选择有效的客户和组。",
+      "dates": "请选择有效的生效日期。",
+      "dateOrder": "结束日期不能早于开始日期。",
+      "references": "请选择本组织的客户和组。",
+      "noRedirect": "请选择与该客户不同的开票对象或付款方。",
+      "group": "该组必须有效且向此关系的付款方开票——请选择付款方的组，或留空。",
+      "overlap": "该客户在该期间的一部分已通过另一付款方开票——请先关闭现有期间，再添加新期间。",
+      "featureOff": "合并开票已关闭——请在公司设置的功能中重新开启，然后重试。",
+      "save": "无法保存开票关系。"
     }
   }
 }
