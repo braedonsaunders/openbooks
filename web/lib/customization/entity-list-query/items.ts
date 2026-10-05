@@ -18,6 +18,8 @@ export const ITEM_BUILT_IN_EXPR: Record<string, SQL> = {
   default_rate: sql`i.default_rate`,
   default_cost: sql`i.default_cost`,
   unit: sql`i.unit`,
+  family: sql`fam.code`,
+  family_name: sql`fam.name`,
   status: ITEM_STATUS_EXPR,
 }
 
@@ -28,6 +30,7 @@ export const ITEM_SORTS: Record<string, SQL> = {
   category: sql`i.category`,
   rate: sql`i.default_rate`,
   cost: sql`i.default_cost`,
+  family: sql`fam.code`,
   status: sql`i.is_active`,
 }
 
@@ -46,6 +49,12 @@ function itemFilterPredicate(clause: FilterClause): SQL | null {
   }
   if (clause.key === 'kind') return select(sql`i.kind`)
   if (clause.key === 'status') return select(ITEM_STATUS_EXPR)
+  if (clause.key === 'family') {
+    if (clause.operator === 'eq') return sql`fam.code = ${value}`
+    if (clause.operator === 'contains') return sql`fam.code ilike ${`%${value}%`}`
+    if (clause.operator === 'is_set') return sql`i.family_id is not null`
+    if (clause.operator === 'is_not_set') return sql`i.family_id is null`
+  }
   if (clause.key === 'category') {
     if (clause.operator === 'eq') return sql`i.category = ${value}`
     if (clause.operator === 'contains') return sql`i.category ilike ${`%${value}%`}`
@@ -67,7 +76,9 @@ export function itemWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: strin
   if (adhoc.filters?.kind) parts.push(sql`and i.kind = ${adhoc.filters.kind}`)
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
-    parts.push(sql`and (i.name ilike ${query} or i.code ilike ${query} or i.category ilike ${query})`)
+    // Variants are found by their family and option values through the same
+    // search: no separate variant picker exists.
+    parts.push(sql`and (i.name ilike ${query} or i.code ilike ${query} or i.category ilike ${query} or fam.name ilike ${query} or fam.code ilike ${query} or i.option_values::text ilike ${query})`)
   }
   return sql.join(parts, sql` `)
 }

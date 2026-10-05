@@ -74,6 +74,13 @@ export {
 } from "./entity-list-query/items"
 
 export {
+  FAMILY_STATUS_EXPR,
+  FAMILY_BUILT_IN_EXPR,
+  FAMILY_SORTS,
+  familyWhere,
+} from "./entity-list-query/item-families"
+
+export {
   ACCOUNT_CLASS_EXPR,
   ACCOUNT_STATUS_EXPR,
   accountBaseJoins,

@@ -130,7 +130,7 @@ test('report entity lists retain source order and reject duplicate sources and k
 test('every inventory lot movement join is pinned to the base organization', () => {
   const entity = REPORT_ENTITY_MAP.inventory_lot_movements!
   const joins = entity.from.split('\n').filter((line) => /\bJOIN\b/i.test(line))
-  assert.equal(joins.length, 6)
+  assert.equal(joins.length, 7)
   for (const join of joins) {
     assert.match(join, /\borg_id\s*=\s*im\.org_id\b/i, join.trim())
   }

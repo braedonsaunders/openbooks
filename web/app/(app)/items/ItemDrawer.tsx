@@ -1,7 +1,9 @@
 'use client'
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import {
   BadgePercent,
@@ -45,6 +47,8 @@ import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { RecordKindCards } from '../../../components/record-kind-cards'
 import { useAppAction } from '../../../lib/use-app-action'
+import { apiJson } from '../../../lib/api-error'
+import { promptDialog } from '../../../lib/prompt'
 
 interface AccountOpt {
   id: string
@@ -172,6 +176,8 @@ export function ItemDrawer({
   configuredPricingViews = [],
   createMode = false,
   recordTabs = [],
+  family = null,
+  variantsEnabled = false,
 }: {
   payload: ItemPayload
   accounts: AccountOpt[]
@@ -206,6 +212,10 @@ export function ItemDrawer({
   createMode?: boolean
   /** Server-rendered configuration collections scoped to this persisted item. */
   recordTabs?: { key: string; label: string; content: ReactNode }[]
+  /** Variant membership resolved server-side; null when standalone or gated off. */
+  family?: { id: string; code: string } | null
+  /** Item variants gate: without it no family surface is offered. */
+  variantsEnabled?: boolean
 }) {
   const t = useTranslations('items')
   const tCommon = useTranslations('common')
@@ -430,6 +440,27 @@ export function ItemDrawer({
     )
   }
 
+  /**
+   * Make this standalone item the first variant of a new family. The item
+   * keeps its code and name; the two prompts capture the option it carries.
+   */
+  async function convertToFamily() {
+    const optionName = await promptDialog({ title: t('families.convert.optionTitle'), label: t('families.convert.optionLabel') })
+    if (optionName === null || optionName === '') return
+    const optionValue = await promptDialog({ title: t('families.convert.valueTitle', { option: optionName }), label: t('families.convert.valueLabel') })
+    if (optionValue === null || optionValue === '') return
+    try {
+      const created = await apiJson<{ id: string; code: string }>(`/api/items/${it.id}/convert-to-family`, {
+        method: 'POST',
+        body: JSON.stringify({ options: [{ name: optionName, value: optionValue }] }),
+      })
+      toast.success(t('families.convert.done', { family: created.code }))
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   const ro = !editable
 
   const effectiveLayout = layout ?? defaultFormLayout('item')
@@ -636,6 +667,14 @@ export function ItemDrawer({
                 <div className="space-y-0.5 [&_button]:w-full [&_button]:justify-start">
                   {isActive ? <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void setActiveState(false) }}>{t('drawer.deactivate')}</Button> : <Button variant="ghost" disabled={busy || !nameValid} onClick={() => { setActionsOpen(false); void setActiveState(true) }}>{t('drawer.activate')}</Button>}
                   {!isActive && !nameValid ? <p className="px-2 py-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</p> : null}
+                  {variantsEnabled && !createMode && family ? (
+                    <Button variant="ghost" asChild onClick={() => setActionsOpen(false)}>
+                      <Link href={`/items/families?family=${family.id}`}>{t('families.itemTab.openFamily')}</Link>
+                    </Button>
+                  ) : null}
+                  {variantsEnabled && !createMode && !family ? (
+                    <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void convertToFamily() }}>{t('families.convert.action')}</Button>
+                  ) : null}
                 </div>
               </Popover>
             </div>

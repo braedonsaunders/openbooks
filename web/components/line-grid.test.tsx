@@ -325,3 +325,45 @@ test("Alt+Down keeps an uncommitted tax override on its own line", async (t) => 
   assert.equal(rows[1]!.taxOverridden, true, "the moved line keeps its override");
   assert.ok(String(rows[1]!.taxAmount).startsWith("5"), `the moved line keeps its override amount, got ${rows[1]!.taxAmount}`);
 });
+
+test("opt-in selection renders checkboxes bound to row identities", async (t) => {
+  const seen: ReadonlySet<string>[] = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const rows = [line("a", "1"), line("b", "2")];
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <LineGrid<TestRow>
+          columns={[{ key: "quantity", label: "Qty", width: "110px", type: "decimal", decimalScale: 8 }]}
+          rows={rows}
+          onRowsChange={() => {}}
+          emptyRow={() => line("z", "")}
+          readOnly
+          minRows={0}
+          getRowKey={(row) => row.clientKey}
+          selection={{ selected: new Set(["a"]), onChange: (next) => { seen.push(next); } }}
+        />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const boxes = [...host.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+  assert.equal(boxes.length, 3, "header select-all plus one box per row");
+  assert.equal(boxes[1]!.checked, true, "the selected row renders checked");
+  assert.equal(boxes[2]!.checked, false, "the unselected row renders unchecked");
+  await act(async () => {
+    boxes[2]!.click();
+    await tick();
+  });
+  await tick();
+  assert.deepEqual([...(seen[0] ?? [])].sort(), ["a", "b"], "toggling a row adds its identity");
+});

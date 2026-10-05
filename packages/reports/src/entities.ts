@@ -408,6 +408,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
       LEFT JOIN accounts a ON a.id = dl.account_id AND a.org_id = dl.org_id
       LEFT JOIN items it ON it.id = dl.item_id AND it.org_id = dl.org_id
+      LEFT JOIN item_families fam ON fam.id = it.family_id AND fam.org_id = it.org_id
       LEFT JOIN parties emp ON emp.id = dl.employee_id AND emp.org_id = dl.org_id
       LEFT JOIN departments dep ON dep.id = coalesce(dl.department_id, d.department_id) AND dep.org_id = dl.org_id
       LEFT JOIN projects prj ON prj.id = coalesce(dl.project_id, d.project_id) AND prj.org_id = dl.org_id
@@ -429,6 +430,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
       { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
+      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
       { key: 'account_number', label: 'Account #', kind: 'text', expr: 'a.number' },
       { key: 'account_name', label: 'Account', kind: 'text', expr: 'a.name' },
       { key: 'description', label: 'Description', kind: 'text', expr: 'dl.description' },
@@ -492,7 +495,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     from: `items it
       LEFT JOIN accounts inc ON inc.id = it.income_account_id AND inc.org_id = it.org_id
       LEFT JOIN accounts exp ON exp.id = it.expense_account_id AND exp.org_id = it.org_id
-      LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id AND rec.org_id = it.org_id`,
+      LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id AND rec.org_id = it.org_id
+      LEFT JOIN item_families fam ON fam.id = it.family_id AND fam.org_id = it.org_id`,
     orgColumn: 'it.org_id',
     subsidiaryScope: null,
     columns: [
@@ -504,6 +508,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'default_rate', label: 'Default rate', kind: 'money', expr: 'it.default_rate' },
       { key: 'default_cost', label: 'Default cost', kind: 'money', expr: 'it.default_cost' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'it.unit' },
+      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
+      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
+      { key: 'option_values', label: 'Option values', kind: 'text', expr: 'it.option_values::text' },
       { key: 'income_account', label: 'Income account', kind: 'text', expr: 'inc.name' },
       { key: 'expense_account', label: 'Expense account', kind: 'text', expr: 'exp.name' },
       { key: 'recovery_account', label: 'Cost recovery account', kind: 'text', expr: 'rec.name' },
@@ -523,6 +530,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     from: `inventory_movements im
       JOIN lots lot ON lot.id = im.lot_id AND lot.org_id = im.org_id
       JOIN items it ON it.id = im.item_id AND it.id = lot.item_id AND it.org_id = im.org_id
+      LEFT JOIN item_families fam ON fam.id = it.family_id AND fam.org_id = im.org_id
       LEFT JOIN stock_locations sl ON sl.id = im.stock_location_id AND sl.org_id = im.org_id
       LEFT JOIN document_lines dl ON dl.id = im.document_line_id AND dl.org_id = im.org_id
       LEFT JOIN documents d ON d.id = dl.document_id AND d.org_id = im.org_id
@@ -540,6 +548,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'expires_on', label: 'Expiry', kind: 'date', expr: 'lot.expires_on' },
       { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
+      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
       {
         key: 'kind', label: 'Movement type', kind: 'enum', expr: 'im.kind',
         options: [
@@ -597,6 +607,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       JOIN item_inventory_profiles ip ON ip.item_id = dl.item_id AND ip.org_id = dl.org_id
        AND ${BACKORDER_OPEN_QUANTITY} > 0
       JOIN items it ON it.id = dl.item_id AND it.org_id = dl.org_id
+      LEFT JOIN item_families fam ON fam.id = it.family_id AND fam.org_id = it.org_id
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
       LEFT JOIN stock_locations sl ON sl.id = dl.stock_location_id AND sl.org_id = dl.org_id`,
     orgColumn: 'dl.org_id',
@@ -612,6 +623,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
       { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
+      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
       { key: 'location_code', label: 'Stock location', kind: 'text', expr: 'sl.code' },
       { key: 'quantity', label: 'Ordered', kind: 'number', expr: 'dl.quantity' },
       { key: 'quantity_fulfilled', label: 'Fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
