@@ -91,7 +91,13 @@
     "healthInsights": "Finanzielle Hinweise",
     "revenueTrend": "Umsatz- und Gewinnentwicklung",
     "marginTrend": "Margenentwicklung",
-    "budgetVariance": "Budget vs. Ist"
+    "budgetVariance": "Budget vs. Ist",
+    "kpiVendorConcentration": "Lieferantenkonzentration",
+    "kpiVendorPayment": "Lieferantenzahlungsverhalten",
+    "kpiSpendVelocity": "Ausgabendynamik",
+    "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
+    "kpiVendorPaymentHint": "Ø {days} Tage bis zur Zahlung · {late} verspätet · {period}",
+    "kpiSpendVelocityHint": "{savings} Sparpotenzial · {period}"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -204,7 +210,10 @@
     "healthInsights": "Probleme, Empfehlungen und Auffälligkeiten aus Finanzielle Gesundheit für den Zeitraum.",
     "revenueTrend": "Monatlicher Umsatz, Bruttogewinn und Betriebsergebnis der letzten Monate.",
     "marginTrend": "Monatliche Brutto- und operative Margen der letzten Monate.",
-    "budgetVariance": "Das genehmigte Budget gegenüber dem Ist des Zeitraums, mit den abweichenden Konten."
+    "budgetVariance": "Das genehmigte Budget gegenüber dem Ist des Zeitraums, mit den abweichenden Konten.",
+    "kpiVendorConcentration": "Lieferanten-HHI und Top-5-Ausgabenanteil aus der Lieferantenleistung.",
+    "kpiVendorPayment": "Pünktlichkeitsquote und verspätet gezahlte Ausgaben aus der Lieferantenleistung.",
+    "kpiSpendVelocity": "Offene Ausgabenalarme und Sparpotenzial aus der Ausgabendynamik."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

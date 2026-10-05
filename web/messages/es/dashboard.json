@@ -91,7 +91,13 @@
     "healthInsights": "Hallazgos financieros",
     "revenueTrend": "Evolución de ingresos y beneficios",
     "marginTrend": "Evolución de márgenes",
-    "budgetVariance": "Presupuesto frente a real"
+    "budgetVariance": "Presupuesto frente a real",
+    "kpiVendorConcentration": "Concentración de proveedores",
+    "kpiVendorPayment": "Desempeño de pagos a proveedores",
+    "kpiSpendVelocity": "Velocidad del gasto",
+    "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
+    "kpiVendorPaymentHint": "Promedio de {days} días de pago · {late} con retraso · {period}",
+    "kpiSpendVelocityHint": "{savings} de ahorro potencial · {period}"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -204,7 +210,10 @@
     "healthInsights": "Problemas, recomendaciones y anomalías que Salud financiera encontró en el período.",
     "revenueTrend": "Ingresos, beneficio bruto y resultado operativo mensuales de los últimos meses.",
     "marginTrend": "Márgenes bruto y operativo mensuales de los últimos meses.",
-    "budgetVariance": "El presupuesto aprobado frente a lo real del período, con las cuentas desviadas."
+    "budgetVariance": "El presupuesto aprobado frente a lo real del período, con las cuentas desviadas.",
+    "kpiVendorConcentration": "HHI de proveedores y cuota de gasto top 5 del desempeño de proveedores.",
+    "kpiVendorPayment": "Tasa de pago puntual y gasto pagado tarde del desempeño de proveedores.",
+    "kpiSpendVelocity": "Alertas de gasto abiertas y ahorro potencial de la velocidad del gasto."
   },
   "grid": {
     "customizing": "Personalizando tu panel",
