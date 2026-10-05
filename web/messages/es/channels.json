@@ -72,7 +72,8 @@
       "hint": "Si las ventas de hoy llegaron al mayor, con la solución en cada prueba abierta.",
       "clear": "Las ventas de hoy están íntegras en los libros.",
       "loadFailed": "La integridad no se cargó (estado {status}).",
-      "proofsSummary": "{count, plural, one {Cómo se prueba la integridad · # prueba} other {Cómo se prueba la integridad · # pruebas}}",
+      "proofsTitle": "Cómo se prueba la integridad",
+      "proofsSummary": "{count, plural, one {# prueba} other {# pruebas}}",
       "proven": "Probado"
     }
   },
