@@ -756,8 +756,8 @@ async function loadPayoutLine(
   if (allowedSubsidiaryIds === undefined) {
     refuse(
       "payout_line_unknown",
-      "The settlement line does not belong to this organization.",
-      "Reload the payouts workspace and choose an unmatched line from this organization.",
+      "The settlement line is unavailable in this payout's legal entity.",
+      "Reload the payouts workspace and choose an unmatched line available in this payout's legal entity.",
       "lineId",
     );
   }
@@ -772,8 +772,8 @@ async function loadPayoutLine(
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.batchSubsidiaryId)) {
     refuse(
       "payout_line_unknown",
-      "The settlement line does not belong to this organization.",
-      "Reload the payouts workspace and choose an unmatched line from this organization.",
+      "The settlement line is unavailable in this payout's legal entity.",
+      "Reload the payouts workspace and choose an unmatched line available in this payout's legal entity.",
       "lineId",
     );
   }
