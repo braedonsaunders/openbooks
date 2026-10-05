@@ -39,7 +39,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
   FR: FR_PAYROLL_PACK,
   IE: IE_PAYROLL_PACK,
   AU: AU_PAYROLL_PACK,
-  // F-reg-003 is fixed: the generic rate and tax-year modules take the pack's
+  // The registry load cycle is closed: the generic rate and tax-year modules take the pack's
   // declarations as parameters instead of importing this registry, so Italy —
   // the first pack to need actual behaviour (`resolveStatutoryRates`) rather
   // than types — registers like every other pack.

@@ -843,7 +843,7 @@ export type SeedAssignee =
  * change_status node — so tests prove the ENGINE releases the document
  * deterministically (not an authored side-effect). The trigger defaults to
  * on_submit (documents); lifecycle subjects seed their own entry event
- * (e.g. on_create for pre-flow bank details, F-t04-004 residual).
+ * (e.g. on_create for pre-flow bank details).
  */
 export async function seedApprovalFlow(
   orgId: string,

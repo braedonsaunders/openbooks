@@ -30,7 +30,7 @@ import { FR_EMPLOYEE_FACTS } from "./employee-facts.ts";
 // ---------------------------------------------------------------------------
 // Regions: France levies no regional income tax — PAS is national — so the one
 // known region is the country itself, and it is supported now that the grille
-// computes end to end (finding F-fr-001 emptied this list at the skeleton
+// computes end to end (an earlier review emptied this list at the skeleton
 // stage, correctly for that state; the grille then landed).
 //
 // DOM domiciles are NOT a region distinction here. Grilles II and III are

@@ -152,7 +152,7 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
     `),
     // Bank-typed accounts behave as cash in every cash reader, so one that
     // persistently carries a credit-normal balance corrupts cash everywhere
-    // (F-t08-003: a -CA$40,000 tax provision typed asset_bank). Reconcilable
+    // (for example a tax provision typed asset_bank). Reconcilable
     // accounts are managed facilities the business tracks as banks and stay
     // silent; genuine cash is debit-normal and never matches.
     db.execute<{ account_id: string; number: string | null; name: string; type: string; balance: string }>(sql`

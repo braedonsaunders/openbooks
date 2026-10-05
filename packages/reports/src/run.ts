@@ -1390,7 +1390,7 @@ function formatExactNumber(value: unknown): string | null {
  * Display value for a summarize-mode measure. Date-kind source columns
  * (min/max/latest of a date) render as calendar dates — the kind-blind
  * fallback printed Date objects as datetimes ("2026-06-30 04:00:00", a UTC
- * rendering of a local-midnight date; F-t07-007). Every other measure keeps
+ * rendering of a local-midnight date). Every other measure keeps
  * the exact shaping it has today.
  */
 export function formatMeasureValue(

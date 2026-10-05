@@ -185,7 +185,7 @@ test("EHT in Ontario unconfigured refuses — unknown liability, not zero", () =
 
 test("account slots apply by population: QC-only slots absent for ON, demanded when unknown", () => {
   // Through the registry, never a direct pack import (which closes the
-  // load-order cycle F-reg-002 extracted payroll-error.ts to break).
+  // load-order cycle that payroll-error.ts was extracted to break).
   const slot = (key: string) => payrollPack("CA").statutorySlots.find((s) => s.key === key)!;
   const on = new Map([["CA", new Set<string | null>(["ON"])]]);
   const qc = new Map([["CA", new Set<string | null>(["QC"])]]);

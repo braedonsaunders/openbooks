@@ -840,7 +840,7 @@ export async function resolveProjectActualCosts(
   const ids = [...new Set(projectIds.filter((id) => typeof id === 'string' && id.length > 0))]
   const empty = { costs: new Map<string, string>(), profileErrors: new Map<string, string>() }
   if (ids.length === 0) return empty
-  // One type/version lookup for the whole id set (F-t03-013: a list sort over
+  // One type/version lookup for the whole id set (a list sort over
   // hundreds of projects cannot afford one `loadProjectType` query each).
   // Mirrors `loadProjectType` (engine/src/projects/type.ts): a complete type
   // row (id, versioned financial profile, invoicing and backup profiles)

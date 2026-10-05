@@ -36,7 +36,7 @@
  *     tax facsimiles) — localizing them corrupts the filing;
  *   - machine canonicalizations (import comparison, refusal-text contracts
  *     pinned by unit tests, numeric hour extraction parsed by Number());
- *   - documented F-t04-010 reader defaults whose UI callers all pass the
+ *   - documented reader defaults whose UI callers all pass the
  *     request locale explicitly (the default serves engine tests and
  *     label-agnostic agent-tool callers).
  */

@@ -207,7 +207,7 @@ export function resolveEmployeePayrollContext(input: {
 // ---------------------------------------------------------------------------
 //
 // These lived in `statutory-rates.ts` and read this registry from there — the
-// edge that closed the F-reg-003 cycle. A function whose whole job is "ask
+// edge that closed the registry load cycle. A function whose whole job is "ask
 // every pack" belongs with the registry, so they live here now; the
 // calculation half in `statutory-rates.ts` takes the declarations as
 // parameters instead.

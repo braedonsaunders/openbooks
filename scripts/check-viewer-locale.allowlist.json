@@ -2,37 +2,37 @@
   {
     "path": "web/lib/cash/core.ts",
     "fn": "categoryWeekly",
-    "reason": "F-t04-010 reader default; all four UI position builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts en-US week labels)"
+    "reason": "Reader default; all four UI position builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts en-US week labels)"
   },
   {
     "path": "web/lib/cash/core.ts",
     "fn": "weekLabel",
-    "reason": "F-t04-010 reader default; the timeline builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts Sep 7 / fr septembre)"
+    "reason": "Reader default; the timeline builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts Sep 7 / fr septembre)"
   },
   {
     "path": "web/lib/cash/ap-position.ts",
     "fn": "apPosition",
-    "reason": "F-t04-010 reader default; the AP loader passes getLocale() — the default serves the label-agnostic ap_position agent-tool caller"
+    "reason": "Reader default; the AP loader passes getLocale() — the default serves the label-agnostic ap_position agent-tool caller"
   },
   {
     "path": "web/lib/cash/ar-position.ts",
     "fn": "arPosition",
-    "reason": "F-t04-010 reader default (F2-14b parity with apPosition); the AR loader passes getLocale() — the default serves the label-agnostic ar_position agent-tool caller"
+    "reason": "Reader default (parity with apPosition); the AR loader passes getLocale() — the default serves the label-agnostic ar_position agent-tool caller"
   },
   {
     "path": "web/lib/cash/cash-position.ts",
     "fn": "buildTimeline",
-    "reason": "F-t04-010 reader default; all four timeline builders (ar/ap/cash positions, analytics cashflow) pass the viewer locale explicitly — the default serves direct engine consumers"
+    "reason": "Reader default; all four timeline builders (ar/ap/cash positions, analytics cashflow) pass the viewer locale explicitly — the default serves direct engine consumers"
   },
   {
     "path": "web/lib/cash/cash-position.ts",
     "fn": "cashPosition",
-    "reason": "F-t04-010 reader default; the banking cash loader passes getLocale() — the default serves the entries-only API route, vitals/metrics aggregates, engine tests, and agent callers, none of which surface labels"
+    "reason": "Reader default; the banking cash loader passes getLocale() — the default serves the entries-only API route, vitals/metrics aggregates, engine tests, and agent callers, none of which surface labels"
   },
   {
     "path": "web/lib/analytics/cashflow-data.ts",
     "fn": "cashflowData",
-    "reason": "F-t04-010 reader default; the analytics cashflow loader passes getLocale() — the default serves the label-agnostic agent-tool caller"
+    "reason": "Reader default; the analytics cashflow loader passes getLocale() — the default serves the label-agnostic agent-tool caller"
   },
   {
     "path": "web/lib/data-io/export-cap.ts",
