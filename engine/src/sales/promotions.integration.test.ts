@@ -337,7 +337,8 @@ test('fixed yen promotion with fils apportioning and stacked caps', { skip: !DB 
   // A configured 30 yen applies 30 whole yen on a -30.0000 line. A 2.000
   // BHD amount over 1.234 + 2.468 lines deals largest-remainder fils
   // [667, 1333]; a second 2.000 BHD amount is then capped at the remaining
-  // 1702 fils as [567, 1135], with the pre-cap 2000 kept in the audit.
+  // 1702 fils, re-dealt in proportion to the computed shares as
+  // [568, 1134], with the pre-cap 2000 kept in the audit.
   await ensureIsoRegistry()
   const org = await withBypassContext(() => createScratchOrg())
   try {
@@ -386,7 +387,7 @@ test('fixed yen promotion with fils apportioning and stacked caps', { skip: !DB 
     assert.equal(second.discountMinor, '1702')
     assert.deepEqual(
       (await withOrg(org.orgId, () => discountLines(org.orgId, doc))).map((line) => line.amount),
-      ['-0.6670', '-1.3330', '-0.5670', '-1.1350'],
+      ['-0.6670', '-1.3330', '-0.5680', '-1.1340'],
     )
     const audit = (await db.execute<{ changes: { event: string; code: string; discountMinor: string; cappedFromMinor?: string } }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${doc}`)).rows
