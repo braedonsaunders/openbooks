@@ -69,15 +69,17 @@ test("intercompany FX residual keeps the origin leg transaction amount in docume
     ctx,
     originSubId,
     originFxRate: fxRate,
+    // Two lines each translated and rounded on their own leave one ledger
+    // unit of residual against the translated total — lawful rounding.
     lines: [
-      {
+      ...[1, 2].map(() => ({
         accountId: randomUUID(),
-        amount: "-33.3334",
+        amount: "-16.6667",
         currency: "EUR",
-        txnAmount: "-100",
+        txnAmount: "-50",
         fxRate,
         subsidiaryId: originSubId,
-      },
+      })),
       {
         accountId: randomUUID(),
         amount: "100",

@@ -249,7 +249,7 @@ test("intercompany balancing derives a rate from rounded mixed-FX totals", async
   const firstAmount = mulRate("0.0300", "1.3333333333");
   const secondAmount = mulRate("0.0200", "0.6666666667");
   const legs = await balancingLegs([
-    line(originSubId, "-0.0533", "-0.0500", "1"),
+    line(originSubId, "-0.0500", "-0.0500", "1"),
     line(counterSubId, firstAmount, "0.0300", "1.3333333333"),
     line(counterSubId, secondAmount, "0.0200", "0.6666666667"),
   ]);
@@ -258,6 +258,20 @@ test("intercompany balancing derives a rate from rounded mixed-FX totals", async
   assert.equal(counter.amount, "-0.0533");
   assert.equal(counter.amount, mulRate(counter.txnAmount, counter.fxRate));
   assert.equal(add("0.0533", counter.amount), "0.0000");
+});
+
+test("intercompany balancing refuses an origin residual beyond translation rounding", async () => {
+  // The origin line claims 0.0533 for a 0.05 transaction at rate 1: folding
+  // that 0.0033 into the due-to/from leg would hide a mistranslation.
+  await assert.rejects(
+    balancingLegs([
+      line(originSubId, "-0.0533", "-0.0500", "1"),
+      line(counterSubId, "0.0533", "0.0500", "1.0660000000"),
+    ]),
+    (error: unknown) =>
+      error instanceof SubsidiaryError &&
+      /"Origin" leaves 0\.0066 of rounding across 2 lines, beyond the bound of 0\.00005 per line — the line exchange rates do not reproduce the functional amounts/.test(error.message),
+  );
 });
 
 test("FX residual folds onto the largest eligible line regardless of position", () => {
