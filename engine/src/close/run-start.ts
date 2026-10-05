@@ -175,6 +175,7 @@ export async function startCloseRun(args: {
               'in_progress', 'readiness', ${targetCloseDate},
               ${JSON.stringify({ subsidiaryIds: args.subsidiaryIds ?? [] })}::jsonb,
               ${fingerprint}, now(), now(), ${args.actorId}, ${args.actorId}, ${args.actorId})
+      -- A concurrent start returns no row and raises the retry-to-resume refusal below.
       on conflict (org_id, period_id, book_id) do nothing
       returning id`));
       const runId = inserted.rows[0]?.id;
@@ -247,7 +248,7 @@ export async function startCloseRun(args: {
                 'blocked', ${step.sort_order}, ${ownerId},
                 ${addBusinessDays(period.ends_on, Number(step.due_offset_business_days))},
                 ${step.evidence_required}, ${args.actorId}, ${args.actorId})
-        on conflict (run_id, key) do nothing`);
+        `);
         if (reviewerId)
           await tx.execute(sql`update close_run_tasks set reviewer_id = ${reviewerId}
         where run_id = ${runId} and key = ${step.key} and org_id = ${args.orgId}`);

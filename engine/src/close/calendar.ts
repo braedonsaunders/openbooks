@@ -240,7 +240,7 @@ export async function generateAccountingPeriods(
           await tx.execute(sql`
             insert into period_locks (org_id, period_id, book_id, module, state, created_by, updated_by)
             values (${orgId}, ${inserted.rows[0]!.id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
-            on conflict (org_id, period_id, book_id, subsidiary_id, module) do nothing`);
+            `);
         }
       }
       created++;

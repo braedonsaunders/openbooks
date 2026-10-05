@@ -2233,15 +2233,27 @@ export async function createCheckoutSession(
       },
       fetchFn,
     );
-    await db.execute(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into payment_attempts
         (org_id, link_id, provider, external_ref, status, amount, surcharge_amount, event_payload, created_by, updated_by)
       values (${link.orgId}, ${link.id}, ${link.provider}, ${session.externalRef}, 'initiated',
               ${invoiceAmount}, ${surcharge.amount},
               ${JSON.stringify({ redirectUrl: session.redirectUrl, invoiceAmount, surchargeAmount: surcharge.amount, feeIncomeAccountId: surcharge.feeIncomeAccountId })}::jsonb,
               null, null)
+      -- A repeated provider reference is accepted only for the same link and quoted amounts below.
       on conflict (org_id, provider, external_ref) do nothing
-    `);
+      returning id`);
+    if (inserted.rows.length === 0) {
+      const existing = (await db.execute<{ link_id: string | null; amount: string; surcharge_amount: string }>(sql`
+        select link_id, amount::text, surcharge_amount::text from payment_attempts
+         where org_id = ${link.orgId} and provider = ${link.provider} and external_ref = ${session.externalRef}`)).rows[0];
+      if (!existing || existing.link_id !== link.id || cmp(existing.amount, invoiceAmount) !== 0
+          || cmp(existing.surcharge_amount, surcharge.amount) !== 0) {
+        throw new PaymentAcceptanceError(
+          'The provider checkout reference conflicts with another payment or quote; review the provider checkout configuration before requesting a new session.',
+        );
+      }
+    }
     return { redirectUrl: session.redirectUrl };
   });
 }

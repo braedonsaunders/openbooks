@@ -2034,11 +2034,20 @@ async function processDuePaymentSchedule(
         return finishLinkedOccurrence(schedule, occurrenceAt, next, existing, now);
       }
       const result = { scheduleId: schedule.id, selected: 0 };
-      await db.execute(sql`
+      const inserted = await db.execute<{ id: string }>(sql`
         insert into payment_schedule_occurrences (org_id, schedule_id, occurrence_at, status, result)
         values (${schedule.org_id}, ${schedule.id}, ${occurrenceAt}, 'completed', ${JSON.stringify(result)}::jsonb)
+        -- A concurrent occurrence is re-read below so an empty selection cannot hide its linked run.
         on conflict (org_id, schedule_id, occurrence_at) do nothing
-      `);
+        returning id`);
+      if (inserted.rows.length === 0) {
+        const raced = await loadPaymentScheduleOccurrence(schedule.org_id, schedule.id, occurrenceAt);
+        if (!raced) throw new PaymentError('Payment schedule occurrence disappeared; retry the schedule.');
+        if (raced.payment_run_id) return finishLinkedOccurrence(schedule, occurrenceAt, next, raced, now);
+        if (raced.status !== 'completed') {
+          throw new PaymentError(`Payment schedule occurrence is ${raced.status}; review its outcome before retrying the schedule.`);
+        }
+      }
       await advancePaymentScheduleCursor(schedule, next, now, null, result);
       return result;
     }

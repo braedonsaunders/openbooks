@@ -178,14 +178,14 @@ export async function recordBillingLink(
   externalUpdatedAt: string | null,
 ): Promise<"created" | "replayed"> {
   {
-    const existing = await db.execute<{ native_id: string }>(sql`
-      select native_id from external_links
+    const existing = await db.execute<{ native_id: string; native_table: string }>(sql`
+      select native_id, native_table from external_links
        where org_id = ${orgId} and provider = ${provider} and external_account = ${externalAccount}
          and object_type = ${objectType} and external_id = ${externalId}
     `);
     const found = existing.rows[0];
     if (found) {
-      if (found.native_id !== nativeId) {
+      if (found.native_id !== nativeId || found.native_table !== nativeTable) {
         refuse(
           "billing_import_link_conflict",
           `${provider} ${objectType} ${externalId} is already linked to a different OpenBooks record.`,
@@ -202,15 +202,19 @@ export async function recordBillingLink(
         (org_id, provider, external_account, object_type, external_id, native_table, native_id, external_updated_at, last_synced_at)
       values (${orgId}, ${provider}, ${externalAccount}, ${objectType}, ${externalId}, ${nativeTable}, ${nativeId},
               ${externalUpdatedAt}, now())
+      -- A concurrent import may win; verify its table and record before accepting a replay.
       on conflict (org_id, provider, external_account, object_type, external_id) do nothing
     `);
-    if ((inserted.rowCount ?? 0) === 0) return "replayed";
-    const verify = await db.execute<{ native_id: string }>(sql`
-      select native_id from external_links
+    const verify = await db.execute<{ native_id: string; native_table: string }>(sql`
+      select native_id, native_table from external_links
        where org_id = ${orgId} and provider = ${provider} and external_account = ${externalAccount}
          and object_type = ${objectType} and external_id = ${externalId}
     `);
-    if (verify.rows[0]?.native_id !== nativeId) {
+    if (!verify.rows[0]) {
+      refuse("billing_import_link_unrecorded", `${provider} ${objectType} ${externalId} was not linked to an OpenBooks record.`,
+        "Retry the import; no observable link was saved.", 409);
+    }
+    if (verify.rows[0].native_id !== nativeId || verify.rows[0].native_table !== nativeTable) {
       refuse(
         "billing_import_link_conflict",
         `${provider} ${objectType} ${externalId} is already linked to a different OpenBooks record.`,
@@ -218,7 +222,7 @@ export async function recordBillingLink(
         409,
       );
     }
-    return "created";
+    return (inserted.rowCount ?? 0) === 1 ? "created" : "replayed";
   }
 }
 
