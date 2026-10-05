@@ -2841,6 +2841,24 @@ export function DocumentDrawer({
       closeHref={basePath}
       beforeClose={confirmDiscard}
       recordId={String(doc.id)}
+      keepRecordTabsMounted={isCashKind}
+      detailTabs={isCashKind && tenderAccounts ? [{
+        key: 'tenders',
+        label: t('tenders.title'),
+        content: (
+          <CashTendersSection
+            value={customValues.tenders}
+            onChange={(next) => setCustomValues((c) => ({ ...c, tenders: next }))}
+            editable={editable}
+            total={effectiveTotals.total}
+            currency={doc.currency}
+            accountOptions={tenderAccountOptions}
+            defaultAccountId={defaultTenderAccountId}
+            storedValueEnabled={storedValueEnabled}
+            resolveStoredValueCode={resolveStoredValueCode}
+          />
+        ),
+      }] : []}
       showEvidenceTabs={!isCreate}
       canEditAttachments={isCreate ? false : canCreate}
       panelClassName={docTypeMeta(config.kind).surfaceCls}
@@ -3205,19 +3223,6 @@ export function DocumentDrawer({
               distribution={distribution}
             />
           </div>
-        ) : null}
-        {isCashKind && tenderAccounts ? (
-          <CashTendersSection
-            value={customValues.tenders}
-            onChange={(next) => setCustomValues((c) => ({ ...c, tenders: next }))}
-            editable={editable}
-            total={effectiveTotals.total}
-            currency={doc.currency}
-            accountOptions={tenderAccountOptions}
-            defaultAccountId={defaultTenderAccountId}
-            storedValueEnabled={storedValueEnabled}
-            resolveStoredValueCode={resolveStoredValueCode}
-          />
         ) : null}
         {splitTarget !== null && rows[splitTarget] ? (
           <DistributionDialog
