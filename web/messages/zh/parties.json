@@ -100,7 +100,12 @@
       "updateFailed": "无法更改设置。",
       "paused": "已暂停",
       "subscriptionScope": "订阅 {name}",
-      "customerScope": "该客户的所有发票"
+      "customerScope": "该客户的所有发票",
+      "backupPosition": "备用 {n}",
+      "backupDescription": "如果默认方式被拒，将按显示顺序扣款备用方式。",
+      "moveUp": "在备用顺序中前移",
+      "moveDown": "在备用顺序中后移",
+      "reorderFailed": "无法更改备用顺序。"
     },
     "wages": {
       "title": "工资费率",

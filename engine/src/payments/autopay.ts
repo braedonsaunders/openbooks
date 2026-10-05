@@ -314,6 +314,10 @@ export interface StoredPaymentMethod {
   expYear: number | null;
   mandateReference: string | null;
   isDefault: boolean;
+  /** Backup chain position: lower charges earlier once the default declines. */
+  fallbackPriority: number;
+  /** Row creation time (ISO): the tie-break inside equal priorities. */
+  createdAt: string;
   status: string;
 }
 
@@ -330,6 +334,8 @@ async function rowToMethod(row: Record<string, unknown>): Promise<StoredPaymentM
     expYear: (row.exp_year as number | null) ?? null,
     mandateReference: (row.mandate_reference as string | null) ?? null,
     isDefault: row.is_default === true,
+    fallbackPriority: typeof row.fallback_priority === "number" ? row.fallback_priority : 0,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? ""),
     status: String(row.status),
   };
 }

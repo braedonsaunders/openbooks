@@ -100,7 +100,12 @@
       "updateFailed": "設定を変更できませんでした。",
       "paused": "一時停止中",
       "subscriptionScope": "サブスクリプション {name}",
-      "customerScope": "このお客様のすべての請求書"
+      "customerScope": "このお客様のすべての請求書",
+      "backupPosition": "バックアップ{n}",
+      "backupDescription": "デフォルトの方法が拒否された場合、バックアップ方法が表示順に請求されます。",
+      "moveUp": "バックアップ順序で前に移動",
+      "moveDown": "バックアップ順序で後に移動",
+      "reorderFailed": "バックアップ順序を変更できませんでした。"
     },
     "wages": {
       "title": "賃金レート",
