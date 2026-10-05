@@ -227,3 +227,53 @@ test('the save payload sends the picked line warehouse', async (t) => {
     'the save payload must send the picked warehouse on the stocked line',
   )
 })
+
+
+test('sales-order routing stays on its parent line and related records use their own view', async (t) => {
+  const writes: unknown[] = []
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url.endsWith('/drop-ship') && init?.method === 'POST') {
+      writes.push(JSON.parse(String(init.body)))
+      return Response.json({ ok: true })
+    }
+    return null
+  })
+  t.after(restoreFetch)
+  const order = draftOrder([
+    stockedLine({ id: 'line-alpha', description: 'Alpha stocked line' }),
+    stockedLine({ id: 'line-beta', description: 'Beta stocked line' }),
+    { ...expenseLine(), id: 'line-service' },
+  ])
+  order.doc.status = 'approved'
+  order.links = [{ direction: 'to', link_type: 'conversion', id: 'invoice-1', kind: 'customer_invoice', document_number: 'INV-RELATED', status: 'posted' }]
+  const { unmount } = await mountDashboard(<OrderDrawer
+    order={order} kind="sales_order" parties={[]} accounts={[]} items={ITEMS}
+    stockLocations={LOCATIONS} taxCodes={[]} taxGroups={[]} departments={[]}
+    projects={[]} subsidiaries={[]} segments={[]} canManage dropShipping canRouteDropShip
+    closeHref="/sales-orders"
+  />, messages)
+  t.after(unmount)
+  const dialog = document.querySelector('[role="dialog"]')
+  const routeButtons = buttonsNamed('Route to vendor')
+  assert.equal(routeButtons.length, 2, 'only stocked persisted lines offer routing')
+  for (const [index, button] of routeButtons.entries()) {
+    const parent = button.closest('[role="row"]')
+    assert.ok(parent, 'route controls must live in their parent line row')
+    assert.match(parent.textContent ?? '', index === 0 ? /Alpha stocked line/ : /Beta stocked line/)
+  }
+  assert.equal(document.querySelector('a[href="/ar/invoices?doc=invoice-1"]'), null, 'related records must not stack below lines')
+  await click(routeButtons[1]!)
+  assert.deepEqual(writes, [{ salesOrderLineId: 'line-beta', routed: true }], 'routing must send the selected persisted parent identity')
+  const relatedTab = buttonsNamed('Origin / Converted into')[0]
+  assert.ok(relatedTab)
+  await click(relatedTab)
+  assert.equal(document.querySelector('[role="dialog"]'), dialog, 'switching keeps the drawer shell')
+  const link = document.querySelector('a[href="/ar/invoices?doc=invoice-1"]')
+  assert.ok(link, 'the related-record view retains its original document link')
+  assert.equal([...document.querySelectorAll('[role="grid"]')].filter(node => !node.closest('[hidden]')).length, 0, 'related records never share a visible body with the line grid')
+  const detailsTab = buttonsNamed('Details')[0]
+  assert.ok(detailsTab)
+  await click(detailsTab)
+  assert.equal(document.querySelector('[role="dialog"]'), dialog)
+  assert.equal(writes.length, 1, 'tab changes must not write')
+})
