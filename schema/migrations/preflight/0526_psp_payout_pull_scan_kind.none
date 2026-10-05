@@ -1,0 +1,1 @@
+Widens the scheduler_outbox kind constraint by one periodic scan kind. Every existing row satisfies it, so no tenant data is read, rewritten or deleted.
