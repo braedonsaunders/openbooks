@@ -57,8 +57,9 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
   }, AU_PAYROLL_PACK.deductionTreatments);
   const pushed: { systemKey: string; amount: string }[] = [];
   const factors = await computeAuStatutory({
-    tx: {} as never,
+    tx: { execute: async () => ({ rows: [{ qualifying: "0.0000" }] }) } as never,
     orgId: "org",
+    subsidiaryId: "employer",
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Test Employee",
@@ -83,7 +84,7 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
       key === "au_tfn_declaration"
         ? { answers: TFN_ANSWERS, onFile: true }
         : key === "au_sg_administration"
-          ? { answers: { qualifying_ytd: "0" }, onFile: true }
+          ? { answers: { opening_qualifying_ytd: "0" }, onFile: true }
           : null) as never,
     bool: (value) => value === "true",
     assertRegionSupported: () => {},

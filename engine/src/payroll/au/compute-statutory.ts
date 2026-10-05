@@ -34,8 +34,9 @@
  *
  * Refused by name: no-TFN payees (scale 4), foreign residents claiming a
  * Medicare exemption (no quotable scale covers the combination), working
- * holiday makers (Schedule 15), SG accrual without verified YTD qualifying
- * earnings (the annual maximum base cannot price without history), pay frequencies outside
+ * holiday makers (Schedule 15), SG accrual without a declared opening
+ * qualifying-earnings carry-in (the annual maximum base cannot price without
+ * history; committed runs here are read from the stubs), pay frequencies outside
  * weekly/fortnightly/monthly/quarterly/bi-monthly, the family/spouse levy adjustment
  * (WLA) machinery, and every other schedule — see AU_REFUSED_2027.
  *
@@ -43,6 +44,7 @@
  * discipline as the shared payroll decimal helpers. Coefficients stay decimal
  * strings.
  */
+import { sql } from "drizzle-orm";
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { rate6 } from "../../money/payroll-decimal.ts";
 import type { Money } from "../../money/brands.ts";
@@ -99,10 +101,11 @@ export interface Au2027Input {
   /** Period ordinary-time earnings (qualifying-earnings proxy), decimal. */
   pensionable: string;
   /**
-   * Verified qualifying earnings already paid this financial year by this
-   * employer (opening balance plus committed current-year payroll), decimal.
-   * Null only from wiring that could not establish the history — the engine
-   * refuses SG rather than posting uncapped.
+   * Qualifying earnings already paid this financial year by this employer:
+   * the declared opening carry-in from before the employer's payroll ran
+   * here, plus every committed run's qualifying earnings since. Null when
+   * the opening carry-in is undeclared — the engine refuses SG rather than
+   * posting uncapped.
    */
   ytdQualifying: string | null;
   /** One of 52 (weekly), 26 (fortnightly), 24 (semi-monthly), 12 (monthly), 4 (quarterly). */
@@ -232,8 +235,9 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
       "AU Super Guarantee cannot accrue without verified year-to-date "
       + "qualifying earnings: the $270,830 annual maximum contributions base "
       + "(SGAA s10A(5)) prices only the remaining headroom. Record the "
-      + "employee's verified FY qualifying-earnings year-to-date on the "
-      + "au_sg_administration certificate (qualifying_ytd) before running payroll",
+      + "qualifying earnings this employer paid the employee this financial year "
+      + "before its payroll ran here (zero when none) on the employee's SG facts "
+      + "(au_sg_administration, opening_qualifying_ytd) before running payroll",
     );
   }
   const maxBase = U(AU_SUPER_2027.maxBase);
@@ -259,6 +263,39 @@ export const AU_FACTOR_LABELS: Readonly<Record<string, string>> = {
   I: "Periodic income this period",
   PI: "Pensionable earnings this period",
 };
+
+/**
+ * Qualifying earnings this employer has already paid the employee in the
+ * financial year through committed runs. The maximum contributions base is
+ * per employer, so only the paying legal entity's runs count; calculated
+ * runs are drafts that may be abandoned, and the current run is excluded so
+ * a recalculation never consumes its own headroom.
+ */
+export async function committedAuQualifyingYearToDate(input: {
+  tx: Pick<PayrollStatutoryComputeContext["tx"], "execute">;
+  orgId: string;
+  subsidiaryId: string;
+  employeePartyId: string;
+  taxYear: number;
+  excludeDocumentId: string;
+}): Promise<string> {
+  const row = (await input.tx.execute<{ qualifying: string | null }>(sql`
+    select round(coalesce(sum((s.factors->>'PI')::numeric), 0), 4)::numeric(24, 4)::text as qualifying
+      from pay_stubs s
+      join pay_runs r on r.org_id = s.org_id
+                    and r.document_id = s.pay_run_document_id
+                    and r.run_status = 'committed'
+      join documents d on d.org_id = r.org_id and d.id = r.document_id
+     where s.org_id = ${input.orgId}
+       and s.employee_party_id = ${input.employeePartyId}
+       and s.country = 'AU'
+       and s.tax_year = ${input.taxYear}
+       and s.pay_run_document_id <> ${input.excludeDocumentId}
+       and d.status <> 'voided'
+       and d.subsidiary_id = ${input.subsidiaryId}::uuid
+  `)).rows[0];
+  return typeof row?.qualifying === "string" ? row.qualifying : "0";
+}
 
 export async function computeAuStatutory(
   ctx: PayrollStatutoryComputeContext,
@@ -310,11 +347,32 @@ export async function computeAuStatutory(
   // ordinary-time earnings, which salary sacrifice does NOT reduce — the
   // pensionable leg arrives whole and is passed through untouched.
   const paygIncome = reducedBases.income;
-  // The SG annual maximum base needs verified YTD qualifying earnings; the
-  // employer's SG administration record carries it, and its absence refuses
-  // (see calculateAu2027) rather than posting uncapped SG.
+  // The SG annual maximum base prices only the headroom left after the
+  // qualifying earnings this employer already paid this financial year: the
+  // declared opening carry-in (pay before the employer's payroll ran here)
+  // plus its own committed runs, read from the stubs so nobody has to keep
+  // a running total by hand. An undeclared carry-in refuses (see
+  // calculateAu2027) rather than posting uncapped SG.
   const sgAdmin = certificateFor("au_sg_administration");
-  const ytdRaw = sgAdmin?.answers["qualifying_ytd"] ?? null;
+  const openingRaw = sgAdmin?.answers["opening_qualifying_ytd"] ?? null;
+  let ytdQualifying: string | null = null;
+  if (openingRaw !== null && openingRaw !== "") {
+    if (!ctx.subsidiaryId) {
+      throw new PayrollPackError(
+        "AU Super Guarantee needs the paying legal employer: the maximum contributions base "
+        + "is per employer, so the year-to-date qualifying earnings cannot be read without it",
+      );
+    }
+    const committed = await committedAuQualifyingYearToDate({
+      tx: ctx.tx,
+      orgId: ctx.orgId,
+      subsidiaryId: ctx.subsidiaryId,
+      employeePartyId: ctx.employeePartyId,
+      taxYear,
+      excludeDocumentId: ctx.documentId,
+    });
+    ytdQualifying = D(U(openingRaw) + U(committed));
+  }
   const result = calculateAu2027({
     income: paygIncome,
     residency,
@@ -324,7 +382,7 @@ export async function computeAuStatutory(
     tfnQuoted: (answers["tax_file_number"] ?? "") !== "",
     stslDebt: bool(answers["stsl_debt"] ?? null),
     pensionable,
-    ytdQualifying: ytdRaw === null || ytdRaw === "" ? null : ytdRaw,
+    ytdQualifying,
     periodsPerYear,
   });
   pushStatutory("payg_withholding", "deduction", "PAYG withholding", result.payg, 110);

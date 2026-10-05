@@ -185,13 +185,14 @@ const MEDICARE_VARIATION_DECLARATION: PayrollCertificate = {
  *
  * SGAA section 10A(5) caps SG at the annual maximum contributions base
  * ($270,830 for 2026–27), so the engine must know the qualifying earnings
- * already paid this financial year by this employer. There is no lawful
- * default — zero is only correct for an employee paid nothing yet this
- * year — so the amount is absent until declared and the engine refuses to
- * accrue SG without it rather than posting uncapped SG. For a mid-year
- * hire or a mid-year conversion, copy the verified opening balance from
- * the prior provider's report; the employer's own committed current-year
- * payroll must already be folded into the declared figure.
+ * already paid this financial year by this employer. The engine adds the
+ * employer's own committed runs from the pay stubs; this record carries
+ * only the opening carry-in — qualifying earnings the employer paid this
+ * financial year before its payroll ran here (a mid-year conversion copies
+ * it from the prior provider's report; zero for a new hire or a conversion
+ * at the start of the year). There is no lawful default, so the amount is
+ * absent until declared and the engine refuses to accrue SG without it
+ * rather than posting uncapped SG.
  */
 const SG_ADMINISTRATION: PayrollCertificate = {
   key: "au_sg_administration",
@@ -204,21 +205,22 @@ const SG_ADMINISTRATION: PayrollCertificate = {
     + "(see AU_SUPER_2027)",
   summary:
     "The employer's per-employee SG record for the annual maximum "
-    + "contributions base: verified qualifying earnings already paid this "
-    + "financial year, for the $270,830 cap.",
+    + "contributions base: qualifying earnings paid this financial year "
+    + "before the employer's payroll ran here, for the $270,830 cap. Runs "
+    + "committed here are added automatically.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "qualifying_ytd",
-      label: "Qualifying earnings year-to-date",
+      key: "opening_qualifying_ytd",
+      label: "Opening qualifying earnings year-to-date",
       kind: "amount",
       decimals: 2,
       min: "0",
-      help: "Verified qualifying earnings already paid this financial year by "
-        + "this employer, for the $270,830 annual maximum contributions base. "
-        + "Zero only when the employee was paid nothing yet this year; copied "
-        + "from the prior provider's report for a mid-year hire. No default "
-        + "exists, so the engine refuses to accrue SG without it.",
+      help: "Qualifying earnings this employer paid the employee this financial "
+        + "year before its payroll ran here, copied from the prior provider's "
+        + "report; zero for a new hire or when payroll has run here since 1 July. "
+        + "Do not include runs committed here: the engine adds those itself. No "
+        + "default exists, so the engine refuses to accrue SG without it.",
     },
   ],
 };
