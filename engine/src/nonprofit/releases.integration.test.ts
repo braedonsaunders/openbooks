@@ -236,7 +236,7 @@ test("fund release readers return the drawer projection with same-org isolation"
   assert.deepEqual(found, { id: release.id, number: release.releaseNumber, releaseDate: org.date, amount: "50.0000",
     purpose: "Award", satisfactionRef: "Terms", status: "draft", fromFundId: restricted.id, toFundId: setup.defaultFundId,
     releaseAccountId: org.accounts.revenue, submittedBy: null, submittedAt: null, flowRunId: null,
-    fromCode: "R", fromName: "R", toCode: "U", toName: "U", postedEntryId: null, voidEntryId: null, custom: { reader: "releases" } });
+    fromCode: "R", fromName: "R", toCode: "U", toName: "U Fund", postedEntryId: null, voidEntryId: null, custom: { reader: "releases" } });
   const ordered = await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, limit: 1 }));
   assert.deepEqual([ordered.total, ordered.releases.map((item) => item.id)], [2, [later.id]]);
   const second = await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, limit: 1, offset: 1 }));
