@@ -83,7 +83,7 @@ function Spark({ values }: { values: number[] }) {
 }
 
 /** Health gauge (Risk-meter): score 0-100 → colour + grade, from the org's own grade cutoffs. */
-function HealthGauge({ score, grade, b, c, d }: { score: number; grade: string; b: number; c: number; d: number }) {
+function HealthGauge({ score, grade, b, c, d, notice }: { score: number; grade: string; b: number; c: number; d: number; notice?: string }) {
   const t = useTranslations('analytics.spendVelocity')
   const color = score >= b ? '#10b981' : score >= c ? '#f59e0b' : score >= d ? '#f97316' : '#ef4444'
   const label = score >= b ? t('health.healthy') : score >= c ? t('health.watch') : score >= d ? t('health.elevated') : t('health.atRisk')
@@ -99,6 +99,7 @@ function HealthGauge({ score, grade, b, c, d }: { score: number; grade: string; 
         <p className="text-xl font-bold tabular-nums" style={{ color }}>{score} <span className="text-sm">({grade})</span></p>
         <p className="text-[10px] font-bold tracking-wider" style={{ color }}>{label}</p>
         <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('health.caption')}</p>
+        {notice ? <p className="mt-1 text-[10px] leading-snug text-slate-400 dark:text-slate-500">{notice}</p> : null}
       </div>
     </div>
   )
@@ -122,14 +123,20 @@ export function SpendVelocityView({ data: initialData, canConfigure }: { data: S
   const s = data.summary
 
   const vel = s.avgVelocity
+  // Detectors the score and alert count omit still name their remedy here:
+  // a clean-looking headline must never hide an unconfigured detector.
+  const caveat = data.summary.unconfiguredDetectors
+    .map((key) => (key === 'fragmentation' ? data.fragmentation.summary.reason : data.commitmentCliff.summary.reason))
+    .filter((reason) => reason !== '')
+    .join(' · ') || null
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} />
+        <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} notice={caveat ?? undefined} />
         <KpiCard icon={Coins} accent="sky" label={t('kpi.totalSpend')} value={money(s.totalSpend)} sub={t('sub.accountsCount', { count: s.accountCount })} />
         <KpiCard icon={GaugeIcon} accent={vel > data.config.velocityMediumThreshold ? 'red' : vel < -data.config.velocityMediumThreshold ? 'emerald' : 'slate'} label={t('kpi.avgVelocity')} value={`${vel > 0 ? '↑' : vel < 0 ? '↓' : ''} ${formatPercent01(Math.abs(vel) / 100, locale, 1)}`} sub={t('sub.acceleratingCount', { count: s.acceleratingCount })} tone={vel > data.config.velocityMediumThreshold ? 'negative' : vel < -data.config.velocityMediumThreshold ? 'positive' : 'neutral'} />
         <KpiCard icon={PiggyBank} accent="violet" label={t('kpi.savingsPotential')} value={money(s.savingsPotential)} sub={toChartNumber(s.savingsPotential) > 0 ? t('sub.creepAndZombies') : t('sub.noIssues')} />
-        <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={caveat ?? t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : 'positive'} />
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detectors' ? s.totalAlerts : undefined }))} active={tab} onChange={setTab}>

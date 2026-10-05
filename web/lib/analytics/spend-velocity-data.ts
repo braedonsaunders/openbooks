@@ -141,6 +141,8 @@ export interface SpendVelocityData {
     expensesVelocity: number;
     savingsPotential: string;
     totalAlerts: number;
+    /** Detectors the score and alert count silently omit (unconfigured). */
+    unconfiguredDetectors: ("fragmentation" | "cliff")[];
   };
   accountVelocity: VelocityRow[];
   vendorVelocity: VelocityRow[];
@@ -1270,6 +1272,12 @@ export async function spendVelocityData(
   const healthGrade = healthScore >= C.healthGradeA ? "A" : healthScore >= C.healthGradeB ? "B" : healthScore >= C.healthGradeC ? "C" : healthScore >= C.healthGradeD ? "D" : "F";
 
   const totalAlerts = boilingFrog.summary.count + anomalies.summary.count + zombies.summary.count + fragmentation.summary.fragmentedCategories;
+  // The score and the alert count silently omit unconfigured detectors, so
+  // the summary names them and the view shows their reasons as a caveat.
+  const unconfiguredDetectors: ("fragmentation" | "cliff")[] = [
+    ...(fragmentation.summary.configured ? [] : ["fragmentation" as const]),
+    ...(cliffConfigured ? [] : ["cliff" as const]),
+  ];
 
   // ---- insights ---------------------------------------------------------------------------------
   const insights: SVInsight[] = [];
@@ -1312,7 +1320,7 @@ export async function spendVelocityData(
       acceleratingCount, deceleratingCount: accountVelocity.filter((a) => a.trend === "declining").length,
       highVelocityCount, healthScore, healthGrade,
       billsTotal, expensesTotal, billsVelocity, expensesVelocity,
-      savingsPotential, totalAlerts,
+      savingsPotential, totalAlerts, unconfiguredDetectors,
     },
     accountVelocity,
     vendorVelocity,

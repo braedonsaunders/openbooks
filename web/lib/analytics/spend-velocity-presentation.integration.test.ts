@@ -115,6 +115,9 @@ test('spend velocity translates every spend functional to presentation', { skip:
       assert.match(data.commitmentCliff.summary.reason, /Configuration/)
       assert.equal(data.commitmentCliff.summary.poVelocity, null)
       assert.equal(data.commitmentCliff.summary.soVelocity, null)
+      // The headline score silently omits both unconfigured detectors, so
+      // the summary names them for the view's caveat.
+      assert.deepEqual(data.summary.unconfiguredDetectors, ["fragmentation", "cliff"])
       // Revenue arrives as an exact decimal string.
       assert.equal(data.revenue.totalRevenue, '470.0000')
       // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual
