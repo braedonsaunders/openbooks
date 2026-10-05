@@ -254,7 +254,8 @@
     "availabilitySummary": "所有地点可售：{count}",
     "onHand": "现有库存",
     "committed": "已承诺",
-    "available": "可售"
+    "available": "可售",
+    "unknownComponent": "已不在目录中"
   },
   "costing": {
     "title": "存货计价",

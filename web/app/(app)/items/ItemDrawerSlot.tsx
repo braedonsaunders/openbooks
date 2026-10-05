@@ -77,7 +77,11 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   // setup grant pick and sell kits, so it rides both drawer paths. Planning
   // is operational the same way: a stocked item's cover and policy belong
   // to the planner, not to setup administration.
-  const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'items.manage'), props, sp)
+  // Kit editing follows PUT's gate (org-wide configuration): the Edit
+  // affordance appears only where the save would be accepted, so a
+  // restricted operator reads the recipe without being offered a refused
+  // write.
+  const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'admin.setup.manage') && authz.allowedSubsidiaryIds === null, props, sp)
   const planningTab = await itemPlanningTab(authz, props, sp)
   const variantsTab = await itemVariantsTab(props, sp)
   const channelStockTab = await itemChannelStockTab(authz, props, sp)

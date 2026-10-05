@@ -254,7 +254,8 @@
     "availabilitySummary": "{count} vendáveis em todos os locais",
     "onHand": "Em estoque",
     "committed": "Comprometido",
-    "available": "Disponível"
+    "available": "Disponível",
+    "unknownComponent": "Não está mais no catálogo"
   },
   "costing": {
     "title": "Custeio de estoque",

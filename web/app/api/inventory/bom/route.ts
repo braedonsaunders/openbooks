@@ -360,10 +360,18 @@ export const PUT = defineRoute({
   },
 })
 
+/**
+ * Read one assembly's recipe for operators: the kit Components tab and the
+ * bill-of-materials editor share this payload, so component lines carry
+ * their catalog identity (code, name, active state) and the editor's
+ * eligible choices ride along. Reading needs only the catalog grant — the
+ * same grant as the kit availability endpoint beside it — because a
+ * restricted operator may inspect a recipe they cannot change; replacing
+ * the recipe stays an org-wide configuration write on PUT.
+ */
 export const GET = defineRoute({
-  permission: 'admin.setup.manage',
+  permission: 'items.read',
   feature: 'inventory',
-  scope: 'unrestricted',
   handler: async ({ request, authz: gate }) => {
   const assemblyItemId = new URL(request.url).searchParams.get('assemblyItemId')
   const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, 'manufacturing')
@@ -373,6 +381,10 @@ export const GET = defineRoute({
   const assembly = await db.execute<{ id: string }>(sql`
     select id from items where org_id = ${gate.user.orgId} and id = ${assemblyItemId}`)
   if (!assembly.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Catalog identity rides with every line: a component the picker would no
+  // longer offer (inactive, unprofiled) still names itself instead of
+  // falling back to its storage id. A line whose item row is gone keeps its
+  // line fields with null identity so the reader shows it as evidence.
   const components = await db.execute<{
     id: string;
     componentItemId: string;
@@ -383,15 +395,20 @@ export const GET = defineRoute({
     operationSeq: number | null;
     scrapPct: string | null;
     isByproduct: boolean;
+    code: string | null;
+    name: string | null;
+    isActive: boolean | null;
   }>(sql`
-    select id, component_item_id as "componentItemId", quantity_per::text as "quantityPer",
-           sort_order as "sortOrder", effective_from::text as "effectiveFrom",
-           effective_to::text as "effectiveTo", operation_seq as "operationSeq",
-           scrap_pct::text as "scrapPct", is_byproduct as "isByproduct"
-      from bom_components
-     where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}
-     order by sort_order, component_item_id, operation_seq nulls first,
-              is_byproduct, effective_from nulls first, effective_to nulls first`)
+    select line.id, line.component_item_id as "componentItemId", line.quantity_per::text as "quantityPer",
+           line.sort_order as "sortOrder", line.effective_from::text as "effectiveFrom",
+           line.effective_to::text as "effectiveTo", line.operation_seq as "operationSeq",
+           line.scrap_pct::text as "scrapPct", line.is_byproduct as "isByproduct",
+           item.code, item.name, item.is_active as "isActive"
+      from bom_components line
+      left join items item on item.org_id = line.org_id and item.id = line.component_item_id
+     where line.org_id = ${gate.user.orgId} and line.assembly_item_id = ${assemblyItemId}
+     order by line.sort_order, line.component_item_id, line.operation_seq nulls first,
+              line.is_byproduct, line.effective_from nulls first, line.effective_to nulls first`)
   const version = await db.execute<{ version: string | null }>(sql`
     select md5(string_agg(
       id::text || ':' || updated_at::text || ':' || component_item_id::text || ':' ||
@@ -403,14 +420,25 @@ export const GET = defineRoute({
     )) as version
       from bom_components
      where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}`)
+  // Editor choices mirror the set PUT accepts (active inventory items with
+  // costing profiles), so the picker can only stage a recipe the save keeps.
+  const validItems = await db.execute<{ id: string; code: string | null; name: string | null }>(sql`
+    select item.id, item.code, item.name
+      from items item
+      join item_inventory_profiles profile
+        on profile.org_id = item.org_id and profile.item_id = item.id
+     where item.org_id = ${gate.user.orgId} and item.is_active
+     order by item.code nulls last, item.name`)
   return NextResponse.json({
     manufacturingEnabled,
+    assemblyItemId,
     version: version.rows[0]?.version ?? null,
     components: components.rows.map((line) => ({
       ...line,
       operationSeq: manufacturingEnabled ? line.operationSeq : null,
       isByproduct: manufacturingEnabled ? line.isByproduct : false,
     })),
+    validItems: validItems.rows,
   })
   },
 })

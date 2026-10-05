@@ -264,7 +264,8 @@
     "availabilitySummary": "{count} vendables sur tous les sites",
     "onHand": "En stock",
     "committed": "Engagé",
-    "available": "Disponible"
+    "available": "Disponible",
+    "unknownComponent": "Ne figure plus au catalogue"
   },
   "costing": {
     "title": "Valorisation des stocks",

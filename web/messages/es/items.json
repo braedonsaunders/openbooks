@@ -264,7 +264,8 @@
     "availabilitySummary": "{count} disponibles en todas las ubicaciones",
     "onHand": "Existencias",
     "committed": "Comprometido",
-    "available": "Disponible"
+    "available": "Disponible",
+    "unknownComponent": "Ya no está en el catálogo"
   },
   "costing": {
     "title": "Costeo de inventario",

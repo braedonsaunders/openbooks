@@ -267,7 +267,8 @@
     "availabilitySummary": "{count} über alle Standorte verkaufbar",
     "onHand": "Bestand",
     "committed": "Reserviert",
-    "available": "Verfügbar"
+    "available": "Verfügbar",
+    "unknownComponent": "Nicht mehr im Katalog"
   },
   "costing": {
     "title": "Bestandsbewertung",
