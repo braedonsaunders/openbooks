@@ -19,10 +19,8 @@ import {
   type ResolveRestockingFeeResult,
 } from '@openbooks/engine/sales/restocking-fees'
 import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
-import { postedReturnEvidenceScope } from '@openbooks/engine/src/inventory/return-quantities.ts'
-import { SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/src/inventory/documents-customer-credits.ts'
+import { postedReturnEvidenceScope, SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/inventory'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { uuidArray } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import {
   authorizeReturn,
   completeReturnInspection,
@@ -396,7 +394,7 @@ async function resolveInspectionRestockingFee(input: {
 }): Promise<ResolveRestockingFeeResult> {
   const itemIds = [...new Set(input.credited.map((line) => line.itemId).filter((id): id is string => id !== null))]
   const categories = itemIds.length === 0 ? [] : (await db.execute<{ id: string; category: string | null }>(sql`
-    select id, category from items where org_id = ${input.orgId} and id = any(${uuidArray(itemIds)}::uuid[])`)).rows
+    select id, category from items where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(itemIds)}::jsonb)::uuid)`)).rows
   const categoryByItem = new Map(categories.map((row) => [row.id, row.category]))
   return resolveRestockingFee(db, input.orgId, {
     returnDate: input.returnDate,
