@@ -42,6 +42,9 @@
     "expectedPayments": "Paiements prévus",
     "topCustomers": "Principaux clients",
     "topVendors": "Principaux fournisseurs",
+    "customerConcentration": "Concentration de la clientèle",
+    "customersAtRisk": "Clients à risque",
+    "atRiskCustomers": "Clients à risque",
     "openCount": "{count, plural, one {# ouvert} other {# ouverts}}",
     "runway": "Autonomie de trésorerie",
     "inboxList": "Mes tâches",
@@ -148,6 +151,9 @@
     "expectedPayments": "Paiements fournisseurs prévus sur les 30 prochains jours, en devise de référence.",
     "topCustomers": "Les cinq plus gros soldes clients ouverts.",
     "topVendors": "Les cinq plus gros soldes fournisseurs ouverts.",
+    "customerConcentration": "Concentration du chiffre d’affaires (HHI) et part du premier client sur la période.",
+    "customersAtRisk": "Clients à risque d’attrition élevé et leur chiffre d’affaires de la période.",
+    "atRiskCustomers": "Clients à risque de départ critique ou élevé.",
     "runway": "Trésorerie projetée et autonomie des prochaines semaines, en devise de référence.",
     "inboxList": "Vos tâches principales avec lien vers la boîte.",
     "payTile": "Prochaine paie et dernier bulletin.",
@@ -311,6 +317,14 @@
     "approver": "Approbateur",
     "viewer": "Lecteur"
   },
+  "concentrationLevels": {
+    "low": "Faible",
+    "moderate": "Modérée",
+    "high": "Élevée"
+  },
+  "concentrationHint": "{level} · premier {share}",
+  "atRiskCount": "{count, plural, one {# client} other {# clients}}",
+  "churnScore": "score d’attrition {score}",
   "analytics": {
     "loading": "Les chiffres ne sont pas encore disponibles.",
     "nothingFlagged": "Rien à signaler sur cette période.",

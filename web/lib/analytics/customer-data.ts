@@ -887,6 +887,51 @@ export interface CustomerSummary {
   weightsError: string | null;
 }
 
+/**
+ * The dashboard's at-risk definition: churn scored critical or high. The
+ * loader builds its at-risk count and revenue from this, and the home
+ * dashboard's at-risk widget lists this, so the tile and the dashboard
+ * can never disagree on who is at risk.
+ */
+export function atRiskCustomersOf(rows: CustomerRow[]): CustomerRow[] {
+  return rows.filter((r) => r.churnLevel === "critical" || r.churnLevel === "high");
+}
+
+/**
+ * The home dashboard's at-risk list: the five highest churn scores. Sorted
+ * here, in the engine, so the tile renders the order without re-sorting —
+ * one ranking, every surface.
+ */
+export function rankAtRiskCustomers(rows: CustomerRow[]): CustomerRow[] {
+  return [...atRiskCustomersOf(rows)]
+    .sort((a, b) => b.churnScore - a.churnScore || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .slice(0, 5);
+}
+
+export interface ConcentrationSummary {
+  /** HHI on the 0–10000 scale, the same figure the dashboard shows. */
+  hhi: number;
+  level: CustomerData["kpis"]["hhiLevel"];
+  /** Customers covering 80% of period revenue, the same count the dashboard shows. */
+  customersFor80Pct: number;
+  /** Share of the largest customer, 0–100, the same figure the dashboard shows. */
+  topSharePct: number;
+}
+
+/**
+ * The concentration figures the home dashboard's widgets render, read off
+ * the dashboard's own KPIs rather than recomputed — one computation, every
+ * surface.
+ */
+export function concentrationOf(kpis: CustomerData["kpis"]): ConcentrationSummary {
+  return {
+    hhi: kpis.hhiScaled,
+    level: kpis.hhiLevel,
+    customersFor80Pct: kpis.customersFor80Pct,
+    topSharePct: kpis.topCustomerShare,
+  };
+}
+
 export function customerData(
   period: { from: string; to: string; label: string }, orgId: string,
   allowed: ReadonlySet<string> | null,
@@ -2057,7 +2102,7 @@ async function readCustomerData(
     };
 
   /* ---- aggregates + insights ---- */
-  const atRisk = rows.filter((r) => r.churnLevel === "critical" || r.churnLevel === "high");
+  const atRisk = atRiskCustomersOf(rows);
   const atRiskRevenue = sum(atRisk.map((r) => r.revenue));
   const totalProjectedClv = sum(rows.map((r) => r.clv));
   const overdueOrders = rows.filter((r) => r.daysOverdue > 0).length;

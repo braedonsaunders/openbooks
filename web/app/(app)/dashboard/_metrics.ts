@@ -970,6 +970,9 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
+  'kpi-customer-concentration': ['concentration'],
+  'kpi-customers-at-risk': ['atRisk'],
+  'list-customers-at-risk': ['atRiskCustomers'],
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
 

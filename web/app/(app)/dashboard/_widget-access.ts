@@ -97,6 +97,10 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
+  // Customer figures, like the top-customers list: AR visibility, not GL.
+  'kpi-customer-concentration': ['ar.read'],
+  'kpi-customers-at-risk': ['ar.read'],
+  'list-customers-at-risk': ['ar.read'],
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
 
