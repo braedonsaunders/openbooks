@@ -49,7 +49,8 @@ test("apportion is exact across 1..1000 deterministic random weight sets", () =>
     const weights: WeightedTarget[] = [];
     for (let k = 0; k < n; k += 1) {
       // Random 4dp-scale weights, sometimes zero, sometimes tied.
-      const w = k > 0 && rand() < 0.15 ? weights[0]?.weight ?? "0" : String(Math.floor(rand() * 1000000));
+      // The first weight is positive: an all-zero set is refused, not split.
+      const w = k > 0 && rand() < 0.15 ? weights[0]?.weight ?? "1" : String((k === 0 ? 1 : 0) + Math.floor(rand() * 1000000));
       weights.push(wt(`t${k}`, w));
     }
     const sign = rand() < 0.3 ? "-" : "";
@@ -85,18 +86,18 @@ test("apportion handles 4dp totals and zero total", () => {
   assert.equal(sum(zero.targets.map((t) => t.amount)), "0.0000");
 });
 
-test("apportion gives zero-weight targets zero and parks all-zero weight on the policy target", () => {
+test("apportion gives zero-weight targets zero and refuses an all-zero weight set by name", () => {
   const r = apportionTargets("10.0000", [wt("a", "0"), wt("b", "3"), wt("c", "0")], "first_target");
   assert.equal(r.targets[0]?.amount, "0.0000");
   assert.equal(r.targets[2]?.amount, "0.0000");
   assert.equal(r.targets[0]?.share, "0.0000000000");
   assert.equal(sum(r.targets.map((t) => t.amount)), "10.0000");
-  // All-zero weights fall back to an equal split: the money invariant wins.
-  const flat = apportionTargets("10.0000", [wt("a", "0"), wt("b", "0")], "last_target");
-  assert.deepEqual(flat.targets.map((t) => t.amount), ["5.0000", "5.0000"]);
-  assert.equal(sum(flat.targets.map((t) => t.amount)), "10.0000");
-  assert.equal(flat.residualKey, "b");
-  assert.deepEqual(flat.targets.map((t) => t.share), ["0.0000000000", "0.0000000000"]);
+  // All-zero weights carry no basis: an equal split would invent attribution.
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "0"), wt("b", "0")], "last_target"),
+    (error: unknown) => error instanceof AllocationApportionError && error.code === "no_driver_weight"
+      && /every target weight is zero, so there is no basis to apportion 10\.0000 — record the driver values for the period being allocated/.test(error.message),
+  );
 });
 
 test("apportion routes the rounding residual per policy", () => {

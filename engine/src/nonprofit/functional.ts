@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { apportionTargets } from "../allocations/apportion.ts";
+import { AllocationApportionError, apportionTargets } from "../allocations/apportion.ts";
 import type { ApportionResult, AllocationResidualPolicy } from "../allocations/types.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { db, inDbTransaction, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -406,17 +406,17 @@ export function splitSharedCost(input: {
       residualPolicy,
     );
   } catch (error) {
+    if (error instanceof AllocationApportionError && error.code === "no_driver_weight") {
+      throw mappingRefusal(
+        "The disclosed allocation driver has no positive weight for the shared cost.",
+        "functional_allocation_driver_empty",
+        "Enter positive driver values for the rule's target departments or projects before allocating the cost.",
+      );
+    }
     throw mappingRefusal(
       error instanceof Error ? error.message : "The allocation driver could not split the shared cost.",
       "functional_allocation_invalid",
       "Correct the published allocation rule and driver weights, then rerun the functional statement.",
-    );
-  }
-  if (apportioned.weightTotal === "0") {
-    throw mappingRefusal(
-      "The disclosed allocation driver has no positive weight for the shared cost.",
-      "functional_allocation_driver_empty",
-      "Enter positive driver values for the rule's target departments or projects before allocating the cost.",
     );
   }
   const splitTargets = apportioned.targets.map((share) => {

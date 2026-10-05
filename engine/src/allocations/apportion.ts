@@ -142,11 +142,17 @@ export function apportionTargets(
   }
 
   const weightTotalUnits = parsed.reduce((acc, p) => acc + p.units, 0n);
-  // All-zero weights carry no information: split equally so the money
-  // invariant still holds, and report zero shares honestly.
-  const allZero = weightTotalUnits === 0n;
-  const splitWeights = parsed.map((p) => (allZero ? 1n : p.units));
-  const basis = allZero ? BigInt(parsed.length) : weightTotalUnits;
+  // All-zero weights carry no basis. Splitting equally would invent an
+  // attribution nobody measured, so every allocation path (document posting,
+  // entry explosion and period runs) refuses here, by name, with the remedy.
+  if (weightTotalUnits === 0n) {
+    throw new AllocationApportionError(
+      "no_driver_weight",
+      `every target weight is zero, so there is no basis to apportion ${canonicalTotal} — record the driver values for the period being allocated, or change the rule's basis or target weights`,
+    );
+  }
+  const splitWeights = parsed.map((p) => p.units);
+  const basis = weightTotalUnits;
   const absorberIndex = parsed.findIndex((p) => p.key === absorberKey);
   const amounts = apportion(totalUnits, splitWeights, { residual: { absorber: absorberIndex } });
 
@@ -158,7 +164,7 @@ export function apportionTargets(
     return {
       key: p.key,
       weight: p.weight,
-      share: allZero ? "0.0000000000" : formatShare10(p.units, weightTotalUnits),
+      share: formatShare10(p.units, weightTotalUnits),
       amount: fromUnits(amount),
       residual: fromUnits(residualUnits),
     };
