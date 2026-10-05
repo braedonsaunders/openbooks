@@ -133,6 +133,7 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     const termsId = randomUUID();
     const termsVendor = randomUUID();
     const bareVendor = randomUUID();
+    const quietVendor = randomUUID();
     const seedBill = async (
       docNum: string, party: string, billDate: string, payDate: string, docDue: string | null,
     ): Promise<void> => {
@@ -175,7 +176,8 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${termsVendor}, ${org.orgId}, 'vendor', 'Terms Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
-               (${bareVendor}, ${org.orgId}, 'vendor', 'Bare Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+               (${bareVendor}, ${org.orgId}, 'vendor', 'Bare Vendor', ${org.subsidiaryId}, true, '{}'::jsonb),
+               (${quietVendor}, ${org.orgId}, 'vendor', 'Quiet Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`
         insert into payment_terms (id, org_id, name, net_days) values (${termsId}, ${org.orgId}, 'Net 30', 30)`);
       await db.execute(sql`
@@ -184,10 +186,25 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       await db.execute(sql`
         insert into vendor_roles (id, org_id, party_id)
         values (${randomUUID()}, ${org.orgId}, ${bareVendor})`);
+      await db.execute(sql`
+        insert into vendor_roles (id, org_id, party_id)
+        values (${randomUUID()}, ${org.orgId}, ${quietVendor})`);
       // Terms Vendor: no document due date, Net 30 from July 1 → due July 31, paid July 15: on time.
       await seedBill("BILL-TERMS", termsVendor, "2026-07-01", "2026-07-15", null);
       // Bare Vendor: no document due date and no payment terms → excluded from on-time, counted.
       await seedBill("BILL-BARE", bareVendor, "2026-07-02", "2026-07-16", null);
+      // Quiet Vendor: spend with no settled bills at all → unrated for lack
+      // of payments, not for lack of dates.
+      const spendEntry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${spendEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'SPEND-QUIET', '2026-07-10', ${org.periodId}, 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${randomUUID()}, ${org.orgId}, ${spendEntry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${quietVendor}, false, '250', 'CAD', '250', 1),
+               (${randomUUID()}, ${org.orgId}, ${spendEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${quietVendor}, false, '-250', 'CAD', '-250', 1)`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now() where id = ${spendEntry}`);
     });
     const data = await withOrgContext(org.orgId, () => vendorData(
       { from: "2026-07-01", to: "2026-07-31", label: "July 2026" },
@@ -199,6 +216,7 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     assert.equal(termsRow.paidBills, 1);
     assert.equal(termsRow.undatedBills, 0);
     assert.equal(termsRow.onTimePct, 1, "payment before the terms-derived due date is on time");
+    assert.equal(termsRow.unratedReason, null, "a rated vendor carries no unrated reason");
     const bareRow = data.rows.find((candidate) => candidate.id === bareVendor);
     assert.ok(bareRow, "the vendor without terms must be present");
     assert.equal(bareRow.paidBills, 1);
@@ -206,6 +224,12 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
     assert.equal(bareRow.onTimePct, null, "a settled bill with no due source is excluded from the on-time figure");
     assert.equal(bareRow.performance, null, "a vendor with no usable payment history is unrated, not neutral");
     assert.equal(bareRow.quadrant, "unrated");
+    assert.equal(bareRow.unratedReason, "undated", "settled-but-undated bills name the dating remedy, not settling");
+    const quietRow = data.rows.find((candidate) => candidate.id === quietVendor);
+    assert.ok(quietRow, "the vendor with spend but no payments must be present");
+    assert.equal(quietRow.paidBills, 0);
+    assert.equal(quietRow.quadrant, "unrated");
+    assert.equal(quietRow.unratedReason, "no-payments", "no settled bills names the settling remedy, not dating");
     assert.equal(data.totals.undatedBills, 1);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

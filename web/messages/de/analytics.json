@@ -1893,7 +1893,7 @@
       },
       "unrated": {
         "label": "Unbewertet",
-        "desc": "Noch keine Zahlungshistorie — Rechnungen begleichen, um zu bewerten"
+        "desc": "Noch keine Zahlungshistorie, oder beglichene Rechnungen haben kein Fälligkeitsdatum"
       }
     },
     "sub": {
@@ -2023,7 +2023,8 @@
       "noHistory": "Noch keine Zahlungshistorie"
     },
     "matrix": {
-      "unratedNote": "{count} Lieferanten haben noch keine Zahlungshistorie und werden nicht dargestellt"
+      "unratedNoPaymentsNote": "{count, plural, one {# Lieferant hat noch keine Zahlungshistorie und wird nicht dargestellt — Rechnungen begleichen, um zu bewerten} other {# Lieferanten haben noch keine Zahlungshistorie und werden nicht dargestellt — Rechnungen begleichen, um zu bewerten}}",
+      "unratedUndatedNote": "{count, plural, one {die beglichenen Rechnungen von # Lieferant haben kein Fälligkeitsdatum und werden nicht dargestellt — Fälligkeitsdaten oder Zahlungsbedingungen ergänzen, um zu bewerten} other {die beglichenen Rechnungen von # Lieferanten haben kein Fälligkeitsdatum und werden nicht dargestellt — Fälligkeitsdaten oder Zahlungsbedingungen ergänzen, um zu bewerten}}"
     }
   },
   "cashflow": {

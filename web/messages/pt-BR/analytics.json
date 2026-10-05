@@ -1893,7 +1893,7 @@
       },
       "unrated": {
         "label": "Sem avaliação",
-        "desc": "Ainda sem histórico de pagamentos — liquide faturas para avaliar"
+        "desc": "Ainda sem histórico de pagamentos, ou as faturas liquidadas não têm vencimento"
       }
     },
     "sub": {
@@ -2023,7 +2023,8 @@
       "noHistory": "Ainda sem histórico de pagamentos"
     },
     "matrix": {
-      "unratedNote": "{count} fornecedores ainda não têm histórico de pagamentos e não aparecem no gráfico"
+      "unratedNoPaymentsNote": "{count, plural, one {# fornecedor ainda não tem histórico de pagamentos e não aparece no gráfico — liquide faturas para avaliar} other {# fornecedores ainda não têm histórico de pagamentos e não aparecem no gráfico — liquide faturas para avaliar}}",
+      "unratedUndatedNote": "{count, plural, one {as faturas liquidadas de # fornecedor não têm vencimento e não aparecem no gráfico — adicione vencimentos ou condições de pagamento para avaliar} other {as faturas liquidadas de # fornecedores não têm vencimento e não aparecem no gráfico — adicione vencimentos ou condições de pagamento para avaliar}}"
     }
   },
   "cashflow": {

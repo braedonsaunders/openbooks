@@ -1893,7 +1893,7 @@
       },
       "unrated": {
         "label": "未评级",
-        "desc": "尚无付款记录 — 结算账单后评级"
+        "desc": "尚无付款记录，或已结算账单没有到期日"
       }
     },
     "sub": {
@@ -2023,7 +2023,8 @@
       "noHistory": "尚无付款记录"
     },
     "matrix": {
-      "unratedNote": "{count}家供应商尚无付款记录，未在图中绘制"
+      "unratedNoPaymentsNote": "{count}家供应商尚无付款记录，未在图中绘制——结算账单后评级",
+      "unratedUndatedNote": "{count}家供应商的已结算账单没有到期日，未在图中绘制——添加到期日或付款条件后评级"
     }
   },
   "cashflow": {

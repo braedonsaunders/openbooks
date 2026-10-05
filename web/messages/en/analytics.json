@@ -1887,7 +1887,7 @@
       },
       "unrated": {
         "label": "Unrated",
-        "desc": "No payment history yet — settle bills to rate"
+        "desc": "No payment history yet, or settled bills have no due date"
       }
     },
     "chart": {
@@ -2023,7 +2023,8 @@
       "noHistory": "No payment history yet"
     },
     "matrix": {
-      "unratedNote": "{count} vendors have no payment history yet and are not plotted"
+      "unratedNoPaymentsNote": "{count, plural, one {# vendor has no payment history yet and is not plotted — settle bills to rate it} other {# vendors have no payment history yet and are not plotted — settle bills to rate them}}",
+      "unratedUndatedNote": "{count, plural, one {# vendor's settled bills have no due date and are not plotted — add due dates or payment terms to rate it} other {# vendors' settled bills have no due date and are not plotted — add due dates or payment terms to rate them}}"
     }
   },
   "cashflow": {

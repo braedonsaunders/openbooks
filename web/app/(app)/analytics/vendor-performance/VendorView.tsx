@@ -273,7 +273,8 @@ function MatrixTab({ data }: { data: VendorData }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const option = useMemo(() => matrixOption(data.rows, (n) => fmtMoney(n, { compact: true }), t, data.config.highPerformanceScore), [data, fmtMoney, t])
-  const unrated = data.rows.filter((r) => r.quadrant === 'unrated').length
+  const unratedNoPayments = data.rows.filter((r) => r.unratedReason === 'no-payments').length
+  const unratedUndated = data.rows.filter((r) => r.unratedReason === 'undated').length
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -290,7 +291,8 @@ function MatrixTab({ data }: { data: VendorData }) {
       </div>
       <Panel title={t('panels.leverageMatrix')} icon={Grid2x2} hint={t('panels.leverageHint')}>
         <Chart option={option} height={420} />
-        {unrated > 0 ? <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{t('matrix.unratedNote', { count: unrated })}</p> : null}
+        {unratedNoPayments > 0 ? <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{t('matrix.unratedNoPaymentsNote', { count: unratedNoPayments })}</p> : null}
+        {unratedUndated > 0 ? <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{t('matrix.unratedUndatedNote', { count: unratedUndated })}</p> : null}
       </Panel>
     </div>
   )
