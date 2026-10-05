@@ -7,13 +7,14 @@ import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/ex
 import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
+import { financialHealth, priorFiscalWindow, type FinancialHealth, type HealthFigures } from "./financial-health";
 import { healthStrings, type HealthStrings } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
-import { OPERATING_EXPENSE_TYPES, operatingExpenseRatio } from "./operating-expenses";
+import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
+import { decimalRatio } from "../reports/decimals";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 import { getMoneyFormatter } from '../money-server'
 
@@ -64,18 +65,22 @@ export interface MonthPoint {
 export interface PnlLine {
   key: string;
   label: string;
-  current: number;
-  prior: number;
-  change: number;
-  changePct: number | null;
+  /** Exact amounts in the presentation currency. */
+  current: string;
+  prior: string;
+  change: string;
+  /** Fraction of the prior magnitude; null without a prior figure. */
+  changePct: string | null;
   strong?: boolean;
 }
 
 export interface MarginStage {
   key: string;
   label: string;
-  amount: number; // the flow amount (revenue, -cogs, gp, -opex, opInc, net)
-  pctOfRevenue: number;
+  /** The exact flow amount (revenue, −cogs, gp, −opex, opInc, net). */
+  amount: string;
+  /** Fraction of revenue; null when the period has no revenue. */
+  pctOfRevenue: string | null;
   kind: "start" | "deduct" | "subtotal" | "total";
 }
 
@@ -146,8 +151,6 @@ export interface HealthData extends FinancialHealth {
   items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: string; totalChange: string };
   insights: Insight[];
   budget: BudgetVariance;
-  /** Effective benchmark targets driving the grades (org overrides over defaults). */
-  benchmarks: HealthBenchmarks;
 }
 
 type SqlNumeric = string | number | null;
@@ -633,17 +636,17 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
 }
 
 function buildPnlSummary(
-  f: FinancialHealth["figures"],
-  prior: FinancialHealth["figures"],
+  f: HealthFigures,
+  prior: HealthFigures,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): PnlLine[] {
-  const line = (key: Parameters<HealthStrings["pnlLine"]>[0], current: number, priorV: number, strong?: boolean): PnlLine => ({
+  const line = (key: Parameters<HealthStrings["pnlLine"]>[0], current: string, priorV: string, strong?: boolean): PnlLine => ({
     key,
     label: strings.pnlLine(key),
     current,
     prior: priorV,
-    change: current - priorV,
-    changePct: Math.abs(priorV) > 0 ? (current - priorV) / Math.abs(priorV) : null,
+    change: add(current, neg(priorV)),
+    changePct: isZero(priorV) ? null : decimalRatio(add(current, neg(priorV)), abs(priorV)),
     strong,
   });
   return [
@@ -657,129 +660,160 @@ function buildPnlSummary(
   ];
 }
 
-function buildMarginFlow(f: FinancialHealth["figures"], strings: HealthStrings = healthStrings(englishCatalogMessage, "en")): MarginStage[] {
-  const rev = f.revenue || 1;
-  const pct = (n: number) => n / rev;
-  const stage = (key: Parameters<HealthStrings["marginStage"]>[0], amount: number, pctOfRevenue: number, kind: MarginStage["kind"]): MarginStage =>
-    ({ key, label: strings.marginStage(key), amount, pctOfRevenue, kind });
+function buildMarginFlow(f: HealthFigures, strings: HealthStrings = healthStrings(englishCatalogMessage, "en")): MarginStage[] {
+  // With no revenue a share of revenue does not exist — never divide by a stand-in.
+  const share = (n: string): string | null => (cmp(f.revenue, "0") > 0 ? decimalRatio(n, f.revenue) : null);
+  const stage = (key: Parameters<HealthStrings["marginStage"]>[0], amount: string, kind: MarginStage["kind"]): MarginStage =>
+    ({ key, label: strings.marginStage(key), amount, pctOfRevenue: share(amount), kind });
+  // Operating income here is the engine's: income tax booked to an operating
+  // account is excluded, so the tax line sits with the non-operating items.
+  const reconcilingTax = add(f.netIncome, neg(add(add(f.operatingIncome, f.otherIncome), neg(f.otherExpense))));
   return [
-    stage("revenue", f.revenue, 1, "start"),
-    stage("cogs", -f.cogs, pct(-f.cogs), "deduct"),
-    stage("grossProfit", f.grossProfit, pct(f.grossProfit), "subtotal"),
-    stage("opex", -f.opex, pct(-f.opex), "deduct"),
+    stage("revenue", f.revenue, "start"),
+    stage("cogs", neg(f.cogs), "deduct"),
+    stage("grossProfit", f.grossProfit, "subtotal"),
+    stage("opex", neg(f.opex), "deduct"),
     // Revenue and gross profit include other income, but operating income
     // excludes it. Show both adjustments so each subtotal reconciles.
-    stage("excludeOtherIncome", -f.otherIncome, pct(-f.otherIncome), "deduct"),
-    stage("operatingIncome", f.operatingIncome, pct(f.operatingIncome), "subtotal"),
-    stage("otherIncome", f.otherIncome, pct(f.otherIncome), "deduct"),
-    stage("otherExpense", -f.otherExpense, pct(-f.otherExpense), "deduct"),
-    stage("netIncome", f.netIncome, pct(f.netIncome), "total"),
+    stage("excludeOtherIncome", neg(f.otherIncome), "deduct"),
+    stage("operatingIncome", f.operatingIncome, "subtotal"),
+    stage("otherIncome", f.otherIncome, "deduct"),
+    stage("otherExpense", add(neg(f.otherExpense), reconcilingTax), "deduct"),
+    stage("netIncome", f.netIncome, "total"),
   ];
 }
 
-/** Derive Issues / Recommendations / Anomalies from ratios + trend. */
+/** Thresholds behind the findings — organization configuration, not constants. */
+interface InsightPolicy {
+  /** Fractions of the target below which a margin is critical / well below. */
+  critical: string;
+  warning: string;
+  revenueDecline: string;
+  revenueTrend: string;
+  marginCompression: number;
+  breakevenSafety: string;
+  anomalySigma: number;
+}
+
+async function insightPolicy(orgId: string): Promise<InsightPolicy> {
+  const c = await analyticsConfig(orgId, "financialHealth");
+  const fraction = (pct: number) => decimalRatio(String(pct), "100")!;
+  return {
+    critical: fraction(c.insightCriticalPercent),
+    warning: fraction(c.insightWarningPercent),
+    revenueDecline: fraction(c.revenueDeclineAlertPercent),
+    revenueTrend: fraction(c.revenueTrendAlertPercent),
+    marginCompression: c.marginCompressionPoints / 100,
+    breakevenSafety: fraction(c.breakevenSafetyPercent),
+    anomalySigma: c.anomalySigma,
+  };
+}
+
+/** Derive Issues / Recommendations / Anomalies from the graded ratios and the trend. */
 function buildInsights(
   base: FinancialHealth,
   monthly: MonthPoint[],
-  benchmarks: HealthBenchmarks,
-  money: (value: number) => string,
+  policy: InsightPolicy,
+  money: (value: string) => string,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Insight[] {
   const out: Insight[] = [];
   const f = base.figures;
-  const gm = f.revenue > 0 ? f.grossProfit / f.revenue : 0;
-  const opm = f.revenue > 0 ? f.operatingIncome / f.revenue : 0;
+  const T = base.benchmarks.targets;
+  const ratio = (id: string) => Object.values(base.ratios).flat().find((r) => r.id === id)?.value ?? null;
+  // Percentage points rendered in the request locale for the finding sentences.
+  const points = (fraction: string) =>
+    new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 1 }).format(mulDecimal(fraction, "100") as unknown as number);
+  const below = (value: string, target: string, share: string) => cmp(value, mulDecimal(target, share)) < 0;
 
-  // Severity-tiered issues engine, graded against the configured GM/Op
-  // benchmarks: critical at 50% of target, warning at 75%.
-  const GM_TARGET = benchmarks.grossMargin;
-  const OP_TARGET = benchmarks.operatingMargin;
-  const pct1 = (n: number): string => (n * 100).toFixed(1);
-  if (f.operatingIncome < 0) out.push(strings.operatingLoss(money(f.operatingIncome)));
-  if (gm < GM_TARGET * 0.5) out.push(strings.gmCritical(pct1(gm), String(Math.round(GM_TARGET * 100))));
-  else if (gm < GM_TARGET * 0.75) out.push(strings.gmWellBelow(pct1(gm), String(Math.round(GM_TARGET * 100))));
-  else if (gm < GM_TARGET) out.push(strings.gmBelow(pct1(gm), String(Math.round(GM_TARGET * 100))));
-  if (opm >= 0 && opm < OP_TARGET * 0.5) out.push(strings.opmCritical(pct1(opm), String(Math.round(OP_TARGET * 100))));
-  else if (opm >= 0 && opm < OP_TARGET) out.push(strings.opmBelow(pct1(opm), String(Math.round(OP_TARGET * 100))));
-  if (f.netIncome < 0) out.push(strings.netLoss(money(f.netIncome)));
-  if (f.revenueGrowth < -0.15) out.push(strings.revFalling(pct1(Math.abs(f.revenueGrowth))));
-  else if (f.revenueGrowth < 0) out.push(strings.revDeclined(pct1(Math.abs(f.revenueGrowth))));
+  const gm = ratio("gross_margin");
+  const opm = ratio("operating_margin");
+  if (cmp(f.operatingIncome, "0") < 0) out.push(strings.operatingLoss(money(f.operatingIncome)));
+  if (gm !== null && T.gross_margin !== null) {
+    if (below(gm, T.gross_margin, policy.critical)) out.push(strings.gmCritical(points(gm), points(T.gross_margin)));
+    else if (below(gm, T.gross_margin, policy.warning)) out.push(strings.gmWellBelow(points(gm), points(T.gross_margin)));
+    else if (cmp(gm, T.gross_margin) < 0) out.push(strings.gmBelow(points(gm), points(T.gross_margin)));
+  }
+  if (opm !== null && T.operating_margin !== null && cmp(opm, "0") >= 0) {
+    if (below(opm, T.operating_margin, policy.critical)) out.push(strings.opmCritical(points(opm), points(T.operating_margin)));
+    else if (cmp(opm, T.operating_margin) < 0) out.push(strings.opmBelow(points(opm), points(T.operating_margin)));
+  }
+  if (cmp(f.netIncome, "0") < 0) out.push(strings.netLoss(money(f.netIncome)));
+  if (f.revenueGrowth !== null) {
+    if (cmp(f.revenueGrowth, neg(policy.revenueDecline)) < 0) out.push(strings.revFalling(points(abs(f.revenueGrowth))));
+    else if (cmp(f.revenueGrowth, "0") < 0) out.push(strings.revDeclined(points(abs(f.revenueGrowth))));
+  }
   // Trend rules over the trailing months: revenue slope and margin compression.
   const recent = monthly.filter((m) => cmp(m.revenue, "0") > 0).slice(-3);
   if (recent.length === 3) {
     const [a, b, c] = recent;
-    if (cmp(a!.revenue, "0") > 0 && cmp(c!.revenue, mulDecimal(a!.revenue, "0.9")) < 0)
-      out.push(strings.revTrendingDown((amountRatio(sum([a!.revenue, neg(c!.revenue)]), abs(a!.revenue)) * 100).toFixed(0)));
-    if (a!.grossMarginPct - c!.grossMarginPct > 0.03 && b!.grossMarginPct <= a!.grossMarginPct)
-      out.push(strings.marginCompression(((a!.grossMarginPct - c!.grossMarginPct) * 100).toFixed(1)));
+    const floor = mulDecimal(a!.revenue, add("1", neg(policy.revenueTrend)));
+    if (cmp(c!.revenue, floor) < 0) {
+      out.push(strings.revTrendingDown(points(decimalRatio(add(a!.revenue, neg(c!.revenue)), abs(a!.revenue))!)));
+    }
+    if (a!.grossMarginPct - c!.grossMarginPct > policy.marginCompression && b!.grossMarginPct <= a!.grossMarginPct)
+      out.push(strings.marginCompression(points(String((a!.grossMarginPct - c!.grossMarginPct).toFixed(4)))));
   }
-  // Safety margin via breakeven.
-  if (f.breakevenMonthly !== null && monthly.length > 0) {
-    const avgMonthlyRev = f.revenue / Math.max(1, monthly.filter((m) => cmp(m.revenue, "0") > 0).length);
-    const safety = avgMonthlyRev > 0 ? (avgMonthlyRev - f.breakevenMonthly) / avgMonthlyRev : 0;
-    if (safety < 0) out.push(strings.belowBreakeven(money(f.breakevenMonthly)));
-    else if (safety < 0.1) out.push(strings.thinMargin((safety * 100).toFixed(0)));
+  // Safety margin: how far the period's revenue sits above its breakeven.
+  if (f.breakevenRevenue !== null && cmp(f.revenue, "0") > 0) {
+    const safety = decimalRatio(add(f.revenue, neg(f.breakevenRevenue)), f.revenue)!;
+    if (cmp(safety, "0") < 0) out.push(strings.belowBreakeven(money(f.breakevenRevenue)));
+    else if (cmp(safety, policy.breakevenSafety) < 0) out.push(strings.thinMargin(points(safety)));
   }
-  if (f.revenue > 0 && f.opex / f.revenue > 0.4)
-    out.push(strings.heavyOverhead(String(operatingExpenseRatio(f.opex, f.revenue))));
+  const opexShare = ratio("opex_ratio");
+  if (opexShare !== null && T.opex_ratio !== null && cmp(opexShare, T.opex_ratio) > 0)
+    out.push(strings.heavyOverhead(points(opexShare)));
 
-  if (gm >= GM_TARGET) out.push(strings.healthyGM);
-  if (opm < OP_TARGET && gm >= GM_TARGET * 0.75) out.push(strings.trimOpex);
-  if (f.operatingLeverage > 1) out.push(strings.posLeverage(f.operatingLeverage.toFixed(1)));
-  if (f.rule40 >= 40) out.push(strings.rule40(f.rule40.toFixed(0)));
+  if (gm !== null && T.gross_margin !== null && cmp(gm, T.gross_margin) >= 0) out.push(strings.healthyGM);
+  if (gm !== null && opm !== null && T.gross_margin !== null && T.operating_margin !== null
+    && cmp(opm, T.operating_margin) < 0 && !below(gm, T.gross_margin, policy.warning)) out.push(strings.trimOpex);
+  if (f.operatingLeverage !== null && T.operating_leverage !== null && cmp(f.operatingLeverage, T.operating_leverage) >= 0)
+    out.push(strings.posLeverage(new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 1 }).format(f.operatingLeverage as unknown as number)));
+  if (f.rule40 !== null && T.rule_of_40 !== null && cmp(f.rule40, T.rule_of_40) >= 0)
+    out.push(strings.rule40(new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 0 }).format(f.rule40 as unknown as number)));
 
-  // Anomalies: months whose margin deviates > 2σ from the mean.
+  // Anomalies: months deviating beyond the configured number of standard
+  // deviations. Dimensionless statistics read the bounded display projection.
   const withRev = monthly.filter((m) => cmp(m.revenue, "0") > 0);
   if (withRev.length >= 4) {
     const margins = withRev.map((m) => m.grossMarginPct);
     const mean = margins.reduce((a, x) => a + x, 0) / margins.length;
     const sd = Math.sqrt(margins.reduce((a, x) => a + (x - mean) ** 2, 0) / margins.length);
     for (const m of withRev) {
-      if (sd > 0 && Math.abs(m.grossMarginPct - mean) > 2 * sd) {
-        out.push(strings.marginOutlier(m.label, pct1(m.grossMarginPct), pct1(mean)));
+      if (sd > 0 && Math.abs(m.grossMarginPct - mean) > policy.anomalySigma * sd) {
+        out.push(strings.marginOutlier(m.label, points(m.grossMarginPct.toFixed(4)), points(mean.toFixed(4))));
       }
     }
     const revs = withRev.map((m) => insightNumber(m.revenue));
     const rMean = revs.reduce((a, x) => a + x, 0) / revs.length;
     const rSd = Math.sqrt(revs.reduce((a, x) => a + (x - rMean) ** 2, 0) / revs.length);
+    const meanRevenue = decimalRatio(sum(withRev.map((m) => m.revenue)), String(withRev.length))!;
     for (const m of withRev) {
-      if (rSd > 0 && Math.abs(insightNumber(m.revenue) - rMean) > 2 * rSd) {
-        out.push(strings.revenueSpike(m.label, money(insightNumber(m.revenue)), money(rMean)));
+      if (rSd > 0 && Math.abs(insightNumber(m.revenue) - rMean) > policy.anomalySigma * rSd) {
+        out.push(strings.revenueSpike(m.label, money(m.revenue), money(meanRevenue)));
       }
     }
   }
   return out;
 }
 
-async function healthBenchmarks(orgId: string): Promise<HealthBenchmarks> {
-  const cfg = await analyticsConfig(orgId, "financialHealth");
-  return {
-    grossMargin: cfg.grossMarginTarget! / 100,
-    operatingMargin: cfg.operatingMarginTarget! / 100,
-    ebitdaMargin: cfg.ebitdaMarginTarget! / 100,
-    netMargin: cfg.netMarginTarget! / 100,
-    roa: cfg.roaTarget! / 100,
-    roe: cfg.roeTarget! / 100,
-    roic: cfg.roicTarget! / 100,
-    revenuePerEmployee: cfg.revenuePerEmployee!,
-    gpPerEmployee: cfg.gpPerEmployee!,
-  };
-}
-
-/** The landing card reads the authoritative scorecard and monthly summary,
- * without loading comparison tables, dimensional analyses or budget detail. */
+/** The landing card and the home-dashboard widgets read the authoritative
+ * scorecard, the monthly summary and the findings, without loading
+ * comparison tables, dimensional analyses or budget detail. */
 export async function healthSummaryData(
   period: { from: string; to: string; label: string },
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
-): Promise<FinancialHealth & { monthly: MonthPoint[] }> {
-  const benchmarks = await healthBenchmarks(orgId);
-  const [base, monthly] = await Promise.all([
-    financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds, strings),
+): Promise<FinancialHealth & { monthly: MonthPoint[]; insights: Insight[] }> {
+  const { money: formatMoney } = await getMoneyFormatter(orgId);
+  const money = (value: string) => formatMoney(value, { maximumFractionDigits: 0 });
+  const [base, monthly, policy] = await Promise.all([
+    financialHealth(period, orgId, allowedSubsidiaryIds, strings),
     monthlySeries(orgId, period.to, allowedSubsidiaryIds, 12, strings),
+    insightPolicy(orgId),
   ]);
-  return { ...base, monthly };
+  return { ...base, monthly, insights: buildInsights(base, monthly, policy, money, strings) };
 }
 
 export async function healthData(
@@ -789,20 +823,16 @@ export async function healthData(
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<HealthData> {
   const { money: formatMoney } = await getMoneyFormatter(orgId)
-  const money = (value: number) => formatMoney(value, { maximumFractionDigits: 0 })
+  const money = (value: string) => formatMoney(value, { maximumFractionDigits: 0 })
   const { from, to } = period;
-  const pFrom = priorYear(from);
-  const pTo = priorYear(to);
-
-  // Per-org benchmark targets (percent-scale in the store → decimals here).
-  const benchmarks = await healthBenchmarks(orgId);
+  const prior = await priorFiscalWindow(orgId, from, to);
 
   const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } });
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
 
-  const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
-    financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds, strings),
-    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId, allowedSubsidiaryIds, strings),
+  const [base, priorBase, monthly, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
+    financialHealth(period, orgId, allowedSubsidiaryIds, strings),
+    financialHealth({ from: prior.from, to: prior.to, label: "prior" }, orgId, allowedSubsidiaryIds, strings),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
     segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, strings),
     segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, strings),
@@ -812,6 +842,7 @@ export async function healthData(
     budgetsOn
       ? budgetVariance(orgId, from, to, allowedSubsidiaryIds)
       : Promise.resolve(emptyBudget()),
+    insightPolicy(orgId),
   ]);
 
   return {
@@ -823,8 +854,7 @@ export async function healthData(
     drivers: drv,
     items,
     budget,
-    insights: buildInsights(base, monthly, benchmarks, money, strings),
-    benchmarks,
+    insights: buildInsights(base, monthly, policy, money, strings),
   };
 }
 
@@ -869,7 +899,7 @@ export function exactBudgetVariance(budget: string, actual: string): { variance:
  * Statuses follow budgetLineStatus above; income favours actual ≥ budget,
  * cost accounts the reverse.
  */
-async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
+export async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
   const scen = (await db.execute(sql`
     select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
     from budget_scenarios bs

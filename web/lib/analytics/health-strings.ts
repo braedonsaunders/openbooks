@@ -11,6 +11,7 @@
 
 import type { AnalyticsFindingKey, CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
+import { RATIO_IDS } from "./ratio-ids";
 
 
 export type PnlLineKey =
@@ -25,14 +26,29 @@ export interface HealthFinding {
   detail: string;
 }
 
-/** No-data notes inside the ratio engine (financial-health.ts core). */
+/** Reasons and measurement notes inside the ratio engine (financial-health.ts). */
 export interface FinancialHealthNotes {
+  unavailable: string;
+  noRevenue: string;
   noDA: string;
   noBalanceSheet: string;
   noHeadcount: string;
   noInterestExpense: string;
+  noCurrentLiabilities: string;
+  noPriorComparison: string;
+  equityNotPositive: string;
+  investedCapitalNotPositive: string;
+  debtNotClassified: string;
+  interestNotClassified: string;
+  noTaxRate: string;
+  mixedTaxRates: string;
   /** `revenue` is pre-formatted money (existing formatter). */
   perEmployees(revenue: string, headcount: number): string;
+  annualized(periodDays: number, yearDays: number): string;
+  effectiveTaxRate(rate: string): string;
+  statutoryTaxRate(rate: string): string;
+  /** An exact fraction rendered as a percentage in the request locale. */
+  percent(fraction: string): string;
 }
 
 export interface HealthStrings extends FinancialHealthNotes {
@@ -78,12 +94,28 @@ export function healthStrings(t: CatalogMessageFn, locale: string): HealthString
   });
   return {
     locale,
+    unavailable: t("financialHealth.ratioNotes.unavailable"),
+    noRevenue: t("financialHealth.ratioNotes.noRevenue"),
     noDA: t("financialHealth.ratioNotes.noDA"),
     noBalanceSheet: t("financialHealth.ratioNotes.noBalanceSheet"),
     noHeadcount: t("financialHealth.ratioNotes.noHeadcount"),
     noInterestExpense: t("financialHealth.ratioNotes.noInterestExpense"),
+    noCurrentLiabilities: t("financialHealth.ratioNotes.noCurrentLiabilities"),
+    noPriorComparison: t("financialHealth.ratioNotes.noPriorComparison"),
+    equityNotPositive: t("financialHealth.ratioNotes.equityNotPositive"),
+    investedCapitalNotPositive: t("financialHealth.ratioNotes.investedCapitalNotPositive"),
+    debtNotClassified: t("financialHealth.ratioNotes.debtNotClassified"),
+    interestNotClassified: t("financialHealth.ratioNotes.interestNotClassified"),
+    noTaxRate: t("financialHealth.ratioNotes.noTaxRate"),
+    mixedTaxRates: t("financialHealth.ratioNotes.mixedTaxRates"),
     perEmployees: (revenue, headcount) =>
       t("financialHealth.ratioNotes.perEmployees", { revenue, count: headcount }),
+    annualized: (periodDays, yearDays) =>
+      t("financialHealth.ratioNotes.annualized", { periodDays, yearDays }),
+    effectiveTaxRate: (rate) => t("financialHealth.ratioNotes.effectiveTaxRate", { rate }),
+    statutoryTaxRate: (rate) => t("financialHealth.ratioNotes.statutoryTaxRate", { rate }),
+    percent: (fraction) =>
+      new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(fraction as unknown as number),
     monthLabel: catalogMonthLabel(t),
     displaySegmentName: (id, name) =>
       id === "unassigned" && name === "Unassigned" ? t("financialHealth.labels.unassignedSegment") : name,
@@ -122,24 +154,6 @@ export function healthStrings(t: CatalogMessageFn, locale: string): HealthString
   };
 }
 
-const RATIO_IDS = [
-  "gross_margin",
-  "operating_margin",
-  "ebitda_margin",
-  "net_margin",
-  "roa",
-  "roe",
-  "roic",
-  "roce",
-  "rev_per_employee",
-  "gp_per_employee",
-  "asset_turnover",
-  "cogs_ratio",
-  "opex_ratio",
-  "operating_leverage",
-  "interest_coverage",
-  "rule_of_40",
-] as const;
 
 export interface RatioDefText {
   label: string;
@@ -149,9 +163,8 @@ export interface RatioDefText {
 }
 
 /**
- * Catalog-backed ratio dictionary — same shape as RATIO_DEFS, every field in
- * the request locale. RATIO_DEFS itself stays the static English table for
- * surfaces outside the analytics dashboards.
+ * Catalog-backed ratio dictionary, every field in the request locale. The
+ * catalog is the only copy of these definitions.
  */
 export function localizedRatioDefs(t: CatalogMessageFn): Record<string, RatioDefText> {
   return Object.fromEntries(

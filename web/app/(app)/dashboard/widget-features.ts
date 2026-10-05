@@ -27,6 +27,7 @@ const WIDGET_FEATURES: Record<string, string> = {
   'team-headcount': 'hrm',
   'team-nudges': 'hrm',
   'resourcing-pulse': 'resourcing',
+  'budget-variance': 'budgets',
 }
 
 export function widgetFeatureKey(widgetId: string): string | null {

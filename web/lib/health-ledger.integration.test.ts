@@ -10,6 +10,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
+const { add } = await import("@openbooks/engine/src/money/money.ts");
 const { db, withOrgContext, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { healthData } = await import("./analytics/health-data");
@@ -47,15 +48,15 @@ for (const view of ["current month", "completed month", "segments", "drivers", "
       await withOrgContext(org.orgId, async () => {
         const to = view === "completed month" ? "2026-08-15" : org.date;
         const result = await healthData({ from: "2026-07-01", to, label: "Ledger review" }, org.orgId, null);
-        assert.equal(result.figures.revenue, 150, "primary-book headline control");
-        assert.equal(result.figures.operatingIncome, 100, "nonoperating income excluded in headline");
-        let running = 0;
+        assert.equal(result.figures.revenue, "150.0000", "primary-book headline control");
+        assert.equal(result.figures.operatingIncome, "100.0000", "nonoperating income excluded in headline");
+        let running = "0";
         // buildMarginFlow always emits the nine waterfall stages: the
         // per-stage reconciliation below cannot pass over an empty flow.
         assert.ok(result.marginFlow.length > 0, "margin waterfall must carry stages");
         for (const stage of result.marginFlow) {
           if (stage.kind === "start") running = stage.amount;
-          else if (stage.kind === "deduct") running += stage.amount;
+          else if (stage.kind === "deduct") running = add(running, stage.amount);
           else assert.equal(stage.amount, running, `${stage.label} reconciles to posted history`);
         }
         const month = result.monthly.find(row => row.month === '2026-07');
@@ -81,7 +82,7 @@ for (const view of ["current month", "completed month", "segments", "drivers", "
 }
 
 const headcountCases = [{ label: "health-headcount", register: async () => {
-const { financialHealth, DEFAULT_BENCHMARKS } = await import("./analytics/financial-health");
+const { financialHealth } = await import("./analytics/financial-health");
 
 const cases = [
   { name: "active employee", hired: "2026-01-01", terminated: null, expected: 1 },
@@ -103,13 +104,13 @@ for (const scenario of cases) {
           values (${org.orgId},${employee},${scenario.hired},${scenario.terminated})`);
       });
       await withOrgContext(org.orgId, async () => {
-        const data = await financialHealth({ from: "2026-07-01", to: "2026-07-31", label: "July" }, DEFAULT_BENCHMARKS, org.orgId, null);
+        const data = await financialHealth({ from: "2026-07-01", to: "2026-07-31", label: "July" }, org.orgId, null);
         assert.equal(data.figures.headcount, scenario.expected);
         for (const key of ["rev_per_employee", "gp_per_employee"]) {
           const ratio = Object.values(data.ratios).flat().find(row => row.id === key);
           assert.ok(ratio);
-          assert.equal(ratio.value, scenario.expected ? 0 : null);
-          assert.equal(ratio.noData, scenario.expected === 0);
+          assert.equal(ratio.value, scenario.expected ? "0.0000" : null);
+          assert.equal(ratio.unavailable !== null, scenario.expected === 0);
         }
       });
     } finally { await dropScratchOrg(org.orgId); }
@@ -274,8 +275,8 @@ for (const boundary of ["service", "completed month", "page", "assistant", "acco
             assert.equal(result.ok, true); assert.ok(result.ok);
             data = result.data as Pick<HealthData, 'figures' | 'budget'>;
           }
-          assert.equal(data.figures.revenue, mode === 'all' ? 1099 : mode === 'empty' ? 0 : 100);
-          assert.equal(data.figures.depreciationAmortization, mode === 'all' ? 109 : mode === 'empty' ? 0 : 10);
+          assert.equal(data.figures.revenue, mode === 'all' ? "1099.0000" : mode === 'empty' ? "0.0000" : "100.0000");
+          assert.equal(data.figures.depreciationAmortization, mode === 'all' ? "109.0000" : mode === 'empty' ? "0.0000" : "10.0000");
           assert.equal(data.figures.headcount, mode === 'all' ? 2 : mode === 'empty' ? 0 : 1);
           assert.equal(data.budget.totals.budget, mode === 'all' ? '500.0000' : mode === 'empty' ? '0.0000' : '120.0000');
           assert.equal(data.budget.totals.actual, mode === 'all' ? '1208.0000' : mode === 'empty' ? '0.0000' : '110.0000');
