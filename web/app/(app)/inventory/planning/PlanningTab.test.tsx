@@ -32,7 +32,7 @@ for (const failedPath of ['policies', 'suggestions']) {
     assert.match(document.body.textContent ?? '', /restore inventory.plan/)
     assert.doesNotMatch(document.body.textContent ?? '', /policy.defaulted|itemTab.none/, 'a refused read cannot assert standard policy or no suggestions')
     assert.equal([...document.querySelectorAll('button')].some((b) => b.textContent === 'policy.save' && !b.disabled), false)
-    assert.deepEqual(writes, [])
+    assert.equal(writes.length, 0)
     const retry = [...document.querySelectorAll('button')].find((b) => b.textContent === 'actions.retry')
     assert.ok(retry)
     refused = false
