@@ -103,6 +103,10 @@ test("top-party lists order, split overdue, and tie the cockpits", { skip: !DB }
     await withBypass(() => postedOpenItem(org, { side: "ar", amount: "300", postingDate: "2026-05-20", period: may, dueDate: null, docNo: "INV-BIG-3", party: big }));
     await withBypass(() => postedOpenItem(org, { side: "ar", amount: "2000", dueDate: "2026-09-13", docNo: "INV-SMALL-1", party: small }));
     await withBypass(() => postedOpenItem(org, { side: "ap", amount: "700", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "BILL-V-1", party: vend }));
+    // BILL-V-2 has no due date, so it ages from its May posting date: past
+    // due like the overdue tiles count it, and it sets the oldest date —
+    // never overdue money with a null oldest date.
+    await withBypass(() => postedOpenItem(org, { side: "ap", amount: "400", postingDate: "2026-05-20", period: may, dueDate: null, docNo: "BILL-V-2", party: vend }));
 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Party Reader", "admin"));
     const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "ar.read", "ap.read"]);
@@ -121,10 +125,14 @@ test("top-party lists order, split overdue, and tie the cockpits", { skip: !DB }
     assert.equal(toUnits(customers[1]?.amount ?? "0"), toUnits("1800"));
     assert.equal(toUnits(customers[1]?.overdue ?? "0"), toUnits("1300"), "the May invoice and the untermed May invoice are past due");
     assert.equal(customers[1]?.count, 3);
+    assert.equal(customers[1]?.oldestDue, "2026-05-20", "the untermed May invoice sets the oldest date from its posting");
     const vendors = metrics.topVendors ?? [];
     assert.equal(vendors.length, 1);
     assert.equal(vendors[0]?.partyName, "Main Supplier");
-    assert.equal(toUnits(vendors[0]?.amount ?? "0"), toUnits("700"));
+    assert.equal(toUnits(vendors[0]?.amount ?? "0"), toUnits("1100"));
+    assert.equal(toUnits(vendors[0]?.overdue ?? "0"), toUnits("1100"), "the May bill and the untermed May bill are past due");
+    assert.equal(vendors[0]?.count, 2);
+    assert.equal(vendors[0]?.oldestDue, "2026-05-20", "the untermed May bill sets the oldest date from its posting");
 
     const settings = { weeklyCap: "0", restrictToSafe: false };
     const [ar, ap] = await pinClock(TODAY, () =>
