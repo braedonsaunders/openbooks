@@ -109,8 +109,12 @@ export function BankFilePanel({
   const t = useTranslations('payroll')
   // The message catalogue is owned elsewhere; until these keys land the panel
   // renders its English source text rather than raw key paths.
+  // A catalogue string with a placeholder must be formatted with its values:
+  // formatting it bare throws instead of rendering.
   const tx = useCallback(
-    (key: string, fallback: string) => (t.has(key as never) ? (t(key as never) as string) : fallback),
+    (key: string, fallback: string, values?: Record<string, string | number>) => (t.has(key as never)
+      ? (t(key as never, values as never) as string)
+      : Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), fallback)),
     [t],
   )
 
@@ -382,19 +386,13 @@ export function BankFilePanel({
         {population && (
           <div className="grid gap-3 sm:grid-cols-3">
             <Fact label={tx('wizard.bankFile.onFile', 'On the file (EFT)')}>
-              {tx('wizard.bankFile.employees', '{n} employees').replace(
-                '{n}',
-                String(population.entries.length),
-              )}
+              {tx('wizard.bankFile.employees', '{n} employees', { n: population.entries.length })}
             </Fact>
             <Fact label={tx('wizard.bankFile.controlTotal', 'Control total')}>
               {fmt(population.total)}
             </Fact>
             <Fact label={tx('wizard.bankFile.onPaper', 'Paid by cheque instead')}>
-              {tx('wizard.bankFile.employees', '{n} employees').replace(
-                '{n}',
-                String(population.excludedCheque.length),
-              )}
+              {tx('wizard.bankFile.employees', '{n} employees', { n: population.excludedCheque.length })}
               {' · '}
               {fmt(population.excludedTotal)}
             </Fact>
@@ -467,10 +465,7 @@ export function BankFilePanel({
                     <TableCell className="text-right">
                       <div className="tabular-nums">{fmt(artifact.controlTotal)}</div>
                       <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {tx('wizard.bankFile.credits', '{n} credits').replace(
-                          '{n}',
-                          String(artifact.entryCount),
-                        )}
+                        {tx('wizard.bankFile.credits', '{n} credits', { n: artifact.entryCount })}
                         {artifact.fileIdModifier ? ` · id ${artifact.fileIdModifier}` : ''}
                         {artifact.fileCreationNumber ? ` · no. ${artifact.fileCreationNumber}` : ''}
                       </div>
