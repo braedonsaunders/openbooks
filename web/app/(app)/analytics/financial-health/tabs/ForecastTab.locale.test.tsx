@@ -23,6 +23,8 @@ const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('@/components/money-provider')
 const { ForecastTab } = await import('./ForecastTab')
+const enMessages = (await import('../../../../../messages/en')).default
+const frMessages = (await import('../../../../../messages/fr')).default
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 
 function month(revenue: string, month: string, label: string) {
@@ -49,8 +51,11 @@ const data = {
 } as unknown as HealthData
 
 function markup(locale: string): string {
+  // Future month names render from the locale catalog, so each render
+  // carries its own language's messages — never an empty catalog.
+  const messages = locale === 'fr' ? frMessages : enMessages
   return renderToStaticMarkup(
-    <NextIntlClientProvider locale={locale} messages={{}} timeZone="UTC">
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
       <MoneyProvider currency="USD">
         <ForecastTab data={data} />
       </MoneyProvider>

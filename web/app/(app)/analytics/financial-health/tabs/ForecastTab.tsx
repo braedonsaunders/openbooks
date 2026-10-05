@@ -3,8 +3,7 @@
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
-import { useLocale, useTranslations } from 'next-intl'
-import { monthLabel } from '@/lib/format'
+import { useTranslations } from 'next-intl'
 import { EmptyState, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
@@ -49,12 +48,26 @@ const METHOD_LABEL: Record<ForecastMethod, string> = {
   arima: 'ARIMA-style',
 }
 
-function futureLabels(lastMonth: string, horizon: number, locale: string): string[] {
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const
+
+/**
+ * Labels for the projected buckets, stepping calendar months from the last
+ * history point's month. The history key is a calendar month (YYYY-MM) or a
+ * fiscal period start (YYYY-MM-DD) — both split the same way, so the first
+ * two segments always carry the year and month stepping starts from.
+ * Month names and the year template come from the catalog, never English.
+ */
+function futureLabels(
+  lastMonth: string,
+  horizon: number,
+  t: (key: string, values?: Record<string, string>) => string,
+): string[] {
   const [y, m] = lastMonth.split('-').map(Number)
   const out: string[] = []
   for (let i = 1; i <= horizon; i++) {
     const d = new Date(Date.UTC(y!, m! - 1 + i, 1))
-    out.push(`${monthLabel(d, locale)} '${String(d.getUTCFullYear()).slice(2)}`)
+    const month = t(`monthsShort.${MONTH_KEYS[d.getUTCMonth()]!}`)
+    out.push(t('monthYear', { month, yy: String(d.getUTCFullYear()).slice(2) }))
   }
   return out
 }
@@ -62,9 +75,9 @@ function futureLabels(lastMonth: string, horizon: number, locale: string): strin
 const SELECT = 'h-8 w-full text-sm'
 
 export function ForecastTab({ data }: { data: HealthData }) {
-  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth.forecast')
+  const tc = useTranslations('analytics.common')
   const tk = useTranslations('analytics.financialHealth.kpi')
   const [metric, setMetric] = useState<Metric>('revenue')
   const [method, setMethod] = useState<ForecastMethod>('ets')
@@ -111,7 +124,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
   const diag = diagnostics(series, result)
   const histLabels = hist.map((p) => p.label)
-  const futLabels = futureLabels(hist[hist.length - 1]!.month, horizon, locale)
+  const futLabels = futureLabels(hist[hist.length - 1]!.month, horizon, (key, values) => tc(key, values))
   const labels = [...histLabels, ...futLabels]
   const N = series.length
   const history = [...series, ...Array(horizon).fill(null)]
