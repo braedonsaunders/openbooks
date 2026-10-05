@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "Assinatura",
+    "termsLabel": "Linhas de assinatura",
     "loading": "Carregando condições da assinatura…",
     "totalContractValue": "Valor total do contrato",
     "discount": "Desconto de {pct} %",

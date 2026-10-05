@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "订阅",
+    "termsLabel": "订阅行",
     "loading": "正在加载订阅条款…",
     "totalContractValue": "合同总价值",
     "discount": "折扣 {pct}%",

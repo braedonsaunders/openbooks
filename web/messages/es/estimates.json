@@ -11,6 +11,7 @@
   },
   "quoteCash": {
     "tab": "Suscripción",
+    "termsLabel": "Líneas de suscripción",
     "loading": "Cargando las condiciones de suscripción…",
     "totalContractValue": "Valor total del contrato",
     "discount": "Descuento del {pct} %",
