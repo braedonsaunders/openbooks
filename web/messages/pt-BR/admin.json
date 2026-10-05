@@ -4516,6 +4516,11 @@
       "retentionRegions": {
         "all": "Todas as regiões",
         "countries": "Países selecionados"
+      },
+      "autopayFinalAction": {
+        "none": "Continuar faturando (sem ação final)",
+        "suspend": "Suspender a assinatura",
+        "cancel": "Cancelar a assinatura"
       }
     },
     "payroll": {
@@ -5617,7 +5622,14 @@
       "criteria": "Elegibilidade e envio",
       "description": "Defina os critérios de cobrança e a sequência de lembretes.",
       "reminderNumber": "Lembrete {number}",
-      "addReminder": "Adicionar lembrete"
+      "addReminder": "Adicionar lembrete",
+      "autopay": "Cobrança automática",
+      "retryOffsetsDays": "Tentar de novo após (dias)",
+      "retryDay": "Dias",
+      "addRetry": "Adicionar tentativa",
+      "retryOffsetsHelp": "Dias após cada cobrança com falha para tentar de novo. Ao esgotar a lista, aplica-se a ação final abaixo.",
+      "finalAction": "Quando as tentativas se esgotarem",
+      "finalActionHelp": "Suspender interrompe o faturamento, mas mantém o contrato; um pagamento posterior o retoma. Cancelar encerra a assinatura."
     },
     "no": "Não",
     "payComponentChooser": {

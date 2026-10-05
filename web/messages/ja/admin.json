@@ -4591,6 +4591,11 @@
       "retentionRegions": {
         "all": "すべての地域",
         "countries": "選択した国"
+      },
+      "autopayFinalAction": {
+        "none": "請求を続ける（最終処理なし）",
+        "suspend": "サブスクリプションを利用停止",
+        "cancel": "サブスクリプションを解約"
       }
     },
     "invoicing": {
@@ -5617,7 +5622,14 @@
       "criteria": "対象条件と送信",
       "description": "回収条件とリマインダーの順序を設定します。",
       "reminderNumber": "リマインダー {number}",
-      "addReminder": "リマインダーを追加"
+      "addReminder": "リマインダーを追加",
+      "autopay": "自動回収",
+      "retryOffsetsDays": "リトライ間隔（日）",
+      "retryDay": "日数",
+      "addRetry": "リトライを追加",
+      "retryOffsetsHelp": "失敗した引き落としの何日後に再試行するか。一覧を使い切ると下記の最終処理が適用されます。",
+      "finalAction": "リトライを使い切った場合",
+      "finalActionHelp": "利用停止は請求を止めますが契約は残り、後の支払い成功で再開します。解約はサブスクリプションを終了します。"
     },
     "no": "いいえ",
     "payComponentChooser": {

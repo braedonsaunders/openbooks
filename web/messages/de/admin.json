@@ -4591,6 +4591,11 @@
       "retentionRegions": {
         "all": "Alle Regionen",
         "countries": "Ausgewählte Länder"
+      },
+      "autopayFinalAction": {
+        "none": "Weiter abrechnen (keine Endaktion)",
+        "suspend": "Abonnement sperren",
+        "cancel": "Abonnement kündigen"
       }
     },
     "bankFeeds": {
@@ -5617,7 +5622,14 @@
       "criteria": "Voraussetzungen und Versand",
       "description": "Legen Sie die Inkassokriterien und die Erinnerungsfolge fest.",
       "reminderNumber": "Erinnerung {number}",
-      "addReminder": "Erinnerung hinzufügen"
+      "addReminder": "Erinnerung hinzufügen",
+      "autopay": "Automatischer Einzug",
+      "retryOffsetsDays": "Erneut versuchen nach (Tage)",
+      "retryDay": "Tage",
+      "addRetry": "Wiederholung hinzufügen",
+      "retryOffsetsHelp": "Tage nach jeder fehlgeschlagenen Abbuchung bis zum nächsten Versuch. Nach dem letzten Eintrag gilt die untenstehende Endaktion.",
+      "finalAction": "Wenn die Wiederholungen aufgebraucht sind",
+      "finalActionHelp": "Sperren stoppt die Abrechnung, der Vertrag bleibt bestehen; eine spätere erfolgreiche Zahlung setzt sie fort. Kündigen beendet das Abonnement."
     },
     "no": "Nein",
     "payComponentChooser": {

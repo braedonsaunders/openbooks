@@ -4471,6 +4471,11 @@
       "retentionRegions": {
         "all": "Toutes les régions",
         "countries": "Pays sélectionnés"
+      },
+      "autopayFinalAction": {
+        "none": "Continuer à facturer (aucune action finale)",
+        "suspend": "Suspendre l’abonnement",
+        "cancel": "Résilier l’abonnement"
       }
     },
     "laborCosting": {
@@ -5617,7 +5622,14 @@
       "criteria": "Admissibilité et envoi",
       "description": "Définissez les critères de recouvrement et la séquence de rappels.",
       "reminderNumber": "Rappel {number}",
-      "addReminder": "Ajouter un rappel"
+      "addReminder": "Ajouter un rappel",
+      "autopay": "Recouvrement automatique",
+      "retryOffsetsDays": "Réessayer après (jours)",
+      "retryDay": "Jours",
+      "addRetry": "Ajouter une relance",
+      "retryOffsetsHelp": "Jours après chaque prélèvement échoué avant de réessayer. Une fois la liste épuisée, l’action finale ci-dessous s’applique.",
+      "finalAction": "Quand les relances sont épuisées",
+      "finalActionHelp": "Suspendre arrête la facturation mais conserve le contrat ; un paiement ultérieur le reprend. Résilier met fin à l’abonnement."
     },
     "no": "Non",
     "payComponentChooser": {

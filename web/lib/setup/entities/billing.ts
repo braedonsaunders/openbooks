@@ -10,6 +10,7 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     formSections: [
       { titleKey: 'collectionPolicyFields.details', fields: ['name', 'isActive'] },
       { titleKey: 'collectionPolicyFields.criteria', fields: ['gracePeriodDays', 'minBalance', 'replyTo'] },
+      { titleKey: 'collectionPolicyFields.autopay', fields: ['retryOffsetsDays', 'finalAction'] },
     ],
     columns: [
       { key: 'name', kind: 'text' }, { key: 'gracePeriodDays', labelKey: 'collectionPolicyFields.gracePeriodDays', kind: 'number' },
@@ -21,6 +22,17 @@ export const BILLING_ENTITIES: SetupEntity[] = [
       { key: 'minBalance', labelKey: 'collectionPolicyFields.minBalance', kind: 'decimal', decimalScale: 4, defaultValue: '0' },
       { key: 'replyTo', labelKey: 'collectionPolicyFields.replyTo', kind: 'text', fullWidth: true },
       { key: 'isActive', kind: 'boolean', defaultValue: true, booleanStyle: 'switch', fullWidth: true },
+      { key: 'retryOffsetsDays', labelKey: 'collectionPolicyFields.retryOffsetsDays', kind: 'objectArray',
+        helpTextKey: 'collectionPolicyFields.retryOffsetsHelp',
+        itemTitleKey: 'collectionPolicyFields.retryDay', itemTitleField: 'days', addLabelKey: 'collectionPolicyFields.addRetry', fields: [
+        { key: 'days', labelKey: 'collectionPolicyFields.retryDay', kind: 'integer', required: true, min: 1, max: 90 },
+      ] },
+      { key: 'finalAction', labelKey: 'collectionPolicyFields.finalAction', kind: 'select', defaultValue: 'none',
+        helpTextKey: 'collectionPolicyFields.finalActionHelp', options: [
+        { value: 'none', labelKey: 'options.autopayFinalAction.none' },
+        { value: 'suspend', labelKey: 'options.autopayFinalAction.suspend' },
+        { value: 'cancel', labelKey: 'options.autopayFinalAction.cancel' },
+      ] },
       { key: 'stages', labelKey: 'collectionPolicyFields.stages', kind: 'objectArray', required: true,
         itemTitleKey: 'collectionPolicyFields.reminderNumber', itemTitleField: 'name', itemSequenceKey: 'sequence', addLabelKey: 'collectionPolicyFields.addReminder', fields: [
         { key: 'sequence', labelKey: 'collectionPolicyFields.sequence', kind: 'integer', required: true },
