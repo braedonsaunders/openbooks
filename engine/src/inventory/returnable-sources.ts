@@ -182,6 +182,12 @@ export interface ReturnableSourceQuery {
   partyId: string;
   itemId?: string | null;
   stockLocationId?: string | null;
+  /**
+   * When returning a kit line, the picker offers the component issues of one
+   * kit sale line instead of filtering by component item: a kit never issues
+   * itself, so an item filter on the kit would offer nothing.
+   */
+  documentLineId?: string | null;
   subsidiaryIds?: readonly string[] | null;
   limit?: number;
   offset?: number;
@@ -219,6 +225,7 @@ export async function returnableSources(
             and reversal.reverses_movement_id = movement.id
        )
        ${query.itemId ? sql`and movement.item_id = ${query.itemId}` : sql``}
+       ${query.documentLineId ? sql`and movement.document_line_id = ${query.documentLineId}` : sql``}
        ${query.stockLocationId ? sql`and movement.stock_location_id = ${query.stockLocationId}` : sql``}
        ${subsidiaryFilter(query.subsidiaryIds)}
        and abs(movement.quantity) - coalesce(returned.quantity, 0) > 0

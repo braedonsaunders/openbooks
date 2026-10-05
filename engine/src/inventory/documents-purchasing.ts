@@ -12,6 +12,7 @@ import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition
 import { receiveInventory } from "./movements.ts";
 import { liveReceiptQuantity } from "./return-quantities.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import { kitLabel, kitNoStockRefusal } from "./kits.ts";
 
 /**
  * lineId → the GL account a vendor bill's inventory line should DEBIT: the
@@ -46,6 +47,16 @@ export async function assertBillReceiptsPostable(
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
   const agency = await resolveAgencyPosting(runner,orgId,documentId);
   const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(line=>!agency.has(line.lineId));
+  // Kits hold no stock: the post-commit receipt would die inside the drain
+  // after the bill's journal has committed, so refuse before posting with
+  // the components named as the receivable side.
+  for (const line of lines) {
+    if (line.itemKind !== "kit") continue;
+    throw new InventoryError(
+      kitNoStockRefusal(await kitLabel(runner, orgId, line.itemId), "receive") +
+        ` (bill line ${line.lineNumber})`,
+    );
+  }
   if (lines.length === 0) return;
   assertDocumentLinesUntracked(lines, {
     movement: "receipt",

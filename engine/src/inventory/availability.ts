@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
-import { add, cmp, neg, normalizeDecimal } from "../money/money.ts";
+import { add, cmp, mulDecimalFactors, neg, normalizeDecimal } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { salesOrderLineRemainders } from "../records/order-line-remainders.ts";
@@ -8,6 +8,7 @@ import { InventoryError, type Runner } from "./contracts.ts";
 import { toBaseQuantity } from "./costing.ts";
 import { isJsonRecord } from "./document-lines.ts";
 import { activePickReservations } from "./pick-reservations.ts";
+import { kitAvailableFromComponents } from "./kits.ts";
 import { getOnHandWith } from "./position.ts";
 import { assertWarehousingFeature, listWarehouseLocations, warehouseOf } from "./warehouses.ts";
 
@@ -98,6 +99,7 @@ export async function availabilityEntity(
 export interface StockedItem {
   itemId: string;
   label: string;
+  kind: string;
   isActive: boolean;
   baseUnit: string;
   conversions: Record<string, number>;
@@ -120,13 +122,14 @@ export async function stockedItems(
   const rows = (await runner.execute<{
     item_id: string;
     label: string;
+    kind: string;
     is_active: boolean;
     base_unit: string;
     unit_conversions: unknown;
     reorder_point: string | null;
     preferred_stock_level: string | null;
   }>(sql`
-    select p.item_id, coalesce(nullif(i.code, ''), i.name) as label, i.is_active, p.base_unit,
+    select p.item_id, coalesce(nullif(i.code, ''), i.name) as label, i.kind, i.is_active, p.base_unit,
            p.unit_conversions, p.reorder_point::text as reorder_point,
            p.preferred_stock_level::text as preferred_stock_level
       from item_inventory_profiles p
@@ -147,6 +150,7 @@ export async function stockedItems(
     out.set(row.item_id, {
       itemId: row.item_id,
       label: row.label,
+      kind: row.kind,
       isActive: row.is_active,
       baseUnit: row.base_unit,
       conversions: conversions as Record<string, number>,
@@ -310,12 +314,59 @@ export async function demandTermsByItem(
     } else if (!scope.locations || scope.locations.has(line.stockLocationId)) {
       entry.committed = add(entry.committed, openBaseQuantity(line.open, line.unit, item, label));
       for (const reservation of held) {
-        if (reservation.salesOrderLineId !== line.lineId) continue;
+        // Kit component picks reserve the component, never the kit: only a
+        // reservation of the line's own item counts toward its reserved share.
+        if (reservation.salesOrderLineId !== line.lineId || reservation.itemId !== line.itemId) continue;
         entry.reserved = add(entry.reserved, openBaseQuantity(reservation.reserved, line.unit, item, label));
       }
     }
   }
+  // Kit order lines promise components, not kits: explode their open demand
+  // into each component (order-date recipe, kit base units converted exactly
+  // like posting converts them) so component availability nets what kits
+  // already owe. The kit's own entry keeps the kit-unit demand for display;
+  // its available is derived separately below.
+  for (const line of lines) {
+    const item = scope.items.get(line.itemId);
+    if (!item || item.kind !== "kit" || (line.subsidiaryId ?? scope.rootId) !== scope.subsidiaryId) continue;
+    if (line.stockLocationId === null) continue;
+    if (scope.locations && !scope.locations.has(line.stockLocationId)) continue;
+    const label = `${line.documentNumber} line ${line.lineNumber}`;
+    const kitOpen = openBaseQuantity(line.open, line.unit, item, label);
+    for (const component of await kitBomForDemand(runner, orgId, line.itemId, line.documentDate)) {
+      const componentItem = scope.items.get(component.componentItemId);
+      if (!componentItem) continue;
+      const componentEntry = terms.get(component.componentItemId)!;
+      componentEntry.committed = add(
+        componentEntry.committed,
+        mulDecimalFactors(kitOpen, [component.quantityPer]),
+      );
+    }
+  }
   return terms;
+}
+
+/**
+ * A kit's plain recipe quantities for demand expansion: order-date windows,
+ * manufacturing-only rows excluded like the pick and issue paths exclude
+ * them. Read fresh per call — recipes are configuration and this list must
+ * never serve a stale one.
+ */
+async function kitBomForDemand(
+  runner: Runner,
+  orgId: string,
+  kitItemId: string,
+  date: string,
+): Promise<{ componentItemId: string; quantityPer: string }[]> {
+  const rows = (await runner.execute<{ component_item_id: string; quantity_per: string }>(sql`
+    select component_item_id, quantity_per::text as quantity_per
+      from bom_components
+     where org_id = ${orgId} and assembly_item_id = ${kitItemId}
+       and operation_seq is null and is_byproduct = false
+       and (effective_from is null or effective_from <= ${date}::date)
+       and (effective_to is null or ${date}::date < effective_to)
+     order by sort_order, component_item_id`)).rows;
+  return rows.map((row) => ({ componentItemId: row.component_item_id, quantityPer: row.quantity_per }));
 }
 
 export interface AvailableToPromise {
@@ -350,10 +401,40 @@ export async function listAvailableToPromise(
   const locations = warehouseId ? await warehouseLocationSet(runner, orgId, warehouseId) : null;
   const items = await stockedItems(runner, orgId, query.itemIds ?? null);
   if (items.size === 0) return [];
+  // Kit derivation needs its components' terms even when the caller asked
+  // for the kit alone: union them in so a filtered query still divides by
+  // real component availability.
+  const kitIds = [...items.values()].filter((item) => item.kind === "kit").map((item) => item.itemId);
+  const today = kitIds.length > 0
+    ? (await runner.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]?.today
+    : null;
+  if (kitIds.length > 0) {
+    if (!today) throw new InventoryError("cannot determine today's date for kit availability");
+    const componentIds = new Set<string>();
+    for (const kitId of kitIds) {
+      for (const component of await kitBomForDemand(runner, orgId, kitId, today)) {
+        componentIds.add(component.componentItemId);
+      }
+    }
+    const missing = [...componentIds].filter((id) => !items.has(id));
+    if (missing.length > 0) {
+      for (const [id, item] of await stockedItems(runner, orgId, missing)) {
+        items.set(id, item);
+      }
+    }
+  }
   const terms = await demandTermsByItem(runner, orgId, { ...entity, items, locations });
-  return [...items.values()].map((item) => {
+  const rows: AvailableToPromise[] = [];
+  for (const item of items.values()) {
+    if (item.kind === "kit") {
+      // Unioned components serve derivation only: list exactly what was asked.
+      if (query.itemIds != null && !query.itemIds.includes(item.itemId)) continue;
+      rows.push(await kitAvailableToPromise(runner, orgId, { ...entity, locations, warehouseId }, item, terms, today!));
+      continue;
+    }
+    if (query.itemIds != null && !query.itemIds.includes(item.itemId)) continue;
     const entry = terms.get(item.itemId)!;
-    return {
+    rows.push({
       itemId: item.itemId,
       itemLabel: item.label,
       subsidiaryId: entity.subsidiaryId,
@@ -364,8 +445,63 @@ export async function listAvailableToPromise(
       reserved: entry.reserved,
       available: add(entry.onHand, neg(entry.committed)),
       unallocated: entry.unallocated,
+    });
+  }
+  return rows;
+}
+
+/**
+ * A kit's row: no stock of its own, so on hand reads zero and available is
+ * the limiting component's availability divided by its recipe quantity,
+ * floored. A kit without an effective recipe, or with a component that
+ * carries no costing profile, is misconfigured stock — refuse by name
+ * rather than report a zero that reads as correctly nil.
+ */
+async function kitAvailableToPromise(
+  runner: Runner,
+  orgId: string,
+  scope: { subsidiaryId: string; locations: ReadonlySet<string> | null; warehouseId: string | null },
+  item: StockedItem,
+  terms: Map<string, DemandTerms>,
+  today: string,
+): Promise<AvailableToPromise> {
+  const recipe = await kitBomForDemand(runner, orgId, item.itemId, today);
+  if (recipe.length === 0) {
+    throw new AvailabilityRefusal(
+      `kit ${item.label} has no bill of materials effective today`,
+      "item_not_stocked",
+      `add its components before promising it`,
+      422,
+    );
+  }
+  const entry = terms.get(item.itemId)!;
+  const components = recipe.map((component) => {
+    const componentTerms = terms.get(component.componentItemId);
+    if (!componentTerms) {
+      throw new AvailabilityRefusal(
+        `kit ${item.label} contains an item with no inventory costing profile`,
+        "item_not_stocked",
+        `add an inventory costing profile on ${COSTING_REMEDY}`,
+        422,
+      );
+    }
+    return {
+      quantityPer: component.quantityPer,
+      available: add(componentTerms.onHand, neg(componentTerms.committed)),
     };
   });
+  return {
+    itemId: item.itemId,
+    itemLabel: item.label,
+    subsidiaryId: scope.subsidiaryId,
+    warehouseId: scope.warehouseId,
+    baseUnit: item.baseUnit,
+    onHand: "0.0000",
+    committed: entry.committed,
+    reserved: entry.reserved,
+    available: kitAvailableFromComponents(components),
+    unallocated: entry.unallocated,
+  };
 }
 
 /** Available to promise for one item, one entity, and optionally one warehouse. */

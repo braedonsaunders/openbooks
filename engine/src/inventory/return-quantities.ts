@@ -28,14 +28,23 @@ export function postedReturnEvidenceScope(input: {
   /** Expression for the source movement id (a bound id, or `movement.id`). */
   sourceId: SQL;
 }): SQL {
+  // Kit component returns name their source one level down
+  // (`inventoryReturn.kitComponents[]` on the kit credit line), so a source
+  // counts as returned when EITHER the direct evidence or a nested kit entry
+  // names it. Non-kit returns never carry the nested shape, so the extra
+  // branch changes nothing for them.
   return sql`
     prior.org_id = ${input.orgId}
     and prior.kind = ${input.returnKind}
     and prior.status = 'posted'
-    and credit_line.custom #>> ARRAY[${sql.join(
-      ["inventoryReturn", input.evidenceKey].map((segment) => sql`${segment}`),
-      sql`, `,
-    )}] = ${input.sourceId}
+    and (
+      credit_line.custom #>> ARRAY[${sql.join(
+        ["inventoryReturn", input.evidenceKey].map((segment) => sql`${segment}`),
+        sql`, `,
+      )}] = ${input.sourceId}
+      or credit_line.custom -> 'inventoryReturn' -> 'kitComponents'
+        @> jsonb_build_array(jsonb_build_object((${input.evidenceKey})::text, (${input.sourceId})::text))
+    )
     and not exists (
       select 1 from inventory_movements reversal
        where reversal.org_id = prior.org_id

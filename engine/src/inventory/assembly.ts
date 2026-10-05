@@ -14,6 +14,7 @@ import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockIn
 import { consumeLayers, recordConsumptions, addLayerAtCost, type Consumption } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
 import { assertItemsActive } from "./item-active.ts";
+import { assertNotKitItem } from "./kits.ts";
 import { type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement, removeInboundLayer, restoreIssueLayers, reverseInventoryJournal } from "./reversal.ts";
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,9 @@ export async function buildAssembly(
 
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
+    // A build mints stock of the parent: a kit parent would create the very
+    // position kits exist not to have. Kits sell straight from components.
+    await assertNotKitItem(tx, orgId, input.assemblyItemId, "build");
     const bookId = await primaryBookId(orgId, tx);
     // There is no separately lockable BOM header. A SHARE table lock is the
     // narrowest PostgreSQL primitive that excludes every INSERT/UPDATE/DELETE,
