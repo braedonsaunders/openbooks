@@ -155,7 +155,8 @@ function render(
 }
 
 test('profile editor renders a pack it has never heard of', () => {
-  const html = render({})
+  // Two packs on offer, so the country picker renders.
+  const html = render({}, { XX: xxPack }, ['XX', 'YY'])
   // The country picker offers the served pack under its SERVED NAME — no
   // locale key exists for XX, so the pack's own name reads as written,
   // never the bare code.
@@ -269,6 +270,15 @@ const yyPack: PackProfileDeclaration = {
     numericEntry: true,
   },
 }
+
+test('a single installed pack leaves no country to choose', () => {
+  const single = render({}, { XX: xxPack }, ['XX'])
+  assert.doesNotMatch(single, /id="pp-country"/)
+  // The subdivision picker still renders from the one pack's declaration.
+  assert.match(single, /<option value="ZH"[^>]*>Zurich<\/option>/)
+  const several = render({}, { XX: xxPack }, ['XX', 'YY'])
+  assert.match(several, /id="pp-country"/)
+})
 
 test('profile editor renders row-backed certificate fields generically', () => {
   const html = render({}, { YY: yyPack }, ['YY'])
@@ -449,7 +459,7 @@ test('edit mode renders the inputs and the save button', () => {
 test('the general section edits generic facts without withholding', () => {
   const html = render({}, { XX: xxPack }, ['XX'], [], {}, { section: 'general' })
   assert.match(html, /id="pp-schedule"/)
-  assert.match(html, /id="pp-vac-pct"/)
+  assert.match(html, /id="pp-basis"/)
   assert.match(html, /id="pp-active"/)
   assert.doesNotMatch(html, /XX-1 · Fixture withholding certificate/)
   assert.doesNotMatch(html, /id="pp-sin"/)
@@ -463,7 +473,7 @@ test('the tax section edits withholding without generic facts', () => {
   assert.match(html, /id="pp-xx_form-codes"/)
   assert.match(html, /id="pp-xx_form-free"/)
   assert.doesNotMatch(html, /id="pp-schedule"/)
-  assert.doesNotMatch(html, /id="pp-vac-pct"/)
+  assert.doesNotMatch(html, /id="pp-basis"/)
   assert.doesNotMatch(html, /id="pp-active"/)
 })
 
