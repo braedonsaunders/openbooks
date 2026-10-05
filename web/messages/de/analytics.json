@@ -760,6 +760,302 @@
         "hhiWarning": {
           "help": "Ein Herfindahl-Index ab dieser Schwelle meldet eine Konzentrationswarnung",
           "label": "Konzentrationswarnung (HHI)"
+        },
+        "healthWeightRecency": {
+          "label": "Gesundheit — Aktualität (%)",
+          "help": "Anteil des Gesundheitswerts aus Aktualität"
+        },
+        "healthWeightFrequency": {
+          "label": "Gesundheit — Häufigkeit (%)",
+          "help": "Anteil des Gesundheitswerts aus Häufigkeit"
+        },
+        "healthWeightMonetary": {
+          "label": "Gesundheit — Umsatz (%)",
+          "help": "Anteil des Gesundheitswerts aus Umsatz"
+        },
+        "healthWeightPayment": {
+          "label": "Gesundheit — Zahlungsverhalten (%)",
+          "help": "Anteil des Gesundheitswerts aus Zahlungsverhalten"
+        },
+        "intelWeightChampions": {
+          "label": "Portfolio — Champions (%)",
+          "help": "Anteil des Portfoliowerts aus dem Champions-Anteil"
+        },
+        "intelWeightRetention": {
+          "label": "Portfolio — Bindung (%)",
+          "help": "Anteil des Portfoliowerts aus der mittleren Bindung"
+        },
+        "intelWeightConcentration": {
+          "label": "Portfolio — Konzentration (%)",
+          "help": "Anteil des Portfoliowerts aus der Konzentrationslage"
+        },
+        "intelWeightPayment": {
+          "label": "Portfolio — Zahlungsquote (%)",
+          "help": "Anteil des Portfoliowerts aus der Zahlungsquote"
+        },
+        "gradeAPlus": {
+          "label": "Note — A+ ab (Wert)",
+          "help": "Werte ab dieser Schwelle erhalten A+"
+        },
+        "gradeA": {
+          "label": "Note — A ab (Wert)",
+          "help": "Werte ab dieser Schwelle erhalten A"
+        },
+        "gradeB": {
+          "label": "Note — B ab (Wert)",
+          "help": "Werte ab dieser Schwelle erhalten B"
+        },
+        "gradeC": {
+          "label": "Note — C ab (Wert)",
+          "help": "Werte ab dieser Schwelle erhalten C"
+        },
+        "gradeD": {
+          "label": "Note — D ab (Wert)",
+          "help": "Werte ab dieser Schwelle erhalten D, darunter F"
+        },
+        "recencyGoodDays": {
+          "label": "Aktualität — frisch bis (Tage)",
+          "help": "Aktualität bis zu dieser Tagezahl erhält 5"
+        },
+        "recencyWarningDays": {
+          "label": "Aktualität — nachlassend bis (Tage)",
+          "help": "Aktualität bis zu dieser Tagezahl erhält 3"
+        },
+        "recencyCriticalDays": {
+          "label": "Aktualität — veraltet bis (Tage)",
+          "help": "Aktualität bis zu dieser Tagezahl erhält 2, älter 1"
+        },
+        "churnHighDays": {
+          "label": "Abwanderung — lange Abwesenheit (Tage)",
+          "help": "Aktualität darüber addiert die kritischen Inaktivitätspunkte"
+        },
+        "churnMediumDays": {
+          "label": "Abwanderung — Abwesenheit (Tage)",
+          "help": "Aktualität darüber addiert die hohen Inaktivitätspunkte"
+        },
+        "churnInactiveLowDays": {
+          "label": "Abwanderung — kurze Abwesenheit (Tage)",
+          "help": "Aktualität darüber addiert die niedrigen Inaktivitätspunkte"
+        },
+        "churnInactiveCriticalPoints": {
+          "label": "Abwanderung — Punkte lange Abwesenheit",
+          "help": "Punkte für Aktualität über den Tagen langer Abwesenheit"
+        },
+        "churnInactiveHighPoints": {
+          "label": "Abwanderung — Punkte Abwesenheit",
+          "help": "Punkte für Aktualität über den Abwesenheitstagen"
+        },
+        "churnInactiveLowPoints": {
+          "label": "Abwanderung — Punkte kurze Abwesenheit",
+          "help": "Punkte für Aktualität über den Tagen kurzer Abwesenheit"
+        },
+        "churnCadenceHighMultiple": {
+          "label": "Abwanderung — gebrochener Rhythmus (×)",
+          "help": "Aktualität jenseits dieses Vielfachen des üblichen Zyklus addiert die hohen Rhythmuspunkte"
+        },
+        "churnCadenceLowMultiple": {
+          "label": "Abwanderung — träger Rhythmus (×)",
+          "help": "Aktualität jenseits dieses Vielfachen des üblichen Zyklus addiert die niedrigen Rhythmuspunkte"
+        },
+        "churnCadenceHighPoints": {
+          "label": "Abwanderung — Punkte gebrochener Rhythmus",
+          "help": "Punkte, wenn die Aktualität das hohe Rhythmus-Vielfache überschreitet"
+        },
+        "churnCadenceLowPoints": {
+          "label": "Abwanderung — Punkte träger Rhythmus",
+          "help": "Punkte, wenn die Aktualität das niedrige Rhythmus-Vielfache überschreitet"
+        },
+        "churnSingleMaxTxns": {
+          "label": "Abwanderung — Einzelkauf bis (Aufträge)",
+          "help": "Auftragszahlen bis zu dieser Zahl addieren die Einzelkauf-Punkte"
+        },
+        "churnFewMaxTxns": {
+          "label": "Abwanderung — wenige Käufe bis (Aufträge)",
+          "help": "Auftragszahlen bis zu dieser Zahl addieren die Wenigkäufer-Punkte"
+        },
+        "churnSinglePoints": {
+          "label": "Abwanderung — Punkte Einzelkauf",
+          "help": "Punkte für Kunden mit nur einem Auftrag"
+        },
+        "churnFewPoints": {
+          "label": "Abwanderung — Punkte Wenigkäufer",
+          "help": "Punkte für Kunden mit wenigen Aufträgen"
+        },
+        "clvMinYears": {
+          "label": "CLV — Mindestlaufzeit (Jahre)",
+          "help": "Kürzere Laufzeiten werden mit dieser Jahrzahl annualisiert"
+        },
+        "clvRetentionBase": {
+          "label": "CLV — Bindungsbasis (%)",
+          "help": "Bindungsfaktor vor dem Aktualitätszerfall, in Prozent"
+        },
+        "clvRetentionDecayDays": {
+          "label": "CLV — Bindungszerfall (Tage)",
+          "help": "Aktualitätstage, die den Bindungsexponenten teilen"
+        },
+        "clvRetentionMinPct": {
+          "label": "CLV — Bindungsuntergrenze (%)",
+          "help": "Die Bindung liegt nie unter diesem Wert"
+        },
+        "clvRetentionMaxPct": {
+          "label": "CLV — Bindungsobergrenze (%)",
+          "help": "Die Bindung liegt nie über diesem Wert"
+        },
+        "tierPlatinumPct": {
+          "label": "Stufe — Platin Top (%)",
+          "help": "Anteil sortierter Kunden mit Platin"
+        },
+        "tierGoldPct": {
+          "label": "Stufe — Gold Top (%)",
+          "help": "Anteil sortierter Kunden ab Gold"
+        },
+        "tierSilverPct": {
+          "label": "Stufe — Silber Top (%)",
+          "help": "Anteil sortierter Kunden ab Silber"
+        },
+        "concentrationCriticalShare": {
+          "label": "Konzentration — kritisch ab (%)",
+          "help": "Umsatzanteile ab dieser Schwelle gelten als kritisch"
+        },
+        "concentrationHighShare": {
+          "label": "Konzentration — hoch ab (%)",
+          "help": "Umsatzanteile ab dieser Schwelle gelten als hoch"
+        },
+        "concentrationMediumShare": {
+          "label": "Konzentration — mittel ab (%)",
+          "help": "Umsatzanteile ab dieser Schwelle gelten als mittel"
+        },
+        "concentrationCoverageShare": {
+          "label": "Konzentration — Abdeckung (%)",
+          "help": "Kumulierter Umsatzanteil für die Abdeckungs-Kundenzahl"
+        },
+        "topSharePct": {
+          "label": "Konzentration — Top-Anteil (%)",
+          "help": "Oberster Kundenanteil in der Konzentrations-Leitkennzahl"
+        },
+        "frictionPointsPerCredit": {
+          "label": "Reibung — Punkte je Gutschrift",
+          "help": "Reibungspunkte je Gutschrift"
+        },
+        "frictionPenaltyCritical": {
+          "label": "Reibung — Abzug kritisch",
+          "help": "Abzug vom Gesundheitswert bei kritischer Reibung"
+        },
+        "frictionPenaltyHigh": {
+          "label": "Reibung — Abzug hoch",
+          "help": "Abzug vom Gesundheitswert bei hoher Reibung"
+        },
+        "frictionPenaltyMedium": {
+          "label": "Reibung — Abzug mittel",
+          "help": "Abzug vom Gesundheitswert bei mittlerer Reibung"
+        },
+        "frictionCriticalRate": {
+          "label": "Reibung — kritisch ab (%)",
+          "help": "Gutschriftsquoten ab dieser Schwelle gelten als kritisch"
+        },
+        "frictionHighRate": {
+          "label": "Reibung — hoch ab (%)",
+          "help": "Gutschriftsquoten ab dieser Schwelle gelten als hoch"
+        },
+        "frictionMediumRate": {
+          "label": "Reibung — mittel ab (%)",
+          "help": "Gutschriftsquoten ab dieser Schwelle gelten als mittel"
+        },
+        "paymentDsoHighDays": {
+          "label": "Zahlung — langsame DSO (Tage)",
+          "help": "Zahlungsdauern darüber erhalten den hohen DSO-Abzug"
+        },
+        "paymentDsoHighPenalty": {
+          "label": "Zahlung — Abzug langsame DSO",
+          "help": "Abzug oberhalb der langsamen DSO-Staffel"
+        },
+        "paymentDsoMediumDays": {
+          "label": "Zahlung — späte DSO (Tage)",
+          "help": "Zahlungsdauern darüber erhalten den mittleren DSO-Abzug"
+        },
+        "paymentDsoMediumPenalty": {
+          "label": "Zahlung — Abzug späte DSO",
+          "help": "Abzug oberhalb der späten DSO-Staffel"
+        },
+        "paymentDsoLowDays": {
+          "label": "Zahlung — zögerliche DSO (Tage)",
+          "help": "Zahlungsdauern darüber erhalten den niedrigen DSO-Abzug"
+        },
+        "paymentDsoLowPenalty": {
+          "label": "Zahlung — Abzug zögerliche DSO",
+          "help": "Abzug oberhalb der zögerlichen DSO-Staffel"
+        },
+        "paymentOverduePerInvoice": {
+          "label": "Zahlung — Punkte je Überfälligkeit",
+          "help": "Abzug je überfälliger Rechnung"
+        },
+        "paymentOverdueCap": {
+          "label": "Zahlung — Obergrenze Überfälligkeit",
+          "help": "Maximaler Abzug für überfällige Rechnungen"
+        },
+        "paymentRatingExcellent": {
+          "label": "Zahlung — exzellent ab (Wert)",
+          "help": "Zahlungswerte ab dieser Schwelle gelten als exzellent"
+        },
+        "paymentRatingGood": {
+          "label": "Zahlung — gut ab (Wert)",
+          "help": "Zahlungswerte ab dieser Schwelle gelten als gut"
+        },
+        "paymentRatingFair": {
+          "label": "Zahlung — mäßig ab (Wert)",
+          "help": "Zahlungswerte ab dieser Schwelle gelten als mäßig, darunter schwach"
+        },
+        "profitHighMargin": {
+          "label": "Ertrag — hoch ab (%)",
+          "help": "Margen ab dieser Schwelle gelten als hoch"
+        },
+        "profitMediumMargin": {
+          "label": "Ertrag — mittel ab (%)",
+          "help": "Margen ab dieser Schwelle gelten als mittel"
+        },
+        "profitLowMargin": {
+          "label": "Ertrag — niedrig ab (%)",
+          "help": "Margen ab dieser Schwelle gelten als niedrig, ab null als grenzwertig"
+        },
+        "profitLeakMarginTarget": {
+          "label": "Ertragsleck — Marge unter (%)",
+          "help": "Leck-Kandidaten liegen mit der Marge unter diesem Ziel"
+        },
+        "profitLeakRevenueSharePct": {
+          "label": "Ertragsleck — Umsatzanteil (%)",
+          "help": "Leck-Kandidaten halten mindestens diesen Periodenumsatzanteil"
+        },
+        "nurtureMinHealth": {
+          "label": "Pflege — Gesundheit ab (Wert)",
+          "help": "Pflege-Kandidaten liegen ab diesem Gesundheitswert"
+        },
+        "nurtureClvPercentile": {
+          "label": "Pflege — CLV-Perzentil",
+          "help": "Pflege-Kandidaten liegen ab diesem CLV-Perzentil"
+        },
+        "growthMaturityFloorPct": {
+          "label": "Wachstum — Reifeschwelle (%)",
+          "help": "Monate unter diesem Mediananteil gelten als Anlaufphase"
+        },
+        "growthMomCapUp": {
+          "label": "Wachstum — MoM-Deckel oben (%)",
+          "help": "Monatswachstum liegt nie über diesem Wert"
+        },
+        "growthMomCapDown": {
+          "label": "Wachstum — MoM-Deckel unten (%)",
+          "help": "Monatsrückgang liegt nie unter minus diesem Wert"
+        },
+        "growthTrendPct": {
+          "label": "Wachstum — Trendband (%)",
+          "help": "Fenstervergleiche jenseits dieses Werts gelten als wachsend oder rückläufig"
+        },
+        "growthYoyWindowMonths": {
+          "label": "Wachstum — Vorjahresfenster (Monate)",
+          "help": "Folgemonate je Seite des Vorjahresvergleichs"
+        },
+        "overdueInsightCount": {
+          "label": "Hinweis — überfällig über (Rechnungen)",
+          "help": "Überfällige Rechnungen über dieser Zahl heben den Zahlungshinweis"
         }
       }
     },

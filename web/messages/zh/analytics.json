@@ -760,6 +760,302 @@
         "hhiWarning": {
           "help": "赫芬达尔指数达到该值即标记为集中预警",
           "label": "集中度预警（HHI）"
+        },
+        "healthWeightRecency": {
+          "label": "健康度 — 近度权重（％）",
+          "help": "来自近度子评分的健康度配分"
+        },
+        "healthWeightFrequency": {
+          "label": "健康度 — 频度权重（％）",
+          "help": "来自频度子评分的健康度配分"
+        },
+        "healthWeightMonetary": {
+          "label": "健康度 — 金额权重（％）",
+          "help": "来自金额子评分的健康度配分"
+        },
+        "healthWeightPayment": {
+          "label": "健康度 — 回款权重（％）",
+          "help": "来自回款子评分的健康度配分"
+        },
+        "intelWeightChampions": {
+          "label": "综合 — 标杆权重（％）",
+          "help": "来自标杆占比的综合配分"
+        },
+        "intelWeightRetention": {
+          "label": "综合 — 留存权重（％）",
+          "help": "来自平均留存的综合配分"
+        },
+        "intelWeightConcentration": {
+          "label": "综合 — 集中度权重（％）",
+          "help": "来自集中度的综合配分"
+        },
+        "intelWeightPayment": {
+          "label": "综合 — 回款率权重（％）",
+          "help": "来自回款率的综合配分"
+        },
+        "gradeAPlus": {
+          "label": "等级 — A+线（分）",
+          "help": "达到该分即为A+"
+        },
+        "gradeA": {
+          "label": "等级 — A线（分）",
+          "help": "达到该分即为A"
+        },
+        "gradeB": {
+          "label": "等级 — B线（分）",
+          "help": "达到该分即为B"
+        },
+        "gradeC": {
+          "label": "等级 — C线（分）",
+          "help": "达到该分即为C"
+        },
+        "gradeD": {
+          "label": "等级 — D线（分）",
+          "help": "达到该分即为D，低于则为F"
+        },
+        "recencyGoodDays": {
+          "label": "近度 — 良好以内（天）",
+          "help": "该天数以内记5分"
+        },
+        "recencyWarningDays": {
+          "label": "近度 — 转淡以内（天）",
+          "help": "该天数以内记3分"
+        },
+        "recencyCriticalDays": {
+          "label": "近度 — 转冷以内（天）",
+          "help": "该天数以内记2分，超出记1分"
+        },
+        "churnHighDays": {
+          "label": "流失 — 长期无交易（天）",
+          "help": "超出即加记严重无交易分"
+        },
+        "churnMediumDays": {
+          "label": "流失 — 无交易（天）",
+          "help": "超出即加记高度无交易分"
+        },
+        "churnInactiveLowDays": {
+          "label": "流失 — 短期无交易（天）",
+          "help": "超出即加记轻度无交易分"
+        },
+        "churnInactiveCriticalPoints": {
+          "label": "流失 — 长期无交易分",
+          "help": "超出长期无交易天数加记的分数"
+        },
+        "churnInactiveHighPoints": {
+          "label": "流失 — 无交易分",
+          "help": "超出无交易天数加记的分数"
+        },
+        "churnInactiveLowPoints": {
+          "label": "流失 — 短期无交易分",
+          "help": "超出短期无交易天数加记的分数"
+        },
+        "churnCadenceHighMultiple": {
+          "label": "流失 — 周期中断（倍）",
+          "help": "超出常规周期该倍数即加记高度周期分"
+        },
+        "churnCadenceLowMultiple": {
+          "label": "流失 — 周期放缓（倍）",
+          "help": "超出常规周期该倍数即加记低度周期分"
+        },
+        "churnCadenceHighPoints": {
+          "label": "流失 — 周期中断分",
+          "help": "超出高度周期倍数时加记的分数"
+        },
+        "churnCadenceLowPoints": {
+          "label": "流失 — 周期放缓分",
+          "help": "超出低度周期倍数时加记的分数"
+        },
+        "churnSingleMaxTxns": {
+          "label": "流失 — 单次交易上限（单）",
+          "help": "该单数以内加记单次交易分"
+        },
+        "churnFewMaxTxns": {
+          "label": "流失 — 少频上限（单）",
+          "help": "该单数以内加记低频分"
+        },
+        "churnSinglePoints": {
+          "label": "流失 — 单次交易分",
+          "help": "为单次交易客户加记的分数"
+        },
+        "churnFewPoints": {
+          "label": "流失 — 低频分",
+          "help": "为低频客户加记的分数"
+        },
+        "clvMinYears": {
+          "label": "CLV — 最短合作时长（年）",
+          "help": "不足部分按该年数年化"
+        },
+        "clvRetentionBase": {
+          "label": "CLV — 留存基数（％）",
+          "help": "衰减前的留存系数（百分比）"
+        },
+        "clvRetentionDecayDays": {
+          "label": "CLV — 留存衰减（天）",
+          "help": "除留存指数的无交易天数"
+        },
+        "clvRetentionMinPct": {
+          "label": "CLV — 留存下限（％）",
+          "help": "留存率不低于该百分比"
+        },
+        "clvRetentionMaxPct": {
+          "label": "CLV — 留存上限（％）",
+          "help": "留存率不高于该百分比"
+        },
+        "tierPlatinumPct": {
+          "label": "分层 — 铂金头部（％）",
+          "help": "获评铂金的排序客户占比"
+        },
+        "tierGoldPct": {
+          "label": "分层 — 黄金及以上（％）",
+          "help": "黄金及以上的排序客户占比"
+        },
+        "tierSilverPct": {
+          "label": "分层 — 白银及以上（％）",
+          "help": "白银及以上的排序客户占比"
+        },
+        "concentrationCriticalShare": {
+          "label": "集中度 — 严重线（％）",
+          "help": "营收占比达到该值即为严重集中"
+        },
+        "concentrationHighShare": {
+          "label": "集中度 — 高线（％）",
+          "help": "营收占比达到该值即为高度集中"
+        },
+        "concentrationMediumShare": {
+          "label": "集中度 — 中线（％）",
+          "help": "营收占比达到该值即为中度集中"
+        },
+        "concentrationCoverageShare": {
+          "label": "集中度 — 覆盖率（％）",
+          "help": "计入覆盖客户数的累计营收占比"
+        },
+        "topSharePct": {
+          "label": "集中度 — 头部分层（％）",
+          "help": "主要集中指标中的头部客户分层"
+        },
+        "frictionPointsPerCredit": {
+          "label": "摩擦 — 每贷项记分",
+          "help": "每张贷项单据的摩擦分数"
+        },
+        "frictionPenaltyCritical": {
+          "label": "摩擦 — 严重扣分",
+          "help": "严重摩擦下的健康度扣分"
+        },
+        "frictionPenaltyHigh": {
+          "label": "摩擦 — 高度扣分",
+          "help": "高度摩擦下的健康度扣分"
+        },
+        "frictionPenaltyMedium": {
+          "label": "摩擦 — 中度扣分",
+          "help": "中度摩擦下的健康度扣分"
+        },
+        "frictionCriticalRate": {
+          "label": "摩擦 — 严重线（％）",
+          "help": "贷项率达到该值即为严重"
+        },
+        "frictionHighRate": {
+          "label": "摩擦 — 高线（％）",
+          "help": "贷项率达到该值即为高度"
+        },
+        "frictionMediumRate": {
+          "label": "摩擦 — 中线（％）",
+          "help": "贷项率达到该值即为中度"
+        },
+        "paymentDsoHighDays": {
+          "label": "回款 — 缓慢DSO（天）",
+          "help": "超出即适用高度DSO扣分"
+        },
+        "paymentDsoHighPenalty": {
+          "label": "回款 — 缓慢DSO扣分",
+          "help": "超出缓慢DSO档位的扣分"
+        },
+        "paymentDsoMediumDays": {
+          "label": "回款 — 迟缓DSO（天）",
+          "help": "超出即适用中度DSO扣分"
+        },
+        "paymentDsoMediumPenalty": {
+          "label": "回款 — 迟缓DSO扣分",
+          "help": "超出迟缓DSO档位的扣分"
+        },
+        "paymentDsoLowDays": {
+          "label": "回款 — 拖延DSO（天）",
+          "help": "超出即适用轻度DSO扣分"
+        },
+        "paymentDsoLowPenalty": {
+          "label": "回款 — 拖延DSO扣分",
+          "help": "超出拖延DSO档位的扣分"
+        },
+        "paymentOverduePerInvoice": {
+          "label": "回款 — 每逾期单扣分",
+          "help": "每张逾期发票的扣分"
+        },
+        "paymentOverdueCap": {
+          "label": "回款 — 逾期扣分上限",
+          "help": "逾期发票扣分上限"
+        },
+        "paymentRatingExcellent": {
+          "label": "回款 — 优秀线（分）",
+          "help": "达到该分即为优秀"
+        },
+        "paymentRatingGood": {
+          "label": "回款 — 良好线（分）",
+          "help": "达到该分即为良好"
+        },
+        "paymentRatingFair": {
+          "label": "回款 — 一般线（分）",
+          "help": "达到该分即为一般，低于则为差"
+        },
+        "profitHighMargin": {
+          "label": "利润 — 高线（％）",
+          "help": "达到该利润率即为高"
+        },
+        "profitMediumMargin": {
+          "label": "利润 — 中线（％）",
+          "help": "达到该利润率即为中"
+        },
+        "profitLowMargin": {
+          "label": "利润 — 低线（％）",
+          "help": "达到该利润率即为低，零以上为微利"
+        },
+        "profitLeakMarginTarget": {
+          "label": "利润漏损 — 低于（％）",
+          "help": "候选利润率低于该目标"
+        },
+        "profitLeakRevenueSharePct": {
+          "label": "利润漏损 — 营收占比（％）",
+          "help": "候选至少占期间营收该比例"
+        },
+        "nurtureMinHealth": {
+          "label": "培育 — 健康度线（分）",
+          "help": "候选达到该健康度分"
+        },
+        "nurtureClvPercentile": {
+          "label": "培育 — CLV分位",
+          "help": "候选达到该CLV分位及以上"
+        },
+        "growthMaturityFloorPct": {
+          "label": "增长 — 成熟下限（％）",
+          "help": "低于中位数该比例的月份视为爬坡期"
+        },
+        "growthMomCapUp": {
+          "label": "增长 — 环比上限（％）",
+          "help": "月环比增长不高于该值"
+        },
+        "growthMomCapDown": {
+          "label": "增长 — 环比下限（％）",
+          "help": "月环比降幅不低于负该值"
+        },
+        "growthTrendPct": {
+          "label": "增长 — 趋势带（％）",
+          "help": "超出即判定为增长或下滑"
+        },
+        "growthYoyWindowMonths": {
+          "label": "增长 — 同比窗口（月）",
+          "help": "同比比较两侧的尾端月数"
+        },
+        "overdueInsightCount": {
+          "label": "提示 — 逾期超（张）",
+          "help": "逾期发票超出该数即提示回款"
         }
       }
     },

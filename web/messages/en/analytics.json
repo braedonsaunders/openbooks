@@ -968,6 +968,302 @@
         "clvYears": {
           "label": "CLV horizon (years)",
           "help": "Years of forward value in the lifetime-value projection"
+        },
+        "healthWeightRecency": {
+          "label": "Health — recency weight (%)",
+          "help": "Share of the health score from the recency sub-score"
+        },
+        "healthWeightFrequency": {
+          "label": "Health — frequency weight (%)",
+          "help": "Share of the health score from the frequency sub-score"
+        },
+        "healthWeightMonetary": {
+          "label": "Health — monetary weight (%)",
+          "help": "Share of the health score from the monetary sub-score"
+        },
+        "healthWeightPayment": {
+          "label": "Health — payment weight (%)",
+          "help": "Share of the health score from the payment sub-score"
+        },
+        "intelWeightChampions": {
+          "label": "Intelligence — champions weight (%)",
+          "help": "Share of the portfolio score from the champions share"
+        },
+        "intelWeightRetention": {
+          "label": "Intelligence — retention weight (%)",
+          "help": "Share of the portfolio score from average retention"
+        },
+        "intelWeightConcentration": {
+          "label": "Intelligence — concentration weight (%)",
+          "help": "Share of the portfolio score from concentration health"
+        },
+        "intelWeightPayment": {
+          "label": "Intelligence — payment weight (%)",
+          "help": "Share of the portfolio score from the payment rate"
+        },
+        "gradeAPlus": {
+          "label": "Grade — A+ from (score)",
+          "help": "Scores at or above this earn A+"
+        },
+        "gradeA": {
+          "label": "Grade — A from (score)",
+          "help": "Scores at or above this earn A"
+        },
+        "gradeB": {
+          "label": "Grade — B from (score)",
+          "help": "Scores at or above this earn B"
+        },
+        "gradeC": {
+          "label": "Grade — C from (score)",
+          "help": "Scores at or above this earn C"
+        },
+        "gradeD": {
+          "label": "Grade — D from (score)",
+          "help": "Scores at or above this earn D; below is F"
+        },
+        "recencyGoodDays": {
+          "label": "Recency — fresh within (days)",
+          "help": "Recency at or below this scores 5"
+        },
+        "recencyWarningDays": {
+          "label": "Recency — fading within (days)",
+          "help": "Recency at or below this scores 3"
+        },
+        "recencyCriticalDays": {
+          "label": "Recency — stale within (days)",
+          "help": "Recency at or below this scores 2; older scores 1"
+        },
+        "churnHighDays": {
+          "label": "Churn — long absence (days)",
+          "help": "Recency above this adds the critical inactivity points"
+        },
+        "churnMediumDays": {
+          "label": "Churn — absence (days)",
+          "help": "Recency above this adds the high inactivity points"
+        },
+        "churnInactiveLowDays": {
+          "label": "Churn — short absence (days)",
+          "help": "Recency above this adds the low inactivity points"
+        },
+        "churnInactiveCriticalPoints": {
+          "label": "Churn — long-absence points",
+          "help": "Points added for recency above the long-absence days"
+        },
+        "churnInactiveHighPoints": {
+          "label": "Churn — absence points",
+          "help": "Points added for recency above the absence days"
+        },
+        "churnInactiveLowPoints": {
+          "label": "Churn — short-absence points",
+          "help": "Points added for recency above the short-absence days"
+        },
+        "churnCadenceHighMultiple": {
+          "label": "Churn — broken cadence (x)",
+          "help": "Recency beyond this multiple of the usual cycle adds the high cadence points"
+        },
+        "churnCadenceLowMultiple": {
+          "label": "Churn — slow cadence (x)",
+          "help": "Recency beyond this multiple of the usual cycle adds the low cadence points"
+        },
+        "churnCadenceHighPoints": {
+          "label": "Churn — broken-cadence points",
+          "help": "Points added when recency exceeds the high cadence multiple"
+        },
+        "churnCadenceLowPoints": {
+          "label": "Churn — slow-cadence points",
+          "help": "Points added when recency exceeds the low cadence multiple"
+        },
+        "churnSingleMaxTxns": {
+          "label": "Churn — single order up to (orders)",
+          "help": "Order counts at or below this add the single-transaction points"
+        },
+        "churnFewMaxTxns": {
+          "label": "Churn — few orders up to (orders)",
+          "help": "Order counts at or below this add the low-frequency points"
+        },
+        "churnSinglePoints": {
+          "label": "Churn — single-transaction points",
+          "help": "Points added for single-transaction customers"
+        },
+        "churnFewPoints": {
+          "label": "Churn — low-frequency points",
+          "help": "Points added for low-frequency customers"
+        },
+        "clvMinYears": {
+          "label": "CLV — minimum tenure (years)",
+          "help": "Shorter tenures annualize as this many years"
+        },
+        "clvRetentionBase": {
+          "label": "CLV — retention base (%)",
+          "help": "Retention factor before recency decay, in percent"
+        },
+        "clvRetentionDecayDays": {
+          "label": "CLV — retention decay (days)",
+          "help": "Recency days dividing the retention exponent"
+        },
+        "clvRetentionMinPct": {
+          "label": "CLV — retention floor (%)",
+          "help": "Retention never reads below this percent"
+        },
+        "clvRetentionMaxPct": {
+          "label": "CLV — retention ceiling (%)",
+          "help": "Retention never reads above this percent"
+        },
+        "tierPlatinumPct": {
+          "label": "Tier — Platinum top (%)",
+          "help": "Share of ranked customers earning Platinum"
+        },
+        "tierGoldPct": {
+          "label": "Tier — Gold top (%)",
+          "help": "Share of ranked customers at or above Gold"
+        },
+        "tierSilverPct": {
+          "label": "Tier — Silver top (%)",
+          "help": "Share of ranked customers at or above Silver"
+        },
+        "concentrationCriticalShare": {
+          "label": "Concentration — critical from (%)",
+          "help": "Revenue shares at or above this read as critical concentration"
+        },
+        "concentrationHighShare": {
+          "label": "Concentration — high from (%)",
+          "help": "Revenue shares at or above this read as high concentration"
+        },
+        "concentrationMediumShare": {
+          "label": "Concentration — medium from (%)",
+          "help": "Revenue shares at or above this read as medium concentration"
+        },
+        "concentrationCoverageShare": {
+          "label": "Concentration — coverage (%)",
+          "help": "Cumulative revenue share counting toward the coverage customer count"
+        },
+        "topSharePct": {
+          "label": "Concentration — top slice (%)",
+          "help": "Top customer share in the headline concentration figure"
+        },
+        "frictionPointsPerCredit": {
+          "label": "Friction — points per credit",
+          "help": "Friction points added per credit memo"
+        },
+        "frictionPenaltyCritical": {
+          "label": "Friction — critical penalty",
+          "help": "Health points deducted at critical friction"
+        },
+        "frictionPenaltyHigh": {
+          "label": "Friction — high penalty",
+          "help": "Health points deducted at high friction"
+        },
+        "frictionPenaltyMedium": {
+          "label": "Friction — medium penalty",
+          "help": "Health points deducted at medium friction"
+        },
+        "frictionCriticalRate": {
+          "label": "Friction — critical from (%)",
+          "help": "Credit issue rates at or above this read as critical"
+        },
+        "frictionHighRate": {
+          "label": "Friction — high from (%)",
+          "help": "Credit issue rates at or above this read as high"
+        },
+        "frictionMediumRate": {
+          "label": "Friction — medium from (%)",
+          "help": "Credit issue rates at or above this read as medium"
+        },
+        "paymentDsoHighDays": {
+          "label": "Payment — slow DSO (days)",
+          "help": "Days-to-pay above this takes the high DSO penalty"
+        },
+        "paymentDsoHighPenalty": {
+          "label": "Payment — slow-DSO penalty",
+          "help": "Points deducted above the slow DSO band"
+        },
+        "paymentDsoMediumDays": {
+          "label": "Payment — late DSO (days)",
+          "help": "Days-to-pay above this takes the medium DSO penalty"
+        },
+        "paymentDsoMediumPenalty": {
+          "label": "Payment — late-DSO penalty",
+          "help": "Points deducted above the late DSO band"
+        },
+        "paymentDsoLowDays": {
+          "label": "Payment — tardy DSO (days)",
+          "help": "Days-to-pay above this takes the low DSO penalty"
+        },
+        "paymentDsoLowPenalty": {
+          "label": "Payment — tardy-DSO penalty",
+          "help": "Points deducted above the tardy DSO band"
+        },
+        "paymentOverduePerInvoice": {
+          "label": "Payment — points per overdue invoice",
+          "help": "Points deducted per overdue invoice"
+        },
+        "paymentOverdueCap": {
+          "label": "Payment — overdue penalty cap",
+          "help": "Maximum points deducted for overdue invoices"
+        },
+        "paymentRatingExcellent": {
+          "label": "Payment — excellent from (score)",
+          "help": "Payment scores at or above this rate as excellent"
+        },
+        "paymentRatingGood": {
+          "label": "Payment — good from (score)",
+          "help": "Payment scores at or above this rate as good"
+        },
+        "paymentRatingFair": {
+          "label": "Payment — fair from (score)",
+          "help": "Payment scores at or above this rate as fair; below is poor"
+        },
+        "profitHighMargin": {
+          "label": "Profit — high from (%)",
+          "help": "Margins at or above this tier as high"
+        },
+        "profitMediumMargin": {
+          "label": "Profit — medium from (%)",
+          "help": "Margins at or above this tier as medium"
+        },
+        "profitLowMargin": {
+          "label": "Profit — low from (%)",
+          "help": "Margins at or above this tier as low; at or above zero is marginal"
+        },
+        "profitLeakMarginTarget": {
+          "label": "Profit leak — margin below (%)",
+          "help": "Leak candidates earn margin below this target"
+        },
+        "profitLeakRevenueSharePct": {
+          "label": "Profit leak — revenue share (%)",
+          "help": "Leak candidates hold at least this share of period revenue"
+        },
+        "nurtureMinHealth": {
+          "label": "Nurture — health from (score)",
+          "help": "Nurture candidates score at or above this"
+        },
+        "nurtureClvPercentile": {
+          "label": "Nurture — CLV percentile",
+          "help": "Nurture candidates sit at or above this CLV percentile"
+        },
+        "growthMaturityFloorPct": {
+          "label": "Growth — maturity floor (%)",
+          "help": "Months below this share of median revenue read as ramp-up"
+        },
+        "growthMomCapUp": {
+          "label": "Growth — MoM cap up (%)",
+          "help": "Month-on-month growth never reads above this"
+        },
+        "growthMomCapDown": {
+          "label": "Growth — MoM cap down (%)",
+          "help": "Month-on-month decline never reads below minus this"
+        },
+        "growthTrendPct": {
+          "label": "Growth — trend band (%)",
+          "help": "Window comparisons beyond this read as growing or declining"
+        },
+        "growthYoyWindowMonths": {
+          "label": "Growth — YoY window (months)",
+          "help": "Trailing months on each side of the year-on-year comparison"
+        },
+        "overdueInsightCount": {
+          "label": "Insight — overdue above (invoices)",
+          "help": "Overdue invoices above this raise the payments insight"
         }
       }
     },

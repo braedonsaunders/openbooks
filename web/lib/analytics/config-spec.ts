@@ -66,6 +66,12 @@ export interface AnalyticsConfigSpec {
    * fields under it. Fields in no section render last, without a heading.
    */
   groups?: readonly { labelKey: string; fields: readonly string[] }[];
+  /**
+   * Weight groups that must sum to `total` (percentage points of one
+   * composite score). A save breaking a group is refused by name: partial
+   * weights would silently rescale every grade the score feeds.
+   */
+  sumsTo?: readonly { keys: readonly string[]; total: number }[];
 }
 
 const pct = (key: string, labelKey: string, min = 0, max = 100, step = 1): ConfigField => ({
@@ -168,6 +174,10 @@ export const ANALYTICS_CONFIG = {
   },
   customerIntelligence: {
     slug: "customer-intelligence",
+    // The full scoring model, with the values the dashboard always used as
+    // defaults. Groups read top to bottom: health weights, intelligence
+    // weights, the shared grade ladder, recency bands, churn, CLV, tiers,
+    // concentration, friction, payment, profit, nurture, growth.
     defaults: {
       churnCriticalScore: 70,
       churnHighScore: 50,
@@ -175,6 +185,95 @@ export const ANALYTICS_CONFIG = {
       hhiWarning: 1500,
       hhiCritical: 2500,
       clvYears: 3,
+      // Health weights: percentage points of the composite health score.
+      healthWeightRecency: 25,
+      healthWeightFrequency: 25,
+      healthWeightMonetary: 30,
+      healthWeightPayment: 20,
+      // Intelligence weights: percentage points of the portfolio score.
+      intelWeightChampions: 30,
+      intelWeightRetention: 30,
+      intelWeightConcentration: 20,
+      intelWeightPayment: 20,
+      // ONE grade ladder, shared by the health grade and the intelligence grade.
+      gradeAPlus: 90,
+      gradeA: 80,
+      gradeB: 70,
+      gradeC: 60,
+      gradeD: 50,
+      // RFM recency bands (days since last order).
+      recencyGoodDays: 30,
+      recencyWarningDays: 90,
+      recencyCriticalDays: 180,
+      // Churn day thresholds and point increments.
+      churnHighDays: 120,
+      churnMediumDays: 60,
+      churnInactiveLowDays: 30,
+      churnInactiveCriticalPoints: 40,
+      churnInactiveHighPoints: 25,
+      churnInactiveLowPoints: 10,
+      churnCadenceHighMultiple: 2,
+      churnCadenceLowMultiple: 1.5,
+      churnCadenceHighPoints: 30,
+      churnCadenceLowPoints: 15,
+      churnSingleMaxTxns: 1,
+      churnFewMaxTxns: 3,
+      churnSinglePoints: 30,
+      churnFewPoints: 15,
+      // CLV projection: tenure floor, retention curve, retention clamp.
+      clvMinYears: 0.25,
+      clvRetentionBase: 95,
+      clvRetentionDecayDays: 120,
+      clvRetentionMinPct: 10,
+      clvRetentionMaxPct: 95,
+      // CLV tier percentiles (share of ranked customers at or above each tier).
+      tierPlatinumPct: 10,
+      tierGoldPct: 30,
+      tierSilverPct: 60,
+      // Concentration share bands (percent of period revenue) and coverage.
+      concentrationCriticalShare: 25,
+      concentrationHighShare: 15,
+      concentrationMediumShare: 10,
+      concentrationCoverageShare: 80,
+      topSharePct: 10,
+      // Friction: points per credit memo, penalty points and issue-rate bands.
+      frictionPointsPerCredit: 2,
+      frictionPenaltyCritical: 25,
+      frictionPenaltyHigh: 15,
+      frictionPenaltyMedium: 8,
+      frictionCriticalRate: 20,
+      frictionHighRate: 10,
+      frictionMediumRate: 5,
+      // Payment score: DSO bands with penalties, overdue penalty, ratings.
+      paymentDsoHighDays: 60,
+      paymentDsoHighPenalty: 40,
+      paymentDsoMediumDays: 30,
+      paymentDsoMediumPenalty: 20,
+      paymentDsoLowDays: 15,
+      paymentDsoLowPenalty: 10,
+      paymentOverduePerInvoice: 10,
+      paymentOverdueCap: 40,
+      paymentRatingExcellent: 80,
+      paymentRatingGood: 60,
+      paymentRatingFair: 40,
+      // Profit tiers (margin points) and the relative profit-leak definition:
+      // revenue share of the period total at or above the share, with margin
+      // below the leak target.
+      profitHighMargin: 40,
+      profitMediumMargin: 25,
+      profitLowMargin: 10,
+      profitLeakMarginTarget: 15,
+      profitLeakRevenueSharePct: 10,
+      // Nurture: health floor plus a percentile of the CLV distribution.
+      nurtureMinHealth: 85,
+      nurtureClvPercentile: 90,
+      // Growth: maturity floor, MoM caps, trend band, YoY window, insight count.
+      growthMaturityFloorPct: 10,
+      growthMomCapUp: 200,
+      growthMomCapDown: 80,
+      growthTrendPct: 10,
+      growthYoyWindowMonths: 15,
+      overdueInsightCount: 5,
     },
     fields: [
       num("churnCriticalScore", "analytics.customer.config.fields.churnCritical", 1, 100),
@@ -183,8 +282,108 @@ export const ANALYTICS_CONFIG = {
       num("hhiWarning", "analytics.customer.config.fields.hhiWarning", 0, 10_000, 100),
       num("hhiCritical", "analytics.customer.config.fields.hhiCritical", 0, 10_000, 100),
       num("clvYears", "analytics.customer.config.fields.clvYears", 1, 10),
+      pct("healthWeightRecency", "analytics.customer.config.fields.healthWeightRecency"),
+      pct("healthWeightFrequency", "analytics.customer.config.fields.healthWeightFrequency"),
+      pct("healthWeightMonetary", "analytics.customer.config.fields.healthWeightMonetary"),
+      pct("healthWeightPayment", "analytics.customer.config.fields.healthWeightPayment"),
+      pct("intelWeightChampions", "analytics.customer.config.fields.intelWeightChampions"),
+      pct("intelWeightRetention", "analytics.customer.config.fields.intelWeightRetention"),
+      pct("intelWeightConcentration", "analytics.customer.config.fields.intelWeightConcentration"),
+      pct("intelWeightPayment", "analytics.customer.config.fields.intelWeightPayment"),
+      num("gradeAPlus", "analytics.customer.config.fields.gradeAPlus", 1, 100),
+      num("gradeA", "analytics.customer.config.fields.gradeA", 1, 100),
+      num("gradeB", "analytics.customer.config.fields.gradeB", 1, 100),
+      num("gradeC", "analytics.customer.config.fields.gradeC", 1, 100),
+      num("gradeD", "analytics.customer.config.fields.gradeD", 1, 100),
+      num("recencyGoodDays", "analytics.customer.config.fields.recencyGoodDays", 1, 730),
+      num("recencyWarningDays", "analytics.customer.config.fields.recencyWarningDays", 1, 730),
+      num("recencyCriticalDays", "analytics.customer.config.fields.recencyCriticalDays", 1, 730),
+      num("churnHighDays", "analytics.customer.config.fields.churnHighDays", 1, 730),
+      num("churnMediumDays", "analytics.customer.config.fields.churnMediumDays", 1, 365),
+      num("churnInactiveLowDays", "analytics.customer.config.fields.churnInactiveLowDays", 1, 365),
+      num("churnInactiveCriticalPoints", "analytics.customer.config.fields.churnInactiveCriticalPoints", 0, 100),
+      num("churnInactiveHighPoints", "analytics.customer.config.fields.churnInactiveHighPoints", 0, 100),
+      num("churnInactiveLowPoints", "analytics.customer.config.fields.churnInactiveLowPoints", 0, 100),
+      num("churnCadenceHighMultiple", "analytics.customer.config.fields.churnCadenceHighMultiple", 1, 10, 0.1),
+      num("churnCadenceLowMultiple", "analytics.customer.config.fields.churnCadenceLowMultiple", 1, 10, 0.1),
+      num("churnCadenceHighPoints", "analytics.customer.config.fields.churnCadenceHighPoints", 0, 100),
+      num("churnCadenceLowPoints", "analytics.customer.config.fields.churnCadenceLowPoints", 0, 100),
+      num("churnSingleMaxTxns", "analytics.customer.config.fields.churnSingleMaxTxns", 1, 10),
+      num("churnFewMaxTxns", "analytics.customer.config.fields.churnFewMaxTxns", 2, 20),
+      num("churnSinglePoints", "analytics.customer.config.fields.churnSinglePoints", 0, 100),
+      num("churnFewPoints", "analytics.customer.config.fields.churnFewPoints", 0, 100),
+      num("clvMinYears", "analytics.customer.config.fields.clvMinYears", 0.05, 5, 0.05),
+      pct("clvRetentionBase", "analytics.customer.config.fields.clvRetentionBase", 1, 100),
+      num("clvRetentionDecayDays", "analytics.customer.config.fields.clvRetentionDecayDays", 1, 730),
+      pct("clvRetentionMinPct", "analytics.customer.config.fields.clvRetentionMinPct"),
+      pct("clvRetentionMaxPct", "analytics.customer.config.fields.clvRetentionMaxPct"),
+      pct("tierPlatinumPct", "analytics.customer.config.fields.tierPlatinumPct", 1, 100),
+      pct("tierGoldPct", "analytics.customer.config.fields.tierGoldPct", 1, 100),
+      pct("tierSilverPct", "analytics.customer.config.fields.tierSilverPct", 1, 100),
+      pct("concentrationCriticalShare", "analytics.customer.config.fields.concentrationCriticalShare"),
+      pct("concentrationHighShare", "analytics.customer.config.fields.concentrationHighShare"),
+      pct("concentrationMediumShare", "analytics.customer.config.fields.concentrationMediumShare"),
+      pct("concentrationCoverageShare", "analytics.customer.config.fields.concentrationCoverageShare", 1, 100),
+      num("topSharePct", "analytics.customer.config.fields.topSharePct", 1, 100),
+      num("frictionPointsPerCredit", "analytics.customer.config.fields.frictionPointsPerCredit", 1, 10),
+      num("frictionPenaltyCritical", "analytics.customer.config.fields.frictionPenaltyCritical", 0, 100),
+      num("frictionPenaltyHigh", "analytics.customer.config.fields.frictionPenaltyHigh", 0, 100),
+      num("frictionPenaltyMedium", "analytics.customer.config.fields.frictionPenaltyMedium", 0, 100),
+      pct("frictionCriticalRate", "analytics.customer.config.fields.frictionCriticalRate"),
+      pct("frictionHighRate", "analytics.customer.config.fields.frictionHighRate"),
+      pct("frictionMediumRate", "analytics.customer.config.fields.frictionMediumRate"),
+      num("paymentDsoHighDays", "analytics.customer.config.fields.paymentDsoHighDays", 1, 180),
+      num("paymentDsoHighPenalty", "analytics.customer.config.fields.paymentDsoHighPenalty", 0, 100),
+      num("paymentDsoMediumDays", "analytics.customer.config.fields.paymentDsoMediumDays", 1, 180),
+      num("paymentDsoMediumPenalty", "analytics.customer.config.fields.paymentDsoMediumPenalty", 0, 100),
+      num("paymentDsoLowDays", "analytics.customer.config.fields.paymentDsoLowDays", 1, 180),
+      num("paymentDsoLowPenalty", "analytics.customer.config.fields.paymentDsoLowPenalty", 0, 100),
+      num("paymentOverduePerInvoice", "analytics.customer.config.fields.paymentOverduePerInvoice", 0, 100),
+      num("paymentOverdueCap", "analytics.customer.config.fields.paymentOverdueCap", 0, 100),
+      num("paymentRatingExcellent", "analytics.customer.config.fields.paymentRatingExcellent", 1, 100),
+      num("paymentRatingGood", "analytics.customer.config.fields.paymentRatingGood", 1, 100),
+      num("paymentRatingFair", "analytics.customer.config.fields.paymentRatingFair", 1, 100),
+      pct("profitHighMargin", "analytics.customer.config.fields.profitHighMargin", -100, 100),
+      pct("profitMediumMargin", "analytics.customer.config.fields.profitMediumMargin", -100, 100),
+      pct("profitLowMargin", "analytics.customer.config.fields.profitLowMargin", -100, 100),
+      pct("profitLeakMarginTarget", "analytics.customer.config.fields.profitLeakMarginTarget", -100, 100),
+      pct("profitLeakRevenueSharePct", "analytics.customer.config.fields.profitLeakRevenueSharePct"),
+      num("nurtureMinHealth", "analytics.customer.config.fields.nurtureMinHealth", 1, 100),
+      pct("nurtureClvPercentile", "analytics.customer.config.fields.nurtureClvPercentile", 1, 100),
+      pct("growthMaturityFloorPct", "analytics.customer.config.fields.growthMaturityFloorPct"),
+      num("growthMomCapUp", "analytics.customer.config.fields.growthMomCapUp", 0, 1000),
+      num("growthMomCapDown", "analytics.customer.config.fields.growthMomCapDown", 0, 1000),
+      pct("growthTrendPct", "analytics.customer.config.fields.growthTrendPct"),
+      num("growthYoyWindowMonths", "analytics.customer.config.fields.growthYoyWindowMonths", 3, 36),
+      num("overdueInsightCount", "analytics.customer.config.fields.overdueInsightCount", 1, 1000),
     ],
-    ordered: [["churnMediumScore", "churnHighScore", "churnCriticalScore"], ["hhiWarning", "hhiCritical"]],
+    ordered: [
+      ["churnMediumScore", "churnHighScore", "churnCriticalScore"],
+      ["hhiWarning", "hhiCritical"],
+      ["gradeD", "gradeC", "gradeB", "gradeA", "gradeAPlus"],
+      ["recencyGoodDays", "recencyWarningDays", "recencyCriticalDays"],
+      ["frictionPenaltyMedium", "frictionPenaltyHigh", "frictionPenaltyCritical"],
+      ["frictionMediumRate", "frictionHighRate", "frictionCriticalRate"],
+      ["churnMediumDays", "churnHighDays"],
+      ["churnCadenceLowMultiple", "churnCadenceHighMultiple"],
+      ["churnSingleMaxTxns", "churnFewMaxTxns"],
+      ["clvRetentionMinPct", "clvRetentionMaxPct"],
+      ["tierPlatinumPct", "tierGoldPct", "tierSilverPct"],
+      ["concentrationMediumShare", "concentrationHighShare", "concentrationCriticalShare"],
+      ["paymentDsoLowDays", "paymentDsoMediumDays", "paymentDsoHighDays"],
+      ["paymentRatingFair", "paymentRatingGood", "paymentRatingExcellent"],
+      ["profitLowMargin", "profitMediumMargin", "profitHighMargin"],
+    ],
+    sumsTo: [
+      {
+        keys: ["healthWeightRecency", "healthWeightFrequency", "healthWeightMonetary", "healthWeightPayment"],
+        total: 100,
+      },
+      {
+        keys: ["intelWeightChampions", "intelWeightRetention", "intelWeightConcentration", "intelWeightPayment"],
+        total: 100,
+      },
+    ],
   },
   utilization: {
     slug: "utilization",
@@ -380,6 +579,40 @@ function comparable(value: AnalyticsConfigValue): string | null {
   return value === "" ? null : String(value);
 }
 
+export interface SumsToViolation {
+  keys: readonly string[];
+  total: number;
+  actual: number;
+}
+
+/**
+ * Weight-group check shared by the write path and dashboard loaders: every
+ * listed key must be a finite number and the group must sum to `total`.
+ * Weights are percentage points, not money, so the comparison allows binary
+ * floating-point dust far below any displayed precision.
+ */
+export function checkSumsTo(
+  spec: AnalyticsConfigSpec,
+  values: AnalyticsConfigValues,
+): SumsToViolation | null {
+  for (const rule of spec.sumsTo ?? []) {
+    let actual = 0;
+    let readable = true;
+    for (const key of rule.keys) {
+      const value = values[key];
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        readable = false;
+        break;
+      }
+      actual += value;
+    }
+    if (readable && Math.abs(actual - rule.total) > 1e-9) {
+      return { keys: rule.keys, total: rule.total, actual };
+    }
+  }
+  return null;
+}
+
 /**
  * Strict WRITE validation: every field required on each whole-object save,
  * unknown keys refused, each value type- and range-checked, and every ordered
@@ -421,6 +654,14 @@ export function cleanConfigValues(dashboard: AnalyticsDashboard, raw: unknown): 
         );
       }
     }
+  }
+  const weights = checkSumsTo(spec, out);
+  if (weights) {
+    const names = weights.keys.map((key) => `'${key}'`).join(", ");
+    throw new InvalidConfigValue(
+      weights.keys[weights.keys.length - 1]!,
+      `thresholds ${names} must sum to ${weights.total} (currently ${weights.actual}) — weights are percentage points of one composite score, so a partial total would silently rescale every grade`,
+    );
   }
   return out;
 }

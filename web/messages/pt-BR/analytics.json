@@ -760,6 +760,302 @@
         "hhiWarning": {
           "help": "Índice Herfindahl neste valor ou acima indica alerta de concentração",
           "label": "Alerta de concentração (HHI)"
+        },
+        "healthWeightRecency": {
+          "label": "Saúde — peso de recência (%)",
+          "help": "Parcela do escore de saúde vinda de recência"
+        },
+        "healthWeightFrequency": {
+          "label": "Saúde — peso de frequência (%)",
+          "help": "Parcela do escore de saúde vinda de frequência"
+        },
+        "healthWeightMonetary": {
+          "label": "Saúde — peso monetário (%)",
+          "help": "Parcela do escore de saúde vinda de valor"
+        },
+        "healthWeightPayment": {
+          "label": "Saúde — peso de pagamentos (%)",
+          "help": "Parcela do escore de saúde vinda de pagamentos"
+        },
+        "intelWeightChampions": {
+          "label": "Portfólio — peso de campeões (%)",
+          "help": "Parcela do escore global vinda de campeões"
+        },
+        "intelWeightRetention": {
+          "label": "Portfólio — peso de retenção (%)",
+          "help": "Parcela do escore global vinda da retenção média"
+        },
+        "intelWeightConcentration": {
+          "label": "Portfólio — peso de concentração (%)",
+          "help": "Parcela do escore global vinda de concentração"
+        },
+        "intelWeightPayment": {
+          "label": "Portfólio — peso de pagamentos (%)",
+          "help": "Parcela do escore global vinda da taxa de pagamento"
+        },
+        "gradeAPlus": {
+          "label": "Nota — A+ desde (pontos)",
+          "help": "Escores neste valor ou acima recebem A+"
+        },
+        "gradeA": {
+          "label": "Nota — A desde (pontos)",
+          "help": "Escores neste valor ou acima recebem A"
+        },
+        "gradeB": {
+          "label": "Nota — B desde (pontos)",
+          "help": "Escores neste valor ou acima recebem B"
+        },
+        "gradeC": {
+          "label": "Nota — C desde (pontos)",
+          "help": "Escores neste valor ou acima recebem C"
+        },
+        "gradeD": {
+          "label": "Nota — D desde (pontos)",
+          "help": "Escores neste valor ou acima recebem D; abaixo é F"
+        },
+        "recencyGoodDays": {
+          "label": "Recência — recente até (dias)",
+          "help": "A recência até estes dias pontua 5"
+        },
+        "recencyWarningDays": {
+          "label": "Recência — morna até (dias)",
+          "help": "A recência até estes dias pontua 3"
+        },
+        "recencyCriticalDays": {
+          "label": "Recência — fria até (dias)",
+          "help": "A recência até estes dias pontua 2; acima pontua 1"
+        },
+        "churnHighDays": {
+          "label": "Churn — ausência longa (dias)",
+          "help": "A recência acima soma os pontos críticos de inatividade"
+        },
+        "churnMediumDays": {
+          "label": "Churn — ausência (dias)",
+          "help": "A recência acima soma os pontos altos de inatividade"
+        },
+        "churnInactiveLowDays": {
+          "label": "Churn — ausência curta (dias)",
+          "help": "A recência acima soma os pontos baixos de inatividade"
+        },
+        "churnInactiveCriticalPoints": {
+          "label": "Churn — pontos de ausência longa",
+          "help": "Pontos por recência acima dos dias de ausência longa"
+        },
+        "churnInactiveHighPoints": {
+          "label": "Churn — pontos de ausência",
+          "help": "Pontos por recência acima dos dias de ausência"
+        },
+        "churnInactiveLowPoints": {
+          "label": "Churn — pontos de ausência curta",
+          "help": "Pontos por recência acima dos dias de ausência curta"
+        },
+        "churnCadenceHighMultiple": {
+          "label": "Churn — cadência quebrada (×)",
+          "help": "A recência além deste múltiplo do ciclo soma os pontos altos"
+        },
+        "churnCadenceLowMultiple": {
+          "label": "Churn — cadência lenta (×)",
+          "help": "A recência além deste múltiplo do ciclo soma os pontos baixos"
+        },
+        "churnCadenceHighPoints": {
+          "label": "Churn — pontos de cadência quebrada",
+          "help": "Pontos quando a recência supera o múltiplo alto"
+        },
+        "churnCadenceLowPoints": {
+          "label": "Churn — pontos de cadência lenta",
+          "help": "Pontos quando a recência supera o múltiplo baixo"
+        },
+        "churnSingleMaxTxns": {
+          "label": "Churn — compra única até (pedidos)",
+          "help": "Pedidos até este número somam os pontos de compra única"
+        },
+        "churnFewMaxTxns": {
+          "label": "Churn — poucos pedidos até (pedidos)",
+          "help": "Pedidos até este número somam os pontos de baixa frequência"
+        },
+        "churnSinglePoints": {
+          "label": "Churn — pontos de compra única",
+          "help": "Pontos para clientes de compra única"
+        },
+        "churnFewPoints": {
+          "label": "Churn — pontos de baixa frequência",
+          "help": "Pontos para clientes de baixa frequência"
+        },
+        "clvMinYears": {
+          "label": "CLV — vigência mínima (anos)",
+          "help": "Vigências menores anualizam com estes anos"
+        },
+        "clvRetentionBase": {
+          "label": "CLV — base de retenção (%)",
+          "help": "Fator de retenção antes do desgaste, em percentual"
+        },
+        "clvRetentionDecayDays": {
+          "label": "CLV — desgaste (dias)",
+          "help": "Dias de recência que dividem o expoente de retenção"
+        },
+        "clvRetentionMinPct": {
+          "label": "CLV — piso de retenção (%)",
+          "help": "A retenção nunca fica abaixo deste percentual"
+        },
+        "clvRetentionMaxPct": {
+          "label": "CLV — teto de retenção (%)",
+          "help": "A retenção nunca passa deste percentual"
+        },
+        "tierPlatinumPct": {
+          "label": "Faixa — Platina superior (%)",
+          "help": "Parcela de clientes ordenados com Platina"
+        },
+        "tierGoldPct": {
+          "label": "Faixa — Ouro superior (%)",
+          "help": "Parcela de clientes ordenados desde Ouro"
+        },
+        "tierSilverPct": {
+          "label": "Faixa — Prata superior (%)",
+          "help": "Parcela de clientes ordenados desde Prata"
+        },
+        "concentrationCriticalShare": {
+          "label": "Concentração — crítica desde (%)",
+          "help": "Participações iguais ou acima indicam concentração crítica"
+        },
+        "concentrationHighShare": {
+          "label": "Concentração — alta desde (%)",
+          "help": "Participações iguais ou acima indicam concentração alta"
+        },
+        "concentrationMediumShare": {
+          "label": "Concentração — média desde (%)",
+          "help": "Participações iguais ou acima indicam concentração média"
+        },
+        "concentrationCoverageShare": {
+          "label": "Concentração — cobertura (%)",
+          "help": "Participação acumulada para a contagem de cobertura"
+        },
+        "topSharePct": {
+          "label": "Concentração — faixa superior (%)",
+          "help": "Faixa superior de clientes no número principal"
+        },
+        "frictionPointsPerCredit": {
+          "label": "Atrito — pontos por crédito",
+          "help": "Pontos de atrito por nota de crédito"
+        },
+        "frictionPenaltyCritical": {
+          "label": "Atrito — penalidade crítica",
+          "help": "Pontos deduzidos da saúde com atrito crítico"
+        },
+        "frictionPenaltyHigh": {
+          "label": "Atrito — penalidade alta",
+          "help": "Pontos deduzidos da saúde com atrito alto"
+        },
+        "frictionPenaltyMedium": {
+          "label": "Atrito — penalidade média",
+          "help": "Pontos deduzidos da saúde com atrito médio"
+        },
+        "frictionCriticalRate": {
+          "label": "Atrito — crítico desde (%)",
+          "help": "Taxas iguais ou acima indicam atrito crítico"
+        },
+        "frictionHighRate": {
+          "label": "Atrito — alto desde (%)",
+          "help": "Taxas iguais ou acima indicam atrito alto"
+        },
+        "frictionMediumRate": {
+          "label": "Atrito — médio desde (%)",
+          "help": "Taxas iguais ou acima indicam atrito médio"
+        },
+        "paymentDsoHighDays": {
+          "label": "Pagamento — DSO lento (dias)",
+          "help": "Prazos acima sofrem a penalidade alta"
+        },
+        "paymentDsoHighPenalty": {
+          "label": "Pagamento — penalidade DSO lento",
+          "help": "Pontos deduzidos acima da faixa lenta"
+        },
+        "paymentDsoMediumDays": {
+          "label": "Pagamento — DSO tardio (dias)",
+          "help": "Prazos acima sofrem a penalidade média"
+        },
+        "paymentDsoMediumPenalty": {
+          "label": "Pagamento — penalidade DSO tardio",
+          "help": "Pontos deduzidos acima da faixa tardia"
+        },
+        "paymentDsoLowDays": {
+          "label": "Pagamento — DSO moroso (dias)",
+          "help": "Prazos acima sofrem a penalidade baixa"
+        },
+        "paymentDsoLowPenalty": {
+          "label": "Pagamento — penalidade DSO moroso",
+          "help": "Pontos deduzidos acima da faixa morosa"
+        },
+        "paymentOverduePerInvoice": {
+          "label": "Pagamento — pontos por fatura vencida",
+          "help": "Pontos deduzidos por fatura vencida"
+        },
+        "paymentOverdueCap": {
+          "label": "Pagamento — teto de vencidas",
+          "help": "Dedução máxima por faturas vencidas"
+        },
+        "paymentRatingExcellent": {
+          "label": "Pagamento — excelente desde (pontos)",
+          "help": "Escores iguais ou acima são excelentes"
+        },
+        "paymentRatingGood": {
+          "label": "Pagamento — bom desde (pontos)",
+          "help": "Escores iguais ou acima são bons"
+        },
+        "paymentRatingFair": {
+          "label": "Pagamento — razoável desde (pontos)",
+          "help": "Escores iguais ou acima são razoáveis; abaixo é ruim"
+        },
+        "profitHighMargin": {
+          "label": "Lucro — alto desde (%)",
+          "help": "Margens iguais ou acima são altas"
+        },
+        "profitMediumMargin": {
+          "label": "Lucro — médio desde (%)",
+          "help": "Margens iguais ou acima são médias"
+        },
+        "profitLowMargin": {
+          "label": "Lucro — baixo desde (%)",
+          "help": "Margens iguais ou acima são baixas; desde zero é marginal"
+        },
+        "profitLeakMarginTarget": {
+          "label": "Vazamento — margem abaixo (%)",
+          "help": "Candidatas ganham margem abaixo desta meta"
+        },
+        "profitLeakRevenueSharePct": {
+          "label": "Vazamento — participação (%)",
+          "help": "Candidatas detêm ao menos esta parcela da receita"
+        },
+        "nurtureMinHealth": {
+          "label": "Cultivo — saúde desde (pontos)",
+          "help": "Candidatas pontuam desde este valor"
+        },
+        "nurtureClvPercentile": {
+          "label": "Cultivo — percentil de CLV",
+          "help": "Candidatas estão desde este percentil de CLV"
+        },
+        "growthMaturityFloorPct": {
+          "label": "Crescimento — piso de maturidade (%)",
+          "help": "Meses abaixo desta parte da mediana são arranque"
+        },
+        "growthMomCapUp": {
+          "label": "Crescimento — teto MoM alta (%)",
+          "help": "O crescimento mensal nunca passa deste valor"
+        },
+        "growthMomCapDown": {
+          "label": "Crescimento — teto MoM baixa (%)",
+          "help": "A queda mensal nunca fica abaixo de menos este valor"
+        },
+        "growthTrendPct": {
+          "label": "Crescimento — faixa de tendência (%)",
+          "help": "Comparações além se leem como alta ou baixa"
+        },
+        "growthYoyWindowMonths": {
+          "label": "Crescimento — janela anual (meses)",
+          "help": "Meses finais de cada lado da comparação anual"
+        },
+        "overdueInsightCount": {
+          "label": "Aviso — vencidas acima (faturas)",
+          "help": "Vencidas acima deste número ativam o aviso de pagamentos"
         }
       }
     },
