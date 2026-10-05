@@ -5,7 +5,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
-export type RefOption = { value: string; label: string; scopeValue?: string | null }
+export type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string }
 
 /** Distinct ref sources declared anywhere in this entity's columns or fields. */
 export function refSources(entity: SetupEntity): SetupRefSource[] {
@@ -18,12 +18,13 @@ export function refSources(entity: SetupEntity): SetupRefSource[] {
 /** Postable accounts for the org, matching the company-settings pickers. */
 export async function loadAccounts(orgId: string): Promise<RefOption[]> {
   const r = (await db.execute(sql`
-    select id, number, name from accounts
+    select id, number, name, type from accounts
      where org_id = ${orgId} and not is_summary and is_active
      order by number nulls last, name`))
   return r.rows.map((a) => ({
     value: a.id as string,
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
+    accountType: a.type as string,
   }))
 }
 
