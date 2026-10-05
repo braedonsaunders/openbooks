@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, DisclosureSection, EmptyState } from '@openbooks/ui'
+import { Badge, EmptyState } from '@openbooks/ui'
+import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { familyTabFromParam, familyTabs, type FamilyTabKey } from './family-tabs'
 import { apiJson } from '@/lib/api-error'
 import { toast } from 'sonner'
 import { FamilyOptionsEditor, type EditableOption } from './FamilyOptionsEditor'
@@ -39,14 +41,48 @@ interface FamilyDetail {
 const VARIANT_KINDS = ['inventory', 'non_inventory', 'service', 'kit', 'assembly'] as const
 
 /**
+ * Drawer-chrome subtab strip for the family workspace. Rendered by the owning
+ * page as the `UrlDrawer` `subtabs` node so the outer drawer shell stays
+ * mounted while the operator moves between the variant matrix, pricing,
+ * options and details — the same pattern item drawers use for `itemSetup`.
+ */
+export function FamilyDrawerSubtabs() {
+  const t = useTranslations('items.families')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const active = familyTabFromParam(searchParams.get('familyTab'))
+
+  function selectTab(key: FamilyTabKey) {
+    const next = new URLSearchParams(searchParams.toString())
+    next.set('familyTab', key)
+    const query = next.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
+
+  return (
+    <DrawerTabStrip
+      tabs={familyTabs().map((key) => ({
+        key,
+        label: key === 'details' ? t('defaults.title') : t(`${key}.title`),
+      }))}
+      activeKey={active}
+      onSelect={selectTab}
+      ariaLabel={t('drawerTitle')}
+    />
+  )
+}
+
+/**
  * One drawer shell through create, loading, detail, refusal and retry: the
- * everyday variant matrix stays visible, options sit one section down, and
- * family defaults hide inside a DisclosureSection that summarizes them.
+ * header names the family once, and exactly one concept body is active at a
+ * time — variants, pricing, options or details — chosen by `familyTab`.
  */
 export function FamilyDrawer({ familyId, canManage }: { familyId: string; canManage: boolean }) {
   const t = useTranslations('items.families')
-  const tItems = useTranslations('items')
   const tCommon = useTranslations('common')
+  const searchParams = useSearchParams()
+  const activeTab = familyTabFromParam(searchParams.get('familyTab'))
   const [detail, setDetail] = useState<FamilyDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(familyId !== 'new')
@@ -126,69 +162,74 @@ export function FamilyDrawer({ familyId, canManage }: { familyId: string; canMan
         </p>
       </div>
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold">{t('variants.title')}</h3>
-          <p className="mt-0.5 text-sm text-slate-500">{t('variants.description')}</p>
-        </div>
-        <FamilyVariantsGrid
-          key={`${detail.id}:${detail.variants.length}`}
-          familyId={detail.id}
-          optionNames={detail.options.map((option) => option.name)}
-          variants={gridVariants}
-          familyRate={detail.defaultRate}
-          canManage={canManage}
-          onChanged={() => void load()}
-        />
-      </section>
+      {activeTab === 'variants' ? (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-base font-semibold">{t('variants.title')}</h3>
+            <p className="mt-0.5 text-sm text-slate-500">{t('variants.description')}</p>
+          </div>
+          <FamilyVariantsGrid
+            key={`${detail.id}:${detail.variants.length}`}
+            familyId={detail.id}
+            optionNames={detail.options.map((option) => option.name)}
+            variants={gridVariants}
+            familyRate={detail.defaultRate}
+            canManage={canManage}
+            onChanged={() => void load()}
+          />
+        </section>
+      ) : null}
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold">{t('pricing.title')}</h3>
-          <p className="mt-0.5 text-sm text-slate-500">{t('pricing.description')}</p>
-        </div>
-        <ItemPriceMatrixEditor familyId={detail.id} canManage={canManage} />
-      </section>
+      {activeTab === 'pricing' ? (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-base font-semibold">{t('pricing.title')}</h3>
+            <p className="mt-0.5 text-sm text-slate-500">{t('pricing.description')}</p>
+          </div>
+          <ItemPriceMatrixEditor familyId={detail.id} canManage={canManage} />
+        </section>
+      ) : null}
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold">{t('options.title')}</h3>
-          <p className="mt-0.5 text-sm text-slate-500">{t('options.description')}</p>
-        </div>
-        <FamilyOptionsEditor
-          key={detail.options.map((option) => option.id).join(',')}
-          initial={detail.options.map((option) => ({ id: option.id, name: option.name, values: option.values }))}
-          variantValues={variantValues}
-          disabled={!canManage}
-          onSave={async (options) => {
-            try {
-              await apiJson(`/api/item-families/${detail.id}/options`, {
-                method: 'PUT',
-                body: JSON.stringify({ options }),
-              })
-              toast.success(t('options.saved'))
-              await load()
-            } catch (saveError) {
-              throw new Error(saveError instanceof Error ? saveError.message : String(saveError))
-            }
-          }}
-        />
-      </section>
+      {activeTab === 'options' ? (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-base font-semibold">{t('options.title')}</h3>
+            <p className="mt-0.5 text-sm text-slate-500">{t('options.description')}</p>
+          </div>
+          <FamilyOptionsEditor
+            key={detail.options.map((option) => option.id).join(',')}
+            initial={detail.options.map((option) => ({ id: option.id, name: option.name, values: option.values }))}
+            variantValues={variantValues}
+            disabled={!canManage}
+            onSave={async (options) => {
+              try {
+                await apiJson(`/api/item-families/${detail.id}/options`, {
+                  method: 'PUT',
+                  body: JSON.stringify({ options }),
+                })
+                toast.success(t('options.saved'))
+                await load()
+              } catch (saveError) {
+                throw new Error(saveError instanceof Error ? saveError.message : String(saveError))
+              }
+            }}
+          />
+        </section>
+      ) : null}
 
-      <DisclosureSection
-        title={t('defaults.title')}
-        summary={t('defaults.summary', {
-          rate: detail.defaultRate ?? t('defaults.noRate'),
-          unit: detail.defaultUnit ?? t('defaults.noUnit'),
-          kind: tItems(`kinds.${detail.kind}`),
-        })}
-      >
-        <DefaultsForm
-          detail={detail}
-          canManage={canManage}
-          onSaved={() => void load()}
-        />
-      </DisclosureSection>
+      {activeTab === 'details' ? (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-base font-semibold">{t('defaults.title')}</h3>
+            <p className="mt-0.5 text-sm text-slate-500">{t('defaults.description')}</p>
+          </div>
+          <DefaultsForm
+            detail={detail}
+            canManage={canManage}
+            onSaved={() => void load()}
+          />
+        </section>
+      ) : null}
     </div>
   )
 }

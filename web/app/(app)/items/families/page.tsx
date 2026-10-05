@@ -10,7 +10,7 @@ import { requirePermission, can } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { isUuid, pickString, mergeHref } from '@/lib/list-params'
 import { itemsWorkspaceTabs } from '../tabs'
-import { FamilyDrawer } from './FamilyDrawer'
+import { FamilyDrawer, FamilyDrawerSubtabs } from './FamilyDrawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +41,8 @@ export default async function FamiliesPage({ searchParams }: { searchParams: Pro
     <EntityListView recordType="item_family" orgId={auth.user.orgId} userId={auth.user.id}
       canManage={false} sp={sp} emptyTitle={t('empty')} emptyDescription={t('emptyDescription')}
       emptyAction={canManage ? <Button asChild><Link href="/items/families?family=new"><Plus size={15} /> {t('newFamily')}</Link></Button> : undefined} drawer={selected ? <UrlDrawer open title={selected === 'new' ? t('newFamily') : t('drawerTitle')}
-        closeHref={mergeHref('/items/families', sp, { family: undefined, drawerReturn: undefined })} size="2xl">
+        closeHref={mergeHref('/items/families', sp, { family: undefined, familyTab: undefined, drawerReturn: undefined })} size="2xl"
+        subtabs={selected === 'new' ? undefined : <FamilyDrawerSubtabs />}>
         <FamilyDrawer familyId={selected} canManage={canManage} />
       </UrlDrawer> : undefined} />
   </ListPageLayout>
