@@ -177,7 +177,14 @@ export function KitComponentsTab({
     return <p role="status" className="py-4 text-sm text-slate-600 dark:text-slate-300">{t('kit.loading')}</p>
   }
   if (loadError || !bom) {
-    return <p role="alert" className="py-4 text-sm text-red-700 dark:text-red-300">{loadError ?? t('kit.loadFailed')}</p>
+    return (
+      <div role="alert" className="space-y-3 py-4">
+        <p className="text-sm text-red-700 dark:text-red-300">{loadError ?? t('kit.loadFailed')}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => { void load() }}>
+          {tCommon('actions.retry')}
+        </Button>
+      </div>
+    )
   }
 
   return (
