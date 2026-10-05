@@ -125,5 +125,83 @@
     "send": "Envoyer",
     "sent": "Suivi envoyé à {to}.",
     "failed": "L’e-mail de suivi n’a pas pu être envoyé."
+  },
+  "shipping": {
+    "tab": "Expédition",
+    "loading": "Chargement des étiquettes…",
+    "labelsTitle": "Étiquettes",
+    "labelsEmpty": "Aucune étiquette. Comparez les tarifs ci-dessous pour acheter la première.",
+    "status": {
+      "purchased": "Achetée",
+      "voided": "Annulée",
+      "refunded": "Remboursée"
+    },
+    "tracking": {
+      "unknown": "Sans suivi",
+      "pre_transit": "Étiquette créée",
+      "in_transit": "En transit",
+      "out_for_delivery": "En livraison",
+      "delivered": "Livrée",
+      "exception": "Incident",
+      "returned": "Retournée",
+      "cancelled": "Annulée"
+    },
+    "print": "Imprimer",
+    "refresh": "Actualiser le suivi",
+    "void": "Annuler",
+    "ratesTitle": "Comparer les tarifs",
+    "noAccountsTitle": "Aucun compte transporteur",
+    "noAccounts": "Connectez un compte EasyPost ou Shippo avant de comparer les tarifs.",
+    "setupLink": "Ouvrir les réglages d’expédition",
+    "rateAccount": "Compte",
+    "ratePackage": "Colis",
+    "ratePackageAuto": "Peser les articles",
+    "rateDirection": "Sens",
+    "direction": {
+      "outbound": "Aller",
+      "return": "Retour"
+    },
+    "modeTest": "Test",
+    "modeLive": "Production",
+    "getRates": "Voir les tarifs",
+    "checkAddress": "Vérifier l’adresse",
+    "validationValid": "L’adresse est correcte.",
+    "validationIssues": "Le transporteur suggère des corrections.",
+    "addressUnchanged": "L’adresse de l’envoi reste inchangée.",
+    "noBuyGrant": "Acheter demande l’autorisation d’expédition. Les tarifs se comparent quand même.",
+    "rateFor": "Tarifs en direct via {account}",
+    "colRate": "Tarif",
+    "colDelivery": "Livraison",
+    "colPrice": "Prix",
+    "buy": "Acheter l’étiquette",
+    "badges": {
+      "cheapest": "Moins cher",
+      "fastest": "Plus rapide",
+      "best_value": "Meilleur choix"
+    },
+    "deliveryDays": "{count, plural, one {# jour} other {# jours}}",
+    "costNote": "Le coût de l’étiquette va au compte de frais d’expédition contre le compte transporteur.",
+    "noRatesTitle": "Aucun tarif",
+    "noRates": "Essayez un autre compte ou colis, ou vérifiez les adresses.",
+    "buyTitle": "Acheter {carrier} {service} ?",
+    "buyConfirm": "Acheter l’étiquette {carrier} {service} pour {amount} ? Le coût est compté aussitôt.",
+    "bought": "Étiquette {carrier} achetée. Le numéro de suivi est sur l’envoi.",
+    "voided": "Étiquette {carrier} annulée. Le coût est contre-passé.",
+    "refreshed": "Suivi à jour.",
+    "voidTitle": "Annuler l’étiquette {carrier} ?",
+    "voidLabel": "Motif",
+    "voidPlaceholder": "Client annulé avant enlèvement",
+    "advancedTitle": "Avancé",
+    "advancedSummary": "Réglages depuis l’expédition",
+    "defaultsLine": "Les tarifs partent de {account} et {preset}. Règles, majorations, assurance, signature et douane sont dans les réglages.",
+    "noDefault": "aucun réglage",
+    "fail": {
+      "labels": "Les étiquettes n’ont pas pu être chargées.",
+      "rates": "Les tarifs n’ont pas pu être chargés.",
+      "buy": "L’étiquette n’a pas pu être achetée.",
+      "void": "L’étiquette n’a pas pu être annulée.",
+      "tracking": "Le suivi n’a pas pu être actualisé.",
+      "validation": "L’adresse n’a pas pu être vérifiée."
+    }
   }
 }

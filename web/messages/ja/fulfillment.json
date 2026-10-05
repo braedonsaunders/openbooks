@@ -125,5 +125,83 @@
     "send": "送信",
     "sent": "追跡情報を {to} に送信しました。",
     "failed": "追跡メールを送信できませんでした。"
+  },
+  "shipping": {
+    "tab": "配送",
+    "loading": "ラベルを読み込み中…",
+    "labelsTitle": "ラベル",
+    "labelsEmpty": "ラベルはまだありません。下で運賃を比較して最初の一枚を購入できます。",
+    "status": {
+      "purchased": "購入済み",
+      "voided": "無効",
+      "refunded": "返金済み"
+    },
+    "tracking": {
+      "unknown": "追跡なし",
+      "pre_transit": "ラベル作成済み",
+      "in_transit": "輸送中",
+      "out_for_delivery": "配達中",
+      "delivered": "配達済み",
+      "exception": "例外",
+      "returned": "返送済み",
+      "cancelled": "取消済み"
+    },
+    "print": "印刷",
+    "refresh": "追跡を更新",
+    "void": "無効化",
+    "ratesTitle": "運賃比較",
+    "noAccountsTitle": "運送会社アカウントがありません",
+    "noAccounts": "運賃を比較する前にEasyPostやShippoのアカウントを接続してください。",
+    "setupLink": "配送設定を開く",
+    "rateAccount": "アカウント",
+    "ratePackage": "梱包",
+    "ratePackageAuto": "商品を計量",
+    "rateDirection": "方向",
+    "direction": {
+      "outbound": "出荷",
+      "return": "返品"
+    },
+    "modeTest": "テスト",
+    "modeLive": "本番",
+    "getRates": "運賃を取得",
+    "checkAddress": "住所を確認",
+    "validationValid": "住所は正しいです。",
+    "validationIssues": "運送会社から修正提案があります。",
+    "addressUnchanged": "出荷の住所は変更されません。",
+    "noBuyGrant": "購入には配送権限が必要です。運賃比較はそのまま行えます。",
+    "rateFor": "{account}のリアルタイム運賃",
+    "colRate": "運賃",
+    "colDelivery": "配送",
+    "colPrice": "料金",
+    "buy": "ラベルを購入",
+    "badges": {
+      "cheapest": "最安",
+      "fastest": "最速",
+      "best_value": "お得"
+    },
+    "deliveryDays": "{count, plural, other {#日}}",
+    "costNote": "ラベル原価は配送費勘定に計上され、相手は運送会社未払勘定です。",
+    "noRatesTitle": "運賃がありません",
+    "noRates": "他のアカウントや梱包を試すか、住所を確認してください。",
+    "buyTitle": "{carrier} {service}を購入しますか。",
+    "buyConfirm": "{carrier} {service}のラベルを{amount}で購入しますか。原価はすぐに計上されます。",
+    "bought": "{carrier}のラベルを購入しました。追跡番号は出荷に記録されます。",
+    "voided": "{carrier}のラベルを無効化しました。原価は戻されます。",
+    "refreshed": "追跡は最新です。",
+    "voidTitle": "{carrier}のラベルを無効化しますか。",
+    "voidLabel": "理由",
+    "voidPlaceholder": "集荷前に顧客が取消",
+    "advancedTitle": "詳細設定",
+    "advancedSummary": "配送設定の初期値",
+    "defaultsLine": "運賃は{account}と{preset}から開始します。ルール・割増・保険・署名・通関は設定画面で行います。",
+    "noDefault": "未設定",
+    "fail": {
+      "labels": "ラベルを読み込めませんでした。",
+      "rates": "運賃を読み込めませんでした。",
+      "buy": "ラベルを購入できませんでした。",
+      "void": "ラベルを無効化できませんでした。",
+      "tracking": "追跡を更新できませんでした。",
+      "validation": "住所を確認できませんでした。"
+    }
   }
 }

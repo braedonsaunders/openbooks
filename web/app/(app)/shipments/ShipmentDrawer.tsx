@@ -17,6 +17,7 @@ import { PdfButton } from '../../../components/pdf-button'
 import { promptDialog } from '../../../lib/prompt'
 import { confirmDialog } from '../../../lib/confirm'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
+import { ShippingPanel } from './_fulfillment/ShippingPanel'
 import {
   FulfillmentHeader,
   FulfillmentLines,
@@ -384,6 +385,19 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
           ),
         },
         { key: 'related', label: t('related.tab'), content: <FulfillmentRelated document={shipment} /> },
+        ...(data.shippingHubEnabled ? [{
+          key: 'shipping',
+          label: t('shipping.tab'),
+          content: (
+            <ShippingPanel
+              shipmentId={shipment.id}
+              draft={draft}
+              canBuy={data.canBuyLabels && draft}
+              accounts={data.shippingAccounts}
+              presets={data.packagePresets}
+            />
+          ),
+        }] : []),
       ]}
     >
       <div className="space-y-6 p-1">

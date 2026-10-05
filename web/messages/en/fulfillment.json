@@ -125,5 +125,83 @@
     "send": "Send",
     "sent": "Tracking sent to {to}.",
     "failed": "The tracking email could not be sent."
+  },
+  "shipping": {
+    "tab": "Shipping",
+    "loading": "Loading labels…",
+    "labelsTitle": "Labels",
+    "labelsEmpty": "No labels yet. Shop rates below to buy the first one.",
+    "status": {
+      "purchased": "Purchased",
+      "voided": "Voided",
+      "refunded": "Refunded"
+    },
+    "tracking": {
+      "unknown": "No tracking",
+      "pre_transit": "Label created",
+      "in_transit": "In transit",
+      "out_for_delivery": "Out for delivery",
+      "delivered": "Delivered",
+      "exception": "Exception",
+      "returned": "Returned",
+      "cancelled": "Cancelled"
+    },
+    "print": "Print",
+    "refresh": "Refresh tracking",
+    "void": "Void",
+    "ratesTitle": "Rate shopping",
+    "noAccountsTitle": "No carrier accounts yet",
+    "noAccounts": "Connect an EasyPost or Shippo account before shopping rates.",
+    "setupLink": "Open Setup Shipping",
+    "rateAccount": "Account",
+    "ratePackage": "Package",
+    "ratePackageAuto": "Weigh the items",
+    "rateDirection": "Direction",
+    "direction": {
+      "outbound": "Outbound",
+      "return": "Return"
+    },
+    "modeTest": "Test",
+    "modeLive": "Live",
+    "getRates": "Get rates",
+    "checkAddress": "Check address",
+    "validationValid": "The address checks out.",
+    "validationIssues": "The carrier suggests fixes below.",
+    "addressUnchanged": "The address on the shipment is unchanged.",
+    "noBuyGrant": "Buying needs the shipping grant. Rates still shop normally.",
+    "rateFor": "Live rates via {account}",
+    "colRate": "Rate",
+    "colDelivery": "Delivery",
+    "colPrice": "Price",
+    "buy": "Buy label",
+    "badges": {
+      "cheapest": "Cheapest",
+      "fastest": "Fastest",
+      "best_value": "Best value"
+    },
+    "deliveryDays": "{count, plural, one {# day} other {# days}}",
+    "costNote": "The label cost posts to the shipping expense account against the carrier payable.",
+    "noRatesTitle": "No rates came back",
+    "noRates": "Try another account or package, or check the addresses.",
+    "buyTitle": "Buy {carrier} {service}?",
+    "buyConfirm": "Buy the {carrier} {service} label for {amount}? The cost posts straight away.",
+    "bought": "{carrier} label bought. The tracking number is on the shipment.",
+    "voided": "{carrier} label voided. The cost reverses.",
+    "refreshed": "Tracking is up to date.",
+    "voidTitle": "Void the {carrier} label?",
+    "voidLabel": "Reason",
+    "voidPlaceholder": "Customer cancelled before pickup",
+    "advancedTitle": "Advanced",
+    "advancedSummary": "Defaults from Setup Shipping",
+    "defaultsLine": "Rates start from {account} and {preset}. Rules, markups, insurance, signature and customs live in Setup.",
+    "noDefault": "no default yet",
+    "fail": {
+      "labels": "Labels could not be loaded.",
+      "rates": "Rates could not be loaded.",
+      "buy": "The label could not be bought.",
+      "void": "The label could not be voided.",
+      "tracking": "Tracking could not be refreshed.",
+      "validation": "The address could not be checked."
+    }
   }
 }

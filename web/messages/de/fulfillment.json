@@ -125,5 +125,83 @@
     "send": "Senden",
     "sent": "Sendungsverfolgung an {to} gesendet.",
     "failed": "Die E-Mail zur Sendungsverfolgung konnte nicht gesendet werden."
+  },
+  "shipping": {
+    "tab": "Versand",
+    "loading": "Etiketten werden geladen…",
+    "labelsTitle": "Etiketten",
+    "labelsEmpty": "Noch keine Etiketten. Tarife unten vergleichen, um das erste zu kaufen.",
+    "status": {
+      "purchased": "Gekauft",
+      "voided": "Storniert",
+      "refunded": "Erstattet"
+    },
+    "tracking": {
+      "unknown": "Kein Tracking",
+      "pre_transit": "Etikett erstellt",
+      "in_transit": "Unterwegs",
+      "out_for_delivery": "In Zustellung",
+      "delivered": "Zugestellt",
+      "exception": "Störung",
+      "returned": "Retoure",
+      "cancelled": "Storniert"
+    },
+    "print": "Drucken",
+    "refresh": "Tracking aktualisieren",
+    "void": "Stornieren",
+    "ratesTitle": "Tarifvergleich",
+    "noAccountsTitle": "Noch keine Frachtkonten",
+    "noAccounts": "Erst ein EasyPost- oder Shippo-Konto verbinden, dann Tarife vergleichen.",
+    "setupLink": "Versandeinstellungen öffnen",
+    "rateAccount": "Konto",
+    "ratePackage": "Paket",
+    "ratePackageAuto": "Artikel wiegen",
+    "rateDirection": "Richtung",
+    "direction": {
+      "outbound": "Ausgehend",
+      "return": "Retoure"
+    },
+    "modeTest": "Test",
+    "modeLive": "Live",
+    "getRates": "Tarife abrufen",
+    "checkAddress": "Adresse prüfen",
+    "validationValid": "Die Adresse ist in Ordnung.",
+    "validationIssues": "Der Frachtführer schlägt Korrekturen vor.",
+    "addressUnchanged": "Die Adresse an der Sendung bleibt unverändert.",
+    "noBuyGrant": "Kaufen braucht die Versandberechtigung. Tarife lassen sich trotzdem vergleichen.",
+    "rateFor": "Live-Tarife über {account}",
+    "colRate": "Tarif",
+    "colDelivery": "Lieferung",
+    "colPrice": "Preis",
+    "buy": "Etikett kaufen",
+    "badges": {
+      "cheapest": "Günstigster",
+      "fastest": "Schnellster",
+      "best_value": "Bestwert"
+    },
+    "deliveryDays": "{count, plural, one {# Tag} other {# Tage}}",
+    "costNote": "Die Etikettkosten gehen auf das Versandaufwandskonto gegen das Frachtführerkonto.",
+    "noRatesTitle": "Keine Tarife gefunden",
+    "noRates": "Anderes Konto oder Paket versuchen, oder Adressen prüfen.",
+    "buyTitle": "{carrier} {service} kaufen?",
+    "buyConfirm": "Das {carrier}-{service}-Etikett für {amount} kaufen? Die Kosten werden sofort gebucht.",
+    "bought": "{carrier}-Etikett gekauft. Die Trackingnummer steht an der Sendung.",
+    "voided": "{carrier}-Etikett storniert. Die Kosten werden zurückgebucht.",
+    "refreshed": "Tracking ist aktuell.",
+    "voidTitle": "Das {carrier}-Etikett stornieren?",
+    "voidLabel": "Grund",
+    "voidPlaceholder": "Kunde hat vor Abholung storniert",
+    "advancedTitle": "Erweitert",
+    "advancedSummary": "Vorgaben aus den Versandeinstellungen",
+    "defaultsLine": "Tarife starten mit {account} und {preset}. Regeln, Aufschläge, Versicherung, Unterschrift und Zoll stehen in den Einstellungen.",
+    "noDefault": "noch keine Vorgabe",
+    "fail": {
+      "labels": "Etiketten konnten nicht geladen werden.",
+      "rates": "Tarife konnten nicht geladen werden.",
+      "buy": "Das Etikett konnte nicht gekauft werden.",
+      "void": "Das Etikett konnte nicht storniert werden.",
+      "tracking": "Tracking konnte nicht aktualisiert werden.",
+      "validation": "Die Adresse konnte nicht geprüft werden."
+    }
   }
 }

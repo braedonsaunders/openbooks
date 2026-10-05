@@ -10,6 +10,21 @@ export interface FulfillmentCarrierOption {
   services: string[]
 }
 
+/** A live carrier account the rate shopper may charge (never its secret). */
+export interface ShippingAccountOption {
+  id: string
+  name: string
+  provider: string
+  mode: string
+  isDefault: boolean
+}
+
+/** A reusable package size the rate shopper may fall back to. */
+export interface PackagePresetOption {
+  id: string
+  name: string
+}
+
 /**
  * Everything a pick-list or shipment drawer renders, assembled by
  * loadFulfillmentDrawerData wherever the record opens (its own list, a
@@ -30,6 +45,14 @@ export interface FulfillmentDrawerData {
   canPost: boolean
   /** Barcode controls appear only when the organization enabled scanning. */
   barcodeScanningEnabled: boolean
+  /** Live rates and labels appear only while the shipping hub is enabled. */
+  shippingHubEnabled: boolean
+  /** shipping.manage: buying and voiding labels spends carrier money. */
+  canBuyLabels: boolean
+  /** Active carrier accounts for rate shopping; empty until the hub is on. */
+  shippingAccounts: ShippingAccountOption[]
+  /** Package presets for the rate shopper's fallback; empty until the hub is on. */
+  packagePresets: PackagePresetOption[]
   /** List URL the drawer closes to. */
   closeHref: string
 }
