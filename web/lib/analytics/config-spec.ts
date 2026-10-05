@@ -1,6 +1,7 @@
 import { canonicalDecimal, compareDecimal } from "../exact-decimal";
 import { moneyRefusal } from "../payroll-decimal-refusal";
 import { normalizeMoney } from "@openbooks/engine/money";
+import { FORECAST_CONFIDENCE_LEVELS } from "../../app/(app)/analytics/_ui/forecast";
 
 /**
  * The single specification of every editable analytics threshold.
@@ -188,7 +189,10 @@ export const ANALYTICS_CONFIG = {
       },
       {
         key: "forecastConfidence", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastConfidence.label", helpKey: "analytics.financialHealth.config.fields.forecastConfidence.help",
-        options: ["80", "90", "95", "99"], optionsKey: "analytics.financialHealth.config.options.forecastConfidence",
+        // The offered levels are the engine's own band table: a level the
+        // model cannot band can never be offered, and a new level is offered
+        // everywhere the moment the engine learns it.
+        options: FORECAST_CONFIDENCE_LEVELS.map(String), optionsKey: "analytics.financialHealth.config.options.forecastConfidence",
       },
       {
         key: "forecastSeasonality", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastSeasonality.label", helpKey: "analytics.financialHealth.config.fields.forecastSeasonality.help",
