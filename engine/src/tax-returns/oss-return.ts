@@ -224,7 +224,7 @@ export async function computeOssReturn(
         left join documents corrected
           on corrected.org_id = d.org_id
          and corrected.id = case
-           when d.custom -> 'crossBorder' ->> 'correctsDocument' ~ '^[0-9a-fA-F-]{36}$'
+           when d.custom -> 'crossBorder' ->> 'correctsDocument' ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
            then (d.custom -> 'crossBorder' ->> 'correctsDocument')::uuid
          end
        where d.org_id = ${orgId}

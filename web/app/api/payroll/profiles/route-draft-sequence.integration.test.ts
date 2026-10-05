@@ -4,6 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextRequest } from 'next/server'
 import type { SessionUser } from '../../../../lib/auth'
+import { isUuid } from '../../../../lib/list-params'
 
 const state: { orgId: string; actorId: string; user: SessionUser | null } = { orgId: '', actorId: '', user: null }
 Object.assign(globalThis, { __draftProfileState: state })
@@ -59,7 +60,7 @@ async function createEmployee() {
   ))
   assert.equal(response.status, 201, await response.clone().text())
   const body = (await response.json()) as { party: { id: string } };
-  assert.match(body.party.id, /^[0-9a-f-]{36}$/);
+  assert.ok(isUuid(body.party.id));
   return { id: body.party.id }
 }
 
