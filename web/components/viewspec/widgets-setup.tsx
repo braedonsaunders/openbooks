@@ -182,7 +182,7 @@ export const SETUP_WIDGETS = {
       localCatalog={props.localCatalog as ComponentProps<typeof NavEditor>['localCatalog']}
     />
   ),
-  /** THREE FLAT props, no wrapper bag — the bank-feeds division. */
+  /** FLAT props, no wrapper bag — the bank-feeds division. */
   'features-workspace': (props) => (
     <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
   ),

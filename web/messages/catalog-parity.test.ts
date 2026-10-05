@@ -273,6 +273,8 @@ const COGNATES = new Set<string>([
   'fr:admin.setup.reviewBuilder.questionCount|{count, plural, one {# question} other {# questions}}',
   // French spells the financial term “ratio” identically.
   'fr:reports.formats.ratio|Ratio',
+  // French spells the Features-page tab “Finance” identically.
+  'fr:admin.setup.features.categories.finance|Finance',
   // French spells the sales term “commission” (une commission) identically.
   'fr:contractCosts.costType.commission|Commission',
   // “Production” is spelled identically in French.

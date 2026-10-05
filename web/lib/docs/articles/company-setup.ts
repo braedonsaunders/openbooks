@@ -54,7 +54,11 @@ realized adjustment is refused until the realized account is set.
 
 ## Features
 
-**Features** switches cross-company optional modules on or off. Field time
+**Features** switches cross-company optional modules on or off. The switches
+are organized into tabs — Finance, Sales, Billing, Inventory, Projects, People,
+Industries and Platform — and the search box finds a feature on any tab by
+name or description. The Industries tab groups the switches each supported
+industry runs, with your own industry first. Field time
 capture (under Time tracking) and each HR module (Compensation, Performance,
 Construction compliance, Certifications and licenses, HR documents,
 Engagement surveys, Recruiting, under Human resources) is a single switch:

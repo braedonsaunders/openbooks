@@ -4,10 +4,10 @@ import { FEATURE_BY_KEY, FEATURES, featureEnabled } from "./feature-registry.ts"
 
 test("distribution features are opt-in and declare their dependencies", () => {
   const expected = [
-    ["dropShipping", "operations", undefined, ["orders", "inventory"]],
-    ["returnAuthorizations", "operations", ["returns"], ["fulfillment"]],
+    ["dropShipping", "inventory", undefined, ["orders", "inventory"]],
+    ["returnAuthorizations", "inventory", ["returns"], ["fulfillment"]],
     ["customerPartNumbers", "sales", undefined, ["orders"]],
-    ["barcodeScanning", "operations", undefined, ["inventory"]],
+    ["barcodeScanning", "inventory", undefined, ["inventory"]],
   ] as const;
   for (const [key, category, navModules, requiresAll] of expected) {
     const def = FEATURE_BY_KEY.get(key);
@@ -20,31 +20,31 @@ test("distribution features are opt-in and declare their dependencies", () => {
   }
 });
 
-test("nonprofit is an opt-in accounting feature owning one nav module", () => {
+test("nonprofit is an opt-in industry feature owning one nav module", () => {
   const def = FEATURE_BY_KEY.get("nonprofit");
   assert.ok(def, "nonprofit must be registered before nonprofit routes gate on it");
   assert.equal(def.defaultEnabled, false);
-  assert.equal(def.category, "accounting");
+  assert.equal(def.category, "industries");
   assert.deepEqual(def.navModules, ["nonprofit"]);
   assert.equal(featureEnabled({}, "nonprofit"), false);
   assert.equal(featureEnabled({ nonprofit: true }, "nonprofit"), true);
 });
 
-test("allocations is an opt-in accounting feature with no nav modules", () => {
+test("allocations is an opt-in finance feature with no nav modules", () => {
   const def = FEATURE_BY_KEY.get("allocations");
   assert.ok(def, "allocations must be registered before sibling shards gate on it");
   assert.equal(def.defaultEnabled, false);
-  assert.equal(def.category, "accounting");
+  assert.equal(def.category, "finance");
   assert.deepEqual(def.navModules ?? [], []);
   assert.equal(featureEnabled({}, "allocations"), false);
   assert.equal(featureEnabled({ allocations: true }, "allocations"), true);
 });
 
-test("contract costs are opt-in sales subordinate to revenue recognition", () => {
+test("contract costs are opt-in billing subordinate to revenue recognition", () => {
   const def = FEATURE_BY_KEY.get("contractCosts");
   assert.ok(def, "contractCosts must be registered before contract cost routes gate on it");
   assert.equal(def.defaultEnabled, false);
-  assert.equal(def.category, "sales");
+  assert.equal(def.category, "billing");
   assert.deepEqual(def.navModules ?? [], []);
   assert.deepEqual(def.requiresAll, ["revenueRecognition"]);
   assert.equal(featureEnabled({}, "contractCosts"), false);
@@ -62,7 +62,7 @@ test("allocation binding-moment gates are subordinate to the parent", () => {
   for (const key of ["allocationsAtEntry", "allocationsAtPosting"]) {
     const def = FEATURE_BY_KEY.get(key);
     assert.ok(def, `${key} must be registered before sibling shards gate on it`);
-    assert.equal(def.category, "accounting");
+    assert.equal(def.category, "finance");
     assert.equal(def.parentKey, "allocations");
     // A stale stored override can never resurrect a child while the parent is off.
     assert.equal(featureEnabled({ allocations: false, [key]: true }, key), false);

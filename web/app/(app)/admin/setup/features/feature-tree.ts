@@ -123,11 +123,14 @@ function missingRequirements(
 
 /**
  * Nest children under their parent row. Parents keep registry order within
- * their own category section; children attach to the parent's group (even
- * across categories — e.g. accounting's `advancedClose` under platform's
- * `flows`) in registry order. Rows with `requiresAll` but no `parentKey`
- * stay top-level. Children of an off parent are excluded from the visible
- * rows and counts; their stored values are untouched.
+ * their own category section; children attach to their ancestor's group in
+ * registry order. Nesting stops at a category boundary: a child declared in
+ * another tab (finance's `advancedClose` under platform's `flows`) is a
+ * top-level row in its own tab, carrying its parent as a "Requires" reason,
+ * so every switch lives on the tab its registry category names. Rows with
+ * `requiresAll` but no `parentKey` stay top-level. Children of an off parent
+ * are excluded from the visible rows and counts; their stored values are
+ * untouched.
  */
 export function buildFeatureTree(
   rows: FeatureTreeRow[],
@@ -145,12 +148,13 @@ export function buildFeatureTree(
     visible,
   })
 
-  // Walk to the TOP-LEVEL ancestor, not just the immediate parent. The
-  // switchboard has two visual levels, but the registry nests deeper than
-  // that — projects > timeTracking > fieldTime, and every HRM module under
-  // Human resources. Attaching only direct children of a top-level row
-  // would silently drop the deeper rows off the page entirely, so an org
-  // could never switch them on. Depth is carried so the row can indent.
+  // Walk to the TOP-LEVEL ancestor within the row's category, not just the
+  // immediate parent. The switchboard has two visual levels, but the
+  // registry nests deeper than that — projects > timeTracking > fieldTime,
+  // and every HRM module under Human resources. Attaching only direct
+  // children of a top-level row would silently drop the deeper rows off the
+  // page entirely, so an org could never switch them on. Depth is carried so
+  // the row can indent.
   const ancestry = (row: FeatureTreeRow): { root: FeatureTreeRow; depth: number } => {
     let current = row
     let depth = 0
@@ -158,7 +162,10 @@ export function buildFeatureTree(
     while (current.parentKey) {
       const parent = byKey.get(current.parentKey)
       // Unknown parent: fail visible as a top-level row rather than vanish.
-      if (!parent || seen.has(parent.key)) break
+      // A parent in another category ends the walk: the row stays on its
+      // own tab, gated by its requirement instead of hidden under a row
+      // the operator is not looking at.
+      if (!parent || seen.has(parent.key) || parent.category !== current.category) break
       seen.add(parent.key)
       current = parent
       depth += 1
@@ -207,4 +214,116 @@ export function buildFeatureTree(
         visibleOn: visible.filter((node) => node.on).length,
       }
     })
+}
+
+/** Lowercased, accent-free text so "resume" finds "Résumé" in every locale. */
+function foldSearchText(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}+/gu, '').toLocaleLowerCase()
+}
+
+/**
+ * Search predicate over one row's displayed text (title, description, and
+ * whatever else the caller supplies). Every whitespace-separated term must
+ * appear somewhere in that text, so "bank feed" narrows rather than widens.
+ * Returns null for a blank query: nothing to filter.
+ */
+export function featureSearchMatcher(
+  query: string,
+  textFor: (row: FeatureTreeRow) => string[],
+): ((row: FeatureTreeRow) => boolean) | null {
+  const terms = foldSearchText(query).split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return null
+  return (row) => {
+    const haystack = foldSearchText(textFor(row).join(' '))
+    return terms.every((term) => haystack.includes(term))
+  }
+}
+
+/**
+ * Narrow built sections to the rows a search matches. A group survives when
+ * its parent or any child matches. A matching parent keeps its normal
+ * children; otherwise only the matching children render, INCLUDING children
+ * hidden behind an off parent — a search for a capability must find it, and
+ * the row arrives locked with its "Requires" reason rather than not at all.
+ * Empty sections drop out; counts cover the rendered rows only.
+ */
+export function filterFeatureTree(
+  sections: FeatureTreeSection[],
+  matches: (row: FeatureTreeRow) => boolean,
+): FeatureTreeSection[] {
+  return sections
+    .map((section) => {
+      const groups = section.groups.flatMap((group): FeatureTreeGroup[] => {
+        if (matches(group.parent.row)) return [group]
+        const matched = group.children.filter((child) => matches(child.row))
+        if (matched.length === 0) return []
+        const visibleChildren = matched.map((child) => ({ ...child, visible: true }))
+        return [{ ...group, visibleChildren, hiddenChildCount: 0 }]
+      })
+      const rendered = groups.flatMap((group) => [group.parent, ...group.visibleChildren])
+      return {
+        category: section.category,
+        groups,
+        visibleTotal: rendered.length,
+        visibleOn: rendered.filter((node) => node.on).length,
+      }
+    })
+    .filter((section) => section.groups.length > 0)
+}
+
+/**
+ * One merged section holding the rows a key set names, across every tab, in
+ * tab order — the Industries tab's per-vertical view. The rows are the same
+ * nodes the home tabs render, so a switch reads and toggles identically
+ * wherever it appears. Null when no named row exists.
+ */
+export function featureLens(
+  sections: FeatureTreeSection[],
+  keys: ReadonlySet<string>,
+  category: string,
+): FeatureTreeSection | null {
+  const groups = filterFeatureTree(sections, (row) => keys.has(row.key)).flatMap((section) => section.groups)
+  if (groups.length === 0) return null
+  const rendered = groups.flatMap((group) => [group.parent, ...group.visibleChildren])
+  return {
+    category,
+    groups,
+    visibleTotal: rendered.length,
+    visibleOn: rendered.filter((node) => node.on).length,
+  }
+}
+
+/** Section key for Industries-category modules no industry preset names. */
+export const OTHER_INDUSTRY_MODULES = 'other'
+
+/** One industry preset as the Industries tab reads it: the keys it switches on. */
+export interface FeatureIndustry {
+  key: string
+  features: string[]
+}
+
+/**
+ * The Industries tab's sections: one per industry preset, the org's applied
+ * industry first, then every Industries-category module no preset names —
+ * so the tab can never hide a switch it owns.
+ */
+export function industryLenses(
+  sections: FeatureTreeSection[],
+  industries: FeatureIndustry[],
+  orgIndustry: string | null,
+): { key: string; section: FeatureTreeSection }[] {
+  const ordered = [
+    ...industries.filter((industry) => industry.key === orgIndustry),
+    ...industries.filter((industry) => industry.key !== orgIndustry),
+  ]
+  const lenses = ordered.flatMap((industry) => {
+    const section = featureLens(sections, new Set(industry.features), industry.key)
+    return section ? [{ key: industry.key, section }] : []
+  })
+  const named = new Set(industries.flatMap((industry) => industry.features))
+  const unnamed = (sections.find((section) => section.category === 'industries')?.groups ?? [])
+    .map((group) => group.parent.row.key)
+    .filter((key) => !named.has(key))
+  const other = featureLens(sections, new Set(unnamed), OTHER_INDUSTRY_MODULES)
+  return other ? [...lenses, { key: OTHER_INDUSTRY_MODULES, section: other }] : lenses
 }

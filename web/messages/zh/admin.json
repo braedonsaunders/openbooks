@@ -3280,7 +3280,7 @@
         "singular": "商品标识符",
         "description": "登记扫描时用于识别商品的精确 GTIN、UPC、EAN 和内部值。"
       },
-            "channel-account-maps": {
+      "channel-account-maps": {
         "title": "渠道记账科目",
         "singular": "渠道记账科目",
         "description": "各渠道记账至哪个总账科目，按网关与税务辖区，附生效日期。"
@@ -4085,7 +4085,7 @@
         "last": "最后一个值",
         "uniqueCount": "不同值数量"
       },
-            "channelAccountRole": {
+      "channelAccountRole": {
         "gateway_clearing": "网关清算",
         "revenue": "收入",
         "discount": "折扣",
@@ -5136,11 +5136,20 @@
         "dependents": "请先关闭从属功能：{features}。"
       },
       "categories": {
-        "sales": "销售与客户",
-        "operations": "运营",
-        "accounting": "会计",
+        "finance": "财务",
+        "sales": "销售",
+        "billing": "计费",
+        "inventory": "存货",
+        "projects": "项目",
+        "people": "人员",
+        "industries": "行业",
         "platform": "平台"
-      }
+      },
+      "tabsAria": "功能分组",
+      "searchPlaceholder": "搜索功能…",
+      "noMatches": "没有与“{query}”匹配的功能。",
+      "otherIndustryModules": "其他行业模块",
+      "yourIndustry": "您的行业"
     },
     "readiness": {
       "navTitle": "上线指南"
