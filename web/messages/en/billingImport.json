@@ -40,5 +40,7 @@
   "rerun": "Re-run",
   "rerunStarted": "Re-run started",
   "status": "Status",
-  "objects": "Objects"
+  "objects": "Objects",
+  "loadFailed": "Could not load billing imports.",
+  "requestFailed": "The billing platform did not answer."
 }
