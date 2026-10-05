@@ -322,6 +322,10 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_worker_qualifications", columnName: "identifier", transform: "null_out" },
   // HR-14 end
   { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
+  // Reviewer assignments map employments to reviewer parties: linkable
+  // identity, so masked sandboxes start with no overrides (NOT NULL jsonb
+  // nulls to '{}'). Scale and template snapshots stay: frozen configuration.
+  { tableName: "hrm_review_cycles", columnName: "reviewer_assignments", transform: "null_out" },
   { tableName: "hrm_exit_records", columnName: "destination", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "notes", transform: "redact" },
   // Correction evidence (0281) mirrors the exit row it corrects, so its
