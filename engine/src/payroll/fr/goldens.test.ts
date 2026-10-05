@@ -45,7 +45,7 @@ function adapterContext({ facts, answers, rates = {}, ctx }: AdapterInput, pushe
   return {
     tx: { execute: async () => ({ rows: facts.length ? [facts[Math.min(query++, facts.length - 1)]] : [] }) } as never,
     orgId: "org", subsidiaryId: "legal-employer", documentId: "doc", employeePartyId: "emp", employmentId: "employment",
-    employeeName: "Test", taxYear: 2026, country: "FR", region: "FR", emp: {}, filingAccountId: "fr-siret-account",
+    employeeName: "Test", taxYear: 2026, country: "FR", region: "FR", emp: { hired_on: "2020-01-01" }, filingAccountId: "fr-siret-account",
     run: { pay_date: "2026-06-15", run_type: "regular" }, periodsPerYear: 12, ...legs, gross: "2000.0000",
     statutoryHours: { regular: "151.6667", extra: "0" },
     // FR declares no pre-tax treatments: the reduced legs are derived via the real helper.
@@ -195,6 +195,20 @@ const GOLDENS: Golden[] = [
     },
     expected: { FAM_ER: "69.0000" },
   },
+  // The plafond accrues from the month of hire, not from January. Hired 1 June, paid 10 000 € in June: one
+  // month of ceiling, plafonnée 4 005 × 6,90 % = 276,35 + déplafonnée 10 000 × 0,40 % = 40,00 (accrued
+  // from January it would be 10 000 × 6,90 % = 690,00). Hired 16 June: 15 days → 4 005 × 15/30 = 2 002,50
+  // → 138,17 + 40,00.
+  ...[["2026-06-01", "316.3500"], ["2026-06-16", "178.1700"]].map(([hiredOn, vieilSal]) => ({
+    year: 2026, label: `adapter accrues the plafond from a ${hiredOn} hire`, citation: "URSSAF régularisation progressive du plafond; proratisation du plafond", engine: "adapter" as const,
+    input: {
+      facts: [{ fact_value: "10.00" }, { fact_value: "ordinary" }, { fact_value: "droit_commun" }, { remuneration: "0", stubs: 0 }],
+      answers: { domicile: "metropole", rgdu_eligibility: "excluded", apec_eligibility: "not_covered" },
+      rates: { fr_atmp: { taux: "1.1000" } },
+      ctx: { emp: { hired_on: hiredOn }, income: "10000.00", pensionable: "10000.00", gross: "10000.0000" },
+    },
+    expected: { VIEIL_SAL: vieilSal },
+  })),
   // The emitted rgdu_* lines must reconcile exactly to the calculator's 635,60 € adjustment.
   {
     year: 2026, label: "adapter emits the URSSAF June RGDU and apportions it to both institutions", citation: `${RGDU_PAGE}, June example`, engine: "adapter",
@@ -250,6 +264,7 @@ const REFUSALS: (Engine & { label: string; refusal: RegExp })[] = [
   },
   // The 748 € / 766 € contrats-courts abattement is transcribed but never applied, so the default grille would over-withhold.
   { label: "adapter for a declared short contract without a transmitted rate", engine: "adapter", input: { facts: [], answers: { domicile: "metropole", short_contract: "true" } }, refusal: /declared short contract.*abattement.*is not computed/ },
+  { label: "adapter without a hire date refuses to accrue the plafond from January", engine: "adapter", input: { facts: [{ fact_value: "10.00" }, { fact_value: "ordinary" }, { fact_value: "droit_commun" }], answers: { domicile: "metropole", rgdu_eligibility: "excluded", apec_eligibility: "not_covered" }, rates: { fr_atmp: { taux: "1.1000" } }, ctx: { emp: {} } }, refusal: /hire date is not recorded.*Record the hire date on the employee record/ },
   { label: "adapter without a known effectif names the employer fact", engine: "adapter", input: { facts: [], answers: { domicile: "metropole", apec_eligibility: "not_covered" } }, refusal: /Effectif salarié annuel de l'employeur.*effectif_moyen_annuel/ },
 ];
 

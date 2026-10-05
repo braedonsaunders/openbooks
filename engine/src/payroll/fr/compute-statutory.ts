@@ -71,7 +71,7 @@ import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import "./employee-facts.ts";
 import { calculateFrRgdu2026, committedFrRgduYearToDate, frRgduSmicFromHours2026 } from "./rgdu-2026.ts";
-import { committedFrPlafondYearToDate } from "./plafond-ytd.ts";
+import { committedFrPlafondYearToDate, frCeilingThirtieths } from "./plafond-ytd.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -416,9 +416,11 @@ export async function computeFrStatutory(
     : false;
   // Capped bases and T1/T2 regularise progressively from the year's
   // committed history, never from the annualised current versement
-  // (Urssaf régularisation progressive du plafond). Monthly pay counts
-  // elapsed ceiling months from the pay date; other periodicities count
-  // prior committed stubs, exact under complete history.
+  // (Urssaf régularisation progressive du plafond). Monthly pay accrues
+  // the ceiling over the months actually employed — from the hire month,
+  // prorated by calendar days in a month of entry or exit — so calendar
+  // gaps without pay still accrue; other periodicities count prior
+  // committed stubs, exact under complete history.
   const plafondHistory = await committedFrPlafondYearToDate({
     tx: ctx.tx,
     orgId: ctx.orgId,
@@ -437,6 +439,11 @@ export async function computeFrStatutory(
     ceilingPeriodsElapsed: periodsPerYear === 12
       ? Number(payDate.slice(5, 7))
       : plafondHistory.priorStubCount + 1,
+    ceilingThirtieths: periodsPerYear === 12
+      ? frCeilingThirtieths({
+        taxYear, payDate, hiredOn: ctx.emp["hired_on"], terminatedOn: ctx.emp["terminated_on"],
+      })
+      : undefined,
     employerEffectif,
     allocFamReducedEligible,
     agsInterim: agsEmployerType === "temporary_work_agency",
