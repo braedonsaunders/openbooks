@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "Auftragsmarge",
         "description": "Gespeicherte Deckungsbeitragsfakten je Kanalauftragszeile, die Marge als Formelkennzahlen."
+      },
+      "collection_recovery": {
+        "label": "Rückgewinnung aus Inkasso",
+        "description": "Eine Zeile pro Rechnung, die das automatische Inkasso belastet hat — Versuche, erste Ablehnungsklasse, ob eine spätere Position sie zurückgewinnen konnte und auf welchem Weg, sowie Tage bis zur Rückgewinnung. Nach Ablehnungsklasse und Anbieter gruppieren für Rückgewinnungsquoten."
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "Kostenstand",
         "currency": "Währung",
         "amount": "Betrag"
+      },
+      "collection_recovery": {
+        "invoice": "Rechnung",
+        "customer": "Kunde",
+        "invoice_day": "Rechnungsdatum",
+        "due_day": "Fälligkeitsdatum",
+        "currency": "Währung",
+        "invoice_total": "Rechnungssumme",
+        "attempts": "Versuche",
+        "failed_attempts": "Fehlgeschlagene Versuche",
+        "first_decline_class": "Erste Ablehnungsklasse",
+        "provider": "Anbieter",
+        "recovered": "Zurückgewonnen",
+        "recovered_via": "Rückgewinnung über",
+        "recovered_amount": "Zurückgewonnener Betrag",
+        "recovered_day": "Tag der Rückgewinnung",
+        "days_to_recover": "Tage bis zur Rückgewinnung",
+        "first_attempt_day": "Erster Versuchstag"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "Import",
       "manual": "Manuell",
       "settled": "Abgerechnet",
-      "estimated": "Geschätzt"
+      "estimated": "Geschätzt",
+      "hard": "Harte Ablehnung",
+      "soft": "Weiche Ablehnung",
+      "insufficient_funds": "Unzureichende Deckung",
+      "needs_authentication": "Authentifizierung erforderlich",
+      "primary": "Primäre Methode",
+      "backup": "Ersatzmethode"
     }
   },
   "operators": {

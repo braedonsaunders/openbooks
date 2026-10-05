@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "订单毛利",
         "description": "按渠道订单明细存储的贡献毛利数据，毛利以公式度量表示。"
+      },
+      "collection_recovery": {
+        "label": "催收回收",
+        "description": "自动催收引擎扣款的每张发票占一行 — 尝试次数、首次拒付类别、后续位置是否收回及收回途径、收回天数。按拒付类别和服务商分组查看回收率。"
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "成本状态",
         "currency": "货币",
         "amount": "金额"
+      },
+      "collection_recovery": {
+        "invoice": "发票",
+        "customer": "客户",
+        "invoice_day": "开票日期",
+        "due_day": "到期日",
+        "currency": "币种",
+        "invoice_total": "发票总额",
+        "attempts": "尝试次数",
+        "failed_attempts": "失败尝试",
+        "first_decline_class": "首次拒付类别",
+        "provider": "服务商",
+        "recovered": "已收回",
+        "recovered_via": "收回途径",
+        "recovered_amount": "收回金额",
+        "recovered_day": "收回日期",
+        "days_to_recover": "收回天数",
+        "first_attempt_day": "首次尝试日期"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "导入",
       "manual": "手动",
       "settled": "已结算",
-      "estimated": "估计"
+      "estimated": "估计",
+      "hard": "硬拒付",
+      "soft": "软拒付",
+      "insufficient_funds": "余额不足",
+      "needs_authentication": "需要验证",
+      "primary": "首选方式",
+      "backup": "备用方式"
     }
   },
   "operators": {

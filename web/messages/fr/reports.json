@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "Marge de la commande",
         "description": "Faits de marge sur coût variable enregistrés par ligne de commande du canal, la marge en mesures de formule."
+      },
+      "collection_recovery": {
+        "label": "Recouvrement des encaissements",
+        "description": "Une ligne par facture prélevée par le recouvrement automatique — tentatives, première classe de refus, récupération éventuelle par une position ultérieure et par quelle voie, et jours jusqu'à la récupération. Regroupez par classe de refus et par prestataire pour les taux de recouvrement."
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "État du coût",
         "currency": "Devise",
         "amount": "Montant"
+      },
+      "collection_recovery": {
+        "invoice": "Facture",
+        "customer": "Client",
+        "invoice_day": "Date de facture",
+        "due_day": "Échéance",
+        "currency": "Devise",
+        "invoice_total": "Total de la facture",
+        "attempts": "Tentatives",
+        "failed_attempts": "Tentatives échouées",
+        "first_decline_class": "Première classe de refus",
+        "provider": "Prestataire",
+        "recovered": "Récupéré",
+        "recovered_via": "Récupéré via",
+        "recovered_amount": "Montant récupéré",
+        "recovered_day": "Jour de récupération",
+        "days_to_recover": "Jours jusqu'à récupération",
+        "first_attempt_day": "Jour de la première tentative"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "Importation",
       "manual": "Manuel",
       "settled": "Réglé",
-      "estimated": "Estimé"
+      "estimated": "Estimé",
+      "hard": "Refus définitif",
+      "soft": "Refus temporaire",
+      "insufficient_funds": "Fonds insuffisants",
+      "needs_authentication": "Authentification requise",
+      "primary": "Méthode principale",
+      "backup": "Méthode de secours"
     }
   },
   "operators": {
