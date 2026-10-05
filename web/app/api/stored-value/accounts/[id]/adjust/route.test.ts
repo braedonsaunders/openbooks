@@ -45,6 +45,7 @@ test('a committed adjustment returns its exact large balance as a usable JSON re
   assert.equal(receipt.entryId, '01a10c33-abb8-797a-bd5a-058e59065554')
   assert.equal(state.calls[0]?.deltaMinor, 250001n)
   assert.equal(state.calls[0]?.idempotencyKey, body.idempotencyKey)
+  assert.equal(state.calls[0]?.allowedSubsidiaryIds, null, 'the route forwards the authoritative actor scope, never a guessed one')
   assert.deepEqual(state.grants, ['stored_value.adjust:storedValue'])
 })
 
@@ -61,5 +62,16 @@ test('an adjustment domain refusal retains its remedy and stable code', async ()
   const response = await post()
   assert.equal(response.status, 409)
   assert.equal((await response.json()).remedy, refusal.remedy)
+  state.error = null
+})
+
+test('an out-of-scope account answers a neutral not-found with no balance leak', async () => {
+  const { ScopeNotFoundError } = await import('@openbooks/engine/organization/scope')
+  state.calls.length = 0; state.error = new ScopeNotFoundError()
+  const response = await post()
+  assert.equal(response.status, 404, 'a hidden account reads as missing, never as a named refusal')
+  const body = await response.json()
+  assert.equal(body.error, 'not found')
+  assert.ok(!('balanceMinor' in body) && !('code' in body) && !('remedy' in body), 'no hidden state may ride the denial')
   state.error = null
 })

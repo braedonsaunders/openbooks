@@ -264,7 +264,9 @@ async function processOrgBreakage(orgId: string): Promise<number> {
      order by a.id
   `)).rows;
   for (const row of expired) {
-    await expireStoredValueAccount({ orgId, accountId: row.id, postingDate: today, idempotencyKey: row.id });
+    // The scheduled scan acts on every entity: explicit null is the
+    // intentional system sentinel.
+    await expireStoredValueAccount({ orgId, accountId: row.id, allowedSubsidiaryIds: null, postingDate: today, idempotencyKey: row.id });
     recognized++;
   }
 
@@ -280,7 +282,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
   for (const row of remote) {
     // The row lock serializes a concurrent redemption: the winner moves the
     // balance first and the loser re-reads it.
-    const account = await lockStoredValueAccount(orgId, row.id);
+    const account = await lockStoredValueAccount(orgId, row.id, null);
     if (account.status !== "active" || account.balanceMinor <= 0n) continue;
     const program = await loadStoredValueProgram(orgId, account.programId);
     if (program.breakagePolicy !== "remote") continue;
@@ -299,7 +301,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
      order by a.id
   `)).rows;
   for (const row of proportional) {
-    const account = await lockStoredValueAccount(orgId, row.id);
+    const account = await lockStoredValueAccount(orgId, row.id, null);
     if (account.status !== "active" || account.balanceMinor <= 0n) continue;
     const program = await loadStoredValueProgram(orgId, account.programId);
     if (program.breakagePolicy !== "proportional") continue;

@@ -10,6 +10,11 @@ import { loadControlAccounts } from "../records/control-accounts.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { featureEnabled } from "../organization/feature-registry.ts";
 import {
+  resolveDraftSubsidiary,
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+} from "../organization/subsidiary-scope.ts";
+import {
   accountFunctionalTotal,
   carryingShare,
   ensureMonetaryLiability,
@@ -541,7 +546,28 @@ type StoredValueAccountRaw = {
   issuedMinorRaw: string; balanceMinorRaw: string; breakageRecognizedMinorRaw: string;
 };
 
-export async function lockStoredValueAccount(orgId: string, accountId: string): Promise<StoredValueAccountRow> {
+/**
+ * Actor entity visibility for one locked account. Unknown scope (undefined)
+ * fails closed exactly like a denial — it is never coalesced to the
+ * unrestricted null, which stays an explicit system-only sentinel the caller
+ * writes out. Runs under the account's row lock, BEFORE any
+ * balance/status/party refusal downstream, so a hidden record's state can
+ * never leak through a named error: out-of-scope reads as missing.
+ */
+function assertStoredValueVisible(
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+  subsidiaryId: string,
+): void {
+  if (allowedSubsidiaryIds === undefined) throw new ScopeNotFoundError();
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) throw new ScopeNotFoundError();
+}
+
+export async function lockStoredValueAccount(
+  orgId: string,
+  accountId: string,
+  /** REQUIRED actor scope; explicit null only for system flows acting on a document-anchored entity. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<StoredValueAccountRow> {
   const rows = (await db.execute<StoredValueAccountRaw>(sql`
     select id, org_id as "orgId", program_id as "programId", kind, code_hash as "codeHash",
            code_last4 as "codeLast4", customer_party_id as "customerPartyId", currency,
@@ -572,6 +598,11 @@ export async function lockStoredValueAccount(orgId: string, accountId: string): 
       remedy: "Retry the operation.",
     });
   }
+  // Locked, then scoped: the check sees the latest committed entity under
+  // the row lock, so a concurrent rehome cannot move the account between the
+  // read and the mutation. Out-of-scope reads as missing, before any named
+  // balance/status/party refusal below can name the hidden record.
+  assertStoredValueVisible(allowedSubsidiaryIds, row.subsidiaryId);
   return {
     ...row,
     issuedMinor: BigInt(row.issuedMinorRaw),
@@ -788,7 +819,14 @@ export interface IssueInput {
   /** Minor units, must be positive. */
   amountMinor: bigint;
   currency: string;
-  /** Issuing legal entity; the hierarchy root when omitted, like documents. */
+  /**
+   * REQUIRED actor scope (explicit null only for system flows): a restricted
+   * caller's issue lands in their single allowed entity, or refuses by name
+   * asking for a visible entity — the org root is never assigned on their
+   * behalf. Validated BEFORE numbering, mint, or journal.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  /** Issuing legal entity; the hierarchy root when an unrestricted caller omits it, like documents. */
   subsidiaryId?: string | null;
   customerPartyId?: string | null;
   expiresOn?: string | null;
@@ -827,6 +865,29 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
   });
   if (prior) {
     return { accountId: prior.accountId, code: null, entryId: prior.entryId, journalEntryId: prior.journalEntryId, replayed: true };
+  }
+  // The issuing entity resolves from the actor's scope BEFORE any program,
+  // currency, or amount refusal: a caller naming a foreign entity is told
+  // which entities they may use, and an unknown scope never becomes the
+  // unrestricted root. Unrestricted callers keep the legacy default.
+  if (input.allowedSubsidiaryIds === undefined) throw new ScopeNotFoundError();
+  const resolvedSubsidiary = resolveDraftSubsidiary(input.allowedSubsidiaryIds, input.subsidiaryId ?? null);
+  if (!resolvedSubsidiary.ok) {
+    throw storedValueRefusal(
+      resolvedSubsidiary.error === "subsidiary_out_of_scope"
+        ? {
+          message: "The issuing legal entity is outside your subsidiary access.",
+          code: "stored_value_subsidiary_out_of_scope",
+          remedy: "Choose one of your visible legal entities as the issuing entity.",
+          field: "subsidiaryId",
+        }
+        : {
+          message: "Stored-value issuance needs an issuing legal entity.",
+          code: "stored_value_subsidiary_required",
+          remedy: "Choose the legal entity issuing this stored value.",
+          field: "subsidiaryId",
+        },
+    );
   }
   const program = await loadStoredValueProgram(input.orgId, input.programId);
   if (!program.isActive) {
@@ -894,7 +955,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
   requireDate(postingDate, "posting date");
   // A direct issue is an off-document event: it prices at the business-date
   // spot on its own entity, and both journal legs convert alike.
-  const context = await postingContext(db, input.orgId, postingDate, input.subsidiaryId ?? null);
+  const context = await postingContext(db, input.orgId, postingDate, resolvedSubsidiary.subsidiaryId);
   const eventRate = await resolveEventRate(db, input.orgId, input.currency, context.currency, postingDate, null);
   const functional = functionalMinor(input.amountMinor, eventRate.units);
 
@@ -967,6 +1028,8 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
 export interface RedeemInput {
   orgId: string;
   accountId: string;
+  /** REQUIRED actor scope; explicit null only for posting-commit steps whose document entity was already gated at draft creation. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Minor units, must be positive and within the available balance. */
   amountMinor: bigint;
   documentId?: string | null;
@@ -995,7 +1058,7 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
       remedy: "Enter the redemption amount as a positive value.",
     });
   }
-  const account = await lockStoredValueAccount(input.orgId, input.accountId);
+  const account = await lockStoredValueAccount(input.orgId, input.accountId, input.allowedSubsidiaryIds);
   // Checked under the row lock, so a concurrent retry waits for the first
   // write and then finds its entry instead of redeeming a second time.
   const prior = await priorStoredValueEntry(input.orgId, `stored-value:redeem-entry:${input.idempotencyKey}`, {
@@ -1176,6 +1239,8 @@ async function priceRedemption(
 export interface AdjustInput {
   orgId: string;
   accountId: string;
+  /** REQUIRED actor scope; explicit null only for system flows. Visibility is enforced under the row lock before any named refusal. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Signed minor units: positive raises the balance, negative lowers it. */
   deltaMinor: bigint;
   /** Mandatory: an out-of-document balance change is audit evidence. */
@@ -1209,7 +1274,7 @@ export async function adjustStoredValue(input: AdjustInput): Promise<{ entryId: 
       remedy: "Enter a nonzero correction amount.",
     });
   }
-  const account = await lockStoredValueAccount(input.orgId, input.accountId);
+  const account = await lockStoredValueAccount(input.orgId, input.accountId, input.allowedSubsidiaryIds);
   const prior = await priorStoredValueEntry(input.orgId, `stored-value:adjust-entry:${input.idempotencyKey}`, {
     accountId: account.id,
     kind: "adjust",
@@ -1322,12 +1387,14 @@ const STATUS_TRANSITIONS: Record<StoredValueStatus, readonly StoredValueStatus[]
 export async function setStoredValueStatus(input: {
   orgId: string;
   accountId: string;
+  /** REQUIRED actor scope; explicit null only for system flows. Visibility is enforced under the row lock before any named refusal. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   to: StoredValueStatus;
   reason?: string | null;
   actorId?: string | null;
 }): Promise<void> {
   await requireStoredValueFeature(db, input.orgId);
-  const account = await lockStoredValueAccount(input.orgId, input.accountId);
+  const account = await lockStoredValueAccount(input.orgId, input.accountId, input.allowedSubsidiaryIds);
   if (!STATUS_TRANSITIONS[account.status].includes(input.to)) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} cannot move from ${account.status} to ${input.to}.`,
@@ -1382,27 +1449,35 @@ export interface BalanceView {
 
 /** Balance lookup by code for POS/storefront use. The code is normalized
  * and hashed, then compared in constant time — a wrong code reveals nothing
- * about any stored code. Unknown codes refuse identically to inactive ones
- * would to an unauthenticated caller; the route adds its own authz. */
-export async function lookupStoredValueByCode(orgId: string, code: string): Promise<BalanceView | null> {
+ * about any stored code. Unknown codes, out-of-scope accounts, and unknown
+ * scope all read identically as missing, so no caller can probe which codes
+ * exist in entities they cannot see. */
+export async function lookupStoredValueByCode(
+  orgId: string,
+  code: string,
+  /** REQUIRED actor scope; explicit null only for code-Bearer [REDACTED] flows where the code itself is the credential. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<BalanceView | null> {
   const normalized = normalizeStoredValueCode(code);
   if (!normalized) return null;
+  if (allowedSubsidiaryIds === undefined) return null;
   const digest = hashStoredValueCode(orgId, code);
   const rows = (await db.execute<{
     id: string; programId: string; kind: StoredValueKind; currency: string;
     balanceMinor: string; status: StoredValueStatus; expiresOn: string | null;
-    customerPartyId: string | null; codeHash: string;
+    customerPartyId: string | null; codeHash: string; subsidiaryId: string;
   }>(sql`
     select id, program_id as "programId", kind, currency,
            balance_minor::text as "balanceMinor", status,
            expires_on::text as "expiresOn", customer_party_id as "customerPartyId",
-           code_hash as "codeHash"
+           code_hash as "codeHash", subsidiary_id as "subsidiaryId"
       from stored_value_accounts
      where org_id = ${orgId} and code_hash = ${digest}
      limit 1
   `)).rows;
   const row = rows[0];
   if (!row || !digestsEqual(digest, row.codeHash)) return null;
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
   return {
     accountId: row.id,
     programId: row.programId,
@@ -1437,19 +1512,26 @@ export interface TenderResolution {
  * design: posting re-locks the account and re-verifies everything, so this
  * read names unknown codes early without ever authorizing the spend.
  */
-export async function resolveStoredValueTender(orgId: string, code: string): Promise<TenderResolution | null> {
+export async function resolveStoredValueTender(
+  orgId: string,
+  code: string,
+  /** REQUIRED actor scope; draft validation inside a posting commit passes explicit null and posting re-locks. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<TenderResolution | null> {
   const normalized = normalizeStoredValueCode(code);
   if (!normalized) return null;
+  if (allowedSubsidiaryIds === undefined) return null;
   const digest = hashStoredValueCode(orgId, code);
   const rows = (await db.execute<{
     id: string; kind: StoredValueKind; currency: string; balanceRaw: string;
     status: StoredValueStatus; customerPartyId: string | null; codeHash: string;
     codeLast4: string; accountLiability: string | null; programLiability: string | null;
+    subsidiaryId: string;
   }>(sql`
     select a.id, a.kind, a.currency, a.balance_minor::text as "balanceRaw", a.status,
            a.customer_party_id as "customerPartyId", a.code_hash as "codeHash",
            a.code_last4 as "codeLast4", a.liability_account_id as "accountLiability",
-           p.liability_account_id as "programLiability"
+           p.liability_account_id as "programLiability", a.subsidiary_id as "subsidiaryId"
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.code_hash = ${digest}
@@ -1457,6 +1539,7 @@ export async function resolveStoredValueTender(orgId: string, code: string): Pro
   `)).rows;
   const row = rows[0];
   if (!row || !digestsEqual(digest, row.codeHash)) return null;
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
   return {
     accountId: row.id,
     kind: row.kind,
@@ -1479,16 +1562,20 @@ export async function resolveStoredValueTender(orgId: string, code: string): Pro
 export async function loadStoredValueTenderAccount(
   orgId: string,
   accountId: string,
+  /** REQUIRED actor scope; draft validation inside a posting commit passes explicit null and posting re-locks. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<TenderResolution | null> {
+  if (allowedSubsidiaryIds === undefined) return null;
   const rows = (await db.execute<{
     id: string; kind: StoredValueKind; currency: string; balanceRaw: string;
     status: StoredValueStatus; customerPartyId: string | null;
     codeLast4: string; accountLiability: string | null; programLiability: string | null;
+    subsidiaryId: string;
   }>(sql`
     select a.id, a.kind, a.currency, a.balance_minor::text as "balanceRaw", a.status,
            a.customer_party_id as "customerPartyId",
            a.code_last4 as "codeLast4", a.liability_account_id as "accountLiability",
-           p.liability_account_id as "programLiability"
+           p.liability_account_id as "programLiability", a.subsidiary_id as "subsidiaryId"
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.id = ${accountId}
@@ -1496,6 +1583,7 @@ export async function loadStoredValueTenderAccount(
   `)).rows;
   const row = rows[0];
   if (!row) return null;
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
   return {
     accountId: row.id,
     kind: row.kind,
@@ -1527,7 +1615,10 @@ export interface DocumentIssueInput {
  * document's own posting already moved DR bank/AR against CR liability —
  * this mints the redeemable account and the issue entry pointing at that
  * journal, so the sale still posts exactly once. Replays find the first
- * entry and report it without minting a second code.
+ * entry and report it without minting a second code. This takes no actor
+ * scope: the account is minted into the posted document's own entity and no
+ * existing account is read, and the actor's visibility was already gated
+ * when the document draft was created.
  */
 export async function attachDocumentIssue(input: DocumentIssueInput): Promise<IssueResult> {
   await requireStoredValueFeature(db, input.orgId);
@@ -1641,12 +1732,14 @@ export async function attachDocumentIssue(input: DocumentIssueInput): Promise<Is
 export async function expireStoredValueAccount(input: {
   orgId: string;
   accountId: string;
+  /** REQUIRED actor scope; the scheduled scan passes explicit null as the intentional system sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   postingDate: string;
   idempotencyKey: string;
   actorId?: string | null;
 }): Promise<{ entryId: string; journalEntryId: string | null }> {
   await requireStoredValueFeature(db, input.orgId);
-  const account = await lockStoredValueAccount(input.orgId, input.accountId);
+  const account = await lockStoredValueAccount(input.orgId, input.accountId, input.allowedSubsidiaryIds);
   if (account.status === "expired" || account.status === "closed") {
     const prior = (await db.execute<{ id: string }>(sql`
       select id from stored_value_entries

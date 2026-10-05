@@ -8,6 +8,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { StoredValueError } from '@openbooks/engine/stored-value'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 
 /**
@@ -84,6 +86,8 @@ export interface StoredValueIssueData {
   programs: { id: string; name: string; kind: string; kindLabel: string; currency: string }[]
   customers: { id: string; name: string }[]
   debitAccounts: { id: string; name: string }[]
+  /** Legal entities the caller may issue into: the only subsidiary options the form offers. */
+  subsidiaries: { id: string; name: string }[]
   closeHref: string
 }
 
@@ -135,26 +139,50 @@ export async function loadStoredValuePage(
   const canManage = can(authz, 'stored_value.manage')
   const canAdjust = can(authz, 'stored_value.adjust')
   const [t, org] = await Promise.all([getTranslations('storedValue'), orgInfo(orgId)])
-  const baseCurrency = org?.base_currency ?? 'USD'
+  // No invented fallback currency: without the org row there is nothing to
+  // sum in, so the page boundary renders this named refusal instead.
+  const baseCurrency = org?.base_currency
+  if (!baseCurrency) {
+    throw new StoredValueError({
+      message: 'The organization cannot be read, so stored-value balances have no currency to render in.',
+      status: 422,
+      code: 'stored_value_org_unreadable',
+      remedy: 'Ask an administrator to verify the organization, then retry.',
+    })
+  }
   const { money } = await getMoneyFormatter(orgId)
   const accountId = pickString(sp.account)
   const issuing = pickString(sp.issue) === '1' && canManage
+  // A restricted caller reads only their entities: every balance below
+  // carries the visibility predicate, so KPIs can never expose foreign debt.
+  // Unknown scope fails closed inside the shared filter, never as null.
+  const scope = authz.allowedSubsidiaryIds
 
   // KPIs count base-currency accounts only: foreign-currency balances cannot
   // be summed without a rate, and a converted total would misstate the debt.
   const [summary, open, pickers, issuePickers] = await Promise.all([
     db.execute<KpiRow>(sql`
       select coalesce((select sum(balance_minor) from stored_value_accounts
-        where org_id = ${orgId} and currency = ${baseCurrency} and status in ('active','frozen')), 0) as outstanding,
-      coalesce((select sum(amount_minor) from stored_value_entries
-        where org_id = ${orgId} and currency = ${baseCurrency} and kind = 'issue'
-          and created_at >= date_trunc('month', now())), 0) as issued,
-      coalesce((select -sum(amount_minor) from stored_value_entries
-        where org_id = ${orgId} and currency = ${baseCurrency} and kind = 'redeem'
-          and created_at >= date_trunc('month', now())), 0) as redeemed,
-      coalesce((select -sum(amount_minor) from stored_value_entries
-        where org_id = ${orgId} and currency = ${baseCurrency} and kind = 'breakage'
-          and created_at >= date_trunc('month', now())), 0) as breakage`),
+        where org_id = ${orgId} and currency = ${baseCurrency} and status in ('active','frozen')
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}), 0) as outstanding,
+      coalesce((select sum(e.amount_minor) from stored_value_entries e
+        where e.org_id = ${orgId} and e.currency = ${baseCurrency} and e.kind = 'issue'
+          and e.created_at >= date_trunc('month', now())
+          and exists (select 1 from stored_value_accounts a
+            where a.org_id = e.org_id and a.id = e.account_id
+            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, scope)})), 0) as issued,
+      coalesce((select -sum(e.amount_minor) from stored_value_entries e
+        where e.org_id = ${orgId} and e.currency = ${baseCurrency} and e.kind = 'redeem'
+          and e.created_at >= date_trunc('month', now())
+          and exists (select 1 from stored_value_accounts a
+            where a.org_id = e.org_id and a.id = e.account_id
+            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, scope)})), 0) as redeemed,
+      coalesce((select -sum(e.amount_minor) from stored_value_entries e
+        where e.org_id = ${orgId} and e.currency = ${baseCurrency} and e.kind = 'breakage'
+          and e.created_at >= date_trunc('month', now())
+          and exists (select 1 from stored_value_accounts a
+            where a.org_id = e.org_id and a.id = e.account_id
+            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, scope)})), 0) as breakage`),
     accountId && isUuid(accountId)
       ? db.execute<AccountRow>(sql`
           select sva.id, sva.kind, sva.code_last4, cust.display_name as customer_name,
@@ -173,7 +201,8 @@ export async function loadStoredValuePage(
             left join parties cust on cust.org_id = sva.org_id and cust.id = sva.customer_party_id
             left join accounts la on la.org_id = sva.org_id and la.id = svp.liability_account_id
             left join accounts ba on ba.org_id = sva.org_id and ba.id = svp.breakage_income_account_id
-           where sva.org_id = ${orgId} and sva.id = ${accountId}`)
+           where sva.org_id = ${orgId} and sva.id = ${accountId}
+           ${subsidiaryVisibleFilter(sql`sva.subsidiary_id`, scope)}`)
       : null,
     accountId && isUuid(accountId)
       ? Promise.all([
@@ -182,6 +211,9 @@ export async function loadStoredValuePage(
                  reason, document_id, journal_entry_id,
                  created_at::text from stored_value_entries
            where org_id = ${orgId} and account_id = ${accountId}
+             and exists (select 1 from stored_value_accounts a
+               where a.org_id = ${orgId} and a.id = ${accountId}
+               ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, scope)})
            order by created_at desc limit 100`),
         canAdjust
           ? db.execute<{ id: string; name: string }>(sql`
@@ -203,6 +235,13 @@ export async function loadStoredValuePage(
           select id, concat_ws(' · ', number, name) as name from accounts
            where org_id = ${orgId} and is_active and not is_summary
              and type in ('bank','cash','undeposited') order by number nulls last`),
+        // The only issuing entities the caller may use: elimination entities
+        // never issue, and a restricted caller sees their allowed set alone.
+        db.execute<{ id: string; name: string }>(sql`
+          select id, name from subsidiaries
+           where org_id = ${orgId} and is_active and not is_elimination
+           ${subsidiaryVisibleFilter(sql`id`, scope)}
+           order by name`),
       ])
       : null,
   ])
@@ -284,6 +323,7 @@ export async function loadStoredValuePage(
         })),
         customers: issuePickers[1].rows.map((c) => ({ id: String(c.id), name: String(c.name) })),
         debitAccounts: issuePickers[2].rows,
+        subsidiaries: issuePickers[3].rows.map((s) => ({ id: String(s.id), name: String(s.name) })),
         closeHref,
       }
       : null,

@@ -371,7 +371,7 @@ test("a stored-value tender posts debit liability and reduces the balance", { sk
     const sv = await seedStoredValue(org, actorId);
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId, programId: sv.giftProgramId, amountMinor: toUnits("100"),
+        orgId: org.orgId, allowedSubsidiaryIds: null, programId: sv.giftProgramId, amountMinor: toUnits("100"),
         currency: "CAD", debitAccountId: org.accounts.bank, postingDate: org.date,
         idempotencyKey: `till-gift-${randomUUID()}`, actorId,
       }),
@@ -413,7 +413,7 @@ test("an overdrawn stored-value tender refuses naming the balance and posts noth
     const sv = await seedStoredValue(org, actorId);
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId, programId: sv.giftProgramId, amountMinor: toUnits("50"),
+        orgId: org.orgId, allowedSubsidiaryIds: null, programId: sv.giftProgramId, amountMinor: toUnits("50"),
         currency: "CAD", debitAccountId: org.accounts.bank, postingDate: org.date,
         idempotencyKey: `till-gift-${randomUUID()}`, actorId,
       }),
@@ -443,7 +443,7 @@ test("a cash refund to store credit loads the named account", { skip: !DB }, asy
     const sv = await seedStoredValue(org, actorId);
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId, programId: sv.creditProgramId, amountMinor: toUnits("20"),
+        orgId: org.orgId, allowedSubsidiaryIds: null, programId: sv.creditProgramId, amountMinor: toUnits("20"),
         currency: "CAD", customerPartyId: org.customerId, debitAccountId: org.accounts.bank,
         postingDate: org.date, idempotencyKey: `till-credit-${randomUUID()}`, actorId,
       }),

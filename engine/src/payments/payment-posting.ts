@@ -418,6 +418,9 @@ export async function postPaymentWithApplications(
         await redeemStoredValue({
           orgId: doc.orgId,
           accountId: tender.accountId,
+          // Posting-commit step on the already-gated receipt: explicit null
+          // is the intentional system sentinel; same-entity is refused by name.
+          allowedSubsidiaryIds: null,
           amountMinor: toUnits(tender.amount),
           documentId: doc.id,
           journalEntryId: entryId,

@@ -82,7 +82,7 @@ async function seedCommerceOrg(): Promise<Fixture> {
   );
   await withBypass(() =>
     issueStoredValue({
-      orgId: org.orgId,
+      orgId: org.orgId, allowedSubsidiaryIds: null,
       programId: program.id,
       // Stored-value minor units are ten-thousandths (units4("50")), not cents.
       amountMinor: 500000n,
@@ -343,7 +343,7 @@ test("the stored-value tie is scoped by entity and measured in functional curren
       createProgram({ orgId: fx.org.orgId, name: "US gift cards", kind: "gift_card", liabilityAccountId: usLiability, actorId: fx.actor }));
     await withBypass(() =>
       issueStoredValue({
-        orgId: fx.org.orgId,
+        orgId: fx.org.orgId, allowedSubsidiaryIds: null,
         programId: program.id,
         amountMinor: 250000n,
         currency: "USD",

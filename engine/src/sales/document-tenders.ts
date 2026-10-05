@@ -629,6 +629,9 @@ export async function redeemCashSaleTenders(
       await redeemStoredValue({
         orgId,
         accountId: row.storedValueAccountId as string,
+        // Posting-commit step on the already-gated sale: explicit null is
+        // the intentional system sentinel; same-entity is refused by name.
+        allowedSubsidiaryIds: null,
         amountMinor: row.amountMinor,
         documentId,
         journalEntryId: options.journalEntryId,
@@ -724,6 +727,9 @@ export async function settleCashRefundTenders(
     try {
       loaded = await attachDocumentLoad({
         orgId,
+        // Posting-commit step on the already-gated refund: explicit null is
+        // the intentional system sentinel; the top-up asserts the entity.
+        allowedSubsidiaryIds: null,
         accountId: row.storedValueAccountId,
         programId: row.storedValueAccountId ? null : programId,
         customerPartyId: parent.partyId,

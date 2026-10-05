@@ -31,6 +31,9 @@ export const POST = defineRoute({
         adjustStoredValue({
           orgId: authz.user.orgId,
           accountId: id,
+          // Visibility is enforced under the row lock before any named
+          // balance/status refusal, so a hidden account reads as missing.
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           deltaMinor: toUnits(body.delta),
           reason: body.reason,
           offsetAccountId: body.offsetAccountId,

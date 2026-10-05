@@ -391,7 +391,7 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
       liabilityAccountId: org.accounts.taxOutput, actorId: actor,
     }));
     const issued = await withBypass(() => issueStoredValue({
-      orgId: org.orgId, programId: program.id, amountMinor: 500000n, currency: "CAD",
+      orgId: org.orgId, allowedSubsidiaryIds: null, programId: program.id, amountMinor: 500000n, currency: "CAD",
       debitAccountId: org.accounts.bank, idempotencyKey: `test-gc-refund-1005`, postingDate: org.date, actorId: actor,
     }));
     await withBypass(() => linkExternal(org.orgId, actor, {

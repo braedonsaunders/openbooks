@@ -54,7 +54,9 @@ export async function reverseStoredValueForVoidedDocument(input: {
   // Accounts lock in id order, like split-tender redemption, so concurrent
   // voids and redemptions of the same cards cannot deadlock.
   for (const accountId of [...byAccount.keys()].sort()) {
-    const account = await lockStoredValueAccount(input.orgId, accountId);
+    // The void reverses the document's own effects: explicit null is the
+    // intentional system sentinel, and each touched account keeps its entity.
+    const account = await lockStoredValueAccount(input.orgId, accountId, null);
     let balance = account.balanceMinor;
     let issued = account.issuedMinor;
     const pending: Array<{ effect: DocumentEffect; amountMinor: bigint; balanceAfter: bigint }> = [];

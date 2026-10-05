@@ -239,11 +239,15 @@ export async function updateDraftPayment(
       for (const tender of patch.storedValueTenders) {
         const tenderUnits = persistPaymentMoney(tender.amount, "stored-value tender amount");
         if (tenderUnits <= 0n) throw new PaymentError("stored-value tender amount must be positive");
+        // Draft validation inside the posting path: explicit null is the
+        // intentional system sentinel — posting re-locks each account and
+        // re-verifies entity, balance, currency, and status.
         const resolved = "code" in tender && tender.code
-          ? await resolveStoredValueTender(doc.orgId, tender.code)
+          ? await resolveStoredValueTender(doc.orgId, tender.code, null)
           : await loadStoredValueTenderAccount(
             doc.orgId,
             "accountId" in tender && typeof tender.accountId === "string" ? tender.accountId : "",
+            null,
           );
         if (!resolved) throw new PaymentError("stored-value code not found; check the code and retry");
         if (resolved.status !== "active") {

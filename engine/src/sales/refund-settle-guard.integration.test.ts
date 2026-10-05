@@ -129,7 +129,7 @@ async function setupGuardWorld(): Promise<GuardSetup> {
     values (${customerB}, ${org.orgId}, 'customer', 'Second Customer', true, '{}'::jsonb)`));
   const issuedB = await withBypass(() =>
     issueStoredValue({
-      orgId: org.orgId, programId: creditProgram.id, amountMinor: toUnits("50"),
+      orgId: org.orgId, allowedSubsidiaryIds: null, programId: creditProgram.id, amountMinor: toUnits("50"),
       currency: "CAD", customerPartyId: customerB, debitAccountId: org.accounts.bank,
       postingDate: org.date, idempotencyKey: `guard-seed-${randomUUID()}`, actorId,
     }),
@@ -221,7 +221,7 @@ test("a replayed settle fills the tender row instead of minting twice", { skip: 
     // recording the account back on the tender row.
     const crashed = await withBypass(() =>
       attachDocumentLoad({
-        orgId: org.orgId, accountId: null, programId: setup.creditProgramId,
+        orgId: org.orgId, allowedSubsidiaryIds: null, accountId: null, programId: setup.creditProgramId,
         customerPartyId: setup.customerA, amountMinor: toUnits("25"), currency: "CAD",
         documentId: refundId, journalEntryId: entryId,
         idempotencyKey: `cash-refund-tender:${refundId}:${tenderId}`, actorId,
@@ -258,7 +258,7 @@ test("a bearer gift card still tops up from any refund", { skip: !DB }, async ()
     );
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId, programId: giftProgram.id, amountMinor: toUnits("40"),
+        orgId: org.orgId, allowedSubsidiaryIds: null, programId: giftProgram.id, amountMinor: toUnits("40"),
         currency: "CAD", debitAccountId: org.accounts.bank,
         postingDate: org.date, idempotencyKey: `guard-gift-${randomUUID()}`, actorId,
       }),
@@ -291,7 +291,7 @@ test("a sale cannot redeem another customer's credit at posting", { skip: !DB },
     await assert.rejects(
       withBypass(() =>
         redeemStoredValue({
-          orgId: org.orgId, accountId: setup.accountB, amountMinor: toUnits("10"),
+          orgId: org.orgId, allowedSubsidiaryIds: null, accountId: setup.accountB, amountMinor: toUnits("10"),
           documentId: saleId, idempotencyKey: `guard-redeem-${randomUUID()}`, actorId,
         }),
       ),
