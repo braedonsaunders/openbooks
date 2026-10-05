@@ -1,4 +1,4 @@
-import { importStripeBilling } from "@openbooks/engine/src/sync/stripe-billing.ts";
+import { importStripeBilling } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

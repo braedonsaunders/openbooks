@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { validateStoredTaxId } from '@openbooks/engine/src/tax/cross-border-records.ts'
-import { VatValidationError } from '@openbooks/engine/src/connectors/vat-validation.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/database'
+import { validateStoredTaxId } from '@openbooks/engine/tax'
+import { VatValidationError } from '@openbooks/engine/connectors'
 
 export const runtime = 'nodejs'
 

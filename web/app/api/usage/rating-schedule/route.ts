@@ -1,4 +1,4 @@
-import { listUsageRatingSettings, saveUsageRatingSchedule } from "@openbooks/engine/src/billing/usage/rating-schedule.ts";
+import { listUsageRatingSettings, saveUsageRatingSchedule } from "@openbooks/engine/billing";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

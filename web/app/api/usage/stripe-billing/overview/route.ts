@@ -1,4 +1,4 @@
-import { getStripeBillingOverview } from "@openbooks/engine/src/sync/stripe-billing.ts";
+import { getStripeBillingOverview } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 
 export const GET = defineRoute({

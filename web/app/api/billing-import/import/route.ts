@@ -1,4 +1,4 @@
-import { runBillingImportById } from "@openbooks/engine/src/sync/billing-history-import.ts";
+import { runBillingImportById } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

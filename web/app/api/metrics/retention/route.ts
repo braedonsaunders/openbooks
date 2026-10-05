@@ -1,4 +1,4 @@
-import { readRetentionStrip } from "@openbooks/engine/src/billing/metrics/metrics-ledger.ts";
+import { readRetentionStrip } from "@openbooks/engine/billing";
 import { defineRoute } from "@/lib/api/route";
 
 /**

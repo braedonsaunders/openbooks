@@ -3,8 +3,8 @@ import { sql } from 'drizzle-orm';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { recordSupplyEvidence } from '@openbooks/engine/src/tax/cross-border-records.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
+import { recordSupplyEvidence } from '@openbooks/engine/tax'
 
 export const runtime = 'nodejs'
 

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
-import { db, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgContext } from "@openbooks/engine/platform/database";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";

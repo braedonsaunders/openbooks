@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { computeOssReturn } from '@openbooks/engine/src/tax-returns/oss-return.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { computeOssReturn } from '@openbooks/engine/tax-returns'
 
 export const runtime = 'nodejs'
 
