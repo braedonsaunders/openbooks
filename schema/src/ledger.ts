@@ -211,9 +211,10 @@ export const journalLines = pgTable(
     /**
      * Who contributed this line beyond the posting kernel: null = kernel,
      * 'rule' (allocation rule version), 'script' (custom_gl_lines user
-     * script), 'app', 'intercompany' (balancing legs). `contributor_ref` is
-     * the version/script/app id. Lets the GL impact view lock standard lines
-     * and show contributed lines separately.
+     * script), 'app', 'intercompany' (balancing legs), 'contract_cost_asset'
+     * (the capitalized contract cost the asset leg relieves).
+     * `contributor_ref` is the version/script/app/asset id. Lets the GL
+     * impact view lock standard lines and show contributed lines separately.
      */
     contributorKind: text("contributor_kind"),
     contributorRef: uuid("contributor_ref"),
