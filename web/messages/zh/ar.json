@@ -572,6 +572,7 @@
       "provider": "服务商",
       "decline": "拒绝原因",
       "nextRetry": "下次重试{date}。",
+      "nextRetryHeader": "下次重试",
       "attemptedAt": "尝试时间",
       "status": "状态",
       "method": "方式",
@@ -631,7 +632,12 @@
       "breakdownTitle": "按拒付类别和服务商",
       "breakdownSummary": "本期回收率",
       "breakdownRow": "{failed} 失败 · {recovered} 收回 · {rate}",
-      "openReports": "在报表中查看完整历史"
+      "openReports": "在报表中查看完整历史",
+      "policyNotice": {
+        "title": "没有生效的催收政策",
+        "description": "自动催收已开启，但客户发票没有任何生效的催收政策——没有重试计划。请激活一项政策以开始催收。",
+        "action": "打开催收设置"
+      }
     }
   },
   "supplyEvidence": {

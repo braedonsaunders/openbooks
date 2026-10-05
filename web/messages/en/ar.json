@@ -572,6 +572,7 @@
       "provider": "Provider",
       "decline": "Decline reason",
       "nextRetry": "Next retry {date}.",
+      "nextRetryHeader": "Next retry",
       "attemptedAt": "Attempted",
       "status": "Status",
       "method": "Method",
@@ -631,7 +632,12 @@
       "breakdownTitle": "By decline class and provider",
       "breakdownSummary": "Recovery rates for the window",
       "breakdownRow": "{failed} failed · {recovered} recovered · {rate}",
-      "openReports": "Full history in Reports"
+      "openReports": "Full history in Reports",
+      "policyNotice": {
+        "title": "No collection policy is active",
+        "description": "Automatic collection is on, but there is no active collection policy for customer invoices, so there is no retry schedule to collect against. Activate a policy to start collecting.",
+        "action": "Open Collections setup"
+      }
     }
   },
   "supplyEvidence": {

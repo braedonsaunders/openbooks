@@ -98,7 +98,10 @@ export const COMMERCE_WIDGETS = {
    *  need a human. Null (surface off) renders nothing — the shell owns the
    *  empty state, never the dashboard. */
   'recovery-dashboard': (props) => (
-    <RecoveryDashboard data={(props.data as ComponentProps<typeof RecoveryDashboard>['data']) ?? null} />
+    <RecoveryDashboard
+      data={(props.data as ComponentProps<typeof RecoveryDashboard>['data']) ?? null}
+      notice={(props.notice as ComponentProps<typeof RecoveryDashboard>['notice']) ?? null}
+    />
   ),
   /** One collection attempt with its retry action. Null (no attempt open)
    *  renders nothing — the list owns the empty state, never the drawer. */

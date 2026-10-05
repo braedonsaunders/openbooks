@@ -572,6 +572,7 @@
       "provider": "Provedor",
       "decline": "Motivo da recusa",
       "nextRetry": "Próxima tentativa {date}.",
+      "nextRetryHeader": "Próxima tentativa",
       "attemptedAt": "Tentado em",
       "status": "Status",
       "method": "Método",
@@ -631,7 +632,12 @@
       "breakdownTitle": "Por classe de recusa e provedor",
       "breakdownSummary": "Taxas de recuperação do período",
       "breakdownRow": "{failed} com falha · {recovered} recuperadas · {rate}",
-      "openReports": "Histórico completo em Relatórios"
+      "openReports": "Histórico completo em Relatórios",
+      "policyNotice": {
+        "title": "Nenhuma política de cobrança ativa",
+        "description": "A cobrança automática está ativada, mas não há nenhuma política de cobrança ativa para faturas de clientes — não há cronograma de novas tentativas. Ative uma política para começar a cobrar.",
+        "action": "Abrir configurações de cobrança"
+      }
     }
   },
   "supplyEvidence": {

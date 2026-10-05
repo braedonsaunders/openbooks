@@ -572,6 +572,7 @@
       "provider": "Prestataire",
       "decline": "Motif du refus",
       "nextRetry": "Prochaine relance {date}.",
+      "nextRetryHeader": "Prochaine relance",
       "attemptedAt": "Tenté le",
       "status": "Statut",
       "method": "Moyen",
@@ -631,7 +632,12 @@
       "breakdownTitle": "Par classe de refus et prestataire",
       "breakdownSummary": "Taux de recouvrement sur la période",
       "breakdownRow": "{failed} en échec · {recovered} récupérés · {rate}",
-      "openReports": "Historique complet dans Rapports"
+      "openReports": "Historique complet dans Rapports",
+      "policyNotice": {
+        "title": "Aucune politique de recouvrement active",
+        "description": "Le recouvrement automatique est activé, mais aucune politique de recouvrement n'est active pour les factures clients : il n'y a aucun calendrier de nouvelles tentatives. Activez une politique pour commencer le recouvrement.",
+        "action": "Ouvrir les paramètres de recouvrement"
+      }
     }
   },
   "supplyEvidence": {

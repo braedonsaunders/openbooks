@@ -90,12 +90,32 @@ export interface RecoveryDashboardData {
   }[]
 }
 
+/** A missing prerequisite rendered as a calm notice, never a page crash. */
+export interface CollectionPolicyNotice {
+  title: string
+  description: string
+  actionLabel: string
+  actionHref: string
+}
+
+/**
+ * The engine refuses recovery facts without an active collection policy;
+ * that refusal names its remedy (activate one in Setup) and the page renders
+ * it as a notice while the rest of the worklist loads. Anything else still
+ * throws.
+ */
+export function isMissingCollectionPolicy(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('no active collection policy')
+}
+
 export interface CollectionsData {
   title: string
   description: string
   /** Availability of the receivables worklist, independently of configuration. */
   worklistHref: string | null
   worklistLabel: string
+  /** Present while automatic collection is on but no collection policy is. */
+  policyNotice: CollectionPolicyNotice | null
   subscriptionsEnabled: boolean
   advancedSubscriptionsEnabled: boolean
   customers: CollectionsOption[]
@@ -247,7 +267,21 @@ export async function loadCollections(
     : [{ rows: [] }, { rows: [] }]
 
   const autopayOn = await isFeatureEnabled(authz.user.orgId, 'autopay')
-  const recovery = autopayOn ? await loadRecovery(authz.user.orgId) : null
+  let recovery: RecoveryDashboardData | null = null
+  let policyNotice: CollectionPolicyNotice | null = null
+  if (autopayOn) {
+    try {
+      recovery = await loadRecovery(authz.user.orgId)
+    } catch (error) {
+      if (!isMissingCollectionPolicy(error)) throw error
+      policyNotice = {
+        title: tAr('collections.recovery.policyNotice.title'),
+        description: tAr('collections.recovery.policyNotice.description'),
+        actionLabel: tAr('collections.recovery.policyNotice.action'),
+        actionHref: '/admin/setup/dunning-policies',
+      }
+    }
+  }
   const attemptId = pickString(sp.attempt)
   let attemptDrawer: CollectionsData['attemptDrawer'] = null
   if (autopayOn && attemptId && isUuid(attemptId)) {
@@ -301,6 +335,7 @@ export async function loadCollections(
     })),
     autopayOn,
     recovery,
+    policyNotice,
     currentParams: sp,
     attemptDrawer,
     attemptsEmptyTitle: tAr('collections.attempts.emptyTitle'),
@@ -323,6 +358,7 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
         // block the shell does not know never disturbs its tab state.
         ...widgetBlock('recovery-dashboard', {
           data: f('recovery'),
+          notice: f('policyNotice'),
         }),
         when: f('autopayOn'),
       },
