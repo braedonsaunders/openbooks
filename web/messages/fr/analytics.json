@@ -151,7 +151,6 @@
         "adjustment": "Ajustement"
       },
       "horizonMonths": "{count} périodes",
-      "confidencePct": "{count} %",
       "diagnostics": "Diagnostic du modèle",
       "diag": {
         "trend": "Tendance",
@@ -241,6 +240,7 @@
       "bridge": "Passerelle de marges annuelle",
       "bridgeHint": "Volume = ΔCA × marge brute N-1 · Taux = CA × Δmarge ({from} → {to})",
       "bridgeNoPrior": "Le partage volume/taux exige du chiffre d’affaires sur la période et la précédente.",
+      "bridgeNoCurrent": "Le chiffre d’affaires de la période en cours est nécessaire pour séparer les effets volume et taux.",
       "bridgeSteps": {
         "prior": "MB N-1",
         "volume": "Effet volume",
@@ -332,7 +332,7 @@
       "onWatch": "{count} à surveiller",
       "coverage": "Couverture",
       "coverageSub": "comptes avec une ligne budgétaire",
-      "toleranceNote": "Conforme : favorable ou dans ±{onTrack} % du budget · À surveiller : dans ±{watch} % · Dépassé (dépenses) / En dessous (produits) : au-delà de ±{watch} %",
+      "toleranceNote": "Conforme : favorable ou dans ±{onTrack} du budget · À surveiller : dans ±{watch} · Dépassé (dépenses) / En dessous (produits) : au-delà de ±{watch}",
       "tableTitle": "Budget et réel ({count})",
       "search": "Rechercher des comptes…",
       "csv": "CSV",
@@ -826,12 +826,6 @@
           "12": "12 périodes",
           "24": "24 périodes"
         },
-        "forecastConfidence": {
-          "80": "80 %",
-          "90": "90 %",
-          "95": "95 %",
-          "99": "99 %"
-        },
         "forecastSeasonality": {
           "auto": "Autodétection",
           "none": "Aucune",
@@ -911,7 +905,6 @@
       "trendMargin": "Tendance des marges",
       "trendOpinc": "Tendance opérationnelle",
       "trendOpMargin": "Marge opérationnelle",
-      "perfTrend": "Tendance de la performance",
       "table": {
         "item": "Poste",
         "current": "Actuel",
@@ -930,7 +923,8 @@
         "warn": "À surveiller",
         "anomaly": "Anomalie",
         "info": "Information"
-      }
+      },
+      "pnlSummary": "Résumé du compte de résultat"
     },
     "segments": {
       "kpi": {
@@ -973,10 +967,13 @@
     "drivers": {
       "kpi": {
         "topRevenue": "Premier moteur des produits",
-        "topCost": "Premier moteur des coûts"
+        "topCost": "Premier moteur des coûts",
+        "revNet": "Mouvement des revenus",
+        "costNet": "Mouvement des coûts"
       },
       "kpiSub": {
-        "vsPrior": "vs année précédente"
+        "vsPrior": "vs année précédente",
+        "net": "variation nette sur un an"
       },
       "movers": "Plus fortes variations (abs.)",
       "revenueTitle": "Moteurs des produits",
@@ -994,7 +991,9 @@
     "items": {
       "kpi": {
         "topGainer": "Plus forte hausse",
-        "topDecliner": "Plus forte baisse"
+        "lines": "Lignes de revenus",
+        "total": "Revenus totaux",
+        "net": "Variation nette"
       },
       "movers": "Plus fortes variations (abs.)",
       "detail": "Détail des comptes",
@@ -1003,9 +1002,18 @@
         "current": "Actuel",
         "change": "Variation",
         "changePct": "Variation %",
-        "share": "Part de Δ"
+        "share": "Part de Δ",
+        "prior": "Antérieur"
       },
-      "empty": "Aucune écriture pour l’instant."
+      "empty": "Aucune écriture pour l’instant.",
+      "kpiSub": {
+        "lines": "comptes de revenus",
+        "total": "période en cours",
+        "net": "vs année précédente"
+      },
+      "gainers": "Principaux gains",
+      "decliners": "Principales baisses",
+      "none": "Aucun."
     }
   },
   "customer": {

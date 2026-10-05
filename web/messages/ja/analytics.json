@@ -151,7 +151,6 @@
         "adjustment": "調整"
       },
       "horizonMonths": "{count}期間",
-      "confidencePct": "{count}％",
       "diagnostics": "モデル診断",
       "diag": {
         "trend": "傾向",
@@ -241,6 +240,7 @@
       "bridge": "前年比マージンブリッジ",
       "bridgeHint": "数量差＝Δ収益×前期粗利益率・率差＝収益×Δ粗利益率（{from} → {to}）",
       "bridgeNoPrior": "数量差と率差の分解には当期と前期の収益が必要です。",
+      "bridgeNoCurrent": "数量効果と料率効果を分けるには当期の収益が必要です。",
       "bridgeSteps": {
         "prior": "前期粗利益",
         "volume": "数量差",
@@ -332,7 +332,7 @@
       "onWatch": "{count}件が要注意",
       "coverage": "カバレッジ",
       "coverageSub": "予算ラインのある勘定",
-      "toleranceNote": "順調：良好または予算の±{onTrack}％以内・要注意：±{watch}％以内・超過（支出）／未達（収益）：±{watch}％超",
+      "toleranceNote": "順調：良好または予算の±{onTrack}以内・要注意：±{watch}以内・超過（支出）／未達（収益）：±{watch}超",
       "tableTitle": "予算対実績（{count}）",
       "search": "勘定を検索…",
       "csv": "CSV",
@@ -826,12 +826,6 @@
           "12": "12期間",
           "24": "24期間"
         },
-        "forecastConfidence": {
-          "80": "80％",
-          "90": "90％",
-          "95": "95％",
-          "99": "99％"
-        },
         "forecastSeasonality": {
           "auto": "自動検出",
           "none": "なし",
@@ -911,7 +905,6 @@
       "trendMargin": "マージン推移",
       "trendOpinc": "営業利益推移",
       "trendOpMargin": "営業利益率",
-      "perfTrend": "業績推移",
       "table": {
         "item": "項目",
         "current": "当期",
@@ -930,7 +923,8 @@
         "warn": "要注意",
         "anomaly": "異常",
         "info": "情報"
-      }
+      },
+      "pnlSummary": "損益サマリー"
     },
     "segments": {
       "kpi": {
@@ -973,10 +967,13 @@
     "drivers": {
       "kpi": {
         "topRevenue": "収益の最大要因",
-        "topCost": "費用の最大要因"
+        "topCost": "費用の最大要因",
+        "revNet": "収益の動き",
+        "costNet": "費用の動き"
       },
       "kpiSub": {
-        "vsPrior": "前期比"
+        "vsPrior": "前期比",
+        "net": "前年比純変動"
       },
       "movers": "変動上位（絶対値）",
       "revenueTitle": "収益の要因",
@@ -994,7 +991,9 @@
     "items": {
       "kpi": {
         "topGainer": "最大増加",
-        "topDecliner": "最大減少"
+        "lines": "収益ライン",
+        "total": "総収益",
+        "net": "純変動"
       },
       "movers": "変動上位（絶対値）",
       "detail": "勘定明細",
@@ -1003,9 +1002,18 @@
         "current": "当期",
         "change": "増減",
         "changePct": "増減率",
-        "share": "Δ構成比"
+        "share": "Δ構成比",
+        "prior": "前期"
       },
-      "empty": "明細がまだありません。"
+      "empty": "明細がまだありません。",
+      "kpiSub": {
+        "lines": "収益勘定",
+        "total": "当期",
+        "net": "前年比"
+      },
+      "gainers": "増加上位",
+      "decliners": "減少上位",
+      "none": "なし。"
     }
   },
   "customer": {

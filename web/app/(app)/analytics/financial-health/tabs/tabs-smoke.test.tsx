@@ -108,7 +108,8 @@ test("overview renders its translated chrome and exact margins", async () => {
     } as never} />,
   );
   assert.match(text, /Revenue Trend/);
-  assert.match(text, /Performance Trend/);
+  assert.match(text, /P&L Summary/);
+  assert.match(text, /100,000/, "the P&L prints exact money, never compact");
   assert.match(text, /40%/);
 });
 
@@ -192,6 +193,9 @@ test("drivers render both tables in the reader's language", async () => {
   assert.match(text, /Revenue Drivers/);
   assert.match(text, /Cost Drivers/);
   assert.match(text, /Services/);
+  assert.match(text, /Revenue Movement/);
+  assert.match(text, /Cost Movement/);
+  assert.match(text, /100,000/, "driver tables print exact money, never compact");
 });
 
 test("driver verdicts follow sign times favourability, never the column", async () => {
@@ -250,6 +254,12 @@ test("items render the detail table in the reader's language", async () => {
   );
   assert.match(text, /Account Detail/);
   assert.match(text, /Largest Gainer/);
+  assert.match(text, /Revenue Lines/);
+  assert.match(text, /Net Change/);
+  assert.match(text, /Prior/);
+  assert.match(text, /Top Gainers/);
+  assert.match(text, /Top Decliners/);
+  assert.match(text, /50,000/, "item money prints exact, never compact");
 });
 
 test("clicking a driver row drills into its account", async () => {
