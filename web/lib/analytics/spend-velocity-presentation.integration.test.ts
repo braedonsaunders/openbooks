@@ -148,7 +148,7 @@ test('period comparison reports unknown change when the prior window has no hist
       assert.equal(row.priorAmount, "0")
       assert.equal(row.isNew, true)
       assert.equal(row.changePct, null)
-      assert.equal(data.periodComparison.summary.priorTotal, "0")
+      assert.equal(data.periodComparison.summary.priorTotal, "0.0000")
       assert.equal(data.periodComparison.summary.changePct, null)
       // With no prior-year bucket either, the trend change is unknown — never
       // a fabricated zero — and the spender change matches the comparison.
