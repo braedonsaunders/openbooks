@@ -69,6 +69,11 @@ test('vendor payment history medians translate at document FX', { skip: !env.OPE
       '235.0000',
       'the median monthly payment reads in functional currency (100 CAD + 100 USD @ 1.35)',
     )
+    assert.equal(
+      category.meta.finalWeekly,
+      '53.0645',
+      'the weekly equivalent spreads the median DOWN (235 × 7 / 31-day July), never the inflated monthly × days / 7',
+    )
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

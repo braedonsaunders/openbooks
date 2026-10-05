@@ -161,12 +161,16 @@ test("monthly spreads use the week's actual calendar month, quarter flags the fi
   // Q3. Run under React's server condition like the other core checks.
   const source = `
     import assert from "node:assert/strict";
-    import { spreadMonthlyOverWeek, fiscalFormulaFlags } from "./web/lib/cash/core.ts";
+    import { spreadMonthlyOverWeek, spreadWeeklyOverMonth, fiscalFormulaFlags } from "./web/lib/cash/core.ts";
 
-    // 4345 a month spreads to 4345 * 31 / 7 in a January week and
-    // 4345 * 28 / 7 in a February week — never 4345 in both.
-    assert.equal(spreadMonthlyOverWeek("4345.0000", "2026-01-04"), "19242.1429");
-    assert.equal(spreadMonthlyOverWeek("4345.0000", "2026-02-01"), "17380.0000");
+    // 4345 a month spreads to 4345 * 7 / 31 in a January week and
+    // 4345 * 7 / 28 in a February week — never 4345 in both, and never the
+    // inflated monthly * days / 7 the helper computed before.
+    assert.equal(spreadMonthlyOverWeek("4345.0000", "2026-01-04"), "981.1290");
+    assert.equal(spreadMonthlyOverWeek("4345.0000", "2026-02-01"), "1086.2500");
+    // The inverse direction places a week's average as a whole month's
+    // worth: 1000 a week lands 4428.5714 in a 31-day monthly placement.
+    assert.equal(spreadWeeklyOverMonth("1000.0000", "2026-01-04"), "4428.5714");
     assert.notEqual(
       spreadMonthlyOverWeek("4345.0000", "2026-01-04"),
       spreadMonthlyOverWeek("4345.0000", "2026-02-01"),
