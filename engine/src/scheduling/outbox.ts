@@ -82,6 +82,8 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "property_billing",
   "fx_providers",
   "saas_metrics",
+  "usage_rating",
+  "stripe_billing_import",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -545,6 +547,40 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "saas_metrics_scan_failed",
       href: COLLECTIONS_HREF,
       remedy: "Review subscription setup in Collections; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "usage_rating") {
+    const { runDueUsageRating } = await import("../billing/usage/rating-schedule.ts");
+    const result = await runDueUsageRating();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "Usage rating",
+      noticeKind: "usage_rating_scan_failed",
+      href: COLLECTIONS_HREF,
+      remedy: "Review closed billing periods and rating schedules; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "stripe_billing_import") {
+    const { runDueStripeBillingImports } = await import("../sync/stripe-billing.ts");
+    const result = await runDueStripeBillingImports();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "Stripe Billing import",
+      noticeKind: "stripe_billing_import_scan_failed",
+      href: "/admin/setup/payment-providers",
+      remedy: "Review the Stripe connection under Setup → Payment providers; the scan retries automatically.",
       problems,
       unattributed: [],
     });

@@ -584,7 +584,8 @@
         "property",
         "receivables",
         "scripting",
-        "sftp"
+        "sftp",
+        "sync"
       ]
     },
     "scripting": {
