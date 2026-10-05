@@ -3,11 +3,12 @@ import 'server-only'
 import type { ComponentProps } from 'react'
 import { getTranslations } from 'next-intl/server'
 import { can, getAuthz } from '../../../lib/authz'
-import { resolvedFeatureState } from '../../../lib/features'
+import { isFeatureEnabled, resolvedFeatureState } from '../../../lib/features'
 import { setupChildEntities, resolveSetupEntityGate } from '../../../lib/setup/registry'
 import { pickString } from '../../../lib/list-params'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
+import { KitComponentsTab } from './KitComponentsTab'
 
 /** Item-owned configuration uses the same scoped list and drawer as setup records. */
 export async function ItemDrawerSlot({ drawer, sp }: {
@@ -18,12 +19,16 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   const { remountKey, ...props } = drawer
   const authz = await getAuthz()
   if (!authz || !can(authz, 'items.read')) return null
+  // A kit's Components tab is operational, not setup: operators without the
+  // setup grant pick and sell kits, so it rides both drawer paths.
+  const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'items.manage'), props, sp)
+  const recordTabs = kitTab ? [kitTab] : []
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
-    return <ItemDrawer key={remountKey} {...props} />
+    return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
   }
   const features = await resolvedFeatureState(authz.user.orgId)
   const t = await getTranslations('admin.setup')
-  const recordTabs = setupChildEntities('items')
+  const recordTabs = [...(kitTab ? [kitTab] : []), ...setupChildEntities('items')
     .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
     .map((entity) => ({
       key: entity.key,
@@ -43,6 +48,38 @@ export async function ItemDrawerSlot({ drawer, sp }: {
           stacked
         />
       ) : null,
-    }))
+    }))]
   return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
+}
+
+/**
+ * A kit sells as a bundle of its components: the Components tab names the
+ * recipe and what it can still sell, with the bill-of-materials editor one
+ * click away. Kits without the inventory feature have no recipe to show.
+ */
+async function kitComponentsTab(
+  orgId: string,
+  canManage: boolean,
+  props: ComponentProps<typeof ItemDrawer>,
+  sp: Record<string, string | string[] | undefined>,
+) {
+  if (props.createMode || String(props.payload.item.kind) !== 'kit') return null
+  if (!(await isFeatureEnabled(orgId, 'inventory'))) return null
+  const t = await getTranslations('items')
+  const itemId = String(props.payload.item.id)
+  const code = String(props.payload.item.code ?? '').trim()
+  const name = String(props.payload.item.name ?? '').trim()
+  return {
+    key: 'components',
+    label: t('kit.tab'),
+    content: pickString(sp.itemSetup) === 'components' ? (
+      <KitComponentsTab
+        itemId={itemId}
+        itemLabel={code ? `${code} · ${name}` : name || itemId}
+        canManage={canManage}
+        tabHref={`/items?item=${encodeURIComponent(itemId)}&itemSetup=components`}
+        editing={pickString(sp.kitBom) === 'edit'}
+      />
+    ) : null,
+  }
 }

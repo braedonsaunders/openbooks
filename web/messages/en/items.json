@@ -306,5 +306,25 @@
       "exclude": "Exclude",
       "software": "Software (residual)"
     }
+  },
+  "kit": {
+    "tab": "Components",
+    "loading": "Loading the kit recipe…",
+    "loadFailed": "The kit recipe could not be loaded.",
+    "noRecipeSummary": "No recipe yet — the kit cannot be sold until it has components.",
+    "recipeSummary": "Bundle of {count}: {parts}",
+    "availableBadge": "{count} available",
+    "addComponents": "Add components",
+    "editComponents": "Edit components",
+    "emptyTitle": "No components yet",
+    "emptyDescription": "A kit sells its components: name what ships in one kit and it becomes sellable.",
+    "consequence": "Selling the kit ships its components — the kit itself is never stocked, and revenue stays on the kit.",
+    "component": "Component",
+    "perKit": "Per kit",
+    "availabilityTitle": "Availability detail",
+    "availabilitySummary": "{count} sellable across all locations",
+    "onHand": "On hand",
+    "committed": "Committed",
+    "available": "Available"
   }
 }

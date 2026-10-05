@@ -199,8 +199,15 @@ export function FulfillmentLines({
       item_id: {
         key: 'itemLabel', label: tCommon('labels.item'), width: 'minmax(170px,1.6fr)', type: 'readonly',
         render: (row) => (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 flex-1 truncate">{row.itemLabel}</span>
+          <div className={`flex min-w-0 items-center gap-2${row.kitGroup ? ' pl-5' : ''}`}>
+            <span className="min-w-0 flex-1 truncate">
+              {row.itemLabel}
+              {row.kitGroup ? (
+                <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                  {t('lines.kitComponent', { kit: row.kitGroup.kitLabel, line: row.salesOrderLineNumber })}
+                </span>
+              ) : null}
+            </span>
             {barcodeScanningEnabled ? (
               <SearchSelect
                 ariaLabel={t('lines.scanItem', { line: row.lineNumber })}

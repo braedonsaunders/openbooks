@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "Línea {line}",
+    "kitComponent": "Componente de {kit} · línea de pedido {line}",
     "lot": "Lote {lot}",
     "serial": "Serie {serial}",
     "actionsFor": "Acciones de la línea {line}",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · {onHand} disponibles",
     "noLines": "Introduzca una cantidad en al menos una línea para preparar.",
     "binRequired": "Elija una ubicación para la línea {line} de la orden.",
+    "pickComponentsBelow": "Se prepara por componentes: indique las cantidades en las filas de componentes.",
+    "kitComponent": "Componente de {kit} · línea {line}",
+    "componentPrecision": "Línea {line}: las cantidades de componentes tienen como máximo cuatro decimales.",
     "created": "Lista de preparación {number} creada.",
     "failed": "No se pudo crear la lista de preparación."
   },

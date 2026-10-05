@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "第 {line} 行",
+    "kitComponent": "{kit} 的组件·订单行 {line}",
     "lot": "批次 {lot}",
     "serial": "序列号 {serial}",
     "actionsFor": "第 {line} 行的操作",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · 现有 {onHand}",
     "noLines": "请至少为一行输入拣货数量。",
     "binRequired": "请为订单第 {line} 行选择货位。",
+    "pickComponentsBelow": "按组件拣选——请在下面的组件行中输入数量。",
+    "kitComponent": "{kit} 的组件·第 {line} 行",
+    "componentPrecision": "第 {line} 行：组件数量最多保留四位小数。",
     "created": "已创建拣货单 {number}。",
     "failed": "无法创建拣货单。"
   },

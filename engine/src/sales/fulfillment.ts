@@ -1260,6 +1260,11 @@ export interface FulfillmentLineView {
   serialNumber: string | null;
   pickLineId: string | null;
   carton: string | null;
+  /**
+   * Set when the row covers a kit's component rather than its order line's
+   * own item: the kit it belongs to, so the form nests the row under it.
+   */
+  kitGroup?: { kitItemId: string; kitLabel: string } | null;
 }
 
 export interface FulfillmentDocumentView {
@@ -1372,16 +1377,21 @@ export async function getFulfillmentDocument(
     bin_id: string; bin_code: string; quantity: string; unit: string | null; sales_order_line_id: string;
     sales_order_line_number: number; lot_number: string | null; serial_number: string | null;
     pick_line_id: string | null; carton: string | null;
+    kit_item_id: string | null; kit_label: string | null;
   }>(sql`
     select line.id as line_id, line.line_number, line.item_id, coalesce(i.code || ' · ' || i.name, i.name) as item_label,
            line.description, line.stock_location_id as bin_id, bin.code as bin_code, line.quantity::text as quantity,
            line.unit, fl.sales_order_line_id, so.line_number as sales_order_line_number,
-           lot.lot_number, serial.serial_number, fl.pick_line_id, fl.carton
+           lot.lot_number, serial.serial_number, fl.pick_line_id, fl.carton,
+           case when line.item_id <> so.item_id then so.item_id end as kit_item_id,
+           case when line.item_id <> so.item_id
+             then coalesce(kit.code || ' · ' || kit.name, kit.name) end as kit_label
       from document_lines line
       join fulfillment_lines fl on fl.line_id = line.id and fl.org_id = line.org_id
       join document_lines so on so.id = fl.sales_order_line_id and so.org_id = fl.org_id
       join items i on i.id = line.item_id and i.org_id = line.org_id
       join stock_locations bin on bin.id = line.stock_location_id and bin.org_id = line.org_id
+      left join items kit on kit.id = so.item_id and kit.org_id = so.org_id
       left join lots lot on lot.id = fl.lot_id
       left join serials serial on serial.id = fl.serial_id
      where line.org_id = ${orgId} and line.document_id = ${row.id}
@@ -1424,6 +1434,9 @@ export async function getFulfillmentDocument(
       serialNumber: line.serial_number,
       pickLineId: line.pick_line_id,
       carton: line.carton,
+      kitGroup: line.kit_item_id && line.kit_label
+        ? { kitItemId: line.kit_item_id, kitLabel: line.kit_label }
+        : null,
     })),
   };
 }
@@ -1709,7 +1722,11 @@ export async function pickCandidates(
   }>(sql`
     with ${pickReservationsCte(orgId)},
     held as (
-      select sales_order_line_id, sum(reserved) as reserved from pick_reservations group by sales_order_line_id
+      select r.sales_order_line_id, sum(r.reserved) as reserved
+        from pick_reservations r
+        join document_lines so on so.id = r.sales_order_line_id and so.org_id = ${orgId}
+       where r.item_id = so.item_id
+       group by r.sales_order_line_id
     ),
     lines as (
       select dl.id, dl.line_number, dl.item_id, i.kind as item_kind,

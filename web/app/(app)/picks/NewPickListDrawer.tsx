@@ -37,14 +37,18 @@ interface PickRow extends Record<string, unknown> {
   bins: PickCandidateLine['bins']
   binId: string
   quantity: string
+  /** A kit line is picked by component, never as a unit: its own row is a
+   *  locked header, and each component rides an editable row naming it. */
+  kitComponentItemId: string | null
+  isKitHeader: boolean
+  kitLabel: string | null
 }
 
 const shown = (quantity: string) => fromQuantityUnits(toQuantityUnits(quantity))
 const positive = (quantity: string) => toQuantityUnits(quantity) > 0n
 
-function toRow(line: PickCandidateLine): PickRow {
-  const pickable = positive(line.pickable) && line.bins.length > 0
-  return {
+function toRows(line: PickCandidateLine): PickRow[] {
+  const header: PickRow = {
     clientKey: crypto.randomUUID(),
     salesOrderLineId: line.salesOrderLineId,
     lineNumber: line.lineNumber,
@@ -54,10 +58,43 @@ function toRow(line: PickCandidateLine): PickRow {
     open: line.open,
     held: line.heldByPickLists,
     pickable: line.pickable,
-    bins: line.bins,
-    binId: line.bins[0]?.binId ?? '',
-    quantity: pickable ? shown(line.pickable) : '',
+    bins: [],
+    binId: '',
+    quantity: '',
+    kitComponentItemId: null,
+    isKitHeader: (line.kitComponents ?? []).length > 0,
+    kitLabel: null,
   }
+  const components = (line.kitComponents ?? []).map((component) => {
+    const pickable = positive(component.pickable) && component.bins.length > 0
+    return {
+      clientKey: crypto.randomUUID(),
+      salesOrderLineId: line.salesOrderLineId,
+      lineNumber: line.lineNumber,
+      itemLabel: component.componentLabel,
+      warehouseId: line.warehouseId,
+      warehouseCode: line.warehouseCode,
+      open: component.open,
+      held: component.heldByPickLists,
+      pickable: component.pickable,
+      bins: component.bins,
+      binId: component.bins[0]?.binId ?? '',
+      quantity: pickable ? shown(component.pickable) : '',
+      kitComponentItemId: component.componentItemId,
+      isKitHeader: false,
+      kitLabel: line.itemLabel,
+    } satisfies PickRow
+  })
+  if (components.length === 0) {
+    const pickable = positive(line.pickable) && line.bins.length > 0
+    return [{
+      ...header,
+      bins: line.bins,
+      binId: line.bins[0]?.binId ?? '',
+      quantity: pickable ? shown(line.pickable) : '',
+    }]
+  }
+  return [header, ...components]
 }
 
 const blankRow = (): PickRow => ({
@@ -107,7 +144,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
         return
       }
       const body = (await res.json()) as { lines: PickCandidateLine[] }
-      const loaded = body.lines.map(toRow)
+      const loaded = body.lines.flatMap(toRows)
       const first = loaded.find((row) => positive(row.pickable) && row.bins.length > 0 && row.warehouseId)
       setLoadError(null)
       setRows(loaded)
@@ -129,12 +166,13 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
 
   const pickable = useCallback(
     (row: PickRow) =>
-      row.salesOrderLineId !== '' && row.warehouseId === warehouseId && positive(row.pickable) && row.bins.length > 0,
+      row.salesOrderLineId !== '' && !row.isKitHeader && row.warehouseId === warehouseId && positive(row.pickable) && row.bins.length > 0,
     [warehouseId],
   )
 
   const whyLocked = useCallback((row: PickRow): string | null => {
     if (row.salesOrderLineId === '') return null
+    if (row.isKitHeader) return t('create.pickComponentsBelow')
     if (!positive(row.pickable)) return t('create.nothingPickable')
     if (row.bins.length === 0) return t('create.noStock')
     if (row.warehouseId !== warehouseId) return t('create.otherWarehouse', { warehouse: row.warehouseCode ?? '—' })
@@ -146,7 +184,17 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
       key: 'lineNumber', label: t('fields.salesOrderLine'), width: '80px', type: 'readonly',
       render: (row) => (row.salesOrderLineId ? t('lines.orderLine', { line: row.lineNumber }) : ''),
     },
-    { key: 'itemLabel', label: tCommon('labels.item'), width: 'minmax(170px,1.6fr)', type: 'readonly' },
+    {
+      key: 'itemLabel', label: tCommon('labels.item'), width: 'minmax(170px,1.6fr)', type: 'readonly',
+      render: (row) => row.kitComponentItemId ? (
+        <span className="block pl-5">
+          <span className="block truncate">{row.itemLabel}</span>
+          <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+            {t('create.kitComponent', { kit: row.kitLabel ?? '', line: row.lineNumber })}
+          </span>
+        </span>
+      ) : row.itemLabel,
+    },
     { key: 'warehouseCode', label: tCommon('labels.warehouse'), width: '100px', type: 'readonly', render: (row) => row.warehouseCode ?? '' },
     { key: 'open', label: t('fields.open'), width: '90px', type: 'readonly', align: 'right', render: (row) => (row.salesOrderLineId ? shown(row.open) : '') },
     { key: 'held', label: t('fields.held'), width: '90px', type: 'readonly', align: 'right', render: (row) => (row.salesOrderLineId ? shown(row.held) : '') },
@@ -192,6 +240,21 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
       refuse(t('create.binRequired', { line: binless.lineNumber }), t('create.failed'))
       return
     }
+    // Component quantities issue into four-decimal stock: catch a finer one
+    // here with the row named, before the server refuses it. An unreadable
+    // quantity skips this check; the server classifies it as before.
+    const tooFine = chosen.find((row) => {
+      if (!row.kitComponentItemId) return false
+      try {
+        return toQuantityUnits(row.quantity.trim()) % 10000n !== 0n
+      } catch {
+        return false
+      }
+    })
+    if (tooFine) {
+      refuse(t('create.componentPrecision', { line: tooFine.lineNumber }), t('create.failed'))
+      return
+    }
     await execute(
       () => fulfillmentRequest<{ pickList: { id: string; documentNumber: string } }>('/api/picks', {
         method: 'POST',
@@ -201,7 +264,12 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
           memo: memo.trim() || null,
           // Quantities travel exactly as typed; the server classifies an
           // unreadable one and names the pick line it sits on.
-          lines: chosen.map((row) => ({ salesOrderLineId: row.salesOrderLineId, binId: row.binId, quantity: row.quantity.trim() })),
+          lines: chosen.map((row) => ({
+            salesOrderLineId: row.salesOrderLineId,
+            binId: row.binId,
+            quantity: row.quantity.trim(),
+            ...(row.kitComponentItemId ? { kitComponentItemId: row.kitComponentItemId } : {}),
+          })),
           ...(Object.keys(custom).length > 0 ? { custom } : {}),
         },
       }, t('create.failed')),

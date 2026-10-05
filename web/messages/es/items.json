@@ -201,6 +201,26 @@
       "software": "Software (residual)"
     }
   },
+  "kit": {
+    "tab": "Componentes",
+    "loading": "Cargando la receta del kit…",
+    "loadFailed": "No se pudo cargar la receta del kit.",
+    "noRecipeSummary": "Aún no hay receta: el kit no se puede vender hasta que tenga componentes.",
+    "recipeSummary": "Paquete de {count}: {parts}",
+    "availableBadge": "{count} disponibles",
+    "addComponents": "Añadir componentes",
+    "editComponents": "Editar componentes",
+    "emptyTitle": "Aún no hay componentes",
+    "emptyDescription": "Un kit vende sus componentes: indique qué incluye un kit para poder venderlo.",
+    "consequence": "Al vender el kit se envían sus componentes: el kit nunca tiene existencias y los ingresos quedan en el kit.",
+    "component": "Componente",
+    "perKit": "Por kit",
+    "availabilityTitle": "Detalle de disponibilidad",
+    "availabilitySummary": "{count} disponibles en todas las ubicaciones",
+    "onHand": "Existencias",
+    "committed": "Comprometido",
+    "available": "Disponible"
+  },
   "costing": {
     "title": "Costeo de inventario",
     "description": "Cómo se valúa y controla el stock de este artículo: método, cuentas y puntos de reorden.",

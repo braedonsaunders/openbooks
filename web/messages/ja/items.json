@@ -191,6 +191,26 @@
       "software": "ソフトウェア(残余法)"
     }
   },
+  "kit": {
+    "tab": "構成品",
+    "loading": "キットのレシピを読み込み中…",
+    "loadFailed": "キットのレシピを読み込めませんでした。",
+    "noRecipeSummary": "レシピがまだありません。構成品を追加するまで販売できません。",
+    "recipeSummary": "{count}点セット：{parts}",
+    "availableBadge": "販売可能：{count}",
+    "addComponents": "構成品を追加",
+    "editComponents": "構成品を編集",
+    "emptyTitle": "構成品がまだありません",
+    "emptyDescription": "キットは構成品を販売します。1セットの内容を登録すると販売可能になります。",
+    "consequence": "販売時は構成品が出荷されます。キット自体に在庫はなく、売上はキットに計上されます。",
+    "component": "構成品",
+    "perKit": "1セットあたり",
+    "availabilityTitle": "在庫内訳",
+    "availabilitySummary": "全拠点で販売可能：{count}",
+    "onHand": "在庫",
+    "committed": "引当済",
+    "available": "販売可能"
+  },
   "costing": {
     "title": "在庫評価",
     "description": "この品目の在庫の評価・管理方法 — 評価方法、勘定科目、発注点を指定します。",

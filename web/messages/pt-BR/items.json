@@ -191,6 +191,26 @@
       "software": "Software (residual)"
     }
   },
+  "kit": {
+    "tab": "Componentes",
+    "loading": "Carregando a receita do kit…",
+    "loadFailed": "Não foi possível carregar a receita do kit.",
+    "noRecipeSummary": "Ainda sem receita — o kit não pode ser vendido até ter componentes.",
+    "recipeSummary": "Pacote de {count}: {parts}",
+    "availableBadge": "{count} disponíveis",
+    "addComponents": "Adicionar componentes",
+    "editComponents": "Editar componentes",
+    "emptyTitle": "Ainda sem componentes",
+    "emptyDescription": "Um kit vende seus componentes: informe o que acompanha cada kit para poder vendê-lo.",
+    "consequence": "Vender o kit expede seus componentes — o kit nunca tem estoque, e a receita fica no kit.",
+    "component": "Componente",
+    "perKit": "Por kit",
+    "availabilityTitle": "Detalhe de disponibilidade",
+    "availabilitySummary": "{count} vendáveis em todos os locais",
+    "onHand": "Em estoque",
+    "committed": "Comprometido",
+    "available": "Disponível"
+  },
   "costing": {
     "title": "Custeio de estoque",
     "description": "Como o estoque deste item é avaliado e controlado — método, contas e pontos de pedido.",

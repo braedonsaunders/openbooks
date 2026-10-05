@@ -33,6 +33,7 @@
   },
   "lines": {
     "orderLine": "Zeile {line}",
+    "kitComponent": "Komponente von {kit} · Auftragszeile {line}",
     "lot": "Charge {lot}",
     "serial": "Seriennummer {serial}",
     "actionsFor": "Aktionen für Zeile {line}",
@@ -84,6 +85,9 @@
     "binOption": "{bin} · {onHand} vorrätig",
     "noLines": "Geben Sie für mindestens eine Zeile eine Menge ein.",
     "binRequired": "Wählen Sie einen Lagerplatz für Auftragszeile {line}.",
+    "pickComponentsBelow": "Wird komponentenweise gepickt – Mengen in den Komponenten­zeilen unten eintragen.",
+    "kitComponent": "Komponente von {kit} · Zeile {line}",
+    "componentPrecision": "Zeile {line}: Komponentenmengen haben höchstens vier Nachkommastellen.",
     "created": "Kommissionierliste {number} erstellt.",
     "failed": "Die Kommissionierliste konnte nicht erstellt werden."
   },
