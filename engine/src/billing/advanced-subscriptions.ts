@@ -1075,6 +1075,17 @@ export type AdvancedBillingLine = {
   incomeAccountId: string | null;
   itemId: string | null;
   taxCodeId: string | null;
+  /**
+   * The service-to party for this line (the child the line is for).
+   * Informational grouping only — the AR leg follows the header party.
+   */
+  servicePartyId?: string | null;
+  /**
+   * The line's legal entity. Null defaults to the document subsidiary,
+   * exactly as before; set when the service was earned by another entity so
+   * the kernel balances the difference with intercompany legs.
+   */
+  subsidiaryId?: string | null;
 };
 
 /** A billable component together with its inclusive effective window. */

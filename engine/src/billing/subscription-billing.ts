@@ -12,6 +12,7 @@ import { loadTaxComponentConfig, persistLineTaxComponents } from "../tax/persist
 import { postDocument } from "../ledger/posting-document.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { resolveSubscriptionBillingTarget } from "./consolidated-billing.ts";
 import { advanceAnchoredMonth } from "./cadence.ts";
 import {
   advancedBillingSnapshot,
@@ -336,6 +337,9 @@ type SubRow = {
   id: string;
   orgId: string;
   customerId: string;
+  /** Per-subscription bill-to/payer overrides (null = hierarchy or self). */
+  billToOverride: string | null;
+  payerOverride: string | null;
   quantity: string;
   priceOverride: string | null;
   autoPost: boolean;
@@ -368,27 +372,6 @@ type SubRow = {
   /** Stored anchor day, else the start date's day (see SUB_SELECT). */
   anchorDay: number;
 };
-
-/**
- * Resolve the legal entity a subscription invoice posts to. The invoice
- * follows the customer — the same boundary subscriptionScopeSql and the
- * customer scope guards authorize by (a null customer entity is org-wide) —
- * never the hardcoded org root. An explicit customer entity must resolve to
- * an active subsidiary of this organization (the FK already pins it
- * same-org); only a legacy null assignment may fall back to the root, mirroring
- * the revenue owner contract. Anything else refuses by name instead of
- * posting to the wrong entity: reassign the customer to an active subsidiary
- * in the party record (or clear the assignment for an org-wide customer)
- * before billing.
- */
-function resolveBillingSubsidiary(row: Pick<SubRow, "trustedSubsidiaryId" | "customerSubsidiaryId" | "rootSubsidiaryId">): string | null {
-  if (row.trustedSubsidiaryId) return row.trustedSubsidiaryId;
-  if (row.customerSubsidiaryId == null) return row.rootSubsidiaryId;
-  throw new SubscriptionError(
-    "the subscription customer is assigned to a subsidiary that is not active in this organization — " +
-    "reassign the customer to an active subsidiary (or clear the assignment for an org-wide customer) before billing",
-  );
-}
 
 /**
  * Exact prorated amount of `fullAmount` for the slice [asOf, periodEnd] of the
@@ -470,6 +453,23 @@ export interface InvoiceSpec {
   postingAuditSource?: string;
   /** Property CAM true-ups may issue a native customer credit. */
   documentKind?: "customer_invoice" | "customer_credit";
+  /**
+   * The service-to party stamped on every line (the child the line is for).
+   * Null writes a null service party (the line is for the header party).
+   */
+  servicePartyId?: string | null;
+  /**
+   * The lines' legal entity when it differs from the header subsidiary
+   * (cross-entity consolidated billing). Null defaults to the header.
+   */
+  lineSubsidiaryId?: string | null;
+  /** The bill-to recipient recorded on the header for delivery and display. */
+  billToPartyId?: string | null;
+  /**
+   * When set, the invoice is a consolidation-eligible draft: it stays draft
+   * and is marked pending for the group's run instead of posting.
+   */
+  consolidation?: { groupId: string; periodStart: string; periodEnd: string } | null;
 }
 
 /**
@@ -645,23 +645,45 @@ async function createSubscriptionInvoiceInTransaction(
 
   const kind = spec.documentKind ?? "customer_invoice";
   const documentNumber = await nextNumber(spec.orgId, kind, kind === "customer_credit" ? "CM-" : "INV-");
+  // A consolidation-eligible charge collects as a pending draft for the
+  // group's run: it never auto-posts standalone, and the run supersedes it
+  // with links instead of deleting it. The bill-to recipient rides the
+  // header for delivery and display; AR follows the header party (payer).
+  const headerCustom: Record<string, unknown> = { ...(spec.custom ?? {}) };
+  if (spec.billToPartyId && spec.billToPartyId !== spec.customerId) {
+    headerCustom.billToPartyId = spec.billToPartyId;
+  }
+  if (spec.consolidation) {
+    headerCustom.consolidationGroupId = spec.consolidation.groupId;
+    headerCustom.consolidationPeriodStart = spec.consolidation.periodStart;
+    headerCustom.consolidationPeriodEnd = spec.consolidation.periodEnd;
+    headerCustom.consolidationStatus = "pending_consolidation";
+  }
   const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, status,
                            subsidiary_id, location_id, memo, subtotal, tax_total, total, custom, created_by)
     values (${spec.orgId}, ${kind}, ${documentNumber}, ${spec.customerId}, ${spec.invoiceDate}, ${spec.dueDate ?? null},
             ${spec.currency}, 'draft', ${spec.subsidiaryId}, ${spec.locationId ?? null}, ${spec.memo}, ${netAmount}, ${taxTotal}, ${total},
-            ${JSON.stringify(spec.custom ?? {})}::jsonb, ${spec.actorId})
+            ${JSON.stringify(headerCustom)}::jsonb, ${spec.actorId})
     returning id
   `));
   const invoiceId = created.rows[0]!.id;
 
   for (const [index, preparedLine] of prepared.entries()) {
+    // The line-level subledger entity is the service party: a service-entity
+    // leg posts against the child that earned it, so the kernel's per-leg
+    // party check passes and per-entity books stay attributable. AR still
+    // follows the header party (payer).
+    const linePartyId = spec.servicePartyId ?? null;
     const line = await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
-            unit_price, amount, tax_code_id, tax_amount, custom, is_billable, created_by)
+            unit_price, amount, tax_code_id, tax_amount, subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
       values (${spec.orgId}, ${invoiceId}, ${index + 1}, ${preparedLine.input.itemId}, ${preparedLine.accountId},
             ${preparedLine.input.description}, ${preparedLine.input.quantity}, ${preparedLine.input.unitPrice},
             ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxAmount},
+            ${preparedLine.input.subsidiaryId ?? spec.lineSubsidiaryId ?? null},
+            ${linePartyId},
+            ${linePartyId},
             ${JSON.stringify(preparedLine.input.custom ?? {})}::jsonb, true, ${spec.actorId})
       returning id
     `);
@@ -671,7 +693,7 @@ async function createSubscriptionInvoiceInTransaction(
   }
 
   let posted = false;
-  if (spec.autoPost) {
+  if (spec.autoPost && !spec.consolidation) {
     const submission = await submitAndReleaseIfUngated(
       kind,
       invoiceId,
@@ -739,11 +761,25 @@ async function billOne(
      limit 1
   `));
   if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
+  // The charge bills through the payer hierarchy on the billing date: the
+  // header carries the payer (AR) and the billing entity, the lines carry
+  // the service party (and the service entity across legal entities), and a
+  // group-held charge collects as an unposted pending draft. Without a
+  // relationship this resolves to the service customer itself, preserving
+  // the historical header, entity and posting behaviour exactly.
+  const target = await resolveSubscriptionBillingTarget(sub.orgId, sub.customerId, billingDate, {
+    billToPartyId: sub.billToOverride,
+    payerPartyId: sub.payerOverride,
+  });
   const generated = await createSubscriptionInvoice({
     orgId: sub.orgId,
     actorId: actor.actorId,
-    customerId: sub.customerId,
-    subsidiaryId: resolveBillingSubsidiary(sub),
+    customerId: target.payerPartyId,
+    subsidiaryId: target.headerSubsidiaryId,
+    servicePartyId: target.servicePartyId,
+    lineSubsidiaryId: target.lineSubsidiaryId,
+    billToPartyId: target.billToPartyId,
+    consolidation: target.consolidation,
     currency: sub.planCurrency ?? sub.baseCurrency,
     incomeAccountId: sub.incomeAccountId,
     itemId: sub.itemId,
@@ -768,7 +804,8 @@ async function billOne(
 }
 
 const SUB_SELECT = sql`
-  select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
+  select s.id, s.org_id as "orgId", s.customer_id as "customerId",
+         s.bill_to_party_id as "billToOverride", s.payer_party_id as "payerOverride", s.quantity,
          s.price_override as "priceOverride", s.auto_post as "autoPost",
          p.name as "planName", p.amount as "planAmount", coalesce(v.currency_code, p.currency_code) as "planCurrency",
          p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
@@ -1056,7 +1093,8 @@ async function requireSubscriptionInOrg(orgId: string, subscriptionId: string): 
  */
 async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDetail> {
   const r = (await db.execute<SubDetail>(sql`
-    select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
+    select s.id, s.org_id as "orgId", s.customer_id as "customerId",
+           s.bill_to_party_id as "billToOverride", s.payer_party_id as "payerOverride", s.quantity,
            s.price_override as "priceOverride", s.auto_post as "autoPost",
            p.name as "planName", p.amount as "planAmount", coalesce(v.currency_code, p.currency_code) as "planCurrency",
            p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
@@ -1145,11 +1183,19 @@ export async function changeSubscription(
     let documentNumber: string | null = null;
     if (toUnits(adjustment) !== 0n) {
       const doc = prorationDocument(adjustment);
+      const target = await resolveSubscriptionBillingTarget(orgId, row.customerId, today, {
+        billToPartyId: row.billToOverride,
+        payerPartyId: row.payerOverride,
+      });
       const gen = await createSubscriptionInvoice({
         orgId,
         actorId,
-        customerId: row.customerId,
-        subsidiaryId: resolveBillingSubsidiary(row),
+        customerId: target.payerPartyId,
+        subsidiaryId: target.headerSubsidiaryId,
+        servicePartyId: target.servicePartyId,
+        lineSubsidiaryId: target.lineSubsidiaryId,
+        billToPartyId: target.billToPartyId,
+        consolidation: target.consolidation,
         currency: row.planCurrency ?? row.baseCurrency,
         incomeAccountId: row.incomeAccountId,
         itemId: row.itemId,
@@ -1229,11 +1275,19 @@ export async function prorateFirstInvoice(
     const amount = prorate(full, row.startOn, firstBillOn, row.startOn);
     if (toUnits(amount) <= 0n) throw new SubscriptionError("nothing to prorate for the first period");
 
+    const target = await resolveSubscriptionBillingTarget(orgId, row.customerId, today, {
+      billToPartyId: row.billToOverride,
+      payerPartyId: row.payerOverride,
+    });
     const gen = await createSubscriptionInvoice({
       orgId,
       actorId,
-      customerId: row.customerId,
-      subsidiaryId: resolveBillingSubsidiary(row),
+      customerId: target.payerPartyId,
+      subsidiaryId: target.headerSubsidiaryId,
+      servicePartyId: target.servicePartyId,
+      lineSubsidiaryId: target.lineSubsidiaryId,
+      billToPartyId: target.billToPartyId,
+      consolidation: target.consolidation,
       currency: row.planCurrency ?? row.baseCurrency,
       incomeAccountId: row.incomeAccountId,
       itemId: row.itemId,
