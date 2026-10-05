@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { ActionError, kindForStatus, transportError, type ActionResult } from '@braedonsaunders/appkit-errors'
 import { Badge, Button, EmptyState, Input, Label, PageHeader, Select } from '@openbooks/ui'
 import { KpiStrip } from '@/components/kpi-strip'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { ListPageLayout } from '@/components/page-layout'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { formatExactPercent } from '@/lib/format'
+import { formatDecimal } from '@/lib/money-format'
 import { useAppAction } from '@/lib/use-app-action'
 
 type Scheme = 'union' | 'non_union' | 'ioss'
@@ -51,6 +53,7 @@ function currentQuarter(): { from: string; to: string } {
  */
 export function OssConsole({ setupHref }: { setupHref: string }) {
   const t = useTranslations('tax.oss')
+  const locale = useLocale()
   const router = useRouter()
   const defaults = useMemo(() => currentQuarter(), [])
   const [scheme, setScheme] = useState<Scheme>('union')
@@ -101,9 +104,9 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
         : <Badge variant="secondary">{t('current')}</Badge>
     ) },
     { key: 'country', header: t('columns.country'), cell: (row) => row.consumptionCountry, search: (row) => row.consumptionCountry },
-    { key: 'rate', header: t('columns.rate'), align: 'right', cell: (row) => `${Number(row.ratePercent).toFixed(2)} %` },
-    { key: 'base', header: t('columns.base'), align: 'right', cell: (row) => Number(row.baseAmount).toFixed(2) },
-    { key: 'vat', header: t('columns.vat'), align: 'right', cell: (row) => Number(row.taxAmount).toFixed(2) },
+    { key: 'rate', header: t('columns.rate'), align: 'right', cell: (row) => formatExactPercent(row.ratePercent, locale, 2) },
+    { key: 'base', header: t('columns.base'), align: 'right', cell: (row) => formatDecimal(locale, row.baseAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
+    { key: 'vat', header: t('columns.vat'), align: 'right', cell: (row) => formatDecimal(locale, row.taxAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
   ]
 
   return (
@@ -141,8 +144,8 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
         <div className="space-y-4">
           <KpiStrip
             items={[
-              { label: t('totalBase'), value: Number(result.totalBase).toFixed(2) },
-              { label: t('totalVat'), value: Number(result.totalTax).toFixed(2) },
+              { label: t('totalBase'), value: formatDecimal(locale, result.totalBase, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
+              { label: t('totalVat'), value: formatDecimal(locale, result.totalTax, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
               { label: t('registration'), value: `${result.identificationState} · ${result.registrationNumber}` },
             ]}
           />
