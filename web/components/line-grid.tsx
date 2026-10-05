@@ -216,6 +216,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   formatAmount,
   distribution,
   getRowKey,
+  selection,
   cloneRow,
 }: {
   columns: LineGridColumn<Row>[]
@@ -245,6 +246,15 @@ export function LineGrid<Row extends Record<string, unknown>>({
    */
   getRowKey?: (row: Row, index: number) => string
   /**
+   * Opt-in row selection (variant grids, bulk edits). Renders a leading
+   * checkbox column bound to the same identities as `getRowKey`; callers own
+   * the set. Absent for every transaction line grid today.
+   */
+  selection?: {
+    selected: ReadonlySet<string>
+    onChange: (next: ReadonlySet<string>) => void
+  }
+  /**
    * Clone a row for duplicate. The default shallow copy preserves a
    * caller-supplied identity field, so callers that pass `getRowKey` must
    * also mint a fresh identity here.
@@ -268,9 +278,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
   // read-only document view and the PDF data shape stay exactly as today.
   const showDist = distribution !== undefined && !readOnly
 
+  const selectColumn = selection ? '36px ' : ''
   const template = readOnly
-    ? columns.map((c) => c.width).join(' ')
-    : `52px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
+    ? `${selectColumn}${columns.map((c) => c.width).join(' ')}`
+    : `${selectColumn}52px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
 
   const clone: (row: Row) => Row = cloneRow ?? ((row: Row): Row => ({ ...row }))
   const resolveKey = useCallback(
@@ -556,6 +567,22 @@ export function LineGrid<Row extends Record<string, unknown>>({
         <div role="grid" className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
           <div role="row" className="contents">
           {/* header */}
+          {selection ? (
+            <div role="columnheader" className="border-b border-slate-200 px-2 py-2 dark:border-slate-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-teal-600"
+                aria-label={t('selectAll')}
+                checked={rowKeys.length > 0 && rowKeys.every((key) => selection.selected.has(key))}
+                ref={(input) => {
+                  if (input) input.indeterminate = rowKeys.some((key) => selection.selected.has(key)) && !rowKeys.every((key) => selection.selected.has(key))
+                }}
+                onChange={(event) => {
+                  selection.onChange(event.target.checked ? new Set(rowKeys) : new Set<string>())
+                }}
+              />
+            </div>
+          ) : null}
           {!readOnly && <div role="columnheader" className="border-b border-slate-200 dark:border-slate-800"><span className="sr-only">{t('lineNumberHeader')}</span></div>}
           {columns.map((c, columnIndex) => (
             <div
@@ -602,6 +629,22 @@ export function LineGrid<Row extends Record<string, unknown>>({
                 }
               }}
             >
+            {selection ? (
+              <div role="gridcell" className={cellBase}>
+                <input
+                  type="checkbox"
+                  className="ml-2 h-4 w-4 accent-teal-600"
+                  aria-label={t('selectRow', { row: i + 1 })}
+                  checked={selection.selected.has(rowKeys[i]!)}
+                  onChange={() => {
+                    const next = new Set(selection.selected)
+                    if (next.has(rowKeys[i]!)) next.delete(rowKeys[i]!)
+                    else next.add(rowKeys[i]!)
+                    selection.onChange(next)
+                  }}
+                />
+              </div>
+            ) : null}
             <RowCells
               row={row}
               rowKey={rowKeys[i]!}

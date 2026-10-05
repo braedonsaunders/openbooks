@@ -826,6 +826,7 @@ const ITEM: RecordTypeMeta = {
     { key: "default_rate", labelKey: "items.labels.defaultRate", kind: "amount", sortable: true, sortKey: "rate", defaultWidth: 120 },
     { key: "default_cost", labelKey: "items.labels.defaultCost", kind: "amount", sortable: true, sortKey: "cost", defaultHidden: true, defaultWidth: 120 },
     { key: "unit", labelKey: "items.labels.unit", kind: "text" },
+    { key: "family", labelKey: "items.labels.family", kind: "text", sortable: true, sortKey: "family", defaultHidden: true },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 100 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
@@ -836,6 +837,55 @@ const ITEM: RecordTypeMeta = {
       kind: "select",
       operators: OPERATORS_BY_KIND.select,
       options: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount", "gift_card"].map((value) => ({
+        value,
+        labelKey: `items.kinds.${value}`,
+      })),
+    },
+    { key: "family", labelKey: "items.labels.family", kind: "text", operators: OPERATORS_BY_KIND.text },
+    { key: "category", labelKey: "items.labels.category", kind: "text", operators: OPERATORS_BY_KIND.text },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "active", labelKey: "common.status.active" },
+        { value: "inactive", labelKey: "common.status.inactive" },
+      ],
+    },
+  ],
+};
+
+/**
+ * Product families group variant items sold in options. The list is a plain
+ * entity list; the drawer owns the options editor and variant grid.
+ */
+const ITEM_FAMILY: RecordTypeMeta = {
+  key: "item_family",
+  labelKey: "customization.recordTypes.item_family",
+  category: "entity",
+  featureKey: "itemVariants",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  defaultSort: { sortKey: "name", dir: "asc" },
+  listColumns: [
+    { key: "code", labelKey: "items.families.code", kind: "text", sortable: true, sortKey: "code" },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "category", labelKey: "items.labels.category", kind: "text", sortable: true, sortKey: "category" },
+    { key: "kind", labelKey: "items.labels.kind", kind: "status", sortable: true, sortKey: "kind" },
+    { key: "default_rate", labelKey: "items.labels.defaultRate", kind: "amount", sortable: true, sortKey: "rate", defaultWidth: 120 },
+    { key: "default_unit", labelKey: "items.labels.unit", kind: "text", defaultHidden: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 100 },
+  ],
+  listFilters: [
+    {
+      key: "kind",
+      labelKey: "items.labels.kind",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ["inventory", "non_inventory", "service", "kit", "assembly"].map((value) => ({
         value,
         labelKey: `items.kinds.${value}`,
       })),
@@ -2418,6 +2468,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   OPPORTUNITY,
   ACTIVITY,
   ITEM,
+  ITEM_FAMILY,
   ACCOUNT,
   BANK_TRANSACTION,
   INVENTORY_ONHAND,

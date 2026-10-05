@@ -8,6 +8,7 @@ import { setupChildEntities, resolveSetupEntityGate } from '../../../lib/setup/r
 import { pickString } from '../../../lib/list-params'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
+import { ItemVariantsTab } from './ItemVariantsTab'
 import { KitComponentsTab } from './KitComponentsTab'
 
 /** Item-owned configuration uses the same scoped list and drawer as setup records. */
@@ -26,28 +27,41 @@ export async function ItemDrawerSlot({ drawer, sp }: {
     return <ItemDrawer key={remountKey} {...props} recordTabs={kitTab ? [kitTab] : []} />
   }
   const features = await resolvedFeatureState(authz.user.orgId)
-  const t = await getTranslations('admin.setup')
-  const recordTabs = [...(kitTab ? [kitTab] : []), ...setupChildEntities('items')
-    .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
-    .map((entity) => ({
-      key: entity.key,
-      label: t(`entities.${entity.key}.title`),
-      content: pickString(sp.itemSetup) === entity.key ? (
-        <SetupEntitySection
-          entity={{ ...entity, columns: entity.columns.filter((column) => column.key !== 'itemId') }}
-          orgId={authz.user.orgId}
-          actorId={authz.user.id}
-          searchParams={sp}
-          basePath="/items"
-          canManage={can(authz, 'items.manage')}
-          allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-          parent={{ recordKey: 'items', value: String(props.payload.item.id) }}
-          rowParam="recordRow"
-          paramPrefix="record"
-          stacked
-        />
-      ) : null,
-    }))]
+  const [t, tFamilies] = await Promise.all([getTranslations('admin.setup'), getTranslations('items.families')])
+  const variantsTab = !props.createMode && props.variantsEnabled && props.family
+    ? [{
+        key: 'variants',
+        label: tFamilies('itemTab.title'),
+        content: pickString(sp.itemSetup) === 'variants' ? (
+          <ItemVariantsTab familyId={props.family.id} itemId={String(props.payload.item.id)} />
+        ) : null,
+      }]
+    : []
+  const recordTabs = [
+    ...(kitTab ? [kitTab] : []),
+    ...variantsTab,
+    ...setupChildEntities('items')
+      .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
+      .map((entity) => ({
+        key: entity.key,
+        label: t(`entities.${entity.key}.title`),
+        content: pickString(sp.itemSetup) === entity.key ? (
+          <SetupEntitySection
+            entity={{ ...entity, columns: entity.columns.filter((column) => column.key !== 'itemId') }}
+            orgId={authz.user.orgId}
+            actorId={authz.user.id}
+            searchParams={sp}
+            basePath="/items"
+            canManage={can(authz, 'items.manage')}
+            allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+            parent={{ recordKey: 'items', value: String(props.payload.item.id) }}
+            rowParam="recordRow"
+            paramPrefix="record"
+            stacked
+          />
+        ) : null,
+      })),
+  ]
   return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
 }
 

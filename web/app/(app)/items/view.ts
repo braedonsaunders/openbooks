@@ -11,6 +11,7 @@ import { loadFieldDefs } from '../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { loadItem } from '../../api/items/_lib'
+import { itemsWorkspaceTabs } from './tabs'
 import type { ItemDrawer } from './ItemDrawer'
 
 /**
@@ -47,8 +48,9 @@ export interface ItemsData {
   onRateBooks: boolean
   onCatalog: boolean
   // Header actions, identical on both views: the Catalog ↔ Rate Books
-  // switcher (null unless the user can manage configuration with projects
-  // on) plus the New button on the catalog view.
+  // switcher (empty unless the user can manage configuration with projects
+  // on), extended with Families while the Item variants gate is on, plus the
+  // New button on the catalog view.
   tabs: { href: string; label: string; active: boolean }[]
   drawer: (Record<string, unknown> & { remountKey: string }) | null
 }
@@ -64,13 +66,14 @@ export async function loadItems(
   // as a tab; managing them keeps the admin.setup.manage gate.
   const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
-  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled, subscriptionPricingEnabled] = await Promise.all([
+  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled, subscriptionPricingEnabled, variantsEnabled] = await Promise.all([
     isFeatureEnabled(orgId, 'projects'),
     isFeatureEnabled(orgId, 'inventory'),
     isFeatureEnabled(orgId, 'revenueRecognition'),
     isFeatureEnabled(orgId, 'timeTracking'),
     isFeatureEnabled(orgId, 'equipment'),
     isFeatureEnabled(orgId, 'subscriptionBilling'),
+    isFeatureEnabled(orgId, 'itemVariants'),
   ])
 
   const itemId = typeof sp.item === 'string' ? sp.item : undefined
@@ -79,16 +82,20 @@ export async function loadItems(
   const rateBooksEntity = view === 'rate-books' ? SETUP_ENTITY_BY_KEY.get('item-rate-books') ?? null : null
 
   // Catalog ↔ Rate Books switcher — visible tabs shown on both views when the
-  // user can manage configuration, defined once and reused. Empty when the
+  // user can manage configuration, defined once and reused. Empty when every
   // gate fails: ModuleHomeTabs renders nothing for fewer than two tabs, which
   // matches the native `{viewChips}` (null when the gate fails) exactly.
+  // Product families ride the same strip while the Item variants gate is on,
+  // so the family list stays one click from the catalog in every configuration.
   const showTabs = canSetup && projectsEnabled
-  const tabs = showTabs
-    ? [
-        { href: '/items', label: t('list.viewCatalog'), active: view === 'catalog' },
-        { href: '/items?view=rate-books', label: t('list.viewRateBooks'), active: view === 'rate-books' },
-      ]
-    : []
+  const tabs = itemsWorkspaceTabs({
+    active: view === 'rate-books' ? 'rate-books' : 'catalog',
+    catalogLabel: t('list.viewCatalog'),
+    rateBooksLabel: t('list.viewRateBooks'),
+    familiesLabel: t('list.viewFamilies'),
+    showRateBooks: showTabs,
+    showFamilies: variantsEnabled,
+  })
 
   if (rateBooksEntity) {
     return {
@@ -196,6 +203,12 @@ export async function loadItems(
     : null
 
   const requestedReturn = pickString(sp.drawerReturn)
+  const openFamilyId = !createMode && variantsEnabled && openItem?.item.family_id
+    ? String(openItem.item.family_id)
+    : null
+  const openFamily = openFamilyId
+    ? (await db.execute<{ code: string }>(sql`select code from item_families where org_id = ${orgId} and id = ${openFamilyId}`)).rows[0] ?? null
+    : null
   const drawer =
     pickers && (openItem || createMode)
       ? {
@@ -246,6 +259,8 @@ export async function loadItems(
           subscriptionPricing: subscriptionPricingEnabled,
           initialPricingView,
           configuredPricingViews,
+          variantsEnabled,
+          family: openFamily && openFamilyId ? { id: openFamilyId, code: openFamily.code } : null,
         }
       : null
 
