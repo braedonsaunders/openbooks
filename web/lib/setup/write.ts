@@ -39,6 +39,7 @@ import {
   pgErrorCode,
   scaleShapeCheckRefusal,
   carrierCheckRefusal,
+  shippingCheckRefusal,
   carrierTrackingTemplateProblem,
   taxRatePercentProblem,
 } from './coerce'
@@ -2354,6 +2355,8 @@ export async function createSetupRecord(
     if (scaleRefusal) return scaleRefusal
     const carrierRefusal = carrierCheckRefusal(entity.key, e)
     if (carrierRefusal) return carrierRefusal
+    const shippingRefusal = shippingCheckRefusal(entity.key, e)
+    if (shippingRefusal) return shippingRefusal
     return { status: 400, body: { error: describeDbError(e) } }
   }
 }
@@ -2974,6 +2977,8 @@ export async function updateSetupRecord(
     if (scaleRefusal) return scaleRefusal
     const carrierRefusal = carrierCheckRefusal(entity.key, e)
     if (carrierRefusal) return carrierRefusal
+    const shippingRefusal = shippingCheckRefusal(entity.key, e)
+    if (shippingRefusal) return shippingRefusal
     return { status: 400, body: { error: describeDbError(e) } }
   }
 }

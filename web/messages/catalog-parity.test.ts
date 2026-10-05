@@ -3302,6 +3302,14 @@ const COGNATES = new Set<string>([
   'de:assets.leases.colRevision|Revision',
   'de:assets.leases.colStatus|Status',
   'pt-BR:assets.leases.colStatus|Status',
+  // Shipping account labels: Name is the German noun itself; Test and Live
+  // are the established loanwords German carrier dashboards use, and French
+  // spells the nouns Test and Mode identically.
+  'de:admin.setup.shipping.accounts.name|Name',
+  'de:admin.setup.shipping.accounts.modeTest|Test',
+  'de:admin.setup.shipping.accounts.modeLive|Live',
+  'fr:admin.setup.shipping.accounts.modeTest|Test',
+  'fr:admin.setup.shipping.accounts.mode|Mode',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {

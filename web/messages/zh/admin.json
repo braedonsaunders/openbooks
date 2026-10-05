@@ -3325,6 +3325,16 @@
       "contract-cost-policy": {
         "title": "合同成本政策",
         "description": "哪些获客成本予以资本化、在哪个受益期间、计入哪些科目(ASC 340-40)。"
+      },
+      "package-presets": {
+        "title": "包裹规格",
+        "singular": "包裹规格",
+        "description": "可重复使用的箱子和信封尺寸，用于比较运费。没有重量的规格无法计算面单价格。"
+      },
+      "shipping-settings": {
+        "title": "配送设置",
+        "singular": "配送设置",
+        "description": "承担面单成本的账目、补齐缺失尺寸的包裹，以及运费、加价、保险、签名和报关的默认值。"
       }
     },
     "fields": {
@@ -3833,7 +3843,20 @@
       "feePercent": "费用百分比",
       "itemCategory": "商品类别",
       "percentValue": "折扣百分比",
-      "usageCount": "使用次数"
+      "usageCount": "使用次数",
+      "length": "长度",
+      "width": "宽度",
+      "height": "高度",
+      "dimUnit": "尺寸单位",
+      "weightUnit": "重量单位",
+      "shippingExpenseAccountId": "配送费用科目",
+      "carrierPayableAccountId": "承运商应付款科目",
+      "defaultPresetId": "默认包裹",
+      "defaultRateRule": "默认运费规则",
+      "markupBps": "加价",
+      "defaultInsurance": "默认保险",
+      "defaultSignature": "默认签名",
+      "customsDefaults": "报关默认值"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -3961,7 +3984,10 @@
       "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。",
       "contractCostPracticalExpedient": "启用后，受益期为十二个月或更短的成本将直接费用化，不予资本化。",
       "contractCostCommensurate": "续约佣金达到或超过初次佣金的这一比例时，即使采用客户生命周期基础，摊销也限定在合同期内。",
-      "minorAmount": "货币的最小单位整数：1000 即 10.00 美元。"
+      "minorAmount": "货币的最小单位整数：1000 即 10.00 美元。",
+      "shippingDefaultPreset": "出货没有自带包裹尺寸时使用。",
+      "shippingMarkup": "在承运商运费上加收的费用，以基点计。100 即百分之一。",
+      "shippingCustomsDefaults": "发往国外的出货默认内容说明。"
     },
     "options": {
       "usageAggregation": {
@@ -4581,6 +4607,30 @@
       "restockingFeeKind": {
         "percent": "按退款金额比例",
         "fixed": "固定金额"
+      },
+      "dimUnit": {
+        "cm": "厘米",
+        "in": "英寸"
+      },
+      "weightUnit": {
+        "g": "克",
+        "kg": "千克",
+        "oz": "盎司",
+        "lb": "磅"
+      },
+      "rateRule": {
+        "cheapest": "最便宜",
+        "fastest": "最快",
+        "cheapest_by_date": "按时到达的最便宜"
+      },
+      "insuranceDefault": {
+        "none": "无保险",
+        "carrier_full": "承运商全额保价"
+      },
+      "signatureDefault": {
+        "none": "无需签名",
+        "direct": "本人签收",
+        "adult": "成人签收"
       }
     },
     "payroll": {
@@ -5716,6 +5766,51 @@
       "employerContribution": {
         "label": "雇主缴款",
         "description": "雇主在工资之外承担、不显示在员工工资中的费用。"
+      }
+    },
+    "shipping": {
+      "navTitle": "配送",
+      "title": "配送",
+      "description": "承运商账号、包裹规格以及每批出货的默认值。",
+      "tabs": {
+        "accounts": "承运商账号"
+      },
+      "accounts": {
+        "title": "承运商账号",
+        "description": "连接 EasyPost 或 Shippo，直接在出货单中比较实时运费并购买面单。API 密钥经封存，不会再次显示。",
+        "connect": "连接账号",
+        "name": "名称",
+        "namePlaceholder": "主 EasyPost 账号",
+        "provider": "服务商",
+        "mode": "模式",
+        "modeTest": "测试",
+        "modeLive": "正式",
+        "apiKey": "API 密钥",
+        "keyPlaceholder": "粘贴服务商 API 密钥",
+        "keyKeepPlaceholder": "留空以保留已保存的密钥",
+        "makeDefault": "新出货的默认账号",
+        "updated": "账号已保存。",
+        "connected": "账号已连接。",
+        "testOk": "与{name}的连接正常。",
+        "disconnected": "已停用{name}。面单和成本记录予以保留。",
+        "disconnectConfirm": "停用{name}？面单和成本记录予以保留。",
+        "test": "测试连接",
+        "disconnect": "停用",
+        "defaultBadge": "默认",
+        "noKey": "未保存密钥",
+        "emptyTitle": "暂无承运商账号",
+        "emptyDescription": "连接 EasyPost 或 Shippo 账号，即可在出货单中比较实时运费并购买面单。",
+        "status": {
+          "active": "有效",
+          "disabled": "已停用",
+          "error": "需要注意"
+        },
+        "errors": {
+          "loadFailed": "无法加载承运商账号。",
+          "saveFailed": "无法保存账号。",
+          "testFailed": "连接测试失败。",
+          "disconnectFailed": "无法停用账号。"
+        }
       }
     }
   },
