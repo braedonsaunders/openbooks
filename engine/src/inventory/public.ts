@@ -2,6 +2,47 @@ export { proposeDropShipAssessment,applyDropShipAssessment,AgencyError,type Agen
 /** Stable native contracts for direct assembly operations and their scoped selectors. */
 export { disassembleAssembly, reverseAssemblyDisassembly, type DisassemblyInput, type DisassemblyResult } from './disassembly.ts'
 export { listInventoryOperationOptions, type InventoryOperationOption } from './operation-options.ts'
+export {
+  ItemFamilyError,
+  assertItemVariantsFeature,
+  assertItemVariantsReadable,
+  createItemFamily,
+  updateItemFamily,
+  replaceFamilyOptions,
+  generateFamilyVariants,
+  previewGenerateVariants,
+  bulkEditVariants,
+  detachVariant,
+  convertItemToFamily,
+  getItemFamily,
+  renderVariantCode,
+  slugifyCodeSegment,
+  variantDisplayName,
+  cartesianCombinations,
+  normalizeFamilyOptions,
+  textArrayLiteral,
+  VARIANT_KINDS,
+  FAMILY_STATUSES,
+  DEFAULT_VARIANT_CODE_PATTERN,
+  type VariantKind,
+  type ItemFamilyRecord,
+  type FamilyOptionRecord,
+  type VariantRecord,
+  type ItemFamilyDetail,
+  type FamilyOptionInput,
+  type FamilyOptionValueInput,
+  type NormalizedOption,
+  type NormalizedOptionValue,
+  type OptionCombination,
+  type MissingCombination,
+  type GeneratedVariant,
+  type GenerateVariantsInput,
+  type CreateFamilyInput,
+  type UpdateFamilyInput,
+  type BulkBarcodeInput,
+  type BulkEditVariantsInput,
+  type ConvertItemInput,
+} from './item-families.ts'
 export { INVENTORY_ACTION_PERMISSIONS } from './public-contracts.ts'
 /** Stable availability promises: the same computation the native availability report renders. */
 export {

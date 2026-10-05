@@ -11,6 +11,7 @@ import {
   generateFamilyVariants,
   getItemFamily,
   ItemFamilyError,
+  previewGenerateVariants,
   replaceFamilyOptions,
 } from "./item-families.ts";
 
@@ -457,6 +458,28 @@ test("families are isolated per organization", { skip: !DB }, async () => {
   } finally {
     await withBypassContext(() => dropScratchOrg(first.org.orgId));
     await withBypassContext(() => dropScratchOrg(second.org.orgId));
+  }
+});
+
+test("preview names the missing combinations with their exact codes", { skip: !DB }, async () => {
+  const { org, actorId } = await setup();
+  try {
+    const family = await createTee(org.orgId, actorId);
+    const before = await withBypassContext(() => previewGenerateVariants(org.orgId, family.id));
+    assert.equal(before.existing, 0);
+    assert.deepEqual(
+      before.missing.map((combination) => combination.code),
+      ["TEE-S-RED", "TEE-S-BLUE", "TEE-M-RED", "TEE-M-BLUE"],
+    );
+    await withBypassContext(() =>
+      generateFamilyVariants(org.orgId, actorId, family.id, { only: [{ Size: "S", Color: "Red" }] }),
+    );
+    const after = await withBypassContext(() => previewGenerateVariants(org.orgId, family.id));
+    assert.equal(after.existing, 1);
+    assert.equal(after.missing.length, 3);
+    assert.ok(after.missing.every((combination) => combination.code !== "TEE-S-RED"));
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
