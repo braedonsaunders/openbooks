@@ -7,7 +7,7 @@ import { apOpenAccountScope as sharedApOpenAccountScope } from '../../engine/src
 
 /**
  * The one shared answer to "which ACCOUNTS carry open payables/receivables"
- * (0171, F-p3-001). Document-kind membership lives once in
+ * (0171). Document-kind membership lives once in
  * engine/src/records/open-item-kinds.ts (AP_OPEN_ITEM_KINDS / AR_OPEN_ITEM_KINDS) —
  * this module never re-lists kinds, only the account side of the scope.
  *

@@ -156,7 +156,7 @@ test("effective windows overlap on shared days", () => {
   );
 });
 
-test("free-text dimension values fail in user language, never field-name jargon (F-t06-016)", async () => {
+test("free-text dimension values fail in user language, never field-name jargon", async () => {
   // The manual-values form fell back to a bare textbox when no dimension
   // options existed, and free text died with "dimensionValueId must be a
   // uuid". The rejection must name the action in user words. Rejects before

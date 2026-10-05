@@ -15,7 +15,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * F-t06-021: voiding a posted JE in an OPEN period answered 422 with a bare
+ * Voiding a posted JE in an OPEN period answered 422 with a bare
  * `{error}` the drawer swallowed. The refusal was the reversal leg, not the
  * source period: the UI sends no reversalDate, so the server reverses on the
  * business day — which can fall outside any accounting period (SIM

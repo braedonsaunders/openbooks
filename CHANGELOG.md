@@ -639,8 +639,7 @@ Defect fixes on top of alpha.12. No new migration.
 
 ### i18n, shell, and allocations
 
-- `ar.collections` and `agents` catalogs backfill de, ja, zh, and pt-BR
-  (F-x6-002).
+- `ar.collections` and `agents` catalogs backfill de, ja, zh, and pt-BR.
 - The platform workspace switcher lives in the account menu.
 - Allocation-rule wizard destination menus stay above the modal and
   match on any dimension, with codes in the option labels.
@@ -737,7 +736,7 @@ agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
   translate; evidence kinds are labeled in en/fr/es.
 - AI Test connection verifies the typed key; load-models errors stay
   structured. Saved list views and bank-feed disconnects confirm first;
-  discard-draft on an app always confirms (F-t10-007).
+  discard-draft on an app always confirms.
 - Open-aging built-ins count application-aware open lines; statement
   tables stay readable on a phone; cash cockpit, bank feeds, project
   billing, setup sidebar, and report filter presets translate.

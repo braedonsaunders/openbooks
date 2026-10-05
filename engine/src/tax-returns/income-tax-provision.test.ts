@@ -7,7 +7,7 @@ import {
   toDeductibleSide,
 } from "./income-tax-provision.ts";
 
-test("inherently-deductible categories normalize positive inputs to the DTA side (F-t10-003)", () => {
+test("inherently-deductible categories normalize positive inputs to the DTA side", () => {
   const nol = { category: "loss_carryforward" as const, description: "NOL", difference: "100000", source: "manual" as const };
   assert.equal(toDeductibleSide(nol).difference, "-100000.0000");
   const warranty = { category: "provisions" as const, description: "Warranty", difference: "20000", source: "manual" as const };

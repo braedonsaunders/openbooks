@@ -60,6 +60,21 @@ const ID_PATTERNS = [
   /\bDSAR-[0-9]+\b/,
   /\(C1[34]\)/,
   /\bthr_[a-z0-9]{6,}\b/,
+  // Review finding ids (F-t06-016, F-reg-003, F-coord-004, ...). Case-
+  // sensitive: form and box codes are upper-case (F-1040) and never match.
+  /\bF-[a-z]+[0-9]*-[0-9]{2,}\b/,
+]
+
+// Published migration lines that predate a pattern. Their bytes are
+// fingerprinted, so they change only with a digest-transition restamp; until
+// then each is exempt by its exact text, and an entry that no longer matches
+// a line fails the check so the list can only shrink.
+const PUBLISHED_EXEMPTIONS = [
+  ['schema/migrations/generated/0169_change_orders_income_account.sql', '-- F-t03-002 residual: an owner change order approved without a target'],
+  ['schema/migrations/generated/0170_forecast_snapshot_org_target.sql', '-- F-t02-002: the forecasts page snapshots whatever scope the summary shows,'],
+  ['schema/migrations/generated/0172_tax_return_form_notice_key.sql', '-- F-w4-001: the generic tax prepare panel branched on the literal `CA_GST34`'],
+  ['schema/migrations/generated/0172_tax_return_form_notice_key.sql', "'Pack-declared filing-notice catalog key (0172, F-w4-001): a tax-namespace message key the generic prepare panel renders for this form, e.g. submission.gst34Notice. NULL = the form declares no notice. Written by pack provisioning on install and reset; never a country branch in UI code';"],
+  ['schema/migrations/generated/0179_pay_component_credit_kind.sql', '-- with the F-reg-003 architecture work (engine/src/payroll/packs.ts types the'],
 ]
 
 // Fleet work-organization wording. Case-insensitive; each shape was removed
@@ -103,6 +118,7 @@ const PATTERNS = [...ID_PATTERNS, ...FLEET_PATTERNS]
 
 export function internalIdViolations(files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0')) {
   const violations = []
+  const unusedExemptions = new Set(PUBLISHED_EXEMPTIONS.map(([file, text]) => `${file}\0${text}`))
   for (const file of files) {
     if (file === SELF || file === BASELINE) continue
     if (!ROOTS.some((root) => file === root || file.startsWith(root))) continue
@@ -110,8 +126,13 @@ export function internalIdViolations(files = execFileSync('git', ['ls-files', '-
     const lines = readFileSync(file, 'utf8').split('\n')
     lines.forEach((line, index) => {
       const hit = PATTERNS.find((pattern) => pattern.test(line))
+      if (hit && unusedExemptions.delete(`${file}\0${line.trim()}`)) return
       if (hit) violations.push(`${file}:${index + 1}: ${hit} :: ${line.trim().slice(0, 160)}`)
     })
+  }
+  for (const stale of unusedExemptions) {
+    const [file, text] = stale.split('\0')
+    if (files.includes(file)) violations.push(`${file}: published exemption no longer matches a line; remove it from ${SELF} :: ${text.slice(0, 120)}`)
   }
   return violations
 }

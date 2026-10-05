@@ -1272,7 +1272,7 @@ const consolidatedRows = [
                           (${scratch.orgId}, ${draftEntry}, 2, ${scratch.accounts.revenue}, ${scratch.subsidiaryId}, ${deptB}, '-50', 'CAD', '-50', '1')`)
                       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${postEntry}`)
                     })
-                    // Scoped like the cash-basis precision case (F-coord-005): the web
+                    // Scoped like the cash-basis precision case: the web
                     // request-org resolver denies unscoped reads under pooled RLS, so a bare
                     // call returns zero rows and mints no columns at all.
                     const matrix = await withBypass(() => withOrgContext(scratch.orgId, async () => statementMatrix({

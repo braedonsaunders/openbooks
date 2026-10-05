@@ -60,7 +60,7 @@ const DEDUCTIBLE_SIDE_CATEGORIES: ReadonlySet<DifferenceInput["category"]> = new
 
 /**
  * Normalize inherently-deductible differences to the deductible (negative)
- * side at the compute boundary (F-t10-003). Preparers enter the reserve or
+ * side at the compute boundary. Preparers enter the reserve or
  * carryforward as the positive amount it is ("the warranty reserve is
  * 20,000"); without this, that natural input books a deferred tax LIABILITY
  * and gross DTA stays unreachable. Already-negative inputs and every other
@@ -1498,7 +1498,7 @@ export async function computeProvisionRun(
       ];
       // Inherently-deductible categories normalize to the DTA side here, so
       // every compute caller (dialog, per-entity overrides, API) shares the
-      // sign rule instead of each reimplementing it (F-t10-003).
+      // sign rule instead of each reimplementing it.
       const differences = [
         ...(autoByEntity.get(subsidiaryId) ?? []),
         ...(manualByEntity.get(subsidiaryId) ?? []),

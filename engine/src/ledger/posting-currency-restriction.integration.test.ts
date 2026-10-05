@@ -10,7 +10,7 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * F-t06-002: a USD deposit into a CAD-restricted bank account. The storage
+ * A USD deposit into a CAD-restricted bank account. The storage
  * trigger (`jl_check_account`) is the only defense, and its UUID-laden
  * exception used to escape as a 500 with the raw INSERT pasted into the UI.
  * The kernel must refuse first with a typed PostingError naming the account

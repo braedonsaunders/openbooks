@@ -220,8 +220,8 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
 }
 
 /**
- * POST assign-warehouse: set one line's warehouse on an approved order
- * (F-coord-004). Approved lines are storage-immutable, so legacy orders
+ * POST assign-warehouse: set one line's warehouse on an approved order.
+ * Approved lines are storage-immutable, so legacy orders
  * approved before line warehouses existed could never gain one and their
  * fulfillment failed closed with no way forward. Only sales and purchase
  * orders are wired: quotes never relieve stock. Setting the warehouse

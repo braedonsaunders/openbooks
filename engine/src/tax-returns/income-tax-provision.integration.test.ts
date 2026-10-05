@@ -892,7 +892,7 @@ test("third same-year repost writes a third distinct reversal without number col
   }
 });
 
-test("positive NOL carryforward and warranty reserve measure as DTA, never DTL (F-t10-003)", { skip: !DB }, async () => {
+test("positive NOL carryforward and warranty reserve measure as DTA, never DTL", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Provision Tester", "admin");

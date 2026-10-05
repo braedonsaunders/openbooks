@@ -9,7 +9,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const USER = randomUUID();
 const actor = { kind: "user" as const, userId: USER };
 
-// F-t12-002: saving a provider selection with missing fields must fail with
+// Saving a provider selection with missing fields must fail with
 // a typed reason instead of silently persisting an incomplete config. A
 // provider that is selected is staged to send, even while disabled — only a
 // fully cleared provider (unconfigured) may be incomplete.

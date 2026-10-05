@@ -73,7 +73,7 @@ test(
 );
 
 test(
-  "retainage receivable control mapping only accepts receivable-type accounts (F-t04-002)",
+  "retainage receivable control mapping only accepts receivable-type accounts",
   () => {
     const receivable: ControlAccountRecord = {
       id: "11111111-1111-4111-8111-111111111111",

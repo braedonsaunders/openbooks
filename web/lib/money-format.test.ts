@@ -77,7 +77,7 @@ test('decimal formatting preserves exact values without a currency symbol', () =
   )
 })
 
-// F-x6-001 item 5: ICU emits U+202F (narrow no-break space) as the fr
+// ICU emits U+202F (narrow no-break space) as the fr
 // grouping separator, and Chromium renders it zero-width in the app's
 // system-ui stack (proven: identical pixel widths with and without it) —
 // so fr amounts read ungrouped ("110699,26") while the DOM stays correct.

@@ -420,7 +420,7 @@ export function UrlDrawer({
   /** Sync the address bar the moment close begins (replaceState to the
    *  resolved close href) instead of waiting for the exit animation's
    *  deferred navigation — so a synchronous URL read at close time already
-   *  matches the dismissed state (F-t06-002). The deferred router navigation
+   *  matches the dismissed state. The deferred router navigation
    *  still re-runs the server after the animation; default false preserves
    *  the historic close-then-navigate timing everywhere else. */
   syncUrlOnClose?: boolean

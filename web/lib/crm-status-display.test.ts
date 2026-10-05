@@ -10,7 +10,7 @@ const messagesDir = join(here, '..', 'messages')
 const catalog = (locale: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(messagesDir, locale, 'crm.json'), 'utf8'))
 
-// F-x6-001 item 4: the opp drawer title pill rendered the DB-seeded English
+// The opp drawer title pill rendered the DB-seeded English
 // status name ("Closed lost") under fr. Unrenamed seed statuses render via
 // the catalog; a renamed (custom) status keeps its stored name.
 test('seeded status names resolve through the translator', () => {
@@ -27,7 +27,7 @@ test('renamed or unknown statuses keep their stored name', () => {
 })
 
 for (const locale of ['en', 'fr', 'es']) {
-  test(`F-x6-001: opportunity status names are translated in ${locale}`, () => {
+  test(`opportunity status names are translated in ${locale}`, () => {
     const statuses = (catalog(locale).opportunities as Record<string, unknown>).statuses as
       | Record<string, unknown>
       | undefined
@@ -38,7 +38,7 @@ for (const locale of ['en', 'fr', 'es']) {
   })
 }
 
-// F-x6-002: account statuses share the opportunity-status pattern —
+// Account statuses share the opportunity-status pattern —
 // DB-seeded English names rendered raw in the account drawer select.
 test('seeded account status names resolve through the translator', () => {
   const t = (key: string) => `<${key}>`
@@ -48,7 +48,7 @@ test('seeded account status names resolve through the translator', () => {
 })
 
 for (const locale of ['en', 'fr', 'es']) {
-  test(`F-x6-002: account status names are translated in ${locale}`, () => {
+  test(`account status names are translated in ${locale}`, () => {
     const statuses = (catalog(locale).accounts as Record<string, unknown>).statuses as
       | Record<string, unknown>
       | undefined

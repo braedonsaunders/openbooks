@@ -34,7 +34,7 @@ import { isUuid } from "../../platform/uuid.ts";
  * map from GB_PACK, which is this module's own package. Importing it at module
  * scope closes the cycle gb/pack -> gb/filings -> yearend -> packs -> gb/pack
  * and evaluates PAYROLL_COUNTRY_PACKS while GB_PACK is still in its temporal
- * dead zone. The codebase's rule for this (F-reg-003) is that a pack's
+ * dead zone. The codebase's rule for this is that a pack's
  * dependencies do not import the registry; every caller below is already
  * async, so load it on first use instead.
  */

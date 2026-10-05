@@ -13,13 +13,13 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * F-t03-005: posting a run whose instructions fail (here: an instruction
+ * Posting a run whose instructions fail (here: an instruction
  * with no payment document, standing in for any per-instruction refusal such
  * as the closed-period lock) returned the reasons in the POST response but
  * persisted only counts. The toast dismissed, the activity feed showed bare
  * tallies, and the clerk could never learn WHY nothing moved. The
  * run_posting_failed event must carry the per-instruction reasons — the same
- * store the activity feed already renders (F-t04-007 contract).
+ * store the activity feed already renders.
  */
 test(
   "a partially failed posting persists its per-instruction reasons on the run event",

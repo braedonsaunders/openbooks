@@ -502,7 +502,7 @@ test("a stated total the components cannot explain is reported even with every c
   assertSelfConsistent(comparison);
 });
 
-test("net attributes against the stated gross, so one-sided earnings do not smear into unexplained net (F-t05-003)", () => {
+test("net attributes against the stated gross, so one-sided earnings do not smear into unexplained net", () => {
   // A prior register that states its totals and itemizes only its deductions
   // — no earning or employer-contribution detail — against our fully itemized
   // run. Every deduction matches and the stated nets agree to a penny, so the

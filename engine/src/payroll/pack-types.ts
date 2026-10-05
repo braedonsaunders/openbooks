@@ -1066,7 +1066,7 @@ export interface PayrollCountryPack {
   ) => import("./annual-settlement.ts").PayrollAnnualSettlement | null;
   /**
    * The statutory engine's published name, for the stub calculation trace
-   * heading (F-t08-012): "T4127" for the CRA pack, "Pub 15-T" for the IRS
+   * heading: "T4127" for the CRA pack, "Pub 15-T" for the IRS
    * pack. REQUIRED: the trace heading names the filing regime the numbers
    * were computed under, and a hardcoded heading names the wrong country.
    */

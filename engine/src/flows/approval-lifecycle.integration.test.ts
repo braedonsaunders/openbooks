@@ -232,7 +232,7 @@ test("submit FAILS CLOSED when the approval flow resolves to zero approvers", { 
   });
 });
 
-/** F-t04-004: a run that failed on a zero-assignee gate strands its subject
+/** A run that failed on a zero-assignee gate strands its subject
  * with no path forward. Retrying the failed run after the gate becomes
  * satisfiable must re-resolve assignees live and park the run at a gate —
  * the same run row. Once the run leaves failed, further retries are refused

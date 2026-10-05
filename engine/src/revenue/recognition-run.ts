@@ -79,7 +79,7 @@ export class StaleRecognitionPreviewError extends Error {}
  * recognized) posted through the kernel, origin = 'revenue_recognition'. A
  * closed GL period is skipped (not an error). Idempotent: a line with a
  * journal_entry_id is never reconsidered. Every posting is capped at what
- * remains genuinely unearned for its obligation (F-w5-001): a fully-credited
+ * remains genuinely unearned for its obligation: a fully-credited
  * obligation holds its plan lines (skipped with an explanatory problem), a
  * partially-credited one posts only the remainder.
  */
@@ -160,7 +160,7 @@ export async function runRevenueRecognition(
         if (!deferredAccountId || !recognizedAccountId) {
           return { status: "not_configured" as const, row };
         }
-        // F-w5-001: a manual credit memo relieves deferred without touching
+        // A manual credit memo relieves deferred without touching
         // the plan. Never post more than what remains genuinely unearned; a
         // fully-credited obligation holds its plan lines, a partially-credited
         // one posts only the remainder (the final line may post partial).

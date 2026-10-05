@@ -416,7 +416,7 @@ test("a country no pack declares refuses rather than answering", () => {
 });
 
 test("every installable pack names its statutory engine and declares withholding buckets", () => {
-  // F-t08-012: the stub register and stub header summarized every run into
+  // The stub register and stub header summarized every run into
   // hardcoded CA buckets because nothing forced the packs to declare their
   // own. The review UI reads these declarations, so a pack that stays silent
   // about its engine label or its employee withholding components renders

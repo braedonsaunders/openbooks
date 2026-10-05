@@ -15,7 +15,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * F-t03-004: posting a bill into a closed AP period must refuse as a typed
+ * Posting a bill into a closed AP period must refuse as a typed
  * PostingError naming the closed module ("AP is closed for this period and
  * accounting book") — which the documents-actions route answers as a 422 the
  * drawer and the row both pin beside the record (see
@@ -56,7 +56,7 @@ test(
           module: "ap",
           state: "closed",
           actorId: userId,
-          reason: "F-t03-004 probe: AP closed with the bill still approved",
+          reason: "Probe: AP closed with the bill still approved",
         });
       });
       await assert.rejects(

@@ -14,7 +14,7 @@ import { isIsoCalendarDate } from "../platform/iso-date.ts";
  * `resolveStatutoryRates`) closed a load-order-dependent cycle:
  * packs.ts -> it/pack.ts -> it/compute-statutory.ts -> ../statutory-rates.ts
  * -> packs.ts, crashing with "Cannot access 'IT_PAYROLL_PACK' before
- * initialization" whenever the pack was entered first (F-reg-003).
+ * initialization" whenever the pack was entered first.
  *
  * Date arithmetic over a tax-year basis needs no registry, so it lives here
  * instead. Its input uses the same pure ISO-date validator as API boundaries.

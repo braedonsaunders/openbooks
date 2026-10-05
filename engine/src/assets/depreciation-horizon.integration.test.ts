@@ -131,7 +131,7 @@ for(const missing of ['line','period'] as const) {
 }
 
 test('run extends schedules past periods created after the build',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  // F-t09-005 engine: the builder only projects months whose accounting
+  // The builder only projects months whose accounting
   // periods exist, and nothing else rebuilds the schedule — so a run after
   // month-end rollover found no September-style line and reported "nothing
   // due" with a 200 while an open period accrued. The run must extend stale

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { REPORT_ENTITY_MAP } from './entities'
 import { formatMeasureValue } from './run'
 
-// F-t07-007: summarize-mode measures rendered kind-blind, so a date measure
+// Summarize-mode measures rendered kind-blind, so a date measure
 // like min(due_date) printed as a datetime ("2026-06-30 04:00:00" — a UTC
 // rendering of a local-midnight date). Date-kind measures must render dates.
 describe('summarize measure display values', () => {

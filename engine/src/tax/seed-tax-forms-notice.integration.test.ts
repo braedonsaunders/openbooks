@@ -13,7 +13,7 @@ async function formNoticeKey(orgId: string, code: string): Promise<string | null
   return rows[0]?.notice_key;
 }
 
-// F-w4-001: the pack declares the filing notice, provisioning carries it onto
+// The pack declares the filing notice, provisioning carries it onto
 // the tenant-owned form row, and the generic UI renders whatever the row
 // declares. A pack that declares nothing must provision NULL — never a
 // fallback notice from another jurisdiction.

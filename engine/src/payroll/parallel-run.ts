@@ -684,8 +684,8 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
     // net == gross − deductions + credits. Attributing net against earnings
     // lets a one-sided earning (a register that states gross without
     // itemizing it) smear the whole gross into "unexplained net" even when
-    // every deduction matches and the stated nets agree to the penny
-    // (F-t05-003) — the same smearing the component tests refuse for matched
+    // every deduction matches and the stated nets agree to the penny —
+    // the same smearing the component tests refuse for matched
     // cells. Credits attribute the same way deductions do: a matched credit
     // explains its share of net, so only an unmatched one is unattributed.
     unattributed: difference(

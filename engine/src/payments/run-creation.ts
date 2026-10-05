@@ -261,8 +261,8 @@ async function createPaymentRunWithinTransaction(
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
     // Name the bills held by another live run (bill + holding run number)
-    // instead of failing the whole selection behind the generic guard
-    // (F-t04-005): the operator can see exactly which selection to drop.
+    // instead of failing the whole selection behind the generic guard,
+    // so the operator can see exactly which selection to drop.
     const reserved = (await db.execute<{ billId: string; billNumber: string; runNumber: string }>(sql`
       select distinct i.source_document_id as "billId", d.document_number as "billNumber", r.run_number as "runNumber"
         from payment_run_items i

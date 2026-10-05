@@ -520,7 +520,7 @@ test("complete history renders beyond twenty chats and shrinks after deleting an
   assert.ok(sidebarTitles(view.host).includes("History chat 45"), "the oldest chat must already be rendered");
 });
 
-/** F-user-002: a delete confirmed in the chat menu must survive switching chats. */
+/** A delete confirmed in the chat menu must survive switching chats. */
 test("a deleted thread stays gone when the next chat arrives with a stale server list", async (t) => {
   const a = randomUUID();
   const b = randomUUID();

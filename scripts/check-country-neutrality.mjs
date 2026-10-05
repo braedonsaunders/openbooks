@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-// Country-neutrality gate (F-w4-001): country packs DECLARE, the generic
+// Country-neutrality gate: country packs DECLARE, the generic
 // layer branches on NOTHING. Two rules:
 //
 // Rule 1 — no equality branch against a pack form code (CA_GST34, US_941,

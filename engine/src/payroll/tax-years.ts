@@ -1,5 +1,5 @@
-// This module imports nothing at runtime — not even `./packs.ts` (F-reg-003;
-// see the note atop `statutory-rates.ts` for why). Country-keyed conveniences
+// This module imports nothing at runtime — not even `./packs.ts` (that
+// closes the registry load cycle; see the note atop `statutory-rates.ts` for why). Country-keyed conveniences
 // (`declaredPayrollTaxYears`, `payrollTaxYearSupport`, `payrollTaxYearProblem`,
 // `payrollTaxYearForDate`, `payrollTaxYearCoverage`, …) live with the registry
 // in `packs.ts`; what stays here takes the pack's declaration as a parameter.
@@ -133,7 +133,7 @@ export interface PayrollTaxYearSupport {
 //
 // The registry half (`declaredPayrollTaxYears`, the EXTRA registrations,
 // `payrollTaxYearSupport`) moved to `packs.ts`: a function whose whole job is
-// "ask every pack" belongs with the registry (F-reg-003). What stays here
+// "ask every pack" belongs with the registry. What stays here
 // takes the pack's declaration as a parameter instead.
 
 /** Years with at least one PUBLISHED country-wide edition, ascending. */

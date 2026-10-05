@@ -159,7 +159,7 @@ test("a line-less submit pins the typed refusal on the drawer", async (t) => {
   );
 });
 
-/** F-coord-003: a refused self-approval must pin its typed reason on the
+/** A refused self-approval must pin its typed reason on the
  * record, not vanish behind a transient toast. */
 test("a refused self-approval pins the typed refusal on the drawer", async (t) => {
   const priorFetch = globalThis.fetch;

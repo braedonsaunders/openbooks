@@ -46,7 +46,7 @@ export async function isFulfilmentGovernedInvoice(
  * satisfy: an inventory-kind line without a costing profile — or with a
  * profile but no resolvable stock location — would otherwise post revenue
  * with no COGS and no stock movement, failing only inside the post-commit
- * effects drain after the journal has committed (F-t07-003). Governed
+ * effects drain after the journal has committed. Governed
  * invoices (sold through fulfillment) already clear this at shipment; this
  * is the backstop for the legacy ship-and-bill path. Fail before posting,
  * like the bill leg.

@@ -357,7 +357,7 @@ test('PATCH mark-filed demands compliance.file, not the report authority', async
   assert.deepEqual(routeState.engineCalls, [{ op: 'markFiled', orgId: 'org-1', userId: 'user-1' }])
 })
 
-// F-x5-001 residual: a 409 whose reason stays server-side is UI-silent — the
+// A 409 whose reason stays server-side is UI-silent — the
 // drawer can only toast a generic save failure. Every mark-filed 409 must
 // carry its machine-readable code so the drawer localizes the remedy.
 test('PATCH mark-filed 409s carry the typed refusal code', async () => {

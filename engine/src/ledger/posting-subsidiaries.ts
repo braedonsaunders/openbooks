@@ -7,8 +7,8 @@ import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryCont
 import { type Doc, type KernelLine, PostingError } from "../journal/posting-contracts.ts";
 import { collectBalancingLegs } from "../journal/balancing-hooks.ts";
 /**
- * Application-layer proof for the storage trigger `jl_check_account`
- * (F-t06-002): every final line inserts in its line currency, so a target
+ * Application-layer proof for the storage trigger `jl_check_account`:
+ * every final line inserts in its line currency, so a target
  * account carrying a currency restriction must name exactly that currency.
  * Refusing here — naming the account and its allowed currency, never an
  * id — turns a 500 raw-SQL escape into a typed refusal before any journal

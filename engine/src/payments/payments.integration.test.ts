@@ -807,7 +807,7 @@ test("an open item can be reserved by only one live payment run at a time", { sk
   }
 });
 
-/** F-t04-005: the duplicate-bill refusal must name the bill and the live run
+/** The duplicate-bill refusal must name the bill and the live run
  * holding it — a generic "another live payment run" leaves the operator
  * guessing which selection to drop. */
 test("a duplicate-bill run refusal names the bill and the holding run", { skip: !DB }, async () => {

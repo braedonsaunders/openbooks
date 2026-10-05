@@ -293,7 +293,7 @@ describe('period_preset compile contract', () => {
 })
 
 describe('open-aging built-ins count truly open lines', () => {
-  // F-t07-007: is_open_item marks AR/AP-tracked lines, not unpaid ones, so
+  // `is_open_item` marks AR/AP-tracked lines, not unpaid ones, so
   // "Open AR by customer" counted paid invoices and their payment lines as
   // open (28 vs the aging detail's 16) and min()ed over stale due dates.
   // Both open-aging built-ins must filter on the application-aware

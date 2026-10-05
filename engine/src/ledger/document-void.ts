@@ -29,7 +29,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 
 /**
- * Machine-readable void refusal reasons (F-t06-021). The human message
+ * Machine-readable void refusal reasons. The human message
  * travels unchanged in `message`; `code` lets callers branch — the journal
  * drawer maps the three actionable refusals to localized copy instead of
  * toasting raw kernel text. Every other refusal is `invalid`.

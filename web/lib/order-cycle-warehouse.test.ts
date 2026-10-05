@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-coord-004: fulfillment/receipt must refuse a stocked order line with no
+// Fulfillment/receipt must refuse a stocked order line with no
 // warehouse instead of failing deep in the inventory kernel. The rule is
 // pure so the refusal predicate is pinned here without a database; the
 // end-to-end legacy shape (refuse → assign → fulfill) is covered by

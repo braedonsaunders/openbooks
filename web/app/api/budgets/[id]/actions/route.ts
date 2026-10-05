@@ -134,7 +134,7 @@ export const POST = defineRoute({
 
           if (action === 'approve' || action === 'reject') {
             if (scenario.status !== 'pending_approval') throw new BudgetMutationError('only_pending_budgets_can_be_decided', 409)
-            // F-coord-003: separation of duties, mirroring the document path
+            // Separation of duties, mirroring the document path
             // ("the submitter cannot approve their own document"). The submitter
             // may not decide their own budget even when they hold
             // budgets.approve; a single-admin exception would need to be an

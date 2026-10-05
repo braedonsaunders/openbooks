@@ -523,7 +523,7 @@ export function parseStripeBalanceTransactions(
     }
     // A missing type is a client-shape refusal, not a 500: the kind mapping
     // below reads `.includes` off this field, so an unvalidated row escapes
-    // as a TypeError with no schema help (F-t06-004). Name the 1-based row
+    // as a TypeError with no schema help. Name the 1-based row
     // (plus the provider id when the row carries one) so the payload can be
     // repaired field-by-field.
     const rowType = typeof r.type === "string" ? r.type : "";
@@ -1535,7 +1535,7 @@ export async function importSettlementBatch(
   }
   // The subsidiary reference enters the lifecycle here too: a malformed id
   // would otherwise die in Postgres as a raw uuid-cast 500, and a foreign
-  // or inactive id would persist to strand the draft at posting (F-t06-004).
+  // or inactive id would persist to strand the draft at posting.
   // Absence stays lenient — the import form asks up front, and posting
   // resolves an absent subsidiary exactly like every other document.
   const subsidiaryId =
@@ -1953,7 +1953,7 @@ export async function postSettlementBatch(
     const ctx = await loadSubsidiaryContext(db, orgId);
     // Only a genuinely ambiguous choice (a multi-entity org with none named)
     // refuses, and then the refusal names exactly what is missing: the old
-    // combined check blamed accounts the batch already carried (F-t06-004).
+    // combined check blamed accounts the batch already carried.
     // Either way the draft is repairable by re-importing the same provider
     // reference with the missing details (the import path fills them in).
     // The outer disjunct keeps every account narrowed past the refusal.

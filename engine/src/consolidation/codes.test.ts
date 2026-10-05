@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ConsolidationError, type ConsolidationCode } from "./consolidation.ts";
 
-// F-t06-026: consolidation refusals reached the close task as bare message
+// Consolidation refusals reached the close task as bare message
 // text — no surface could map them stably. Every refusal carries a
 // machine-readable code alongside the user-language message.
 test("consolidation refusals default to the invalid code", () => {

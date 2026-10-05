@@ -319,7 +319,7 @@ export function ExpenseDrawer({
   lineDefs: CustomFieldDefClient[]
   canSubmit: boolean
   canPost: boolean
-  /** The open report is recallable to draft by this viewer (F-user-003). */
+  /** The open report is recallable to draft by this viewer. */
   canRecall: boolean
   layout?: FormLayoutConfig
   closeHref?: string

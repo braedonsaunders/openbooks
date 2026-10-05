@@ -27,7 +27,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
  * The project list's "Actual cost" must read the same profile-driven reader
- * as the cockpit Financials tab (F-t03-009: the list showed 36,064.07 while
+ * as the cockpit Financials tab (the list once showed 36,064.07 while
  * the cockpit showed 56,435.68 for one project — posted-only standard-type
  * legs versus posted+reversed profile-source legs plus adjustments).
  * This pins the batched list reader to the single-project resolver on a
@@ -148,7 +148,7 @@ test("the batched list actual-cost reader ties the single-project resolver", { s
 });
 
 /**
- * F-t03-013: the batched reader must resolve each project's own type profile
+ * The batched reader must resolve each project's own type profile
  * in one lookup (no per-project `loadProjectType`), and sort-by-actual must
  * plan from the same reader — one aggregate over the filtered id set, never
  * a correlated per-row sum over journal_lines.
