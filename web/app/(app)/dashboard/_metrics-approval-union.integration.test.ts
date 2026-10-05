@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks";
 
 // the dashboard "Pending approvals" widget lists the top-5
 // pending FLOW GATES while the tile counts the unified worklist, so the
@@ -18,13 +19,8 @@ registerHooks({
     // Worktree node_modules symlinks to the main checkout's install: pin
     // bare self-imports to this checkout (same modules a real install
     // resolves) so the loader and its transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      const root = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 1);
-      return nextResolve(
-        new URL(`engine/${specifier.slice("@openbooks/engine/".length)}`, root).href,
-        context,
-      );
-    }
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });

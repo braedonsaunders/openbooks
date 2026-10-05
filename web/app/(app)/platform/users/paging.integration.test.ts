@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks'
 
 // Users list paging — platformUsers must page in SQL (limit/offset) with a
 // stable total, because the list renders server-side from whatever the loader
@@ -11,13 +12,8 @@ import test from 'node:test'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@openbooks/engine/src/')) {
-      const root = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 1)
-      return nextResolve(
-        new URL(`engine/${specifier.slice('@openbooks/engine/'.length)}`, root).href,
-        context,
-      )
-    }
+    const engineUrl = resolveEngineSpecifier(specifier)
+    if (engineUrl) return nextResolve(engineUrl, context)
     return nextResolve(specifier, context)
   },
 })

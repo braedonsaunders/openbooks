@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks";
 
 // Behavioral proof for the notifications authorization boundary.
 //
@@ -34,13 +35,8 @@ registerHooks({
     }
     // node_modules is shared with the main checkout: pin bare self-imports
     // to this checkout so the route and the test share one db context.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      const root = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 1);
-      return nextResolve(
-        new URL(`engine/${specifier.slice("@openbooks/engine/".length)}`, root).href,
-        context,
-      );
-    }
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     if (context.parentURL?.startsWith("mock:")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
