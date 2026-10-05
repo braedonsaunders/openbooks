@@ -398,7 +398,7 @@ export function ProductsTab({ channelId, currency, canManage }: { channelId: str
             ) : null}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDrawer(null)}>
-                {tc('cancel')}
+                {tc('actions.cancel')}
               </Button>
               <Button disabled={busy || (drawer.action === 'match' && itemId === '')} onClick={submitDrawer}>
                 {drawer.action === 'match' ? t('actions.match') : drawer.action === 'create_item' ? t('actions.createItem') : t('actions.createFamily')}
