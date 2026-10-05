@@ -8,6 +8,7 @@ import {
   findNative,
   linkExternal,
   listExternalLinks,
+  listLinksByNative,
   unlinkExternal,
 } from "./external-links.ts";
 import { db, withOrgContext } from "../platform/db.ts";
@@ -214,5 +215,34 @@ test("links are tenant-isolated and unlink with audit evidence", DB, async () =>
     const customer = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from parties where org_id = ${org.orgId} and id = ${org.customerId}`))).rows;
     assert.equal(customer.length, 1);
+  });
+});
+
+test("native-scoped listing returns only that record's identities", DB, async () => {
+  await setup(async (org, actor) => {
+    const channelId = await shopifyChannel(org.orgId, actor);
+    await linkExternal(org.orgId, actor, {
+      channelId,
+      provider: "shopify",
+      externalAccount: "maple.myshopify.com",
+      objectType: "customer",
+      externalId: "101",
+      nativeTable: "parties",
+      nativeId: org.customerId,
+    }, "salesChannels");
+    await linkExternal(org.orgId, actor, {
+      channelId,
+      provider: "shopify",
+      externalAccount: "maple.myshopify.com",
+      objectType: "customer",
+      externalId: "102",
+      nativeTable: "parties",
+      nativeId: org.vendorId,
+    }, "salesChannels");
+    const customerLinks = await withOrgContext(org.orgId, () => listLinksByNative(org.orgId, "parties", org.customerId));
+    assert.deepEqual(customerLinks.map((link) => link.externalId), ["101"]);
+    const vendorLinks = await withOrgContext(org.orgId, () => listLinksByNative(org.orgId, "parties", org.vendorId));
+    assert.deepEqual(vendorLinks.map((link) => link.externalId), ["102"]);
+    assert.equal((await withOrgContext(org.orgId, () => listLinksByNative(org.orgId, "items", org.customerId))).length, 0);
   });
 });

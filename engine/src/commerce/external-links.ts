@@ -295,6 +295,24 @@ export async function findNative(
   return row ? { nativeTable: row.native_table, nativeId: row.native_id } : null;
 }
 
+/**
+ * Every external identity pinned to one native record, newest sync first.
+ * Drawer tabs scope through this (never the generic section alone, which
+ * cannot filter on the native table), and the channel workspace lists one
+ * channel's share the same way.
+ */
+export async function listLinksByNative(
+  orgId: string,
+  nativeTable: string,
+  nativeId: string,
+): Promise<ExternalLinkRow[]> {
+  const rows = (await db.execute<LinkDbRow>(sql`
+    select ${LINK_COLUMNS} from external_links
+     where org_id = ${orgId} and native_table = ${nativeTable} and native_id = ${nativeId}
+     order by last_synced_at desc nulls last, external_id`)).rows;
+  return rows.map(toRow);
+}
+
 /** Resolve a native record to its external identity, or null when unlinked. */
 export async function findExternal(
   orgId: string,
