@@ -66,7 +66,10 @@
       "description": "Erstellen, speichern und planen Sie Ihre eigenen Berichte über das Hauptbuch"
     },
     "searchPlaceholder": "Berichte durchsuchen…",
-    "noMatches": "Keine Berichte entsprechen Ihrer Suche."
+    "noMatches": "Keine Berichte entsprechen Ihrer Suche.",
+    "all": "Alle Berichte",
+    "browseGroups": "Berichtsgruppen",
+    "reportCount": "{count, plural, one {# Bericht} other {# Berichte}}"
   },
   "baseCurrency": {
     "title": "Basiswährung ist nicht konfiguriert",

@@ -66,7 +66,10 @@
       "description": "Créez, enregistrez et planifiez vos propres rapports sur le grand livre"
     },
     "searchPlaceholder": "Rechercher des rapports…",
-    "noMatches": "Aucun rapport ne correspond à votre recherche."
+    "noMatches": "Aucun rapport ne correspond à votre recherche.",
+    "all": "Tous les rapports",
+    "browseGroups": "Groupes de rapports",
+    "reportCount": "{count, plural, one {# rapport} other {# rapports}}"
   },
   "baseCurrency": {
     "title": "La devise de référence n'est pas configurée",

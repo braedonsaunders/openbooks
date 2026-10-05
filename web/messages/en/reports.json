@@ -66,7 +66,10 @@
       "description": "Build, save and schedule your own reports over the ledger"
     },
     "searchPlaceholder": "Search reports…",
-    "noMatches": "No reports match your search."
+    "noMatches": "No reports match your search.",
+    "all": "All reports",
+    "browseGroups": "Report groups",
+    "reportCount": "{count, plural, one {# report} other {# reports}}"
   },
   "baseCurrency": {
     "title": "Base currency is not configured",
