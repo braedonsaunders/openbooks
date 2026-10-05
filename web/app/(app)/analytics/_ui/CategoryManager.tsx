@@ -193,8 +193,11 @@ export function CategoryManager({
 
   const openEditor = (idx: number) => {
     setEditIdx(idx)
+    // A new draft names its frequency explicitly: the select shows Weekly
+    // when nothing is chosen, and the API now refuses a missing frequency
+    // instead of assuming monthly — what the draft shows is what saves.
     setDraft(idx === -1
-      ? { id: '', name: '', direction: 'outflow', method: 'gl_history_average' }
+      ? { id: '', name: '', direction: 'outflow', method: 'gl_history_average', frequency: 'weekly' }
       : { ...cats[idx]! })
     setMsg(null)
   }

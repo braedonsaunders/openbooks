@@ -122,7 +122,9 @@ const clampNum = (v: unknown, min: number, max: number, dflt: number): number =>
   return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : dflt;
 };
 
-type CleanResult = { ok: true; category: ForecastCategory } | { ok: false; error: string };
+type CleanResult =
+  | { ok: true; category: ForecastCategory }
+  | { ok: false; error: string; status?: 422 };
 const GENERIC_CATEGORY_ERROR =
   "Each category must include a valid name, method, and method-specific configuration.";
 
@@ -275,7 +277,24 @@ async function clean(
     // persisted/read model is an exact numeric(19,4) string. Keep this route
     // on the exact-money path without crossing through an unsafe float.
     (out as unknown as { amount?: string }).amount = amount;
-    out.frequency = FREQUENCIES.has(String(c.frequency)) ? (c.frequency as ForecastCategory["frequency"]) : "monthly";
+    // No silent default: the editor shows Weekly when nothing is chosen while
+    // the engine used to assume monthly, so a missing or misspelled frequency
+    // refuses by name instead of forecasting at a cadence nobody picked.
+    if (c.frequency === undefined || c.frequency === null || c.frequency === "") {
+      return {
+        ok: false,
+        status: 422,
+        error: `manual_recurring category "${name}" needs a frequency — choose weekly, biweekly or monthly in the category editor`,
+      };
+    }
+    if (!FREQUENCIES.has(String(c.frequency))) {
+      return {
+        ok: false,
+        status: 422,
+        error: `manual_recurring category "${name}" has an unknown frequency "${String(c.frequency)}" — choose weekly, biweekly or monthly in the category editor`,
+      };
+    }
+    out.frequency = c.frequency as ForecastCategory["frequency"];
   }
   // Subsidiary attribution for the org-level strategies (manual, formula):
   // SQL-backed methods scope through their own accounts/parties, so the
@@ -349,13 +368,13 @@ export const PUT = defineRoute({
     }
     const invalidIndex = cleaned.findIndex((result) => !result.ok);
     if (invalidIndex !== -1) {
-      const failure = cleaned[invalidIndex] as { ok: false; error: string };
+      const failure = cleaned[invalidIndex] as { ok: false; error: string; status?: 422 };
       return NextResponse.json(
         {
           error: `invalid category at index ${invalidIndex}`,
           message: failure.error,
         },
-        { status: 400 },
+        { status: failure.status ?? 400 },
       );
     }
     // Every result is ok here (any failure returned above); project the stored rows.
