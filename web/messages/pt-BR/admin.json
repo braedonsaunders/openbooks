@@ -6136,6 +6136,10 @@
       "title": "Cobrança automática",
       "description": "Métodos de pagamento salvos, cobrança automática de faturas vencidas com tentativas e suspensão em caso de falha definitiva. Requer Pagamentos online."
     },
+    "consolidatedBilling": {
+      "title": "Faturamento consolidado",
+      "description": "Uma fatura por pagador para as assinaturas de uma hierarquia — matrizes, revendedores e franquias — inclusive entre entidades legais com lançamentos intercompanhia."
+    },
     "storedValue": {
       "title": "Vales e créditos",
       "description": "Cartões-presente e créditos em loja registrados no passivo, com emissão, resgate, expiração e breakage."

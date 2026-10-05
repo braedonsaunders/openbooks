@@ -6064,6 +6064,10 @@
       "title": "Cobro automático",
       "description": "Métodos de pago guardados, cobro automático de facturas vencidas con reintentos y suspensión ante el fallo definitivo. Requiere Pagos en línea."
     },
+    "consolidatedBilling": {
+      "title": "Facturación consolidada",
+      "description": "Una factura por pagador para las suscripciones de una jerarquía — matrices, distribuidores y franquicias — incluso entre entidades legales con asientos entre compañías."
+    },
     "storedValue": {
       "title": "Tarjetas regalo y crédito",
       "description": "Tarjetas regalo y crédito en tienda registrados como pasivo, con emisión, canje, caducidad y deterioro."

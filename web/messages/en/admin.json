@@ -6136,6 +6136,10 @@
       "title": "Autopay",
       "description": "Stored payment methods, automatic collection of due invoices with retries, and suspension when collection finally fails. Needs Online Payments."
     },
+    "consolidatedBilling": {
+      "title": "Consolidated billing",
+      "description": "One invoice per payer for a hierarchy's subscriptions — parent companies, resellers and franchises — including across legal entities with intercompany legs."
+    },
     "storedValue": {
       "title": "Stored value",
       "description": "Gift cards and store credit carried as liabilities, with issuance, redemption, breakage, and expiry."
