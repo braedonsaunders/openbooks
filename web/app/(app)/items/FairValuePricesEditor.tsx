@@ -8,6 +8,7 @@ import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Badge, Button, Card, CardContent, Input, Label } from '@openbooks/ui'
 import { useAppAction } from '../../../lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
+import { apiJson, ApiResponseError } from '@/lib/api-error'
 
 interface Price {
   id: string
@@ -52,16 +53,14 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
     setLoadState('loading')
     setLoadError('')
     setPrices([])
-    return fetch(`/api/items/${itemId}/fair-values`)
-      .then((res) => {
-        if (!res.ok) throw new Error(common('feedback.loadFailed'))
-        return (res.json() as Promise<{ prices: Price[] }>).then((data) => {
-          setPrices(data.prices)
-          setLoadState('loaded')
-        })
+    return apiJson<{ prices: Price[] }>(`/api/items/${itemId}/fair-values`, undefined, common('feedback.loadFailed'))
+      .then((data) => {
+        if (!Array.isArray(data.prices)) throw new Error(common('feedback.loadFailed'))
+        setPrices(data.prices)
+        setLoadState('loaded')
       })
       .catch((error: unknown) => {
-        setLoadError(error instanceof Error ? error.message : common('feedback.loadFailed'))
+        setLoadError(error instanceof ApiResponseError ? error.message : common('feedback.loadFailed'))
         setLoadState('failed')
       })
   }
@@ -171,7 +170,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
         </Card>
       ) : null}
 
-      {prices.length > 0 ? (
+      {!form && prices.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
