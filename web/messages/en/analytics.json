@@ -1944,6 +1944,14 @@
           "label": "Engagement cap (bills)",
           "help": "Bill count that earns the full engagement score"
         },
+        "engagementMaxPoints": {
+          "label": "Engagement points",
+          "help": "Points for full engagement in the relationship score"
+        },
+        "stabilityMaxPoints": {
+          "label": "Stability points",
+          "help": "Points for perfectly stable spend in the relationship score"
+        },
         "gradeA": {
           "label": "Grade A cutoff",
           "help": "Relationship score at or above this earns grade A"
