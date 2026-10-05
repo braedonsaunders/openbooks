@@ -284,4 +284,26 @@ describe("IE payroll pack", () => {
     assert.equal(factors.IE_PRSI_EE, "0.0000");
     assert.equal(factors.IE_PRSI_ER, "0.0000");
   });
+
+  it("prices every week-1 basis pay day on its own, past week 1 and despite earlier pay", async () => {
+    // Revenue's Ann example: week 1 €400 → €3.08; week 2 €850 → €93.85 on
+    // one week's credits (€76.92) and band (€846.16), earlier pay ignored.
+    const pushed: Record<string, string> = {};
+    const factors = await IE_PAYROLL_PACK.computeStatutory({
+      tx: { execute: async () => ({ rows: [{ tax: "3.0800", usc: "1.1600", taxbase: "400.0000", gross: "400.0000" }] }) },
+      orgId: "org", documentId: "doc", employeePartyId: "emp", taxYear: 2026, region: "IE",
+      run: { pay_date: "2026-01-08" }, emp: {}, periodsPerYear: 52,
+      income: "850.00", nonPeriodic: "0", pensionable: "850.00", insurable: "850.00",
+      deduction: () => "0",
+      pushStatutory: (key: string, kind: string, _d: string, amount: string) => { pushed[`${key}:${kind}`] = amount; },
+      certificateFor: (key: string) => key === "ie_rpn"
+        ? { onFile: true, answers: { pay_basis: "week1", tax_credits_total: "4000", rate_band_total: "44000", usc_cutoff_total: "70044" } }
+        : { onFile: true, answers: { prsi_class: "A" } },
+      assertRegionSupported: () => undefined,
+    } as never);
+    assert.equal(factors.IE_PAYE, "93.8500");
+    assert.equal(pushed["ie_paye:deduction"], "93.8500");
+    // USC on one week's cut-offs: 231.00 × 0.5% + 320.92 × 2% + 298.08 × 3% = 16.52.
+    assert.equal(factors.IE_USC, "16.5200");
+  });
 });
