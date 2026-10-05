@@ -28,6 +28,9 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
             values (${project},${org.orgId},${org.subsidiaryId},'LEDGER','Ledger project',${org.customerId},'active',true)`);
           await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
             values (${taxBook},${org.orgId},'TAX','Tax',false,true,true)`);
+          // Vendor bills post against a party holding a vendor role: vendor
+          // spend counts only vendor-role parties.
+          await db.execute(sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${org.vendorId})`);
           async function ledger(book: string, status: 'posted' | 'draft' | 'reversed', cost: string, revenue: string) {
             const entry = randomUUID();
             const document = randomUUID();
@@ -69,8 +72,8 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
           const period = { from: '2026-07-01', to: '2026-07-31', label: 'Ledger review' };
           if (view === 'vendor total' || view === 'vendor months') {
             const data = await vendorData(period, org.orgId, null);
-            if (view === 'vendor total') assert.equal(data.totals.spend, 100);
-            else assert.equal(data.monthly.find(row => row.month === '2026-07')?.spend, 100);
+            if (view === 'vendor total') assert.equal(data.totals.spend, '100.0000');
+            else assert.equal(data.monthly.find(row => row.month === '2026-07')?.spend, '100.0000');
           } else if (view === 'customer profitability') {
             const loader = await customerData(period, org.orgId, null);
             const data = await customerProfitability(period, org.orgId, null, undefined, loader.kpis.totalRevenue);
@@ -79,11 +82,11 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
             assert.equal(data.summary.totalGrossProfit, '100.0000');
           } else {
             const data = await spendVelocityData(org.orgId, period, null);
-            if (view === 'spend accounts') assert.equal(data.summary.totalSpend, 100);
-            if (view === 'spend vendors') assert.equal(data.vendorVelocity.find(row => row.id === org.vendorId)?.totalSpend, 100);
+            if (view === 'spend accounts') assert.equal(data.summary.totalSpend, '100.0000');
+            if (view === 'spend vendors') assert.equal(data.vendorVelocity.find(row => row.id === org.vendorId)?.totalSpend, '100.0000');
             if (view === 'spend revenue') assert.equal(data.revenue.totalRevenue, '200.0000');
-            if (view === 'spend categories') assert.equal(data.expenseAnalysis.categories.find(row => row.categoryId === org.accounts.cogs)?.currentAmount, 100);
-            if (view === 'spend comparison') assert.equal(data.periodComparison.summary.currentTotal, 100);
+            if (view === 'spend categories') assert.equal(data.expenseAnalysis.categories.find(row => row.categoryId === org.accounts.cogs)?.currentAmount, '100.0000');
+            if (view === 'spend comparison') assert.equal(data.periodComparison.summary.currentTotal, '100.0000');
           }
         });
       } finally { await dropScratchOrg(org.orgId); }
@@ -115,8 +118,10 @@ for (const scenario of ['empty', 'balanced', 'excess purchases'] as const) {
         assert.equal(summary.totalSO, scenario === 'empty' ? '0.0000' : '100.0000');
         assert.equal(summary.ratio, scenario === 'empty' ? 0 : scenario === 'excess purchases' ? 2.5 : 1);
         assert.equal(summary.status, scenario === 'excess purchases' ? 'critical' : 'healthy');
-        assert.equal(summary.poVelocity, 0);
-        assert.equal(summary.soVelocity, 0);
+        // A single commitment month is no measurable velocity: null, never a
+        // fabricated 0.
+        assert.equal(summary.poVelocity, null);
+        assert.equal(summary.soVelocity, null);
         assert.equal(summary.monthsToCliff, null);
       });
     } finally { await dropScratchOrg(org.orgId); }
@@ -135,6 +140,8 @@ for (const side of ['ar','ap'] as const) {
         const actor=await withBypass(()=>createScratchUser(org.orgId,'History writer','admin'));
         await withBypass(async()=>{
           const hidden=randomUUID();const party=side === 'ar' ? org.customerId : org.vendorId;
+          // Payment timeliness counts only vendor-role parties on the AP side.
+          await db.execute(sql`insert into vendor_roles(id,org_id,party_id) values (${randomUUID()},${org.orgId},${org.vendorId})`);
           const account=side === 'ar' ? org.accounts.ar : org.accounts.ap;
           await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
           for(const [sub,paidOn] of [[org.subsidiaryId,'2026-07-06'],[hidden,'2026-07-21']]) {
@@ -211,9 +218,9 @@ for(const scenario of ['posted control','draft report','foreign currency','secon
       });
       await withOrgContext(org.orgId,async()=>{
         const data=await spendVelocityData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Spend review'},null);
-        assert.equal(data.summary.expensesTotal,Number(base),'primary ledger control');
+        assert.equal(data.summary.expensesTotal,`${base}.0000`,'primary ledger control');
         const spender=data.expenseAnalysis.topSpenders.find(row=>row.employeeId === employee);assert.ok(spender);
-        assert.equal(spender.totalSpend,Number(base));
+        assert.equal(spender.totalSpend,`${base}.0000`);
         assert.equal(spender.reportCount,1);
       });
     }finally{await dropScratchOrg(org.orgId);}
@@ -231,6 +238,8 @@ for(const scenario of ['in-period payment','early payment','partial payment','fu
       await withBypassContext(async()=>{
       const actor=await createScratchUser(org.orgId,'Payment writer','admin');
       const invoice=randomUUID(),taxBook=randomUUID();
+      // Settlement timeliness counts only vendor-role parties.
+      await db.execute(sql`insert into vendor_roles(id,org_id,party_id) values (${randomUUID()},${org.orgId},${org.vendorId})`);
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${taxBook},${org.orgId},'TAX','Tax',false,true,true)`);
       await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,due_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
         values (${invoice},${org.orgId},'vendor_bill',${invoice},'2026-07-01','2026-07-01','2026-07-10',${org.vendorId},${org.subsidiaryId},'CAD',100,0,100)`);
@@ -264,7 +273,9 @@ for(const scenario of ['in-period payment','early payment','partial payment','fu
         assert.equal(row.paidBills,paid ? 1 : 0);
         assert.equal(row.avgDaysToPay,paid ? scenario === 'early payment' ? 5 : 11 : null);
         assert.equal(row.onTimePct,paid ? scenario === 'early payment' ? 1 : 0 : null);
-        assert.equal(row.lateSpend,scenario === 'in-period payment' ? 100 : scenario === 'partial payment' ? 40 : 0);
+        // Settled late spend is canonical money; with nothing settled in the
+        // window the row keeps the loader's "0" seed, as elsewhere.
+        assert.equal(row.lateSpend,scenario === 'in-period payment' ? '100.0000' : scenario === 'partial payment' ? '40.0000' : scenario === 'early payment' ? '0.0000' : '0');
       });
     }finally{await dropScratchOrg(org.orgId);}
   });
@@ -401,7 +412,7 @@ test('the vendor view echoes each calendar range with zero spend', async () => {
         assert.deepEqual(result.period, { ...range, label: 'Calendar review' });
         assert.deepEqual(result.rows, []);
         assert.equal(result.totals.vendors, 0);
-        assert.equal(result.totals.spend, 0);
+        assert.equal(result.totals.spend, "0");
       }
     });
   } finally { await withBypass(() => dropScratchOrg(org.orgId)); }
@@ -415,7 +426,7 @@ test('the spend velocity view echoes each calendar range with zero spend', async
       for (const range of ranges) {
         const result = await spendVelocityData(org.orgId, { ...range, label: 'Calendar review' }, null);
         assert.deepEqual(result.period, { ...range, label: 'Calendar review' });
-        assert.equal(result.summary.totalSpend, 0);
+        assert.equal(result.summary.totalSpend, "0");
         assert.equal(result.summary.accountCount, 0);
       }
     });
@@ -558,6 +569,7 @@ const { customerData, customerProfitability, isProfitLeak } = await import('./an
 const { analyticsConfig } = await import('./analytics/config');
 const { vendorData } = await import('./analytics/vendor-data');
 const { spendVelocityData } = await import('./analytics/spend-velocity-data');
+const { add } = await import('@openbooks/engine/src/money/money.ts');
 // The page LOADERS. The `page` boundary below asks whether the page applies
 // the reader's subsidiary scope, and that decision lives in the loader — the
 // spec only names where the resolved data is drawn. Reading the loader output
@@ -568,7 +580,7 @@ const { loadCustomerIntelligence } = await import('../app/(app)/analytics/custom
 const { loadVendorPerformance } = await import('../app/(app)/analytics/vendor-performance/view');
 const { loadSpendVelocity } = await import('../app/(app)/analytics/spend-velocity/view');
 const { executeAssistantTool } = await import('./assistant/registry');
-type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: number }; summary?: { totalSpend: number }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: number }[] | { items: { totalSpend: number }[] } } };
+type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: string | number }; summary?: { totalSpend: string | number }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: string }[] | { items: { totalSpend: string }[] } } };
 
 for (const surface of ['customer', 'vendor', 'spend'] as const) {
   for (const boundary of ['service', 'page', 'assistant'] as const) {
@@ -586,6 +598,9 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             for (const [sub, amount, name] of [[org.subsidiaryId, '100', 'Visible'], [hidden, '999', 'PRIVATE-ANALYTICS-EVIDENCE']]) {
               const party = randomUUID(), project = randomUUID();
               await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${party},${org.orgId},'organization',${name},${sub})`);
+              // Vendor spend counts only vendor-role parties: these seeded
+              // organizations bill and report expenses as vendors.
+              await db.execute(sql`insert into vendor_roles(id,org_id,party_id) values (${randomUUID()},${org.orgId},${party})`);
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${sub},${project},${name},${party},'active',true)`);
               for (const kind of ['vendor_bill', 'customer_invoice', 'expense_report'] as const) {
                 const entry = randomUUID(), doc = randomUUID();
@@ -636,11 +651,11 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             }
             const expectedRevenue = mode === 'all' ? 1099 : mode === 'empty' ? 0 : 100;
             const expected = surface === 'customer' ? expectedRevenue : mode === 'all' ? 1121 : mode === 'empty' ? 0 : 102;
-            // Customer-loader money is exact decimal strings on the service
-            // and page boundaries (the assistant boundary runs the tool,
-            // which serializes numbers).
+            // Loader money travels as exact decimal strings on the service and
+            // page boundaries; the customer assistant tool serializes numbers.
             const want = surface === 'customer' && boundary !== 'assistant' ? expectedRevenue.toFixed(4) : expected;
-            assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, want);
+            const expectedMoney = mode === 'all' ? '1121.0000' : mode === 'empty' ? '0' : '102.0000';
+            assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, surface === 'customer' ? want : expectedMoney);
             assert.equal(JSON.stringify(data).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             if (surface === 'spend') {
               // Cliff totals are exact money strings.
@@ -648,7 +663,12 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
               assert.equal(data.commitmentCliff?.summary.totalSO, expectedRevenue.toFixed(4));
               const spenders = data.expenseAnalysis?.topSpenders;
               assert.ok(spenders);
-              assert.equal((Array.isArray(spenders) ? spenders : spenders.items).reduce((total,row) => total + row.totalSpend,0), mode === 'all' ? 22 : mode === 'empty' ? 0 : 2);
+              // Spender amounts are exact decimal strings: sum them exactly,
+              // since 0 + "2.0000" + "20.0000" concatenates instead of adding.
+              assert.equal(
+                (Array.isArray(spenders) ? spenders : spenders.items).reduce((total, row) => add(total, row.totalSpend), "0"),
+                mode === "all" ? "22.0000" : mode === "empty" ? "0" : "2.0000",
+              );
             }
             if (surface === 'customer') {
               assert.equal((profitability as { summary: { totalRevenue: string } }).summary.totalRevenue, expectedRevenue.toFixed(4));
