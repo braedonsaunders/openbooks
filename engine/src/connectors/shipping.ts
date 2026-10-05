@@ -149,7 +149,7 @@ export class CarrierError extends Error {
   }
 }
 
-const DECIMAL_RE = /^\d+(\.\d+)?$/;
+const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 
 function fail(what: string): never {
   throw new CarrierError(what);
@@ -158,13 +158,16 @@ function fail(what: string): never {
 /** Exact decimal string, no floats: "12.34" stays 12.34 through every conversion below. */
 export function assertDecimal(value: string, what: string): string {
   if (typeof value !== "string" || !DECIMAL_RE.test(value.trim())) fail(`${what} must be a decimal number, got ${JSON.stringify(value)}`);
-  return value.trim().replace(/^0+(?=\d)/, "") || "0";
+  const negative = value.trim().startsWith("-");
+  const unsigned = value.trim().replace(/^-/, "").replace(/^0+(?=\d)/, "") || "0";
+  return negative ? `-${unsigned}` : unsigned;
 }
 
-function splitDecimal(value: string): { int: string; frac: string } {
+function splitDecimal(value: string): { neg: boolean; int: string; frac: string } {
   const cleaned = assertDecimal(value, "amount");
-  const [int = "0", frac = ""] = cleaned.split(".");
-  return { int: int === "" ? "0" : int, frac };
+  const neg = cleaned.startsWith("-");
+  const [int = "0", frac = ""] = (neg ? cleaned.slice(1) : cleaned).split(".");
+  return { neg, int: int === "" ? "0" : int, frac };
 }
 
 /**
@@ -175,6 +178,7 @@ function splitDecimal(value: string): { int: string; frac: string } {
 export function mulDecimal(value: string, factor: string, places: number): string {
   const a = splitDecimal(value);
   const b = splitDecimal(factor);
+  if (a.neg || b.neg) fail("unit conversion needs non-negative measures");
   const product = BigInt(a.int + a.frac) * BigInt(b.int + b.frac);
   const scale = a.frac.length + b.frac.length;
   const target = 10n ** BigInt(places);
@@ -195,13 +199,13 @@ export const kgToOz = (kg: string): string => mulDecimal(kg, "35.273962", 4);
  * Extra precision rounds half-up; a non-decimal refuses instead of guessing.
  */
 export function decimalToMinorUnits(amount: string, minorUnits: number): bigint {
-  const { int, frac } = splitDecimal(amount);
+  const { neg, int, frac } = splitDecimal(amount);
   if (minorUnits < 0 || minorUnits > 4 || !Number.isInteger(minorUnits)) fail(`unsupported currency precision ${minorUnits}`);
   const kept = frac.slice(0, minorUnits).padEnd(minorUnits, "0");
   let minor = BigInt(int === "" ? "0" : int) * 10n ** BigInt(minorUnits) + (kept === "" ? 0n : BigInt(kept));
   // Half-up on the discarded fraction: a first dropped digit of 5 or more rounds up.
   if ((frac.slice(minorUnits)[0] ?? "0") >= "5") minor += 1n;
-  return minor;
+  return neg ? -minor : minor;
 }
 
 /** Minor units → ledger decimal string (at most 4 places, never floats). */

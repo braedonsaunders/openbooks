@@ -17,6 +17,19 @@ import { markEntryReversed, postEntry } from "./post-entry.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 type ProjectGlTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type ProjectGlExecutor = Pick<ProjectGlTransaction, "execute">;
+export interface OriginEntryRefs {
+  /** Native document this entry evidences (a shipment for carrier cost). */
+  sourceDocumentId?: string | null;
+  /** Freeform entry refs (label, order) for margin reads; never segment dims. */
+  custom?: Record<string, unknown> | null;
+  /**
+   * Exactly-once identity, arbitrated by the partial unique index
+   * journal_entries_org_idempotency_key — a replay returns the winner
+   * instead of posting a duplicate.
+   */
+  idempotencyKey?: string;
+}
+
 export interface GlLine {
   accountId: string;
   amount: string; // signed: debit +, credit −
@@ -28,6 +41,7 @@ export interface GlLine {
   classId?: string | null;
   /** Legal entity for this leg; defaults to the entry header subsidiary. */
   subsidiaryId?: string | null;
+  /** Custom segment assignments — keys must be active custom segment definitions. */
   extraDims?: Record<string, string> | null;
   contributorKind?: "rule" | "script" | "app" | "intercompany" | null;
   /** Rule version / script / app id that contributed this line. */
@@ -52,7 +66,7 @@ export async function postProjectGlEntry(opts: {
   /** Target GL book; defaults to the active primary posting book. */
   bookId?: string | null;
   lines: GlLine[];
-}): Promise<string | null> {
+} & OriginEntryRefs): Promise<string | null> {
   return inDbTransaction((tx) => postProjectGlEntryWithinTransaction(tx, opts));
 }
 
@@ -207,6 +221,9 @@ export async function postProjectGlEntryWithinTransaction(
     periodId,
     memo,
     origin,
+    sourceDocumentId: opts.sourceDocumentId ?? null,
+    custom: opts.custom ?? undefined,
+    idempotencyKey: opts.idempotencyKey,
     actorId,
     currency,
     auditAction: "insert",
