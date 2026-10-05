@@ -30,21 +30,13 @@ function refuses(fn: () => void): string {
 }
 
 describe("rounding rules", () => {
-  it("none keeps exact hours", () => {
-    assert.equal(roundHours("7.1267", { incrementMinutes: 0, mode: "nearest" }), "7.1267");
-  });
-  it("nearest quarter rounds 7.13 to 7.25", () => {
-    assert.equal(roundHours("7.13", { incrementMinutes: 15, mode: "nearest" }), "7.2500");
-  });
-  it("nearest quarter rounds 7.11 to 7.00", () => {
-    assert.equal(roundHours("7.11", { incrementMinutes: 15, mode: "nearest" }), "7.0000");
-  });
-  it("up always rounds up a partial tenth", () => {
-    assert.equal(roundHours("7.01", { incrementMinutes: 6, mode: "up" }), "7.1000");
-  });
-  it("down truncates a partial tenth", () => {
-    assert.equal(roundHours("7.19", { incrementMinutes: 6, mode: "down" }), "7.1000");
-  });
+  for (const [name, hours, rule, expected] of [
+    ["none keeps exact hours", "7.1267", { incrementMinutes: 0, mode: "nearest" }, "7.1267"],
+    ["nearest quarter rounds 7.13 to 7.25", "7.13", { incrementMinutes: 15, mode: "nearest" }, "7.2500"],
+    ["nearest quarter rounds 7.11 to 7.00", "7.11", { incrementMinutes: 15, mode: "nearest" }, "7.0000"],
+    ["up always rounds up a partial tenth", "7.01", { incrementMinutes: 6, mode: "up" }, "7.1000"],
+    ["down truncates a partial tenth", "7.19", { incrementMinutes: 6, mode: "down" }, "7.1000"],
+  ] as const) it(name, () => assert.equal(roundHours(hours, rule), expected));
   it("exact steps are untouched in every mode", () => {
     assert.equal(roundHours("8.25", { incrementMinutes: 15, mode: "up" }), "8.2500");
     assert.equal(roundHours("8.25", { incrementMinutes: 15, mode: "down" }), "8.2500");
@@ -106,6 +98,9 @@ describe("shift-level break allocation", () => {
   });
 });
 
+/** Source instants share one conversion fixture; each split keeps its own zone and assertions. */
+const splitInstants = (from: string, to: string, zone: string) => splitZoneDays(Date.parse(from), Date.parse(to), zone);
+
 describe("round-once dealing", () => {
   const quarter = { incrementMinutes: 15, mode: "nearest" } as const;
   it("quanta match the rounding rule", () => {
@@ -122,49 +117,33 @@ describe("round-once dealing", () => {
     refuses(() => hoursToQuantumUnits("7.1300", quarter));
   });
   it("UTC day splits are exact to the millisecond", () => {
-    const pieces = splitZoneDays(
-      Date.parse("2026-09-14T23:52:00.000Z"),
-      Date.parse("2026-09-15T00:08:00.000Z"),
-      "UTC",
-    );
+    const pieces = splitInstants("2026-09-14T23:52:00.000Z", "2026-09-15T00:08:00.000Z", "UTC");
     assert.deepEqual(pieces.map((p) => p.date), ["2026-09-14", "2026-09-15"]);
     assert.deepEqual(pieces.map((p) => p.ms), [8 * 60_000, 8 * 60_000]);
   });
   it("a single-day span is one piece", () => {
-    const pieces = splitZoneDays(
-      Date.parse("2026-09-14T08:00:00.000Z"),
-      Date.parse("2026-09-14T16:00:00.000Z"),
-      "UTC",
-    );
+    const pieces = splitInstants("2026-09-14T08:00:00.000Z", "2026-09-14T16:00:00.000Z", "UTC");
     assert.deepEqual(pieces, [{ date: "2026-09-14", ms: 8 * 3_600_000 }]);
   });
   it("a UTC-5 evening shift stays on its one local date", () => {
     // 20:00-24:00 Toronto time is 01:00-05:00Z: a UTC split would date
     // the whole shift on Jan 15.
-    const pieces = splitZoneDays(
-      Date.parse("2026-01-15T01:00:00.000Z"),
-      Date.parse("2026-01-15T05:00:00.000Z"),
-      "America/Toronto",
-    );
+    const pieces = splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "America/Toronto");
     assert.deepEqual(pieces, [{ date: "2026-01-14", ms: 4 * 3_600_000 }]);
   });
   it("an overnight local shift splits at the business midnight", () => {
     // 22:00-02:00 Toronto time: local midnight is 05:00Z.
-    const pieces = splitZoneDays(
-      Date.parse("2026-01-15T03:00:00.000Z"),
-      Date.parse("2026-01-15T07:00:00.000Z"),
-      "America/Toronto",
-    );
+    const pieces = splitInstants("2026-01-15T03:00:00.000Z", "2026-01-15T07:00:00.000Z", "America/Toronto");
     assert.deepEqual(pieces, [
       { date: "2026-01-14", ms: 2 * 3_600_000 },
       { date: "2026-01-15", ms: 2 * 3_600_000 },
     ]);
   });
   it("an unknown zone refuses instead of guessing a boundary", () => {
-    refuses(() => splitZoneDays(Date.parse("2026-01-15T01:00:00.000Z"), Date.parse("2026-01-15T05:00:00.000Z"), "Not/AZone"));
+    refuses(() => splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "Not/AZone"));
   });
   it("the zone refusal names the Business time zone setting that fixes it", () => {
-    const message = refuses(() => splitZoneDays(Date.parse("2026-01-15T01:00:00.000Z"), Date.parse("2026-01-15T05:00:00.000Z"), "Not/AZone"));
+    const message = refuses(() => splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "Not/AZone"));
     assert.match(message, /"Not\/AZone"/, "the refusal names the offending zone");
     assert.match(message, /Business time zone/, "the refusal names the real setting");
     assert.match(message, /Company Settings/, "the refusal names where the setting lives");
@@ -172,11 +151,7 @@ describe("round-once dealing", () => {
   it("a stored alias days in its canonical zone", () => {
     // US/Eastern is absent from supportedValuesOf but formats fine; the
     // shared validator canonicalizes it instead of refusing it.
-    const pieces = splitZoneDays(
-      Date.parse("2026-01-15T01:00:00.000Z"),
-      Date.parse("2026-01-15T05:00:00.000Z"),
-      "US/Eastern",
-    );
+    const pieces = splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "US/Eastern");
     assert.deepEqual(pieces, [{ date: "2026-01-14", ms: 4 * 3_600_000 }]);
   });
   it("the 23:52-00:08 shift deals its single quarter deterministically", () => {

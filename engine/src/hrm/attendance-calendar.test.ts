@@ -73,6 +73,10 @@ function executor(
   return { exec, queries }
 }
 
+/** Every calendar property uses the same tenant, actor and month fixture. */
+const calendar = (exec: SqlExecutor, departmentId: string | null = null) =>
+  absenceCalendarForDepartment(exec, 'org', 'actor', departmentId, '2026-09-01', '2026-09-30')
+
 test('all departments reads every authorized employment including one without a department', async () => {
   const { exec, queries } = executor(
     [
@@ -84,14 +88,7 @@ test('all departments reads every authorized employment including one without a 
       unassigned: [absence('b', '4.00', 'SICK')],
     },
   )
-  const days = await absenceCalendarForDepartment(
-    exec,
-    'org',
-    'actor',
-    null,
-    '2026-09-01',
-    '2026-09-30',
-  )
+  const days = await calendar(exec)
   assert.deepEqual(
     days.map((day) => day.workerName),
     ['Ada', 'Grace'],
@@ -106,14 +103,7 @@ test('a selected department resolves its primary assignment on each absence date
   const { exec, queries } = executor([member('sales', 'entity-a', 'Ada')], {
     sales: [absence('a', '8.00')],
   })
-  await absenceCalendarForDepartment(
-    exec,
-    'org',
-    'actor',
-    'department-sales',
-    '2026-09-01',
-    '2026-09-30',
-  )
+  await calendar(exec, 'department-sales')
   const query = queries[1]!
   assert.ok(query.params.includes('department-sales'))
   assert.match(query.sql, /v\.org_id = a\.org_id/)
@@ -134,14 +124,7 @@ test('restricted readers cannot see another legal entity and an empty scope read
     },
     new Set(['entity-a']),
   )
-  const days = await absenceCalendarForDepartment(
-    exec,
-    'org',
-    'actor',
-    null,
-    '2026-09-01',
-    '2026-09-30',
-  )
+  const days = await calendar(exec)
   assert.deepEqual(
     days.map((day) => day.workerName),
     ['Ada'],
@@ -150,14 +133,7 @@ test('restricted readers cannot see another legal entity and an empty scope read
   assert.match(queries[0]!.sql, /e\.employer_subsidiary_id in/)
   const empty = executor([], {}, new Set())
   assert.deepEqual(
-    await absenceCalendarForDepartment(
-      empty.exec,
-      'org',
-      'actor',
-      null,
-      '2026-09-01',
-      '2026-09-30',
-    ),
+    await calendar(empty.exec),
     [],
   )
   assert.equal(empty.queries.length, 0)
@@ -171,14 +147,7 @@ test('reversed absences disappear and leave types retain their exact net hours',
       absence('sick', '7.50', 'SICK'),
     ],
   })
-  const days = await absenceCalendarForDepartment(
-    exec,
-    'org',
-    'actor',
-    null,
-    '2026-09-01',
-    '2026-09-30',
-  )
+  const days = await calendar(exec)
   assert.equal(days.length, 1)
   assert.equal(days[0]?.leaveTypeCode, 'SICK')
   assert.equal(days[0]?.hours, '7.50')
@@ -192,14 +161,7 @@ test('a computed employment refusal propagates rather than returning a partial c
     'access denied — ask an administrator for leave read access',
   )
   await assert.rejects(
-    absenceCalendarForDepartment(
-      exec,
-      'org',
-      'actor',
-      null,
-      '2026-09-01',
-      '2026-09-30',
-    ),
+    calendar(exec),
     /ask an administrator for leave read access/,
   )
 })
