@@ -97,7 +97,9 @@
     "methodSeasonal": "Saisonnière",
     "methodIntermittent": "Intermittente",
     "methodAverage": "Moyenne",
-    "defaulted": "Règle standard appliquée — ajustez par article."
+    "defaulted": "Règle standard appliquée — ajustez par article.",
+    "loadFailed": "La politique de planification n’a pas pu être chargée. Réessayez avant de la modifier.",
+    "integerInvalid": "{field} nécessite un nombre entier positif ou nul. Saisissez un nombre entier ou laissez le champ vide pour utiliser la valeur standard."
   },
   "itemTab": {
     "title": "Planification",

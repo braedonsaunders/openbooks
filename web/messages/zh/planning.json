@@ -97,7 +97,9 @@
     "methodSeasonal": "季节性",
     "methodIntermittent": "间歇性",
     "methodAverage": "平均",
-    "defaulted": "当前使用标准策略 — 可按物料微调。"
+    "defaulted": "当前使用标准策略 — 可按物料微调。",
+    "loadFailed": "无法加载规划策略。请重试后再修改。",
+    "integerInvalid": "{field}需要非负整数。请输入整数，或将字段留空以使用标准值。"
   },
   "itemTab": {
     "title": "计划",

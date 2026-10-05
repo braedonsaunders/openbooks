@@ -97,7 +97,9 @@
     "methodSeasonal": "Estacional",
     "methodIntermittent": "Intermitente",
     "methodAverage": "Promedio",
-    "defaulted": "Usando la política estándar — ajusta valores por artículo."
+    "defaulted": "Usando la política estándar — ajusta valores por artículo.",
+    "loadFailed": "No se pudo cargar la política de planificación. Vuelva a intentarlo antes de cambiarla.",
+    "integerInvalid": "{field} requiere un número entero no negativo. Introduzca un número entero o deje el campo vacío para usar el valor estándar."
   },
   "itemTab": {
     "title": "Planificación",

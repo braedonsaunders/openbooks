@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, EmptyState, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { Alert, AlertDescription, Badge, Button, EmptyState, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { canonicalNonNegativeDecimal } from '@openbooks/engine/money/decimal'
 import { readApiErrorMessage } from '@/lib/api-error'
 
 interface Policy {
@@ -41,11 +42,9 @@ const SERVICE_LEVELS = ['0.8', '0.9', '0.95', '0.975', '0.99']
 const METHODS = ['auto', 'seasonal', 'intermittent', 'average'] as const
 
 /**
- * The item drawer's Planning tab: this item's planning policy next to its
- * current cover and next suggestion. Everyday state (cover + next action)
- * stays visible; the policy form configures; the method override and
- * history window sit one disclosure... (flat here — seven fields are the
- * whole configuration, and hiding two of them would strand them).
+ * The selected item's policy and next suggestion share its planning context.
+ * Editing begins only after both reads succeed, so a refused read cannot
+ * turn existing configuration into an apparently empty default form.
  */
 export function PlanningTab({
   itemId,
@@ -59,6 +58,11 @@ export function PlanningTab({
   vendors: { id: string; name: string }[]
 }) {
   const t = useTranslations('planning')
+  const tc = useTranslations('common')
+  const requestKey = `${itemId}:${subsidiaryId}`
+  const [readState, setReadState] = useState<{ key: string; error: string | null } | null>(null)
+  const [reload, setReload] = useState(0)
+  const ready = readState?.key === requestKey && readState.error === null
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [suggestion, setSuggestion] = useState<OpenSuggestion | null>(null)
   const [busy, setBusy] = useState(false)
@@ -83,47 +87,51 @@ export function PlanningTab({
             credentials: 'same-origin',
           }),
         ])
-        if (policiesRes.ok) {
-          const policies = (await policiesRes.json()) as Policy[]
-          const found = policies.find((entry) => entry.itemId === itemId) ?? null
-          if (live) {
-            setPolicy(found)
-            if (found) {
-              setForm({
-                leadTimeDays: found.leadTimeDays?.toString() ?? '',
-                reviewCycleDays: found.reviewCycleDays?.toString() ?? '',
-                serviceLevel: found.serviceLevel ?? '0.95',
-                moqQty: found.moqQty ?? '',
-                casePackQty: found.casePackQty ?? '',
-                preferredSupplierId: found.preferredSupplierId ?? '',
-                forecastMethod: found.forecastMethod ?? 'auto',
-                historyWeeks: found.historyWeeks?.toString() ?? '',
-              })
-            }
-          }
+        if (!policiesRes.ok) throw new Error(await readApiErrorMessage(policiesRes, t('policy.loadFailed')))
+        if (!suggestionsRes.ok) throw new Error(await readApiErrorMessage(suggestionsRes, t('policy.loadFailed')))
+        const [policies, suggestions] = await Promise.all([
+          policiesRes.json() as Promise<Policy[]>,
+          suggestionsRes.json() as Promise<OpenSuggestion[]>,
+        ])
+        const found = policies.find((entry) => entry.itemId === itemId) ?? null
+        const nextSuggestion = suggestions.find((entry) => entry.itemId === itemId) ?? null
+        if (live) {
+          setPolicy(found)
+          setSuggestion(nextSuggestion)
+          setForm({
+            leadTimeDays: found?.leadTimeDays?.toString() ?? '',
+            reviewCycleDays: found?.reviewCycleDays?.toString() ?? '',
+            serviceLevel: found?.serviceLevel ?? '0.95',
+            moqQty: found?.moqQty ?? '',
+            casePackQty: found?.casePackQty ?? '',
+            preferredSupplierId: found?.preferredSupplierId ?? '',
+            forecastMethod: found?.forecastMethod ?? 'auto',
+            historyWeeks: found?.historyWeeks?.toString() ?? '',
+          })
+          setReadState({ key: requestKey, error: null })
         }
-        if (suggestionsRes.ok && live) {
-          const rows = (await suggestionsRes.json()) as OpenSuggestion[]
-          setSuggestion(rows.find((entry) => entry.itemId === itemId) ?? null)
-        }
-      } catch {
-        // The tab degrades to its form: a failed load never blocks saving.
+      } catch (error) {
+        if (live) setReadState({ key: requestKey, error: error instanceof Error ? error.message : t('policy.loadFailed') })
       }
     }
     void load()
     return () => {
       live = false
     }
-  }, [itemId, subsidiaryId])
+  }, [itemId, subsidiaryId, requestKey, reload, t])
 
-  function num(value: string): number | null {
+  function num(value: string, field: string): number | null {
     const trimmed = value.trim()
     if (trimmed === '') return null
-    const parsed = Number(trimmed)
-    return Number.isInteger(parsed) ? parsed : null
+    const canonical = canonicalNonNegativeDecimal(trimmed, 0)
+    const parsed = canonical === null ? Number.NaN : Number(canonical)
+    if (!Number.isSafeInteger(parsed)) throw new Error(t('policy.integerInvalid', { field }))
+    return parsed
   }
 
   async function save() {
+    // A refused or unfinished read cannot authorize overwriting an unknown policy.
+    if (!ready) return
     setBusy(true)
     try {
       const res = await fetch('/api/inventory/planning/policies', {
@@ -133,14 +141,14 @@ export function PlanningTab({
         body: JSON.stringify({
           itemId,
           subsidiaryId,
-          leadTimeDays: form.leadTimeDays.trim() === '' ? null : num(form.leadTimeDays),
-          reviewCycleDays: form.reviewCycleDays.trim() === '' ? null : num(form.reviewCycleDays),
+          leadTimeDays: form.leadTimeDays.trim() === '' ? null : num(form.leadTimeDays, t('policy.leadTime')),
+          reviewCycleDays: form.reviewCycleDays.trim() === '' ? null : num(form.reviewCycleDays, t('policy.reviewCycle')),
           serviceLevel: form.serviceLevel,
           moqQty: form.moqQty.trim() === '' ? null : form.moqQty.trim(),
           casePackQty: form.casePackQty.trim() === '' ? null : form.casePackQty.trim(),
           preferredSupplierId: form.preferredSupplierId === '' ? null : form.preferredSupplierId,
           forecastMethod: form.forecastMethod,
-          historyWeeks: form.historyWeeks.trim() === '' ? null : num(form.historyWeeks),
+          historyWeeks: form.historyWeeks.trim() === '' ? null : num(form.historyWeeks, t('policy.history')),
         }),
       })
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('policy.save')))
@@ -151,6 +159,18 @@ export function PlanningTab({
     } finally {
       setBusy(false)
     }
+  }
+
+  if (!ready) {
+    const error = readState?.key === requestKey ? readState.error : null
+    return error ? (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+        <Button variant="outline" onClick={() => { setReadState(null); setReload((value) => value + 1) }}>
+          {tc('actions.retry')}
+        </Button>
+      </Alert>
+    ) : <p role="status" className="text-sm text-muted-foreground">{tc('actions.loading')}</p>
   }
 
   const field = 'space-y-1.5'

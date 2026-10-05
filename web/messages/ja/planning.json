@@ -97,7 +97,9 @@
     "methodSeasonal": "季節性",
     "methodIntermittent": "間欠",
     "methodAverage": "平均",
-    "defaulted": "標準ポリシーを使用中 — 品目ごとに調整できます。"
+    "defaulted": "標準ポリシーを使用中 — 品目ごとに調整できます。",
+    "loadFailed": "計画ポリシーを読み込めませんでした。変更する前に再試行してください。",
+    "integerInvalid": "{field}には0以上の整数が必要です。整数を入力するか、標準値を使用する場合は空欄にしてください。"
   },
   "itemTab": {
     "title": "計画",
