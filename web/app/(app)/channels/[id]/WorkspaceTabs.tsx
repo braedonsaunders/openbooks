@@ -26,3 +26,30 @@ export function WorkspaceTabs({
     />
   );
 }
+
+/**
+ * Settings subsections ride the URL (`?tab=settings&section=`), so each
+ * entity section keeps its own addressable body. Switching sections drops
+ * row params, exactly like switching workspace tabs closes drawers.
+ */
+export function SettingsSubTabs({
+  channelId,
+  activeSection,
+  sections,
+  ariaLabel,
+}: {
+  channelId: string;
+  activeSection: string;
+  sections: { key: string; label: string }[];
+  ariaLabel: string;
+}) {
+  const router = useRouter();
+  return (
+    <DrawerTabStrip
+      tabs={sections}
+      activeKey={activeSection}
+      onSelect={(key) => router.push(`/channels/${channelId}?tab=settings&section=${encodeURIComponent(key)}`)}
+      ariaLabel={ariaLabel}
+    />
+  );
+}
