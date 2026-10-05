@@ -66,7 +66,15 @@
     "marginReport": "Margin report",
     "marginMeta": "{orders} order(s) · {revenue} revenue · {adSpend} ad spend",
     "marginEstimated": "{count} estimated",
-    "marginPct": "{pct}%"
+    "marginPct": "{pct}%",
+    "completeness": {
+      "title": "Today's completeness",
+      "hint": "Whether today's storefront sales reached the ledger, with the remedy on each open proof.",
+      "clear": "Today's storefront sales are fully in the books.",
+      "loadFailed": "Completeness did not load (status {status}).",
+      "proofsSummary": "{count, plural, one {How completeness is proven · # proof} other {How completeness is proven · # proofs}}",
+      "proven": "Proven"
+    }
   },
   "workspace": {
     "back": "Channels",

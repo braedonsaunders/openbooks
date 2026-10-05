@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "过账后处理未完成",
       "message": "已过账单据的库存或收入后续处理未完成。请解决错误，在单据上填写复核理由并重试最终失败的处理，等待处理完成后再关闭总账期间。"
+    },
+    "commerce-orders-incomplete": {
+      "title": "账簿缺少网店销售",
+      "message": "{count, plural, one {有 # 个渠道订单缺失或未过账，需在结账前处理。} other {有 # 个渠道订单缺失或未过账，需在结账前处理。}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "有网店无法连通",
+      "message": "{count, plural, one {有 # 个渠道日期未能与网店核对。} other {有 # 个渠道日期未能与网店核对。}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "有结算尚未过账",
+      "message": "{count, plural, one {有 # 个结算批次仍为草稿。} other {有 # 个结算批次仍为草稿。}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "清算科目留有余额",
+      "message": "{count, plural, one {有 # 个清算科目未能清零。} other {有 # 个清算科目未能清零。}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "礼品卡负债对不上",
+      "message": "{count, plural, one {有 # 个负债科目与未兑卡券对不上。} other {有 # 个负债科目与未兑卡券对不上。}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "递延收入对不上",
+      "message": "{count, plural, one {有 # 个递延科目与未确认计划对不上。} other {有 # 个递延科目与未确认计划对不上。}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "资本化合同成本对不上",
+      "message": "{count, plural, one {有 # 项成本资产与账面分录对不上。} other {有 # 项成本资产与账面分录对不上。}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "有渠道异常待处理",
+      "message": "{count, plural, one {有 # 个挂起的订单或事件待处理。} other {有 # 个挂起的订单或事件待处理。}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "发布结账包",
       "description": "冻结结账档案并发布已配置的报告包。"
+    },
+    "commerce-complete": {
+      "title": "证明商务完整性",
+      "description": "每一笔网店销售都已入账：订单与网店一致，结算已过账，清算为零，负债结转相符。"
     }
   },
   "setup": {

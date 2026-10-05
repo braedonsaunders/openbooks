@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "Efeitos da contabilização incompletos",
       "message": "Documentos contabilizados têm projeções de estoque ou receita incompletas. Resolva as falhas, repita as falhas definitivas no documento com um motivo de revisão e aguarde a conclusão antes de fechar o razão."
+    },
+    "commerce-orders-incomplete": {
+      "title": "Faltam vendas da loja nos livros",
+      "message": "{count, plural, one {Falta # pedido do canal ou está sem lançar e precisa de solução antes do fechamento.} other {Faltam # pedidos do canal ou estão sem lançar e precisam de solução antes do fechamento.}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "Não foi possível contatar uma loja",
+      "message": "{count, plural, one {Não foi possível verificar # dia do canal junto à sua loja.} other {Não foi possível verificar # dias do canal junto às suas lojas.}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "Há pagamentos a contabilizar",
+      "message": "{count, plural, one {# lote de liquidação continua em rascunho.} other {# lotes de liquidação continuam em rascunho.}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "Contas de compensação têm saldo",
+      "message": "{count, plural, one {# conta de compensação não zera.} other {# contas de compensação não zeram.}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "O passivo de cartões-presente não confere",
+      "message": "{count, plural, one {# conta de passivo difere de seus cartões e créditos em aberto.} other {# contas de passivo diferem de seus cartões e créditos em aberto.}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "A receita diferida não confere",
+      "message": "{count, plural, one {# conta de diferido difere de seu plano não reconhecido.} other {# contas de diferido diferem de seus planos não reconhecidos.}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "Os custos de contrato capitalizados não conferem",
+      "message": "{count, plural, one {# ativo de custo difere de seus lançamentos.} other {# ativos de custo diferem de seus lançamentos.}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "Há exceções do canal aguardando",
+      "message": "{count, plural, one {Resta # pedido ou evento aguardando solução.} other {Restam # pedidos ou eventos aguardando solução.}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "Publicar o pacote de fechamento",
       "description": "Congele o dossiê de fechamento e publique o pacote de relatórios configurado."
+    },
+    "commerce-complete": {
+      "title": "Provar a integridade do commerce",
+      "description": "Cada venda da loja está no razão: os pedidos conferem com a loja, os pagamentos estão lançados, a compensação zera e os passivos conferem."
     }
   },
   "setup": {

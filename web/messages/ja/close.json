@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "転記後処理が未完了",
       "message": "転記済み伝票の在庫または収益の後続処理が未完了です。エラーを解決し、最終失敗した処理を確認理由付きで伝票から再試行して、完了してから総勘定元帳を締めてください。"
+    },
+    "commerce-orders-incomplete": {
+      "title": "店舗売上が帳簿に不足しています",
+      "message": "{count, plural, one {# 件の不足または未転記のチャネル注文が決算前の対応を待っています。} other {# 件の不足または未転記のチャネル注文が決算前の対応を待っています。}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "店舗に接続できませんでした",
+      "message": "{count, plural, one {# 日分のチャネル日次が店舗と照合できませんでした。} other {# 日分のチャネル日次が店舗と照合できませんでした。}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "未転記の精算があります",
+      "message": "{count, plural, one {# 件の精算バッチが下書きのままです。} other {# 件の精算バッチが下書きのままです。}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "クリアリング勘定に残高があります",
+      "message": "{count, plural, one {# 件のクリアリング勘定がゼロになっていません。} other {# 件のクリアリング勘定がゼロになっていません。}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "ギフトカード負債が一致しません",
+      "message": "{count, plural, one {# 件の負債勘定が未使用残高と一致しません。} other {# 件の負債勘定が未使用残高と一致しません。}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "前受収益が一致しません",
+      "message": "{count, plural, one {# 件の前受勘定が未認識計画と一致しません。} other {# 件の前受勘定が未認識計画と一致しません。}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "資産化した契約コストが一致しません",
+      "message": "{count, plural, one {# 件のコスト資産が元帳と一致しません。} other {# 件のコスト資産が元帳と一致しません。}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "チャネル例外が保留中です",
+      "message": "{count, plural, one {# 件の保留中の注文またはイベントが対応を待っています。} other {# 件の保留中の注文またはイベントが対応を待っています。}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "決算パッケージを公表する",
       "description": "決算バインダーを凍結し、設定された報告パッケージを公表します。"
+    },
+    "commerce-complete": {
+      "title": "コマースの完全性を証明する",
+      "description": "すべての店舗売上は元帳にあります。注文は店舗と一致し、精算は転記済み、クリアリングはゼロ、負債の繰越は一致しています。"
     }
   },
   "setup": {

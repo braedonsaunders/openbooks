@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "Unvollständige Buchungsfolgen",
       "message": "Gebuchte Belege haben unvollständige Bestands- oder Erlösverarbeitung. Fehler beheben, endgültig fehlgeschlagene Verarbeitung am Beleg mit Prüfungsbegründung erneut ausführen und vor dem Hauptbuchabschluss auf den Abschluss warten."
+    },
+    "commerce-orders-incomplete": {
+      "title": "Verkäufe aus dem Shop fehlen in den Büchern",
+      "message": "{count, plural, one {# fehlende oder ungebuchte Kanalbestellung braucht ihre Lösung vor dem Abschluss.} other {# fehlende oder ungebuchte Kanalbestellungen brauchen ihre Lösung vor dem Abschluss.}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "Ein Shop war nicht erreichbar",
+      "message": "{count, plural, one {# Kanaltag konnte nicht gegen seinen Shop geprüft werden.} other {# Kanaltage konnten nicht gegen ihre Shops geprüft werden.}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "Auszahlungen sind ungebucht",
+      "message": "{count, plural, one {# Abrechnungsstapel ist noch ein Entwurf.} other {# Abrechnungsstapel sind noch Entwürfe.}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "Verrechnungskonten haben einen Rest",
+      "message": "{count, plural, one {# Verrechnungskonto gleicht sich nicht auf null aus.} other {# Verrechnungskonten gleichen sich nicht auf null aus.}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "Gutscheinschuld stimmt nicht",
+      "message": "{count, plural, one {# Schuldkonto weicht von seinen offenen Karten und Guthaben ab.} other {# Schuldkonten weichen von ihren offenen Karten und Guthaben ab.}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "Abgegrenzte Erlöse stimmen nicht",
+      "message": "{count, plural, one {# Abgrenzungskonto weicht von seinem offenen Plan ab.} other {# Abgrenzungskonten weichen von ihren offenen Plänen ab.}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "Aktivierte Vertragskosten stimmen nicht",
+      "message": "{count, plural, one {# Kostenposition weicht von ihren Buchungen ab.} other {# Kostenpositionen weichen von ihren Buchungen ab.}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "Kanalausnahmen warten",
+      "message": "{count, plural, one {# geparkte Bestellung oder geparktes Ereignis braucht noch eine Lösung.} other {# geparkte Bestellungen oder Ereignisse brauchen noch eine Lösung.}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "Das Abschlusspaket veröffentlichen",
       "description": "Frieren Sie den Abschlussordner ein und veröffentlichen Sie das konfigurierte Berichtspaket."
+    },
+    "commerce-complete": {
+      "title": "Commerce-Vollständigkeit nachweisen",
+      "description": "Jeder Shopverkauf steht im Hauptbuch: Bestellungen stimmen mit dem Shop überein, Auszahlungen sind gebucht, Verrechnungskonten sind null, und Schuldabstimmungen stimmen."
     }
   },
   "setup": {

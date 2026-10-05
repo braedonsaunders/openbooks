@@ -179,6 +179,38 @@
     "posting-effects-incomplete": {
       "title": "Effets de comptabilisation incomplets",
       "message": "Des documents comptabilisés ont des projections de stocks ou de revenus incomplètes. Corrigez les erreurs, relancez les échecs définitifs depuis le document avec un motif de vérification et attendez la fin du traitement avant de clôturer le grand livre."
+    },
+    "commerce-orders-incomplete": {
+      "title": "Des ventes de la boutique manquent dans les livres",
+      "message": "{count, plural, one {# commande du canal manquante ou non comptabilisée attend sa solution avant la clôture.} other {# commandes du canal manquantes ou non comptabilisées attendent leur solution avant la clôture.}}"
+    },
+    "commerce-storefront-unreachable": {
+      "title": "Une boutique est restée injoignable",
+      "message": "{count, plural, one {# jour du canal n’a pas pu être vérifié auprès de sa boutique.} other {# jours du canal n’ont pas pu être vérifiés auprès de leurs boutiques.}}"
+    },
+    "commerce-payouts-unposted": {
+      "title": "Des versements restent à comptabiliser",
+      "message": "{count, plural, one {# lot de règlement est encore au brouillon.} other {# lots de règlement sont encore au brouillon.}}"
+    },
+    "commerce-clearing-residual": {
+      "title": "Des comptes d’attente gardent un solde",
+      "message": "{count, plural, one {# compte d’attente ne se solde pas à zéro.} other {# comptes d’attente ne se soldent pas à zéro.}}"
+    },
+    "commerce-stored-value-gap": {
+      "title": "Le passif des cartes cadeaux ne concorde pas",
+      "message": "{count, plural, one {# compte de passif diffère de ses cartes et crédits en circulation.} other {# comptes de passif diffèrent de leurs cartes et crédits en circulation.}}"
+    },
+    "commerce-deferred-gap": {
+      "title": "Les produits constatés d’avance ne concordent pas",
+      "message": "{count, plural, one {# compte de report diffère de son plan non reconnu.} other {# comptes de report diffèrent de leurs plans non reconnus.}}"
+    },
+    "commerce-contract-cost-gap": {
+      "title": "Les coûts de contrat capitalisés ne concordent pas",
+      "message": "{count, plural, one {# actif de coût diffère de ses écritures.} other {# actifs de coût diffèrent de leurs écritures.}}"
+    },
+    "commerce-exceptions-open": {
+      "title": "Des exceptions du canal sont en attente",
+      "message": "{count, plural, one {# commande ou événement en attente attend encore sa solution.} other {# commandes ou événements en attente attendent encore leur solution.}}"
     }
   },
   "severity": {
@@ -381,6 +413,10 @@
     "publish-package": {
       "title": "Publier le dossier de clôture",
       "description": "Figer le dossier de clôture et publier les rapports configurés."
+    },
+    "commerce-complete": {
+      "title": "Prouver l’exhaustivité du commerce",
+      "description": "Chaque vente de la boutique est au grand livre : les commandes correspondent à la boutique, les versements sont comptabilisés, les comptes d’attente sont à zéro et les passifs concordent."
     }
   },
   "setup": {

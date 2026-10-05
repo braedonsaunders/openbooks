@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.ts";
+import { commerceCloseChecks, snapshotCommerceCloseEvidence, type CommerceCloseCheck } from "./commerce-close.ts";
+import { startCloseRun } from "./run-start.ts";
 import { registerChannelAdapter } from "../commerce/adapters.ts";
 import { createChannel, markChannelActive, retryChannel } from "../commerce/channels.ts";
 import { upsertAccountMap } from "../commerce/account-maps.ts";
@@ -317,6 +318,55 @@ test("an unrecognized plan without its deferral fails naming the account", { ski
     assert.equal(deferred.count, 1);
     const ties = (deferred.details as { ties: { gap: string }[] }).ties;
     assert.equal(ties[0]!.gap, "100.0000");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("a proven commerce task freezes one evidence snapshot, exactly once per fingerprint", { skip: !DB }, async () => {
+  const fx = await seedCommerceOrg();
+  try {
+    const runId = await withBypass(() =>
+      startCloseRun({ orgId: fx.org.orgId, periodId: fx.org.periodId, bookId: fx.org.bookId, actorId: fx.actor }),
+    );
+    const taskId = (
+      await withBypass(() => db.execute<{ id: string }>(sql`
+        select id from close_run_tasks
+         where org_id = ${fx.org.orgId} and run_id = ${runId} and key = 'commerce-complete'`))
+    ).rows[0]?.id;
+    assert.ok(taskId, "the run carries the commerce task while Sales Channels is on");
+    // Nothing to freeze before the proof completes.
+    assert.equal(await withBypass(() => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), null);
+    await withBypass(async () => {
+      await db.execute(sql`update close_runs set data_fingerprint = 'fp-proof-1' where id = ${runId} and org_id = ${fx.org.orgId}`);
+      await db.execute(sql`update close_run_tasks set status = 'complete' where id = ${taskId} and org_id = ${fx.org.orgId}`);
+    });
+    const evidenceId = await withBypass(() => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor));
+    assert.ok(evidenceId);
+    const rows = (
+      await withBypass(() => db.execute<{ label: string; snapshot: unknown }>(sql`
+        select label, snapshot from close_task_evidence
+         where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`))
+    ).rows;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.label, "Commerce completeness evidence");
+    const snapshot = rows[0]!.snapshot as { fingerprint: string; checks: { code: string; count: number }[] };
+    assert.equal(snapshot.fingerprint, "fp-proof-1");
+    assert.equal(snapshot.checks.length, 8);
+    // The tokenless test channel cannot be verified live, so the snapshot
+    // records the refusal (one per period day) instead of a clean proof —
+    // and still attaches once.
+    const unreachable = snapshot.checks.find((check) => check.code === "commerce-storefront-unreachable");
+    assert.ok((unreachable?.count ?? 0) > 0);
+    assert.equal(await withBypass(() => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), evidenceId);
+    assert.equal(
+      (
+        await withBypass(() => db.execute<{ count: string }>(sql`
+          select count(*)::text as count from close_task_evidence
+           where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`))
+      ).rows[0]!.count,
+      "1",
+    );
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }

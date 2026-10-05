@@ -66,7 +66,15 @@
     "marginReport": "毛利报表",
     "marginMeta": "{orders}个订单·营收{revenue}·广告{adSpend}",
     "marginEstimated": "{count}个估计",
-    "marginPct": "{pct}%"
+    "marginPct": "{pct}%",
+    "completeness": {
+      "title": "今日完整性",
+      "hint": "今日网店销售是否已入账，每个未完成的证明都附带处理办法。",
+      "clear": "今日网店销售已全部入账。",
+      "loadFailed": "完整性未能加载（状态 {status}）。",
+      "proofsSummary": "完整性证明方式 · 共 {count} 项",
+      "proven": "已证明"
+    }
   },
   "workspace": {
     "back": "渠道",

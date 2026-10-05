@@ -66,7 +66,15 @@
     "marginReport": "Margenbericht",
     "marginMeta": "{orders} Auftrag/Aufträge · {revenue} Umsatz · {adSpend} Werbeausgaben",
     "marginEstimated": "{count} geschätzt",
-    "marginPct": "{pct} %"
+    "marginPct": "{pct} %",
+    "completeness": {
+      "title": "Vollständigkeit heute",
+      "hint": "Ob die heutigen Shopverkäufe im Hauptbuch stehen — mit Lösungsweg für jeden offenen Nachweis.",
+      "clear": "Die heutigen Shopverkäufe stehen vollständig in den Büchern.",
+      "loadFailed": "Vollständigkeit wurde nicht geladen (Status {status}).",
+      "proofsSummary": "{count, plural, one {So wird Vollständigkeit nachgewiesen · # Nachweis} other {So wird Vollständigkeit nachgewiesen · # Nachweise}}",
+      "proven": "Nachgewiesen"
+    }
   },
   "workspace": {
     "back": "Kanäle",
