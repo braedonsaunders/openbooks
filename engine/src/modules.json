@@ -97,6 +97,9 @@
     "commerce": {
       "description": "Storefront channels, the external-identity map, the inbound webhook inbox, and the channel adapter contract.",
       "dependsOn": [
+        "connectors",
+        "fx",
+        "inventory",
         "organization",
         "platform"
       ]
