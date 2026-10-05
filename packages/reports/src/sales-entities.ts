@@ -5,6 +5,12 @@ const shared = {
   requiredPermission: "crm.forecasts.read",
   currencyColumn: "currency",
 };
+const promotionShared = {
+  category: "orders" as const,
+  featureKey: "promotions",
+  requiredPermission: "reports.read",
+  currencyColumn: "currency",
+};
 export const SALES_REPORT_ENTITIES: ReportEntity[] = [
   {
     ...shared,
@@ -175,6 +181,58 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
         label: "Attainment percent",
         kind: "number",
         expr: "case when q.amount=0 then null else coalesce(a.actual,0)*100/q.amount end",
+      },
+    ],
+  },
+  {
+    ...promotionShared,
+    key: "promotion_performance",
+    label: "Promotion performance",
+    description:
+      "Discount lines carried by promotions, with the discount given and the gross and net revenue attached, by period and promotion.",
+    // One row per promotion discount line. The lateral attachment prices the
+    // parent document once: gross is the positively priced non-promotion
+    // lines, net is gross plus every discount on the document.
+    from: `document_lines dl join documents d on d.org_id=dl.org_id and d.id=dl.document_id join promotions p on p.org_id=dl.org_id and p.id=dl.promotion_id left join parties c on c.org_id=d.org_id and c.id=d.party_id left join lateral (select coalesce(sum(case when sib.promotion_id is null and sib.amount > 0 then sib.amount else 0 end),0) as gross, coalesce(sum(case when sib.promotion_id is not null then sib.amount else 0 end),0) as discounts from document_lines sib where sib.org_id=dl.org_id and sib.document_id=dl.document_id) doc on true`,
+    orgColumn: "dl.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    timeKey: "document_date",
+    defaultSort: { column: "document_date", direction: "desc" },
+    columns: [
+      { key: "promotion_code", label: "Promotion code", kind: "text", expr: "p.code" },
+      { key: "promotion_name", label: "Promotion", kind: "text", expr: "p.name" },
+      { key: "promotion_kind", label: "Promotion kind", kind: "enum", expr: "p.kind", options: ["percent", "amount", "free_shipping", "buy_x_get_y"] },
+      { key: "document_date", label: "Document date", kind: "date", expr: "d.document_date" },
+      { key: "document_number", label: "Document", kind: "text", expr: "d.document_number" },
+      {
+        key: "document_kind",
+        label: "Document kind",
+        kind: "enum",
+        expr: "d.kind",
+        options: ["quote", "sales_order", "customer_invoice"],
+      },
+      { key: "customer", label: "Customer", kind: "text", expr: "coalesce(c.display_name,'Unattributed')" },
+      { key: "currency", label: "Currency", kind: "text", expr: "d.currency" },
+      {
+        key: "discount_given",
+        label: "Discount given",
+        kind: "money",
+        expr: "-dl.amount",
+        txnCurrency: true,
+      },
+      {
+        key: "attached_gross",
+        label: "Attached gross",
+        kind: "money",
+        expr: "doc.gross",
+        txnCurrency: true,
+      },
+      {
+        key: "attached_net",
+        label: "Attached net",
+        kind: "money",
+        expr: "doc.gross+doc.discounts",
+        txnCurrency: true,
       },
     ],
   },
