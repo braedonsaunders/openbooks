@@ -714,7 +714,8 @@
       "rates": "Tasas legales",
       "workSchedules": "Horarios de trabajo",
       "serviceCredits": "Antigüedad reconocida",
-      "vacationTerms": "Condiciones de vacaciones"
+      "vacationTerms": "Condiciones de vacaciones",
+      "expenses": "Distribución de gastos"
     },
     "packs": {
       "installed": "Instalado",

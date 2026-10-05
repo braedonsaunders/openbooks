@@ -100,7 +100,8 @@
     "fulfillment": "Exécution de commande",
     "fulfillmentShort": "Exéc.",
     "returnAuthorization": "Autorisation de retour",
-    "returnAuthorizationShort": "RMA"
+    "returnAuthorizationShort": "RMA",
+    "payRun": "Cycle de paie"
   },
   "labels": {
     "name": "Nom",

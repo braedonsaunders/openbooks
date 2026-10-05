@@ -9,6 +9,7 @@ import type { RuleHeadSummary } from '../../../../../../engine/src/allocations/i
 import { PagedTable } from '../../../../../components/paged-table'
 import { ShowInactivePill } from '../../../../../components/show-inactive-pill'
 import { mergeHref } from '../../../../../lib/list-params'
+import Link from 'next/link'
 import { formatWindow } from './rule-window'
 
 /**
@@ -22,9 +23,17 @@ import { formatWindow } from './rule-window'
 export function RulesTable({
   rules,
   currentParams,
+  basePath = '/admin/setup/allocations',
+  payrollExpenses = false,
+  postingEnabled = true,
+  allocationsEnabled = true,
 }: {
   rules: RuleHeadSummary[]
   currentParams: Record<string, string | string[] | undefined>
+  basePath?: string
+  payrollExpenses?: boolean
+  postingEnabled?: boolean
+  allocationsEnabled?: boolean
 }) {
   const t = useTranslations('allocations')
   const router = useRouter()
@@ -42,18 +51,28 @@ export function RulesTable({
     retired: t('rules.statuses.retired'),
   } as const
   const openRule = (ruleParam: string) => {
-    router.push(mergeHref('/admin/setup/allocations', currentParams, { rule: ruleParam }) as never)
+    router.push(mergeHref(basePath, currentParams, { rule: ruleParam }) as never)
   }
   const newRule = () => openRule('new')
   // RatesTab depth: the workspace header already names this tab, so the tab
   // body leads with its blurb plus the New action — no restated h2.
   return (
     <div className="space-y-4">
+      {payrollExpenses && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>{postingEnabled ? t('rules.list.payrollEnabled') : t('rules.list.payrollDisabled')}</span>
+          <div className="flex flex-wrap gap-4">
+            <Link href="/admin/setup/features" className="text-teal-700 underline dark:text-teal-300">{t('rules.list.features')}</Link>
+            <Link href="/admin/setup/allocations?tab=drivers" className="text-teal-700 underline dark:text-teal-300">{t('rules.tabs.drivers')}</Link>
+            <Link href={mergeHref(basePath, currentParams, { view: 'departments', rule: undefined }) as never} className="text-teal-700 underline dark:text-teal-300">{t('rules.list.departmentDefaults')}</Link>
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-          {t('rules.list.blurb')}
+          {payrollExpenses ? t('rules.list.payrollBlurb') : t('rules.list.blurb')}
         </p>
-        <Button onClick={newRule}>
+        <Button onClick={newRule} disabled={!allocationsEnabled}>
           <Plus size={15} />
           {t('rules.list.new')}
         </Button>

@@ -27,6 +27,8 @@ const bodyObjectSchema = z.object({
     subsidiaryId: z.string().uuid().nullable().optional(),
     partyId: z.string().uuid().nullable().optional(),
     itemId: z.string().uuid().nullable().optional(),
+    payComponentId: z.string().uuid().nullable().optional(),
+    payrollExpense: z.boolean().optional(),
     extraDims: z.record(z.string(), z.string()).optional(),
   }).strict().optional(),
   periodId: z.string().optional(),
@@ -82,6 +84,8 @@ async function legacyPOST(req: Request, { params }: { params: Promise<{ id: stri
       subsidiaryId: asId(rawLine['subsidiaryId']),
       partyId: asId(rawLine['partyId']),
       itemId: asId(rawLine['itemId']),
+      payComponentId: asId(rawLine['payComponentId']),
+      payrollExpense: rawLine['payrollExpense'] === true,
       extraDims: asStringMap(rawLine['extraDims']),
       amount: '0',
     }

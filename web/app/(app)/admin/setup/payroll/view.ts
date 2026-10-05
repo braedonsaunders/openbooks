@@ -58,11 +58,12 @@ const ENTITY_BY_TAB = {
   filing: 'payroll-filing-accounts',
   schedules: 'pay-schedules',
   components: 'pay-components',
+  expenses: 'pay-component-department-expenses',
   union: 'union-agreements',
 } as const
 
 const TABS = [
-  'packs', 'accounts', 'filing', 'schedules', 'components', 'union',
+  'packs', 'accounts', 'filing', 'schedules', 'components', 'expenses', 'union',
   // Employer-supplied statutory rates (experience-rated SUI, the FUTA credit
   // reduction, provincial employer health levies), at the scope the pack
   // declares each varies by.
@@ -86,7 +87,7 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 /** Configuration families use a picker; only the selected family has a local row. */
 const GROUPS: { key: 'foundations' | 'earnings' | 'payday'; tabs: Tab[] }[] = [
   { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
-  { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
+  { key: 'earnings', tabs: ['components', 'expenses', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
   { key: 'payday', tabs: ['payday'] },
 ]
 
@@ -106,7 +107,7 @@ export interface PayrollSetupData {
   onEmployerFacts: boolean
   onWorkSchedules: boolean
   onEntityTab: boolean
-  onComponents: boolean
+  onExpenses: boolean
   entityKey: string | null
   onDerived: boolean
   onDerivedPreview: boolean
@@ -144,7 +145,9 @@ export async function loadPayrollSetup(
   const tabLabel = (key: Tab, fallback: string) =>
     t.has(`tabs.${key}` as never) ? t(`tabs.${key}` as never) : fallback
   const label = (key: Tab): string =>
-    key === 'derived'
+    key === 'expenses'
+      ? tabLabel(key, 'Expense allocations')
+      : key === 'derived'
       ? tabLabel(key, 'Derived Earnings')
       : key === 'derivedPreview'
         ? tabLabel(key, 'Rule Preview')
@@ -201,8 +204,8 @@ export async function loadPayrollSetup(
     onRates: tab === 'rates',
     onEmployerFacts: tab === 'employerFacts',
     onWorkSchedules: tab === 'workSchedules',
-    onEntityTab: isEntityTab(tab),
-    onComponents: tab === 'components',
+    onEntityTab: isEntityTab(tab) && (tab !== 'expenses' || sp.view === 'departments'),
+    onExpenses: tab === 'expenses' && sp.view !== 'departments',
     entityKey: entityKeyFor(tab),
     onDerived: tab === 'derived',
     onDerivedPreview: tab === 'derivedPreview',
@@ -288,18 +291,13 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
           }),
           when: f('onEntityTab'),
         },
-        // The Components tab also carries the department expense child
-        // list: same slot, the mapping entity's own key. The section
-        // renders under its own title beneath the components table.
         {
-          ...widgetBlock('setup-section', {
-            entityKey: 'pay-component-department-expenses',
-            sp: data.currentParams,
-            basePath,
-            rowParam: 'departmentExpense',
-            paramPrefix: 'departmentExpense',
-          }),
-          when: f('onComponents'),
+          ...widgetBlock('allocations-rules-tab', { sp: data.currentParams, basePath, payrollExpenses: true }),
+          when: f('onExpenses'),
+        },
+        {
+          ...widgetBlock('allocations-rule-drawer', { sp: data.currentParams, basePath, payrollExpenses: true }),
+          when: f('onExpenses'),
         },
         // The derived tab's entity is not yet in the registry: same slot,
         // same session-derived lookup, key resolved by the loader.

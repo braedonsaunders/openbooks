@@ -16,7 +16,7 @@ export type WizardSplitKind = 'ratio' | 'percent' | 'driver'
 export type SourceMatchMode = 'any' | 'untagged' | 'specific'
 export type SourceFilterKey = 'department' | 'location' | 'class' | 'project' | 'subsidiary' | 'party' | 'item'
 export type BuiltinTargetDimension = 'department' | 'location' | 'class' | 'project' | 'subsidiary'
-export type TargetDimension = BuiltinTargetDimension | `extra:${string}`
+export type TargetDimension = BuiltinTargetDimension | 'account' | `extra:${string}`
 
 export const SOURCE_FILTER_KEYS: readonly SourceFilterKey[] = [
   'department',
@@ -56,6 +56,7 @@ export const WIZARD_DOCUMENT_KINDS = [
   { kind: 'check', labelKey: 'check' },
   { kind: 'card_charge', labelKey: 'cardCharge' },
   { kind: 'expense_report', labelKey: 'expenseReport' },
+  { kind: 'pay_run', labelKey: 'payRun' },
 ] as const
 
 export type WizardDocumentKind = (typeof WIZARD_DOCUMENT_KINDS)[number]['kind']
@@ -80,6 +81,7 @@ export interface WizardDraft {
   key: string
   description: string
   documentKinds: WizardDocumentKind[]
+  payComponentFilter: SourceFilter
   sourceFilters: Record<SourceFilterKey, SourceFilter>
   sourceExtraDims: Record<string, SourceFilter>
   splitKind: WizardSplitKind
@@ -95,19 +97,20 @@ export interface WizardDraft {
 
 const HUNDRED_UNITS = toUnits('100')
 
-export function defaultWizardDraft(): WizardDraft {
+export function defaultWizardDraft(payrollExpenses = false): WizardDraft {
   return {
-    mode: 'entry',
+    mode: payrollExpenses ? 'post' : 'entry',
     name: '',
     key: '',
     description: '',
-    documentKinds: [],
-    sourceFilters: defaultSourceFilters('entry'),
+    documentKinds: payrollExpenses ? ['pay_run'] : [],
+    payComponentFilter: emptySourceFilter(),
+    sourceFilters: defaultSourceFilters(payrollExpenses ? 'post' : 'entry'),
     sourceExtraDims: {},
-    splitKind: 'ratio',
+    splitKind: payrollExpenses ? 'percent' : 'ratio',
     driverId: '',
     targetDimension: 'department',
-    targets: [
+    targets: payrollExpenses ? [{ valueId: '', weight: '50' }, { valueId: '', weight: '50' }] : [
       { valueId: '', weight: '1' },
       { valueId: '', weight: '2' },
       { valueId: '', weight: '3' },
@@ -279,6 +282,7 @@ export function wizardStepComplete(step: WizardStep, draft: WizardDraft): boolea
       return draft.mode === 'entry' || draft.mode === 'post' || draft.mode === 'period'
     case 'source':
       if (draft.name.trim() === '' || !isRuleKey(draft.key)) return false
+      if (draft.payComponentFilter.mode === 'specific' && draft.payComponentFilter.ids.length === 0) return false
       return sourceFiltersComplete(draft.sourceFilters, draft.sourceExtraDims)
     case 'split':
       if (draft.splitKind === 'driver') return draft.driverId !== ''
@@ -287,7 +291,7 @@ export function wizardStepComplete(step: WizardStep, draft: WizardDraft): boolea
       if (!wizardUsesExplicitTargets(draft)) return draft.driverId !== ''
       {
         const rows = filledTargets(draft)
-        if (rows.length < 2) return false
+        if (rows.length < 1) return false
         if (draft.splitKind === 'percent') return percentsSumToHundred(rows.map((row) => row.weight))
         return true
       }
@@ -358,7 +362,7 @@ export function wizardTargetPayload(draft: WizardDraft): Record<string, unknown>
   const extraKey = extraSegmentKey(dimension)
   return rows.map((row, index) => ({
     sequence: index,
-    targetAccountId: null,
+    targetAccountId: dimension === 'account' ? row.valueId : null,
     departmentId: dimension === 'department' ? row.valueId : null,
     locationId: dimension === 'location' ? row.valueId : null,
     classId: dimension === 'class' ? row.valueId : null,
@@ -372,7 +376,7 @@ export function wizardTargetPayload(draft: WizardDraft): Record<string, unknown>
   }))
 }
 
-export function knownDriverDimension(dimension: string): dimension is TargetDimension {
+export function knownDriverDimension(dimension: string): dimension is Exclude<TargetDimension, 'account'> {
   return (
     dimension === 'department'
     || dimension === 'location'

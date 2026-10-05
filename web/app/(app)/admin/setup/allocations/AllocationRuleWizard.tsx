@@ -21,6 +21,7 @@ import { useBusinessToday } from '../../../../../components/business-date-provid
 import { useMoney } from '../../../../../components/money-provider'
 import { WizardShell } from '../wizard/WizardShell'
 import { apiError, definitionPayload } from './rule-drawer-form'
+import { ApiResponseError, throwApiErrorIfNotOk } from '../../../../../lib/api-error'
 import {
   BUILTIN_TARGET_DIMENSIONS,
   SOURCE_FILTER_KEYS,
@@ -36,6 +37,7 @@ import {
   knownDriverDimension,
   nextTargetWeight,
   previewSplitAmounts,
+  ratioToFixedPercents,
   trimDecimal,
   wizardDefinitionForm,
   wizardStepComplete,
@@ -64,6 +66,8 @@ interface SegmentOption {
 }
 
 interface PickerOptions {
+  accounts: Option[]
+  payComponents: Option[]
   departments: Option[]
   locations: Option[]
   classes: Option[]
@@ -84,6 +88,8 @@ async function loadWizardOptions(signal: AbortSignal): Promise<{ options: Picker
   const rawSegments = Array.isArray(payload['segments']) ? (payload['segments'] as SegmentOption[]) : []
   return {
     options: {
+      accounts: asOptions(payload['expenseAccounts']),
+      payComponents: asOptions(payload['payComponents']),
       departments: asOptions(payload['departments']),
       locations: asOptions(payload['locations']),
       classes: asOptions(payload['classes']),
@@ -107,14 +113,17 @@ async function loadWizardOptions(signal: AbortSignal): Promise<{ options: Picker
  * Answers map onto the same rule version + targets the Definition tab edits,
  * so graduating to the drawer never means re-learning.
  */
-export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
+export function AllocationRuleWizard({ closeHref, payrollExpenses = false }: { closeHref: string; payrollExpenses?: boolean }) {
   const t = useTranslations('allocations')
   const tc = useTranslations('common')
   const router = useRouter()
   const today = useBusinessToday()
   const { money } = useMoney()
-  const [stepIdx, setStepIdx] = useState(0)
-  const [draft, setDraft] = useState<WizardDraft>(defaultWizardDraft)
+  const [stepIdx, setStepIdx] = useState(payrollExpenses ? 1 : 0)
+  const [draft, setDraft] = useState<WizardDraft>(() => defaultWizardDraft(payrollExpenses))
+  const [effectiveFrom, setEffectiveFrom] = useState('')
+  const [effectiveTo, setEffectiveTo] = useState('')
+  const datesValid = (effectiveFrom || today) !== '' && (effectiveTo === '' || effectiveTo >= (effectiveFrom || today))
   const [keyTouched, setKeyTouched] = useState(false)
   const [sourceFiltersTouched, setSourceFiltersTouched] = useState(false)
   const [options, setOptions] = useState<PickerOptions | null>(null)
@@ -169,19 +178,18 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   }
 
   const chooseSplit = (splitKind: WizardDraft['splitKind']) => {
-    setDraft((prev) => ({
-      ...prev,
-      splitKind,
-      targets: prev.targets.map((row, index) => ({
-        ...row,
-        weight:
-          splitKind === 'percent'
-            ? (['10', '20', '30', '40'][index] ?? '10')
-            : splitKind === 'ratio'
-              ? String(index + 1)
-              : row.weight,
-      })),
-    }))
+    setDraft((prev) => {
+      if (prev.splitKind === splitKind) return prev
+      const percentages = ratioToFixedPercents(prev.targets.map((row) => row.weight))
+      return {
+        ...prev,
+        splitKind,
+        targets: prev.targets.map((row, index) => ({
+          ...row,
+          weight: splitKind === 'percent' ? (percentages[index] ?? '') : row.weight,
+        })),
+      }
+    })
   }
 
   const setName = (name: string) => {
@@ -195,6 +203,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   const dimensionOptions = (dimension: string): Option[] => {
     if (!options) return []
     if (dimension === 'department') return options.departments
+    if (dimension === 'account') return options.accounts
     if (dimension === 'location') return options.locations
     if (dimension === 'class') return options.classes
     if (dimension === 'project') return options.projects
@@ -210,6 +219,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
 
   const dimLabel = (dimension: string): string => {
     if (dimension === 'department') return t('rules.definition.filters.department')
+    if (dimension === 'account') return t('rules.targets.account')
     if (dimension === 'location') return t('rules.definition.filters.location')
     if (dimension === 'class') return t('rules.definition.filters.class')
     if (dimension === 'project') return t('rules.definition.filters.project')
@@ -226,7 +236,8 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   const targetDimensions = ((): { id: TargetDimension; label: string }[] => {
     if (!options) return BUILTIN_TARGET_DIMENSIONS.map((id) => ({ id, label: id }))
     return [
-      ...BUILTIN_TARGET_DIMENSIONS.map((id) => ({ id, label: dimLabel(id) })),
+      ...BUILTIN_TARGET_DIMENSIONS.filter((id) => id !== 'subsidiary' || options.subsidiaries.length > 1).map((id) => ({ id, label: dimLabel(id) })),
+      ...(payrollExpenses ? [{ id: 'account' as const, label: dimLabel('account') }] : []),
       ...options.segments.map((segment) => ({ id: `extra:${segment.key}` as const, label: segment.label })),
     ]
   })()
@@ -242,13 +253,13 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   }
 
   const selectedDriver = drivers.find((driver) => driver.id === draft.driverId) ?? null
-  const canNext = wizardStepComplete(step, draft)
+  const canNext = wizardStepComplete(step, draft) && (step !== 'policy' || datesValid)
   const explicit = wizardUsesExplicitTargets(draft)
   const filled = filledTargets(draft)
   const previewWeights = filled.map((row) => row.weight)
-  const previewAmounts = previewWeights.length >= 2 ? previewSplitAmounts('1000.00', previewWeights) : []
+  const previewAmounts = previewWeights.length >= 1 ? previewSplitAmounts('1000.00', previewWeights) : []
   const previewPercents = ((): string[] => {
-    if (!explicit || filled.length < 2) return []
+    if (!explicit || filled.length < 1) return []
     if (draft.splitKind === 'percent' && !wizardStepComplete('targets', draft)) return []
     try {
       return wizardTargetPercents(draft).map(trimDecimal)
@@ -271,6 +282,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         key: key || 'allocation',
         name,
         mode: draft.mode,
+        payrollExpenses,
         description: draft.description === '' ? null : draft.description,
       })
       if (status !== 201) {
@@ -299,7 +311,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   }
 
   const finish = async () => {
-    if (busy || uncertainCreateKey !== null || !wizardStepComplete('review', draft)) return
+    if (busy || uncertainCreateKey !== null || !wizardStepComplete('review', draft) || !datesValid) return
     setBusy(true)
     let createdRuleId: string | null = null
     try {
@@ -308,6 +320,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         key: draft.key,
         name: draft.name.trim(),
         mode: draft.mode,
+        payrollExpenses,
         description: draft.description === '' ? null : draft.description,
       })
       if (created.status !== 201) {
@@ -334,7 +347,13 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         return
       }
       const versionUrl = `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`
-      const form = wizardDefinitionForm(draft, today, selectedDriver)
+      const form = wizardDefinitionForm(draft, effectiveFrom || today, selectedDriver)
+      form.effectiveTo = effectiveTo
+      if (payrollExpenses) {
+        form.payrollExpensesOnly = true
+        form.filterPayComponentIds = draft.payComponentFilter.mode === 'specific' ? draft.payComponentFilter.ids : []
+        form.documentKinds = ['pay_run']
+      }
       const patched = await postJson(versionUrl, definitionPayload(form, revision), 'PATCH')
       if (patched.status !== 200) {
         toast.error(apiError(patched.status, patched.body, t('wizard.createFailed')).message)
@@ -399,6 +418,8 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         return tc('transactionTypes.cardCharge')
       case 'expense_report':
         return tc('transactionTypes.expenseReport')
+      case 'pay_run':
+        return tc('transactionTypes.payRun')
     }
   }
 
@@ -411,15 +432,15 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   return (
     <WizardShell
       testId="allocation-rule-wizard"
-      dialogLabel={t('wizard.when.title')}
+      dialogLabel={t(payrollExpenses ? 'wizard.payrollTitle' : 'wizard.when.title')}
       stepKey={options ? step : 'loading'}
-      progress={options ? { index: stepIdx, total: WIZARD_STEPS.length } : null}
+      progress={options ? { index: stepIdx - (payrollExpenses ? 1 : 0), total: WIZARD_STEPS.length - (payrollExpenses ? 1 : 0) } : null}
       skip={!busy ? { label: tc('actions.close'), onClick: close } : null}
       footer={
         options
           ? {
               back:
-                stepIdx > 0
+                stepIdx > (payrollExpenses ? 1 : 0)
                   ? {
                       label: (
                         <>
@@ -509,7 +530,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         </div>
       ) : null}
       {options && step === 'source' ? (
-        <StepFrame title={t('wizard.source.title')} description={t('wizard.source.description')}>
+        <StepFrame title={t('wizard.source.title')} description={t(payrollExpenses ? 'wizard.payrollSource' : 'wizard.source.description')}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t('rules.general.name')}>
               <Input value={draft.name} aria-label={t('rules.general.name')} onChange={(e) => setName(e.target.value)} />
@@ -529,15 +550,16 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
             <Input value={draft.description} aria-label={t('rules.general.description')} onChange={(e) => set('description', e.target.value)} />
           </Field>
           <div>
-            <Label help={t('wizard.source.kindsHint')}>{t('wizard.source.kinds')}</Label>
+            <Label help={payrollExpenses ? undefined : t('wizard.source.kindsHint')}>{t('wizard.source.kinds')}</Label>
             <div className="mt-2 flex flex-wrap gap-2">
-              {WIZARD_DOCUMENT_KINDS.map((item) => {
+              {WIZARD_DOCUMENT_KINDS.filter((item) => !payrollExpenses || item.kind === 'pay_run').map((item) => {
                 const on = draft.documentKinds.includes(item.kind)
                 return (
                   <button
                     key={item.kind}
                     type="button"
                     aria-pressed={on}
+                    disabled={payrollExpenses}
                     onClick={() =>
                       set(
                         'documentKinds',
@@ -553,13 +575,28 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
                 )
               })}
             </div>
-            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{t('wizard.source.anyKind')}</p>
+            {!payrollExpenses && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{t('wizard.source.anyKind')}</p>}
           </div>
           <div className="space-y-2">
             <Label help={t('wizard.source.filtersHint')}>{t('wizard.source.filters')}</Label>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('wizard.source.filtersAny')}</p>
             <div className="space-y-2">
-              {SOURCE_FILTER_KEYS.map((key) => (
+              {payrollExpenses && (
+                <SourceFilterRow
+                  label={t('rules.definition.filters.payComponent')}
+                  filter={draft.payComponentFilter}
+                  values={options.payComponents}
+                  allowUntagged={false}
+                  pickLabel={t('wizard.source.pickValue')}
+                  noValuesLabel={t('wizard.source.noValues')}
+                  modeAny={t('wizard.source.modeAny')}
+                  modeUntagged={t('wizard.source.modeUntagged')}
+                  modeSpecific={t('wizard.source.modeSpecific')}
+                  removeLabel={tc('actions.remove')}
+                  onChange={(next) => set('payComponentFilter', next)}
+                />
+              )}
+              {SOURCE_FILTER_KEYS.filter((key) => !payrollExpenses || (key !== 'party' && key !== 'item' && (key !== 'subsidiary' || options.subsidiaries.length > 1))).map((key) => (
                 <SourceFilterRow
                   key={key}
                   label={dimLabel(key)}
@@ -745,6 +782,14 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
       ) : null}
       {options && step === 'policy' ? (
         <StepFrame title={t('wizard.policy.title')} description={t('wizard.policy.description')}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('rules.definition.effectiveFrom')}>
+              <Input type="date" value={effectiveFrom || today} required aria-label={t('rules.definition.effectiveFrom')} onChange={(e) => setEffectiveFrom(e.target.value)} />
+            </Field>
+            <Field label={t('rules.definition.effectiveTo')}>
+              <Input type="date" value={effectiveTo} min={effectiveFrom || today} aria-label={t('rules.definition.effectiveTo')} onChange={(e) => setEffectiveTo(e.target.value)} />
+            </Field>
+          </div>
           {draft.mode === 'entry' ? (
             <div className="space-y-2">
               <Label>{t('rules.definition.applyPolicy')}</Label>
@@ -877,6 +922,17 @@ async function postJson(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (!res.ok) {
+    try {
+      await throwApiErrorIfNotOk(res, 'Request failed')
+    } catch (error) {
+      if (error instanceof ApiResponseError) {
+        const body = error.body !== null && typeof error.body === 'object' && !Array.isArray(error.body) ? error.body : {}
+        return { status: error.status, body: { ...body, error: error.message } }
+      }
+      throw error
+    }
+  }
   let parsed: unknown = null
   try {
     parsed = await res.json()

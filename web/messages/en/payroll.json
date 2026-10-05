@@ -714,7 +714,8 @@
       "rates": "Statutory Rates",
       "workSchedules": "Work schedules",
       "serviceCredits": "Credited service",
-      "vacationTerms": "Vacation terms"
+      "vacationTerms": "Vacation terms",
+      "expenses": "Expense allocations"
     },
     "packs": {
       "installed": "Installed",

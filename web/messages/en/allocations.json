@@ -63,7 +63,12 @@
       "active": "Active",
       "searchPlaceholder": "Search rules…",
       "emptyDescription": "Create the first rule to start distributing costs.",
-      "blurb": "Versioned rules that fire at entry, at posting, or as a period sweep. New rule opens a guided setup."
+      "blurb": "Versioned rules that fire at entry, at posting, or as a period sweep. New rule opens a guided setup.",
+      "payrollBlurb": "Split payroll expense by department, project, location, class, legal entity or a custom dimension. Use percentages, ratios or a driver; employee pay and withholdings stay unchanged.",
+      "payrollEnabled": "Published rules apply when payroll posts.",
+      "payrollDisabled": "Posting allocations are off. Enable them in Company Settings → Features before these rules can apply.",
+      "features": "Company features",
+      "departmentDefaults": "Department account defaults"
     },
     "modes": {
       "entry": "At entry",
@@ -204,7 +209,8 @@
         "project": "Projects",
         "subsidiary": "Subsidiaries",
         "party": "Parties",
-        "item": "Items"
+        "item": "Items",
+        "payComponent": "Pay components"
       },
       "partyRoles": {
         "vendor": "Vendors",
@@ -307,7 +313,8 @@
       "subsidiary": "Subsidiary",
       "party": "Party",
       "item": "Item",
-      "testing": "Testing…"
+      "testing": "Testing…",
+      "payrollExpense": "Payroll expense leg"
     },
     "errors": {
       "load": "Could not load allocation rules.",
@@ -555,7 +562,7 @@
       "pickValue": "Choose a value…",
       "add": "Add destination",
       "noValues": "No active values for that dimension yet.",
-      "needOne": "Pick at least two destinations with a positive share.",
+      "needOne": "Choose a destination and a positive share for each split.",
       "example": "A 1,000.00 line would become {amounts}.",
       "driverDynamic": "{driver} will split across every {dimension} that has weight.",
       "driverDynamicHint": "No need to list destinations — the driver vector is the target set."
@@ -591,7 +598,9 @@
       "splitPercent": "Split {percents}",
       "splitDriver": "Split by driver {driver}",
       "targets": "Onto {dimension}: {names}"
-    }
+    },
+    "payrollTitle": "Payroll expense allocation",
+    "payrollSource": "Name the rule and choose which payroll expenses to split. Leave a filter at Any to include every matching expense. Employee pay and withholdings remain unchanged."
   },
   "lineage": {
     "title": "Allocation lineage",

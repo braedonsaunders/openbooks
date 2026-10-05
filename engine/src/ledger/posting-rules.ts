@@ -682,11 +682,14 @@ export const RULES: Record<string, RuleFn> = {
     lines.map((l) => {
       const accountId = resolvedLineAccount(l);
       const partyId = l.partyId ?? null;
+      const payrollSource = l.custom as Record<string, unknown> | null;
       return {
         accountId,
         amount: parseMoney(l.amount),
         memo: l.description,
         partyId,
+        payrollExpense: payrollSource?.["payrollExpense"] === true,
+        payComponentId: typeof payrollSource?.["payComponentId"] === "string" ? payrollSource["payComponentId"] : null,
         // commitPayRun puts a party ONLY on the per-employee net-pay legs —
         // those are open items by construction (settled by the payment
         // journal), regardless of the payable account's configured type.

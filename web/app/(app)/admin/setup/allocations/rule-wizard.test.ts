@@ -178,5 +178,28 @@ test('filledTargets drops blank rows and next weight follows the count', () => {
   draft.targets[0] = { valueId: 'a', weight: '1' }
   draft.targets[1] = { valueId: '', weight: '2' }
   assert.deepEqual(filledTargets(draft), [{ valueId: 'a', weight: '1' }])
-  assert.equal(wizardStepComplete('targets', draft), false)
+  assert.equal(wizardStepComplete('targets', draft), true, 'one destination supports a complete account routing rule')
+  draft.splitKind = 'percent'
+  assert.equal(wizardStepComplete('targets', draft), false, 'a one-percent destination cannot consume the full expense')
+  draft.targets[0] = { valueId: 'a', weight: '100' }
+  assert.equal(wizardStepComplete('targets', draft), true)
+})
+
+
+test('payroll starts with posting scope and an exact equal split; component selection cannot be empty', () => {
+  const draft = defaultWizardDraft(true)
+  assert.equal(draft.mode, 'post')
+  assert.deepEqual(draft.documentKinds, ['pay_run'])
+  assert.equal(draft.splitKind, 'percent')
+  assert.deepEqual(draft.targets.map(row => row.weight), ['50', '50'])
+  draft.name = 'Payroll costs'
+  draft.key = 'payroll-costs'
+  draft.payComponentFilter = { mode: 'specific', ids: [] }
+  assert.equal(wizardStepComplete('source', draft), false)
+  draft.payComponentFilter.ids = ['earning-component']
+  assert.equal(wizardStepComplete('source', draft), true)
+  draft.targetDimension = 'account'
+  draft.targets = [{ valueId: 'expense-account', weight: '100' }]
+  assert.equal(wizardStepComplete('targets', draft), true)
+  assert.deepEqual(wizardTargetPayload(draft).map(row => [row['targetAccountId'], row['fixedPercent']]), [['expense-account', '100.0000']])
 })

@@ -100,7 +100,8 @@
     "fulfillment": "Cumplimiento",
     "fulfillmentShort": "Cumpl.",
     "returnAuthorization": "Autorización de devolución",
-    "returnAuthorizationShort": "RMA"
+    "returnAuthorizationShort": "RMA",
+    "payRun": "Ciclo de nómina"
   },
   "labels": {
     "name": "Nombre",

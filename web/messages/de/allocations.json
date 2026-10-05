@@ -63,7 +63,12 @@
       "active": "Aktiv",
       "searchPlaceholder": "Regeln suchen…",
       "emptyDescription": "Legen Sie die erste Regel an, um Kosten zu verteilen.",
-      "blurb": "Versionierte Regeln, die bei Erfassung, bei Buchung oder als Periodenumlage greifen. Eine neue Regel öffnet eine geführte Einrichtung."
+      "blurb": "Versionierte Regeln, die bei Erfassung, bei Buchung oder als Periodenumlage greifen. Eine neue Regel öffnet eine geführte Einrichtung.",
+      "payrollBlurb": "Verteilen Sie Personalaufwand nach Abteilung, Projekt, Standort, Klasse, Rechtsträger oder benutzerdefinierter Dimension. Nutzen Sie Prozentsätze, Verhältnisse oder einen Kostentreiber; Auszahlungen und Abzüge bleiben unverändert.",
+      "payrollEnabled": "Veröffentlichte Regeln gelten bei der Buchung der Abrechnung.",
+      "payrollDisabled": "Buchungsverteilungen sind deaktiviert. Aktivieren Sie sie unter Unternehmenseinstellungen → Funktionen, damit diese Regeln angewendet werden.",
+      "features": "Unternehmensfunktionen",
+      "departmentDefaults": "Standardkonten je Abteilung"
     },
     "modes": {
       "entry": "Bei Erfassung",
@@ -204,7 +209,8 @@
         "project": "Projekte",
         "subsidiary": "Tochtergesellschaften",
         "party": "Parteien",
-        "item": "Artikel"
+        "item": "Artikel",
+        "payComponent": "Lohnkomponenten"
       },
       "partyRoles": {
         "vendor": "Lieferanten",
@@ -307,7 +313,8 @@
       "subsidiary": "Tochtergesellschaft",
       "party": "Partei",
       "item": "Artikel",
-      "testing": "Wird getestet…"
+      "testing": "Wird getestet…",
+      "payrollExpense": "Personalaufwandszeile"
     },
     "errors": {
       "load": "Umlageregeln konnten nicht geladen werden.",
@@ -555,7 +562,7 @@
       "pickValue": "Wert wählen…",
       "add": "Ziel hinzufügen",
       "noValues": "Noch keine aktiven Werte für diese Dimension.",
-      "needOne": "Wählen Sie mindestens zwei Ziele mit positivem Anteil.",
+      "needOne": "Wählen Sie ein Ziel und einen positiven Anteil für jede Aufteilung.",
       "example": "Eine Zeile über 1.000,00 würde zu {amounts}.",
       "driverDynamic": "{driver} teilt auf jede {dimension} mit Gewicht auf.",
       "driverDynamicHint": "Keine Ziele auflisten nötig — der Schlüsselvektor ist die Zielmenge."
@@ -591,7 +598,9 @@
       "splitPercent": "Aufteilung {percents}",
       "splitDriver": "Aufteilung per Schlüssel {driver}",
       "targets": "Auf {dimension}: {names}"
-    }
+    },
+    "payrollTitle": "Verteilung der Lohnkosten",
+    "payrollSource": "Benennen Sie die Regel und wählen Sie die aufzuteilenden Lohnkosten. Lassen Sie einen Filter auf Alle, um alle passenden Kosten einzubeziehen. Vergütung und Abzüge der Beschäftigten bleiben unverändert."
   },
   "lineage": {
     "title": "Umlageherkunft",

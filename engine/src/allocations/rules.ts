@@ -35,6 +35,7 @@ import {
 } from "../organization/allocation-scope.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
 /**
  * Rule/version service: versioned, effective-dated allocation
@@ -607,10 +608,12 @@ export async function createRule(input: CreateRuleInput, audit: AllocationAudit)
 
 /** Create a rule head and its initial draft as one audited database unit. */
 export async function createRuleWithInitialDraft(
-  input: CreateRuleInput & { effectiveFrom: string; allowedSubsidiaryIds: SubsidiaryScope },
+  input: CreateRuleInput & { effectiveFrom: string; allowedSubsidiaryIds: SubsidiaryScope; payrollExpenses?: boolean },
   audit: AllocationAudit,
 ): Promise<{ created: RuleMutationResult; draft: RuleVersionWithTargets }> {
   return withOrgTransaction(input.orgId, async () => {
+    if (input.payrollExpenses && input.mode !== "post") throw new AllocationRuleError("INVALID", "Payroll expense allocations must run at posting.");
+    if (input.payrollExpenses && !(await lockAndCheckOrgFeature(db, input.orgId, "payroll"))) throw new AllocationRuleError("INVALID", "Payroll is disabled — enable it in Company Settings → Features before configuring payroll expense allocations.");
     const created = await createRule({
       orgId: input.orgId,
       key: input.key,
@@ -624,6 +627,7 @@ export async function createRuleWithInitialDraft(
       orgId: input.orgId,
       effectiveFrom: input.effectiveFrom,
       allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+      ...(input.payrollExpenses ? { documentKinds: ["pay_run"], dimensionFilters: { payrollExpensesOnly: true } } : {}),
     }, audit);
     return { created, draft };
   });
@@ -787,6 +791,12 @@ function checkedDimensionFilters(value: unknown): DimensionFilters {
   if (partyIds !== undefined) out.partyIds = partyIds;
   const itemIds = idList("itemIds");
   if (itemIds !== undefined) out.itemIds = itemIds;
+  const payComponentIds = idList("payComponentIds");
+  if (payComponentIds !== undefined) out.payComponentIds = payComponentIds;
+  if (value["payrollExpensesOnly"] !== undefined) {
+    if (typeof value["payrollExpensesOnly"] !== "boolean") throw new AllocationRuleError("INVALID", "dimensionFilters.payrollExpensesOnly must be a boolean");
+    out.payrollExpensesOnly = value["payrollExpensesOnly"];
+  }
   const extraDims: unknown = value["extraDims"];
   if (extraDims !== undefined) {
     if (!isRecord(extraDims)) throw new AllocationRuleError("INVALID", "dimensionFilters.extraDims must be an object");
@@ -1204,6 +1214,20 @@ export async function publishVersion(
       throw new AllocationRuleError("FROZEN", `version ${id} is retired and cannot publish`);
     }
     const targets = await loadTargets(orgId, id);
+    if (version.dimensionFilters.payComponentIds?.length && !version.dimensionFilters.payrollExpensesOnly) {
+      throw new AllocationRuleError("INVALID", "Pay component filters require payroll expense scope — create the rule from Payroll setup → Expense allocations before publishing.");
+    }
+    if (version.dimensionFilters.payrollExpensesOnly) {
+      if (!(await lockAndCheckOrgFeature(db, orgId, "payroll"))) throw new AllocationRuleError("INVALID", "Payroll is disabled — enable it in Company Settings → Features before publishing payroll expense allocations.");
+      if (head.mode !== "post" || version.documentKinds?.length !== 1 || version.documentKinds[0] !== "pay_run") {
+        throw new AllocationRuleError("INVALID", "Payroll expense allocations must be posting rules restricted to pay runs — restore the pay-run transaction type before publishing.");
+      }
+      const componentIds = version.dimensionFilters.payComponentIds ?? [];
+      if (componentIds.length) {
+        const components = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') and id = any(${`{${componentIds.join(",")}}`}::uuid[])`)).rows;
+        if (new Set(componentIds).size !== components.length) throw new AllocationRuleError("INVALID", "A selected pay component is missing, inactive, or does not create payroll expense — choose active earnings or employer contributions before publishing.");
+      }
+    }
     assertRuleVisible(input.allowedSubsidiaryIds, version, targets.map((t) => t.subsidiaryId));
     const context = await validationContext(orgId, version.ruleId, version);
     const problems = validateRuleVersion(version, targets, {
@@ -1353,12 +1377,13 @@ export async function loadRuleInEffectByKey(
  */
 export async function listRuleHeads(
   orgId: string,
-  opts: { mode?: AllocationMode; activeOnly?: boolean; allowedSubsidiaryIds?: SubsidiaryScope } = {},
+  opts: { mode?: AllocationMode; activeOnly?: boolean; allowedSubsidiaryIds?: SubsidiaryScope; payrollExpenses?: boolean } = {},
 ): Promise<RuleHeadSummary[]> {
   const id = uuid(orgId, "orgId");
   return withOrgTransaction(id, async () => {
     const modeFilter = opts.mode === undefined ? sql`` : sql`and r.mode = ${oneOf(opts.mode, MODES, "mode")}`;
     const activeFilter = opts.activeOnly === true ? sql`and r.is_active` : sql``;
+    const payrollFilter = opts.payrollExpenses ? sql`and exists (select 1 from allocation_rule_versions pv where pv.org_id = r.org_id and pv.rule_id = r.id and pv.dimension_filters->>'payrollExpensesOnly' = 'true')` : sql``;
     const rows = await db.execute<Prefixed>(sql`select ${RULE_COLS},
       ${documentRevisionSql(sql`r.updated_at`)} as rule_revision,
       v.id as current_id, v.version_no as current_version_no, v.status as current_status,
@@ -1366,7 +1391,7 @@ export async function listRuleHeads(
       v.definition_hash as current_definition_hash
       from allocation_rules r
       left join allocation_rule_versions v on v.org_id = r.org_id and v.id = r.current_version_id
-      where r.org_id = ${id} ${modeFilter} ${activeFilter}
+      where r.org_id = ${id} ${modeFilter} ${activeFilter} ${payrollFilter}
       order by r.sort_order, r.key`);
     const result: RuleHeadSummary[] = [];
     for (const row of rows.rows) {

@@ -25,7 +25,7 @@ export {
   newAllocationLine,
 } from './split-lines-model'
 import type { AllocationLine, CodingConfig } from './split-lines-model'
-import { allocationPortionFromInput, CODING_FIELD, newAllocationLine } from './split-lines-model'
+import { allocationCodingPatch, allocationCodingValue, allocationPortionFromInput, newAllocationLine } from './split-lines-model'
 
 export interface SplitLinesLabels {
   account: string
@@ -169,14 +169,13 @@ export function SplitLinesEditor({
           {(codings.length > 0 || showDescription || showLabel) && (
             <div className="flex flex-wrap items-center gap-2 pl-0.5">
               {codings.map((c) => {
-                const fieldKey = CODING_FIELD[c.key]
-                const value = (line[fieldKey] as string | null | undefined) ?? ''
+                const value = allocationCodingValue(line, c.key) ?? ''
                 return (
                   <div key={c.key} className="min-w-[9rem] flex-1">
                     <SearchSelect
                       options={c.options}
                       value={value}
-                      onChange={(v) => setLine(i, { [fieldKey]: v || null } as Partial<AllocationLine>)}
+                      onChange={(v) => setLine(i, allocationCodingPatch(line, c.key, v || null))}
                       placeholder={c.label}
                       clearable
                       emptyLabel={c.label}

@@ -100,7 +100,8 @@
     "fulfillment": "出荷実績",
     "fulfillmentShort": "出荷実績",
     "returnAuthorization": "返品承認",
-    "returnAuthorizationShort": "RMA"
+    "returnAuthorizationShort": "RMA",
+    "payRun": "給与計算"
   },
   "labels": {
     "name": "名前",

@@ -151,7 +151,11 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       .map((row) => ({ id: row.id, label: row.label, ...(row.extra === null ? {} : { extra: row.extra }) })),
   }));
 
+  const expenseAccounts = (await db.execute<Option>(sql`select id::text, number || ' · ' || name as label from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'cogs', 'expense_other') order by number, name`)).rows;
+  const payComponents = (await db.execute<Option>(sql`select id::text, code || ' · ' || name as label from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') order by sequence, code`)).rows;
   return NextResponse.json({
+    expenseAccounts,
+    payComponents,
     accounts: accounts.rows,
     departments,
     locations,

@@ -714,7 +714,8 @@
       "rates": "法定料率",
       "workSchedules": "勤務スケジュール",
       "serviceCredits": "認定勤続期間",
-      "vacationTerms": "休暇条件"
+      "vacationTerms": "休暇条件",
+      "expenses": "費用配賦"
     },
     "packs": {
       "installed": "インストール済み",

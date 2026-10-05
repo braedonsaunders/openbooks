@@ -38,6 +38,8 @@ function refusedCommitMessage(refusals: PayRunCalculationError[]): string {
 }
 
 export interface PayRunGlLeg {
+  payrollExpense?: boolean;
+  payComponentId?: string | null;
   accountId: string;
   amount: string;
   partyId: string | null;
@@ -98,14 +100,17 @@ async function payRunGlLegs(
     }
 
     const stubLines = (await tx.execute<Record<string, string | null>>(sql`
-      select l.id as line_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
+      select l.id as line_id, l.component_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
              c.system_key, c.country, l.expense_account_id as line_expense_account_id,
              c.expense_account_id as component_expense_account_id,
              c.liability_account_id, c.remittance_party_id, s.net_pay,
-             l.payment_kind, l.non_cash_account_id
+             l.payment_kind, l.non_cash_account_id, expense_account.type as expense_account_type
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+        left join accounts expense_account on expense_account.org_id = l.org_id
+          and expense_account.id = coalesce(l.expense_account_id, c.expense_account_id,
+            case when l.kind = 'employer_contribution' then ${burdenExpense}::uuid else ${wageExpense}::uuid end)
         left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
        where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
          ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
@@ -124,26 +129,28 @@ async function payRunGlLegs(
       return {legs:[],debitTotal:'0.0000',lineLiabilities:[],lineDestinations:[]};
     }
 
-    // Aggregate GL legs: key = account|project|department|party (party only on
-    // net pay). Employer burden debits additionally split per component
-    // description: several shares ride one expense account, and merging them
-    // under the first share's name mislabels the aggregate.
+    // Keep the account, coding, party and payroll component in the grouping
+    // identity so posting allocations can select the original expense source.
+    // Employer burden descriptions remain separate to identify each share.
     const legs = new Map<string, {
       accountId: string; amount: string; partyId: string | null;
       projectId: string | null; departmentId: string | null; description: string;
+      payrollExpense?: boolean; payComponentId?: string | null;
     }>();
     const accumulate = (
       accountId: string, amount: string, description: string,
-      opts: { partyId?: string | null; projectId?: string | null; departmentId?: string | null; split?: string } = {},
+      opts: { partyId?: string | null; projectId?: string | null; departmentId?: string | null; split?: string; payrollExpense?: boolean; payComponentId?: string | null } = {},
     ) => {
       if (cmp(amount, "0") === 0) return;
-      const key = [accountId, opts.partyId ?? "", opts.projectId ?? "", opts.departmentId ?? "", opts.split ?? ""].join("|");
+      const key = [accountId, opts.partyId ?? "", opts.projectId ?? "", opts.departmentId ?? "", opts.split ?? "", opts.payrollExpense ? "expense" : "", opts.payComponentId ?? ""].join("|");
       const existing = legs.get(key);
       if (existing) existing.amount = add(existing.amount, amount);
       else legs.set(key, {
         accountId, amount, description,
         partyId: opts.partyId ?? null, projectId: opts.projectId ?? null,
         departmentId: opts.departmentId ?? null,
+        payrollExpense: opts.payrollExpense,
+        payComponentId: opts.payComponentId,
       });
     };
 
@@ -161,6 +168,9 @@ async function payRunGlLegs(
     for (const line of stubLines.rows) {
       netByEmployee.set(line.employee_party_id!, line.net_pay!);
       const amount = line.amount!;
+      // Bank drawdowns debit a liability rather than a new payroll expense.
+      // Keep those debits outside cost allocation, just like payable credits.
+      const payrollExpense = ["expense", "expense_other", "cogs"].includes(line.expense_account_type ?? "");
       if (line.kind === "earning") {
         if (line.payment_kind === "non_cash") {
           if (!line.non_cash_account_id) throw new PayrollError(`non-cash earning "${line.description}" has no calculated clearing account — recalculate the editable run after configuring its non-cash account`);
@@ -182,6 +192,7 @@ async function payRunGlLegs(
             line.line_expense_account_id ?? line.component_expense_account_id ?? wageExpense,
             amount, line.description ?? "Wages", {
               projectId: line.project_id, departmentId: line.department_id,
+              payrollExpense, payComponentId: line.component_id,
             });
         }
       } else if (line.kind === "deduction") {
@@ -220,10 +231,11 @@ async function payRunGlLegs(
         // Each component keeps its own debit: the shares ride one expense
         // account, so without the split the whole aggregate wears the first
         // share's name.
-        // Burden is deliberately NOT item-routed (owner decision pending):
-        // the component-then-default fallback stands exactly as before.
-        accumulate(line.component_expense_account_id ?? burdenExpense, amount, line.description ?? "Employer burden", {
+        // Honor the account resolved during calculation before falling back
+        // to the component or company burden account.
+        accumulate(line.line_expense_account_id ?? line.component_expense_account_id ?? burdenExpense, amount, line.description ?? "Employer burden", {
           projectId: line.project_id, departmentId: line.department_id,
+          payrollExpense, payComponentId: line.component_id,
           split: line.description ?? "Employer burden",
         });
         accumulate(liability, neg(amount), line.description ?? "Employer burden");
@@ -575,9 +587,10 @@ export async function commitPayRun(input: {
     for (const leg of legs) {
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                    amount, party_id, project_id, department_id, created_by, updated_by)
+                                    amount, party_id, project_id, department_id, custom, created_by, updated_by)
         values (${orgId}, ${documentId}, ${lineNumber++}, ${leg.accountId}, ${leg.description},
                 ${leg.amount}, ${leg.partyId}, ${leg.projectId}, ${leg.departmentId},
+                ${JSON.stringify({ payrollExpense: leg.payrollExpense === true, payComponentId: leg.payComponentId ?? null })}::jsonb,
                 ${actorId}, ${actorId})
       `);
     }

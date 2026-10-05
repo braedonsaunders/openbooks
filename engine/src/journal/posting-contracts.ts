@@ -28,6 +28,9 @@ export type Doc = PostingDocument;
 export type DocLine = PostingDocumentLine;
 
 export interface KernelLine {
+  /** Expense-only payroll source identity, preserved through aggregation for rule matching. */
+  payrollExpense?: boolean;
+  payComponentId?: string | null;
   accountId: string;
   /** Signed transaction-currency amount, canonical ledger money by the time
    * a rule emits it (parsed at the DocLine boundary, brand-closed after);

@@ -43,8 +43,8 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = String(context.parentURL)
     if (
-      specifier === './authz'
-      && (parent.includes('/lib/allocations-gate.ts') || parent.includes('/lib/feature-gates.ts'))
+      (specifier === './authz' || specifier === '@/lib/authz')
+      && (parent.includes('/lib/allocations-gate.ts') || parent.includes('/lib/feature-gates.ts') || parent.includes('/lib/api/route.ts'))
     ) {
       return { url: 'mock:alloc-rules-authz', shortCircuit: true }
     }
@@ -398,4 +398,42 @@ test('test-match previews entry matches and links period rules to Runs', async (
   )
   assert.equal(deep.body.kind, 'period')
   assert.ok(deep.body.runsUrl.includes('tab=runs'))
+})
+
+
+test('payroll expense creation preserves scope and refuses unsafe component selection', async (t) => {
+  const f = await seed(true)
+  t.after(() => dropScratchOrg(f.orgId))
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,payroll}', 'true'::jsonb) where id = ${f.orgId}`)
+  const wrongMode = await read<{ error: string }>(await listRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {
+    key: 'payroll-wrong-mode', name: 'Payroll costs', mode: 'entry', payrollExpenses: true,
+  })))
+  assert.equal(wrongMode.status, 400)
+  assert.match(wrongMode.body.error, /posting/i)
+  const created = await read<{ rule: { id: string }; version: { id: string; revision: string; documentKinds: string[]; dimensionFilters: { payrollExpensesOnly: boolean } } }>(await listRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {
+    key: 'payroll-costs', name: 'Payroll costs', mode: 'post', payrollExpenses: true,
+  })))
+  assert.equal(created.status, 201)
+  assert.deepEqual(created.body.version.documentKinds, ['pay_run'])
+  assert.equal(created.body.version.dimensionFilters.payrollExpensesOnly, true)
+  const ctx = { params: Promise.resolve({ id: created.body.rule.id, versionId: created.body.version.id }) }
+  const missingComponent = '00000000-0000-4000-8000-000000000001'
+  const edited = await read<{ version: { revision: string; dimensionFilters: { payComponentIds: string[] } } }>(await versionRoute.PATCH(jsonRequest('http://openbooks.test/x', 'PATCH', {
+    expectedRevision: created.body.version.revision,
+    dimensionFilters: { payrollExpensesOnly: true, payComponentIds: [missingComponent] },
+  }), ctx))
+  assert.equal(edited.status, 200)
+  assert.deepEqual(edited.body.version.dimensionFilters.payComponentIds, [missingComponent])
+  const refused = await read<{ error: string }>(await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), ctx))
+  assert.equal(refused.status, 422)
+  assert.match(refused.body.error, /missing, inactive/)
+  assert.match(refused.body.error, /choose active earnings or employer contributions/)
+  const unscoped = await versionRoute.PATCH(jsonRequest('http://openbooks.test/x', 'PATCH', {
+    expectedRevision: edited.body.version.revision,
+    dimensionFilters: { payComponentIds: [missingComponent] },
+  }), ctx)
+  assert.equal(unscoped.status, 200)
+  const unscopedRefusal = await read<{ error: string }>(await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), ctx))
+  assert.equal(unscopedRefusal.status, 422)
+  assert.match(unscopedRefusal.body.error, /Payroll setup → Expense allocations/)
 })

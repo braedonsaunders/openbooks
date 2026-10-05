@@ -6,15 +6,16 @@
  * module, so existing consumers keep importing from the component.
  */
 
-export type CodingKey = 'department' | 'project' | 'location' | 'class' | 'tax' | 'party'
+export type CodingKey = 'department' | 'project' | 'location' | 'class' | 'tax' | 'party' | 'subsidiary' | `extra:${string}`
 
-export const CODING_FIELD: Record<CodingKey, keyof AllocationLine> = {
+export const CODING_FIELD: Record<Exclude<CodingKey, `extra:${string}`>, keyof AllocationLine> = {
   department: 'departmentId',
   project: 'projectId',
   location: 'locationId',
   class: 'classId',
   tax: 'taxCodeId',
   party: 'partyId',
+  subsidiary: 'subsidiaryId',
 }
 
 export interface CodingConfig {
@@ -40,11 +41,29 @@ export interface AllocationLine {
   projectId?: string | null
   locationId?: string | null
   classId?: string | null
+  subsidiaryId?: string | null
+  extraDims?: Record<string, string>
   taxCodeId?: string | null
   partyId?: string | null
   description?: string | null
   /** Allocation target label (the rule drawer shows it beside the share). */
   label?: string | null
+}
+
+export function allocationCodingValue(line: AllocationLine, key: CodingKey): string | null {
+  if (key.startsWith('extra:')) return line.extraDims?.[key.slice(6)] ?? null
+  const value = line[CODING_FIELD[key as Exclude<CodingKey, `extra:${string}`>]]
+  return typeof value === 'string' ? value : null
+}
+
+export function allocationCodingPatch(line: AllocationLine, key: CodingKey, value: string | null): Partial<AllocationLine> {
+  if (key.startsWith('extra:')) {
+    const extraDims = { ...line.extraDims }
+    if (value) extraDims[key.slice(6)] = value
+    else delete extraDims[key.slice(6)]
+    return { extraDims }
+  }
+  return { [CODING_FIELD[key as Exclude<CodingKey, `extra:${string}`>]]: value }
 }
 
 /**

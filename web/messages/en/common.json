@@ -100,7 +100,8 @@
     "fulfillment": "Fulfillment",
     "fulfillmentShort": "Fulfill",
     "returnAuthorization": "Return authorization",
-    "returnAuthorizationShort": "RMA"
+    "returnAuthorizationShort": "RMA",
+    "payRun": "Pay run"
   },
   "labels": {
     "name": "Name",
