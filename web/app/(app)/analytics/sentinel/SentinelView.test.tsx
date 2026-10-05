@@ -38,7 +38,7 @@ const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 const { SentinelView } = await import('./SentinelView')
-const { RISK_SCORING } = await import('../../../../lib/analytics/sentinel-data')
+const { RISK_SCORING } = await import('../../../../lib/analytics/sentinel-scoring')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
