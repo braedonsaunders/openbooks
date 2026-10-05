@@ -162,6 +162,13 @@ CREATE TRIGGER contract_cost_asset_terms_guard_trigger
   BEFORE UPDATE ON public.contract_cost_assets
   FOR EACH ROW EXECUTE FUNCTION public.contract_cost_asset_terms_guard();
 
+-- Contract cost postings attribute their asset legs to the capitalized cost
+-- they relieve, so the carrying amount is always the ledger itself. The
+-- kernel's closed contributor vocabulary gains that one kind.
+ALTER TABLE public.journal_lines DROP CONSTRAINT journal_lines_contributor_kind_check;
+ALTER TABLE public.journal_lines ADD CONSTRAINT journal_lines_contributor_kind_check
+  CHECK ((contributor_kind IS NULL) OR (contributor_kind = ANY (ARRAY['rule'::text, 'script'::text, 'app'::text, 'intercompany'::text, 'contract_cost_asset'::text])));
+
 ALTER TABLE public.contract_cost_policies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contract_cost_policies FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON public.contract_cost_policies
