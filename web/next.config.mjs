@@ -1,6 +1,8 @@
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+const retainDevelopmentCompilation = process.env.NODE_ENV === "development"
+  && process.env.OPENBOOKS_DEV_KEEP_COMPILE_CACHE === "1";
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +26,8 @@ export const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const config = {
   experimental: {
+    // Dedicated development hosts can retain compiled modules between visits.
+    ...(retainDevelopmentCompilation ? { turbopackMemoryEviction: false } : {}),
     cpus: 1,
     staticGenerationMaxConcurrency: 1,
     webpackBuildWorker: true,
