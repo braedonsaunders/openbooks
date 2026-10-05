@@ -143,7 +143,7 @@ export function buildFeatureTree(
   const toNode = (row: FeatureTreeRow, visible: boolean): FeatureTreeNode => ({
     row,
     depth: 0,
-    on: visible && resolveFeatureOn(allRows, state, row.key),
+    on: resolveFeatureOn(allRows, state, row.key),
     missingRequirements: missingRequirements(byKey, state, row),
     visible,
   })
