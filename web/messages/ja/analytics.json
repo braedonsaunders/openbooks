@@ -1626,7 +1626,8 @@
       "method": "方式",
       "logic": "予測ロジック",
       "perWeek": "週平均",
-      "horizonTotal": "期間合計"
+      "horizonTotal": "期間合計",
+      "unavailable": "カテゴリを利用できません: {detail}"
     },
     "toggle": {
       "outflowsAp": "流出 (AP)",

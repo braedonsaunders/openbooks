@@ -1626,7 +1626,8 @@
       "method": "Méthode",
       "logic": "Logique prévisionnelle",
       "perWeek": "Par semaine (moy.)",
-      "horizonTotal": "Total horizon"
+      "horizonTotal": "Total horizon",
+      "unavailable": "Catégorie indisponible : {detail}"
     },
     "toggle": {
       "outflowsAp": "Sorties (AP)",

@@ -1626,7 +1626,8 @@
       "method": "Método",
       "logic": "Lógica de previsão",
       "perWeek": "Por semana (méd.)",
-      "horizonTotal": "Total do horizonte"
+      "horizonTotal": "Total do horizonte",
+      "unavailable": "Categoria indisponível: {detail}"
     },
     "toggle": {
       "outflowsAp": "Saídas (AP)",
