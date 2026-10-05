@@ -40,6 +40,18 @@
     "emailReceived": "Envoyer la réception par e-mail",
     "emailDecision": "Envoyer la décision finale par e-mail",
     "emailSent": "E-mail envoyé",
-    "emailFailed": "Impossible d’envoyer la mise à jour du retour"
+    "emailFailed": "Impossible d’envoyer la mise à jour du retour",
+    "fee": {
+      "title": "Frais de restockage",
+      "preview": "Aperçu des frais",
+      "previewFailed": "Impossible d’afficher les frais",
+      "total": "Frais sur cet avoir : {amount}",
+      "detail": "{count, plural, one {# ligne de frais} other {# lignes de frais}}",
+      "noPolicy": "Aucune règle de frais",
+      "capped": "plafonné à la valeur créditée",
+      "waive": "Exonérer les frais",
+      "reason": "Motif de l’exonération",
+      "reasonPlaceholder": "Pourquoi les frais sont-ils exonérés ?"
+    }
   }
 }

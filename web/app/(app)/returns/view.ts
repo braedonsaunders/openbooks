@@ -27,6 +27,8 @@ export type ReturnsDrawer = DrawerProps & {
   workflow: ReturnAuthorization | null
   workflowCanInspect: boolean
   workflowCanManage: boolean
+  workflowCanWaiveFee: boolean
+  workflowCurrency: string | null
   vendors: { id: string; display_name: string }[]
 }
 
@@ -124,6 +126,8 @@ export async function loadReturns(sp: Record<string, string | string[] | undefin
         workflow,
         workflowCanInspect: can(authz, 'ar.create') && can(authz, 'items.post'),
         workflowCanManage: canCreate,
+        workflowCanWaiveFee: can(authz, 'returns.waive_fee'),
+        workflowCurrency: openDocument ? String(openDocument.doc.currency) : null,
         vendors,
       } satisfies ReturnsDrawer
     : null

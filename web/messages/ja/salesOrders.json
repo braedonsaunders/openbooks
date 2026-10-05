@@ -23,5 +23,17 @@
     "reason": "評価理由",
     "propose": "承認提案を準備",
     "failed": "支配の評価を準備できませんでした"
+  },
+  "promotion": {
+    "apply": "プロモーションを適用",
+    "chip": "プロモーション",
+    "selectTitle": "プロモーションを適用",
+    "selectLabel": "プロモーションを選択",
+    "enterCode": "コードを入力…",
+    "codeTitle": "プロモーションコードを適用",
+    "codeLabel": "プロモーションコード",
+    "applied": "{code}を適用しました：{amount}の割引（{count}明細）",
+    "loadFailed": "プロモーションを読み込めませんでした",
+    "applyFailed": "プロモーションを適用できませんでした"
   }
 }

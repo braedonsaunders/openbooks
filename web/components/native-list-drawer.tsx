@@ -30,11 +30,16 @@ const renderers = {
           workflow?: ReturnAuthorization | null
           workflowCanInspect?: boolean
           workflowCanManage?: boolean
+          workflowCanWaiveFee?: boolean
+          workflowCurrency?: string | null
           vendors?: { id: string; display_name: string }[]
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, vendors, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, ...rest } = drawer as typeof drawer & {
+      workflowCanWaiveFee?: boolean
+      workflowCurrency?: string | null
+    }
     return (
       <DocumentDrawer
         key={remountKey}
@@ -61,6 +66,8 @@ const renderers = {
                   authorization={workflow}
                   canInspect={workflowCanInspect === true}
                   canManage={workflowCanManage === true}
+                  canWaiveFee={workflowCanWaiveFee === true}
+                  currency={workflowCurrency ?? undefined}
                   stockLocations={rest.stockLocations ?? []}
                   vendors={vendors ?? []}
                 />

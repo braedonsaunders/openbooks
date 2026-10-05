@@ -12,6 +12,7 @@ import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from '@/lib/price-basis'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
+import { PromotionApplyControl } from '@/components/promotion-apply'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { optionalScanResolver } from '../../../lib/scan'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -75,6 +76,8 @@ interface LineRow extends Record<string, unknown> {
    *  the save payload picks explicit fields). Lets a reopened draft re-send
    *  its stored basis when the row is untouched, instead of nulling it. */
   loadedPrice: { itemId: string; unitPrice: string; quantity: string; basis: PriceBasis } | null
+  /** Promotion code carried by a discount line; blank on ordinary lines. */
+  promotionCode: string
 }
 type OrderLineValidationInput = Pick<LineRow, 'itemId' | 'accountId' | 'description' | 'quantity' | 'unitPrice'>
 
@@ -335,6 +338,7 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   projectId: '',
   stockLocationId: '',
   loadedPrice: null,
+  promotionCode: '',
   ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
 })
 
@@ -406,6 +410,7 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     projectId: lineText(l.project_id),
     stockLocationId: lineText(l.stock_location_id),
     loadedPrice: loadedPriceOf(l),
+    promotionCode: lineText(l.promotion_code),
     ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, extraDims?.[segment.key] ?? ''])),
   }
 }
@@ -443,6 +448,7 @@ export function OrderDrawer({
   isDropShipPurchaseOrder = false,
   barcodeScanningEnabled = false,
   customerItemRefs = [],
+  promotionsEnabled = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -492,12 +498,15 @@ export function OrderDrawer({
   isDropShipPurchaseOrder?: boolean
   barcodeScanningEnabled?: boolean
   customerItemRefs?: { customerId: string; itemId: string; customerSku: string }[]
+  /** Server-known promotions gate for the apply-promotion action and chip. */
+  promotionsEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
   const tFulfillment = useTranslations('fulfillment')
   const tReturns = useTranslations('returns')
+  const tSales = useTranslations('salesOrders')
   const statusLabel = (status: string) => {
     const key = toStatusKey(String(status))
     return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace('_', ' ')
@@ -1308,6 +1317,24 @@ export function OrderDrawer({
     }
   }, [stockLocations, rows, stockedItemIds, tCommon])
 
+  // Discount lines applied from a promotion carry its code; the column shows
+  // only when a row actually carries one, so ordinary orders keep their grid.
+  const promotionColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
+    if (!(promotionsEnabled && (kind === 'quote' || kind === 'sales_order'))) return null
+    if (!rows.some((row) => row.promotionCode !== '')) return null
+    return {
+      key: 'promotionCode',
+      label: tSales('promotion.chip'),
+      width: '130px',
+      type: 'readonly',
+      render: (row) => {
+        const code = String(row.promotionCode ?? '')
+        if (code === '') return null
+        return <Badge variant="secondary">{code}</Badge>
+      },
+    }
+  }, [promotionsEnabled, kind, rows, tSales])
+
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => {
@@ -1392,6 +1419,7 @@ export function OrderDrawer({
         // The warehouse picker is force-shown like a mandatory dimension:
         // tenant layouts predate the key, so placement alone would hide it.
         ...(warehouseColumn ? [warehouseColumn] : []),
+        ...(promotionColumn ? [promotionColumn] : []),
         ...segments.filter((segment) => segment.showOnLines).map((segment): LineGridColumn<LineRow> => ({
           key: `seg_${segment.key}`,
           label: segment.name,
@@ -1403,7 +1431,7 @@ export function OrderDrawer({
       ]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn, customerSkuByItem, barcodeScanningEnabled, partyId],
+    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn, promotionColumn, customerSkuByItem, barcodeScanningEnabled, partyId],
   )
 
   const field = 'space-y-1.5'
@@ -1713,7 +1741,12 @@ export function OrderDrawer({
         ) : null}
 
         <div className="space-y-2">
-          <Label>{tCommon('labels.lines')}</Label>
+          <div className="flex items-center gap-2">
+            <Label>{tCommon('labels.lines')}</Label>
+            {promotionsEnabled && (kind === 'quote' || kind === 'sales_order') && editable && !createMode && doc.id !== '' && doc.status === 'draft' ? (
+              <PromotionApplyControl documentId={doc.id} currency={doc.currency} onApplied={() => router.refresh()} />
+            ) : null}
+          </div>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}

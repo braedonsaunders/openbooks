@@ -11,6 +11,13 @@ import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting-dispatch.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { toCents } from '@openbooks/engine/src/money/money.ts'
+import {
+  recordRestockingFeeWaiver,
+  resolveRestockingFee,
+  restockingFeeCreditLines,
+  type ResolveRestockingFeeResult,
+} from '@openbooks/engine/src/sales/restocking-fees.ts'
 import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import {
@@ -204,6 +211,76 @@ async function customerCreditLine(
   }
 }
 
+type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMinor: bigint }
+
+/**
+ * Resolve the restocking fee for accepted return value, shared by the fee
+ * preview and the inspect write path so both price the same lines.
+ */
+async function resolveInspectionRestockingFee(input: {
+  orgId: string
+  returnDate: string
+  currency: string
+  credited: CreditedReturnLine[]
+  waived: boolean
+  waiveReason: string | null
+}): Promise<ResolveRestockingFeeResult> {
+  const itemIds = [...new Set(input.credited.map((line) => line.itemId).filter((id): id is string => id !== null))]
+  const categories = itemIds.length === 0 ? [] : (await db.execute<{ id: string; category: string | null }>(sql`
+    select id, category from items where org_id = ${input.orgId} and id = any(${itemIds})`)).rows
+  const categoryByItem = new Map(categories.map((row) => [row.id, row.category]))
+  return resolveRestockingFee(db, input.orgId, {
+    returnDate: input.returnDate,
+    currency: input.currency,
+    lines: input.credited.map((line) => ({
+      key: line.lineId,
+      itemId: line.itemId,
+      itemCategory: line.itemId ? categoryByItem.get(line.itemId) ?? null : null,
+      lineTotalMinor: line.lineTotalMinor,
+    })),
+    waived: input.waived,
+    waiveReason: input.waiveReason,
+    // The inspect route authorizes the grant before requesting a waiver;
+    // the preview never waives.
+    canWaive: input.waived,
+  })
+}
+
+/** Fee preview for the inspect form: what the accepted quantities would charge. */
+export async function previewReturnRestockingFee(input: {
+  orgId: string
+  documentId: string
+  lines: Array<{ lineId: string; accepted: string }>
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+}): Promise<ResolveRestockingFeeResult> {
+  const current = await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds)
+  if (current.stage !== 'receiving' && current.stage !== 'inspected') {
+    throw new ReturnRefusal('The return must be received before previewing fees', 'wrong_stage', 409, 'Receive the authorized goods first')
+  }
+  const header = (await db.execute<{ document_date: string; currency: string }>(sql`
+    select document_date::text, currency from documents
+     where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
+  if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
+  const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
+  const credited: CreditedReturnLine[] = []
+  for (const { lineId, accepted } of input.lines) {
+    const rmaLine = linesById.get(lineId)
+    if (!rmaLine?.sourceIssueMovementId || accepted === '0') continue
+    const credit = await customerCreditLine(input.orgId, current.id, {
+      lineId, accepted, disposition: null, dispositionLocationId: null,
+    }, rmaLine.sourceIssueMovementId)
+    if (credit) credited.push({ lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: toCents(credit.amount) })
+  }
+  return resolveInspectionRestockingFee({
+    orgId: input.orgId,
+    returnDate: header.document_date,
+    currency: header.currency,
+    credited,
+    waived: false,
+    waiveReason: null,
+  })
+}
+
 async function createVendorReturnDrafts(input: {
   orgId: string
   actorId: string
@@ -306,6 +383,9 @@ export async function inspectReturnAuthorization(input: {
   documentId: string
   inspectionLines: InspectionLine[]
   allowedSubsidiaryIds: ReadonlySet<string> | null
+  /** The inspect route authorizes the grant before passing these through. */
+  waiveFee?: boolean
+  waiveReason?: string | null
 }): Promise<{ authorization: ReturnAuthorization; awaitingCreditApproval: boolean }> {
   let postedCreditId: string | null = null
   const result = await withOrgTransaction(input.orgId, async () => {
@@ -315,8 +395,8 @@ export async function inspectReturnAuthorization(input: {
       throw new ReturnRefusal(`${current.documentNumber} must be received before inspection`, 'wrong_stage', 409, 'Receive the authorized goods before inspection')
     }
     validateReturnInspection(current, input.inspectionLines)
-    const header = (await db.execute<{ party_id: string; subsidiary_id: string; document_date: string; status: string }>(sql`
-      select party_id, subsidiary_id, document_date::text, status
+    const header = (await db.execute<{ party_id: string; subsidiary_id: string; document_date: string; status: string; currency: string }>(sql`
+      select party_id, subsidiary_id, document_date::text, status, currency
         from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
     if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
     let creditId = current.customerCreditId
@@ -324,13 +404,35 @@ export async function inspectReturnAuthorization(input: {
     if (!creditId) {
       const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
       const creditLines: DocumentLineInput[] = []
+      const credited: Array<{ lineId: string; itemId: string | null; lineTotalMinor: bigint }> = []
       for (const decision of input.inspectionLines) {
         const rmaLine = linesById.get(decision.lineId)
         if (!rmaLine?.sourceIssueMovementId) throw new ReturnRefusal(`RMA line ${decision.lineId} has no return source`, 'source_unavailable', 422, 'Reload the authorized return lines')
         const line = await customerCreditLine(input.orgId, current.id, decision, rmaLine.sourceIssueMovementId)
-        if (line) creditLines.push(line)
+        if (line) {
+          creditLines.push(line)
+          credited.push({ lineId: decision.lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: toCents(line.amount) })
+        }
       }
       if (creditLines.length === 0) throw new ReturnRefusal('Accept at least one unit before issuing a customer credit', 'invalid_input', 422, 'Accept a received quantity for at least one line')
+      // The restocking fee rides on the accepted value: one income line per
+      // fee-bearing return line, reducing the credit the customer receives.
+      const fee = await resolveInspectionRestockingFee({
+        orgId: input.orgId,
+        returnDate: header.document_date,
+        currency: header.currency,
+        credited,
+        waived: input.waiveFee === true,
+        waiveReason: input.waiveReason ?? null,
+      })
+      for (const feeLine of restockingFeeCreditLines(fee)) creditLines.push(feeLine)
+      if (input.waiveFee === true && BigInt(fee.unwaivedTotalMinor) > 0n) {
+        await recordRestockingFeeWaiver(db, input.orgId, input.actorId, input.documentId, {
+          totalMinor: fee.unwaivedTotalMinor,
+          currency: fee.currency,
+          reason: (input.waiveReason ?? '').trim(),
+        })
+      }
       const created = await createDocument({
         orgId: input.orgId,
         userId: input.actorId,

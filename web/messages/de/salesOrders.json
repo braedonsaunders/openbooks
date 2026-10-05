@@ -23,5 +23,17 @@
     "reason": "Beurteilungsgrund",
     "propose": "Genehmigungsvorschlag vorbereiten",
     "failed": "Die Kontrollbeurteilung konnte nicht vorbereitet werden"
+  },
+  "promotion": {
+    "apply": "Aktion anwenden",
+    "chip": "Aktion",
+    "selectTitle": "Aktion anwenden",
+    "selectLabel": "Aktion wählen",
+    "enterCode": "Code eingeben…",
+    "codeTitle": "Aktionscode anwenden",
+    "codeLabel": "Aktionscode",
+    "applied": "{code} angewendet: {amount} Rabatt auf {count, plural, one {# Zeile} other {# Zeilen}}",
+    "loadFailed": "Aktionen konnten nicht geladen werden",
+    "applyFailed": "Die Aktion konnte nicht angewendet werden"
   }
 }

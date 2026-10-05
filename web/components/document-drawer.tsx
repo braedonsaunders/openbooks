@@ -16,6 +16,7 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
+import { PromotionApplyControl } from './promotion-apply'
 import { TransactionDrawer } from './transaction-drawer'
 import { ExternalRefChip } from './external-ref-chip'
 import { LineGrid, type LineGridColumn, type LineGridDistribution } from './line-grid'
@@ -162,6 +163,8 @@ interface LineRow extends Record<string, unknown> {
   distributionLocked: boolean
   /** Rule key staged for explosion; blank once the server materializes children. */
   distributionKey: string
+  /** Promotion code carried by a discount line; blank on ordinary lines. */
+  promotionCode: string
 }
 
 /** The distribution slice of a grid row: server line → row, row → collapse. */
@@ -693,6 +696,7 @@ const emptyLine = (): LineRow => ({
   taxOverridden: false,
   taxAmount: '',
   ...clearedDistributionFields(),
+  promotionCode: '',
 })
 
 function positiveAmount(value: unknown): boolean {
@@ -875,6 +879,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
     ...distributionFieldsOf(l),
+    promotionCode: lineText(l.promotion_code),
   }
   const custom = isLineMap(l.custom) ? l.custom : null
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
@@ -1046,6 +1051,10 @@ export interface DocumentDrawerProps {
   allocationsEntryEnabled?: boolean
   /** RMA create link resolved by the invoice loader's permission and feature gates. */
   returnAuthorizationHref?: string | null
+  /** Server-known promotions gate. When explicitly false the drawer renders
+   *  no promotion action or chip instead of probing an endpoint the server
+   *  must refuse. Undefined preserves the hidden default. */
+  promotionsEnabled?: boolean
 }
 
 export function DocumentDrawer({
@@ -1083,10 +1092,12 @@ export function DocumentDrawer({
   afterContent,
   allocationsEntryEnabled,
   returnAuthorizationHref,
+  promotionsEnabled,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
+  const tSales = useTranslations('salesOrders')
   const tPostingEffects = useTranslations('common.postingEffects')
   const tReturns = useTranslations('returns')
   const router = useRouter()
@@ -1542,6 +1553,27 @@ export function DocumentDrawer({
       ],
     }
   }, [showReturnPicker, returnSide, returnSources, stockedItemIds, t])
+
+  // -- promotion chip --------------------------------------------------------
+  // Discount lines applied from a promotion carry its code; the column shows
+  // only when a row actually carries one, so ordinary documents keep their
+  // exact grid.
+  const showPromotionColumn =
+    promotionsEnabled === true && rows.some((row) => String(row.promotionCode ?? '') !== '')
+  const promotionColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
+    if (!showPromotionColumn) return null
+    return {
+      key: 'promotionCode',
+      label: tSales('promotion.chip'),
+      width: '130px',
+      type: 'readonly',
+      render: (row) => {
+        const code = String(row.promotionCode ?? '')
+        if (code === '') return null
+        return <Badge variant="secondary">{code}</Badge>
+      },
+    }
+  }, [showPromotionColumn, tSales])
 
   const payload_ = useMemo(() => {
     if (isTransfer) {
@@ -2084,6 +2116,7 @@ export function DocumentDrawer({
     ]
     if (warehouseColumn) cols.push(warehouseColumn)
     if (returnSourceColumn) cols.push(returnSourceColumn)
+    if (promotionColumn) cols.push(promotionColumn)
     if (config.hasTax) {
       cols.push({
         key: 'taxProfileId',
@@ -2133,7 +2166,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn, returnSourceColumn])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn, returnSourceColumn, promotionColumn])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -2327,10 +2360,11 @@ export function DocumentDrawer({
       ...configured,
       ...(warehouseColumn ? [warehouseColumn] : []),
       ...(returnSourceColumn ? [returnSourceColumn] : []),
+      ...(promotionColumn ? [promotionColumn] : []),
       ...columns.filter((column) => String(column.key).startsWith('seg_')),
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, warehouseColumn, returnSourceColumn])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, warehouseColumn, returnSourceColumn, promotionColumn])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
@@ -3014,6 +3048,9 @@ export function DocumentDrawer({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <FieldLabel fieldName={tCommon('labels.lines')}>{tCommon('labels.lines')}</FieldLabel>
+              {promotionsEnabled === true && recordType === 'customer_invoice' && editable && !createMode && doc.id !== '' && doc.status === 'draft' ? (
+                <PromotionApplyControl documentId={doc.id} currency={doc.currency} onApplied={() => router.refresh()} />
+              ) : null}
               {distOn && distEditable && distAuto.length > 0 ? (
                 <Button
                   type="button"

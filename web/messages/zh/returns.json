@@ -40,6 +40,18 @@
     "emailReceived": "发送收货通知",
     "emailDecision": "发送最终决定",
     "emailSent": "邮件已发送",
-    "emailFailed": "无法发送退货更新"
+    "emailFailed": "无法发送退货更新",
+    "fee": {
+      "title": "重新入库费用",
+      "preview": "预览费用",
+      "previewFailed": "无法预览费用",
+      "total": "此项退款的费用：{amount}",
+      "detail": "{count} 条费用明细",
+      "noPolicy": "无费用规则",
+      "capped": "以退款金额为上限",
+      "waive": "免除费用",
+      "reason": "免除原因",
+      "reasonPlaceholder": "免除费用的原因？"
+    }
   }
 }

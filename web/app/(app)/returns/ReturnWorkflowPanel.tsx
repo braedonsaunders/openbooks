@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Button, FieldLabel, Input, Select } from '@openbooks/ui'
+import { Button, DisclosureSection, FieldLabel, Input, Select } from '@openbooks/ui'
+import { Switch } from '../../../components/switch'
 import { promptDialog } from '../../../lib/prompt'
 import { useAppAction } from '../../../lib/use-app-action'
+import { useMoney } from '@/components/money-provider'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
 import type { ReturnAuthorization } from '@openbooks/engine/src/sales/returns.ts'
 
@@ -15,11 +18,37 @@ type Props = {
   authorization: ReturnAuthorization
   canInspect: boolean
   canManage: boolean
+  canWaiveFee?: boolean
+  currency?: string
   stockLocations: { id: string; code: string | null }[]
   vendors: { id: string; display_name: string }[]
 }
 
-export function ReturnWorkflowPanel({ authorization, canInspect, canManage, stockLocations, vendors }: Props) {
+type FeePreviewLine = {
+  key: string
+  policyId: string | null
+  policyName: string | null
+  scope: string
+  feeMinor: string
+  capped: boolean
+  incomeAccountId: string | null
+}
+
+type FeePreview = {
+  lines: FeePreviewLine[]
+  totalMinor: string
+  currency: string
+}
+
+/** Minor units (cents) to an exact major-unit decimal string. */
+function minorToMajor(minor: string): string {
+  const units = BigInt(minor)
+  const sign = units < 0n ? '-' : ''
+  const abs = units < 0n ? -units : units
+  return `${sign}${(abs / 100n).toString()}.${(abs % 100n).toString().padStart(2, '0')}`
+}
+
+export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canWaiveFee, currency, stockLocations, vendors }: Props) {
   const t = useTranslations('returns')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -29,8 +58,14 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, stoc
   const [disposition, setDisposition] = useState<Record<string, string>>(() => Object.fromEntries(authorization.lines.map((line) => [line.lineId, line.disposition ?? ''])))
   const [location, setLocation] = useState<Record<string, string>>(() => Object.fromEntries(authorization.lines.map((line) => [line.lineId, line.dispositionLocationId ?? ''])))
   const [vendor, setVendor] = useState<Record<string, string>>({})
+  const [feePreview, setFeePreview] = useState<FeePreview | null>(null)
+  const [previewBusy, setPreviewBusy] = useState(false)
+  const [waiveFee, setWaiveFee] = useState(false)
+  const [waiveReason, setWaiveReason] = useState('')
   const activeLines = useMemo(() => authorization.lines, [authorization.lines])
   const base = `/api/returns/${authorization.id}`
+  const { money } = useMoney(currency)
+  const feeTotal = feePreview ? money(minorToMajor(feePreview.totalMinor), { currency: feePreview.currency }) : ''
 
   async function receive() {
     await execute(() => fulfillmentRequest(`${base}/receive`, { method: 'POST', body: { lines: activeLines.map((line) => ({ lineId: line.lineId, received: received[line.lineId] ?? '0' })) } }, t('workflow.receiveFailed')), {
@@ -40,14 +75,43 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, stoc
     })
   }
 
+  async function previewFee() {
+    const lines = activeLines
+      .map((line) => ({ lineId: line.lineId, accepted: accepted[line.lineId] ?? '0' }))
+      .filter((line) => line.accepted !== '' && line.accepted !== '0')
+    if (lines.length === 0) {
+      setFeePreview({ lines: [], totalMinor: '0', currency: currency ?? '' })
+      return
+    }
+    setPreviewBusy(true)
+    try {
+      const res = await fetch(`${base}/restocking-fee`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines }),
+      })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('fee.previewFailed')))
+        return
+      }
+      setFeePreview((await res.json()) as FeePreview)
+    } finally {
+      setPreviewBusy(false)
+    }
+  }
+
   async function inspect() {
-    await execute(() => fulfillmentRequest<{ awaitingCreditApproval: boolean }>(`${base}/inspect`, { method: 'POST', body: { lines: activeLines.map((line) => ({
-      lineId: line.lineId,
-      accepted: accepted[line.lineId] ?? '0',
-      disposition: (disposition[line.lineId] || null) as 'restock' | 'scrap' | 'vendor-return' | null,
-      dispositionLocationId: location[line.lineId] || null,
-      vendorId: vendor[line.lineId] || null,
-    })) } }, t('workflow.inspectFailed')), {
+    await execute(() => fulfillmentRequest<{ awaitingCreditApproval: boolean }>(`${base}/inspect`, { method: 'POST', body: {
+      lines: activeLines.map((line) => ({
+        lineId: line.lineId,
+        accepted: accepted[line.lineId] ?? '0',
+        disposition: (disposition[line.lineId] || null) as 'restock' | 'scrap' | 'vendor-return' | null,
+        dispositionLocationId: location[line.lineId] || null,
+        vendorId: vendor[line.lineId] || null,
+      })),
+      ...(waiveFee && canWaiveFee ? { waiveFee: true, waiveReason } : {}),
+    } }, t('workflow.inspectFailed')), {
       fallbackMessage: t('workflow.inspectFailed'),
       onOk: (result) => {
         toast.success(result.awaitingCreditApproval ? t('workflow.awaitingApproval') : t('workflow.completed'))
@@ -113,6 +177,42 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, stoc
             <option value="">{tc('actions.select')}</option>{vendors.map((option) => <option key={option.id} value={option.id}>{option.display_name}</option>)}
           </Select></div> : null}
       </div>)}</div>
+      <div className="space-y-2 rounded-md border p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">{t('fee.title')}</span>
+          <Button variant="outline" size="sm" disabled={busy || previewBusy} onClick={previewFee}>{t('fee.preview')}</Button>
+        </div>
+        {feePreview && feePreview.lines.length > 0 ? (
+          <DisclosureSection
+            title={t('fee.detail', { count: feePreview.lines.length })}
+            summary={t('fee.total', { amount: feeTotal })}
+            defaultOpen={false}
+          >
+            <ul className="space-y-1 text-sm">
+              {feePreview.lines.map((line) => (
+                <li key={line.key} className="flex items-center justify-between gap-2">
+                  <span>{line.policyName ?? t('fee.noPolicy')}{line.capped ? ` · ${t('fee.capped')}` : ''}</span>
+                  <span>{money(minorToMajor(line.feeMinor), { currency: feePreview.currency })}</span>
+                </li>
+              ))}
+            </ul>
+          </DisclosureSection>
+        ) : null}
+        {feePreview && BigInt(feePreview.totalMinor) > 0n && canWaiveFee ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Switch on={waiveFee} disabled={busy} label={t('fee.waive')} onToggle={() => setWaiveFee((current) => !current)} />
+            {waiveFee ? (
+              <Input
+                value={waiveReason}
+                onChange={(event) => setWaiveReason(event.target.value)}
+                placeholder={t('fee.reasonPlaceholder')}
+                className="min-w-52 flex-1"
+                aria-label={t('fee.reason')}
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <Button disabled={busy} onClick={inspect}>{t('workflow.inspect')}</Button><Button variant="outline" disabled={busy || !canManage} onClick={() => sendEmail('received')}>{t('workflow.emailReceived')}</Button>
       {refusal ? <ActionAlert error={refusal} fallbackMessage={t('workflow.inspectFailed')} /> : null}
     </section>

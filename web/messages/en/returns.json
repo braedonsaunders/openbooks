@@ -40,6 +40,18 @@
     "emailReceived": "Email receipt update",
     "emailDecision": "Email final decision",
     "emailSent": "Email sent",
-    "emailFailed": "Could not send the return update"
+    "emailFailed": "Could not send the return update",
+    "fee": {
+      "title": "Restocking fee",
+      "preview": "Preview fee",
+      "previewFailed": "Could not preview the restocking fee",
+      "total": "Fee on this credit: {amount}",
+      "detail": "{count, plural, one {# fee line} other {# fee lines}}",
+      "noPolicy": "No fee policy",
+      "capped": "capped at credited value",
+      "waive": "Waive the fee",
+      "reason": "Waiver reason",
+      "reasonPlaceholder": "Why is the fee waived?"
+    }
   }
 }
