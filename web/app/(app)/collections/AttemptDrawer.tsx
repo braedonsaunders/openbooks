@@ -40,11 +40,11 @@ export function AttemptDrawer({
   const t = useTranslations('ar.collections.attempts')
   const tc = useTranslations('common')
   const router = useRouter()
+  const { attempt, canRetry, closeHref } = drawer
   const { money } = createMoneyFormatter(useLocale(), attempt.currency)
   const formattedAmount = money(attempt.amount, { currency: attempt.currency })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { attempt, canRetry, closeHref } = drawer
   const retryable = canRetry && attempt.status === 'failed' && attempt.declineKind === 'soft'
   const statusLabel =
     attempt.status === 'succeeded' ? t('statusSucceeded')
@@ -62,7 +62,7 @@ export function AttemptDrawer({
   const retryNow = async () => {
     const confirmed = await confirmDialog({
       title: t('retryConfirmTitle'),
-      description: t('retryConfirmDescription', { amount: formattedAmount, invoice: attempt.invoiceNumber }),
+      message: t('retryConfirmDescription', { amount: formattedAmount, invoice: attempt.invoiceNumber }),
       confirmLabel: t('retryNow'),
       cancelLabel: tc('actions.cancel'),
     })
@@ -129,7 +129,7 @@ export function AttemptDrawer({
             </>
           )}
         </dl>
-        <DisclosureSection summary={t('providerDetail')} forceOpen={attempt.status === 'processing'}>
+        <DisclosureSection title={t('providerDetail')} summary={attempt.provider} forceOpen={attempt.status === 'processing'}>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">{t('provider')}</dt>
             <dd>{attempt.provider}</dd>
