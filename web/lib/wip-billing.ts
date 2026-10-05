@@ -1,4 +1,6 @@
 import 'server-only'
+import { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-pricing'
+export { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-pricing'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -6,7 +8,6 @@ import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform
 import { add, allocateLargestRemainder, cmp, mul, mulPercent, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { canonicalDecimal } from './exact-decimal'
-import { pgTextArrayLiteral } from './pg-array'
 import { computeLineTaxes } from '@openbooks/engine/src/tax/tax.ts'
 import {
   loadTaxComponentConfig,
@@ -312,49 +313,6 @@ async function loadProjectPolicy(
     invoicingProfile: row.invoicing_profile,
     versions: versions.rows,
   }
-}
-
-/**
- * Contract capacity already CLAIMED on a project — the single definition of
- * "invoiced to date" that every not-to-exceed check uses (billing-request
- * invoicing and WIP prebilling alike), so the two paths can never disagree:
- *   + every non-voided invoice line on the project, whatever its lifecycle
- *     state — a draft already reserves the amount it will bill;
- *   − every non-voided credit line;
- *   + every open worksheet (draft / review / approved) not yet converted.
- * Voiding an invoice is the only thing that gives capacity back.
- */
-export async function projectContractCapacityUsed(
-  executor: Executor,
-  orgId: string,
-  projectId: string,
-  invoicedToDate: { docKinds: string[]; creditKinds: string[] },
-  options: { excludePrebillId?: string } = {},
-): Promise<string> {
-  const invoiceKinds = invoicedToDate.docKinds.length ? invoicedToDate.docKinds : ['customer_invoice']
-  const creditKinds = invoicedToDate.creditKinds.length ? invoicedToDate.creditKinds : ['customer_credit']
-  const allKinds = [...new Set([...invoiceKinds, ...creditKinds])]
-  const excludePrebillId = options.excludePrebillId ?? null
-  const used = (await executor.execute<{ used: string }>(sql`
-    select coalesce((
-             select sum(case when document.kind = any(${pgTextArrayLiteral(creditKinds)}::text[])
-                             then -line.amount else line.amount end)
-               from document_lines line
-               join documents document on document.org_id = line.org_id and document.id = line.document_id
-              where line.org_id = ${orgId}
-                and coalesce(line.project_id, document.project_id) = ${projectId}
-                and document.status <> 'voided'
-                and document.kind = any(${pgTextArrayLiteral(allKinds)}::text[])
-           ), 0)
-           + coalesce((
-             select sum(worksheet.proposed_bill_amount)
-               from wip_prebills worksheet
-              where worksheet.org_id = ${orgId} and worksheet.project_id = ${projectId}
-                and worksheet.status in ('draft', 'review', 'approved')
-                and (${excludePrebillId}::uuid is null or worksheet.id <> ${excludePrebillId})
-           ), 0) as used
-  `))
-  return normalizeMoney(used.rows[0]?.used ?? '0')
 }
 
 async function remainingContractCapacity(

@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, schema, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/platform/db.ts'
-import { PostingError } from '@openbooks/engine/src/journal/posting-contracts.ts'
+import { PostingError } from '@openbooks/engine/journal/contracts'
 import { typedRefusal } from './api/error-response'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'

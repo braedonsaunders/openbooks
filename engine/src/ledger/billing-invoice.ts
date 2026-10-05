@@ -1,0 +1,1219 @@
+import { sql } from 'drizzle-orm'
+import { db } from '../platform/db.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, signedDocumentAmount, sum, toUnits } from '../money/money.ts'
+import { canonicalDecimal } from '../money/exact-decimal.ts'
+import { isUuid } from '../platform/uuid.ts'
+import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPricingError, resolveRateAdjustments, resolveRateAdjustmentWindow, type AdjustmentCharge, type RateAdjustmentWindow } from '../projects/rate-adjustments.ts'
+import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from '../projects/invoice-rollup.ts'
+import { roundCurrencyMoney } from '../fx/currencies.ts'
+import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
+import { projectContractCapacityUsed } from '../projects/contract-capacity.ts'
+import { businessToday } from '../platform/business-date.ts'
+
+/** The day the invoice is cut, or the period it closes. */
+async function invoiceDateOf(orgId: string, req: { cutoff_date?: string | null }): Promise<string> {
+  return req.cutoff_date ?? businessToday(orgId)
+}
+
+/** Prices are negotiated as of the date work was PERFORMED, not the day billed. */
+function rateDateOf(lines: { workedOn?: string | null }[]): string | null {
+  return lines.reduce<string | null>(
+    (latest, l) => (l.workedOn && (!latest || l.workedOn > latest) ? l.workedOn : latest), null,
+  )
+}
+
+/** Map a time type's name onto the buckets a rate-card adjustment can exclude. */
+function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | null {
+  const n = String(name ?? '').toLowerCase()
+  if (!n) return null
+  if (n.includes('double')) return 'double_time'
+  if (n.includes('over')) return 'overtime'
+  return 'regular'
+}
+import { recognitionAccounts } from '../projects/recognition.ts'
+import { loadProjectType } from '../projects/type.ts'
+import { computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './document-totals.ts';
+import { persistTaxQuote } from '../tax/rate-providers.ts'
+import { featureEnabled, type FeatureState } from '../organization/feature-registry.ts'
+
+/**
+ * Project billing engine — turns a billing_request (a pre-invoice work order)
+ * into a `customer_invoice` DOCUMENT, modelled on order-cycle.ts convertOrder.
+ * No parallel invoice table: the invoice is a document, posted later through the
+ * existing kernel/customer_invoice rule. The generator consumes unbilled
+ * billable time_entries + cost lines and stamps their provenance columns
+ * (time_entries.invoiced_by_line_id, document_lines.billed_by_line_id) so
+ * re-billing is idempotent — the same rows can never be billed twice.
+ */
+
+export class BillingError extends Error {
+  readonly status = 422
+}
+
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
+interface GenerateResult {
+  id: string
+  documentNumber: string
+  kind: string
+  /** Whether the billing request requires a backup packet for this invoice. */
+  backupRequired: boolean
+  backupType: string
+}
+
+/** One locked billing_requests row — jsonb option bags arrive parsed. */
+interface BillingRequestRow extends Record<string, unknown> {
+  id: string
+  status: string
+  basis: string
+  backup_required: boolean | null
+  backup_type: string | null
+  billing_method_snapshot: string | null
+  project_id: string
+  invoice_description: string | null
+  invoice_type: string | null
+  start_date: string | null
+  cutoff_date: string | null
+  draw_amount: string | null
+  customer_po: string | null
+  selected_time_entry_ids: unknown
+  custom: Record<string, unknown> | null
+}
+
+/** The project header the invoice is cut against. */
+interface BillingProjectRow extends Record<string, unknown> {
+  id: string
+  customer_id: string | null
+  customer_po_number: string | null
+  subsidiary_id: string | null
+  custom: Record<string, unknown> | null
+  project_invoicing: unknown
+  customer_invoicing: unknown
+  billing_currency: string | null
+}
+
+interface BillingScheduleRow extends Record<string, unknown> {
+  id: string
+  name: string | null
+  amount_billed: string | null
+}
+
+interface BillingTimeRow extends Record<string, unknown> {
+  id: string
+  hours: string | null
+  cost_rate: string | null
+  bill_rate: string | null
+  item_id: string | null
+  time_type_id: string | null
+  employee_party_id: string | null
+  memo: string | null
+  department_id: string | null
+  worked_on: string | null
+  income_account_id: string | null
+  default_rate: string | null
+  tax_code_id: string | null
+  item_name: string | null
+  item_kind: string | null
+  item_category: string | null
+  time_type_name: string | null
+  /** Every active trade / job title held by the time entry's employee. */
+  trades: string[] | null
+  job_titles: string[] | null
+}
+
+/** One jsonb rate-component object behind a materials line. */
+interface BillRateComponent {
+  unitCode: string | null
+  unitName: string | null
+  quantity: string
+  rate: string
+  amount: string
+}
+
+interface BillingCostRow extends Record<string, unknown> {
+  id: string
+  amount: string | null
+  markup_percent: string | null
+  description: string | null
+  item_id: string | null
+  quantity: string | null
+  unit: string | null
+  bill_rate: string | null
+  bill_amount: string | null
+  equipment_unit_id: string | null
+  rate_version_id: string | null
+  kind: string | null
+  department_id: string | null
+  document_date: string | null
+  subsidiary_id: string | null
+  location_id: string | null
+  class_id: string | null
+  rate_presentation: string | null
+  income_account_id: string | null
+  tax_code_id: string | null
+  item_name: string | null
+  item_kind: string | null
+  item_category: string | null
+  bill_components: BillRateComponent[] | null
+  /** Every active trade / job title held by the cost line's employee, if any. */
+  trades: string[] | null
+  job_titles: string[] | null
+}
+
+/** Negate a decimal safely — prefixing '-' breaks when the value is already negative. */
+function negate(v: string): string {
+  return fromUnits(-toUnits(String(v ?? '0')))
+}
+
+/** Apply the percentage directly so a rounded multiplier cannot lose precision. */
+function applyMarkup(amount: string, percent: string): string {
+  return add(amount, mulPercent(amount, percent, 4))
+}
+
+/** Exact numeric(19,4) for an invoice line — never String() a money/qty column. */
+function persistInvoiceDecimal(value: unknown, error: string): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new BillingError(error)
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new BillingError(error)
+  }
+}
+
+/**
+ * Exact decimal for a persisted quantity. Quantities are not money:
+ * document_lines.quantity is numeric(28,8), so Postgres hands every stored
+ * line back at eight decimals ("1.00000000") — canonicalize at the column's
+ * own scale instead of the ledger's four.
+ */
+function persistInvoiceQuantity(value: unknown, error: string): string {
+  const exact = canonicalDecimal(value, 8)
+  if (exact === null) throw new BillingError(error)
+  return exact
+}
+
+export async function generateInvoiceFromBillingRequest(
+  orgId: string,
+  userId: string,
+  requestId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<GenerateResult> {
+  return db.transaction(async (tx) => {
+    const projectGate = (await tx.execute<{ features: FeatureState | null }>(sql`
+      select settings->'features' as features
+        from orgs where id = ${orgId} for share
+    `))
+    const featureState = projectGate.rows[0]?.features ?? {}
+    if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
+    // Lock the request; only an open request can be invoiced.
+    const reqRes = (await tx.execute<BillingRequestRow>(sql`
+      select br.* from billing_requests br
+        join projects p on p.id = br.project_id and p.org_id = br.org_id
+       where br.id = ${requestId} and br.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+       for update of br, p
+    `))
+    const req = reqRes.rows[0]
+    if (!req) throw new BillingError('Billing request not found')
+    if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
+    if (req.basis === 'field_ticket' && !featureEnabled(featureState, 'fieldTickets')) {
+      throw new BillingError('Field Ticket billing is disabled')
+    }
+    const selectedFieldTickets = req.basis === 'field_ticket'
+      ? (await tx.execute<{ id: string }>(sql`
+          select field_ticket_id as id
+            from billing_request_field_tickets
+           where org_id = ${orgId}
+             and billing_request_id = ${requestId}
+           order by selected_at, id
+        `))
+      : { rows: [] as { id: string }[] }
+    const selectedFieldTicketIds = selectedFieldTickets.rows.map((ticket) => ticket.id)
+    if (req.basis === 'field_ticket' && selectedFieldTicketIds.length === 0) {
+      throw new BillingError('The Field Ticket billing request has no selected tickets')
+    }
+
+    const projRes = (await tx.execute<BillingProjectRow>(sql`
+      select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
+             p.invoicing_profile as project_invoicing, c.invoicing_profile as customer_invoicing,
+             coalesce(s.base_currency,o.base_currency) as billing_currency
+        from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
+             left join parties c on c.id = p.customer_id and c.org_id = p.org_id
+       where p.id = ${req.project_id} and p.org_id = ${orgId}
+    `))
+    const project = projRes.rows[0]
+    if (!project) throw new BillingError('Project not found')
+    if (!project.customer_id) throw new BillingError('The project has no customer to invoice')
+
+    const markup = persistInvoiceDecimal((project.custom ?? {}).markupPercent ?? '0', 'The project markup percentage is invalid')
+    // The project type governs line building, the credit account, and the coarse
+    // billing-method label snapshotted onto the invoice document.
+    const ptype = await loadProjectType(orgId, project.id)
+    // The agreement is with the CUSTOMER and is sometimes specific to one job,
+    // so the type's rules are narrowed by each in turn.
+    const invoicing = resolveInvoicingProfile(
+      ptype.invoicingProfile,
+      project.customer_invoicing as Partial<typeof ptype.invoicingProfile> | null,
+      project.project_invoicing as Partial<typeof ptype.invoicingProfile> | null,
+    )
+    const billingMethod: string = req.billing_method_snapshot ?? ptype.billingMethod ?? 'time_and_materials'
+    if (invoicing.billingProcedure === 'application_for_payment') {
+      throw new BillingError('This project bills through applications for payment')
+    }
+
+    const currency = project.billing_currency
+    if (!currency) throw new BillingError('The project subsidiary has no functional currency')
+    const currencyRow = (await tx.execute<{ minor_units: number }>(sql`
+      select minor_units from currencies where code = ${currency}
+    `)).rows[0]
+    const minorUnits = currencyRow?.minor_units
+    if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+      throw new BillingError('The billing currency has unsupported minor-unit precision')
+    }
+
+    // Reuse the authoritative Company control accounts. A chart's sort order
+    // cannot choose the accounting policy for an unconfigured item or draw.
+    const recog = await recognitionAccounts(orgId, tx)
+    const defaultIncomeId = recog.projectRevenue ?? null
+    // A recognition policy must relieve its contract asset. Missing mapping
+    // cannot silently credit revenue a second time when an invoice is issued.
+    if (invoicing.revenueAccount === 'unbilled_receivable' && !recog.unbilledReceivable) {
+      throw new BillingError('Configure the Unbilled Receivable control account in Company Settings before billing this project')
+    }
+    const fixedPriceCreditAcct =
+      invoicing.revenueAccount === 'unbilled_receivable' ? recog.unbilledReceivable! : defaultIncomeId
+
+    // -- build the invoice lines ------------------------------------------
+    interface BuiltLine {
+      itemId: string | null
+      accountId: string | null
+      description: string | null
+      quantity: string
+      unitPrice: string
+      amount: string
+      taxCodeId: string | null
+      employeeId: string | null
+      timeEntryId: string | null
+      timeTypeId: string | null
+      /** Source cost line to stamp billed_by_line_id on (materials billing). */
+      sourceCostLineId: string | null
+      /** All source cost lines represented by this invoice line after grouping. */
+      sourceCostLineIds?: string[]
+      unit?: string | null
+      equipmentUnitId?: string | null
+      rateVersionId?: string | null
+      /** Pre-markup amount + whether this line is labor — for lump-sum markup. */
+      baseAmount?: string
+      /** Quantity at creation, never rewritten by presentation grouping or
+       * markup splitting — the deterministic basis for per-hour pricing. */
+      billableQuantity?: string | null
+      isLabor?: boolean
+      /** Item classification + time bucket, for rate-card adjustment targeting. */
+      itemKind?: string | null
+      itemCategory?: string | null
+      /** Every active trade / job title held by the line's employee. */
+      tradeIds?: string[] | null
+      jobTitles?: string[] | null
+      departmentId?: string | null
+      /** Owning subsidiary + work location/class, for adjustment targeting. */
+      subsidiaryId?: string | null
+      locationId?: string | null
+      classId?: string | null
+      /** Date the work happened — the date its price is negotiated as of. */
+      workedOn?: string | null
+      /** True when the source line carried its own negotiated markup. */
+      hasLineMarkup?: boolean
+      /** Document kind the charge came from, for rollup grouping. */
+      sourceKind?: string | null
+      timeKind?: 'regular' | 'overtime' | 'double_time' | null
+    }
+    const built: BuiltLine[] = []
+    /** Milestone schedule rows this invoice actually bills (provenance is stamped on these only). */
+    const billedScheduleIds: string[] = []
+
+    // A request that names a work-based basis is billing actual work, so it must
+    // build from that work even when the project type defaults to milestones —
+    // an explicit basis outranks the type's default line builder.
+    const billsActualWork = req.basis === 'field_ticket' || req.basis === 'time_selection' || req.basis === 'date_range'
+
+    if (req.basis === 'draw_amount') {
+      const exact = canonicalDecimal(req.draw_amount ?? '0', 4)
+      if (exact === null) throw new BillingError('Enter a draw amount to bill')
+      let amt: string
+      try {
+        amt = normalizeMoney(exact)
+      } catch {
+        throw new BillingError('Enter a draw amount to bill')
+      }
+      if (!amt || isZero(amt)) throw new BillingError('Enter a draw amount to bill')
+      if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post the draw to')
+      built.push({
+        itemId: null,
+        accountId: fixedPriceCreditAcct,
+        description: req.invoice_description ?? 'Progress draw',
+        quantity: '1',
+        unitPrice: amt,
+        amount: amt,
+        taxCodeId: null,
+        employeeId: null,
+        timeEntryId: null,
+        timeTypeId: null,
+        sourceCostLineId: null,
+      })
+    } else if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
+      // Bill the selected (or all open) milestone schedule rows.
+      const scheds = (await tx.execute<BillingScheduleRow>(sql`
+        select id, name, amount_billed from billing_schedules
+         where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
+         order by sort_order
+         for update
+      `))
+      if (scheds.rows.length === 0) throw new BillingError('No open milestones to bill on this project')
+      if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
+      for (const m of scheds.rows) {
+        const exact = canonicalDecimal(m.amount_billed ?? '0', 4)
+        if (exact === null) throw new BillingError('A milestone billed amount is invalid')
+        let amt: string
+        try {
+          amt = normalizeMoney(exact)
+        } catch {
+          throw new BillingError('A milestone billed amount is invalid')
+        }
+        if (isZero(amt)) continue
+        billedScheduleIds.push(String(m.id))
+        built.push({
+          itemId: null,
+          accountId: fixedPriceCreditAcct,
+          description: m.name,
+          quantity: '1',
+          unitPrice: amt,
+          amount: amt,
+          taxCodeId: null,
+          employeeId: null,
+          timeEntryId: null,
+          timeTypeId: null,
+          sourceCostLineId: null,
+        })
+      }
+    } else {
+      // Time & materials / cost-plus: unbilled billable time + billable cost lines.
+      const selected: string[] | null =
+        req.basis === 'time_selection' && Array.isArray(req.selected_time_entry_ids)
+          ? (req.selected_time_entry_ids as string[])
+          : null
+      // A request created with an explicitly empty selection names no work to
+      // bill: invoicing it would silently fall through to every eligible
+      // entry on the project. Refuse with the way forward instead.
+      if (req.basis === 'time_selection' && selected !== null && selected.length === 0) {
+        throw new BillingError('This billing request was created with an empty time selection — cancel it and create a new request selecting the entries to bill')
+      }
+      if (selected?.some((id) => typeof id !== 'string' || !isUuid(id))) {
+        throw new BillingError('A time entry selected on this billing request is invalid — cancel it and create a new request with valid entry ids')
+      }
+      // A FINAL invoice without an explicit source selection closes the job and
+      // bills all remaining work. An explicit Field Ticket or time-entry
+      // selection remains an immutable scope even on a final invoice; silently
+      // widening it would bill work the approver did not select.
+      const isFinal = req.invoice_type === 'final'
+      const hasTimeSelection = selected !== null && selected.length > 0
+      const dateFilter = sql.join(
+        [
+          req.start_date ? sql` and te.worked_on >= ${req.start_date}` : sql``,
+          req.cutoff_date ? sql` and te.worked_on <= ${req.cutoff_date}` : sql``,
+        ],
+        sql``,
+      )
+      const selFilter =
+        hasTimeSelection
+          ? sql` and te.id = any(${`{${selected!.join(',')}}`}::uuid[])`
+          : sql``
+      // Field Ticket selection is relational, immutable, tenant-scoped, and
+      // validated at request creation. It is the exact unit of work to invoice.
+      const ticketIds = selectedFieldTicketIds
+      const ticketFilter = ticketIds.length
+        ? sql` and te.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
+        : sql``
+
+      const timeRows = (await tx.execute<BillingTimeRow>(sql`
+        select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
+               te.employee_party_id, te.memo, te.department_id, te.worked_on,
+               i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
+               i.kind as item_kind, i.category as item_category, tt.name as time_type_name,
+               er.trades, er.job_titles
+          from time_entries te
+          left join items i on i.id = te.item_id and i.org_id = te.org_id
+          left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
+          -- Adjustment targets can select the worker's trade: every active
+          -- role counts, so a second active role cannot hide the match.
+          left join lateral (
+            select coalesce(array_agg(distinct r.trade_id order by r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
+                   coalesce(array_agg(distinct r.job_title order by r.job_title) filter (where r.job_title is not null), '{}') as job_titles
+              from employee_roles r
+             where r.org_id = te.org_id and r.party_id = te.employee_party_id and r.is_active
+          ) er on true
+         where te.org_id = ${orgId} and te.project_id = ${req.project_id}
+           and te.status = 'approved' and te.is_billable
+           and te.billing_status = 'unbilled'
+           ${isFinal && ticketIds.length === 0 && !hasTimeSelection ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
+         order by te.worked_on, te.id
+         for update of te
+      `))
+      // Every explicitly selected entry must be billable here: invoicing only
+      // the eligible subset while marking the request invoiced would silently
+      // drop the rest. Name the entries that cannot be billed so the operator
+      // can recreate the request without them (or approve them first).
+      if (hasTimeSelection) {
+        const billed = new Set(timeRows.rows.map((row) => String(row.id)))
+        const missing = selected!.filter((id) => !billed.has(id))
+        if (missing.length > 0) {
+          throw new BillingError(
+            `Time ${missing.length === 1 ? 'entry' : 'entries'} ${missing.join(', ')} selected on this billing request cannot be billed — already billed, unapproved, non-billable, or outside this project or its dates. Cancel this request and create a new one without ${missing.length === 1 ? 'it' : 'them'}`,
+          )
+        }
+      }
+
+      for (const te of timeRows.rows) {
+        const hours = persistInvoiceDecimal(te.hours ?? '0', 'A time entry hours value is invalid')
+        const rate =
+          invoicing.lineBuilder === 'cost_plus'
+            ? applyMarkup(persistInvoiceDecimal(te.cost_rate ?? '0', 'A time entry rate is invalid'), markup)
+            : persistInvoiceDecimal(te.bill_rate ?? te.default_rate ?? '0', 'A time entry rate is invalid')
+        const amount = mulDecimal(hours, rate)
+        built.push({
+          itemId: te.item_id,
+          accountId: te.income_account_id ?? defaultIncomeId,
+          description: te.memo || te.item_name || null,
+          quantity: hours,
+          unitPrice: rate,
+          amount,
+          taxCodeId: te.tax_code_id,
+          employeeId: te.employee_party_id,
+          timeEntryId: te.id,
+          timeTypeId: te.time_type_id,
+          sourceCostLineId: null,
+          baseAmount: amount,
+          billableQuantity: hours,
+          isLabor: true,
+          itemKind: te.item_kind ?? 'labor',
+          itemCategory: te.item_category ?? null,
+          tradeIds: te.trades ?? null,
+          jobTitles: te.job_titles ?? null,
+          timeKind: timeKindOf(te.time_type_name),
+          departmentId: te.department_id ?? null,
+          // Time carries no subsidiary of its own: the work belongs to the
+          // billed project's subsidiary.
+          subsidiaryId: project.subsidiary_id ?? null,
+          workedOn: te.worked_on ? String(te.worked_on).slice(0, 10) : null,
+        })
+      }
+
+      // Cost is billed for the SAME period as the labor. Without this a progress
+      // invoice cut for one month would sweep in every later month's unbilled
+      // materials, because only the time query honoured the request's range.
+      // On a field-ticket basis, cost follows the explicit field_ticket_id on
+      // the charge line. Date-span inference is intentionally prohibited: it can
+      // pull unrelated materials into an invoice and cannot produce an auditable
+      // source-to-invoice reconciliation.
+      // A request may name cost documents it bills — bills, expense reports or
+      // orders explicitly chosen for this invoice. Those are always in scope: the
+      // period and ticket windows exist to GUESS what was chosen, so they widen
+      // the selection and must never veto something named outright.
+      const sourceDocumentIds: string[] = Array.isArray((req.custom ?? {}).sourceDocumentIds)
+        ? ((req.custom as { sourceDocumentIds: string[] }).sourceDocumentIds ?? [])
+            .filter((id) => typeof id === 'string' && isUuid(id))
+        : []
+      const ticketScope = ticketIds.length
+        ? sql` and dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
+        : sql``
+      const costDateFilter = sql.join(
+        [
+          req.start_date ? sql` and d.document_date >= ${req.start_date}` : sql``,
+          req.cutoff_date ? sql` and d.document_date <= ${req.cutoff_date}` : sql``,
+        ],
+        sql``,
+      )
+      // Billable cost lines (materials/subs/equipment) on the document kinds this
+      // project type treats as cost sources — configurable, because tenants stage
+      // priced billable items differently (purchase docs, or e.g. sales orders).
+      const costKinds = invoicing.costSourceKinds?.length
+        ? invoicing.costSourceKinds
+        : ["vendor_bill", "expense_report", "card_charge", "check"]
+      const automaticCostScope = ticketIds.length
+        ? ticketScope
+        : isFinal
+          ? sql``
+          : costDateFilter
+
+      const costRows = (await tx.execute<BillingCostRow>(sql`
+        select dl.id,
+               -- Native order lines are stored in document direction: ordinary
+               -- commitments are positive and discount lines remain negative.
+               -- Credits are the only source kind whose positive document amount
+               -- must be inverted when it becomes customer-billable value.
+               (${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)}) as amount,
+               dl.cost_multiplier, dl.markup_percent, dl.description, dl.item_id, dl.quantity, dl.unit,
+               dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
+               coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
+               coalesce(dl.subsidiary_id, d.subsidiary_id) as subsidiary_id,
+               coalesce(dl.location_id, d.location_id) as location_id,
+               coalesce(dl.class_id, d.class_id) as class_id,
+               dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
+               i.kind as item_kind, i.category as item_category,
+               coalesce(rc.components, '[]'::jsonb) as bill_components,
+               er.trades, er.job_titles
+          from document_lines dl
+          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+          left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+          left join lateral (
+            select coalesce(array_agg(distinct r.trade_id order by r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
+                   coalesce(array_agg(distinct r.job_title order by r.job_title) filter (where r.job_title is not null), '{}') as job_titles
+              from employee_roles r
+             where r.org_id = dl.org_id and r.party_id = dl.employee_id and r.is_active
+          ) er on true
+          left join lateral (
+            select jsonb_agg(jsonb_build_object(
+              'unitCode', c.unit_code, 'unitName', c.unit_name, 'quantity', c.quantity::text,
+              'rate', c.rate::text, 'amount', c.amount::text
+            ) order by c.sequence) as components
+              from charge_rate_components c
+             where c.document_line_id = dl.id and c.org_id = dl.org_id and c.role = 'bill'
+          ) rc on true
+         where dl.org_id = ${orgId}
+           and coalesce(dl.project_id, d.project_id) = ${req.project_id}
+           -- An ORDER line is a commitment to bill the customer: that is what
+           -- ordering the work means, so it carries no separate billable flag
+           -- and source systems do not set one. Requiring the flag silently
+           -- dropped every consumable and equipment charge staged on an order.
+           and (dl.is_billable or d.kind in ('sales_order', 'purchase_order'))
+           and dl.billed_by_line_id is null
+           and ((true ${automaticCostScope}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
+           and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
+             or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
+      `))
+
+      if (allowedSubsidiaryIds !== null && costRows.rows.some(row => !allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
+        throw new BillingError('Selected costs include subsidiaries outside your access')
+      }
+      for (const cl of costRows.rows) {
+        const isProjectCharge = cl.kind === 'project_charge'
+        // A markup recorded ON THE LINE is the deal struck for that line and
+        // wins outright — including an explicit zero, which bills at cost. Only
+        // a line that says nothing falls back to the project's configured markup.
+        const base = persistInvoiceDecimal(cl.amount ?? '0', 'A cost line amount is invalid')
+        const amount = isProjectCharge
+          ? persistInvoiceDecimal(cl.bill_amount ?? '0', 'A cost line billed amount is invalid')
+          : cl.markup_percent != null
+            ? add(base, mulPercent(base, String(cl.markup_percent), 4))
+            : applyMarkup(base, markup)
+        const components = isProjectCharge && cl.rate_presentation === 'rate_components' && Array.isArray(cl.bill_components)
+          ? cl.bill_components
+          : []
+        if (components.length) {
+          components.forEach((component, index: number) => {
+            const componentQuantity = persistInvoiceQuantity(component.quantity ?? '0', 'A cost line quantity is invalid')
+            built.push({
+              itemId: cl.item_id,
+              accountId: cl.income_account_id ?? defaultIncomeId,
+              description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
+              billableQuantity: componentQuantity,
+              quantity: componentQuantity,
+              unitPrice: persistInvoiceDecimal(component.rate ?? '0', 'A cost line rate is invalid'),
+              amount: persistInvoiceDecimal(component.amount ?? '0', 'A cost line amount is invalid'),
+              taxCodeId: cl.tax_code_id,
+              employeeId: null,
+              timeEntryId: null,
+              timeTypeId: null,
+              sourceCostLineId: index === 0 ? cl.id : null,
+              unit: component.unitName ?? component.unitCode ?? cl.unit,
+              equipmentUnitId: cl.equipment_unit_id,
+              rateVersionId: cl.rate_version_id,
+              itemKind: cl.item_kind ?? null,
+              itemCategory: cl.item_category ?? null,
+              tradeIds: cl.trades ?? null,
+              jobTitles: cl.job_titles ?? null,
+              sourceKind: cl.kind ?? null,
+              departmentId: cl.department_id ?? null,
+              subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
+              locationId: cl.location_id != null ? String(cl.location_id) : null,
+              classId: cl.class_id != null ? String(cl.class_id) : null,
+              workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
+            })
+          })
+        } else {
+          const lineQuantity = isProjectCharge ? persistInvoiceQuantity(cl.quantity ?? '1', 'A cost line quantity is invalid') : '1'
+          built.push({
+            itemId: cl.item_id,
+            accountId: cl.income_account_id ?? defaultIncomeId,
+            description: cl.description || cl.item_name || null,
+            billableQuantity: lineQuantity,
+            quantity: lineQuantity,
+            unitPrice: isProjectCharge ? persistInvoiceDecimal(cl.bill_rate ?? amount, 'A cost line rate is invalid') : amount,
+            amount,
+            taxCodeId: cl.tax_code_id,
+            employeeId: null,
+            timeEntryId: null,
+            timeTypeId: null,
+            sourceCostLineId: cl.id,
+            itemKind: cl.item_kind ?? null,
+            itemCategory: cl.item_category ?? null,
+            tradeIds: cl.trades ?? null,
+            jobTitles: cl.job_titles ?? null,
+            sourceKind: cl.kind ?? null,
+            departmentId: cl.department_id ?? null,
+            subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
+            locationId: cl.location_id != null ? String(cl.location_id) : null,
+            classId: cl.class_id != null ? String(cl.class_id) : null,
+            hasLineMarkup: cl.markup_percent != null,
+            workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
+            unit: cl.unit,
+            equipmentUnitId: cl.equipment_unit_id,
+            rateVersionId: cl.rate_version_id,
+            // Pre-markup base (cost documents only; project charges carry their own price).
+            baseAmount: isProjectCharge ? amount : base,
+          })
+        }
+      }
+
+    }
+
+    // Source charges are rounded before either presentation pass. Otherwise
+    // combining two sub-cent charges changes the customer's payable amount.
+    for (const line of built) {
+      line.amount = roundCurrencyMoney(line.amount, minorUnits)
+      if (line.baseAmount != null) line.baseAmount = roundCurrencyMoney(line.baseAmount, minorUnits)
+      if (line.quantity === '1') line.unitPrice = line.amount
+    }
+
+    if (invoicing.markupPresentation === 'lump_sum') {
+      const markupLines = new Map<string, BuiltLine>()
+      for (const line of built) {
+        if (line.baseAmount == null || line.isLabor) continue
+        const delta = add(line.amount, negate(line.baseAmount))
+        if (cmp(delta, '0') <= 0) continue
+        if (line.taxCodeId) {
+          throw new BillingError('Taxable markup requires embedded presentation to preserve its tax calculation. Select embedded markup in the project invoicing profile before billing')
+        }
+        const key = JSON.stringify([line.accountId, line.departmentId ?? null, line.workedOn ?? null])
+        const prior = markupLines.get(key)
+        if (prior) {
+          prior.amount = add(prior.amount, delta)
+          prior.unitPrice = prior.amount
+        } else {
+          markupLines.set(key, {
+            itemId: null, accountId: line.accountId, description: 'Markup', quantity: '1',
+            unitPrice: delta, amount: delta, taxCodeId: null, employeeId: null,
+            timeEntryId: null, timeTypeId: null, sourceCostLineId: null,
+            sourceKind: 'charge', departmentId: line.departmentId, workedOn: line.workedOn,
+          })
+        }
+        line.amount = line.baseAmount
+        line.unitPrice = line.baseAmount
+        line.quantity = '1'
+      }
+      built.push(...markupLines.values())
+    }
+
+    // Rebill markup is NOT taken from the rate card's markup term: that term is
+    // presentation 'included', meaning it is already embedded in the negotiated
+    // labor rates rather than layered onto rebilled cost. Applying it to cost
+    // lines double-charges it. A line's OWN markup is what prices that line.
+
+    // (2a) Present the same item as one line. Cost arrives one line per source
+    //      document line — a welder issued three times is three lines — but the
+    //      customer is billed for the item, so sum them. Labor keeps its own
+    //      lines: hours are read per employee and day.
+    if (invoicing.lineGrouping === 'per_item') {
+      const grouped = new Map<string, (typeof built)[number]>()
+      const kept: typeof built = []
+      for (const l of built) {
+        // Taxable sources retain their individual rounding bases. Other lines
+        // may combine only when their pricing and source attribution agree —
+        // including every dimension an adjustment target can see. Merging two
+        // lines with different subsidiary or trade contexts would charge both
+        // (or neither) under a scoped surcharge depending on row order, so
+        // the key carries the full target context and merged lines always
+        // measure alike.
+        const key = l.isLabor || !l.itemId || l.taxCodeId ? null : JSON.stringify([
+          l.itemId, l.unitPrice, l.accountId, l.unit ?? null, l.departmentId ?? null,
+          l.equipmentUnitId ?? null, l.rateVersionId ?? null, l.workedOn ?? null,
+          l.sourceKind ?? null, l.hasLineMarkup ?? false,
+          l.subsidiaryId ?? null, l.locationId ?? null, l.classId ?? null,
+          l.itemCategory ?? null, l.tradeIds ?? null, l.jobTitles ?? null,
+        ])
+        if (!key) { kept.push(l); continue }
+        const prior = grouped.get(key)
+        if (!prior) { grouped.set(key, l); kept.push(l); continue }
+        prior.quantity = addInvoiceQuantities(prior.quantity, l.quantity)
+        // The quantity basis merges alongside: per-hour pricing measures the
+        // merged line, so it must see the merged hours.
+        if (prior.billableQuantity != null && l.billableQuantity != null) {
+          prior.billableQuantity = addInvoiceQuantities(prior.billableQuantity, l.billableQuantity)
+        } else if (l.billableQuantity != null) {
+          prior.billableQuantity = l.billableQuantity
+        }
+        prior.amount = add(prior.amount, l.amount)
+        if (prior.baseAmount != null && l.baseAmount != null) prior.baseAmount = add(prior.baseAmount, l.baseAmount)
+        const sourceCostLineIds = prior.sourceCostLineIds ?? (prior.sourceCostLineId ? [prior.sourceCostLineId] : [])
+        if (l.sourceCostLineId && !sourceCostLineIds.includes(l.sourceCostLineId)) {
+          sourceCostLineIds.push(l.sourceCostLineId)
+        }
+        for (const sourceCostLineId of l.sourceCostLineIds ?? []) {
+          if (!sourceCostLineIds.includes(sourceCostLineId)) sourceCostLineIds.push(sourceCostLineId)
+        }
+        prior.sourceCostLineIds = sourceCostLineIds
+      }
+      built.length = 0
+      built.push(...kept)
+    }
+
+    const invoiceDate = await invoiceDateOf(orgId, req)
+    // Prices are negotiated as of the date work is PERFORMED, not the day the
+    // invoice happens to be cut: re-billing or catching up on old work must not
+    // silently apply today's card. Latest work date on the invoice wins, so a
+    // period bills at the rates in force at its end.
+    const rateDate = rateDateOf(built) ?? invoiceDate
+
+    // (2b) Commercial adjustments from the customer's rate card — fuel/shift
+    //      surcharges, negotiated markups, per-diem. Which lines each one
+    //      measures, and whether it bills separately at all, is card
+    //      configuration; nothing here is specific to a trade or tenant.
+    if (built.length) {
+      // One partition per (department, location, class): a location-A-only
+      // card's terms apply to A's work and lapse only A's work, never the
+      // unscoped work.
+      const partitions = new Map<string, {
+        departmentId: string | null; locationId: string | null; classId: string | null; lines: typeof built
+      }>()
+      for (const l of built) {
+        const key = JSON.stringify([l.departmentId ?? null, l.locationId ?? null, l.classId ?? null])
+        const prior = partitions.get(key)
+        if (prior) prior.lines.push(l)
+        else {
+          partitions.set(key, {
+            departmentId: l.departmentId ?? null, locationId: l.locationId ?? null,
+            classId: l.classId ?? null, lines: [l],
+          })
+        }
+      }
+      // Pricing refusals name the card term and its remedy; surface them as
+      // billing refusals rather than bare transaction failures.
+      let charges: AdjustmentCharge[]
+      try {
+        // Sequential partitions, never Promise.all: invoice generation runs
+        // inside one transaction (one pg client), where concurrent rate-card
+        // reads interleave on the single connection.
+        const partitionCharges: AdjustmentCharge[][] = []
+        for (const partition of [...partitions.values()]) {
+          const scope = {
+            orgId, projectId: req.project_id,
+            departmentId: partition.departmentId,
+            locationId: partition.locationId, classId: partition.classId,
+          }
+          // Each partition prices as of its OWN work: a combined invoice
+          // must not reprice August work at September's card. Work crossing
+          // a card effective-date boundary splits by the card in force, so
+          // each slice prices under its own window.
+          const dates = [...new Set(
+            partition.lines.map((l) => l.workedOn).filter((d): d is string => !!d),
+          )].sort()
+          const windows = new Map<string, RateAdjustmentWindow>()
+          for (const date of dates) {
+            windows.set(date, await resolveRateAdjustmentWindow({ ...scope, onDate: date }))
+          }
+          const slices = new Map<string, { onDate: string; window: RateAdjustmentWindow; lines: typeof built }>()
+          for (const date of dates) {
+            const window = windows.get(date)!
+            const key = window.versionId ?? 'none'
+            const slice = slices.get(key)
+            if (slice) {
+              if (date > slice.onDate) slice.onDate = date
+            } else {
+              slices.set(key, { onDate: date, window, lines: [] })
+            }
+          }
+          const undated = partition.lines.filter((l) => !l.workedOn)
+          if (undated.length) {
+            // Lines with no work date join the latest slice; a partition
+            // with no dates at all prices as of the invoice, as before.
+            const latest = [...slices.values()].sort((a, b) => (a.onDate < b.onDate ? -1 : 1)).pop()
+            if (latest) latest.lines.push(...undated)
+            else {
+              slices.set('none', {
+                onDate: rateDate,
+                window: await resolveRateAdjustmentWindow({ ...scope, onDate: rateDate }),
+                lines: undated,
+              })
+            }
+          }
+          for (const [date, window] of windows) {
+            slices.get(window.versionId ?? 'none')!.lines.push(
+              ...partition.lines.filter((l) => l.workedOn === date),
+            )
+          }
+          const sliceCharges: AdjustmentCharge[] = []
+          for (const slice of slices.values()) {
+            // A lapse is per slice, so each is asked separately: one
+            // slice's card running out says nothing about another's.
+            const lapsed = await findLapsedRateCard({ ...scope, onDate: slice.onDate })
+            // Carry-forward needs an earlier agreement to carry. A future-only
+            // card is not evidence of terms for this work and must still fail
+            // closed rather than silently pricing the adjustment at zero.
+            if (lapsed && (invoicing.rateCardLapse !== 'carry_forward' || !lapsed.lastEffectiveTo)) {
+              throw new BillingError(
+                `This customer's rate card ${lapsed.lastEffectiveTo ? `expired on ${lapsed.lastEffectiveTo}` : 'has no version in force on or before this work'} and none covers ${slice.onDate}. ` +
+                'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
+              )
+            }
+            // Carrying forward prices the work at the last card in force, never at
+            // a later one: a card that starts after the work was done was not the deal.
+            const cardDate = lapsed?.lastEffectiveTo ?? slice.onDate
+            const adjustments = lapsed?.lastEffectiveTo
+              ? await resolveRateAdjustments({ ...scope, onDate: cardDate })
+              : slice.window.adjustments
+            sliceCharges.push(...priceAdjustments(
+              slice.lines.map((l) => ({
+                amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
+                itemCategory: l.itemCategory ?? null,
+                tradeIds: l.tradeIds ?? null, jobTitles: l.jobTitles ?? null,
+                departmentId: partition.departmentId,
+                customerId: project.customer_id, projectId: req.project_id,
+                subsidiaryId: l.subsidiaryId ?? null,
+                locationId: partition.locationId, classId: partition.classId,
+                quantity: l.billableQuantity ?? null, workedOn: l.workedOn ?? null,
+                isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
+              })),
+              adjustments,
+              invoicing.surchargeRounding ?? 'half_up',
+            ))
+          }
+          partitionCharges.push(sliceCharges)
+        }
+        charges = mergeCharges(
+          partitionCharges.flat(),
+          invoicing.surchargeRounding ?? 'half_up',
+        )
+      } catch (cause) {
+        if (cause instanceof RateAdjustmentPricingError) throw new BillingError(cause.message)
+        throw cause
+      }
+      for (const c of charges) {
+        const item = c.adjustment.itemId
+          ? ((await tx.execute<{ income_account_id: string | null; tax_code_id: string | null }>(sql`
+              select income_account_id, tax_code_id from items
+               where id = ${c.adjustment.itemId} and org_id = ${orgId}
+            `))).rows[0]
+          : undefined
+        const unitPriced = c.adjustment.calculation === 'per_hour' || c.adjustment.calculation === 'per_day'
+        built.push({
+          itemId: c.adjustment.itemId, accountId: item?.income_account_id ?? defaultIncomeId,
+          description: c.adjustment.name,
+          // A quantity-priced charge snapshots its basis on the line: the
+          // customer sees 10 hours at $5, not a lump $50.
+          quantity: c.quantityBasis ?? '1',
+          unitPrice: unitPriced ? (c.adjustment.value ?? c.amount) : c.amount,
+          amount: c.amount,
+          unit: c.adjustment.unit
+            ?? (c.adjustment.calculation === 'per_hour' ? 'hour' : c.adjustment.calculation === 'per_day' ? 'day' : null),
+          taxCodeId: item?.tax_code_id ?? null, employeeId: null, timeEntryId: null,
+          timeTypeId: null, sourceCostLineId: null, sourceKind: 'charge',
+        })
+      }
+    }
+
+    // (3) Not-to-exceed cap: trim the CUMULATIVE claimed total to the contract.
+    // "Claimed" is the one shared definition WIP prebilling enforces too: every
+    // non-voided invoice on the project (a draft already reserves what it will
+    // bill), net of credits, plus open prebill worksheets. The project row is
+    // locked exclusively by the request read above, so two concurrent requests
+    // cannot each observe the full remaining capacity.
+    let remainingCapacity: string | null = null
+    if (invoicing.notToExceed && built.length) {
+      const contractRes = (await tx.execute<{ contract: string }>(sql`
+        select coalesce(contract_value, 0)::text as contract from projects where id = ${req.project_id} and org_id = ${orgId}
+      `))
+      const contract = contractRes.rows[0]?.contract ?? '0'
+      if (cmp(contract, '0') > 0) {
+        const claimedToDate = await projectContractCapacityUsed(tx, orgId, req.project_id, ptype.financialProfile.invoicedToDate)
+        const running = sum(built.map((l) => l.amount))
+        const remaining = add(contract, negate(claimedToDate))
+        remainingCapacity = remaining
+        if (cmp(remaining, '0') <= 0) throw new BillingError('The not-to-exceed budget is fully invoiced')
+        const over = add(running, negate(remaining))
+        // Tax-inclusive input amounts are not net contract consumption. Defer
+        // taxable cap decisions until the shared tax engine resolves the net.
+        // An untaxed adjustment cannot safely reduce a taxable charge.
+        if (cmp(over, '0') > 0 && !built.some((line) => line.taxCodeId)) {
+          built.push({
+            itemId: invoicing.notToExceedItemId ?? null, accountId: defaultIncomeId,
+            description: 'Not-to-exceed cap adjustment', quantity: '1', unitPrice: negate(over),
+            amount: negate(over), taxCodeId: null, employeeId: null, timeEntryId: null,
+            timeTypeId: null, sourceCostLineId: null,
+          })
+        }
+      }
+    }
+
+    if (built.length === 0) throw new BillingError('Nothing available to bill for the selected criteria')
+
+    if (invoicing.revenueAccount === 'fixed' || invoicing.revenueAccount === 'unbilled_receivable') {
+      for (const line of built) line.accountId = fixedPriceCreditAcct
+    }
+
+    // Round source charges before presentation so regrouping cannot change the
+    // amount owed in currencies whose payable precision is below the ledger's.
+    for (const line of built) {
+      line.amount = roundCurrencyMoney(line.amount, minorUnits)
+      if (line.baseAmount != null) line.baseAmount = roundCurrencyMoney(line.baseAmount, minorUnits)
+      if (line.quantity === '1') line.unitPrice = line.amount
+    }
+
+    // Present the invoice the way this customer has agreed to see it. Only the
+    // PRESENTATION changes: provenance still points at the detail lines, so the
+    // backup and every downstream reconciliation keep the full picture.
+    const rollupLines = built.map((l) => ({ ...l, sourceKind: l.sourceKind ?? null, itemCategory: l.itemCategory ?? null }))
+    const sourcePositions = new Map(rollupLines.map((line, index) => [line, index]))
+    const rolled = applyRollup(
+      rollupLines,
+      invoicing.rollup,
+      (group, amount, quantity, members) => {
+        const source = members[0]!
+        if (group.itemId && group.itemId !== source.itemId) {
+          throw new BillingError('Grouped presentation cannot replace a source billing item. Clear the group item or match its source item')
+        }
+        return {
+          ...source,
+          description: group.label,
+          quantity,
+          amount,
+          baseAmount: members.every((line) => line.baseAmount != null)
+            ? sum(members.map((line) => line.baseAmount!)) : undefined,
+          timeEntryId: null,
+          sourceCostLineId: null,
+        }
+      },
+      // A display group cannot merge different accounting, item, rate, tax,
+      // or source attribution. Taxable rows retain individual rounding bases.
+      (line) => JSON.stringify([
+        line.accountId, line.itemId, line.taxCodeId, line.unit ?? null, line.unitPrice,
+        line.employeeId, line.timeTypeId, line.departmentId ?? null,
+        line.equipmentUnitId ?? null, line.rateVersionId ?? null,
+        line.taxCodeId ? sourcePositions.get(line) : null,
+      ]),
+    )
+    const presentedLines = rolled.presented
+    const validatedAccounts = new Set<string>()
+    for (const line of [...built, ...presentedLines]) {
+      if (!line.accountId) {
+        throw new BillingError('Configure an income account on each billable item or the Project Revenue control account in Company Settings before billing')
+      }
+      if (validatedAccounts.has(line.accountId)) continue
+      const account = await tx.execute(sql`
+        select id from accounts where org_id = ${orgId} and id = ${line.accountId}
+          and is_active and not is_summary for share
+      `)
+      if (!account.rows.length) {
+        throw new BillingError('The configured project billing account must be active, non-summary, and belong to this organization')
+      }
+      validatedAccounts.add(line.accountId)
+    }
+    // Stored time/cost rows and existing invoices stay. Turning Inventory off
+    // must refuse a generate that would persist inventory / assembly / kit.
+    if (!featureEnabled(featureState, 'inventory')) {
+      const itemIds = [...new Set(
+        presentedLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          throw new BillingError('Inventory is disabled')
+        }
+      }
+    }
+    // Stored time/cost rows and existing invoices stay. Turning Equipment off
+    // must refuse a generate that would persist equipment_charge.
+    if (!featureEnabled(featureState, 'equipment')) {
+      const itemIds = [...new Set(
+        presentedLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          throw new BillingError('Equipment is disabled')
+        }
+      }
+    }
+
+    // Use the same effective-dated tax calculation and evidence as the native
+    // invoice editor. A tax code without its amount/components is not a quote.
+    let totals: Awaited<ReturnType<typeof computeBillTotalsWithProvider>>
+    try {
+      totals = await computeBillTotalsWithProvider(
+        presentedLines.map((line) => ({ accountId: line.accountId!, amount: line.amount, taxCodeId: line.taxCodeId })),
+        await taxProfileMap(orgId, invoiceDate),
+        {
+          orgId,
+          kind: 'customer_invoice',
+          currency,
+          documentDate: invoiceDate,
+          partyId: project.customer_id,
+          // The selling entity is the project's subsidiary, not the org
+          // fallback: without it a foreign subsidiary's invoice would quote
+          // from the org's country.
+          subsidiaryId: project.subsidiary_id ?? undefined,
+        },
+      )
+    } catch (error) {
+      throw new BillingError(error instanceof Error ? error.message : String(error))
+    }
+    if (remainingCapacity !== null && cmp(totals.subtotal, remainingCapacity) > 0) {
+      throw new BillingError('The rounded invoice exceeds the remaining contract capacity. Adjust the selected charges or approved pricing before billing')
+    }
+
+    // -- create the customer_invoice draft --------------------------------
+    const documentNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', project.subsidiary_id ?? undefined)
+    const created = (await tx.execute<{ id: string }>(sql`
+      insert into documents (org_id, kind, document_number, party_id, document_date, currency,
+                             status, project_id, subsidiary_id, billing_method, is_final_invoice,
+                             reference_number, memo, subtotal, tax_total, total, created_by)
+      values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id},
+              ${invoiceDate}, ${currency}, 'draft', ${req.project_id},
+              ${project.subsidiary_id}, ${billingMethod === 'cost_plus' ? 'time_and_materials' : billingMethod},
+              ${req.invoice_type === 'final'}, ${req.customer_po ?? project.customer_po_number},
+              ${req.invoice_description}, '0', '0', '0', ${userId})
+      returning id
+    `)).rows[0]!
+    const invoiceId = created.id
+
+    // The invoice carries the PRESENTED lines; provenance is stamped from the
+    // detail behind them. A rolled-up line bills many source rows, and every one
+    // of those rows must still be marked billed or it becomes available again.
+    const presentedLineIds: string[] = []
+    let lineNo = 1
+    for (const [index, l] of presentedLines.entries()) {
+      const tax = totals.lines[index]!
+      const line = (await tx.execute<{ id: string }>(sql`
+        insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
+              quantity, unit, unit_price, amount, tax_code_id, tax_input_amount, tax_amount, tax_overridden,
+              employee_id, time_entry_id, time_type_id,
+              is_billable, equipment_unit_id, rate_version_id, bill_rate, bill_amount, department_id, project_id, created_by)
+        values (${orgId}, ${invoiceId}, ${lineNo}, ${l.itemId}, ${l.accountId}, ${l.description},
+              ${l.quantity}, ${l.unit ?? null}, ${l.unitPrice}, ${tax.amount}, ${l.taxCodeId},
+              ${tax.taxInputAmount}, ${tax.taxAmount}, ${tax.taxOverridden}, ${l.employeeId},
+              ${l.timeEntryId}, ${l.timeTypeId}, true, ${l.equipmentUnitId ?? null}, ${l.rateVersionId ?? null},
+              ${l.unitPrice}, ${tax.amount}, ${l.departmentId ?? null}, ${req.project_id}, ${userId})
+        returning id
+      `)).rows[0]!
+      await persistLineTaxComponents(tx, { orgId, documentLineId: String(line.id), components: tax.taxComponents, actorId: userId })
+      if (tax.providerQuote) {
+        await persistTaxQuote(orgId, tax.providerQuote.providerConfigId,
+          { ...tax.providerQuote.request, documentLineId: String(line.id) }, tax.providerQuote.result, userId, tx)
+        await tx.execute(sql`
+          update tax_rate_provider_configs set last_attempt_at=now(), last_success_at=now(), last_error=null
+           where id=${tax.providerQuote.providerConfigId} and org_id=${orgId}
+        `)
+      }
+      presentedLineIds.push(String(line.id))
+      lineNo++
+    }
+
+    for (const [index, l] of built.entries()) {
+      const billedBy = presentedLineIds[rolled.presentedIndexOf[index] ?? index]
+      if (!billedBy) continue
+      if (l.timeEntryId) {
+        const claimed = await tx.execute<{ id: string }>(sql`
+          update time_entries
+             set invoiced_by_line_id = ${billedBy}, billing_status = 'billed'
+           where id = ${l.timeEntryId} and org_id = ${orgId}
+             and billing_status = 'unbilled'
+           returning id`)
+        if (!claimed.rows[0]) throw new BillingError('A time entry is no longer available for billing')
+      }
+      const sourceCostLineIds = l.sourceCostLineIds ?? (l.sourceCostLineId ? [l.sourceCostLineId] : [])
+      for (const sourceCostLineId of sourceCostLineIds) {
+        // Migration 0034 freezes every non-draft source line, including the
+        // approved project-charge rows this path is required to consume. The
+        // billed-link is provenance metadata rather than a financial edit, so
+        // use the guard's paired transaction-local authority for this one write
+        // and immediately clear it before continuing with invoice bookkeeping.
+        await tx.execute(sql`set local openbooks.migration = on`)
+        await tx.execute(sql`set local openbooks.amend = on`)
+        const stamped = await tx.execute<{ id: string }>(sql`
+          update document_lines
+             set billed_by_line_id = ${billedBy}
+           where id = ${sourceCostLineId}
+             and org_id = ${orgId}
+             and billed_by_line_id is null
+           returning id
+        `)
+        await tx.execute(sql`set local openbooks.migration = off`)
+        await tx.execute(sql`set local openbooks.amend = off`)
+        if (!stamped.rows[0]) {
+          throw new BillingError('A cost source line is no longer available for billing')
+        }
+      }
+    }
+
+    await tx.execute(sql`
+      update documents set subtotal = ${totals.subtotal}, tax_total = ${totals.taxTotal}, total = ${totals.total}, updated_by = ${userId}
+      where id = ${invoiceId} and org_id = ${orgId}
+    `)
+
+    // Match the order-cycle architecture: preserve a document-level edge from
+    // every selected source ticket to the resulting customer invoice. Line-level
+    // provenance remains on time_entries/document_lines for exact reconciliation.
+    for (const fieldTicketId of selectedFieldTicketIds) {
+      await tx.execute(sql`
+        insert into document_links (
+          org_id, from_document_id, to_document_id, link_type, created_by
+        )
+        values (${orgId}, ${fieldTicketId}, ${invoiceId}, 'bills', ${userId})
+        on conflict (org_id, from_document_id, to_document_id, link_type) do nothing
+      `)
+    }
+
+    // Advance ONLY the milestone schedules this invoice billed. Zero-amount
+    // (unpriced) rows were skipped as lines; claiming them here would consume
+    // them without billing them, and provenance release only unwinds on void.
+    if (billedScheduleIds.length > 0) {
+      await tx.execute(sql`
+        update billing_schedules set billing_request_id = ${requestId}, percent_billed = coalesce(percent_complete, percent_billed), updated_by = ${userId}
+         where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
+           and id = any(${`{${billedScheduleIds.join(',')}}`}::uuid[])
+      `)
+    }
+
+    await tx.execute(sql`
+      update billing_requests set status = 'invoiced', invoice_document_id = ${invoiceId}, updated_by = ${userId}
+      where id = ${requestId} and org_id = ${orgId}
+    `)
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${orgId},
+        'billing_requests',
+        ${requestId},
+        'update',
+        ${JSON.stringify({
+          before: { status: 'open', invoiceDocumentId: null },
+          after: { status: 'invoiced', invoiceDocumentId: invoiceId },
+          fieldTicketIds: selectedFieldTicketIds,
+        })}::jsonb,
+        ${userId}
+      )
+    `)
+
+    return {
+      id: invoiceId,
+      documentNumber,
+      kind: 'customer_invoice',
+      backupRequired: req.backup_required === true,
+      backupType: typeof req.backup_type === 'string' && req.backup_type ? req.backup_type : 'none',
+    }
+  })
+}
+
+// The delete/void provenance-release hook lives in engine (billing-provenance.ts)
+// so every delete path can reach it; deleteDocument calls it for invoices.

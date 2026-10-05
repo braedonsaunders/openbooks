@@ -6,68 +6,14 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 
 import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
-import { dataDependentFeatureDefault } from '@openbooks/engine/src/organization/feature-defaults.ts'
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { acquireOrgFeatureGateLock } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 // One source defines the fence identity: the engine module below. This
 // switchboard re-exports its key so every importer keeps working.
 export { featureGateLockKey } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 
-/** Load the org's feature state (raw overrides; combine with featureEnabled). */
-export async function orgFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
-  const r = (await executor.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`))
-  return r.rows[0]?.f ?? {}
-}
-
-/** Server helper for route guards: is this feature on for the org? Resolves
- * the data-dependent defaults exactly like resolvedFeatureState, so guards
- * agree with the Features page and the setup-entity gate. */
-export async function isFeatureEnabled(orgId: string, key: string, executor: SqlExecutor = db): Promise<boolean> {
-  const state = await orgFeatureState(orgId, executor)
-  if (key === 'multiSubsidiary') return resolveMultiSubsidiary(orgId, state, executor)
-  if (key === 'multiCurrency') return resolveMultiCurrency(orgId, state, executor)
-  return featureEnabled(state, key)
-}
-
-/**
- * `multiSubsidiary` has a DATA-DEPENDENT default resolved by the single
- * engine helper: on iff the org already runs more than one subsidiary. This
- * keeps existing multi-entity orgs working when the flag was never
- * explicitly set, and lets a single-entity org opt in to add its first extra
- * subsidiary. An explicit stored boolean always wins.
- */
-async function resolveMultiSubsidiary(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
-  return dataDependentFeatureDefault(executor, orgId, 'multiSubsidiary', state)
-}
-
-/** Is multi-subsidiary on for this org (with the data-dependent default)? */
-export async function subsidiaryFeatureEnabled(orgId: string, executor: SqlExecutor = db): Promise<boolean> {
-  return resolveMultiSubsidiary(orgId, await orgFeatureState(orgId, executor), executor)
-}
-
-/**
- * `multiCurrency` default resolved by the single engine helper: on iff the
- * org has already touched foreign currency. Keeps existing multi-currency
- * orgs working when the flag was never set; an explicit stored boolean
- * always wins.
- */
-async function resolveMultiCurrency(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
-  return dataDependentFeatureDefault(executor, orgId, 'multiCurrency', state)
-}
-
-/**
- * Feature state with data-dependent defaults resolved to explicit booleans
- * (`multiSubsidiary`, `multiCurrency`). Use this for the Features page and
- * the setup-rail gating so `featureEnabled` returns the correct value.
- */
-export async function resolvedFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
-  const state = await orgFeatureState(orgId, executor)
-  const [multiSubsidiary, multiCurrency] = await sequential([
-    () => resolveMultiSubsidiary(orgId, state, executor),
-    () => resolveMultiCurrency(orgId, state, executor),
-  ])
-  return { ...state, multiSubsidiary, multiCurrency }
-}
+import { orgFeatureState, isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '@openbooks/engine/organization/feature-state'
+export { orgFeatureState, isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '@openbooks/engine/organization/feature-state'
 
 /** The set of nav module keys hidden by disabled features (for the resolver). */
 export function hiddenNavModules(state: FeatureState): Set<string> {
@@ -456,13 +402,7 @@ export async function acquireFeatureGateLock(orgId: string, runner: SqlExecutor 
  * status contract. Call it inside the write transaction, on the writer's
  * runner, before the first project-linked insert — never a copy per route.
  */
-export async function checkProjectsWriteEnabled(
-  orgId: string,
-  runner: SqlExecutor = db,
-): Promise<boolean> {
-  await acquireFeatureGateLock(orgId, runner)
-  return lockAndCheckOrgFeature(runner, orgId, 'projects')
-}
+export { checkProjectsWriteEnabled } from '@openbooks/engine/organization/feature-state'
 
 /** Whether a single feature is hard-blocked from being disabled (PUT-route guard). */
 export async function featureDisableBlocked(orgId: string, key: string): Promise<boolean> {

@@ -8,3 +8,4 @@ export {
   type ProviderBillTotalsOptions,
   type TaxProfiles,
 } from './document-totals.ts'
+export type { TaxComponentConfig } from '../tax/tax.ts'
