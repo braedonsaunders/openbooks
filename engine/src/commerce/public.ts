@@ -56,6 +56,7 @@ export { SHOPIFY_WEBHOOK_TOPICS } from "./shopify/subscriptions.ts";
 export { importShopifyLocations } from "./shopify/locations.ts";
 export { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 export { loadChannelOrder } from "./orders.ts";
-export { getPostingPolicy, setPostingPolicy } from "./posting-policies.ts";
+export { getPostingPolicy, listPostingPolicies, setPostingPolicy } from "./posting-policies.ts";
+export type { ChannelPostingPolicy } from "./posting-policies.ts";
 export { replayChannelExceptions } from "./exceptions.ts";
 export { postChannelOrder } from "./order-posting.ts";
