@@ -5926,7 +5926,11 @@
       "addRetry": "添加重试",
       "retryOffsetsHelp": "每次扣款失败后间隔多少天重试。用完列表后将执行下面的最终处理。",
       "finalAction": "重试用尽时",
-      "finalActionHelp": "暂停会停止开票但保留合同，之后付款成功即恢复。取消将终止订阅。"
+      "finalActionHelp": "暂停会停止开票但保留合同，之后付款成功即恢复。取消将终止订阅。",
+      "insufficientFundsOffsetsDays": "余额不足重试（天）",
+      "insufficientFundsOffsetsHelp": "因余额不足被拒后多少天重试 — 安排在常见的发薪日附近，此时账户最可能有资金。",
+      "expiryNoticeDays": "卡片到期提醒（天）",
+      "expiryNoticeHelp": "保存的卡片到期前多少天，将其列入联系队列并附上更换链接。"
     },
     "storedValueProgramFields": {
       "description": "配置未兑换余额的存放位置，以及到期或确认为断点收入的时间。",

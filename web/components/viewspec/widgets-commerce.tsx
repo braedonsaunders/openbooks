@@ -8,6 +8,7 @@ import { ApCockpit } from '../../app/(app)/ap/cockpit/ApCockpit'
 import { ApHeaderActions } from '../../app/(app)/ap/sections'
 import { CollectionsShell } from '../../app/(app)/collections/sections'
 import { AttemptDrawer } from '../../app/(app)/collections/AttemptDrawer'
+import { RecoveryDashboard } from '../../app/(app)/collections/RecoveryDashboard'
 import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
 import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
@@ -92,6 +93,12 @@ export const COMMERCE_WIDGETS = {
       customers={(props.customers as ComponentProps<typeof CollectionsShell>['customers']) ?? []}
       incomeAccounts={(props.incomeAccounts as ComponentProps<typeof CollectionsShell>['incomeAccounts']) ?? []}
     />
+  ),
+  /** Recovery vitals above the console: KPIs plus the three queues that
+   *  need a human. Null (surface off) renders nothing — the shell owns the
+   *  empty state, never the dashboard. */
+  'recovery-dashboard': (props) => (
+    <RecoveryDashboard data={(props.data as ComponentProps<typeof RecoveryDashboard>['data']) ?? null} />
   ),
   /** One collection attempt with its retry action. Null (no attempt open)
    *  renders nothing — the list owns the empty state, never the drawer. */

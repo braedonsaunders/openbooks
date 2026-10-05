@@ -11,7 +11,7 @@ import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { isValidEmailAddress } from "@openbooks/emails";
 import { isUuid } from '@/lib/list-params'
 import { claimSetupCreate, SetupCreateConflict } from '@/lib/api/idempotency'
-import { autopayFieldError, normalizeFinalAction, normalizeRetryOffsets, requireAutopayWrite, retryOffsetsSql } from './autopay-fields'
+import { autopayFieldError, normalizeExpiryNoticeDays, normalizeFinalAction, normalizeRetryOffsets, requireAutopayWrite, retryOffsetsSql } from './autopay-fields'
 const stageSchema = z.object({
   sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
   subjectTemplate: z.string(), bodyTemplate: z.string(), escalate: z.boolean().optional(),
@@ -27,6 +27,8 @@ const POSTBodySchema1 = z.object({
   // Autopay retry schedule (setup rows of {days}) and final action: validated
   // by the autopay engine, which is also what the scan executes.
   retryOffsetsDays: z.array(z.unknown()).optional(),
+  insufficientFundsOffsetsDays: z.array(z.unknown()).optional(),
+  expiryNoticeDays: z.union([z.number().int(), z.string().regex(/^\d+$/), z.null()]).optional(),
   finalAction: z.string().nullable().optional(),
 });
 
@@ -122,6 +124,8 @@ export const GET = defineRoute({
         select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
                min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive",
                autopay_retry_offsets_days as "retryOffsetsDays",
+               autopay_insufficient_funds_offsets_days as "insufficientFundsOffsetsDays",
+               autopay_expiry_notice_days as "expiryNoticeDays",
                autopay_final_action as "finalAction",
                to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
           from dunning_policies where org_id = ${authz.user.orgId} order by name
@@ -144,6 +148,7 @@ export const GET = defineRoute({
         policies: policies.rows.map((p) => ({
           ...p,
           retryOffsetsDays: toRetryRows(p.retryOffsetsDays),
+          insufficientFundsOffsetsDays: toRetryRows(p.insufficientFundsOffsetsDays),
           stages: byPolicy.get(p.id as string) ?? [],
         })),
       });
@@ -208,12 +213,19 @@ export const POST = defineRoute({
     // rides on this policy. Absent fields keep the migration defaults (no
     // retries, no final action), so plain reminder policies are unaffected.
     let retryOffsets: number[] | undefined;
+    let insufficientFundsOffsets: number[] | undefined;
+    let expiryNoticeDays: number | undefined;
     let finalAction: 'none' | 'suspend' | 'cancel' | undefined;
-    if (body.retryOffsetsDays !== undefined || body.finalAction !== undefined) {
+    if (body.retryOffsetsDays !== undefined || body.insufficientFundsOffsetsDays !== undefined ||
+        body.expiryNoticeDays !== undefined || body.finalAction !== undefined) {
       const denied = await requireAutopayWrite(authz);
       if (denied) return denied;
       try {
         if (body.retryOffsetsDays !== undefined) retryOffsets = normalizeRetryOffsets(body.retryOffsetsDays);
+        if (body.insufficientFundsOffsetsDays !== undefined) insufficientFundsOffsets = normalizeRetryOffsets(body.insufficientFundsOffsetsDays);
+        if (body.expiryNoticeDays !== undefined && body.expiryNoticeDays !== null) {
+          expiryNoticeDays = normalizeExpiryNoticeDays(typeof body.expiryNoticeDays === 'string' ? Number(body.expiryNoticeDays) : body.expiryNoticeDays);
+        }
         if (body.finalAction !== undefined && body.finalAction !== null) finalAction = normalizeFinalAction(body.finalAction);
       } catch (e) {
         const refusal = autopayFieldError(e);
@@ -232,12 +244,16 @@ export const POST = defineRoute({
         }
         const created = (await tx.execute<Record<string, unknown>>(sql`
           insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance,
-                                        reply_to, is_active, autopay_retry_offsets_days, autopay_final_action,
+                                        reply_to, is_active, autopay_retry_offsets_days,
+                                        autopay_insufficient_funds_offsets_days, autopay_expiry_notice_days,
+                                        autopay_final_action,
                                         created_by, updated_by)
           values (coalesce(${requestId}::uuid, gen_random_uuid()), ${authz.user.orgId}, ${body.name}, ${appliesToKind},
                   ${gracePeriodDays}, ${minBalance},
                   ${(body.replyTo as string | null) ?? null}, ${active},
                   ${retryOffsets !== undefined ? retryOffsetsSql(retryOffsets) : sql`'{}'::integer[]`},
+                  ${insufficientFundsOffsets !== undefined ? retryOffsetsSql(insufficientFundsOffsets) : sql`'{3,7,14}'::integer[]`},
+                  ${expiryNoticeDays ?? 30},
                   ${finalAction ?? 'none'},
                   ${authz.user.id}, ${authz.user.id})
           -- A request identity already claimed cannot create another policy.

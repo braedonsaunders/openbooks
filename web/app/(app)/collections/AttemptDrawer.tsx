@@ -23,6 +23,8 @@ export interface AttemptPayload {
   declineKind: string | null
   retryPosition: number
   nextRetryOn: string | null
+  authUrl: string | null
+  usedBackup: boolean
   receiptId: string | null
   attemptedAt: string
 }
@@ -45,7 +47,15 @@ export function AttemptDrawer({
   const formattedAmount = money(attempt.amount, { currency: attempt.currency })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const retryable = canRetry && attempt.status === 'failed' && attempt.declineKind === 'soft'
+  const retryable = canRetry && attempt.status === 'failed' &&
+    (attempt.declineKind === 'soft' || attempt.declineKind === 'insufficient_funds')
+  const needsAuth = attempt.status === 'failed' && attempt.declineKind === 'needs_authentication'
+  const remedy =
+    attempt.status !== 'failed' ? null
+    : attempt.declineKind === 'hard' ? t('remedyHard')
+    : attempt.declineKind === 'needs_authentication' ? t('remedyNeedsAuth')
+    : attempt.declineKind === 'insufficient_funds' ? t('remedyInsufficientFunds')
+    : null
   const statusLabel =
     attempt.status === 'succeeded' ? t('statusSucceeded')
     : attempt.status === 'failed' ? t('statusFailed')
@@ -58,6 +68,16 @@ export function AttemptDrawer({
     : attempt.status === 'processing' ? t('summaryProcessing', { amount: formattedAmount, invoice: attempt.invoiceNumber })
     : attempt.status === 'canceled' ? t('summaryCanceled', { amount: formattedAmount, invoice: attempt.invoiceNumber })
     : t('summaryInitiated', { amount: formattedAmount, invoice: attempt.invoiceNumber })
+
+  const copyAuthLink = async () => {
+    if (!attempt.authUrl) return
+    try {
+      await navigator.clipboard.writeText(attempt.authUrl)
+      toast.success(t('authLinkCopied'))
+    } catch {
+      setError(t('retryFailed'))
+    }
+  }
 
   const retryNow = async () => {
     const confirmed = await confirmDialog({
@@ -114,6 +134,20 @@ export function AttemptDrawer({
           </p>
         )}
         <p className="text-sm">{summary}</p>
+        {remedy && (
+          <p className="text-sm text-muted-foreground">{remedy}</p>
+        )}
+        {needsAuth && attempt.authUrl && (
+          <div className="flex items-center gap-2">
+            <p className="text-sm break-all">{attempt.authUrl}</p>
+            <Button variant="outline" onClick={() => void copyAuthLink()}>
+              {t('copyAuthLink')}
+            </Button>
+          </div>
+        )}
+        {attempt.status === 'succeeded' && attempt.usedBackup && (
+          <p className="text-sm text-muted-foreground">{t('collectedViaBackup')}</p>
+        )}
         {attempt.status === 'failed' && attempt.nextRetryOn && (
           <p className="text-sm text-muted-foreground">{t('nextRetry', { date: attempt.nextRetryOn })}</p>
         )}

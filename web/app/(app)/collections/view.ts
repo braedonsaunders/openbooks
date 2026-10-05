@@ -8,6 +8,9 @@ import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-v
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, pickString } from '../../../lib/list-params'
+import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
+import { businessToday } from '@openbooks/engine/platform/business-date'
+import { findCardsExpiringSoon, getRecoveryMetrics } from '@openbooks/engine/payments/autopay'
 
 /** The shell composes shared page chrome, registered lists and domain editors.
  * Permissions and feature dependencies are resolved before reaching the client. */
@@ -34,11 +37,56 @@ export interface AttemptDrawerData {
     declineKind: string | null
     retryPosition: number
     nextRetryOn: string | null
+    authUrl: string | null
+    usedBackup: boolean
     receiptId: string | null
     attemptedAt: string
   }
   canRetry: boolean
   closeHref: string
+}
+
+export interface RecoveryDashboardData {
+  window: { from: string; to: string }
+  metrics: {
+    attempts: number
+    invoicesWithFailures: number
+    recoveredInvoices: number
+    recoveredAmount: string
+    recoveryRate: number | null
+    churnPrevented: number
+    awaitingAuthentication: number
+    byDeclineClass: { declineClass: string; failedAttempts: number; recoveredInvoices: number; recoveryRate: number | null }[]
+    byProvider: { provider: string; failedAttempts: number; recoveredInvoices: number; recoveryRate: number | null }[]
+  }
+  awaitingAuth: {
+    attemptId: string
+    invoiceId: string
+    invoiceNumber: string
+    customerName: string
+    amount: string
+    currency: string
+    authUrl: string | null
+    attemptedAt: string
+  }[]
+  expiring: {
+    methodId: string
+    partyId: string
+    partyName: string | null
+    provider: string
+    brand: string | null
+    last4: string | null
+    expiresOn: string
+    currency: string
+  }[]
+  hardStuck: {
+    attemptId: string
+    invoiceNumber: string
+    customerName: string
+    amount: string
+    currency: string
+    declineCode: string | null
+  }[]
 }
 
 export interface CollectionsData {
@@ -53,10 +101,117 @@ export interface CollectionsData {
   incomeAccounts: CollectionsOption[]
   /** The automatic-collection queue renders only while the surface is on. */
   autopayOn: boolean
+  /** Recovery facts for the dashboard; null while the surface is off. */
+  recovery: RecoveryDashboardData | null
   currentParams: Record<string, string | string[] | undefined>
   attemptDrawer: ({ widget: 'collection-attempt-drawer'; props: { drawer: AttemptDrawerData & { remountKey: string } } }) | null
   attemptsEmptyTitle: string
   attemptsEmptyDescription: string
+}
+
+/**
+ * Recovery facts for the dashboard cockpit: trailing-90-day metrics off
+ * stored attempts, the authentication queue, cards nearing expiry and hard
+ * declines with no backup on file. Bounded lists — the Reports hub owns the
+ * full history.
+ */
+async function loadRecovery(orgId: string): Promise<RecoveryDashboardData> {
+  const today = await businessToday(orgId)
+  const window = { from: addCalendarDays(today, -89), to: addCalendarDays(today, 1) }
+  const [metrics, expiringCards, awaitingAuthRows, hardStuckRows] = await Promise.all([
+    getRecoveryMetrics(orgId, window),
+    findCardsExpiringSoon(orgId, { asOf: today }),
+    db.execute<{
+      attemptId: string
+      invoiceId: string
+      invoiceNumber: string
+      customerName: string
+      amount: string
+      currency: string
+      authUrl: string | null
+      attemptedAt: string
+    }>(sql`
+      select a.id as "attemptId", a.invoice_id as "invoiceId", d.document_number as "invoiceNumber",
+             p.display_name as "customerName", a.amount::text as "amount", a.currency,
+             a.auth_url as "authUrl",
+             to_char(a.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "attemptedAt"
+        from collection_attempts a
+        join documents d on d.id = a.invoice_id and d.org_id = a.org_id
+        join parties p on p.id = d.party_id and p.org_id = d.org_id
+       where a.org_id = ${orgId} and a.status = 'failed'
+         and a.decline_kind = 'needs_authentication' and a.next_retry_on is null
+       order by a.created_at desc
+       limit 8
+    `),
+    db.execute<{
+      attemptId: string
+      invoiceNumber: string
+      customerName: string
+      amount: string
+      currency: string
+      declineCode: string | null
+    }>(sql`
+      select a.id as "attemptId", d.document_number as "invoiceNumber",
+             p.display_name as "customerName", a.amount::text as "amount", a.currency,
+             a.decline_code as "declineCode"
+        from collection_attempts a
+        join documents d on d.id = a.invoice_id and d.org_id = a.org_id
+        join parties p on p.id = d.party_id and p.org_id = d.org_id
+       where a.org_id = ${orgId} and a.status = 'failed' and a.decline_kind = 'hard'
+         and a.next_retry_on is null and a.created_at >= ${addCalendarDays(today, -30)}::timestamptz
+         and not exists (
+           select 1 from customer_payment_methods m
+            where m.org_id = a.org_id and m.party_id = d.party_id and m.status = 'active'
+              and m.id <> a.payment_method_id
+         )
+       order by a.created_at desc
+       limit 8
+    `),
+  ])
+  const expiring = expiringCards.slice(0, 8)
+  const awaitingAuth = awaitingAuthRows.rows
+  const hardStuck = hardStuckRows.rows
+  const invoiceCurrency = (await db.execute<{ currency: string }>(sql`
+    select d.currency from documents d
+     where d.org_id = ${orgId} and d.kind = 'customer_invoice'
+     order by d.document_date desc limit 1
+  `)).rows[0]?.currency ?? 'USD'
+  return {
+    window,
+    metrics: {
+      attempts: metrics.attempts,
+      invoicesWithFailures: metrics.invoicesWithFailures,
+      recoveredInvoices: metrics.recoveredInvoices,
+      recoveredAmount: metrics.recoveredAmount,
+      recoveryRate: metrics.recoveryRate,
+      churnPrevented: metrics.churnPrevented,
+      awaitingAuthentication: metrics.awaitingAuthentication,
+      byDeclineClass: metrics.byDeclineClass.map((row) => ({
+        declineClass: row.declineClass,
+        failedAttempts: row.failedAttempts,
+        recoveredInvoices: row.recoveredInvoices,
+        recoveryRate: row.recoveryRate,
+      })),
+      byProvider: metrics.byProvider.map((row) => ({
+        provider: row.provider,
+        failedAttempts: row.failedAttempts,
+        recoveredInvoices: row.recoveredInvoices,
+        recoveryRate: row.recoveryRate,
+      })),
+    },
+    awaitingAuth,
+    expiring: expiring.map((row) => ({
+      methodId: row.methodId,
+      partyId: row.partyId,
+      partyName: row.partyName,
+      provider: row.provider,
+      brand: row.brand,
+      last4: row.last4,
+      expiresOn: row.expiresOn,
+      currency: invoiceCurrency,
+    })),
+    hardStuck,
+  }
 }
 
 export async function loadCollections(
@@ -90,6 +245,7 @@ export async function loadCollections(
     : [{ rows: [] }, { rows: [] }]
 
   const autopayOn = await isFeatureEnabled(authz.user.orgId, 'autopay')
+  const recovery = autopayOn ? await loadRecovery(authz.user.orgId) : null
   const attemptId = pickString(sp.attempt)
   let attemptDrawer: CollectionsData['attemptDrawer'] = null
   if (autopayOn && attemptId && isUuid(attemptId)) {
@@ -102,6 +258,8 @@ export async function loadCollections(
              a.status, a.decline_code as "declineCode", a.decline_kind as "declineKind",
              a.retry_position as "retryPosition",
              a.next_retry_on::text as "nextRetryOn",
+             a.auth_url as "authUrl",
+             (a.fallback_method_id is not null) as "usedBackup",
              a.receipt_document_id::text as "receiptId",
              to_char(a.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "attemptedAt"
         from collection_attempts a
@@ -140,6 +298,7 @@ export async function loadCollections(
       label: [a.number, a.name].filter(Boolean).join(' · '),
     })),
     autopayOn,
+    recovery,
     currentParams: sp,
     attemptDrawer,
     attemptsEmptyTitle: tAr('collections.attempts.emptyTitle'),
@@ -156,6 +315,15 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
     layout: 'bare',
     header: [],
     body: [
+      {
+        // Recovery vitals sit above the console: the dashboard owns the
+        // recovery facts while the shell owns the operational queue, and a
+        // block the shell does not know never disturbs its tab state.
+        ...widgetBlock('recovery-dashboard', {
+          data: f('recovery'),
+        }),
+        when: f('autopayOn'),
+      },
       widgetBlock('collections-shell', {
         title: f('title'),
         description: f('description'),
