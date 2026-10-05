@@ -1,0 +1,4 @@
+The 0510 migration creates one empty table and only widens three existing
+CHECK constraints to admit additional enumerated values. Widening an IN-list
+can never invalidate a stored row, and the new table starts empty with no
+backfill, so there is no data-dependent preflight to run.

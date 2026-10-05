@@ -41,7 +41,14 @@ export const SALES_CHANNEL_ACCOUNT_ROLES = [
   "refund_clearing",
 ] as const;
 
-export const EXTERNAL_LINK_PROVIDERS = ["shopify", "stripe"] as const;
+export const EXTERNAL_LINK_PROVIDERS = [
+  "shopify",
+  "stripe",
+  "chargebee",
+  "recurly",
+  "maxio",
+  "zuora",
+] as const;
 export const EXTERNAL_LINK_OBJECT_TYPES = [
   "product",
   "variant",
@@ -56,6 +63,10 @@ export const EXTERNAL_LINK_OBJECT_TYPES = [
   "price",
   "meter",
   "subscription_item",
+  "invoice",
+  "credit_note",
+  "payment",
+  "coupon",
 ] as const;
 export const EXTERNAL_LINK_NATIVE_TABLES = [
   "items",
@@ -69,6 +80,7 @@ export const EXTERNAL_LINK_NATIVE_TABLES = [
   "subscription_usage_links",
   "usage_meters",
   "usage_rating_plan_versions",
+  "promotions",
 ] as const;
 
 export const INBOUND_EVENT_STATUSES = [
@@ -263,14 +275,14 @@ export const externalLinks = pgTable(
       t.objectType,
       t.nativeId,
     ),
-    check("external_links_provider_valid", sql`${t.provider} in ('shopify', 'stripe')`),
+    check("external_links_provider_valid", sql`${t.provider} in ('shopify', 'stripe', 'chargebee', 'recurly', 'maxio', 'zuora')`),
     check(
       "external_links_object_type_valid",
-      sql`${t.objectType} in ('product', 'variant', 'customer', 'order', 'refund', 'fulfillment', 'payout', 'location', 'gift_card', 'subscription', 'price', 'meter', 'subscription_item')`,
+      sql`${t.objectType} in ('product', 'variant', 'customer', 'order', 'refund', 'fulfillment', 'payout', 'location', 'gift_card', 'subscription', 'price', 'meter', 'subscription_item', 'invoice', 'credit_note', 'payment', 'coupon')`,
     ),
     check(
       "external_links_native_table_valid",
-      sql`${t.nativeTable} in ('items', 'item_families', 'parties', 'documents', 'stock_locations', 'stored_value_accounts', 'subscriptions', 'subscription_items', 'subscription_usage_links', 'usage_meters', 'usage_rating_plan_versions')`,
+      sql`${t.nativeTable} in ('items', 'item_families', 'parties', 'documents', 'stock_locations', 'stored_value_accounts', 'subscriptions', 'subscription_items', 'subscription_usage_links', 'usage_meters', 'usage_rating_plan_versions', 'promotions')`,
     ),
     check(
       "external_links_account_nonblank",
