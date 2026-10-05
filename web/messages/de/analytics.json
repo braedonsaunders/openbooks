@@ -2957,6 +2957,7 @@
       "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}",
       "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen.",
       "fragmentationUnconfigured": "Setzen Sie die Fragmentierungs-Obergrenze unter Spend Velocity → Konfiguration",
+      "annualizedUnknown": "Annualisierte Werte brauchen das Berichtsende in einer deklarierten Fiskalperiode",
       "cliffUnconfigured": "Setzen Sie die Mindestbasis unter Spend Velocity → Konfiguration"
     },
     "banner": {

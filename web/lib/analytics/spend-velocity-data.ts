@@ -140,7 +140,7 @@ export interface SpendVelocityData {
     expensesTotal: string;
     billsVelocity: number | null;
     expensesVelocity: number | null;
-    savingsPotential: string;
+    savingsPotential: string | null;
     totalAlerts: number;
     /** Detectors the score and alert count silently omit (unconfigured). */
     unconfiguredDetectors: ("fragmentation" | "cliff")[];
@@ -165,7 +165,7 @@ export interface SpendVelocityData {
     insights: { type: string; message: string }[];
   };
   boilingFrog: {
-    summary: { count: number; criticalCount: number; totalAnnualizedCreep: string };
+    summary: { count: number; criticalCount: number; totalAnnualizedCreep: string | null };
     accounts: {
       accountId: string; accountName: string; monotonicRatio: number; avgMonthlyIncrease: number; totalCreep: number;
       startAmount: string; endAmount: string; monthCount: number; annualizedCreep: string | null; monthlyAmounts: number[];
@@ -177,7 +177,7 @@ export interface SpendVelocityData {
     accounts: (VelocityRow & { spendShare: number })[];
   };
   zombies: {
-    summary: { count: number; criticalCount: number; totalAnnualCost: string };
+    summary: { count: number; criticalCount: number; totalAnnualCost: string | null };
     subscriptions: { vendorId: string; vendorName: string; amount: string; monthCount: number; annualCost: string | null; firstMonth: string; lastMonth: string; severity: "critical" | "warning" }[];
   };
   fragmentation: {
@@ -940,11 +940,15 @@ export async function spendVelocityData(
     }
   }
   frogAccounts.sort((x, y) => y.totalCreep - x.totalCreep);
+  // A total over partly unmeasurable annuals is unknown, never a sum that
+  // silently drops the unmeasured share.
+  const sumMeasured = (amounts: (string | null)[]): string | null =>
+    amounts.some((a) => a === null) ? null : amounts.reduce((s, a) => add(s, a as string), ZERO);
   const boilingFrog = {
     summary: {
       count: frogAccounts.length,
       criticalCount: frogAccounts.filter((x) => x.severity === "critical").length,
-      totalAnnualizedCreep: frogAccounts.reduce((s, x) => (x.annualizedCreep === null ? s : add(s, x.annualizedCreep)), ZERO),
+      totalAnnualizedCreep: sumMeasured(frogAccounts.map((x) => x.annualizedCreep)),
     },
     accounts: frogAccounts.slice(0, 20),
   };
@@ -994,7 +998,7 @@ export async function spendVelocityData(
     summary: {
       count: zombieList.length,
       criticalCount: zombieList.filter((z) => z.severity === "critical").length,
-      totalAnnualCost: zombieList.reduce((s, z) => (z.annualCost === null ? s : add(s, z.annualCost)), ZERO),
+      totalAnnualCost: sumMeasured(zombieList.map((z) => z.annualCost)),
     },
     subscriptions: zombieList.slice(0, 20),
   };
@@ -1288,9 +1292,13 @@ export async function spendVelocityData(
   if (commitmentCliff.summary.status === "critical") structural += SEV.structural.cliffCriticalPoints;
   else if (commitmentCliff.summary.status === "warning") structural += SEV.structural.cliffWarningPoints;
   deductions += Math.min(SEV.structural.cap, structural);
-  // Financial impact: savings potential as a share of total spend.
-  const savingsPotential = add(boilingFrog.summary.totalAnnualizedCreep, zombies.summary.totalAnnualCost);
-  if (cmp(totalSpend, ZERO) > 0) {
+  // Financial impact: savings potential as a share of total spend. Unknown
+  // when either leg is unmeasurable — and then it deducts nothing, like the
+  // other omitted figures.
+  const savingsPotential = boilingFrog.summary.totalAnnualizedCreep === null || zombies.summary.totalAnnualCost === null
+    ? null
+    : add(boilingFrog.summary.totalAnnualizedCreep, zombies.summary.totalAnnualCost);
+  if (savingsPotential !== null && cmp(totalSpend, ZERO) > 0) {
     const savingsRatio = toChartNumber(div(savingsPotential, totalSpend)) * 100;
     if (savingsRatio > C.savingsRatioCritical) deductions += SEV.savings.criticalPoints;
     else if (savingsRatio > C.savingsRatioHigh) deductions += SEV.savings.highPoints;
@@ -1326,7 +1334,7 @@ export async function spendVelocityData(
   if (anomalies.summary.criticalCount > 0) insights.push({ type: "alert", ...strings.anomalies(anomalies.summary.criticalCount) });
   if (boilingFrog.summary.criticalCount > 0) insights.push({ type: "warning", ...strings.creep(boilingFrog.summary.criticalCount) });
   if (concentration.summary.top1Share > C.concentrationTop1Warning) insights.push({ type: "warning", ...strings.concentration(Math.round(concentration.summary.top1Share)) });
-  if (zombies.summary.count > 0) insights.push({ type: "info", ...strings.zombies(zombies.summary.count, fmtK(zombies.summary.totalAnnualCost)) });
+  if (zombies.summary.count > 0 && zombies.summary.totalAnnualCost !== null) insights.push({ type: "info", ...strings.zombies(zombies.summary.count, fmtK(zombies.summary.totalAnnualCost)) });
   if (fragmentation.summary.fragmentedCategories > 0) insights.push({ type: "warning", ...strings.fragmentation(fragmentation.summary.fragmentedCategories) });
   if (revenue.hasData && revenue.opexRatio > C.opexRatioAlert) insights.push({ type: "alert", ...strings.opexRatio(revenue.opexRatio) });
   if (commitmentCliff.summary.status !== "healthy") {

@@ -61,11 +61,17 @@ async function analyticsReason(): Promise<CatalogMessageFn> {
   // dashboard request (tests, scripts) there is no request scope for
   // translations to resolve in. Anything else — a broken messages import,
   // a bug — throws instead of silently rendering the wrong language.
+  // The shapes below are the missing-scope refusals themselves, verified
+  // against the installed stack: plain-node callers get next-intl's
+  // client-component guard, server callers get the missing request config
+  // or the absent Next request storage.
+  const SCOPE_REFUSAL =
+    /client component|server component|getRequestConfig|requestAsyncStorage|async local storage|app router|request scope|request context/i
   try {
     const t = await getTranslations('analytics')
     return (key, values) => t(key, values as Record<string, string | number>)
   } catch (e) {
-    if (e instanceof Error && /request scope|request context|app router|server component|client component/i.test(e.message)) {
+    if (e instanceof Error && SCOPE_REFUSAL.test(e.message)) {
       return englishCatalogMessage
     }
     throw e
@@ -133,7 +139,10 @@ export async function loadVendorWidgetMetrics(
     const data = await spendVelocityData(ctx.orgId, window, ctx.allowedSubsidiaryIds)
     if (need('vendorPeriodLabel')) out.vendorPeriodLabel = data.period.label
     if (need('spendSavingsPotential')) {
-      out.spendSavingsPotential = { available: true, value: data.summary.savingsPotential }
+      // An unknown savings figure refuses by name instead of reading $0.
+      out.spendSavingsPotential = data.summary.savingsPotential === null
+        ? unavailable((await analyticsReason())('spendVelocity.insights.annualizedUnknown'))
+        : { available: true, value: data.summary.savingsPotential }
     }
     if (need('spendOpenAlerts')) {
       // The open-alert count depends on the full detector set: with the

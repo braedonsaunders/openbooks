@@ -56,10 +56,16 @@ test('the configuration tab renders the fixed scoring rubric read-only', async (
 test('the headlines caveat the detectors the score omits', async () => {
   // The fixture leaves fragmentation unconfigured: the gauge and the
   // alerts headline must carry its remedy, not a clean bill of health.
-  const { host, cleanup } = await mountView(<SpendVelocityView data={spendVelocityFixture()} />)
+  // An unknown savings figure refuses by name instead of reading $0.
+  const data = spendVelocityFixture()
+  data.summary.savingsPotential = null
+  data.boilingFrog.summary.totalAnnualizedCreep = null
+  data.zombies.summary.totalAnnualCost = null
+  const { host, cleanup } = await mountView(<SpendVelocityView data={data} />)
   try {
     const text = host.textContent ?? ''
     assert.ok(text.includes('Set the fragmentation size cap in Spend Velocity → Configuration'), `the headlines must caveat the omitted detector, got:\n${text}`)
+    assert.ok(text.includes('Annualized figures need the report end inside a declared fiscal period'), `unknown savings must name its reason, got:\n${text}`)
   } finally {
     await cleanup()
   }

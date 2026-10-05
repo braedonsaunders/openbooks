@@ -136,7 +136,7 @@ export function SpendVelocityView({ data: initialData, canConfigure }: { data: S
         <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} notice={caveat ?? undefined} />
         <KpiCard icon={Coins} accent="sky" label={t('kpi.totalSpend')} value={money(s.totalSpend)} sub={t('sub.accountsCount', { count: s.accountCount })} />
         <KpiCard icon={GaugeIcon} accent={vel === null ? 'slate' : vel > data.config.velocityMediumThreshold ? 'red' : vel < -data.config.velocityMediumThreshold ? 'emerald' : 'slate'} label={t('kpi.avgVelocity')} value={vel === null ? '—' : `${vel > 0 ? '↑' : vel < 0 ? '↓' : ''} ${formatPercent01(Math.abs(vel) / 100, locale, 1)}`} sub={t('sub.acceleratingCount', { count: s.acceleratingCount })} tone={vel === null ? 'neutral' : vel > data.config.velocityMediumThreshold ? 'negative' : vel < -data.config.velocityMediumThreshold ? 'positive' : 'neutral'} />
-        <KpiCard icon={PiggyBank} accent="violet" label={t('kpi.savingsPotential')} value={money(s.savingsPotential)} sub={toChartNumber(s.savingsPotential) > 0 ? t('sub.creepAndZombies') : t('sub.noIssues')} />
+        <KpiCard icon={PiggyBank} accent="violet" label={t('kpi.savingsPotential')} value={s.savingsPotential === null ? '—' : money(s.savingsPotential)} sub={s.savingsPotential === null ? t('insights.annualizedUnknown') : toChartNumber(s.savingsPotential) > 0 ? t('sub.creepAndZombies') : t('sub.noIssues')} />
         <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={caveat ?? t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : 'positive'} />
       </div>
 
@@ -291,9 +291,9 @@ function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVeloci
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const cliff = data.commitmentCliff.summary
   const tiles: { key: string; label: string; icon: typeof Bug; tone: string; count: string; active: boolean; metric: string; sub: string; desc: string }[] = [
-    { key: 'frog', label: t('detectors.frog.label'), icon: Bug, tone: 'text-violet-500', count: String(data.boilingFrog.summary.count), active: data.boilingFrog.summary.count > 0, metric: money(data.boilingFrog.summary.totalAnnualizedCreep), sub: t('detectors.frog.sub'), desc: t('detectors.frog.desc') },
+    { key: 'frog', label: t('detectors.frog.label'), icon: Bug, tone: 'text-violet-500', count: String(data.boilingFrog.summary.count), active: data.boilingFrog.summary.count > 0, metric: data.boilingFrog.summary.totalAnnualizedCreep === null ? '—' : money(data.boilingFrog.summary.totalAnnualizedCreep), sub: data.boilingFrog.summary.totalAnnualizedCreep === null ? t('insights.annualizedUnknown') : t('detectors.frog.sub'), desc: t('detectors.frog.desc') },
     { key: 'anomaly', label: t('detectors.anomaly.label'), icon: Bolt, tone: 'text-rose-500', count: String(data.anomalies.summary.count), active: data.anomalies.summary.count > 0, metric: String(data.anomalies.summary.criticalCount), sub: t('detectors.anomaly.sub'), desc: t('detectors.anomaly.desc', { sigma: data.config.anomalyStdDevThreshold }) },
-    { key: 'zombie', label: t('detectors.zombie.label'), icon: Ghost, tone: 'text-slate-400', count: String(data.zombies.summary.count), active: data.zombies.summary.count > 0, metric: money(data.zombies.summary.totalAnnualCost), sub: t('detectors.zombie.sub'), desc: t('detectors.zombie.desc') },
+    { key: 'zombie', label: t('detectors.zombie.label'), icon: Ghost, tone: 'text-slate-400', count: String(data.zombies.summary.count), active: data.zombies.summary.count > 0, metric: data.zombies.summary.totalAnnualCost === null ? '—' : money(data.zombies.summary.totalAnnualCost), sub: data.zombies.summary.totalAnnualCost === null ? t('insights.annualizedUnknown') : t('detectors.zombie.sub'), desc: t('detectors.zombie.desc') },
     { key: 'fragmentation', label: t('detectors.fragmentation.label'), icon: Puzzle, tone: 'text-orange-500', count: data.fragmentation.summary.configured ? String(data.fragmentation.summary.fragmentedCategories) : '—', active: data.fragmentation.summary.fragmentedCategories > 0, metric: data.fragmentation.summary.configured ? money(data.fragmentation.summary.totalFragmentedSpend) : '—', sub: data.fragmentation.summary.configured ? t('detectors.fragmentation.sub') : data.fragmentation.summary.reason, desc: t('detectors.fragmentation.desc') },
     { key: 'concentration', label: t('detectors.concentration.label'), icon: PieIcon, tone: 'text-amber-500', count: formatPercent01(data.concentration.summary.top1Share / 100, locale, 0), active: data.concentration.summary.top1Share > data.config.concentrationTop1Warning, metric: formatPercent01(data.concentration.summary.top5Share / 100, locale, 0), sub: t('detectors.concentration.sub'), desc: t('detectors.concentration.desc') },
     { key: 'cliff', label: t('detectors.cliff.label'), icon: Mountain, tone: 'text-sky-500', count: cliff.velocityGap === null ? '—' : `${cliff.velocityGap}%`, active: cliff.status !== 'healthy', metric: cliff.poVelocity === null ? '—' : `${cliff.poVelocity}%`, sub: !cliff.configured ? cliff.reason : cliff.poVelocity === null ? t('detectors.cliff.insufficientHistory') : t('detectors.cliff.sub'), desc: t('detectors.cliff.desc') },
@@ -424,7 +424,7 @@ interface Alert {
   label: string
   item: string
   severity: 'Critical' | 'High' | 'Medium' | 'Low'
-  impact: string
+  impact: string | null
   details: string
   accountId?: string
   vendorId?: string
@@ -441,9 +441,9 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
     const out: Alert[] = []
     const want = (k: string) => selected === 'all' || selected === k
     const c = data.config
-    if (want('frog')) for (const v of data.boilingFrog.accounts) out.push({ detector: 'frog', label: t('detectors.frog.label'), item: v.accountName, severity: v.totalCreep > c.boilingFrogCriticalCreep ? 'High' : 'Medium', impact: v.annualizedCreep ?? '0', details: t('details.frog', { rate: formatPercent01(v.avgMonthlyIncrease / 100, locale, 1), months: v.monthCount }), accountId: v.accountId })
+    if (want('frog')) for (const v of data.boilingFrog.accounts) out.push({ detector: 'frog', label: t('detectors.frog.label'), item: v.accountName, severity: v.totalCreep > c.boilingFrogCriticalCreep ? 'High' : 'Medium', impact: v.annualizedCreep, details: t('details.frog', { rate: formatPercent01(v.avgMonthlyIncrease / 100, locale, 1), months: v.monthCount }), accountId: v.accountId })
     if (want('anomaly')) for (const a of data.anomalies.items) out.push({ detector: 'anomaly', label: t('detectors.anomaly.label'), item: a.accountName, severity: a.severity === 'critical' ? 'Critical' : 'High', impact: a.amount, details: t('details.anomaly', { sigma: decimalLabel(a.zScore, locale, 1, 1), month: a.month }), accountId: a.accountId })
-    if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost ?? '0', details: t('details.zombie', { amount: fmtMoney(z.amount), months: z.monthCount }), vendorId: z.vendorId })
+    if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost, details: t('details.zombie', { amount: fmtMoney(z.amount), months: z.monthCount }), vendorId: z.vendorId })
     if (want('concentration')) for (const cc of data.concentration.accounts) out.push({ detector: 'concentration', label: t('detectors.concentration.label'), item: cc.name, severity: cc.spendShare > c.concentrationHighShare ? 'High' : 'Medium', impact: cc.totalSpend, details: t('details.concentration', { share: formatPercent01(cc.spendShare / 100, locale, 1), trend: t(`trend.${cc.trend}`) }), accountId: cc.id })
     if (want('fragmentation')) for (const f of data.fragmentation.categories) out.push({ detector: 'fragmentation', label: t('detectors.fragmentation.label'), item: f.accountName, severity: f.txnsPerMonth > c.fragmentationHighTxns ? 'High' : 'Medium', impact: f.totalSpend, details: t('details.fragmentation', { txns: f.txnsPerMonth, avg: fmtMoney(f.avgTransactionSize) }), accountId: f.accountId })
     if (want('seasonal')) for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow)) out.push({ detector: 'seasonal', label: t('detectors.seasonal.label'), item: p.monthName, severity: Math.abs(p.deviation) > c.seasonalCriticalDeviation ? 'High' : 'Low', impact: p.totalSpend, details: t('details.seasonal', { deviation: `${p.deviation > 0 ? '+' : ''}${p.deviation}` }) })
@@ -453,7 +453,8 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
       out.push({ detector: 'cliff', label: t('detectors.cliff.label'), item: t('details.cliffItem'), severity: cliff.status === 'critical' ? 'Critical' : 'High', impact: cliff.totalPO, details: cliff.velocityGap === null ? t('details.cliffNoVelocity', { ratio: ratioText }) : t('details.cliff', { gap: formatPercent01(cliff.velocityGap / 100, locale, 1), ratio: ratioText }) })
     }
     // Impacts are canonical money strings: exact comparison, no float round-trip.
-    return out.sort((a, b) => compareMoney(b.impact, a.impact))
+    // Unmeasurable impacts sort last, never as zeroes among measured ones.
+    return out.sort((a, b) => (a.impact === null ? 1 : b.impact === null ? -1 : compareMoney(b.impact, a.impact)))
   }, [data, selected, fmtMoney, locale, t])
 
   const total = data.summary.totalAlerts
@@ -490,7 +491,7 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
                   <SharedTableCell className="px-4 py-2 text-center">
                     <Badge variant={a.severity === 'Critical' ? 'destructive' : a.severity === 'High' ? 'warning' : 'secondary'}>{t(`severity.${a.severity.toLowerCase()}`)}</Badge>
                   </SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.impact)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{a.impact === null ? '—' : money0(a.impact)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{a.details}</SharedTableCell>
                 </InteractiveTableRow>
               )) : (

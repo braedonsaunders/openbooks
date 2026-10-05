@@ -2957,6 +2957,7 @@
       "seasonalLow": "支出が減少しやすい時期：{months}",
       "shadowItReason": "経費精算の明細には店舗名や仕入先名が含まれず、費用勘定と自由記述のみのため、従業員間でのソフトウェアのバイラルな普及を追跡できません。",
       "fragmentationUnconfigured": "支出速度 → 設定 で断片化のサイズ上限を設定してください",
+      "annualizedUnknown": "年換算値には、宣言された会計期間内の報告終了日が必要です",
       "cliffUnconfigured": "支出速度 → 設定 で最小基準額を設定してください"
     },
     "banner": {
