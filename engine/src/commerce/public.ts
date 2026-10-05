@@ -79,6 +79,7 @@ export {
   similarCatalogEntries,
 } from "./shopify/catalog.ts";
 export { SHOPIFY_WEBHOOK_TOPICS } from "./shopify/subscriptions.ts";
+export { loadShopifyChannel, type ShopifyChannelAccess } from "./shopify/channel-access.ts";
 export { importShopifyLocations } from "./shopify/locations.ts";
 export { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 export { loadChannelOrder } from "./orders.ts";
