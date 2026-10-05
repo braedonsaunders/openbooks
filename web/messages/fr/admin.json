@@ -6064,6 +6064,10 @@
       "title": "Prélèvement automatique",
       "description": "Moyens de paiement enregistrés, recouvrement automatique des factures échues avec relances et suspension en cas d’échec définitif. Requiert Paiements en ligne."
     },
+    "consolidatedBilling": {
+      "title": "Facturation consolidée",
+      "description": "Une facture par payeur pour les abonnements d'une hiérarchie — sociétés mères, revendeurs et franchises — y compris entre entités juridiques avec écritures intercompagnies."
+    },
     "storedValue": {
       "title": "Cartes cadeaux et avoirs",
       "description": "Cartes cadeaux et avoirs comptabilisés au passif, avec émission, utilisation, péremption et breakage."

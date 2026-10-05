@@ -5952,6 +5952,10 @@
       "title": "Automatische Abbuchung",
       "description": "Gespeicherte Zahlungsmethoden, automatischer Einzug fälliger Rechnungen mit Wiederholungen und Sperrung bei endgültigem Fehlschlagen. Erfordert Online-Zahlungen."
     },
+    "consolidatedBilling": {
+      "title": "Sammelabrechnung",
+      "description": "Eine Rechnung pro Zahler für die Abonnements einer Hierarchie — Muttergesellschaften, Wiederverkäufer und Franchisenehmer — auch über Rechtsträger hinweg mit Intercompany-Buchungen."
+    },
     "storedValue": {
       "title": "Guthaben",
       "description": "Geschenkkarten und Ladenguthaben als Verbindlichkeiten, mit Ausgabe, Einlösung, Verfall und Erlöserfassung."
