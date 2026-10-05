@@ -21,6 +21,7 @@ export async function readListDrawer(source: ListDrawerSource, params: Params): 
     pick_list: async () => (await import('../../app/(app)/picks/view')).loadPicks(params),
     shipment: async () => (await import('../../app/(app)/shipments/view')).loadShipments(params),
     customer_payment: async () => (await import('../../app/(app)/receipts/view')).loadReceipts(params),
+    subscription: async () => (await import('../../app/(app)/collections/subscription-drawer')).loadSubscriptionDrawer(params),
   }
   const data = await readers[source]()
   return data.drawer ? { widget: listDrawerRoute(source)!.widget, drawer: data.drawer } : null

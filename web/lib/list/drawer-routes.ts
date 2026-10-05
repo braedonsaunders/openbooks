@@ -16,6 +16,7 @@ export const LIST_DRAWER_ROUTES = {
   pick_list: { path: '/picks', param: 'pick', widget: 'pick-list-drawer', permission: 'orders.fulfill', feature: 'fulfillment' },
   shipment: { path: '/shipments', param: 'shipment', widget: 'shipment-drawer', permission: 'orders.fulfill', feature: 'fulfillment' },
   customer_payment: { path: '/receipts', param: 'payment', widget: 'payment-drawer', permission: 'ar.pay' },
+  subscription: { path: '/collections', param: 'subscription', widget: 'subscription-drawer', permission: 'ar.read', feature: 'subscriptionBilling' },
 } as const
 
 export type ListDrawerSource = keyof typeof LIST_DRAWER_ROUTES

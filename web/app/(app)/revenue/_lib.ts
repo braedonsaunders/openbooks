@@ -130,8 +130,7 @@ export async function loadContract(
   if (!contract) return null;
 
   // The billed agreement behind a scoped contract: the sales order (with its
-  // record drawer) or the subscription (plan name; subscriptions have no
-  // record surface yet, so no deep link).
+  // record drawer) or the subscription (with its record drawer).
   let source: ContractSource | null = null;
   if (contract.scope === "order" && contract.source_document_id) {
     const order = (await db.execute<{ document_number: string }>(sql`
@@ -150,7 +149,13 @@ export async function loadContract(
                         where p.id = s.plan_id and p.org_id = s.org_id),
                       s.id::text) as plan
         from subscriptions s where s.id = ${contract.subscription_id} and s.org_id = ${orgId}`)).rows[0];
-    if (subscription) source = { kind: "subscription", label: subscription.plan, href: null };
+    if (subscription) {
+      source = {
+        kind: "subscription",
+        label: subscription.plan,
+        href: `/collections?subscription=${contract.subscription_id}`,
+      };
+    }
   }
 
   // One contract per invoice by construction (revenueContractPostingEffectKey),
