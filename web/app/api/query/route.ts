@@ -1,7 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod'
 import { NextResponse } from "next/server";
-import { runUserSql, validateUserSql } from "@openbooks/engine/src/platform/sqlapi.ts";
+import { runUserSql, UserSqlRefusal, validateUserSql } from "@openbooks/engine/src/platform/sqlapi.ts";
 import { defineRoute } from '@/lib/api/route'
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
@@ -58,6 +58,8 @@ export const POST = defineRoute({
     });
     return NextResponse.json(result);
   } catch (e) {
+    // The governed path's own refusals name their cause and remedy.
+    if (e instanceof UserSqlRefusal) return apiErrorResponse(e);
     // Full error stays in the server log only; the client gets a generic
     // message so database internals never reach the browser.
     console.error("[query-console] execution failed", e);
