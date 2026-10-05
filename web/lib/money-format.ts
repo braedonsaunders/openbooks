@@ -6,6 +6,8 @@
  * never be used to guess the currency.
  */
 
+import { minorToMajor } from './setup/money-fields.ts'
+
 export type MoneyValue = string | number | bigint | null | undefined
 
 export type MoneyOptions = {
@@ -87,8 +89,10 @@ function decimalFallback(
 /**
  * Currency minor units (hundredths of the major unit, as the engine's
  * toCents produces) to an exact major-unit decimal string for the money
- * formatter. Exact bigint math in one tested place: a misplaced separator
- * here is a 100x display error.
+ * formatter. Legacy callers without a registry precision stay explicitly on
+ * 2; callers with a currency use minorToMajorTextUnits below. The
+ * conversion itself lives in one tested place: a misplaced separator here
+ * is a 100x display error.
  */
 export function minorToMajorText(minor: string): string {
   return minorToMajorTextUnits(minor, 2)
@@ -99,21 +103,34 @@ export function minorToMajorText(minor: string): string {
  * formatter. The precision always comes from the authoritative currencies
  * registry (`minor_units`); unknown or out-of-range precision refuses by
  * name instead of guessing hundredths — guessing misprices BHD 10x and
- * JPY 100x.
+ * JPY 100x. The decimal-string math is the shared setup primitive, never a
+ * second exponent algorithm here.
  */
-export function minorToMajorTextUnits(minor: string, minorUnits: number): string {
-  if (!Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+export function minorToMajorTextUnits(minor: string, minorUnits: number, currency?: string): string {
+  const major = minorToMajor(minor, minorUnits)
+  if (major !== null) return major
+  const code = typeof currency === 'string' && currency.trim() !== '' ? currency.trim().toUpperCase() : null
+  if (!Number.isInteger(minorUnits) || (minorUnits as number) < 0 || (minorUnits as number) > 4) {
     throw new Error(
-      `unsupported currency precision "${String(minorUnits)}": configure minor units for the currency in Setup → Currencies`,
+      `unsupported currency precision "${String(minorUnits)}"${code ? ` for ${code}` : ''}: configure minor units for the currency in Setup → Currencies`,
     )
   }
-  const factor = 10n ** BigInt(minorUnits)
-  const units = BigInt(minor)
-  const sign = units < 0n ? '-' : ''
-  const abs = units < 0n ? -units : units
-  const major = (abs / factor).toString()
-  if (minorUnits === 0) return `${sign}${major}`
-  return `${sign}${major}.${(abs % factor).toString().padStart(minorUnits, '0')}`
+  throw new Error(
+    `unreadable minor-unit amount "${minor}"${code ? ` for ${code}` : ''}: the stored value is not numeric; re-import or replay the source event to restore it`,
+  )
+}
+
+/**
+ * Null-returning display conversion for operator surfaces: a missing,
+ * malformed, or out-of-range precision (or a non-string minor value) yields
+ * null so the caller renders its named notice, never a guessed amount and
+ * never a throw that unmounts the surrounding view.
+ */
+export function tryMinorToMajorTextUnits(minor: unknown, minorUnits: unknown): string | null {
+  if (typeof minor !== 'string' || minor.trim() === '') return null
+  if (typeof minorUnits !== 'number') return null
+  const major = minorToMajor(minor, minorUnits)
+  return major
 }
 
 /** Locale-aware decimal presentation that preserves exact numeric strings. */
