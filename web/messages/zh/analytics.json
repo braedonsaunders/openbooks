@@ -1191,6 +1191,7 @@
     "metricsSub": {
       "avgMoM": "平均环比（成熟月份）",
       "daysToPay": "回款天数",
+      "noHistory": "暂无付款历史",
       "ofRevenue": "占营收比",
       "paidInFull": "已全额支付的发票",
       "perCustomer": "单客户",
