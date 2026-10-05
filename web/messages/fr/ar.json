@@ -23,7 +23,7 @@
     "newCredit": "Nouvelle note de crédit",
     "submitForApproval": "Soumettre pour approbation"
   },
-    "tenders": {
+  "tenders": {
     "title": "Modes de règlement",
     "tenderedOf": "{tendered} encaissés sur {total}",
     "balanced": "Équilibré",
@@ -35,15 +35,33 @@
     "amount": "Montant",
     "reference": "Référence",
     "referencePlaceholder": "Autorisation ou ticket",
+    "label": "Libellé",
+    "code": "Carte cadeau / avoir",
+    "codePlaceholder": "Saisissez le code, puis vérifiez le solde",
+    "checkBalance": "Vérifier",
+    "balance": "Solde {balance}",
+    "codeNotFound": "Aucune carte cadeau ni avoir ne correspond à ce code.",
+    "unresolvedCard": "carte non vérifiée",
+    "externalRef": "Réf. prestataire",
+    "externalRefPlaceholder": "Référence de la passerelle",
     "remove": "Retirer",
     "add": "Ajouter un règlement",
     "emptyHint": "Ajoutez au moins un règlement avant de comptabiliser.",
     "refundAction": "Rembourser",
     "postTitle": "Comptabiliser ce reçu ?",
     "postBody": "{number} : encaisser {total}.\n{tenders}",
-    "kinds": { "cash": "Espèces", "card": "Carte", "bank": "Banque" }
+    "kinds": {
+      "cash": "Espèces",
+      "card": "Carte",
+      "bank": "Banque",
+      "bank_transfer": "Virement",
+      "wallet": "Portefeuille",
+      "gateway": "Passerelle",
+      "stored_value": "Avoir",
+      "other": "Autre"
+    }
   },
-"drawer": {
+  "drawer": {
     "editingHint": "Modification — Enregistrer pour appliquer",
     "viewGlImpact": "Voir l’impact au GL",
     "dateLabel": "Date de la facture",

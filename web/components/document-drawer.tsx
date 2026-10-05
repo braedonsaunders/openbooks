@@ -1075,6 +1075,10 @@ export interface DocumentDrawerProps {
    *  Empty or absent hides the column: with no facilitator there is nothing
    *  to choose. Only sales kinds offer it (see marketplaceColumn). */
   marketplaceFacilitators?: { name: string }[]
+  /** Server-known stored-value gate. When explicitly false the tender
+   *  section offers no gift card / store credit method. Undefined preserves
+   *  the hidden default. */
+  storedValueEnabled?: boolean
 }
 
 export function DocumentDrawer({
@@ -1117,6 +1121,7 @@ export function DocumentDrawer({
   refundHref,
   defaultTenderAccountId,
   marketplaceFacilitators = EMPTY_FACILITATORS,
+  storedValueEnabled,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
@@ -1182,7 +1187,39 @@ export function DocumentDrawer({
   const [internalNotes, setInternalNotes] = useState<string>(doc.internal_notes ?? '')
   const [billingMethod, setBillingMethod] = useState<string>(doc.billing_method ?? '')
   const [isFinalInvoice, setIsFinalInvoice] = useState<boolean>(doc.is_final_invoice === true)
-  const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
+  // Tenders arrive from the table (payload.tenders), never from custom:
+  // the server consumes submitted custom.tenders into document_tenders and
+  // never persists the key, so the editor seeds from the table rows first
+  // (refund prefill and in-progress drafts still ride custom).
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>(() => ({
+    ...(doc.custom ?? {}),
+    tenders:
+      (payload as { tenders?: unknown }).tenders
+      ?? (doc.custom as Record<string, unknown> | null)?.tenders
+      ?? [],
+  }))
+
+  const resolveStoredValueCode = useCallback(async (code: string) => {
+    const response = await fetch(`/api/stored-value/lookup?code=${encodeURIComponent(code)}`, {
+      headers: { accept: 'application/json' },
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      accountId?: string
+      balance?: string
+      currency?: string
+      status?: string
+      last4?: string
+    }
+    if (typeof body.accountId !== 'string' || typeof body.balance !== 'string') return null
+    return {
+      accountId: body.accountId,
+      balance: body.balance,
+      currency: typeof body.currency === 'string' ? body.currency : '',
+      status: typeof body.status === 'string' ? body.status : '',
+      last4: typeof body.last4 === 'string' ? body.last4 : '',
+    }
+  }, [])
   const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
 
   // -- transfer: dedicated to/from + amount state ---------------------------
@@ -2025,8 +2062,14 @@ export function DocumentDrawer({
     if (action === 'post' && isCashKind) {
       const drafts = parseTenderDrafts(customValues.tenders)
       const tenderLines = drafts.map((draft) => {
+        const label = draft.methodLabel || draft.kind
+        const reference = draft.reference ? ` ${draft.reference}` : ''
+        if (draft.kind === 'stored_value') {
+          const card = draft.svLast4 ? `…${draft.svLast4}` : t('tenders.unresolvedCard')
+          return `· ${money(draft.amount || '0', { currency: doc.currency })} ${label}${reference} → ${card}`
+        }
         const account = tenderAccountOptions.find((option) => option.value === draft.accountId)?.label ?? draft.accountId
-        return `· ${money(draft.amount || '0', { currency: doc.currency })} ${draft.kind} → ${account}`
+        return `· ${money(draft.amount || '0', { currency: doc.currency })} ${label}${reference} → ${account}`
       })
       const confirmed = await confirmDialog({
         title: t('tenders.postTitle'),
@@ -3172,6 +3215,8 @@ export function DocumentDrawer({
             currency={doc.currency}
             accountOptions={tenderAccountOptions}
             defaultAccountId={defaultTenderAccountId}
+            storedValueEnabled={storedValueEnabled}
+            resolveStoredValueCode={resolveStoredValueCode}
           />
         ) : null}
         {splitTarget !== null && rows[splitTarget] ? (

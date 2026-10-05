@@ -23,7 +23,7 @@
     "newCredit": "新規得意先貸方票",
     "submitForApproval": "承認のために提出"
   },
-    "tenders": {
+  "tenders": {
     "title": "支払方法",
     "tenderedOf": "{total} のうち {tendered} を受領",
     "balanced": "一致",
@@ -35,15 +35,33 @@
     "amount": "金額",
     "reference": "参照",
     "referencePlaceholder": "承認番号・伝票番号",
+    "label": "表示名",
+    "code": "ギフトカード / ストアクレジット",
+    "codePlaceholder": "コードを入力して残高を確認",
+    "checkBalance": "確認",
+    "balance": "残高 {balance}",
+    "codeNotFound": "そのコードに一致する有効なギフトカードがありません。",
+    "unresolvedCard": "未確認のカード",
+    "externalRef": "外部参照",
+    "externalRefPlaceholder": "決済代行の参照番号",
     "remove": "削除",
     "add": "支払方法を追加",
     "emptyHint": "記帳前に少なくとも1つの支払方法を追加してください。",
     "refundAction": "返金",
     "postTitle": "このレシートを記帳しますか？",
     "postBody": "{number}: {total} を受領します。\n{tenders}",
-    "kinds": { "cash": "現金", "card": "カード", "bank": "銀行" }
+    "kinds": {
+      "cash": "現金",
+      "card": "カード",
+      "bank": "銀行",
+      "bank_transfer": "銀行振込",
+      "wallet": "ウォレット",
+      "gateway": "決済代行",
+      "stored_value": "ストアクレジット",
+      "other": "その他"
+    }
   },
-"drawer": {
+  "drawer": {
     "editingHint": "編集中 — 保存して変更を適用",
     "viewGlImpact": "総勘定元帳への影響を表示",
     "dateLabel": "請求日",

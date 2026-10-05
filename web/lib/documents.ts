@@ -48,7 +48,11 @@ import { resolveOrgId } from './org-scope'
 import { resolveExternalRefPair } from './external-ref'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
-import { CASH_TENDER_KINDS } from '@openbooks/engine/sales/cash-tenders'
+import {
+  replaceDocumentTenders,
+  TenderRefusal,
+  type TenderInput,
+} from '@openbooks/engine/sales/document-tenders'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 import { PROVIDER_COMMIT_KINDS } from '@openbooks/engine/tax'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
@@ -1150,60 +1154,41 @@ export async function applyDocumentEdit(
     }
   }
 
-  // Paid-at-sale tenders (cash_sale/cash_refund custom.tenders): each names
-  // the clearing or bank account the money settled into. Like the funding
-  // override above, these are native account pointers inside custom jsonb
-  // (not registered custom fields), so prove uuid shape, org ownership, and
-  // subsidiary scope here — a foreign id would otherwise persist as a silent
-  // cross-tenant pointer. Only supplied tenders are fenced, so legacy bags
-  // cannot lock unrelated edits; the kernel still cross-foots tenders to the
-  // document total at posting.
+  // Paid-at-sale tenders (cash_sale/cash_refund): the drawer submits them
+  // inside custom.tenders, but custom never stores them — since 0494 they
+  // persist in document_tenders, so masked clones and reports read one
+  // source. Collect the supplied set here; the write transaction below swaps
+  // the rows through the engine writer (which validates kinds, accounts,
+  // amounts, and stored-value balances by name). Only supplied tenders are
+  // fenced, so unrelated edits cannot lock tender writes.
+  let tenderInputs: TenderInput[] | undefined
   if (body.custom !== undefined && (current.kind === 'cash_sale' || current.kind === 'cash_refund')) {
     const suppliedTenders = (body.custom as Record<string, unknown>).tenders
     if (suppliedTenders !== undefined) {
-      if (!Array.isArray(suppliedTenders) || suppliedTenders.length === 0) {
-        throw new DocumentEditError(422, `a ${current.kind === 'cash_sale' ? 'cash sale' : 'cash refund'} needs at least one tender — name the clearing or bank account and the amount`)
+      if (!Array.isArray(suppliedTenders)) {
+        throw new DocumentEditError(422, 'tenders must be a list — rebuild the tenders on the document')
       }
-      const validated: Record<string, unknown>[] = []
-      for (let i = 0; i < suppliedTenders.length; i++) {
-        const entry = suppliedTenders[i] as Record<string, unknown>
-        const label = `tender ${i + 1}`
+      tenderInputs = suppliedTenders.map((entry) => {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-          throw new DocumentEditError(422, `${label} is not an object — rebuild the tenders on the document`)
+          throw new DocumentEditError(422, 'a tender is not an object — rebuild the tenders on the document')
         }
-        if (typeof entry.kind !== 'string' || !(CASH_TENDER_KINDS as readonly string[]).includes(entry.kind)) {
-          throw new DocumentEditError(422, `${label} kind must be one of ${CASH_TENDER_KINDS.join(', ')}`)
-        }
-        if (typeof entry.accountId !== 'string' || !isUuid(entry.accountId)) {
-          throw new DocumentEditError(422, `${label} must name a valid clearing or bank account`)
-        }
-        const owned = await runner.execute<{ id: string; type: string }>(sql`
-          select a.id, a.type from accounts a
-           where a.org_id = ${orgId} and a.id = ${entry.accountId}::uuid
-             and a.is_active and not a.is_summary
-             and ${referenceSubsidiaryScope}
-           for key share
-        `)
-        const account = owned.rows[0]
-        if (!account) throw new DocumentEditError(404, `${label} account not found for this subsidiary`)
-        if (account.type === 'asset_receivable' || account.type === 'liability_payable') {
-          throw new DocumentEditError(422, `${label} cannot settle into a receivable or payable control account — pick the clearing or bank account the money moved through`)
-        }
-        const exact = typeof entry.amount === 'string' ? canonicalDecimal(entry.amount, 4) : null
-        if (exact === null || cmp(exact, '0') <= 0) {
-          throw new DocumentEditError(422, `${label} amount must be a positive decimal number`)
-        }
-        if (entry.reference !== undefined && entry.reference !== null && typeof entry.reference !== 'string') {
-          throw new DocumentEditError(422, `${label} reference must be text`)
-        }
-        validated.push({
-          kind: entry.kind,
-          accountId: entry.accountId,
-          amount: exact,
-          ...(typeof entry.reference === 'string' && entry.reference.length > 0 ? { reference: entry.reference } : {}),
-        })
-      }
-      headerCustom = { ...(headerCustom ?? current.custom ?? {}), tenders: validated }
+        const tender = entry as Record<string, unknown>
+        return {
+          kind: typeof tender.kind === 'string' ? tender.kind : '',
+          methodLabel: typeof tender.methodLabel === 'string' ? tender.methodLabel : null,
+          accountId: typeof tender.accountId === 'string' ? tender.accountId : null,
+          storedValueAccountId:
+            typeof tender.storedValueAccountId === 'string' ? tender.storedValueAccountId : null,
+          amount: typeof tender.amount === 'string' ? tender.amount : '',
+          reference: typeof tender.reference === 'string' ? tender.reference : null,
+          externalRef: typeof tender.externalRef === 'string' ? tender.externalRef : null,
+        } satisfies TenderInput
+      })
+      // Never persist the key: the table is the single source from here on.
+      // The custom-field cleaner drops unregistered keys, but a pre-0494 bag
+      // carried in through the existing-custom spread would survive — delete
+      // it explicitly.
+      if (headerCustom) delete headerCustom.tenders
     }
   }
 
@@ -2070,6 +2055,22 @@ export async function applyDocumentEdit(
               await tx.execute(sql`set local openbooks.amend = off`)
             }
           }
+        }
+      }
+
+      // Paid-at-sale tenders persist in document_tenders through the engine
+      // writer — validated (kinds, accounts, amounts, stored-value balances)
+      // and swapped atomically with the header and lines above, still on the
+      // draft the lifecycle guard requires. A refusal rolls the whole edit
+      // back with its message intact.
+      if (tenderInputs !== undefined) {
+        try {
+          await replaceDocumentTenders(
+            tx as unknown as SqlExecutor, orgId, id, tenderInputs, { actorId: userId },
+          )
+        } catch (error) {
+          if (error instanceof TenderRefusal) throw new DocumentEditError(error.status, error.message)
+          throw error
         }
       }
 

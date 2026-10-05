@@ -73,7 +73,19 @@ export async function loadDocument(id: string, orgId: string) {
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `))
-  return { doc: exactDocument, lines: lines.rows }
+  // Paid-at-sale tenders ride the table (never custom): amounts leave as
+  // canonical decimal strings so every reader — drawer, prefill, API —
+  // shares one shape with the writer.
+  const tenders = (await db.execute<Record<string, unknown>>(sql`
+    select t.position, t.kind, t.method_label as "methodLabel", t.account_id as "accountId",
+           t.stored_value_account_id as "storedValueAccountId",
+           ((t.amount_minor / 10000)::text || '.' || lpad((t.amount_minor % 10000)::text, 4, '0')) as amount,
+           t.currency, t.reference, t.external_ref as "externalRef"
+      from document_tenders t
+     where t.document_id = ${id} and t.org_id = ${orgId}
+     order by t.position
+  `))
+  return { doc: exactDocument, lines: lines.rows, tenders: tenders.rows }
 }
 
 /** Exact edit snapshot used by every internal and external document writer. */

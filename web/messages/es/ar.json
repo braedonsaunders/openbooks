@@ -23,7 +23,7 @@
     "newCredit": "Nueva nota de crédito",
     "submitForApproval": "Enviar para aprobación"
   },
-    "tenders": {
+  "tenders": {
     "title": "Formas de pago",
     "tenderedOf": "Cobrado {tendered} de {total}",
     "balanced": "Cuadrado",
@@ -35,15 +35,33 @@
     "amount": "Importe",
     "reference": "Referencia",
     "referencePlaceholder": "Autorización o resguardo",
+    "label": "Etiqueta",
+    "code": "Tarjeta regalo / saldo",
+    "codePlaceholder": "Ingrese el código y consulte el saldo",
+    "checkBalance": "Consultar",
+    "balance": "Saldo {balance}",
+    "codeNotFound": "Ninguna tarjeta regalo ni saldo coincide con ese código.",
+    "unresolvedCard": "tarjeta sin verificar",
+    "externalRef": "Ref. proveedor",
+    "externalRefPlaceholder": "Referencia de la pasarela",
     "remove": "Quitar",
     "add": "Añadir forma de pago",
     "emptyHint": "Añade al menos una forma de pago antes de contabilizar.",
     "refundAction": "Reembolsar",
     "postTitle": "¿Contabilizar este recibo?",
     "postBody": "{number}: recibir {total}.\n{tenders}",
-    "kinds": { "cash": "Efectivo", "card": "Tarjeta", "bank": "Banco" }
+    "kinds": {
+      "cash": "Efectivo",
+      "card": "Tarjeta",
+      "bank": "Banco",
+      "bank_transfer": "Transferencia",
+      "wallet": "Billetera",
+      "gateway": "Pasarela",
+      "stored_value": "Saldo",
+      "other": "Otro"
+    }
   },
-"drawer": {
+  "drawer": {
     "editingHint": "Editando — Guarde para aplicar los cambios",
     "viewGlImpact": "Ver impacto en el libro mayor",
     "dateLabel": "Fecha de la factura",
