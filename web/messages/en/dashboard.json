@@ -91,7 +91,10 @@
     "ap": "Payables",
     "ar": "Receivables",
     "personal": "Personal",
-    "admin": "Administration"
+    "admin": "Administration",
+    "ratios": "Financial ratios",
+    "cash": "Cash",
+    "analytics": "Analytics"
   },
   "catalog": {
     "operatingExpenses": "Month-to-date operating expenses, excluding cost of sales, from the profit and loss report.",
@@ -153,7 +156,8 @@
     "closePalette": "Close",
     "remove": "Remove widget",
     "cardMissing": "Card unavailable",
-    "unknownWidget": "Unknown widget: {id}"
+    "unknownWidget": "Unknown widget: {id}",
+    "analyticsPreview": "Live figures appear here once you save the layout."
   },
   "palette": {
     "title": "Widgets",

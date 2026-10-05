@@ -334,6 +334,46 @@
       "noInterestExpense": "无利息费用",
       "unavailable": "暂无数据",
       "perEmployees": "{revenue} / {count, plural, one {# 人} other {# 人}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "毛利率目标（%）",
+          "help": "毛利率评级的基准"
+        },
+        "operatingMarginTarget": {
+          "label": "营业利润率目标（%）",
+          "help": "营业利润率评级的基准"
+        },
+        "ebitdaMarginTarget": {
+          "label": "EBITDA 利润率目标（%）",
+          "help": "EBITDA 利润率评级的基准"
+        },
+        "netMarginTarget": {
+          "label": "净利率目标（%）",
+          "help": "最终盈利能力的基准"
+        },
+        "roaTarget": {
+          "label": "资产回报率目标（%）",
+          "help": "ROA 评级的基准（需要资产负债表数据）"
+        },
+        "roeTarget": {
+          "label": "净资产收益率目标（%）",
+          "help": "ROE 评级的基准（需要资产负债表数据）"
+        },
+        "roicTarget": {
+          "label": "投入资本回报率目标（%）",
+          "help": "ROIC 评级的基准（需要资产负债表数据）"
+        },
+        "revenuePerEmployee": {
+          "label": "人均收入（{currency}）",
+          "help": "员工生产率的基准"
+        },
+        "gpPerEmployee": {
+          "label": "人均毛利（{currency}）",
+          "help": "员工生产率的基准"
+        }
+      }
     }
   },
   "customer": {
@@ -2580,5 +2620,21 @@
       "4thWeek": "第4周",
       "distributed": "分摊"
     }
+  },
+  "configEditor": {
+    "title": "阈值",
+    "hint": "按组织设置 — 保存后所有标签页都会重新计算",
+    "default": "默认 {value}",
+    "notSet": "未设置",
+    "on": "开启",
+    "off": "关闭",
+    "save": "保存配置",
+    "reset": "恢复默认值",
+    "readOnly": "只读 — 修改这些设置需要具有全公司范围的设置权限。",
+    "saved": "已保存 — 正在重新计算…",
+    "conflict": "此配置在您打开后已被更改 — 现显示最新值；请重新应用您的更改并再次保存。",
+    "forbidden": "保存需要设置权限。",
+    "saveFailed": "保存失败",
+    "loadFailed": "无法加载阈值。"
   }
 }

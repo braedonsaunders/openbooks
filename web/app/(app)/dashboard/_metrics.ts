@@ -46,6 +46,14 @@ import { presentationCurrency } from '@/lib/fx-presentation'
 import { approvalRecordHref } from '@/lib/approvals-links'
 import { WIDGETS } from './_widget-registry'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { resolvePeriod, type ResolvedPeriod } from '@/lib/periods'
+import type { DashboardWidgetContext } from './_metrics-context'
+import { EMPTY_FINANCIAL_WIDGET_METRICS, loadFinancialWidgetMetrics, type FinancialWidgetMetrics } from './_metrics-financial'
+import { EMPTY_CASH_WIDGET_METRICS, loadCashWidgetMetrics, type CashWidgetMetrics } from './_metrics-cash'
+import { EMPTY_CUSTOMER_WIDGET_METRICS, loadCustomerWidgetMetrics, type CustomerWidgetMetrics } from './_metrics-customers'
+import { EMPTY_VENDOR_WIDGET_METRICS, loadVendorWidgetMetrics, type VendorWidgetMetrics } from './_metrics-vendors'
+import { EMPTY_PROJECT_WIDGET_METRICS, loadProjectWidgetMetrics, type ProjectWidgetMetrics } from './_metrics-projects'
+import { EMPTY_RISK_WIDGET_METRICS, loadRiskWidgetMetrics, type RiskWidgetMetrics } from './_metrics-risk'
 
 /**
  * The money readers the dashboard loads through, injectable so tests can
@@ -242,6 +250,13 @@ export type DashboardMetrics = {
   workflowErrors: PersonaMetrics['workflowErrors']
   adminCalendar: PersonaMetrics['adminCalendar']
 }
+  // Widgets extracted from the Analytics dashboards, one reader module each.
+  & FinancialWidgetMetrics
+  & CashWidgetMetrics
+  & CustomerWidgetMetrics
+  & VendorWidgetMetrics
+  & ProjectWidgetMetrics
+  & RiskWidgetMetrics
 
 /**
  * Bank-reconciliation queue for the dashboard tile. Returns null for a
@@ -620,7 +635,26 @@ export async function loadDashboardMetrics(
   const personaNeeded = new Set<keyof PersonaMetrics>(
     personaKeys.filter((key) => needed.has(key)),
   )
-  const persona = await loadPersonaMetrics(authz, personaNeeded)
+  // Analytics widget readers: each module reads only the fields its visible
+  // widgets list, over the caller's scope and the dashboards' opening period.
+  let period: Promise<ResolvedPeriod> | null = null
+  const widgetContext: DashboardWidgetContext = {
+    authz,
+    orgId,
+    today,
+    subsidiaryIds: subIds,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    period: () => (period ??= resolvePeriod(undefined, { orgId, today })),
+  }
+  const [persona, financial, cash, customers, vendors, projects, risk] = await Promise.all([
+    loadPersonaMetrics(authz, personaNeeded),
+    loadFinancialWidgetMetrics(widgetContext, need),
+    loadCashWidgetMetrics(widgetContext, need),
+    loadCustomerWidgetMetrics(widgetContext, need),
+    loadVendorWidgetMetrics(widgetContext, need),
+    loadProjectWidgetMetrics(widgetContext, need),
+    loadRiskWidgetMetrics(widgetContext, need),
+  ])
   return {
     baseCurrency,
     journalLineCount: Number(t.journal_lines),
@@ -680,6 +714,13 @@ export async function loadDashboardMetrics(
       status: r.status,
     })),
     ...persona,
+    ...EMPTY_ANALYTICS_WIDGET_METRICS,
+    ...financial,
+    ...cash,
+    ...customers,
+    ...vendors,
+    ...projects,
+    ...risk,
   }
 }
 
@@ -731,6 +772,26 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'admin-attention': ['adminAttention'],
   'workflow-errors': ['workflowErrors'],
   'admin-calendar': ['adminCalendar'],
+  // ── Analytics: financial ratios and health (Financial Health) ──────────
+
+  // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
+
+  // ── Analytics: customers (Customer Intelligence) ───────────────────────
+
+  // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
+
+  // ── Analytics: projects (True Cost, Utilization) ───────────────────────
+
+  // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
+}
+
+const EMPTY_ANALYTICS_WIDGET_METRICS = {
+  ...EMPTY_FINANCIAL_WIDGET_METRICS,
+  ...EMPTY_CASH_WIDGET_METRICS,
+  ...EMPTY_CUSTOMER_WIDGET_METRICS,
+  ...EMPTY_VENDOR_WIDGET_METRICS,
+  ...EMPTY_PROJECT_WIDGET_METRICS,
+  ...EMPTY_RISK_WIDGET_METRICS,
 }
 
 const EMPTY_METRICS: DashboardMetrics = {
@@ -790,6 +851,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   adminAttention: null,
   workflowErrors: null,
   adminCalendar: null,
+  ...EMPTY_ANALYTICS_WIDGET_METRICS,
 }
 
 /**

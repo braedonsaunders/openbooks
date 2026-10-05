@@ -91,7 +91,10 @@
     "ap": "Verbindlichkeiten",
     "ar": "Forderungen",
     "personal": "Persönlich",
-    "admin": "Verwaltung"
+    "admin": "Verwaltung",
+    "ratios": "Finanzkennzahlen",
+    "cash": "Liquidität",
+    "analytics": "Analytik"
   },
   "catalog": {
     "operatingExpenses": "Betriebsaufwendungen seit Monatsbeginn ohne Umsatzkosten, aus der Gewinn- und Verlustrechnung.",
@@ -153,7 +156,8 @@
     "closePalette": "Schließen",
     "remove": "Widget entfernen",
     "cardMissing": "Karte nicht verfügbar",
-    "unknownWidget": "Unbekanntes Widget: {id}"
+    "unknownWidget": "Unbekanntes Widget: {id}",
+    "analyticsPreview": "Die aktuellen Werte erscheinen hier, sobald Sie das Layout speichern."
   },
   "palette": {
     "title": "Widgets",

@@ -1,7 +1,6 @@
 'use client'
 
 import { Info, LineChart } from 'lucide-react'
-import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel } from '../../_ui/Panel'
 import { ConfigEditor } from '../../_ui/ConfigEditor'
 
@@ -10,8 +9,7 @@ import { ConfigEditor } from '../../_ui/ConfigEditor'
  * tab and the composite health score, editable per organization. Saving
  * recomputes every grade and the score with the new targets.
  */
-export function ConfigurationTab({ data, canEdit }: { data: HealthData; canEdit: boolean }) {
-  const b = data.benchmarks
+export function ConfigurationTab({ canEdit }: { canEdit: boolean }) {
   const forecastDefaults: { label: string; value: string }[] = [
     { label: 'Default method', value: 'Exponential Smoothing (ETS)' },
     { label: 'Default horizon', value: '6 months' },
@@ -21,43 +19,7 @@ export function ConfigurationTab({ data, canEdit }: { data: HealthData; canEdit:
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <ConfigEditor
-        dashboard="financialHealth"
-        canEdit={canEdit}
-        fields={[
-          { key: 'grossMarginTarget', label: 'Gross margin target (%)', help: 'Benchmark for the Gross Margin grade', min: 0, max: 100, step: 1 },
-          { key: 'operatingMarginTarget', label: 'Operating margin target (%)', help: 'Benchmark for the Operating Margin grade', min: 0, max: 100, step: 1 },
-          { key: 'ebitdaMarginTarget', label: 'EBITDA margin target (%)', help: 'Benchmark for the EBITDA Margin grade', min: 0, max: 100, step: 1 },
-          { key: 'netMarginTarget', label: 'Net margin target (%)', help: 'Bottom-line profitability benchmark', min: 0, max: 100, step: 1 },
-          { key: 'roaTarget', label: 'Return on assets target (%)', help: 'Benchmark for the ROA grade (needs balance-sheet data)', min: 0, max: 100, step: 1 },
-          { key: 'roeTarget', label: 'Return on equity target (%)', help: 'Benchmark for the ROE grade (needs balance-sheet data)', min: 0, max: 100, step: 1 },
-          { key: 'roicTarget', label: 'Return on invested capital target (%)', help: 'Benchmark for the ROIC grade (needs balance-sheet data)', min: 0, max: 100, step: 1 },
-          { key: 'revenuePerEmployee', label: 'Revenue per employee ($)', help: 'Workforce productivity benchmark', min: 0, max: 10_000_000, step: 5_000 },
-          { key: 'gpPerEmployee', label: 'Gross profit per employee ($)', help: 'Workforce productivity benchmark', min: 0, max: 10_000_000, step: 5_000 },
-        ]}
-        values={{
-          grossMarginTarget: Math.round(b.grossMargin * 100),
-          operatingMarginTarget: Math.round(b.operatingMargin * 100),
-          ebitdaMarginTarget: Math.round(b.ebitdaMargin * 100),
-          netMarginTarget: Math.round(b.netMargin * 100),
-          roaTarget: Math.round(b.roa * 100),
-          roeTarget: Math.round(b.roe * 100),
-          roicTarget: Math.round(b.roic * 100),
-          revenuePerEmployee: b.revenuePerEmployee,
-          gpPerEmployee: b.gpPerEmployee,
-        }}
-        defaults={{
-          grossMarginTarget: 40,
-          operatingMarginTarget: 15,
-          ebitdaMarginTarget: 20,
-          netMarginTarget: 10,
-          roaTarget: 8,
-          roeTarget: 15,
-          roicTarget: 12,
-          revenuePerEmployee: 200_000,
-          gpPerEmployee: 80_000,
-        }}
-      />
+      <ConfigEditor dashboard="financialHealth" canEdit={canEdit} />
 
       <div className="space-y-5">
         <Panel title="How grades are computed" icon={Info}>

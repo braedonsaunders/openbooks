@@ -409,6 +409,46 @@
       "noInterestExpense": "No interest expense",
       "unavailable": "Data not available",
       "perEmployees": "{revenue} / {count, plural, one {# employee} other {# employees}}"
+    },
+    "config": {
+      "fields": {
+        "grossMarginTarget": {
+          "label": "Gross margin target (%)",
+          "help": "Benchmark for the Gross Margin grade"
+        },
+        "operatingMarginTarget": {
+          "label": "Operating margin target (%)",
+          "help": "Benchmark for the Operating Margin grade"
+        },
+        "ebitdaMarginTarget": {
+          "label": "EBITDA margin target (%)",
+          "help": "Benchmark for the EBITDA Margin grade"
+        },
+        "netMarginTarget": {
+          "label": "Net margin target (%)",
+          "help": "Bottom-line profitability benchmark"
+        },
+        "roaTarget": {
+          "label": "Return on assets target (%)",
+          "help": "Benchmark for the ROA grade (needs balance-sheet data)"
+        },
+        "roeTarget": {
+          "label": "Return on equity target (%)",
+          "help": "Benchmark for the ROE grade (needs balance-sheet data)"
+        },
+        "roicTarget": {
+          "label": "Return on invested capital target (%)",
+          "help": "Benchmark for the ROIC grade (needs balance-sheet data)"
+        },
+        "revenuePerEmployee": {
+          "label": "Revenue per employee ({currency})",
+          "help": "Workforce productivity benchmark"
+        },
+        "gpPerEmployee": {
+          "label": "Gross profit per employee ({currency})",
+          "help": "Workforce productivity benchmark"
+        }
+      }
     }
   },
   "customer": {
@@ -2655,5 +2695,21 @@
       "dec": "Dec"
     },
     "monthYear": "{month} ''{yy}"
+  },
+  "configEditor": {
+    "title": "Thresholds",
+    "hint": "Per organization — every tab recomputes on save",
+    "default": "default {value}",
+    "notSet": "Not set",
+    "on": "On",
+    "off": "Off",
+    "save": "Save configuration",
+    "reset": "Reset to defaults",
+    "readOnly": "Read-only — changing these needs the Setup permission with full company scope.",
+    "saved": "Saved — recomputing…",
+    "conflict": "This configuration changed after you opened it — the latest values are shown; reapply your change and save again.",
+    "forbidden": "Saving requires the Setup permission.",
+    "saveFailed": "Save failed",
+    "loadFailed": "The thresholds could not be loaded."
   }
 }

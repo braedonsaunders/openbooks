@@ -91,7 +91,10 @@
     "ap": "Contas a pagar",
     "ar": "Contas a receber",
     "personal": "Pessoal",
-    "admin": "Administração"
+    "admin": "Administração",
+    "ratios": "Índices financeiros",
+    "cash": "Caixa",
+    "analytics": "Análises"
   },
   "catalog": {
     "operatingExpenses": "Despesas operacionais do mês até hoje, sem o custo das vendas, da demonstração de resultados.",
@@ -153,7 +156,8 @@
     "closePalette": "Fechar",
     "remove": "Remover widget",
     "cardMissing": "Cartão indisponível",
-    "unknownWidget": "Widget desconhecido: {id}"
+    "unknownWidget": "Widget desconhecido: {id}",
+    "analyticsPreview": "Os números em tempo real aparecem aqui assim que você salvar o layout."
   },
   "palette": {
     "title": "Widgets",

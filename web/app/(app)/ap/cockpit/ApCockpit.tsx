@@ -33,7 +33,7 @@ import { PayRunPlanner } from './PayRunPlanner'
  * flyout. All off the shared cash engine, so numbers agree with the forecast.
  */
 export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; canConfigure: boolean; canPay: boolean }) {
-  const { money, moneyCompact, currency } = useMoney()
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations('ap.cockpit')
   const [showConfig, setShowConfig] = useState(false)
   const [drillWeek, setDrillWeek] = useState<number | null>(null)
@@ -162,10 +162,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
           onClose={() => setShowConfig(false)}
           title={t('configTitle')}
           description={t('configDescription')}
-          weeklyCap={data.payPlan.weeklyCap}
-          restrictToSafe={data.payPlan.restrictToSafe}
           dpo={data.dpo}
-          currencyCode={currency}
           canEdit={canConfigure}
         />
       ) : null}

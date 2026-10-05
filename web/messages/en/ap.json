@@ -237,8 +237,8 @@
     "config": {
       "weeklyCapLabel": "Weekly AP pay cap ({currency})",
       "weeklyCapHelp": "0 = unlimited. With a cap, payables are chosen oldest-due-first up to this amount each week and the rest defers.",
-      "restrictLabel": "Restrict to safe capacity (0/1)",
-      "restrictHelp": "1 = never recommend paying beyond the cash available that week (projected inflows − outflows). Overflow defers forward.",
+      "restrictLabel": "Restrict to safe capacity",
+      "restrictHelp": "When on, never recommend paying beyond the cash available that week (projected inflows − outflows). Overflow defers forward.",
       "scheduleTitle": "How bills are scheduled",
       "orderLabel": "Selection order",
       "orderValue": "Oldest due first",

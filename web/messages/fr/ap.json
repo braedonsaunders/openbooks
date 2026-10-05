@@ -155,8 +155,8 @@
     "config": {
       "weeklyCapLabel": "Plafond hebdomadaire des paiements ({currency})",
       "weeklyCapHelp": "0 = illimité. Avec un plafond, les dettes sont choisies par échéance la plus ancienne jusqu’à ce montant chaque semaine, le reste est reporté.",
-      "restrictLabel": "Limiter à la capacité sûre (0/1)",
-      "restrictHelp": "1 = ne jamais recommander de payer au-delà de la trésorerie disponible cette semaine (entrées prévues − sorties). Le dépassement est reporté.",
+      "restrictLabel": "Limiter à la capacité sûre",
+      "restrictHelp": "Si activé, ne jamais recommander de payer au-delà de la trésorerie disponible cette semaine (entrées prévues − sorties). Le dépassement est reporté.",
       "scheduleTitle": "Comment les factures sont planifiées",
       "orderLabel": "Ordre de sélection",
       "orderValue": "Échéance la plus ancienne d’abord",

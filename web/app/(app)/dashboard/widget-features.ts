@@ -3,6 +3,7 @@ import type { Authz } from '@/lib/authz'
 import { isFeatureEnabled } from '@/lib/features'
 import { canSeeWidget } from './_widget-access'
 import { WIDGETS } from './_widget-registry'
+import { ANALYTICS_DASHBOARD_MAP } from '@/lib/analytics/dashboard-catalog'
 
 /**
  * The one map from dashboard widget id to the feature key that gates it.
@@ -29,7 +30,13 @@ const WIDGET_FEATURES: Record<string, string> = {
 }
 
 export function widgetFeatureKey(widgetId: string): string | null {
-  return WIDGET_FEATURES[widgetId] ?? null
+  const own = WIDGET_FEATURES[widgetId]
+  if (own) return own
+  // A widget extracted from an Analytics dashboard carries that dashboard's
+  // Company Features gate (Projects for True Cost, Time Tracking for
+  // Utilization) — declared once, in the analytics catalog.
+  const source = WIDGETS[widgetId]?.analyticsSource
+  return (source && ANALYTICS_DASHBOARD_MAP[source]?.feature) || null
 }
 
 /** True when the widget's feature gate (if any) resolves on for the org. */

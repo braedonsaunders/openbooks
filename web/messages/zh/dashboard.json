@@ -91,7 +91,10 @@
     "ap": "应付",
     "ar": "应收",
     "personal": "个人",
-    "admin": "管理"
+    "admin": "管理",
+    "ratios": "财务比率",
+    "cash": "现金",
+    "analytics": "分析"
   },
   "catalog": {
     "operatingExpenses": "损益表中本月至今的营业费用，不含销售成本。",
@@ -153,7 +156,8 @@
     "closePalette": "关闭",
     "remove": "移除小组件",
     "cardMissing": "卡片不可用",
-    "unknownWidget": "未知小组件：{id}"
+    "unknownWidget": "未知小组件：{id}",
+    "analyticsPreview": "保存布局后，这里将显示实时数据。"
   },
   "palette": {
     "title": "小组件",

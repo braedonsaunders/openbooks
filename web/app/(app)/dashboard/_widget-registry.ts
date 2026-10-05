@@ -5,6 +5,9 @@ export type WidgetCategory =
   | 'gl'
   | 'ap'
   | 'ar'
+  | 'ratios'
+  | 'cash'
+  | 'analytics'
   | 'personal'
   | 'admin'
 
@@ -17,6 +20,13 @@ export type WidgetMeta = {
   minSize: { w: number; h: number }
   maxSize?: { w?: number; h?: number }
   rolesShown?: readonly RoleTier[]
+  /**
+   * The Analytics dashboard (catalog slug) whose figures this widget shows.
+   * Its availability IS the widget's: the dashboard's grants, subsidiary
+   * rule and Company Features gate decide, so a widget can never show an
+   * extract of a dashboard its viewer cannot open.
+   */
+  analyticsSource?: string
 }
 
 export const WIDGETS: Record<string, WidgetMeta> = {
@@ -410,6 +420,17 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 4, h: 3 },
     rolesShown: ['admin', 'controller', 'accountant'],
   },
+  // ── Analytics: financial ratios and health (Financial Health) ──────────
+
+  // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
+
+  // ── Analytics: customers (Customer Intelligence) ───────────────────────
+
+  // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
+
+  // ── Analytics: projects (True Cost, Utilization) ───────────────────────
+
+  // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {
@@ -417,6 +438,9 @@ export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {
   gl: 'categories.gl',
   ap: 'categories.ap',
   ar: 'categories.ar',
+  ratios: 'categories.ratios',
+  cash: 'categories.cash',
+  analytics: 'categories.analytics',
   personal: 'categories.personal',
   admin: 'categories.admin',
 }

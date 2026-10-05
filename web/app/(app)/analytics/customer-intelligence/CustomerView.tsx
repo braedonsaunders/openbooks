@@ -1105,24 +1105,10 @@ function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: bool
       <span className="font-medium text-slate-700 tabular-nums dark:text-slate-300">{value}</span>
     </div>
   )
-  const c = data.config
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <ConfigEditor
-          dashboard="customerIntelligence"
-          canEdit={canEdit}
-          fields={[
-            { key: 'churnCriticalScore', label: t('config.fields.churnCritical.label'), help: t('config.fields.churnCritical.help'), min: 1, max: 100, step: 1 },
-            { key: 'churnHighScore', label: t('config.fields.churnHigh.label'), help: t('config.fields.churnHigh.help'), min: 1, max: 100, step: 1 },
-            { key: 'churnMediumScore', label: t('config.fields.churnMedium.label'), help: t('config.fields.churnMedium.help'), min: 1, max: 100, step: 1 },
-            { key: 'hhiWarning', label: t('config.fields.hhiWarning.label'), help: t('config.fields.hhiWarning.help'), min: 0, max: 10_000, step: 100 },
-            { key: 'hhiCritical', label: t('config.fields.hhiCritical.label'), help: t('config.fields.hhiCritical.help'), min: 0, max: 10_000, step: 100 },
-            { key: 'clvYears', label: t('config.fields.clvYears.label'), help: t('config.fields.clvYears.help'), min: 1, max: 10, step: 1 },
-          ]}
-          values={{ churnCriticalScore: c.churnCriticalScore, churnHighScore: c.churnHighScore, churnMediumScore: c.churnMediumScore, hhiWarning: c.hhiWarning, hhiCritical: c.hhiCritical, clvYears: c.clvYears }}
-          defaults={{ churnCriticalScore: 70, churnHighScore: 50, churnMediumScore: 30, hhiWarning: 1500, hhiCritical: 2500, clvYears: 3 }}
-        />
+        <ConfigEditor dashboard="customerIntelligence" canEdit={canEdit} />
         <Panel title={t('panels.scoringModel')} hint={t('panels.scoringModelHint')}>
           {item(t('scoring.healthWeights.label'), t('scoring.healthWeights.value'))}
           {item(t('scoring.frictionPenalty.label'), t('scoring.frictionPenalty.value'))}
