@@ -1890,6 +1890,10 @@
       "transactional": {
         "desc": "Gasto baixo, pouco engajamento — automatizar / consolidar",
         "label": "Transacional"
+      },
+      "unrated": {
+        "label": "Sem avaliação",
+        "desc": "Ainda sem histórico de pagamentos — liquide faturas para avaliar"
       }
     },
     "sub": {
@@ -3511,6 +3515,10 @@
     },
     "unit": {
       "months": "meses"
+    },
+    "labels": {
+      "unknownParty": "Desconhecido",
+      "accountFallback": "Conta {id}"
     }
   },
   "sentinel": {

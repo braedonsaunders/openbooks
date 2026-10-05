@@ -1890,6 +1890,10 @@
       "transactional": {
         "desc": "Dépenses faibles, faible engagement — automatiser / consolider",
         "label": "Transactionnels"
+      },
+      "unrated": {
+        "label": "Non évalué",
+        "desc": "Pas encore d’historique de paiement — réglez des factures pour évaluer"
       }
     },
     "sub": {
@@ -3511,6 +3515,10 @@
     },
     "unit": {
       "months": "mois"
+    },
+    "labels": {
+      "unknownParty": "Inconnu",
+      "accountFallback": "Compte {id}"
     }
   },
   "sentinel": {

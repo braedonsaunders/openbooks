@@ -148,13 +148,13 @@ test("vendor performance counts only bills inside the selected period", async ()
   assert.ok(withBills);
   assert.ok(withoutBills);
   assert.equal(withBills.bills, 2);
-  assert.equal(withBills.avgBill, 150);
+  assert.equal(withBills.avgBill, "150.0000");
   assert.equal(withBills.lastBill, "2024-03-20");
   assert.equal(withoutBills.bills, 0);
-  assert.equal(withoutBills.avgBill, 0);
+  assert.equal(withoutBills.avgBill, "0");
   assert.equal(withoutBills.lastBill, null);
   assert.equal(result.totals.bills, 2);
-  assert.equal(result.totals.avgBill, 210);
+  assert.equal(result.totals.avgBill, "210.0000");
 
   const billQuery = state.queries.find((query) => query.text.includes("from documents"));
   assert.ok(billQuery);

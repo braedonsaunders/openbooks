@@ -1890,6 +1890,10 @@
       "transactional": {
         "desc": "支出が小さく関与度が低い — 自動化・集約を",
         "label": "トランザクショナル"
+      },
+      "unrated": {
+        "label": "未評価",
+        "desc": "支払履歴がまだありません — 請求書の決済で評価されます"
       }
     },
     "sub": {
@@ -3511,6 +3515,10 @@
     },
     "unit": {
       "months": "か月"
+    },
+    "labels": {
+      "unknownParty": "不明",
+      "accountFallback": "口座{id}"
     }
   },
   "sentinel": {

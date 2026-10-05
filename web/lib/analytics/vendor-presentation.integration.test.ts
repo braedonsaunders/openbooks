@@ -29,6 +29,9 @@ async function seedTwoCurrencySpend() {
       values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${usVend}, ${org.orgId}, 'vendor', 'US Vendor', ${usSub}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
+      values (${randomUUID()}, ${org.orgId}, ${usVend}),
+             (${randomUUID()}, ${org.orgId}, ${org.vendorId})`)
     await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual'),
@@ -48,19 +51,21 @@ async function seedTwoCurrencySpend() {
       ['BILL-PRIOR', usSub, usVend, 'USD', '100', '1', '2025-07-15', priorPeriod, null],
     ] as const
     let usBillLine = ''
+    // Timeliness runs from the bill document's own due date: the line-level
+    // due rides null here so the document date is what the loader must read.
     for (const [num, sub, party, cur, total, fx, date, period, due] of bills) {
       const docId = randomUUID()
       const entryId = randomUUID()
       const lineId = randomUUID()
       if (num === 'BILL-USD') usBillLine = lineId
       if (num === 'BILL-CAD') cadBillDocumentId = docId
-      await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
-        values (${docId}, ${org.orgId}, 'vendor_bill', ${num}, ${party}, ${sub}, ${date}, ${date}, ${cur}, ${fx}, 'draft', ${total}, 0, ${total}, ${total})`)
+      await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, due_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
+        values (${docId}, ${org.orgId}, 'vendor_bill', ${num}, ${party}, ${sub}, ${date}, ${date}, ${due}, ${cur}, ${fx}, 'draft', ${total}, 0, ${total}, ${total})`)
       await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
         values (${entryId}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${date}, ${period}, 'draft', 'manual', ${docId})`)
       await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, due_date, is_open_item, amount, currency, txn_amount, fx_rate)
-        values (${lineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${sub}, ${party}, ${due}, true, ${'-' + total}, ${cur}, ${'-' + total}, ${fx}),
-               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${sub}, ${party}, ${due}, false, ${total}, ${cur}, ${total}, ${fx})`)
+        values (${lineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${sub}, ${party}, null, true, ${'-' + total}, ${cur}, ${'-' + total}, ${fx}),
+               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${sub}, ${party}, null, false, ${total}, ${cur}, ${total}, ${fx})`)
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${period} where id=${docId}`)
     }
@@ -97,15 +102,15 @@ test('vendor performance translates every spend functional to presentation', { s
         const data = await vendorData(P, org.orgId, null)
         const usRow = data.rows.find((r) => r.id === usVend)!
         const cadRow = data.rows.find((r) => r.id === org.vendorId)!
-        assert.equal(usRow.spend, 135)
-        assert.equal(usRow.priorSpend, 130)
-        assert.equal(usRow.lateSpend, 135)
+        assert.equal(usRow.spend, "135.0000")
+        assert.equal(usRow.priorSpend, "130.0000")
+        assert.equal(usRow.lateSpend, "135.0000")
         assert.equal(usRow.bills, 1, 'a bill voided after the report cutoff remains in July activity')
         assert.equal(cadRow.bills, 1, 'the voided CAD bill also remains in July activity')
-        assert.equal(data.totals.spend, 235)
-        assert.equal(data.totals.priorSpend, 130)
-        assert.equal(data.totals.lateSpend, 135)
-        assert.equal(data.monthly.find((m) => m.month === '2026-07')?.spend, 235)
+        assert.equal(data.totals.spend, "235.0000")
+        assert.equal(data.totals.priorSpend, "130.0000")
+        assert.equal(data.totals.lateSpend, "135.0000")
+        assert.equal(data.monthly.find((m) => m.month === '2026-07')?.spend, "235.0000")
       })
     })
   } finally {
