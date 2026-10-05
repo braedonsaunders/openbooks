@@ -35,6 +35,7 @@
     "inventory_movement": "Inventory movement",
     "channel_order": "Channel order",
     "channel_exception": "Order exception",
+    "channel_event_exception": "Order event exception",
     "webhook_endpoint": "Webhook endpoint",
     "payment_dispute_review": "Payment dispute review",
     "budget_scenario": "Budget",

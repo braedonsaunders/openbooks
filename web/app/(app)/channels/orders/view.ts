@@ -26,6 +26,22 @@ export interface ChannelOrdersData {
   drawer: { widget: string; props: { drawer: unknown; closeHref: string } } | null
 }
 
+/**
+ * Everything waiting in the needs-attention queues: parked orders plus
+ * parked refund, cancellation and fulfilment events.
+ */
+export async function countChannelExceptions(orgId: string): Promise<number> {
+  const [orders, events] = await Promise.all([
+    db.execute<{ count: string }>(
+      sql`select count(*)::text as count from channel_orders where org_id = ${orgId} and posting_status = 'exception'`,
+    ),
+    db.execute<{ count: string }>(
+      sql`select count(*)::text as count from channel_order_events where org_id = ${orgId} and posting_status = 'exception'`,
+    ),
+  ])
+  return Number(orders.rows[0]?.count ?? '0') + Number(events.rows[0]?.count ?? '0')
+}
+
 function channelTabs(t: (key: string) => string, active: 'orders' | 'exceptions' | 'posting', exceptionCount: number): ChannelTab[] {
   return [
     { href: '/channels/orders', label: t('tabs.orders'), active: active === 'orders' },
@@ -43,11 +59,7 @@ export async function loadChannelOrders(
   const orgId = authz.user.orgId
   const canManage = can(authz, 'channels.manage')
 
-  const [exceptionCount] = await Promise.all([
-    db.execute<{ count: string }>(
-      sql`select count(*)::text as count from channel_orders where org_id = ${orgId} and posting_status = 'exception'`,
-    ),
-  ])
+  const exceptionCount = await countChannelExceptions(orgId)
 
   const orderId = typeof sp.order === 'string' && isUuid(sp.order) ? sp.order : null
   const drawer = orderId ? await loadChannelOrderDrawer(orgId, orderId, canManage) : null
@@ -55,7 +67,7 @@ export async function loadChannelOrders(
   return {
     title: t('title'),
     description: t('description'),
-    tabs: channelTabs(t, 'orders', Number(exceptionCount.rows[0]?.count ?? '0')),
+    tabs: channelTabs(t, 'orders', exceptionCount),
     currentParams: sp,
     emptyTitle: t('empty.ordersTitle'),
     emptyDescription: t('empty.ordersDescription'),

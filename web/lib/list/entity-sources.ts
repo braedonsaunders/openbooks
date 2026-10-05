@@ -1789,6 +1789,27 @@ function channelOrderWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: stri
   return sql.join(parts, sql` `)
 }
 
+const CHANNEL_EVENT_EXCEPTION_CODES = [
+  'unmapped_item', 'unmapped_location', 'unmapped_account', 'closed_period', 'tax_mismatch',
+  'currency_unsupported', 'over_refund', 'refund_unposted_order', 'unmapped_fulfilment_location',
+  'insufficient_stock', 'cancellation_blocked',
+];
+
+function channelEventExceptionWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string) {
+  const parts: SQL[] = [sql`e.org_id = ${orgId}`, sql`and e.posting_status = 'exception'`]
+  if (adhoc.q) {
+    parts.push(sql`and (o.external_number ilike ${`%${adhoc.q}%`} or coalesce(o.customer_email, '') ilike ${`%${adhoc.q}%`} or coalesce(o.customer_name, '') ilike ${`%${adhoc.q}%`})`)
+  }
+  if (adhoc.filters?.code) parts.push(sql`and e.exception_code = ${adhoc.filters.code}`)
+  if (adhoc.filters?.channel) parts.push(sql`and e.channel_id = ${adhoc.filters.channel}`)
+  for (const filter of view.filters) {
+    if (filter.key === 'code') {
+      pushNonprofitStatusFilter(parts, filter, sql`e.exception_code`, CHANNEL_EVENT_EXCEPTION_CODES)
+    } else parts.push(sql`and false`)
+  }
+  return sql.join(parts, sql` `)
+}
+
 async function enrichChannelOrderTotals(rows: Record<string, unknown>[]): Promise<void> {
   for (const row of rows) {
     try {
@@ -1852,6 +1873,35 @@ const CHANNEL_ORDER_SOURCES: Record<string, EntityListSource> = {
     statusVariant: () => 'destructive',
     statusDisplayName: (stored, translate) => translate(`channels.exceptionCodes.${stored}`),
     enrichRows: async (_orgId, rows) => { await enrichChannelOrderTotals(rows) },
+  },
+  channel_event_exception: {
+    recordType: 'channel_event_exception', table: 'channel_order_events', alias: 'e', readPermission: 'channels.read',
+    baseJoins: sql`join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
+  join channel_orders o on o.org_id = e.org_id and o.id = e.order_id`,
+    builtInExpr: {
+      number: sql`o.external_number`, channel: sql`c.name`, channel_id: sql`e.channel_id`,
+      order_id: sql`e.order_id`, event: sql`e.kind`, occurred: sql`e.occurred_at`,
+      status: sql`e.exception_code`,
+      code: sql`e.exception_code`, reason: sql`e.exception_reason`, remedy: sql`e.exception_remedy`,
+    },
+    sorts: {
+      number: sql`o.external_number`, channel: sql`c.name`, event: sql`e.kind`,
+      occurred: sql`e.occurred_at`, status: sql`e.exception_code`,
+    },
+    defaultSort: sql`e.occurred_at`,
+    statusExpr: sql`e.exception_code`,
+    quickFilters: [{ paramKey: 'code', filterKey: 'code' }],
+    where: (view, adhoc, orgId) => channelEventExceptionWhere(view, adhoc, orgId),
+    // An event opens its order: the drawer shows the order with the event in
+    // its timeline, so the fix happens where the order lives.
+    drawerParam: 'order', basePath: '/channels/exceptions',
+    drawerTarget: (row) => ({ param: 'order', id: String(row.order_id ?? '') }),
+    statusVariant: () => 'destructive',
+    statusDisplayName: (stored, translate) => translate(
+      stored === 'refund' || stored === 'cancellation' || stored === 'fulfilment' || stored === 'edit'
+        ? `channels.eventKinds.${stored}`
+        : `channels.exceptionCodes.${stored}`,
+    ),
   },
 }
 

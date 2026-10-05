@@ -13,7 +13,7 @@ import { isoDateOf } from '@openbooks/engine/platform/civil-date'
 import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { channelTabs } from '../orders/view'
+import { channelTabs, countChannelExceptions } from '../orders/view'
 import type { ChannelTab } from '../ChannelWidgets'
 
 /**
@@ -62,9 +62,7 @@ export async function loadChannelPosting(): Promise<ChannelPostingData> {
       select p.id as value, p.display_name as label from parties p
         join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
        where p.org_id = ${orgId} and p.is_active order by p.display_name`),
-    db.execute<{ count: string }>(
-      sql`select count(*)::text as count from channel_orders where org_id = ${orgId} and posting_status = 'exception'`,
-    ),
+    countChannelExceptions(orgId),
   ])
 
   const policies: Record<string, ChannelPostingPolicyView | null> = {}
@@ -82,7 +80,7 @@ export async function loadChannelPosting(): Promise<ChannelPostingData> {
   return {
     title: t('postingTitle'),
     description: t('postingDescription'),
-    tabs: channelTabs(t, 'posting', Number(exceptionCount.rows[0]?.count ?? '0')),
+    tabs: channelTabs(t, 'posting', exceptionCount),
     canManage: can(authz, 'channels.manage'),
     today,
     channels: channels.map((channel) => ({ id: channel.id, name: channel.name, kind: channel.kind, currency: channel.currency })),

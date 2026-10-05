@@ -242,6 +242,8 @@
     "stockLabel": "Lagerort",
     "syncStock": "Bestände synchronisieren",
     "fulfils": "Liefert Bestellungen",
+    "fulfilsOnHint": "Verkäufe bewegen Bestand aus diesem Regal bei der Buchung; die Storefront muss nichts zurückmelden.",
+    "fulfilsOffHint": "Verkäufe buchen ohne Bestandsbewegung; die Fulfillments der Storefront bewegen ihn später, und ein fehlendes Fulfillment lässt das Regal unberührt.",
     "columnShopify": "Shopify",
     "columnStock": "Lagerort",
     "columnSync": "Abgleich",
@@ -320,7 +322,18 @@
     "unmapped_account": "Konto fehlt",
     "closed_period": "Periode geschlossen",
     "tax_mismatch": "Summen stimmen nicht",
-    "currency_unsupported": "Währung nicht unterstützt"
+    "currency_unsupported": "Währung nicht unterstützt",
+    "over_refund": "Rückerstattung übersteigt Verkauf",
+    "refund_unposted_order": "Rückerstattung vor Verkauf",
+    "unmapped_fulfilment_location": "Fulfillment-Standort fehlt",
+    "insufficient_stock": "Bestand zu niedrig",
+    "cancellation_blocked": "Stornierung blockiert"
+  },
+  "eventKinds": {
+    "refund": "Rückerstattung",
+    "cancellation": "Stornierung",
+    "fulfilment": "Fulfillment",
+    "edit": "Bestelländerung"
   },
   "columns": {
     "number": "Bestellung",
@@ -330,17 +343,22 @@
     "document": "Beleg",
     "code": "Ursache",
     "reason": "Grund",
-    "remedy": "Lösung"
+    "remedy": "Lösung",
+    "event": "Ereignis",
+    "occurred": "Eingetreten"
   },
   "empty": {
     "ordersTitle": "Noch keine Kanalbestellungen",
     "ordersDescription": "Bestellungen erscheinen hier, sobald ein verbundener Shop sie sendet. Verbinden Sie zuerst einen Kanal.",
     "exceptionsTitle": "Kein Handlungsbedarf",
-    "exceptionsDescription": "Jede Bestellung ist gebucht oder wartet auf ihre Tagessumme."
+    "exceptionsDescription": "Jede Bestellung ist gebucht oder wartet auf ihre Tagessumme.",
+    "eventExceptionsTitle": "Keine blockierten Rückerstattungen, Stornierungen oder Fulfillments",
+    "eventExceptionsDescription": "Jedes Storefront-Ereignis ist gebucht. Blockierte landen hier mit der Lösung."
   },
   "drawer": {
     "lines": "Positionen",
     "tenders": "Zahlungen",
+    "activity": "Verlauf",
     "posting": "Buchung",
     "document": "Beleg",
     "summary": "Tagessumme",
@@ -350,6 +368,7 @@
     "giftCard": "Geschenkkarte",
     "replay": "Bestellung erneut buchen",
     "replayAll": "Alle mit dieser Ursache erneut buchen",
+    "replayAllEvents": "Alle Ereignisse mit dieser Ursache erneut buchen",
     "replayed": "{count} Bestellung(en) erneut gebucht: {posted} gebucht, {parked} weiter blockiert.",
     "noDocument": "Noch kein Beleg. Die Bestellung wird gebucht, sobald es geht.",
     "filterByCause": "Alle mit dieser Ursache zeigen",
@@ -410,6 +429,23 @@
     "confirmBody": "{fix} Dadurch {count, plural, one {wird # Bestellung} other {werden # Bestellungen}} erneut verarbeitet. Bereits gebuchte Vorgänge behalten ihre Konten.",
     "evidence": "Warum diese Lösung",
     "evidenceSummary": "{count, plural, one {# Grund} other {# Gründe}}"
+  },
+  "timeline": {
+    "empty": "Noch keine Rückerstattungen, Fulfillments oder Stornierungen.",
+    "pushed": "An Storefront übertragen",
+    "restocks": "Rücklagerung",
+    "kind": {
+      "refund": "Rückerstattung",
+      "fulfilment": "Fulfillment",
+      "cancellation": "Stornierung",
+      "edit": "Bestelländerung"
+    },
+    "status": {
+      "pending": "Wartet",
+      "posted": "Gebucht",
+      "exception": "Blockiert",
+      "ignored": "Ignoriert"
+    }
   },
   "posting": {
     "mode": "Buchungsmodus",

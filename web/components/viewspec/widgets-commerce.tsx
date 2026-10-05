@@ -406,6 +406,7 @@ export const COMMERCE_WIDGETS = {
     <ChannelReplayAll
       channelId={str(props, 'channelId')}
       code={str(props, 'code')}
+      scope={str(props, 'scope') === 'events' ? 'events' : null}
     />
   ),
   /** Per-channel posting policies with effective dating and history. */

@@ -34,6 +34,7 @@
     "inventory_movement": "Mouvement de stock",
     "channel_order": "Commande de canal",
     "channel_exception": "Exception de commande",
+    "channel_event_exception": "Exception d'événement de commande",
     "webhook_endpoint": "Destinataire de webhook",
     "payment_dispute_review": "Examen de litige de paiement",
     "budget_scenario": "Budget",

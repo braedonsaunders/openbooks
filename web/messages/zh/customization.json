@@ -31,6 +31,7 @@
     "inventory_movement": "库存移动",
     "channel_order": "渠道订单",
     "channel_exception": "订单异常",
+    "channel_event_exception": "订单事件异常",
     "webhook_endpoint": "Webhook 端点",
     "payment_dispute_review": "付款争议复核",
     "budget_scenario": "预算",

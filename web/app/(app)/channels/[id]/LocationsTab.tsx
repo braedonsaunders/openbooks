@@ -584,10 +584,13 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               <Switch on={sync} onToggle={() => setSync((value) => !value)} disabled={busy} label={t('locations.syncStock')} />
               {t('locations.syncStock')}
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch on={fulfils} onToggle={() => setFulfils((value) => !value)} disabled={busy} label={t('locations.fulfils')} />
-              {t('locations.fulfils')}
-            </label>
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm">
+                <Switch on={fulfils} onToggle={() => setFulfils((value) => !value)} disabled={busy} label={t('locations.fulfils')} />
+                {t('locations.fulfils')}
+              </label>
+              <p className="text-xs text-slate-500">{t(fulfils ? 'locations.fulfilsOnHint' : 'locations.fulfilsOffHint')}</p>
+            </div>
             <div className="space-y-2">
               <Label>{t('locations.bufferLabel')}</Label>
               <Input

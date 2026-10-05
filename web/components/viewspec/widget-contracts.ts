@@ -105,7 +105,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'change-set-drawer': { props: ['drawer'] },
   'channel-order-drawer': { props: ['closeHref', 'drawer'] },
   'channel-posting-form': { props: ['canManage', 'channels', 'customers', 'history', 'policies', 'today'] },
-  'channel-replay-all': { props: ['channelId', 'code'] },
+  'channel-replay-all': { props: ['channelId', 'code', 'scope'] },
   'channel-workspace': { props: ['channelId', 'sp', 'tab'] },
   'channels-console': { props: [] },
   'choose-recon-account': { props: ['href', 'label'] },

@@ -22,24 +22,28 @@ export function ChannelTabs({ tabs }: { tabs: ChannelTab[] }) {
 export function ChannelReplayAll({
   channelId,
   code,
+  scope,
 }: {
   channelId?: string | null
   code?: string | null
+  scope?: 'orders' | 'events' | null
 }) {
   const t = useTranslations('channels')
   const router = useRouter()
   const { busy, refusal, execute } = useAppAction()
+  const events = scope === 'events'
+  const label = events ? t('drawer.replayAllEvents') : t('drawer.replayAll')
 
   const onReplay = async () => {
     await execute(
       () =>
         channelRequest<{ replayed: number; posted: number; parked: number; waiting: number }>(
-          '/api/channels/exceptions/replay',
+          events ? '/api/channels/exceptions/events/replay' : '/api/channels/exceptions/replay',
           { method: 'POST', body: { channelId: channelId ?? null, code: code ?? null } },
-          t('drawer.replayAll'),
+          label,
         ),
       {
-        fallbackMessage: t('drawer.replayAll'),
+        fallbackMessage: label,
         onOk: (outcome) => {
           router.refresh()
           toast.success(
@@ -52,9 +56,9 @@ export function ChannelReplayAll({
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <ActionAlert error={refusal} fallbackMessage={t('drawer.replayAll')} />
+      <ActionAlert error={refusal} fallbackMessage={label} />
       <Button variant="outline" disabled={busy} onClick={onReplay}>
-        {t('drawer.replayAll')}
+        {label}
       </Button>
     </div>
   )

@@ -1092,6 +1092,11 @@ const CHANNEL_EXCEPTION_CODES = [
   "closed_period",
   "tax_mismatch",
   "currency_unsupported",
+  "over_refund",
+  "refund_unposted_order",
+  "unmapped_fulfilment_location",
+  "insufficient_stock",
+  "cancellation_blocked",
 ];
 
 const CHANNEL_ORDER: RecordTypeMeta = {
@@ -1138,6 +1143,34 @@ const CHANNEL_EXCEPTION: RecordTypeMeta = {
     { key: "remedy", labelKey: "channels.columns.remedy", kind: "text", sortable: false },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "ordered", labelKey: "channels.columns.ordered", kind: "date", sortable: true, sortKey: "ordered" },
+  ],
+  listFilters: [
+    {
+      key: "code",
+      labelKey: "channels.columns.code",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: CHANNEL_EXCEPTION_CODES.map((value) => ({ value, labelKey: `channels.exceptionCodes.${value}` })),
+    },
+  ],
+};
+
+const CHANNEL_EVENT_EXCEPTION: RecordTypeMeta = {
+  key: "channel_event_exception",
+  labelKey: "customization.recordTypes.channel_event_exception",
+  category: "entity",
+  featureKey: "salesChannels",
+  supportsForms: false,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "channels.columns.number", kind: "text", sortable: true, sortKey: "number", locked: true },
+    { key: "channel", labelKey: "channels.columns.channel", kind: "text", sortable: true, sortKey: "channel" },
+    { key: "event", labelKey: "channels.columns.event", kind: "status", sortable: true, sortKey: "event" },
+    { key: "code", labelKey: "channels.columns.code", kind: "status", sortable: true, sortKey: "status" },
+    { key: "reason", labelKey: "channels.columns.reason", kind: "text", sortable: false },
+    { key: "remedy", labelKey: "channels.columns.remedy", kind: "text", sortable: false },
+    { key: "occurred", labelKey: "channels.columns.occurred", kind: "date", sortable: true, sortKey: "occurred" },
   ],
   listFilters: [
     {
@@ -2727,6 +2760,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   DEMAND_SUGGESTION,
   CHANNEL_ORDER,
   CHANNEL_EXCEPTION,
+  CHANNEL_EVENT_EXCEPTION,
   WEBHOOK_ENDPOINT,
   BUDGET_SCENARIO,
   HRM_PROCESS_TEMPLATE,
