@@ -28,7 +28,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
   const t = useTranslations('ar.collections.subscriptions.drawer')
   const common = useTranslations('common')
   const router = useRouter()
-  const money = useMoney()
+  const { money } = useMoney()
   const amount = money(drawer.amount, { currency: drawer.currency })
   const [billTo, setBillTo] = useState<string | null>(drawer.billTo?.id ?? null)
   const [payer, setPayer] = useState<string | null>(drawer.payer?.id ?? null)
@@ -102,7 +102,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
           <p className="text-sm text-destructive">{drawer.lastError}</p>
         ) : null}
       </div>
-      <DisclosureSection summary={t('billing.title')}>
+      <DisclosureSection title={t('billing.title')} summary={t('billing.summary')}>
         <dl className="space-y-1.5 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">{t('billing.customer')}</dt>

@@ -56,6 +56,7 @@ async function parseJsonBody(request: Request): Promise<{ ok: true; body: unknow
  */
 export const GET = defineRoute({
   permission: 'admin.setup.manage',
+  feature: { none: 'Authority connections are Tax setup configuration, governed by the setup permission.' },
   handler: async ({ authz: routeAuthz }) => {
     try {
       const [hmrc, abn] = await Promise.all([
@@ -71,6 +72,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: 'admin.setup.manage',
+  feature: { none: 'Authority connections are Tax setup configuration, governed by the setup permission.' },
   handler: async ({ authz: routeAuthz, request }) => {
     const gate = routeAuthz;
     const parsedBody = await parseJsonBody(request)

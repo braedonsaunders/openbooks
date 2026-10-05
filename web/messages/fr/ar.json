@@ -441,7 +441,34 @@
       "retentionArpa": "Revenu moyen par compte",
       "retentionQuickRatio": "Ratio de croissance",
       "retentionUnavailable": "Les indicateurs de rétention apparaissent après le premier calcul des métriques SaaS.",
-      "retentionForMonth": "Pour {month}"
+      "retentionForMonth": "Pour {month}",
+      "drawer": {
+        "status": {
+          "active": "Actif",
+          "paused": "En pause",
+          "suspended": "Suspendue",
+          "canceled": "Résiliée"
+        },
+        "every": "tous les {count}{unit}",
+        "nextBill": "Prochaine facture {date}",
+        "billing": {
+          "title": "Facturation",
+          "summary": "Client, facturé à et payeur",
+          "customer": "Client",
+          "billTo": "Facturer à",
+          "payer": "Payeur",
+          "sameAsCustomer": "Identique au client",
+          "autoPost": "Comptabiliser les factures automatiquement"
+        },
+        "overrides": {
+          "billTo": "Dérogation de facturé à",
+          "payer": "Dérogation de payeur",
+          "hint": "Facturé à et payeur sont le client par défaut. Les dérogations s’appliquent aux factures futures ; la relance et le prélèvement automatique agissent sur le payeur.",
+          "save": "Enregistrer les dérogations",
+          "saved": "Dérogations enregistrées.",
+          "saveFailed": "Enregistrement des dérogations impossible."
+        }
+      }
     },
     "recurring": {
       "newSchedule": "Nouvelle planification récurrente",

@@ -244,6 +244,7 @@ test("the receipts header button shares canCreate with the drawer", () => {
     view: "receipts" as const,
     tabLabels: { receipts: "R", collections: "C" },
     currentParams: {},
+    drawer: null,
   };
   const shown = headerNewPaymentWidgets(receiptsSpec({ ...data, showNewReceipt: true }));
   assert.equal(shown.length, 1);

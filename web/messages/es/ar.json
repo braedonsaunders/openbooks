@@ -441,7 +441,34 @@
       "retentionArpa": "Ingreso medio por cuenta",
       "retentionQuickRatio": "Coeficiente de crecimiento",
       "retentionUnavailable": "Las métricas de retención aparecen tras el primer cálculo de métricas SaaS.",
-      "retentionForMonth": "De {month}"
+      "retentionForMonth": "De {month}",
+      "drawer": {
+        "status": {
+          "active": "Activa",
+          "paused": "Pausada",
+          "suspended": "Suspendida",
+          "canceled": "Cancelada"
+        },
+        "every": "cada {count}{unit}",
+        "nextBill": "Próxima factura {date}",
+        "billing": {
+          "title": "Facturación",
+          "summary": "Cliente, facturar a y pagador",
+          "customer": "Cliente",
+          "billTo": "Facturar a",
+          "payer": "Pagador",
+          "sameAsCustomer": "Igual que el cliente",
+          "autoPost": "Contabilizar facturas automáticamente"
+        },
+        "overrides": {
+          "billTo": "Excepción de facturar a",
+          "payer": "Excepción de pagador",
+          "hint": "Facturar a y pagador son el cliente por defecto. Las excepciones aplican a futuras facturas; la gestión de cobro y el autopago actúan sobre el pagador.",
+          "save": "Guardar excepciones",
+          "saved": "Excepciones guardadas.",
+          "saveFailed": "No se pudieron guardar las excepciones."
+        }
+      }
     },
     "recurring": {
       "newSchedule": "Nueva programación recurrente",
