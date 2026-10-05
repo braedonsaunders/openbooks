@@ -299,6 +299,53 @@ test('true cost per-FTE refuses by name with no annual hours', { skip: !env.OPEN
 })
 
 /**
+ * Headcount aggregates once per department: with GL activity in two
+ * functionals (CAD at home, USD abroad) and one employee working in the
+ * department, the headcount base is 1 — never 2 (once per currency).
+ */
+test('true cost counts headcount once per department across currencies', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const usSub = randomUUID()
+  const dept = randomUUID()
+  const emp = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'Headcount Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
+    await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
+    await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
+    for (const [num, sub, cur, amt] of [['HC-CAD', org.subsidiaryId, 'CAD', '100'], ['HC-USD', usSub, 'USD', '100']] as const) {
+      const entry = randomUUID()
+      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${entry}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${D}, ${org.periodId}, 'draft', 'manual')`)
+      await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${entry}, 1, ${org.accounts.cogs}, ${sub}, ${dept}, ${amt}, ${cur}, ${amt}, '1'),
+               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${sub}, ${dept}, ${'-' + amt}, ${cur}, ${'-' + amt}, '1')`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+    }
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(
+        data.bases.headcount.byDept[dept],
+        1,
+        'one employee in a two-currency department is a headcount of 1, not 2',
+      )
+      assert.equal(data.bases.headcount.total, 1)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
  * Labour dollars are the configured cost_pool / direct_labor account set
  * (rule plus pin) — the same classification that excludes direct labour from
  * burden. The 1000 on the name-matching `Wages and Salaries` account is
