@@ -28,7 +28,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
-import { CardShell, EmptyRow, MetricTile, type WidgetCardProps } from './_widget-tiles'
+import { CardShell, EmptyRow, MetricTile, type MetricTone, type WidgetCardProps } from './_widget-tiles'
 import type { DashboardMetrics } from './_metrics'
 import { WIDGETS } from './_widget-registry'
 import { FinancialWidgetCard } from './_widget-views-financial'
@@ -70,6 +70,11 @@ export function WidgetCard({
       })
     : null
   const withAsOf = (hint: string) => (asOf ? `${hint} · ${asOf}` : hint)
+  // Money without a currency is a mislabelled figure: with no base currency
+  // the tile refuses by name instead of formatting as dollars.
+  const withoutCurrency = (label: string, icon: React.ReactNode, href: string, tone: MetricTone) => (
+    <MetricTile icon={icon} label={label} value="—" href={href} tone={tone} hint={withAsOf(t('metricContext.noBaseCurrency'))} />
+  )
   // Noon-anchored like the as-of label above: a bare YYYY-MM-DD parses as
   // UTC midnight and would render a day early west of Greenwich.
   const fmtDay = (iso: string) =>
@@ -111,10 +116,13 @@ export function WidgetCard({
       )
     }
     case 'kpi-ledger-balance':
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.ledgerBalance'), <Scale size={15} />, '/journal', 'slate')
       return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, { currency: data.baseCurrency })} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.cashBalance'), <Landmark size={15} />, '/banking', 'emerald')
       return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={withAsOf(t('metricContext.baseCurrency', { currency: data.baseCurrency }))} />
     case 'kpi-open-receivables': {
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.openReceivables'), <CircleDollarSign size={15} />, '/ar', 'sky')
       // The withAsOf(outstanding) shape below: a money tile
       // must state its cut-off. The DSO qualifier appends after it, never
       // in place of it.
@@ -122,8 +130,10 @@ export function WidgetCard({
       return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={`${withAsOf(t('metricContext.outstanding'))}${dso}`} />
     }
     case 'kpi-overdue-receivables':
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.overdueReceivables'), <AlertTriangle size={15} />, '/ar', 'rose')
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-open-payables': {
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.openPayables'), <Receipt size={15} />, '/ap', 'violet')
       // The withAsOf(outstanding) shape below: a money tile
       // must state its cut-off. The DPO qualifier appends after it, never
       // in place of it.
@@ -131,10 +141,12 @@ export function WidgetCard({
       return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={`${withAsOf(t('metricContext.outstanding'))}${dpo}`} />
     }
     case 'kpi-expected-receipts-30d':
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.expectedReceipts'), <CalendarCheck size={15} />, '/ar', 'teal')
       return data.expectedReceipts30d === null
         ? <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value="—" href="/ar" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value={money(data.expectedReceipts30d, { currency: data.baseCurrency })} href="/ar" tone="teal" hint={withAsOf(t('metricContext.next30Days'))} />
     case 'kpi-bills-due-30d':
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.expectedPayments'), <CalendarClock size={15} />, '/ap', 'amber')
       return data.expectedPayments30d === null
         ? <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value="—" href="/ap" tone="amber" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value={money(data.expectedPayments30d, { currency: data.baseCurrency })} href="/ap" tone="amber" hint={withAsOf(t('metricContext.next30Days'))} />
@@ -143,6 +155,7 @@ export function WidgetCard({
       // single word is parsed. The figure is the projected end — where cash
       // lands at the horizon — with the runway or the shortfall beneath it.
       const tone = data.runwayStatus === 'critical' ? 'rose' : data.runwayStatus === 'caution' ? 'amber' : 'emerald'
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.runway'), <Hourglass size={15} />, '/banking/cash', tone)
       if (data.projectedCash === null) {
         return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value="—" href="/banking/cash" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
       }
@@ -154,27 +167,55 @@ export function WidgetCard({
       return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value={money(data.projectedCash, { currency: data.baseCurrency })} href="/banking/cash" tone={tone} hint={withAsOf(state)} />
     }
     case 'kpi-overdue-payables':
+      if (data.baseCurrency === null) return withoutCurrency(t('widgets.overduePayables'), <AlertTriangle size={15} />, '/ap', 'orange')
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={withAsOf(t('metricContext.pastDue'))} />
-    case 'kpi-revenue-mtd':
+    case 'kpi-revenue-mtd': {
+      // Consolidated P&L tiles label the currency the reader returned and
+      // the fiscal period it covered — never the org base or "Month to
+      // date". A refused read names its remedy on the tile, never "No data".
+      if (data.plUnavailable) {
+        return <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value="—" href="/reports/pnl" tone="emerald" hint={withAsOf(data.plUnavailable)} />
+      }
+      const revenueCcy = data.plCurrency ?? data.baseCurrency
+      if (revenueCcy === null) return withoutCurrency(t('widgets.revenue'), <TrendingUp size={15} />, '/reports/pnl', 'emerald')
       return data.revenueMtd === null
         ? <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value="—" href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
-        : <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value={money(data.revenueMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.monthToDate'))} />
-    case 'kpi-expenses-mtd':
-      return <MetricTile icon={<Wallet size={15} />} label={t('widgets.operatingExpenses')} value={data.expensesMtd === null ? '—' : money(data.expensesMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="amber" hint={withAsOf(t(data.expensesMtd === null ? 'metricContext.noData' : 'metricContext.monthToDate'))} />
-    case 'kpi-net-income-mtd':
+        : <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value={money(data.revenueMtd, { currency: revenueCcy })} href="/reports/pnl" tone="emerald" hint={withAsOf(data.plPeriodLabel ?? t('metricContext.monthToDate'))} />
+    }
+    case 'kpi-expenses-mtd': {
+      if (data.plUnavailable) {
+        return <MetricTile icon={<Wallet size={15} />} label={t('widgets.operatingExpenses')} value="—" href="/reports/pnl" tone="amber" hint={withAsOf(data.plUnavailable)} />
+      }
+      const expensesCcy = data.plCurrency ?? data.baseCurrency
+      if (expensesCcy === null) return withoutCurrency(t('widgets.operatingExpenses'), <Wallet size={15} />, '/reports/pnl', 'amber')
+      return <MetricTile icon={<Wallet size={15} />} label={t('widgets.operatingExpenses')} value={data.expensesMtd === null ? '—' : money(data.expensesMtd, { currency: expensesCcy })} href="/reports/pnl" tone="amber" hint={withAsOf(data.expensesMtd === null ? t('metricContext.noData') : (data.plPeriodLabel ?? t('metricContext.monthToDate')))} />
+    }
+    case 'kpi-net-income-mtd': {
+      if (data.plUnavailable) {
+        return <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value="—" href="/reports/pnl" tone="teal" hint={withAsOf(data.plUnavailable)} />
+      }
+      const incomeCcy = data.plCurrency ?? data.baseCurrency
+      if (incomeCcy === null) return withoutCurrency(t('widgets.netIncome'), <Wallet size={15} />, '/reports/pnl', 'teal')
       return data.netIncomeMtd === null
         ? <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value="—" href="/reports/pnl" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
-        : <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value={money(data.netIncomeMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="teal" hint={withAsOf(t('metricContext.monthToDate'))} />
+        : <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value={money(data.netIncomeMtd, { currency: incomeCcy })} href="/reports/pnl" tone="teal" hint={withAsOf(data.plPeriodLabel ?? t('metricContext.monthToDate'))} />
+    }
     case 'kpi-gross-margin-mtd': {
-      // No MTD revenue means the ratio is undefined, not zero — the tile
+      if (data.plUnavailable) {
+        return <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value="—" href="/reports/pnl" tone="slate" hint={withAsOf(data.plUnavailable)} />
+      }
+      const marginCcy = data.plCurrency ?? data.baseCurrency
+      if (marginCcy === null) return withoutCurrency(t('widgets.grossMargin'), <Percent size={15} />, '/reports/pnl', 'slate')
+      // No period revenue means the ratio is undefined, not zero — the tile
       // shows the gross profit it can state and drops the margin it cannot.
+      const periodHint = data.plPeriodLabel ?? t('metricContext.monthToDate')
       const margin = data.grossMarginMtd === null
         ? null
         : number(Number(data.grossMarginMtd), { style: 'percent', maximumFractionDigits: 1 })
-      const hint = margin === null ? t('metricContext.monthToDate') : `${margin} · ${t('metricContext.monthToDate')}`
+      const hint = margin === null ? periodHint : `${margin} · ${periodHint}`
       return data.grossProfitMtd === null
         ? <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value="—" href="/reports/pnl" tone="slate" hint={withAsOf(t('metricContext.noData'))} />
-        : <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value={money(data.grossProfitMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="slate" hint={withAsOf(hint)} />
+        : <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value={money(data.grossProfitMtd, { currency: marginCcy })} href="/reports/pnl" tone="slate" hint={withAsOf(hint)} />
     }
     case 'list-top-customers':
       return <PartyBalanceList title={t('widgets.topCustomers')} icon={<Users size={14} />} href="/ar" parties={data.topCustomers ?? []} />
