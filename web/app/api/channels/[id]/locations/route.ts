@@ -20,6 +20,8 @@ const locationsBodySchema = z.discriminatedUnion("action", [
     stockLocationId: z.string().uuid().nullish(),
     syncInventory: z.boolean().optional(),
     fulfilsOrders: z.boolean().optional(),
+    bufferQuantity: z.string().trim().min(1).max(30).nullish(),
+    stopSellingAtZero: z.boolean().optional(),
   }),
   z.strictObject({
     action: z.literal("unlink"),
@@ -69,6 +71,8 @@ export const POST = defineRoute({
         stockLocationId: body.stockLocationId ?? null,
         syncInventory: body.syncInventory,
         fulfilsOrders: body.fulfilsOrders,
+        bufferQuantity: body.bufferQuantity ?? null,
+        stopSellingAtZero: body.stopSellingAtZero,
       });
       return NextResponse.json({ location });
     } catch (error) {

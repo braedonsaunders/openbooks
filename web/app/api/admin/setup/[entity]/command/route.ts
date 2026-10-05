@@ -76,6 +76,8 @@ const channelLocationBody = z.strictObject({
   stockLocationId: z.string().uuid().nullish(),
   syncInventory: z.boolean().nullish(),
   fulfilsOrders: z.boolean().nullish(),
+  bufferQuantity: z.string().trim().min(1).max(30).nullish(),
+  stopSellingAtZero: z.boolean().nullish(),
 });
 
 /** Domain refusals keep typed status with message, code, remedy, and field. */
@@ -149,6 +151,8 @@ async function runCommandBody(
         stockLocationId: parsed.data.stockLocationId ?? null,
         syncInventory: parsed.data.syncInventory ?? undefined,
         fulfilsOrders: parsed.data.fulfilsOrders ?? undefined,
+        bufferQuantity: parsed.data.bufferQuantity ?? null,
+        stopSellingAtZero: parsed.data.stopSellingAtZero ?? undefined,
       });
     }
   }

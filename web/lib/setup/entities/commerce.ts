@@ -61,6 +61,8 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
       { key: 'stockLocationId', kind: 'ref', ref: 'stock-locations' },
       { key: 'syncInventory', kind: 'boolean' },
       { key: 'fulfilsOrders', kind: 'boolean' },
+      { key: 'bufferQuantity', kind: 'decimal' },
+      { key: 'stopSellingAtZero', kind: 'boolean' },
     ],
     fields: [
       { key: 'channelId', kind: 'ref', ref: 'sales-channels', required: true, lockedOnEdit: true },
@@ -69,6 +71,8 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
       { key: 'stockLocationId', kind: 'ref', ref: 'stock-locations' },
       { key: 'syncInventory', kind: 'boolean', defaultValue: true },
       { key: 'fulfilsOrders', kind: 'boolean', defaultValue: true },
+      { key: 'bufferQuantity', kind: 'decimal' },
+      { key: 'stopSellingAtZero', kind: 'boolean', defaultValue: true },
     ],
   },
   {
