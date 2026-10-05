@@ -65,11 +65,7 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
       // A broken weight sum refuses in the loader payload: surface it as the
       // hub notice instead of rendering empty figures as a healthy preview.
       if (data.weightsError) return result(periodLabel, [], data.weightsError)
-      // Monthly revenue arrives as floats from its loader (its dashboard's
-      // scope, not this preview's); the chart boundary below is the only
-      // crossing, through boundChartNumber until that loader returns exact
-      // decimal strings — String(float) would throw on noise like 5.55e-17.
-      chart = trend(t('customer.kpi.periodRevenue'), data.growth.monthly.map((month) => boundChartNumber(month.revenue)), data.growth.monthly.map((month) => month.label))
+      chart = trend(t('customer.kpi.periodRevenue'), data.growth.monthly.map((month) => toChartNumber(month.revenue)), data.growth.monthly.map((month) => month.label))
       return result(periodLabel, [metric('customer.kpi.totalCustomers', number(data.kpis.totalCustomers)), metric('customer.kpi.periodRevenue', fmt.money(data.kpis.totalRevenue)), metric('customer.kpi.totalInvoiced', fmt.money(data.kpis.totalInvoiced)), metric('customer.kpi.atRisk', number(data.kpis.atRiskCount))])
     }
     case 'vendor-performance': {

@@ -1,4 +1,4 @@
-import { add, cmp, neg } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, neg } from "@openbooks/engine/money";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 
 export function exactProfit(revenue: string, costs: string): string {

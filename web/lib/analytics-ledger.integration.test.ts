@@ -568,7 +568,7 @@ const { loadCustomerIntelligence } = await import('../app/(app)/analytics/custom
 const { loadVendorPerformance } = await import('../app/(app)/analytics/vendor-performance/view');
 const { loadSpendVelocity } = await import('../app/(app)/analytics/spend-velocity/view');
 const { executeAssistantTool } = await import('./assistant/registry');
-type Summary = { kpis?: { totalRevenue: number }; totals?: { spend: number }; summary?: { totalSpend: number }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: number }[] | { items: { totalSpend: number }[] } } };
+type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: number }; summary?: { totalSpend: number }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: number }[] | { items: { totalSpend: number }[] } } };
 
 for (const surface of ['customer', 'vendor', 'spend'] as const) {
   for (const boundary of ['service', 'page', 'assistant'] as const) {
@@ -637,8 +637,9 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             const expectedRevenue = mode === 'all' ? 1099 : mode === 'empty' ? 0 : 100;
             const expected = surface === 'customer' ? expectedRevenue : mode === 'all' ? 1121 : mode === 'empty' ? 0 : 102;
             // Customer-loader money is exact decimal strings on the service
-            // and page boundaries (the tool boundary serializes numbers).
-            const want = surface === 'customer' && boundary !== 'tool' ? expectedRevenue.toFixed(4) : expected;
+            // and page boundaries (the assistant boundary runs the tool,
+            // which serializes numbers).
+            const want = surface === 'customer' && boundary !== 'assistant' ? expectedRevenue.toFixed(4) : expected;
             assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, want);
             assert.equal(JSON.stringify(data).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             if (surface === 'spend') {
