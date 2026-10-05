@@ -1,7 +1,7 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { getMoneyFormatter } from '../money-server'
-import { toChartNumber } from '../chart-number'
+import { boundChartNumber, toChartNumber } from '../chart-number'
 import { formatDecimal } from '../money-format'
 import type { AnalyticsDashboardDefinition, AnalyticsPreview, AnalyticsPreviewChart } from './dashboard-catalog'
 import { requirePermission, ForbiddenError } from '../authz'
@@ -24,7 +24,11 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
   const t = await getTranslations('analytics')
   const fmt = await getMoneyFormatter(orgId)
   const number = (value: number | string | null | undefined) => value == null ? '—' : formatDecimal(fmt.locale, value, { maximumFractionDigits: 1 })
-  const percent = (value: number | null | undefined) => value == null ? '—' : `${number(value)}%`
+  // Loader KPIs arrive on the 0–100 scale; Intl renders the sign, spacing
+  // and digits for the locale instead of a hardcoded `%` suffix.
+  const percent = (value: number | null | undefined) => value == null
+    ? '—'
+    : new Intl.NumberFormat(fmt.locale, { style: 'percent', maximumFractionDigits: 1 }).format(value / 100)
   const metric = (key: string, value: string) => ({ label: t(key), value })
   let chart: AnalyticsPreviewChart | undefined
   const trend = (label: string, points: number[], labels: string[]): AnalyticsPreviewChart | undefined => points.length > 1 ? { kind: 'sparkline', label, points, from: labels[0]!, to: labels[labels.length - 1]! } : undefined
@@ -60,22 +64,25 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/customer-intelligence/view')).loadCustomerIntelligencePreview(sp)
       // Monthly revenue arrives as floats from its loader (its dashboard's
       // scope, not this preview's); the chart boundary below is the only
-      // crossing, through toChartNumber like every other preview sparkline.
-      chart = trend(t('customer.kpi.periodRevenue'), data.growth.monthly.map((month) => toChartNumber(String(month.revenue))), data.growth.monthly.map((month) => month.label))
+      // crossing, through boundChartNumber until that loader returns exact
+      // decimal strings — String(float) would throw on noise like 5.55e-17.
+      chart = trend(t('customer.kpi.periodRevenue'), data.growth.monthly.map((month) => boundChartNumber(month.revenue)), data.growth.monthly.map((month) => month.label))
       return result(periodLabel, [metric('customer.kpi.totalCustomers', number(data.kpis.totalCustomers)), metric('customer.kpi.periodRevenue', fmt.money(data.kpis.totalRevenue)), metric('customer.kpi.totalInvoiced', fmt.money(data.kpis.totalInvoiced)), metric('customer.kpi.atRisk', number(data.kpis.atRiskCount))])
     }
     case 'vendor-performance': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/vendor-performance/view')).loadVendorPerformance(sp)
       // Monthly vendor spend arrives as floats from its loader (its
-      // dashboard's scope); the chart boundary is the only crossing.
-      chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => toChartNumber(String(month.spend))), data.monthly.map((month) => month.label))
+      // dashboard's scope); the chart boundary is the only crossing, through
+      // boundChartNumber until that loader returns exact decimal strings.
+      chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => boundChartNumber(month.spend)), data.monthly.map((month) => month.label))
       return result(periodLabel, [metric('vendor.kpi.activeVendors', number(data.totals.vendors)), metric('vendor.kpi.totalSpend', fmt.money(data.totals.spend)), metric('vendor.kpi.onTimeRate', percent(data.totals.onTimePct)), metric('vendor.kpi.top5Share', percent(data.totals.top5SharePct))])
     }
     case 'spend-velocity': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/spend-velocity/view')).loadSpendVelocity(sp)
       // Monthly velocity totals arrive as floats from their loader (its
-      // dashboard's scope); the chart boundary is the only crossing.
-      chart = trend(t('spendVelocity.kpi.totalSpend'), data.monthlyTrends.map((month) => toChartNumber(String(month.totalAmount))), data.monthlyTrends.map((month) => month.month))
+      // dashboard's scope); the chart boundary is the only crossing, through
+      // boundChartNumber until that loader returns exact decimal strings.
+      chart = trend(t('spendVelocity.kpi.totalSpend'), data.monthlyTrends.map((month) => boundChartNumber(month.totalAmount)), data.monthlyTrends.map((month) => month.month))
       return result(periodLabel, [metric('spendVelocity.kpi.totalSpend', fmt.money(data.summary.totalSpend)), metric('spendVelocity.kpi.avgVelocity', percent(data.summary.avgVelocity)), metric('spendVelocity.kpi.savingsPotential', fmt.money(data.summary.savingsPotential)), metric('spendVelocity.kpi.alerts', number(data.summary.totalAlerts))])
     }
     case 'sentinel': {
