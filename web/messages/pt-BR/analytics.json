@@ -2931,7 +2931,8 @@
         "title": "Desequilíbrio entre velocidade de compras e vendas",
         "message": "Velocidade de OC ({po} %/mês) supera a de OV ({so} %/mês) em {gap} % — relação OC/OV: {ratio}×",
         "actionWithMonths": "Risco de pressão de caixa em ~{months} meses. Revisar compromissos de compra.",
-        "actionMonitor": "Monitorar a velocidade de compras e alinhá-la ao pipeline de vendas."
+        "actionMonitor": "Monitorar a velocidade de compras e alinhá-la ao pipeline de vendas.",
+        "messageNoVelocity": "relação OC/OV: {ratio}× sem velocidades mensuráveis"
       },
       "seasonalHigh": "Gastos elevados costumam se concentrar em {months}",
       "seasonalLow": "Gastos reduzidos costumam se concentrar em {months}",
@@ -3340,7 +3341,8 @@
       "fragmentation": "{txns} transações/mês, méd. {avg}",
       "frog": "+{rate}%/mês por {months} meses",
       "seasonal": "{deviation}% vs mês médio",
-      "zombie": "{amount}/mês inalterado por {months} meses"
+      "zombie": "{amount}/mês inalterado por {months} meses",
+      "cliffNoVelocity": "razão {ratio}× — velocidades não mensuráveis"
     },
     "detectors": {
       "anomaly": {
@@ -3351,7 +3353,8 @@
       "cliff": {
         "desc": "Diferença de velocidade PC vs PV",
         "label": "Penhasco de compromissos",
-        "sub": "velocidade de PC"
+        "sub": "velocidade de PC",
+        "insufficientHistory": "Velocidade não mensurável"
       },
       "concentration": {
         "desc": "Dependência excessiva de categoria",

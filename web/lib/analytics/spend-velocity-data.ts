@@ -156,7 +156,7 @@ export interface SpendVelocityData {
   };
   shadowIT: { available: false; reason: string };
   commitmentCliff: {
-    summary: { poVelocity: number; soVelocity: number; velocityGap: number; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string };
+    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string };
     months: { month: string; poAmount: string; soAmount: string }[];
   };
   revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
@@ -190,19 +190,27 @@ const DEFAULT_VELOCITY_ENGINE: VelocityEngine = {
   minBaseAmount: specDefaults.minBaseAmount,
 };
 
-/** An empty minimum base means no floor: every series scores from its first month. */
+/** Growth from a zero base is undefined: leading non-positive buckets are never
+ * a start point, so a zero first month no longer fabricates a flat 0 velocity.
+ * An empty minimum base means no floor beyond that: every positive series
+ * scores from its first month. */
 function velocityCAGR(monthlyAmounts: number[], minBase: string): number {
   if (!monthlyAmounts || monthlyAmounts.length < 2) return 0;
-  let start = monthlyAmounts[0]!;
-  let periods = monthlyAmounts.length - 1;
-  const end = monthlyAmounts[monthlyAmounts.length - 1]!;
+  let first = 0;
+  while (first < monthlyAmounts.length && monthlyAmounts[first]! <= 0) first++;
+  const scored = monthlyAmounts.slice(first);
+  if (scored.length < 2) return 0;
+  let start = scored[0]!;
+  let periods = scored.length - 1;
+  const end = scored[scored.length - 1]!;
   if (minBase !== "") {
     const floor = Number(minBase);
     if (start < floor) {
-      for (let i = 0; i < monthlyAmounts.length - 1; i++) {
-        if (monthlyAmounts[i]! >= floor) { start = monthlyAmounts[i]!; periods = monthlyAmounts.length - 1 - i; break; }
+      let found = false;
+      for (let i = 0; i < scored.length - 1; i++) {
+        if (scored[i]! >= floor) { start = scored[i]!; periods = scored.length - 1 - i; found = true; break; }
       }
-      if (start < floor) return 0;
+      if (!found) return 0;
     }
   }
   return calculateCAGR(start, end, periods);
@@ -227,6 +235,34 @@ export function velocityAndAcceleration(amounts: number[], C: VelocityEngine = D
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Exact-string twin of {@link velocityCAGR} for commitment series: leading
+ * non-positive buckets are never a start point (a zero first month no longer
+ * divides by zero), the configured floor applies on top of the skipped
+ * series, and fewer than two measurable buckets — or no bucket above the
+ * floor — yields null so the detector renders its named reason instead of a
+ * fabricated 0. A measured collapse to zero still reads −100. */
+export function moneyCagr(amounts: string[], minimum: string): number | null {
+  let first = 0;
+  while (first < amounts.length && cmp(amounts[first]!, "0") <= 0) first++;
+  const scored = amounts.slice(first);
+  if (scored.length < 2) return null;
+  let start = scored[0]!;
+  let periods = scored.length - 1;
+  const end = scored[scored.length - 1]!;
+  if (minimum !== "") {
+    if (cmp(start, minimum) < 0) {
+      let found = false;
+      for (let i = 0; i < scored.length - 1; i++) {
+        if (cmp(scored[i]!, minimum) >= 0) { start = scored[i]!; periods = scored.length - 1 - i; found = true; break; }
+      }
+      if (!found) return null;
+    }
+  }
+  if (cmp(end, "0") <= 0) return -100;
+  const ratio = toChartNumber(div(end, start));
+  return Math.max(-100, Math.min(200, (Math.pow(ratio, 1 / periods) - 1) * 100));
+}
 
 export interface SpendVelocityComparisonWindows {
   periodDays: number;
@@ -882,38 +918,24 @@ export async function spendVelocityData(
   const cliffSeries = [...cliffMonths.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     .map(([bucket, v]) => ({ month: bucket, poAmount: v.po, soAmount: v.so }));
   // A short history suppresses growth estimates, not the observed commitments.
-  const moneyCagr = (amounts: string[], minimum: string): number => {
-    if (amounts.length < 2) return 0;
-    let start = amounts[0]!;
-    let periods = amounts.length - 1;
-    const end = amounts[amounts.length - 1]!;
-    if (minimum !== "") {
-      if (cmp(start, minimum) < 0) {
-        for (let i = 0; i < amounts.length - 1; i++) {
-          if (cmp(amounts[i]!, minimum) >= 0) { start = amounts[i]!; periods = amounts.length - 1 - i; break; }
-        }
-        if (cmp(start, minimum) < 0) return 0;
-      }
-    }
-    if (cmp(end, ZERO) <= 0) return -100;
-    const ratio = toChartNumber(div(end, start));
-    return Math.max(-100, Math.min(200, (Math.pow(ratio, 1 / periods) - 1) * 100));
-  };
-  const poVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.poAmount), C.minBaseAmount));
-  const soVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.soAmount), C.minBaseAmount));
-  const velocityGap = poVelocity - soVelocity;
+  const poCagr = moneyCagr(cliffSeries.map((m) => m.poAmount), C.minBaseAmount);
+  const soCagr = moneyCagr(cliffSeries.map((m) => m.soAmount), C.minBaseAmount);
+  const poVelocity = poCagr === null ? null : Math.round(poCagr);
+  const soVelocity = soCagr === null ? null : Math.round(soCagr);
+  const velocityGap = poVelocity === null || soVelocity === null ? null : poVelocity - soVelocity;
   const totalPO = cliffSeries.reduce((s, m) => add(s, m.poAmount), "0.0000");
   const totalSO = cliffSeries.reduce((s, m) => add(s, m.soAmount), "0.0000");
   const hasSales = cmp(totalSO, ZERO) > 0;
   const ratio = hasSales ? Math.round(toChartNumber(div(totalPO, totalSO)) * 100) / 100 : 0;
   let status: "healthy" | "warning" | "critical" = "healthy";
   let monthsToCliff: number | null = null;
-  if (velocityGap > C.cliffCriticalGap || ratio > C.cliffCriticalRatio) {
+  const gap = velocityGap;
+  if ((gap !== null && gap > C.cliffCriticalGap) || ratio > C.cliffCriticalRatio) {
     status = "critical";
-    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffCriticalHorizon / (velocityGap / 10)));
-  } else if (velocityGap > C.cliffWarningGap || ratio > C.cliffWarningRatio) {
+    if (gap !== null && gap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffCriticalHorizon / (gap / 10)));
+  } else if ((gap !== null && gap > C.cliffWarningGap) || ratio > C.cliffWarningRatio) {
     status = "warning";
-    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffWarningHorizon / (velocityGap / 10)));
+    if (gap !== null && gap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(C.cliffWarningHorizon / (gap / 10)));
   }
   const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO }, months: cliffSeries };
 
