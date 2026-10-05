@@ -636,7 +636,7 @@
       "policyNotice": {
         "title": "No collection policy is active",
         "description": "Automatic collection is on, but there is no active collection policy for customer invoices, so there is no retry schedule to collect against. Activate a policy to start collecting.",
-        "action": "Open Collections setup"
+        "action": "Open Policies"
       }
     }
   },

@@ -10,7 +10,7 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
 import { businessToday } from '@openbooks/engine/platform/business-date'
-import { findCardsExpiringSoon, getRecoveryMetrics } from '@openbooks/engine/payments/autopay'
+import { findCardsExpiringSoon, getRecoveryMetrics, MISSING_COLLECTION_POLICY } from '@openbooks/engine/payments/autopay'
 
 /** The shell composes shared page chrome, registered lists and domain editors.
  * Permissions and feature dependencies are resolved before reaching the client. */
@@ -100,12 +100,12 @@ export interface CollectionPolicyNotice {
 
 /**
  * The engine refuses recovery facts without an active collection policy;
- * that refusal names its remedy (activate one in Setup) and the page renders
- * it as a notice while the rest of the worklist loads. Anything else still
- * throws.
+ * that refusal carries a stable code (the message stays human copy) and the
+ * page renders it as a notice while the rest of the worklist loads. Anything
+ * else still throws.
  */
 export function isMissingCollectionPolicy(error: unknown): boolean {
-  return error instanceof Error && error.message.startsWith('no active collection policy')
+  return error instanceof Error && (error as { code?: unknown }).code === MISSING_COLLECTION_POLICY
 }
 
 export interface CollectionsData {
@@ -278,7 +278,9 @@ export async function loadCollections(
         title: tAr('collections.recovery.policyNotice.title'),
         description: tAr('collections.recovery.policyNotice.description'),
         actionLabel: tAr('collections.recovery.policyNotice.action'),
-        actionHref: '/admin/setup/dunning-policies',
+        // Collection policies are maintained in the Collections Policies
+        // view (the entity is rehomed there, so no /admin/setup page exists).
+        actionHref: '/collections?view=policies',
       }
     }
   }

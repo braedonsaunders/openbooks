@@ -636,7 +636,7 @@
       "policyNotice": {
         "title": "Aucune politique de recouvrement active",
         "description": "Le recouvrement automatique est activé, mais aucune politique de recouvrement n'est active pour les factures clients : il n'y a aucun calendrier de nouvelles tentatives. Activez une politique pour commencer le recouvrement.",
-        "action": "Ouvrir les paramètres de recouvrement"
+        "action": "Ouvrir les politiques"
       }
     }
   },

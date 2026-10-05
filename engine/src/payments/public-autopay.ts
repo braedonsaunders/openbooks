@@ -6,6 +6,7 @@ export {
   enrollAutopay,
   findCardsExpiringSoon,
   getRecoveryMetrics,
+  MISSING_COLLECTION_POLICY,
   listPaymentMethods,
   markExpiryOutreachSent,
   parseExpiryNoticeDays,
