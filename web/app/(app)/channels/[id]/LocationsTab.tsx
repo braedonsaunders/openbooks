@@ -84,14 +84,14 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
     { key: 'policies', label: t('locations.overrideTitle'), href: mergeHref(pathname, sp, { section: 'policies' }) },
   ]
   const [conflictLocation, setConflictLocation] = useState<LocationRow | null>(null)
-  // Reachability keys on the loaded conflict identity, never the narrower
-  // push-state count: an unlinked variant keeps its conflict listed with no
-  // state row, and a doubly-mapped stock location returns one row per mapping.
-  const openConflicts = dedupeConflicts(conflicts)
   const [rows, setRows] = useState<LocationRow[]>([])
   const [states, setStates] = useState<SyncState[]>([])
   const [conflicts, setConflicts] = useState<ConflictRow[]>([])
   const [policies, setPolicies] = useState<PolicyRow[]>([])
+  // Reachability keys on the loaded conflict identity, never the narrower
+  // push-state count: an unlinked variant keeps its conflict listed with no
+  // state row, and a doubly-mapped stock location returns one row per mapping.
+  const openConflicts = dedupeConflicts(conflicts)
   const [mapping, setMapping] = useState<LocationRow | null>(null)
   const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null)
   const [itemOptions, setItemOptions] = useState<{ value: string; label: string }[]>([])
