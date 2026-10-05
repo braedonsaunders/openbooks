@@ -11,9 +11,9 @@ import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand } from "../inventory/position.ts";
 import { ManufacturingError } from "./errors.ts";
 import { activateRouting, createRouting, createRoutingOperation } from "./routings.ts";
-import { createWorkCenter } from "./work-centers.ts";
-import { createWorkOrder, holdWorkOrder, releaseWorkOrder, cancelWorkOrder } from "./work-orders.ts";
-import { issueMaterials } from "./materials.ts";
+import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
+import { createWorkOrder, holdWorkOrder, releaseWorkOrder, cancelWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
+import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
 import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMaterial } from "./completion.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -131,7 +131,102 @@ async function counts(f: Fixture) {
     layers: (await db.execute<{ n: number }>(sql`select count(*)::int n from cost_layers where org_id=${f.org.orgId}`)).rows[0]!.n,
   }));
 }
+async function account(f: Fixture, role: string, type: string): Promise<string> {
+  const id = randomUUID();
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+      values (${id},${f.org.orgId},${"9" + randomUUID().slice(0, 6)},${role},${type},false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object(${role}::text,${id}::text),true) where id=${f.org.orgId} returning id`);
+  });
+  return id;
+}
+/**
+ * A staffed machine cell: 30/h standard labor, 12/h machine rate and a 5/h
+ * standard overhead card on labor hours. Ten units at 6 run minutes each and
+ * two components at 3.00 per unit.
+ */
+async function conversionOrder(f: Fixture, produced: string) {
+  await withBypassContext(async () => {
+    await db.execute(sql`update labor_cost_rates set rate='30' where org_id=${f.org.orgId} and department_id=${f.departmentId} returning id`);
+    await db.execute(sql`insert into overhead_rates (org_id,department_id,method,rate_kind,rate_percent,effective_from)
+      values (${f.org.orgId},${f.departmentId},'standard','per_hour','5','2026-01-01') returning id`);
+    if (produced !== f.org.items.assembly) await db.execute(sql`insert into bom_components (org_id,assembly_item_id,component_item_id,quantity_per,sort_order,is_byproduct)
+      values (${f.org.orgId},${produced},${f.org.items.component},'2',0,false) returning id`);
+    else await db.execute(sql`update bom_components set quantity_per='2',operation_seq=null,is_byproduct=false
+      where org_id=${f.org.orgId} and assembly_item_id=${produced} and component_item_id=${f.org.items.component} returning id`);
+  });
+  const ids = { clearing: await account(f, "laborClearing", "liability_current_other"), applied: await account(f, "mfgOverheadApplied", "cogs"),
+    laborVariance: await account(f, "mfgLaborEfficiencyVariance", "cogs"), overheadVariance: await account(f, "mfgOverheadVariance", "cogs") };
+  const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+    code: "WC-" + randomUUID(), name: "Assembly cell", kind: "cell", capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: true,
+  }));
+  await run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(center.id), { machineRatePerHour: "12", effectiveFrom: "2026-01-01" }));
+  const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+    producedItemId: produced, code: "RT-" + randomUUID(), name: "Cell route", effectiveFrom: "2026-01-01",
+    defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "labor_hours",
+  }));
+  await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+    sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "6",
+  }));
+  await run((tx) => activateRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
+  const order = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+    producedItemId: produced, quantityOrdered: "10", subsidiaryId: f.org.subsidiaryId,
+    issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: f.org.date,
+  }));
+  await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, order.id));
+  const detail = await withBypassContext(async () => ({
+    material: (await db.execute<{ id: string }>(sql`select id from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${order.id}`)).rows[0]!.id,
+    operation: (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${order.id}`)).rows[0]!.id,
+  }));
+  await stock(f, f.org.items.component, "20", "3");
+  await issue(f, order.id, [{ materialId: detail.material, quantity: "20" }]);
+  await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, detail.operation));
+  return { id: order.id, number: order.number, operation: detail.operation, ...ids };
+}
+async function entryAmounts(f: Fixture, entryId: string) {
+  return withBypassContext(async () => Object.fromEntries((await db.execute<{ account_id: string; amount: string }>(sql`
+    select account_id, sum(amount)::text amount from journal_lines where org_id=${f.org.orgId} and entry_id=${entryId} group by account_id`)).rows
+    .map((row) => [row.account_id, row.amount])));
+}
 const cases: Case[] = [
+  { name: "completed operations carry labor, machine and overhead into FIFO finished goods", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    // Standard time: 60 minutes of a staffed machine cell.
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" }));
+    const absorbed = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from journal_entries
+      where org_id=${f.org.orgId} and custom->>'work_order_number'=${wo.number} and custom ? 'conversion_labor_amount'`)).rows);
+    assert.equal(absorbed.length, 1);
+    const conversion = await entryAmounts(f, absorbed[0]!.id);
+    assert.equal(conversion[f.wipId], "47.0000"); // 30 labor + 12 machine + 5 overhead
+    assert.equal(conversion[wo.clearing], "-30.0000");
+    assert.equal(conversion[wo.applied], "-17.0000");
+    const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "10" }));
+    assert.equal(result.relievedWip, "107.0000"); // 60 material + 47 conversion
+    assert.equal(result.value, "107.0000");
+    assert.equal(await wip(f, wo.number), "0.0000");
+    assert.equal((await getOnHand(f.org.orgId, f.org.items.assembly, f.org.stockLocationId2)).value, "107.0000");
+  } },
+  { name: "standard output splits labor and overhead variances from production variance", run: async (f) => {
+    await withBypassContext(() => db.execute(sql`update item_inventory_profiles set standard_cost='10.70'
+      where org_id=${f.org.orgId} and item_id=${f.org.items.standard} returning item_id`));
+    const wo = await conversionOrder(f, f.org.items.standard);
+    // 72 reported minutes against 60 standard: labor 36, machine 14.40, overhead 6.
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation,
+      { doneQty: "10", actualRunMinutes: "72", actualLaborMinutes: "72" }));
+    const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "10" }));
+    const amounts = await entryAmounts(f, result.entryId);
+    assert.equal(amounts[f.wipId], "-116.4000");
+    assert.equal(result.value, "107.0000");
+    assert.equal(amounts[wo.laborVariance], "6.0000");
+    assert.equal(amounts[wo.overheadVariance], "3.4000");
+    assert.equal(amounts[f.org.accounts.adjustment], undefined, "the conversion in the standard is not a production variance");
+  } },
+  { name: "operation completion refuses by name when its work center has no machine rate", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    await withBypassContext(() => db.execute(sql`delete from mfg_work_center_rates where org_id=${f.org.orgId} returning id`));
+    await refuse(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" })),
+      "machine_rate_missing", "has no machine rate covering", "Add a machine rate for work center");
+  } },
   { name: "completion uses the organization's business date", run: async (f) => {
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
     await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
@@ -272,6 +367,46 @@ const cases: Case[] = [
     const qty = await withBypassContext(async () => (await db.execute<{ issued_qty: string }>(sql`select issued_qty::text from mfg_wo_materials where org_id=${f.org.orgId} and id=${wo.materials[0]!.id}`)).rows[0]!.issued_qty);
     assert.equal(qty, "0.0000");
     assert.equal((await run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Cancel the stopped order"))).status, "cancelled");
+  } },
+  { name: "an issue carried into finished goods reverses only after the completion that carried it", run: async (f) => {
+    const wo = await prepare(f); await stock(f, f.org.items.component, "5", "3");
+    const issued = await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
+    const movement = async (entryId: string, kind: string) => withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+      select id from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${entryId} and kind=${kind}`)).rows[0]!.id);
+    const issueMovement = await movement(issued.entryId!, "assembly_consume");
+    const completion = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" }));
+    assert.equal(await wip(f, wo.number), "0.0000");
+    const completionNumber = await withBypassContext(async () => (await db.execute<{ n: string }>(sql`
+      select entry_number n from journal_entries where org_id=${f.org.orgId} and id=${completion.entryId}`)).rows[0]!.n);
+    // The completion relieved all 6.00 of the issue to finished goods:
+    // returning the material now would drive WIP to -6.00.
+    await refuse(run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: issueMovement, reversalDate: f.postingDate, reason: "Return the over-issue" })),
+      "issue_cost_relieved_to_finished_goods", completionNumber, "Reverse the completion receipts posted after this issue");
+    await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Stop the production run"));
+    // The named remedy exists: the completion receipt reverses on a held order.
+    await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: await movement(completion.entryId, "assembly_build"), reversalDate: f.postingDate, reason: "Undo the finished-goods receipt" }));
+    assert.equal(await wip(f, wo.number), "6.0000");
+    assert.equal((await getOnHand(f.org.orgId, f.org.items.assembly, f.org.stockLocationId2)).quantity, "0.0000");
+    await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: issueMovement, reversalDate: f.postingDate, reason: "Return the over-issue" }));
+    assert.equal(await wip(f, wo.number), "0.0000");
+    assert.equal((await run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Cancel the stopped order"))).status, "cancelled");
+  } },
+  { name: "cancelling after operation time was absorbed writes the consumed conversion off", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" }));
+    await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Customer cancelled"));
+    await refuse(run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Customer cancelled")), "work_order_has_postings", "posted manufacturing entries", "through the inventory movement reversal");
+    const issueMovement = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select movement.id from inventory_movements movement
+      join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
+      where movement.org_id=${f.org.orgId} and movement.kind='assembly_consume' and entry.custom->>'work_order_number'=${wo.number}`)).rows[0]!.id);
+    await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId: issueMovement, reversalDate: f.postingDate, reason: "Return unused material" }));
+    assert.equal(await wip(f, wo.number), "47.0000");
+    assert.equal((await run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Customer cancelled"))).status, "cancelled");
+    assert.equal(await wip(f, wo.number), "0.0000");
+    const writeOff = await withBypassContext(async () => (await db.execute<{ amount: string }>(sql`select line.amount::text amount
+      from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+      where line.org_id=${f.org.orgId} and line.account_id=${f.org.accounts.adjustment} and entry.entry_number like 'MFG-CANCEL-%'`)).rows);
+    assert.deepEqual(writeOff, [{ amount: "47.0000" }]);
   } },
   { name: "issue reversal refuses after the order is done", run: async (f) => {
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3"); const issued = await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);

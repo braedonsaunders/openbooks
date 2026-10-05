@@ -18,7 +18,8 @@ import { auditChange, decimalValue } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
 import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
-import { restoreIssueLayers, reverseInventoryJournal, type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement } from "../inventory/reversal.ts";
+import { conversionRelief } from "./conversion.ts";
+import { removeInboundLayer, restoreIssueLayers, reverseInventoryJournal, type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement } from "../inventory/reversal.ts";
 
 type Order = {
   id: string; number: string; produced_item_id: string; status: string; hold_reason: string | null;
@@ -145,8 +146,9 @@ async function materialUsageVariance(
     select custom->'material_usage_variance_delta_by_component' as deltas
       from journal_entries where org_id=${orgId} and origin='manufacturing'
         and custom->>'work_order_number'=${order.number}
-        -- Live entries only: only unreversed posted material-usage variance deltas contribute to cumulative variance.
-        and custom ? 'material_usage_variance_delta_by_component' and status='posted'`)).rows;
+        -- Live originals only: a reversed completion is status 'reversed' and its
+        -- reversal carries the same evidence, so neither contributes.
+        and custom ? 'material_usage_variance_delta_by_component' and status='posted' and reverses_entry_id is null`)).rows;
   for (const row of priorRows) {
     if (!row.deltas || typeof row.deltas !== "object" || Array.isArray(row.deltas)) continue;
     for (const [itemId, amount] of Object.entries(row.deltas)) {
@@ -296,8 +298,17 @@ export async function completeWorkOrder(
     refuse("Work order " + order.number + " has a credit balance in Manufacturing WIP.", "negative_work_order_wip", "Review the work order's manufacturing journal entries before completing it.");
   }
   const remainingQuantity = add(order.quantity_ordered, neg(order.quantity_completed));
-  const relievedWip = cmp(completed, order.quantity_ordered) >= 0
+  const finalCompletion = cmp(completed, order.quantity_ordered) >= 0;
+  const relievedWip = finalCompletion
     ? balance : ratioAmount(balance, toUnits(q), toUnits(remainingQuantity));
+  // The labor and overhead absorbed by completed operations leave WIP with
+  // the units. Standard-cost output also compares them with the standard
+  // allowed for the completed quantity, so labor and overhead variances are
+  // reported apart from material usage and the residual production variance.
+  const isStandard = producedProfile.costingMethod === "standard";
+  const conversion = await conversionRelief(tx, orgId, order, q, remainingQuantity, finalCompletion, isStandard);
+  const laborVariance = isStandard ? add(conversion.relievedLabor, neg(conversion.standardLabor)) : "0.0000";
+  const overheadVariance = isStandard ? add(conversion.relievedOverhead, neg(conversion.standardOverhead)) : "0.0000";
   const selections = input.lots ?? [];
   const date = await businessToday(orgId);
   const bookId = await primaryBookId(orgId, tx as Runner);
@@ -345,8 +356,16 @@ export async function completeWorkOrder(
     refuse("A manual NRV references an item that is not a by-product on this order.", "byproduct_nrv_item_invalid", "Provide NRV values only for this order's by-products.");
   }
   const itemVariance = add(add(relievedWip, neg(byproductValue)), neg(finishedValue));
-  const finalItemVariance = add(itemVariance, neg(usage.delta));
+  const finalItemVariance = add(add(add(itemVariance, neg(usage.delta)), neg(laborVariance)), neg(overheadVariance));
   const varianceLines: JournalLineInput[] = [];
+  if (!isZero(laborVariance)) {
+    varianceLines.push({ accountId: await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgLaborEfficiencyVariance"),
+      amount: laborVariance, locationId: locationDimension, memo: "Work order " + order.number + " labor variance" });
+  }
+  if (!isZero(overheadVariance)) {
+    varianceLines.push({ accountId: await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgOverheadVariance"),
+      amount: overheadVariance, locationId: locationDimension, memo: "Work order " + order.number + " overhead variance" });
+  }
   for (const component of usage.byComponent) {
     if (isZero(component.delta)) continue;
     varianceLines.push({ accountId: usageVarianceId!, amount: component.delta,
@@ -380,6 +399,8 @@ export async function completeWorkOrder(
     memo: "Finished goods completion for work order " + order.number, lines,
     custom: { ...ev, completion_quantity: q, completed_quantity: completed,
       material_usage_variance_cumulative: usage.cumulative,
+      relieved_labor: conversion.relievedLabor, relieved_overhead: conversion.relievedOverhead,
+      labor_variance: laborVariance, overhead_variance: overheadVariance,
       material_usage_variance_delta_by_component: Object.fromEntries(usage.byComponent.map((component) => [component.itemId, component.delta])),
       byproductNrv: byproductReceipts.map(({ row, unit, value }) => ({ itemId: row.item_id, nrvUnit: unit, value,
         reason: row.default_rate === null ? input.byproductValues?.find((v) => v.itemId === row.item_id)?.reason?.trim() : null })) },
@@ -534,6 +555,132 @@ export async function markWorkOrderDone(
   return { id: order.id, status: "done", shortCloseReason: short ? shortCloseReason : null };
 }
 
+/** Live completion entries of a work order posted after `entryId`, newest first. */
+async function liveCompletionsAfter(tx: SqlExecutor, orgId: string, workOrderNumber: string, entryId: string): Promise<string[]> {
+  return (await tx.execute<{ entry_number: string }>(sql`
+    select completion.entry_number from journal_entries completion
+      join journal_entries anchor on anchor.org_id=completion.org_id and anchor.id=${entryId}
+     where completion.org_id=${orgId} and completion.origin='manufacturing'
+       and completion.custom->>'work_order_number'=${workOrderNumber}
+       and completion.custom ? 'completion_quantity'
+       and completion.status='posted' and completion.reverses_entry_id is null
+       and completion.id<>anchor.id
+       and (completion.created_at, completion.id::text) > (anchor.created_at, anchor.id::text)
+     order by completion.created_at desc, completion.id desc`)).rows.map((row) => row.entry_number);
+}
+
+/**
+ * Reverse one finished-goods completion: the received layers leave stock
+ * (refused when any of it has been consumed), the completion journal is
+ * reversed so WIP gets back exactly what the completion relieved, including
+ * its variances, and the order's completed quantity drops by the receipt.
+ * Completions unwind newest first, because each relief was proportioned on
+ * the WIP left by the ones before it.
+ */
+async function reverseCompletionReceipt(
+  tx: SqlExecutor, orgId: string, actorId: string,
+  peek: ReversibleMovement & { work_order_number: string | null },
+  input: ReverseInventoryInput, reason: string,
+): Promise<ReverseInventoryResult> {
+  if (!peek.journal_entry_id || !peek.work_order_number) throw new InventoryError("Only a posted work-order completion receipt can be reversed.");
+  const entry = (await tx.execute<{ entry_number: string; status: string; reverses_entry_id: string | null; completion_quantity: string | null }>(sql`
+    select entry_number, status, reverses_entry_id, custom->>'completion_quantity' as completion_quantity
+      from journal_entries where org_id=${orgId} and id=${peek.journal_entry_id}`)).rows[0];
+  if (!entry || entry.reverses_entry_id || entry.completion_quantity == null) {
+    throw new InventoryError("Only a posted work-order completion receipt can be reversed.");
+  }
+  const sources = (await tx.execute<ReversibleMovement>(sql`
+    select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+           serial_id, quantity, unit_cost, total_value, journal_entry_id, paired_movement_id, status
+      from inventory_movements where org_id=${orgId} and journal_entry_id=${peek.journal_entry_id}
+       and kind='assembly_build' order by item_id, stock_location_id, id`)).rows;
+  if (!sources.length) throw new InventoryError("The work-order completion has no receipt movements.");
+  await lockMovementPositions(tx, sources);
+  const order = (await tx.execute<Order>(sql`
+    select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text,
+           subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
+           standard_cost_snapshot::text, planned_start::text, short_close_reason
+      from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
+  if (!order) throw new ManufacturingNotFoundError();
+  const prior = (await tx.execute<{ id: string }>(sql`
+    select id from journal_entries where org_id=${orgId} and reverses_entry_id=${peek.journal_entry_id}
+      and status in ('posted','reversed') order by id limit 1`)).rows[0];
+  if (prior) {
+    const reversals = (await tx.execute<{ id: string }>(sql`
+      select id from inventory_movements where org_id=${orgId}
+        and reverses_movement_id in (${sql.join(sources.map((row) => sql`${row.id}`), sql`,`)}) order by id`)).rows;
+    if (reversals.length !== sources.length) {
+      throw new InventoryError("The work-order completion reversal is incomplete; contact an administrator before retrying.");
+    }
+    return { movementIds: reversals.map((row) => row.id), entryId: prior.id, alreadyReversed: true };
+  }
+  if (!["released", "in_progress", "on_hold"].includes(order.status)) {
+    refuse("Completion " + entry.entry_number + " of work order " + order.number + " cannot be reversed after the order is " + order.status + ".",
+      "completion_reversal_after_close", "Correct finished goods of a " + order.status + " work order with an inventory adjustment.", 409);
+  }
+  const later = await liveCompletionsAfter(tx, orgId, order.number, peek.journal_entry_id);
+  if (later.length) {
+    refuse("Work order " + order.number + " has later completions " + later.join(", ") + ".", "later_completion_exists",
+      "Reverse the completion receipts newest first (" + later.join(", ") + "), then reverse " + entry.entry_number + ".", 409);
+  }
+  const locked = (await tx.execute<ReversibleMovement>(sql`
+    select movement.id, movement.org_id, movement.subsidiary_id, movement.item_id, movement.kind,
+           movement.moved_at::text, movement.stock_location_id, movement.lot_id, movement.serial_id,
+           serial.serial_number, movement.quantity, movement.unit_cost, movement.total_value,
+           movement.journal_entry_id, movement.paired_movement_id, movement.status
+      from inventory_movements movement left join serials serial
+        on serial.org_id=movement.org_id and serial.id=movement.serial_id
+     where movement.org_id=${orgId} and movement.journal_entry_id=${peek.journal_entry_id}
+       and movement.kind='assembly_build' order by movement.id for update of movement`)).rows;
+  if (locked.length !== sources.length || locked.some((row) => row.status !== "posted")) {
+    throw new InventoryError("The work-order completion changed before reversal; reload and retry.");
+  }
+  if (locked.some((row) => input.reversalDate < row.moved_at.slice(0, 10))) {
+    throw new InventoryError("reversal date cannot precede the completion receipt");
+  }
+  for (const movement of locked) await removeInboundLayer(tx as Runner, orgId, movement, actorId);
+  const reversalEntryId = await reverseInventoryJournal(tx as Runner, orgId, actorId,
+    peek.journal_entry_id, input.reversalDate, reason, { allowManufacturingOrigin: true });
+  const itemLabels = await loadItemLabels(tx, orgId, locked.map((movement) => movement.item_id));
+  const reversalIds: string[] = [];
+  for (const movement of locked) {
+    const inserted = await tx.execute<{ id: string }>(sql`
+      insert into inventory_movements
+        (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
+         quantity, unit_cost, total_value, journal_entry_id, reverses_movement_id, reversal_reason,
+         status, memo, created_by, updated_by)
+      values (${orgId}, ${movement.subsidiary_id}, ${movement.item_id}, 'return', ${input.reversalDate},
+        ${movement.stock_location_id}, ${movement.lot_id}, ${movement.serial_id}, ${neg(movement.quantity)},
+        ${movement.unit_cost}, ${movement.total_value === null ? null : neg(movement.total_value)},
+        ${reversalEntryId}, ${movement.id}, ${reason}, 'posted',
+        ${"Reversal of work order " + order.number + " completion for " + (itemLabels.get(movement.item_id) ?? "finished item") + ": " + reason},
+        ${actorId}, ${actorId}) returning id`);
+    const reversalId = rowOrNotFound(inserted.rows).id;
+    reversalIds.push(reversalId);
+    rowOrNotFound((await tx.execute<{ id: string }>(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'inventory_movements', ${movement.id}, 'void',
+        ${JSON.stringify({ reason, reversalDate: input.reversalDate, reversalMovementId: reversalId, reversalEntryId })}::jsonb,
+        ${actorId}) returning id`)).rows);
+    if (movement.serial_id) {
+      const serial = await tx.execute<{ id: string }>(sql`
+        update serials set status='registered', current_stock_location_id=null, updated_at=now(), updated_by=${actorId}
+         where org_id=${orgId} and id=${movement.serial_id} and status='in_stock'
+           and current_stock_location_id=${movement.stock_location_id} returning id`);
+      if (serial.rows.length !== 1) throw new InventoryError("Serial " + (movement.serial_number ?? "evidence") + " changed before completion reversal.");
+    }
+  }
+  const completed = add(order.quantity_completed, neg(entry.completion_quantity));
+  if (cmp(completed, "0") < 0) throw new InventoryError("Work order " + order.number + " completed quantity would fall below zero.");
+  const updated = await tx.execute<{ id: string }>(sql`
+    update mfg_work_orders set quantity_completed=${completed}, updated_by=${actorId}, updated_at=now()
+     where org_id=${orgId} and id=${order.id} and quantity_completed=${order.quantity_completed} returning id`);
+  if (updated.rows.length !== 1) refuse("Work order " + order.number + " changed while the completion was being reversed.", "work_order_changed", "Reload the work order and retry.", 409);
+  await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: order.id, action: "update",
+    before: order, after: { ...order, quantity_completed: completed, reversedCompletionEntryId: peek.journal_entry_id, reversalEntryId, reason } });
+  return { movementIds: reversalIds.sort(), entryId: reversalEntryId, alreadyReversed: false };
+}
+
 async function lockMovementPositions(tx: SqlExecutor, movements: ReversibleMovement[]): Promise<void> {
   const positions = [...new Set(movements.map((movement) => movement.item_id + ":" + movement.stock_location_id))].sort();
   for (const position of positions) {
@@ -563,7 +710,7 @@ export async function reverseMaterialIssue(
        where movement.org_id=${orgId} and movement.id=${input.movementId}`)).rows[0];
     if (!peek) throw new ManufacturingNotFoundError();
     if (peek.entry_origin !== "manufacturing") throw new InventoryError("The movement is not a manufacturing work-order movement.");
-    if (peek.kind === "assembly_build") throw new InventoryError("work-order completion receipts cannot be reversed yet");
+    if (peek.kind === "assembly_build") return reverseCompletionReceipt(tx, orgId, actorId, peek, input, reason);
     if (peek.kind !== "assembly_consume" || !peek.journal_entry_id || !peek.work_order_number) {
       throw new InventoryError("Only a posted work-order material issue or backflush can be reversed.");
     }
@@ -595,6 +742,18 @@ export async function reverseMaterialIssue(
     }
     if (order.status === "done" || order.status === "closed") {
       refuse("Material issue for work order " + order.number + " cannot be reversed after it is " + order.status + ".", "issue_reversal_after_completion", "Use a new work order for any additional material movement.", 409);
+    }
+    // A completion relieves WIP in proportion to the units it receives, so a
+    // completion posted after this issue carried part (or, at the final
+    // completion, all) of the issue's cost into finished goods. Returning the
+    // material to stock would then credit WIP for cost it no longer holds and
+    // leave the order with a credit WIP balance it can never complete or
+    // close. Unwinding the later completions first puts that cost back.
+    const laterCompletions = await liveCompletionsAfter(tx, orgId, order.number, peek.journal_entry_id);
+    if (laterCompletions.length) {
+      refuse("Material issue for work order " + order.number + " has been carried into finished goods by completion " + laterCompletions.join(", ") + ".",
+        "issue_cost_relieved_to_finished_goods",
+        "Reverse the completion receipts posted after this issue, newest first (" + laterCompletions.join(", ") + "), then reverse the issue.", 409);
     }
     const lockedSources = (await tx.execute<ReversibleMovement>(sql`
       select movement.id, movement.org_id, movement.subsidiary_id, movement.item_id, movement.kind,

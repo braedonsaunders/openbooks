@@ -11,7 +11,7 @@ import { receiveInventory } from "../inventory/movements.ts";
 import { primaryBookId } from "../inventory/position.ts";
 import { ManufacturingError } from "./errors.ts";
 import { activateRouting, createRouting, createRoutingOperation } from "./routings.ts";
-import { createWorkCenter } from "./work-centers.ts";
+import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
 import { createWorkOrder, holdWorkOrder, releaseWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
 import { createSandbox } from "../sandbox/lifecycle.ts";
@@ -63,6 +63,9 @@ async function prepare(f: Fixture, input: {
   const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code: `WC-${randomUUID()}`, name: "Assembly center", kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: false,
   }));
+  // An explicit zero machine rate: these cases exercise material flows, and
+  // operation completion refuses a machine center with no rate at all.
+  await run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(center.id), { machineRatePerHour: "0", effectiveFrom: "2026-01-01" }));
   const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: "2026-01-01",
     defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",

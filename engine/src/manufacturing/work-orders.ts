@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { add, cmp, div, mul, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
+import { add, cmp, div, isZero, mul, neg, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { loadSubsidiaryContext, SubsidiaryError, type SubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -25,12 +26,15 @@ import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
 import { resolveProfile, assertStockLocationAdmitsSubsidiary } from "../inventory/profile-policy.ts";
 import { inventoryRequestHash } from "../inventory/action-idempotency.ts";
 import type { Runner } from "../inventory/contracts.ts";
+import { assertInventoryAccountsPostable } from "../inventory/journal.ts";
+import { periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
 import { explodeBom } from "./bom-explode.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
 import { backflushOperation } from "./materials.ts";
+import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 
 export interface WorkOrderInput {
   producedItemId: string;
@@ -1131,12 +1135,58 @@ async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow
        -- Live entries only: cancellation is blocked only by unreversed original manufacturing entries.
        and entry.status='posted' and entry.reverses_entry_id is null
        and entry.custom->>'work_order_number'=${order.number}
+       -- Absorbed operation time is not returnable: cancellation writes it
+       -- off instead (see writeOffAbandonedWip), so it never blocks.
+       and not entry.custom ? 'conversion_labor_amount'
        and not exists (
          select 1 from journal_entries reversal
           where reversal.org_id=entry.org_id and reversal.reverses_entry_id=entry.id
             and reversal.status in ('posted','reversed')
        )
      order by entry.entry_number`)).rows;
+}
+
+/**
+ * Labor and overhead absorbed by completed operations were really consumed
+ * and cannot go back to stock the way material can. When a work order whose
+ * issues and completions have all been reversed is cancelled, whatever WIP
+ * remains is that consumed conversion cost: it is written off to the
+ * produced item's variance account, in the same transaction as the cancel.
+ */
+async function writeOffAbandonedWip(tx: SqlExecutor, orgId: string, actorId: string, order: WorkOrderRow, reason: string): Promise<void> {
+  const wipId = await manufacturingControlAccount(tx, orgId, order.subsidiaryId, "mfgWip");
+  const balance = (await tx.execute<{ balance: string }>(sql`
+    select coalesce(sum(line.amount), 0)::text as balance
+      from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+     where line.org_id=${orgId} and line.account_id=${wipId} and entry.origin='manufacturing'
+       and entry.custom->>'work_order_number'=${order.number} and entry.status in ('posted','reversed')`)).rows[0]?.balance ?? "0";
+  if (isZero(balance)) return;
+  if (cmp(balance, "0") < 0) {
+    refuse(`Work order ${order.number} has a credit balance in Manufacturing WIP.`, "negative_work_order_wip", "Review the work order's manufacturing journal entries before cancelling it.");
+  }
+  if (!order.subsidiaryId || !order.bomRevision || order.routingVersion === null) {
+    refuse(`Work order ${order.number} is missing its released posting evidence.`, "work_order_snapshot_missing", "Contact an administrator; the released work order has no BOM and routing evidence.", 409);
+  }
+  const profile = await resolveProfile(orgId, order.producedItemId, tx as Runner, true);
+  if (!profile.varianceAccountId) {
+    refuse(`Work order ${order.number} has ${balance} of absorbed labor and overhead to write off, but its produced item has no variance account.`,
+      "abandoned_wip_variance_account_missing", "Configure the produced item's variance account in inventory costing setup, then cancel again.");
+  }
+  const date = await businessTodayInTx(tx, orgId);
+  const periodId = await periodForDate(orgId, date, tx as Runner);
+  if (!periodId) refuse(`No accounting period covers ${date}.`, "posting_period_missing", "Open an accounting period for the cancellation date.");
+  const lines = [
+    { accountId: profile.varianceAccountId, amount: balance, memo: `Abandoned work on cancelled work order ${order.number}` },
+    { accountId: wipId, amount: neg(balance), memo: `Cancelled work order ${order.number} WIP write-off` },
+  ];
+  await assertInventoryAccountsPostable(tx as Runner, orgId, lines.map((line) => line.accountId));
+  await postManufacturingEntry(tx as Runner, {
+    orgId, bookId: await primaryBookId(orgId, tx as Runner), subsidiaryId: order.subsidiaryId, actorId,
+    currency: await subsidiaryCurrency(orgId, order.subsidiaryId, tx as Runner), periodId, date,
+    entryNumber: `MFG-CANCEL-${date}-${randomUUID().slice(0, 12)}`,
+    memo: `Abandoned WIP write-off for cancelled work order ${order.number}`, lines,
+    custom: { workOrderNumber: order.number, bomRevision: order.bomRevision, routingVersion: String(order.routingVersion), cancelReason: reason },
+  });
 }
 
 async function descendants(tx: SqlExecutor, orgId: string, id: string) {
@@ -1165,7 +1215,7 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
   if (before.status === "cancelled") return { ...before, pendingApproval: false };
   if (before.status !== "draft" && before.status !== "released" && before.status !== "on_hold") {
     await heldRefusal(before);
-    refuse(`Work order ${before.number} cannot be cancelled from ${before.status}.`, "invalid_work_order_transition", "Put the order on hold, then cancel it if nothing has posted.", 409);
+    refuse(`Work order ${before.number} cannot be cancelled from ${before.status}.`, "invalid_work_order_transition", "Put the order on hold, reverse its completion receipts and material issues, then cancel it.", 409);
   }
   const cancelReason = reason?.trim() || null;
   if (before.status !== "draft" && !cancelReason) {
@@ -1173,7 +1223,7 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
   }
   const entries = await postedEntries(tx, orgId, before);
   if (entries.length) {
-    refuse(`Work order ${before.number} has posted manufacturing entries ${entries.map((entry) => entry.entry_number).join(", ")}.`, "work_order_has_postings", "Reverse the entry first, then cancel the work order.", 409);
+    refuse(`Work order ${before.number} has posted manufacturing entries ${entries.map((entry) => entry.entry_number).join(", ")}.`, "work_order_has_postings", "Reverse the work order's completion receipts (newest first) and then its material issues through the inventory movement reversal, then cancel the work order.", 409);
   }
   const children = await descendants(tx, orgId, id);
   const childGates = new Map<string, PendingWorkOrderGate[]>();
@@ -1189,7 +1239,7 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
     if (childBefore.status === "cancelled") continue;
     const childEntries = await postedEntries(tx, orgId, childBefore);
     if (childEntries.length) {
-      refuse(`Child work order ${childBefore.number} has posted manufacturing entries ${childEntries.map((entry) => entry.entry_number).join(", ")}.`, "work_order_has_postings", "Reverse the entry first, then cancel the child and parent work orders.", 409);
+      refuse(`Child work order ${childBefore.number} has posted manufacturing entries ${childEntries.map((entry) => entry.entry_number).join(", ")}.`, "work_order_has_postings", "Reverse the child's completion receipts (newest first) and then its material issues through the inventory movement reversal, then cancel the child and parent work orders.", 409);
     }
     await cancelPendingApprovals(tx, orgId, childGates.get(childBefore.id) ?? [], actorId, cancelReason ?? `Parent ${before.number} cancelled.`);
     const childAfter = await tx.execute<WorkOrderRow>(sql`
@@ -1200,6 +1250,7 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
     await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: childBefore.id, action: "update", before: childBefore, after: { ...cancelledChild, reason: cancelReason ?? `Parent ${before.number} cancelled.` } });
   }
   await cancelPendingApprovals(tx, orgId, pendingGates, actorId, cancelReason ?? "Draft cancelled.");
+  if (before.status !== "draft") await writeOffAbandonedWip(tx, orgId, actorId, before, cancelReason ?? "Cancelled.");
   const updated = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason}, hold_reason=null, hold_prior_status=null,
       updated_by=${actorId}, updated_at=now()

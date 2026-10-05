@@ -160,11 +160,11 @@ export const POST = defineRoute({
       return notFound("record")
     }
     // Assembly operations must be handled as complete controlled units.
-    // Manufacturing work-order issues use the manufacturing reversal path;
-    // their completion receipts refuse until a controlled correction exists.
-    // Other assembly movements keep the existing build reversal behavior.
+    // Manufacturing work-order issues and completion receipts use the
+    // manufacturing reversal path; other assembly movements keep the
+    // existing build reversal behavior.
     const manufacturing = source.rows[0]?.origin === 'manufacturing'
-    if (manufacturing && source.rows[0]?.kind === 'assembly_consume' && !can(gate, 'manufacturing.manage')) {
+    if (manufacturing && !can(gate, 'manufacturing.manage')) {
       return NextResponse.json({ error: 'missing permission: manufacturing.manage' }, { status: 403 })
     }
     const isAssemblyLeg = source.rows[0]?.kind === 'assembly_build' || source.rows[0]?.kind === 'assembly_consume'
