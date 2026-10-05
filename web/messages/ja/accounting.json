@@ -10,12 +10,15 @@
       "excellent": "非常に良好",
       "good": "良好",
       "average": "平均的",
-      "needsWork": "要改善"
+      "needsWork": "要改善",
+      "unscored": "未評価"
     },
     "categories": {
       "profitability": "収益性",
       "efficiency": "効率性",
-      "operating": "運営"
+      "operating": "運営",
+      "liquidity": "流動性",
+      "solvency": "安全性"
     },
     "vitals": {
       "healthScore": "健全性スコア",
