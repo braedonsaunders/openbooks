@@ -2727,6 +2727,11 @@
         "singular": "使用量料金プラン",
         "description": "使用量料金プランの通貨とライフサイクルを設定します。"
       },
+      "saas-features": {
+        "title": "サブスクリプション機能",
+        "singular": "サブスクリプション機能",
+        "description": "プランがサブスクリプションに付与する課金対象の機能: オン/オフ、含まれる数量、従量利用、カスタム値。"
+      },
       "warehouses": {
         "title": "倉庫",
         "singular": "倉庫",
@@ -3503,6 +3508,7 @@
       "regime": "税制",
       "classCode": "区分コード",
       "rate": "レート",
+      "meterKey": "使用量メーター",
       "method": "方法",
       "firstYearFraction": "初年度按分",
       "allowRecapture": "取戻しを認める",
@@ -3977,6 +3983,7 @@
       "contractCostBasisLabel": "償却基準",
       "contractCostAssetAccount": "契約コスト資産勘定",
       "amountMinor": "割引額（補助単位）",
+      "featureType": "機能の種類",
       "feeAmountMinor": "手数料金額（補助単位）",
       "feePercent": "手数料率",
       "itemCategory": "商品カテゴリ",
@@ -4017,6 +4024,8 @@
       "storedValueExpiryMonths": "発行後、法律で認められる場合に未利用価値が失効するまでの月数。失効なしは空欄。",
       "storedValueInactivityMonths": "非アクティブ時ポリシーの残高をブレークとして認識するまでの無活動月数。",
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
+      "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
+"saasFeatureMeter": "従量機能のメーターキー。使用量課金で使用量を解決します。他の種類では空にします。",
       "putawayItem": "空欄にするとすべての品目に適用されます。",
       "putawayCapacity": "格納先に置ける品目の上限数量。バルクゾーンでは必須です。固定棚で空欄にすると上限なしになります。",
       "carrierServices": "この配送業者が提供するサービス区分（例：通常便、翌日配達）。出荷ごとにいずれか1つを選択します。",
@@ -4176,6 +4185,12 @@
       "usageRatingPlanStatus": {
         "active": "有効",
         "retired": "廃止"
+      },
+      "saasFeatureType": {
+        "boolean": "オン/オフ",
+        "quantity": "数量",
+        "metered": "従量",
+        "custom": "カスタム"
       },
       "warehouseStatus": {
         "draft": "下書き",

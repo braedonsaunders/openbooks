@@ -34,6 +34,7 @@ import { ASSET_ENTITIES } from './entities/assets'
 import { CURRENCY_ENTITIES } from './entities/currency'
 import { MANUFACTURING_ENTITIES } from './entities/manufacturing'
 import { USAGE_ENTITIES } from './entities/usage'
+import { ENTITLEMENT_ENTITIES } from './entities/entitlements'
 import { NONPROFIT_SETUP_ENTITIES } from './entities/nonprofit'
 import { COMMERCE_ENTITIES } from './entities/commerce'
 
@@ -60,6 +61,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...CURRENCY_ENTITIES,
   ...MANUFACTURING_ENTITIES,
   ...USAGE_ENTITIES,
+  ...ENTITLEMENT_ENTITIES,
   ...NONPROFIT_SETUP_ENTITIES,
   ...COMMERCE_ENTITIES,
 ]

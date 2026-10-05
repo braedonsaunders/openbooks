@@ -2607,6 +2607,11 @@
         "singular": "Plan de tarifas de uso",
         "description": "Configure la moneda y el ciclo de vida de los planes de tarifas de uso."
       },
+      "saas-features": {
+        "title": "Prestaciones de suscripción",
+        "singular": "Prestación de suscripción",
+        "description": "Las capacidades tarifadas que los planes otorgan a las suscripciones: interruptores, cantidades incluidas, uso medido y valores personalizados."
+      },
       "warehouses": {
         "title": "Almacenes",
         "singular": "Almacén",
@@ -3383,6 +3388,7 @@
       "regime": "Régimen",
       "classCode": "Código de clase",
       "rate": "Tasa",
+      "meterKey": "Medidor de uso",
       "method": "Método",
       "firstYearFraction": "Fracción del primer año",
       "allowRecapture": "Permitir recuperación",
@@ -3857,6 +3863,7 @@
       "contractCostBasisLabel": "Base de amortización",
       "contractCostAssetAccount": "Cuenta de activo de costos del contrato",
       "amountMinor": "Descuento (unidades menores)",
+      "featureType": "Tipo de prestación",
       "feeAmountMinor": "Cargo (unidades menores)",
       "feePercent": "Porcentaje del cargo",
       "itemCategory": "Categoría del artículo",
@@ -3897,6 +3904,8 @@
       "storedValueExpiryMonths": "Meses completos tras la emisión antes de que venza el valor no canjeado, donde sea legal. Vacío para sin vencimiento.",
       "storedValueInactivityMonths": "Meses sin actividad antes de reconocer como breakage un saldo de la política por inactividad.",
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
+      "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
+"saasFeatureMeter": "Clave del medidor para prestaciones medidas, resuelve el uso mediante la facturación por uso. Vacío para otros tipos.",
       "putawayItem": "Déjelo en blanco para aplicar la regla a todos los artículos.",
       "putawayCapacity": "Lo máximo que el destino puede contener del artículo. Obligatorio en una zona a granel; déjelo en blanco en un hueco fijo para no poner límite.",
       "carrierServices": "Los niveles de servicio que ofrece este transportista, como Terrestre o Urgente. Cada envío elige uno de ellos.",
@@ -4056,6 +4065,12 @@
       "usageRatingPlanStatus": {
         "active": "Activo",
         "retired": "Retirado"
+      },
+      "saasFeatureType": {
+        "boolean": "Sí/no",
+        "quantity": "Cantidad",
+        "metered": "Medido",
+        "custom": "Personalizado"
       },
       "warehouseStatus": {
         "draft": "Borrador",

@@ -2652,6 +2652,11 @@
         "singular": "Usage rating plan",
         "description": "Configure the currency and lifecycle of usage rating plans."
       },
+      "saas-features": {
+        "title": "Subscription features",
+        "singular": "Subscription feature",
+        "description": "The priced capabilities plans grant to subscriptions: on/off switches, included quantities, metered usage and custom values."
+      },
       "warehouses": {
         "title": "Warehouses",
         "singular": "Warehouse",
@@ -3437,6 +3442,7 @@
       "regime": "Regime",
       "classCode": "Class code",
       "rate": "Rate",
+      "meterKey": "Usage meter",
       "method": "Method",
       "firstYearFraction": "First-year fraction",
       "allowRecapture": "Allow recapture",
@@ -3902,6 +3908,7 @@
       "contractCostBasisLabel": "Amortization basis",
       "contractCostAssetAccount": "Contract cost asset account",
       "amountMinor": "Discount amount (minor units)",
+      "featureType": "Feature type",
       "feeAmountMinor": "Fee amount (minor units)",
       "feePercent": "Fee percent",
       "itemCategory": "Item category",
@@ -3942,6 +3949,8 @@
       "storedValueExpiryMonths": "Whole months after issue before unredeemed value expires, where lawful. Leave empty for no expiry.",
       "storedValueInactivityMonths": "Months without activity before a remote-policy balance is recognized as breakage.",
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
+      "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
+"saasFeatureMeter": "Meter key for metered features, resolving usage through usage billing. Leave empty for other types.",
       "putawayItem": "Leave blank to apply the rule to every item.",
       "putawayCapacity": "The most the target may hold of the item. Required for a bulk zone; leave blank on a fixed bin for no limit.",
       "carrierServices": "The service levels this carrier offers, such as Ground or Overnight. A shipment chooses one of them.",
@@ -4101,6 +4110,12 @@
       "usageRatingPlanStatus": {
         "active": "Active",
         "retired": "Retired"
+      },
+      "saasFeatureType": {
+        "boolean": "On/off",
+        "quantity": "Quantity",
+        "metered": "Metered",
+        "custom": "Custom"
       },
       "warehouseStatus": {
         "draft": "Draft",

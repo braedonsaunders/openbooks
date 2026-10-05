@@ -2652,6 +2652,11 @@
         "singular": "用量费率计划",
         "description": "配置用量费率计划的币种和生命周期。"
       },
+      "saas-features": {
+        "title": "订阅功能",
+        "singular": "订阅功能",
+        "description": "计划授予订阅的计费能力:开关、包含数量、按量使用和自定义值。"
+      },
       "warehouses": {
         "title": "仓库",
         "singular": "仓库",
@@ -3437,6 +3442,7 @@
       "regime": "制度",
       "classCode": "类别编码",
       "rate": "汇率",
+      "meterKey": "用量计量器",
       "method": "方法",
       "firstYearFraction": "首年比例",
       "allowRecapture": "允许追征",
@@ -3902,6 +3908,7 @@
       "contractCostBasisLabel": "摊销基准",
       "contractCostAssetAccount": "合同成本资产科目",
       "amountMinor": "折扣金额（最小单位）",
+      "featureType": "功能类型",
       "feeAmountMinor": "费用金额（最小单位）",
       "feePercent": "费用百分比",
       "itemCategory": "商品类别",
@@ -3942,6 +3949,8 @@
       "storedValueExpiryMonths": "发行后未兑换价值到期前的整月数（在合法地区）。不到期则留空。",
       "storedValueInactivityMonths": "长期未动政策余额确认为断点前的无活动月数。",
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
+      "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
+"saasFeatureMeter": "按量功能的计量器键,通过用量计费解析用量。其他类型请留空。",
       "putawayItem": "留空则规则适用于所有物料。",
       "putawayCapacity": "目标位置可存放该物料的最大数量。批量区必填；固定库位留空表示不限。",
       "carrierServices": "该承运商提供的服务级别，例如标准或次日达。每张发货单从中选择一个。",
@@ -4101,6 +4110,12 @@
       "usageRatingPlanStatus": {
         "active": "有效",
         "retired": "已停用"
+      },
+      "saasFeatureType": {
+        "boolean": "开/关",
+        "quantity": "数量",
+        "metered": "按量",
+        "custom": "自定义"
       },
       "warehouseStatus": {
         "draft": "草稿",
