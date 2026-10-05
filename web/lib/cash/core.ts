@@ -319,7 +319,7 @@ export interface CategoryWeekly {
    * message stays server-side for logs only, never rendered.
    */
   unavailable?: {
-    code: "card-threshold-missing" | "missing-exchange-rate";
+    code: "card-threshold-missing" | "missing-exchange-rate" | "formula-tax-unconfigured";
     message: string;
     params: Record<string, string | number>;
   };
@@ -345,11 +345,31 @@ export class CategoryForecastRefusal extends Error {
   }
 }
 
+/**
+ * A formula category's tax refusal: {TAX_RATE} needs an enacted income tax
+ * rate, resolved per attributed subsidiary. Unconfigured, or attributions
+ * that disagree on the rate, refuse the category by name with the remedy —
+ * a scoped unavailable state, never a whole-forecast failure.
+ */
+export class FormulaTaxRefusal extends Error {
+  readonly code = "formula-tax-unconfigured" as const;
+  readonly categoryId: string;
+  readonly categoryName: string;
+  constructor(categoryId: string, categoryName: string, detail: string) {
+    super(
+      `formula category "${categoryName}" ${detail} — set one at Setup → Taxes → Income tax rates`,
+    );
+    this.name = "FormulaTaxRefusal";
+    this.categoryId = categoryId;
+    this.categoryName = categoryName;
+  }
+}
+
 /** A category that refused to forecast, for banners and tile hints. */
 export type RefusedCategory = {
   id: string;
   name: string;
-  code: "card-threshold-missing" | "missing-exchange-rate";
+  code: "card-threshold-missing" | "missing-exchange-rate" | "formula-tax-unconfigured";
   message: string;
   params: Record<string, string | number>;
 };
@@ -401,6 +421,20 @@ export function toUnavailableCategory(
         message: e.message,
         params: { func: e.func, base: e.base, date: e.date },
       },
+    };
+  }
+  if (e instanceof FormulaTaxRefusal) {
+    return {
+      id: cat.id,
+      name: cat.name,
+      direction: cat.direction,
+      method: cat.method,
+      weekly: Array<Money>(weekCount).fill(ZERO_MONEY),
+      total: ZERO_MONEY,
+      logic: "",
+      meta: { method: "Unavailable" },
+      breakdown: [],
+      unavailable: { code: e.code, message: e.message, params: { name: e.categoryName } },
     };
   }
   return null;
@@ -711,12 +745,34 @@ export async function loadCategories(orgId: string): Promise<ForecastCategory[]>
 }
 
 /**
+ * Percent to exact decimal fraction — a decimal-point shift, never a
+ * rounded money division: 21.125% prices 0.21125, not the 4-decimal 0.2113
+ * a money division would round to. Canonical minimal form (no trailing
+ * zeros); still an exact decimal string, never a float.
+ */
+export function percentToFractionExact(ratePercent: string): Money {
+  const raw = ratePercent.trim();
+  if (!/^\+?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new Error(`not a percent: "${ratePercent}"`);
+  const unsigned = raw.replace(/^\+/, "");
+  const [whole = "0", fraction = ""] = unsigned.split(".");
+  const digits = `${whole}${fraction}`;
+  const point = whole.length - 2;
+  let out: string;
+  if (point <= 0) out = `0.${"0".repeat(-point)}${digits}`;
+  else if (point >= digits.length) out = `${digits}${"0".repeat(point - digits.length)}`;
+  else out = `${digits.slice(0, point)}.${digits.slice(point)}`;
+  const [w, f = ""] = out.split(".");
+  const trimmed = f.replace(/0+$/, "");
+  const wNorm = w.replace(/^0+(?=\d)/, "") || "0";
+  return trimmed ? `${wNorm}.${trimmed}` : wNorm;
+}
+
+/**
  * Resolve the formula engine's tax fraction from the EFFECTIVE-DATED,
  * subsidiary-scoped income tax rate: the org-wide rows stacked with the
- * entity's own, as of the week being forecast. Forecast categories are
- * org-level models, so callers pass null and price the org-wide stack. Null
- * (nothing configured) is a named refusal, never an assumed rate; the
- * percent-to-fraction step is exact decimal, never a float /100.
+ * entity's own, as of the week being forecast. Null (nothing configured)
+ * is a named refusal, never an assumed rate; the percent-to-fraction step
+ * is exact decimal, never a rounded money division or a float /100.
  */
 export async function resolveFormulaTaxRate(
   orgId: string,
@@ -730,7 +786,40 @@ export async function resolveFormulaTaxRate(
       `formula {TAX_RATE} has no enacted income tax rate for organization ${orgId} on ${weekIso} — set one at Setup → Taxes → Income tax rates`,
     );
   }
-  return divideMoney(enacted.ratePercent, "100");
+  return percentToFractionExact(enacted.ratePercent);
+}
+
+/**
+ * The formula engine's tax fraction for one category and week, resolved per
+ * attributed subsidiary: an unattributed category prices the org-wide
+ * stack, an attributed one prices each attributed subsidiary's stack, and
+ * attributions that disagree on the rate refuse the category by name.
+ * Anything unconfigured refuses the category (a scoped unavailable state
+ * through forecastCategoryOrUnavailable) — never the whole forecast.
+ */
+export async function resolveFormulaTaxRateForCategory(
+  orgId: string,
+  cat: ForecastCategory,
+  weekIso: string,
+  taxReader: typeof enactedIncomeTaxRate = enactedIncomeTaxRate,
+): Promise<Money> {
+  const attributed = cat.subsidiaryIds ?? [];
+  const scopes = attributed.length > 0 ? attributed : [null];
+  const enacted = await Promise.all(scopes.map((s) => taxReader(orgId, s, weekIso)));
+  const missing = scopes.filter((_, i) => enacted[i] === null);
+  if (missing.length > 0) {
+    const where = missing.map((s) => (s === null ? `organization ${orgId}` : `subsidiary ${s}`)).join(", ");
+    throw new FormulaTaxRefusal(cat.id, cat.name, `has no enacted income tax rate for ${where} on ${weekIso}`);
+  }
+  const rates = enacted.map((e) => e!.ratePercent);
+  if (new Set(rates).size > 1) {
+    throw new FormulaTaxRefusal(
+      cat.id,
+      cat.name,
+      `is attributed to subsidiaries with different enacted income tax rates (${[...new Set(rates)].join(", ")}%) on ${weekIso}`,
+    );
+  }
+  return percentToFractionExact(rates[0]!);
 }
 
 /* ------------------- category engine helpers ------------------------------- */
@@ -1526,7 +1615,7 @@ export async function categoryWeekly(
     // The rate is effective-dated per week being forecast — one read per
     // week, only for formulas that price tax.
     const weekTaxRates = expression.includes("{TAX_RATE}")
-      ? await Promise.all(weekStarts.map((k) => resolveFormulaTaxRate(orgId, k)))
+      ? await Promise.all(weekStarts.map((k) => resolveFormulaTaxRateForCategory(orgId, cat, k)))
       : [];
     weekStarts.forEach((k, i) => {
       const cur = parseISO(k);

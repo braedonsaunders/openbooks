@@ -2095,7 +2095,8 @@
       "perWeek": "Por semana (prom.)",
       "horizonTotal": "Total del horizonte",
       "unavailableCardThreshold": "La categoría de tarjeta de crédito «{name}» no tiene historial de pagos ni umbral de pago significativo — define uno en el editor de categorías para que la previsión sepa qué pagos cuentan como el último pago",
-      "unavailableMissingRate": "Sin tipo de cambio de {func}→{base} en vigor el {date} o antes — añade uno en Setup → Tipos de cambio para convertir el historial"
+      "unavailableMissingRate": "Sin tipo de cambio de {func}→{base} en vigor el {date} o antes — añade uno en Setup → Tipos de cambio para convertir el historial",
+      "unavailableFormulaTax": "La categoría de fórmula «{name}» no tiene un tipo impositivo utilizable — define uno en Setup → Impuestos → Tipos para que {TAX_RATE} se calcule."
     },
     "toggle": {
       "outflowsAp": "Salidas (AP)",

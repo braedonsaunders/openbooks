@@ -2095,7 +2095,8 @@
       "perWeek": "Pro Woche (Ø)",
       "horizonTotal": "Horizont gesamt",
       "unavailableCardThreshold": "Kreditkartenkategorie „{name}“ hat keine Zahlungshistorie und keine Schwelle für wesentliche Zahlungen — lege eine im Kategorie-Editor fest, damit die Prognose weiß, welche Zahlungen als letzte Zahlung zählen",
-      "unavailableMissingRate": "Kein Kassakurs für {func}→{base} am oder vor dem {date} — lege einen unter Setup → Wechselkurse an, damit Historien umgerechnet werden"
+      "unavailableMissingRate": "Kein Kassakurs für {func}→{base} am oder vor dem {date} — lege einen unter Setup → Wechselkurse an, damit Historien umgerechnet werden",
+      "unavailableFormulaTax": "Formelkategorie \"{name}\" hat keinen verwendbaren Ertragsteuersatz — lege einen unter Setup → Steuern → Ertragsteuersätze an, damit {TAX_RATE} bepreist werden kann."
     },
     "toggle": {
       "outflowsAp": "Abflüsse (AP)",

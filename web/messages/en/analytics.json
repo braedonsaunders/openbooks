@@ -2095,7 +2095,8 @@
       "perWeek": "Per Week (avg)",
       "horizonTotal": "Horizon Total",
       "unavailableCardThreshold": "Credit card category \"{name}\" has no payment history and no significant payment threshold — set one in the category editor so the forecast knows which payments count as the last payment",
-      "unavailableMissingRate": "No spot rate for {func}→{base} on or before {date} — add one in Setup → Exchange Rates so history translates"
+      "unavailableMissingRate": "No spot rate for {func}→{base} on or before {date} — add one in Setup → Exchange Rates so history translates",
+      "unavailableFormulaTax": "Formula category \"{name}\" has no usable income tax rate — set one at Setup → Taxes → Income tax rates so {TAX_RATE} can price."
     },
     "toggle": {
       "outflowsAp": "Outflows (AP)",
