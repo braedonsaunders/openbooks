@@ -19,7 +19,10 @@ import {
   type ResolveRestockingFeeResult,
 } from '@openbooks/engine/sales/restocking-fees'
 import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
+import { postedReturnEvidenceScope } from '@openbooks/engine/src/inventory/return-quantities.ts'
+import { SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/src/inventory/documents-customer-credits.ts'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { uuidArray } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import {
   authorizeReturn,
   completeReturnInspection,
@@ -81,14 +84,21 @@ export async function createReturnAuthorization(input: {
         unit: string | null
         stock_location_id: string
       }>(sql`
-        select movement.item_id, source_line.account_id, source_line.description,
-               source_line.unit, movement.stock_location_id
+        -- A fulfillment line carries the order line's account, which may be
+        -- empty when the order relied on the item's income account; invoicing
+        -- from the order resolves the same fallback.
+        select movement.item_id, coalesce(source_line.account_id, item.income_account_id) as account_id,
+               source_line.description, source_line.unit, movement.stock_location_id
           from inventory_movements movement
           join document_lines source_line on source_line.id = movement.document_line_id and source_line.org_id = movement.org_id
+          left join items item on item.id = movement.item_id and item.org_id = movement.org_id
          where movement.org_id = ${input.orgId} and movement.id = ${selection.sourceIssueMovementId}
       `)).rows[0]
-      if (!source || !source.account_id) {
+      if (!source) {
         throw new ReturnRefusal(`Return line ${index + 1} shipment is unavailable`, 'source_unavailable', 422, 'Choose a posted customer shipment with a sale line')
+      }
+      if (!source.account_id) {
+        throw new ReturnRefusal(`Return line ${index + 1} shipment has no sale line account and its item has no income account`, 'source_unavailable', 422, 'Set an income account on the item, then authorize the return again')
       }
       documentLines.push({
         ...requestedLines[index]!,
@@ -162,13 +172,54 @@ type SourceLine = Record<string, unknown> & {
   lot_id: string | null
   serial_id: string | null
   source_stock_location_id: string
+  source_document_number: string | null
+  order_line_id: string | null
+  customer_credit_id: string | null
 }
 
+type BilledOrderLine = Record<string, unknown> & {
+  order_number: string | null
+  invoice_lines: number
+  pricing_profiles: number
+  invoice_numbers: string | null
+  account_id: string | null
+  tax_code_id: string | null
+  tax_group_id: string | null
+  billed_quantity: string
+  returned_quantity: string
+  unit_price: string | null
+  amount: string | null
+  tax_amount: string | null
+}
+
+/**
+ * Units of one sales-order line already credited within the current preview or
+ * inspection, so two RMA lines drawn from the same order line cannot together
+ * credit more than the order billed.
+ */
+type OrderLineClaims = Map<string, string>
+
+/**
+ * Price the customer credit for one accepted RMA line from what the customer
+ * was actually charged.
+ *
+ * A direct invoice that moved stock itself carries its own price, so the credit
+ * is the proportional share of that invoice line. An order-governed shipment
+ * does not: a sales fulfillment line is a zero-priced record of goods leaving
+ * the warehouse, and the invoice that billed those goods moves no stock. For a
+ * fulfillment the credit is therefore priced from the posted customer invoice
+ * lines converted from the same sales-order line, at their average billed
+ * price and tax, posted to the income account and tax profile they billed. A
+ * shipment nobody has invoiced yet, or units beyond what was invoiced and not
+ * already returned, are refused rather than credited at zero or at a price the
+ * customer was never charged.
+ */
 async function customerCreditLine(
   orgId: string,
   rmaId: string,
   line: InspectionLine,
   sourceIssueMovementId: string,
+  claims: OrderLineClaims,
 ): Promise<DocumentLineInput | null> {
   if (line.accepted === '0') return null
   const source = (await db.execute<SourceLine>(sql`
@@ -178,7 +229,10 @@ async function customerCreditLine(
            source_line.tax_code_id, source_line.tax_group_id,
            round(source_line.tax_amount * ${line.accepted}::numeric / nullif(source_line.quantity, 0), 4)::text as tax_amount,
            source_line.stock_location_id, movement.stock_location_id as source_stock_location_id,
-           movement.lot_id, movement.serial_id
+           movement.lot_id, movement.serial_id, source_document.document_number as source_document_number,
+           case when source_document.kind = ${SALES_FULFILLMENT_DOCUMENT_KIND}
+                then source_line.custom->'fulfillment'->>'sourceLineId' end as order_line_id,
+           rma.customer_credit_id
       from inventory_movements movement
       join document_lines source_line on source_line.id = movement.document_line_id and source_line.org_id = movement.org_id
       join documents source_document on source_document.id = source_line.document_id and source_document.org_id = source_line.org_id
@@ -187,27 +241,127 @@ async function customerCreditLine(
        and rma.document_id = ${rmaId} and movement.kind = 'issue' and movement.status = 'posted'
        and source_line.item_id is not null
   `)).rows[0]
-  if (!source || !source.account_id) {
+  if (!source) {
     throw new ReturnRefusal(`RMA line ${line.lineId} has no customer sale line to credit`, 'source_unavailable', 422, 'Choose a customer invoice or sales fulfillment line with a posted stock issue')
   }
+  const inventoryReturnSource = {
+    movementId: sourceIssueMovementId,
+    sourceStockLocationId: source.source_stock_location_id,
+    lotId: source.lot_id,
+    serialId: source.serial_id,
+  }
+  if (source.order_line_id === null) {
+    if (!source.account_id) {
+      throw new ReturnRefusal(`RMA line ${line.lineId} has no customer sale line to credit`, 'source_unavailable', 422, 'Choose a customer invoice or sales fulfillment line with a posted stock issue')
+    }
+    return {
+      itemId: source.item_id,
+      accountId: source.account_id,
+      description: source.description,
+      quantity: line.accepted,
+      unitPrice: source.unit_price,
+      amount: source.amount,
+      taxCodeId: source.tax_code_id,
+      taxGroupId: source.tax_group_id,
+      taxOverridden: true,
+      taxAmount: source.tax_amount,
+      stockLocationId: line.dispositionLocationId,
+      inventoryReturnSource,
+    }
+  }
+
+  const orderLineId = source.order_line_id
+  const priorClaim = claims.get(orderLineId) ?? '0'
+  const billed = (await db.execute<BilledOrderLine>(sql`
+    with order_line as (
+      select ol.id, ol.document_id, od.document_number
+        from document_lines ol
+        join documents od on od.id = ol.document_id and od.org_id = ol.org_id
+       where ol.org_id = ${orgId} and ol.id::text = ${orderLineId}
+    ),
+    invoice_line as (
+      -- Only posted invoices bill the customer: drafts have not, and voided or
+      -- reversed invoices no longer do.
+      select il.quantity, il.amount, il.tax_amount, il.unit_price, il.account_id,
+             il.tax_code_id, il.tax_group_id, invoice.document_number
+        from order_line
+        join document_lines il on il.org_id = ${orgId}
+         and il.custom->'convertedFrom'->>'lineId' = order_line.id::text
+         and il.custom->'convertedFrom'->>'documentId' = order_line.document_id::text
+        join documents invoice on invoice.id = il.document_id and invoice.org_id = il.org_id
+       where invoice.kind = 'customer_invoice' and invoice.status = 'posted'
+    ),
+    returned as (
+      -- Units of this order line already brought back on posted, unreversed
+      -- customer credits (from any of its shipments), excluding this return's
+      -- own credit so a retried inspection does not count itself.
+      select coalesce(sum(abs(prior.quantity)), 0) as quantity
+        from order_line
+        join document_lines shipped_line on shipped_line.org_id = ${orgId}
+         and shipped_line.custom->'fulfillment'->>'sourceLineId' = order_line.id::text
+        join inventory_movements shipped on shipped.org_id = shipped_line.org_id
+         and shipped.document_line_id = shipped_line.id and shipped.kind = 'issue' and shipped.status = 'posted'
+        join inventory_movements prior on prior.org_id = shipped.org_id
+        join document_lines credit_line on credit_line.id = prior.document_line_id and credit_line.org_id = prior.org_id
+       where ${postedReturnEvidenceScope({ orgId, returnKind: 'receipt', evidenceKey: 'sourceIssueMovementId', sourceId: sql`shipped.id::text` })}
+         and credit_line.document_id is distinct from ${source.customer_credit_id}::uuid
+    )
+    select (select document_number from order_line) as order_number,
+           count(invoice_line.*)::int as invoice_lines,
+           count(distinct concat_ws('|', coalesce(invoice_line.account_id::text, ''),
+             coalesce(invoice_line.tax_code_id::text, ''), coalesce(invoice_line.tax_group_id::text, '')))::int as pricing_profiles,
+           string_agg(distinct invoice_line.document_number, ', ') as invoice_numbers,
+           min(invoice_line.account_id::text) as account_id,
+           min(invoice_line.tax_code_id::text) as tax_code_id,
+           min(invoice_line.tax_group_id::text) as tax_group_id,
+           coalesce(sum(invoice_line.quantity), 0)::text as billed_quantity,
+           (select quantity from returned)::text as returned_quantity,
+           case when count(distinct invoice_line.unit_price) = 1 then min(invoice_line.unit_price)
+                else round(sum(invoice_line.amount) / nullif(sum(invoice_line.quantity), 0), 8) end::text as unit_price,
+           round(sum(invoice_line.amount) * ${line.accepted}::numeric / nullif(sum(invoice_line.quantity), 0), 4)::text as amount,
+           round(sum(invoice_line.tax_amount) * ${line.accepted}::numeric / nullif(sum(invoice_line.quantity), 0), 4)::text as tax_amount
+      from invoice_line
+  `)).rows[0]
+  const shipment = source.source_document_number ?? 'the shipment'
+  const order = billed?.order_number ?? 'its sales order'
+  if (!billed || billed.invoice_lines === 0 || billed.amount === null || billed.tax_amount === null || billed.unit_price === null) {
+    throw new ReturnRefusal(
+      `RMA line ${line.lineId} returns goods shipped on ${shipment} that no posted customer invoice has billed from ${order}, so there is no price to credit`,
+      'source_unavailable', 422,
+      `Invoice the shipped goods from ${order} and post that invoice, then inspect the return again`,
+    )
+  }
+  if (billed.pricing_profiles !== 1 || !billed.account_id) {
+    throw new ReturnRefusal(
+      `RMA line ${line.lineId} returns goods from ${order} that were billed on ${billed.invoice_numbers} with different income accounts or tax profiles, so one credit price cannot be chosen`,
+      'source_unavailable', 422,
+      `Void the invoice that billed this line of ${order} on a different income account or tax profile, invoice the goods again from ${order}, then inspect the return again`,
+    )
+  }
+  const creditable = (await db.execute<{ quantity: string; claim: string }>(sql`
+    select (${billed.billed_quantity}::numeric - ${billed.returned_quantity}::numeric - ${priorClaim}::numeric)::text as quantity,
+           (${priorClaim}::numeric + ${line.accepted}::numeric)::text as claim`)).rows[0]!
+  if (compareDecimal(line.accepted, creditable.quantity) > 0) {
+    throw new ReturnRefusal(
+      `RMA line ${line.lineId} accepts ${line.accepted} units from ${order}, but only ${creditable.quantity} of the units invoiced on ${billed.invoice_numbers} remain to be credited`,
+      'exceeds_returnable_quantity', 409,
+      `Accept no more than ${creditable.quantity}, or invoice the remaining shipped goods from ${order} and post that invoice before inspecting the return`,
+    )
+  }
+  claims.set(orderLineId, creditable.claim)
   return {
     itemId: source.item_id,
-    accountId: source.account_id,
+    accountId: billed.account_id,
     description: source.description,
     quantity: line.accepted,
-    unitPrice: source.unit_price,
-    amount: source.amount,
-    taxCodeId: source.tax_code_id,
-    taxGroupId: source.tax_group_id,
+    unitPrice: billed.unit_price,
+    amount: billed.amount,
+    taxCodeId: billed.tax_code_id,
+    taxGroupId: billed.tax_group_id,
     taxOverridden: true,
-    taxAmount: source.tax_amount,
+    taxAmount: billed.tax_amount,
     stockLocationId: line.dispositionLocationId,
-    inventoryReturnSource: {
-      movementId: sourceIssueMovementId,
-      sourceStockLocationId: source.source_stock_location_id,
-      lotId: source.lot_id,
-      serialId: source.serial_id,
-    },
+    inventoryReturnSource,
   }
 }
 
@@ -227,7 +381,7 @@ async function resolveInspectionRestockingFee(input: {
 }): Promise<ResolveRestockingFeeResult> {
   const itemIds = [...new Set(input.credited.map((line) => line.itemId).filter((id): id is string => id !== null))]
   const categories = itemIds.length === 0 ? [] : (await db.execute<{ id: string; category: string | null }>(sql`
-    select id, category from items where org_id = ${input.orgId} and id = any(${itemIds})`)).rows
+    select id, category from items where org_id = ${input.orgId} and id = any(${uuidArray(itemIds)}::uuid[])`)).rows
   const categoryByItem = new Map(categories.map((row) => [row.id, row.category]))
   return resolveRestockingFee(db, input.orgId, {
     returnDate: input.returnDate,
@@ -263,12 +417,13 @@ export async function previewReturnRestockingFee(input: {
   if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
   const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
   const credited: CreditedReturnLine[] = []
+  const claims: OrderLineClaims = new Map()
   for (const { lineId, accepted } of input.lines) {
     const rmaLine = linesById.get(lineId)
     if (!rmaLine?.sourceIssueMovementId || accepted === '0') continue
     const credit = await customerCreditLine(input.orgId, current.id, {
       lineId, accepted, disposition: null, dispositionLocationId: null,
-    }, rmaLine.sourceIssueMovementId)
+    }, rmaLine.sourceIssueMovementId, claims)
     if (credit) credited.push({ lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: toCents(credit.amount) })
   }
   return resolveInspectionRestockingFee({
@@ -405,10 +560,11 @@ export async function inspectReturnAuthorization(input: {
       const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
       const creditLines: DocumentLineInput[] = []
       const credited: Array<{ lineId: string; itemId: string | null; lineTotalMinor: bigint }> = []
+      const claims: OrderLineClaims = new Map()
       for (const decision of input.inspectionLines) {
         const rmaLine = linesById.get(decision.lineId)
         if (!rmaLine?.sourceIssueMovementId) throw new ReturnRefusal(`RMA line ${decision.lineId} has no return source`, 'source_unavailable', 422, 'Reload the authorized return lines')
-        const line = await customerCreditLine(input.orgId, current.id, decision, rmaLine.sourceIssueMovementId)
+        const line = await customerCreditLine(input.orgId, current.id, decision, rmaLine.sourceIssueMovementId, claims)
         if (line) {
           creditLines.push(line)
           credited.push({ lineId: decision.lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: toCents(line.amount) })
