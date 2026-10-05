@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   customType,
@@ -343,6 +344,72 @@ export const integrationInboundEvents = pgTable(
     }),
     foreignKey({
       name: "integration_inbound_events_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+  ],
+);
+
+export const SHOPIFY_CATALOG_OBJECT_TYPES = ["product", "variant"] as const;
+export const SHOPIFY_CATALOG_STATUSES = ["queued", "matched", "ignored"] as const;
+
+/** Shopify catalog match queue: one row per storefront product or variant with its match state. */
+export const shopifyCatalogEntries = pgTable(
+  "shopify_catalog_entries",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    objectType: text("object_type", { enum: SHOPIFY_CATALOG_OBJECT_TYPES }).notNull(),
+    externalId: text("external_id").notNull(),
+    externalParentId: text("external_parent_id"),
+    title: text("title").notNull(),
+    sku: text("sku"),
+    barcode: text("barcode"),
+    priceMinor: bigint("price_minor", { mode: "bigint" }),
+    currency: currencyCode("currency").notNull().default(""),
+    optionValues: jsonb("option_values").$type<Record<string, string>>().notNull().default({}),
+    shopifyUpdatedAt: timestamp("shopify_updated_at", { withTimezone: true }),
+    status: text("status", { enum: SHOPIFY_CATALOG_STATUSES }).notNull().default("queued"),
+    nativeTable: text("native_table", { enum: ["items", "item_families"] }),
+    nativeId: uuid("native_id"),
+    ignoreReason: text("ignore_reason"),
+    proposal: jsonb("proposal").$type<Record<string, unknown> | null>(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("shopify_catalog_entries_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("shopify_catalog_entries_external_unique").on(t.orgId, t.channelId, t.externalId),
+    index("shopify_catalog_entries_queue").on(t.orgId, t.channelId, t.status),
+    check(
+      "shopify_catalog_entries_object_valid",
+      sql`${t.objectType} in ('product', 'variant')`,
+    ),
+    check(
+      "shopify_catalog_entries_status_valid",
+      sql`${t.status} in ('queued', 'matched', 'ignored')`,
+    ),
+    check(
+      "shopify_catalog_entries_external_id_nonblank",
+      sql`length(btrim(${t.externalId})) > 0`,
+    ),
+    check("shopify_catalog_entries_title_nonblank", sql`length(btrim(${t.title})) > 0`),
+    check(
+      "shopify_catalog_entries_native_valid",
+      sql`${t.nativeTable} is null or ${t.nativeTable} in ('items', 'item_families')`,
+    ),
+    check(
+      "shopify_catalog_entries_match_valid",
+      sql`(${t.status} = 'matched') = (${t.nativeTable} is not null and ${t.nativeId} is not null)`,
+    ),
+    foreignKey({
+      name: "shopify_catalog_entries_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "shopify_catalog_entries_channel_tenant_fk",
       columns: [t.orgId, t.channelId],
       foreignColumns: [salesChannels.orgId, salesChannels.id],
     }),
