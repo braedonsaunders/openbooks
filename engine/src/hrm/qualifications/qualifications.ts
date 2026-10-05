@@ -300,8 +300,10 @@ export interface RecordQualificationInput {
   readonly typeId: string;
   readonly identifier?: string | null;
   readonly issuedOn: string;
-  /** Null + an expiring type defaults from validity_months at save. */
+  /** Null defaults from the type at save unless expiryPolicy explicitly preserves it. */
   readonly expiresOn?: string | null;
+  /** Preserve an explicitly approved expiry, including a non-expiring credential. Default callers retain the taxonomy default. */
+  readonly expiryPolicy?: "type_default" | "explicit";
   readonly evidenceFileId?: string | null;
   readonly notes?: string | null;
 }
@@ -316,6 +318,8 @@ export async function recordQualification(
   const typeId = requireId(input.typeId, "typeId");
   const issuedOn = requireDate(input.issuedOn, "issuedOn");
   const expiresOn = input.expiresOn === undefined ? undefined : input.expiresOn === null ? null : requireDate(input.expiresOn, "expiresOn");
+  if (input.expiryPolicy !== undefined && input.expiryPolicy !== "type_default" && input.expiryPolicy !== "explicit") throw new HrmQualificationError("Choose the qualification type default or an explicit expiry policy.");
+  if (input.expiryPolicy === "explicit" && expiresOn === undefined) throw new HrmQualificationError("Explicit qualification expiry needs a date or an explicit non-expiring value — review the approved qualification policy.");
   return runInCallerTransaction(exec, async (tx) => {
     // The grant plus the allowed employer set, resolved on this same
     // runner so the check and the write below are atomic.
@@ -348,7 +352,7 @@ export async function recordQualification(
     // Defaulted at save when the caller leaves it null and the type
     // expires; stored, never computed at read.
     const storedExpiresOn =
-      expiresOn === undefined || expiresOn === null
+      input.expiryPolicy === "explicit" ? expiresOn! : expiresOn === undefined || expiresOn === null
         ? type.validity_months === null
           ? null
           : addMonthsClamped(issuedOn, type.validity_months)

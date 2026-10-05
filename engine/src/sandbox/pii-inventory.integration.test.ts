@@ -66,6 +66,26 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  "cam_pools.vacancy_treatment",
+  "pay_components.protection_class",
+  "payroll_compensation_packages.code",
+  "payroll_compensation_packages.country",
+  "payroll_compensation_packages.currency",
+  "payroll_compensation_packages.status",
+  "payroll_compensation_versions.definition_hash",
+  "payroll_compensation_versions.status",
+  "payroll_compensation_assignments.status",
+  // Training configuration codes, lifecycle states, IANA zones and content digests identify no person.
+  "hrm_training_courses.code",
+  "hrm_training_courses.status",
+  "hrm_training_courses.request_hash",
+  "hrm_training_sessions.status",
+  "hrm_training_sessions.time_zone",
+  "hrm_training_sessions.request_hash",
+  "hrm_training_participants.status",
+  "hrm_training_participants.request_hash",
+  "hrm_training_participants.completion_hash",
+  "hrm_training_feedback.request_hash",
   // Native disassembly components contain item references, quantities and
   // inventory values; registration_ids contains UUID references, not numbers.
   "assembly_disassemblies.components",
