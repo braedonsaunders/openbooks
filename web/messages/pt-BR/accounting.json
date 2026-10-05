@@ -26,6 +26,7 @@
       "close": "Progresso do fechamento",
       "closeSub": "{period}",
       "closeUnavailable": "Indisponível",
+      "closeOrgWide": "Os diagnósticos de fechamento abrangem toda a organização — peça a um administrador com visibilidade irrestrita de filiais para listá-los",
       "noClose": "—",
       "noCloseSub": "Nenhum fechamento iniciado",
       "draftJournals": "Lançamentos em rascunho",
