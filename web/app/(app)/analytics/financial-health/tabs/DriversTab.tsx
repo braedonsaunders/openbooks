@@ -7,12 +7,13 @@ import { useLocale, useTranslations } from 'next-intl'
 import { cn, EmptyState } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { cmp } from '@openbooks/engine/money'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
 import { useAnalyticsMoney, toChartNumber } from '../../_ui/format'
 
-export function DriversTab({ data }: { data: HealthData }) {
+export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
   const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth.drivers')
@@ -41,14 +42,14 @@ export function DriversTab({ data }: { data: HealthData }) {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DriverTable title={t('revenueTitle')} icon={TrendingUp} rows={topRev} empty={t('emptyRevenue')} fmtMoney={fmtMoney} pctN={pctN} t={t} />
-        <DriverTable title={t('costTitle')} icon={TrendingDown} rows={topCost} empty={t('emptyCost')} fmtMoney={fmtMoney} pctN={pctN} t={t} />
+        <DriverTable title={t('revenueTitle')} icon={TrendingUp} rows={topRev} empty={t('emptyRevenue')} fmtMoney={fmtMoney} pctN={pctN} t={t} onDrill={onDrill} />
+        <DriverTable title={t('costTitle')} icon={TrendingDown} rows={topCost} empty={t('emptyCost')} fmtMoney={fmtMoney} pctN={pctN} t={t} onDrill={onDrill} />
       </div>
     </div>
   )
 }
 
-function DriverTable({ title, icon: Icon, rows, empty, fmtMoney, pctN, t }: {
+function DriverTable({ title, icon: Icon, rows, empty, fmtMoney, pctN, t, onDrill }: {
   title: string
   icon: typeof TrendingUp
   rows: HealthData['drivers']['revenue']
@@ -56,6 +57,7 @@ function DriverTable({ title, icon: Icon, rows, empty, fmtMoney, pctN, t }: {
   fmtMoney: ReturnType<typeof useAnalyticsMoney>
   pctN: (n: number) => string
   t: (key: string) => string
+  onDrill: (id: string, name: string) => void
 }) {
   return (
     <Panel title={title} icon={Icon}>
@@ -74,13 +76,13 @@ function DriverTable({ title, icon: Icon, rows, empty, fmtMoney, pctN, t }: {
           </SharedTableHeader>
           <SharedTableBody>
             {rows.map((d) => (
-              <SharedTableRow key={d.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+              <InteractiveTableRow key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                 <SharedTableCell className="max-w-44 truncate py-1.5 pr-2 text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
                 <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</SharedTableCell>
                 <SharedTableCell className={cn('py-1.5 text-right font-medium tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</SharedTableCell>
                 <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : pctN(d.changePct)}</SharedTableCell>
                 <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{pctN(d.contribution)}</SharedTableCell>
-              </SharedTableRow>
+              </InteractiveTableRow>
             ))}
           </SharedTableBody>
         </SharedTable>
