@@ -147,7 +147,10 @@
   },
   "tabs": {
     "products": "Productos",
-    "locations": "Ubicaciones"
+    "locations": "Ubicaciones",
+    "orders": "Pedidos",
+    "exceptions": "Excepciones",
+    "posting": "Contabilización"
   },
   "actions": {
     "connect": "Conectar Shopify",
@@ -246,5 +249,81 @@
   },
   "toast": {
     "loadFailed": "No se pudo cargar. Compruebe su conexión e inténtelo de nuevo."
+  },
+  "title": "Pedidos de canales",
+  "description": "Cada pedido de la tienda con su estado de contabilización y enlace al documento.",
+  "exceptionsTitle": "Excepciones de pedidos",
+  "exceptionsDescription": "Pedidos que no se pueden contabilizar, cada uno con su solución. Nada se contabiliza hasta corregirlo.",
+  "postingTitle": "Contabilización de canales",
+  "postingDescription": "Cómo cada canal convierte los pedidos en contabilidad, y desde qué fecha.",
+  "orderStatus": {
+    "pending": "Pendiente",
+    "posted": "Contabilizado",
+    "summarized": "En resumen diario",
+    "exception": "Requiere atención",
+    "excluded": "Excluido"
+  },
+  "exceptionCodes": {
+    "unmapped_item": "Falta el artículo",
+    "unmapped_location": "Falta la ubicación",
+    "unmapped_account": "Falta la cuenta",
+    "closed_period": "Período cerrado",
+    "tax_mismatch": "Los totales no cuadran",
+    "currency_unsupported": "Moneda no admitida"
+  },
+  "columns": {
+    "number": "Pedido",
+    "channel": "Canal",
+    "ordered": "Fecha",
+    "customer": "Cliente",
+    "document": "Documento",
+    "code": "Causa",
+    "reason": "Motivo",
+    "remedy": "Solución"
+  },
+  "empty": {
+    "ordersTitle": "Aún no hay pedidos de canales",
+    "ordersDescription": "Los pedidos aparecen aquí cuando una tienda conectada los envía. Conecte primero un canal.",
+    "exceptionsTitle": "Nada requiere atención",
+    "exceptionsDescription": "Cada pedido está contabilizado o espera su resumen diario."
+  },
+  "drawer": {
+    "lines": "Líneas",
+    "tenders": "Cobros",
+    "posting": "Contabilización",
+    "document": "Documento",
+    "summary": "Resumen diario",
+    "customer": "Cliente",
+    "gateway": "Pasarela",
+    "reference": "Referencia",
+    "giftCard": "Tarjeta regalo",
+    "replay": "Reintentar el pedido",
+    "replayAll": "Reintentar todos con esta causa",
+    "replayed": "{count} pedido(s) reintentados: {posted} contabilizados, {parked} aún bloqueados.",
+    "noDocument": "Aún sin documento. El pedido se contabiliza cuando sea posible.",
+    "filterByCause": "Mostrar todos con esta causa",
+    "item": "Artículo",
+    "quantity": "Cant.",
+    "price": "Precio",
+    "amount": "Importe"
+  },
+  "posting": {
+    "mode": "Modo de contabilización",
+    "modePerOrder": "Por pedido",
+    "modePerOrderDescription": "Cada pedido pagado contabiliza su propia venta al contado de inmediato.",
+    "modeDailySummary": "Resumen diario",
+    "modeDailySummaryDescription": "Una venta al contado por canal, día, ubicación y moneda al cierre.",
+    "unpaidCreatesSalesOrder": "Crear un pedido de venta para pedidos impagos que preparamos",
+    "guestCustomer": "Cliente genérico para pedidos de invitados",
+    "guestCustomerDescription": "Déjelo en blanco para crear un cliente por pedido.",
+    "createPromotion": "Crear promociones desde códigos de descuento",
+    "cutoffTz": "Zona horaria del cierre diario",
+    "excludedTags": "Etiquetas de pedido excluidas",
+    "excludedSources": "Orígenes de pedido excluidos",
+    "effectiveFrom": "Vigente desde",
+    "save": "Guardar política de contabilización",
+    "saved": "Política guardada, vigente desde {date}. Los pedidos ya contabilizados conservan sus documentos.",
+    "history": "Historial de políticas",
+    "noPolicy": "Este canal aún no tiene política de contabilización. Los pedidos esperan hasta que elija un modo."
   }
 }

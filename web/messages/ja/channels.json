@@ -147,7 +147,10 @@
   },
   "tabs": {
     "products": "商品",
-    "locations": "ロケーション"
+    "locations": "ロケーション",
+    "orders": "注文",
+    "exceptions": "例外",
+    "posting": "転記設定"
   },
   "actions": {
     "connect": "Shopifyを接続",
@@ -246,5 +249,81 @@
   },
   "toast": {
     "loadFailed": "読み込めませんでした。接続を確認して再試行してください。"
+  },
+  "title": "チャネル注文",
+  "description": "各店舗注文の転記状況と伝票へのリンク。",
+  "exceptionsTitle": "注文の例外",
+  "exceptionsDescription": "転記できない注文と、それぞれの対処法。修正されるまで転記されません。",
+  "postingTitle": "チャネル転記設定",
+  "postingDescription": "各チャネルが店舗注文を会計に変換する方法と、その適用日。",
+  "orderStatus": {
+    "pending": "保留中",
+    "posted": "転記済み",
+    "summarized": "日次サマリーに含む",
+    "exception": "要対応",
+    "excluded": "除外"
+  },
+  "exceptionCodes": {
+    "unmapped_item": "品目が未登録",
+    "unmapped_location": "ロケーションが未登録",
+    "unmapped_account": "勘定科目が未登録",
+    "closed_period": "会計期間が締結済み",
+    "tax_mismatch": "合計が一致しない",
+    "currency_unsupported": "未対応の通貨"
+  },
+  "columns": {
+    "number": "注文",
+    "channel": "チャネル",
+    "ordered": "注文日",
+    "customer": "顧客",
+    "document": "伝票",
+    "code": "原因",
+    "reason": "理由",
+    "remedy": "対処法"
+  },
+  "empty": {
+    "ordersTitle": "チャネル注文はまだありません",
+    "ordersDescription": "接続中の店舗が注文を送信するとここに表示されます。先にチャネルを接続してください。",
+    "exceptionsTitle": "対応が必要なものはありません",
+    "exceptionsDescription": "すべての注文が転記済みか、日次サマリー待ちです。"
+  },
+  "drawer": {
+    "lines": "明細",
+    "tenders": "決済",
+    "posting": "転記",
+    "document": "伝票",
+    "summary": "日次サマリー",
+    "customer": "顧客",
+    "gateway": "決済手段",
+    "reference": "参照",
+    "giftCard": "ギフトカード",
+    "replay": "注文を再実行",
+    "replayAll": "同じ原因のすべてを再実行",
+    "replayed": "{count}件を再実行: {posted}件を転記、{parked}件は引き続き停止中。",
+    "noDocument": "伝票はまだありません。転記可能になり次第転記されます。",
+    "filterByCause": "同じ原因をすべて表示",
+    "item": "商品",
+    "quantity": "数量",
+    "price": "単価",
+    "amount": "金額"
+  },
+  "posting": {
+    "mode": "転記モード",
+    "modePerOrder": "注文ごと",
+    "modePerOrderDescription": "支払済みの注文ごとに現金売上を即時転記します。",
+    "modeDailySummary": "日次サマリー",
+    "modeDailySummaryDescription": "締め時刻にチャネル・日・ロケーション・通貨ごとに現金売上を1件転記します。",
+    "unpaidCreatesSalesOrder": "当社が履行する未払い注文を受注伝票にする",
+    "guestCustomer": "ゲスト注文用の店頭顧客",
+    "guestCustomerDescription": "空欄のままにすると注文ごとに顧客を作成します。",
+    "createPromotion": "割引コードからプロモーションを作成",
+    "cutoffTz": "サマリー締め時刻のタイムゾーン",
+    "excludedTags": "除外する注文タグ",
+    "excludedSources": "除外する注文ソース",
+    "effectiveFrom": "適用日",
+    "save": "転記ポリシーを保存",
+    "saved": "転記ポリシーを保存しました(適用日{date})。転記済みの注文の伝票はそのままです。",
+    "history": "ポリシー履歴",
+    "noPolicy": "このチャネルにはまだ転記ポリシーがありません。モードを選択するまで注文は待機します。"
   }
 }

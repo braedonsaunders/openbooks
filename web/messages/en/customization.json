@@ -33,6 +33,8 @@
     "demand_suggestion": "Planning suggestion",
     "inventory_onhand": "Inventory on hand",
     "inventory_movement": "Inventory movement",
+    "channel_order": "Channel order",
+    "channel_exception": "Order exception",
     "webhook_endpoint": "Webhook endpoint",
     "payment_dispute_review": "Payment dispute review",
     "budget_scenario": "Budget",

@@ -6,6 +6,7 @@ import { journalDraftScopeWhere } from '../customization/entity-list-query/journ
 import type { ReportDrillTarget } from '../report-drill'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { fromMinorUnits } from '@openbooks/engine/src/payments/acceptance.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/projects/financials.ts'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { assertUnrestrictedScope } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -1757,6 +1758,102 @@ const SOURCES: Record<string, EntityListSource> = {
     statusVariant: (row) => row.status === 'open' ? 'success' : 'secondary',
   },
 }
+
+/**
+ * Channel order subledger: every storefront order with its posting status.
+ * Minor-unit totals sort exactly in SQL; the display major is derived per
+ * displayed row through the shared provider-scale conversion, so zero- and
+ * three-decimal shop currencies format exactly.
+ */
+const channelOrderBaseJoins = sql`join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
+  left join documents d on d.org_id = o.org_id and d.id = o.posting_document_id`;
+
+function channelOrderWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, exceptionOnly: boolean) {
+  const parts: SQL[] = [sql`o.org_id = ${orgId}`]
+  if (exceptionOnly) parts.push(sql`and o.posting_status = 'exception'`)
+  if (adhoc.q) {
+    parts.push(sql`and (o.external_number ilike ${`%${adhoc.q}%`} or coalesce(o.customer_email, '') ilike ${`%${adhoc.q}%`} or coalesce(o.customer_name, '') ilike ${`%${adhoc.q}%`})`)
+  }
+  if (adhoc.filters?.status && !exceptionOnly) parts.push(sql`and o.posting_status = ${adhoc.filters.status}`)
+  if (adhoc.filters?.code && exceptionOnly) parts.push(sql`and o.exception_code = ${adhoc.filters.code}`)
+  if (adhoc.filters?.channel) parts.push(sql`and o.channel_id = ${adhoc.filters.channel}`)
+  for (const filter of view.filters) {
+    if (filter.key === 'status' && !exceptionOnly) {
+      pushNonprofitStatusFilter(parts, filter, sql`o.posting_status`, ['pending', 'posted', 'summarized', 'exception', 'excluded'])
+    } else if (filter.key === 'code' && exceptionOnly) {
+      pushNonprofitStatusFilter(parts, filter, sql`o.exception_code`, ['unmapped_item', 'unmapped_location', 'unmapped_account', 'closed_period', 'tax_mismatch', 'currency_unsupported'])
+    } else parts.push(sql`and false`)
+  }
+  return sql.join(parts, sql` `)
+}
+
+async function enrichChannelOrderTotals(rows: Record<string, unknown>[]): Promise<void> {
+  for (const row of rows) {
+    try {
+      row.total = fromMinorUnits(BigInt(String(row.total_minor ?? '0')), String(row.shop_currency ?? 'USD'))
+    } catch {
+      row.total = '0.0000'
+    }
+  }
+}
+
+const CHANNEL_ORDER_SOURCES: Record<string, EntityListSource> = {
+  channel_order: {
+    recordType: 'channel_order', table: 'channel_orders', alias: 'o', readPermission: 'channels.read',
+    baseJoins: channelOrderBaseJoins,
+    builtInExpr: {
+      number: sql`o.external_number`, channel: sql`c.name`, channel_id: sql`o.channel_id`,
+      ordered: sql`o.ordered_at`, customer: sql`coalesce(nullif(o.customer_email, ''), o.customer_name, '')`,
+      total_minor: sql`o.total_minor::text`, shop_currency: sql`o.shop_currency`,
+      total: sql`o.total_minor::text`, posting_status: sql`o.posting_status`, status: sql`o.posting_status`,
+      document_number: sql`d.document_number`, document_id: sql`o.posting_document_id`,
+      exception_code: sql`o.exception_code`, exception_reason: sql`o.exception_reason`, exception_remedy: sql`o.exception_remedy`,
+    },
+    sorts: {
+      number: sql`o.external_number`, channel: sql`c.name`, ordered: sql`o.ordered_at`,
+      total: sql`o.total_minor`, status: sql`o.posting_status`,
+    },
+    defaultSort: sql`o.ordered_at`,
+    statusExpr: sql`o.posting_status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId) => channelOrderWhere(view, adhoc, orgId, false),
+    drawerParam: 'order', basePath: '/channels/orders',
+    currencyField: 'shop_currency',
+    statusVariant: (_row, value) =>
+      value === 'posted' || value === 'summarized' ? 'success'
+      : value === 'exception' ? 'destructive'
+      : value === 'excluded' ? 'secondary'
+      : value === 'pending' ? 'warning' : 'outline',
+    statusDisplayName: (stored, translate) => translate(`channels.orderStatus.${stored}`),
+    enrichRows: async (_orgId, rows) => { await enrichChannelOrderTotals(rows) },
+  },
+  channel_exception: {
+    recordType: 'channel_exception', table: 'channel_orders', alias: 'o', readPermission: 'channels.read',
+    baseJoins: channelOrderBaseJoins,
+    builtInExpr: {
+      number: sql`o.external_number`, channel: sql`c.name`, channel_id: sql`o.channel_id`,
+      ordered: sql`o.ordered_at`, customer: sql`coalesce(nullif(o.customer_email, ''), o.customer_name, '')`,
+      total_minor: sql`o.total_minor::text`, shop_currency: sql`o.shop_currency`,
+      total: sql`o.total_minor::text`, status: sql`o.exception_code`,
+      code: sql`o.exception_code`, reason: sql`o.exception_reason`, remedy: sql`o.exception_remedy`,
+    },
+    sorts: {
+      number: sql`o.external_number`, channel: sql`c.name`, ordered: sql`o.ordered_at`,
+      total: sql`o.total_minor`, status: sql`o.exception_code`,
+    },
+    defaultSort: sql`o.ordered_at`,
+    statusExpr: sql`o.exception_code`,
+    quickFilters: [{ paramKey: 'code', filterKey: 'code' }],
+    where: (view, adhoc, orgId) => channelOrderWhere(view, adhoc, orgId, true),
+    drawerParam: 'order', basePath: '/channels/exceptions',
+    currencyField: 'shop_currency',
+    statusVariant: () => 'destructive',
+    statusDisplayName: (stored, translate) => translate(`channels.exceptionCodes.${stored}`),
+    enrichRows: async (_orgId, rows) => { await enrichChannelOrderTotals(rows) },
+  },
+}
+
+for (const [key, source] of Object.entries(CHANNEL_ORDER_SOURCES)) SOURCES[key] = source
 
 export function entityListSource(recordType: string): EntityListSource | undefined {
   return SOURCES[recordType]

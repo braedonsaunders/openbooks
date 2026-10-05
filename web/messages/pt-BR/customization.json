@@ -29,6 +29,8 @@
     "demand_suggestion": "Sugestão de planejamento",
     "inventory_onhand": "Estoque disponível",
     "inventory_movement": "Movimentação de estoque",
+    "channel_order": "Pedido de canal",
+    "channel_exception": "Exceção de pedido",
     "webhook_endpoint": "Extremo de webhook",
     "payment_dispute_review": "Revisão de disputa de pagamento",
     "budget_scenario": "Orçamento",
