@@ -161,6 +161,31 @@ test('waive requires the grant and a reason, and is audited', { skip: !DB }, asy
   }
 })
 
+test('a policy that is not waivable refuses a waiver even from a grant holder', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableReturns(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const policyId = await insertPolicy(org, actorId, { kind: 'percent', feePercent: '15', effectiveFrom: '2020-01-01' })
+    await db.execute(sql`update restocking_fee_policies set waivable = false where id = ${policyId} and org_id = ${org.orgId}`)
+    const line = { key: 'l1', itemId: null, itemCategory: null, lineTotalMinor: 10000n }
+    await assert.rejects(
+      withOrg(org.orgId, () => resolveRestockingFee(db, org.orgId, {
+        returnDate: '2026-06-01', currency: 'CAD', lines: [line], waived: true, waiveReason: 'Goodwill', canWaive: true,
+      })),
+      (error: unknown) => error instanceof RestockingFeeRefusal && error.code === 'waive_not_allowed' && error.status === 409
+        && /15\.?0*% restocking fee \(default\) policy does not allow its fee to be waived/.test(error.message)
+        && /allow waivers on the policy/.test(error.remedy ?? ''),
+    )
+    const charged = await withOrg(org.orgId, () => resolveRestockingFee(db, org.orgId, {
+      returnDate: '2026-06-01', currency: 'CAD', lines: [line], waived: false, canWaive: true,
+    }))
+    assert.equal(charged.totalMinor, '1500')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('overlapping open policies are refused under lock', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {

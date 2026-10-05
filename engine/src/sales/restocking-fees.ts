@@ -10,6 +10,7 @@ export type RestockingFeeRefusalCode =
   | "invalid_input"
   | "currency_mismatch"
   | "waive_forbidden"
+  | "waive_not_allowed"
   | "waive_reason_required";
 
 /** A restocking fee refusal with the stable detail returned by API routes. */
@@ -231,6 +232,17 @@ export async function resolveRestockingFee(
         continue;
       }
       throw refusal("No restocking fee policy covers this return date", "not_found", 404, "Extend a restocking fee policy over the return date, create a default policy in Setup → Inventory → Restocking fees, or waive the fee with a reason");
+    }
+    // A policy marked not waivable binds even holders of the waiver grant:
+    // the grant authorizes waiving a waivable fee, not overriding the policy.
+    if (input.waived && !policy.waivable) {
+      const scope = policy.item_id !== null ? "item" : policy.item_category !== null ? "category" : "default";
+      throw refusal(
+        `The ${policyName(policy, scope)} policy does not allow its fee to be waived`,
+        "waive_not_allowed",
+        409,
+        "Charge the fee, or have an administrator allow waivers on the policy in Setup → Inventory → Restocking fees",
+      );
     }
     const fee = feeForLine(policy, line, currency, false);
     unwaived += BigInt(fee.feeMinor);
