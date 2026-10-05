@@ -1021,7 +1021,10 @@ const CORE_B = [
   "equipment_units",
   "item_rate_versions",
   "item_rate_books",
+  "item_family_options",
   "items",
+  // Variants reference families with RESTRICT, so families go after items.
+  "item_families",
   "recognition_rules",
   // payment_cards.holder_party_id references parties.
   "payment_cards",

@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { normalizeMoney } from "../money/money.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 
@@ -434,6 +435,15 @@ export function renderVariantCode(
 
 export const DEFAULT_VARIANT_CODE_PATTERN = "{family}-{values}";
 
+/**
+ * One bind parameter for a text[] column: drizzle expands a JS array into a
+ * record (rejected by the cast), so values travel as an array literal with
+ * quoting that survives commas, quotes and backslashes inside values.
+ */
+export function textArrayLiteral(values: string[]): string {
+  return `{${values.map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
 export type OptionCombination = Record<string, string>;
 
 /** Cartesian product of the ordered options, in option order. */
@@ -509,7 +519,7 @@ export async function createItemFamily(
         insert into item_family_options
           (org_id, family_id, position, name, "values", created_by, updated_by)
         values
-          (${orgId}, ${family.id}, ${position}, ${option.name}, ${option.values.map((entry) => entry.value)}::text[], ${actorId}, ${actorId})
+          (${orgId}, ${family.id}, ${position}, ${option.name}, ${textArrayLiteral(option.values.map((entry) => entry.value))}::text[], ${actorId}, ${actorId})
         returning id`)).rows[0];
       if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
     }
@@ -716,7 +726,7 @@ export async function replaceFamilyOptions(
     if (removedIds.length > 0) {
       const deleted = await tx.execute(sql`
         delete from item_family_options
-         where org_id = ${orgId} and family_id = ${familyId} and id = any(${removedIds}::uuid[])`);
+         where org_id = ${orgId} and family_id = ${familyId} and id = any(${uuidArray(removedIds)}::uuid[])`);
       if ((deleted.rowCount ?? 0) !== removedIds.length) {
         throw new InventoryError("family option removal matched no row");
       }
@@ -729,7 +739,7 @@ export async function replaceFamilyOptions(
       if (option.id !== null) {
         const updated = await tx.execute(sql`
           update item_family_options
-             set position = ${position}, name = ${option.name}, "values" = ${valueList}::text[],
+             set position = ${position}, name = ${option.name}, "values" = ${textArrayLiteral(valueList)}::text[],
                  updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and family_id = ${familyId} and id = ${option.id}`);
         if ((updated.rowCount ?? 0) !== 1) throw new InventoryError(`family option ${option.name} update matched no row`);
@@ -739,7 +749,7 @@ export async function replaceFamilyOptions(
           insert into item_family_options
             (org_id, family_id, position, name, "values", created_by, updated_by)
           values
-            (${orgId}, ${familyId}, ${position}, ${option.name}, ${valueList}::text[], ${actorId}, ${actorId})
+            (${orgId}, ${familyId}, ${position}, ${option.name}, ${textArrayLiteral(valueList)}::text[], ${actorId}, ${actorId})
           returning id`)).rows[0];
         if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
         finalOptions.push({ id: inserted.id, name: option.name, position, values: valueList });
@@ -1031,6 +1041,16 @@ export async function bulkEditVariants(
   }
   const price = input.price === undefined ? undefined : assertRate(input.price, "price");
   const cost = input.cost === undefined ? undefined : assertRate(input.cost, "cost");
+  if (input.barcode !== undefined && input.barcode !== null && ids.length > 1) {
+    // One value cannot identify several items: the scan resolver refuses
+    // ambiguous values, so sharing a barcode would strand every variant.
+    throw new ItemFamilyError(
+      `barcode ${input.barcode.value.trim()} cannot identify ${ids.length} variants at once`,
+      "barcode_shared",
+      "set the barcode on one variant at a time",
+      422,
+    );
+  }
   let barcode: { value: string; kind: string } | null | undefined;
   if (input.barcode !== undefined) {
     if (input.barcode === null) {
@@ -1053,7 +1073,7 @@ export async function bulkEditVariants(
     const rows = (await tx.execute<VariantRow & { family_id: string | null }>(sql`
       select id, code, name, option_values, kind, unit, default_rate, default_cost, is_active, family_id
         from items
-       where org_id = ${orgId} and id = any(${ids}::uuid[])
+       where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])
        order by id
        for update`)).rows;
     // A write that matches zero rows is a failure: under RLS an unscoped
@@ -1091,7 +1111,7 @@ export async function bulkEditVariants(
         select i.id as item_id, i.code, i.name
           from item_identifiers ii
           join items i on i.id = ii.item_id and i.org_id = ii.org_id
-         where ii.org_id = ${orgId} and ii.value = ${barcode.value} and ii.item_id <> all(${ids}::uuid[])`)).rows[0];
+         where ii.org_id = ${orgId} and ii.value = ${barcode.value} and ii.item_id <> all(${uuidArray(ids)}::uuid[])`)).rows[0];
       if (taken) {
         throw new ItemFamilyError(
           `barcode ${barcode.value} is already used by ${taken.code ?? taken.name}`,
@@ -1284,7 +1304,7 @@ export async function convertItemToFamily(
         insert into item_family_options
           (org_id, family_id, position, name, "values", created_by, updated_by)
         values
-          (${orgId}, ${family.id}, ${position}, ${option.name}, ${option.values.map((entry) => entry.value)}::text[], ${actorId}, ${actorId})
+          (${orgId}, ${family.id}, ${position}, ${option.name}, ${textArrayLiteral(option.values.map((entry) => entry.value))}::text[], ${actorId}, ${actorId})
         returning id`)).rows[0];
       if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
     }
@@ -1329,7 +1349,7 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
       (await tx.execute<{ item_id: string; quantity: string }>(sql`
         select item_id, coalesce(sum(remaining_quantity), 0)::text as quantity
           from cost_layers
-         where org_id = ${orgId} and item_id = any(${variants.map((variant) => variant.id)}::uuid[])
+         where org_id = ${orgId} and item_id = any(${uuidArray(variants.map((variant) => variant.id))}::uuid[])
          group by item_id`)).rows.map((entry) => [entry.item_id, entry.quantity] as [string, string]),
     );
     return {
