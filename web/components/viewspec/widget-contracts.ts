@@ -521,6 +521,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'statement-drawer': { props: ['drawer'] },
   'statement-matrix': { props: ['currency', 'drill', 'scale', 'view'] },
   'statement-rows': { props: ['rows'] },
+  'stored-value-drawer': { props: ['drawer'] },
+  'stored-value-issue': { props: ['issue'] },
   'subcontracts-workspace': { props: [], open: true },
   'submitted-document-cell': { props: ['documentNumber', 'href'] },
   'subsidiary-switcher': { props: ['label', 'picker', 'value'] },
