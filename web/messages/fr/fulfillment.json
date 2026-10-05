@@ -239,6 +239,11 @@
         "buy": "Les étiquettes n’ont pas pu être achetées.",
         "nothingSelected": "Sélectionnez d’abord au moins un envoi.",
         "dateRequired": "Choisissez la date d’arrivée des étiquettes."
+      },
+      "tabs": {
+        "shipments": "Expéditions",
+        "rates": "Tarifs",
+        "labels": "Étiquettes achetées"
       }
     }
   }
