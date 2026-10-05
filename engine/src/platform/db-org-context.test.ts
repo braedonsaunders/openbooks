@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
+import { db, orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
 
 /**
  * Regression guard for the worst failure mode this database layer has:
@@ -115,4 +115,23 @@ test("a nested isolation request inside an ambient bypass transaction refuses by
       ),
     /cannot change isolation inside an active bypass transaction/,
   );
+});
+
+test("a nested db.transaction verifies the enclosing isolation and access mode instead of dropping them", async () => {
+  const ambient = (isolation: string, readOnly: string) => ({
+    execute: async () => ({ rows: [{ isolation, read_only: readOnly }] }),
+  });
+  const nested = (txDb: object, config: Parameters<typeof db.transaction>[1]) =>
+    orgContext.run({ orgId: "11111111-1111-1111-1111-111111111111", bypass: false, txDb: txDb as never }, () =>
+      db.transaction(async () => "joined", config));
+  await assert.rejects(
+    () => nested(ambient("read committed", "off"), { isolationLevel: "repeatable read" }),
+    /cannot raise isolation to repeatable read inside an active transaction running at read committed/,
+  );
+  await assert.rejects(
+    () => nested(ambient("serializable", "off"), { accessMode: "read only" }),
+    /cannot make an active read-write transaction read only/,
+  );
+  assert.equal(await nested(ambient("serializable", "on"), { isolationLevel: "repeatable read", accessMode: "read only" }), "joined");
+  assert.equal(await nested(ambient("read committed", "off"), undefined), "joined");
 });
