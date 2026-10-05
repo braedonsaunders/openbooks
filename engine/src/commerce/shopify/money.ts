@@ -45,6 +45,22 @@ export function shopifyDecimalToMinor(amount: unknown, currencyCode: unknown): b
   return BigInt(normalized === "" || normalized === "-" ? "0" : normalized);
 }
 
+/**
+ * Minor units to an exact major-unit decimal string for display. Exact
+ * bigint math against the currency exponent: a misplaced separator here
+ * is a 100x display error, so the web layer never divides minors itself.
+ */
+export function minorToMajorText(minor: bigint, currencyCode: string): string {
+  const code = currencyCode.trim().toUpperCase();
+  const currency = SUPPORTED_CURRENCIES.find((entry) => entry.code === code);
+  const exponent = currency?.minorUnits ?? 2;
+  const negative = minor < 0n;
+  const digits = (negative ? -minor : minor).toString().padStart(exponent + 1, "0");
+  const whole = digits.slice(0, digits.length - exponent) || "0";
+  const fraction = digits.slice(digits.length - exponent);
+  return `${negative ? "-" : ""}${whole}${exponent === 0 ? "" : `.${fraction}`}`;
+}
+
 /** Canonical decimal string (scale 4) for storage in rate columns. */
 export function shopifyDecimalToRate(amount: unknown): string {
   const text = typeof amount === "string" ? amount.trim() : "";
