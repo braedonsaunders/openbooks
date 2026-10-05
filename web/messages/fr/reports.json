@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "Récompenses et versements",
         "description": "Récompenses des employés, preuves d’approbation, références de remise et liens vers les entrées de paie."
+      },
+      "contract_balances": {
+        "label": "Soldes des contrats",
+        "description": "Facturé, comptabilisé et position nette par contrat de revenus dans le livre principal — actifs et passifs contractuels."
+      },
+      "remaining_performance_obligations": {
+        "label": "Obligations de prestation restantes",
+        "description": "Prix de transaction restant à comptabiliser par obligation et par mois dans le livre principal, avec échéance attendue (ASC 606-10-50-13)."
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "Identifiant de la récompense",
         "pay_run_document_id": "Exécution de paie",
         "pay_run_adjustment_id": "Ajustement de paie"
+      },
+      "contract_balances": {
+        "contract_number": "Contrat",
+        "customer": "Client",
+        "scope": "Périmètre",
+        "status": "Statut",
+        "currency": "Devise",
+        "billed": "Facturé",
+        "recognized": "Comptabilisé",
+        "remaining": "Restant",
+        "net": "Position nette",
+        "position": "Position",
+        "starts_on": "Début",
+        "ends_on": "Fin"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "Contrat",
+        "obligation": "Obligation",
+        "scope": "Périmètre",
+        "month": "Mois",
+        "timing_band": "Échéance",
+        "remaining": "Restant",
+        "currency": "Devise",
+        "schedule_status": "Statut du plan",
+        "obligation_status": "Statut de l'obligation",
+        "journal_entry_id": "Écriture (id)"
       }
     },
     "enumValues": {

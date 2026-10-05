@@ -978,6 +978,14 @@
       "hrm_benefit_awards": {
         "label": "Prêmios e pagamentos de benefícios",
         "description": "Prêmios dos empregados, evidências de aprovação, referências de entrega e vínculos com a folha."
+      },
+      "contract_balances": {
+        "label": "Saldos de contratos",
+        "description": "Faturado, reconhecido e posição líquida por contrato de receita no livro principal — ativos e passivos contratuais."
+      },
+      "remaining_performance_obligations": {
+        "label": "Obrigações de desempenho restantes",
+        "description": "Preço de transação ainda por reconhecer por obrigação e mês no livro principal, com prazo esperado (ASC 606-10-50-13)."
       }
     },
     "columns": {
@@ -2331,6 +2339,32 @@
         "id": "ID do prêmio",
         "pay_run_document_id": "Processamento da folha",
         "pay_run_adjustment_id": "Ajuste da folha"
+      },
+      "contract_balances": {
+        "contract_number": "Contrato",
+        "customer": "Cliente",
+        "scope": "Cobertura",
+        "status": "Status",
+        "currency": "Moeda",
+        "billed": "Faturado",
+        "recognized": "Reconhecido",
+        "remaining": "Restante",
+        "net": "Posição líquida",
+        "position": "Posição",
+        "starts_on": "Início",
+        "ends_on": "Fim"
+      },
+      "remaining_performance_obligations": {
+        "contract_number": "Contrato",
+        "obligation": "Obrigação",
+        "scope": "Cobertura",
+        "month": "Mês",
+        "timing_band": "Prazo",
+        "remaining": "Restante",
+        "currency": "Moeda",
+        "schedule_status": "Status do plano",
+        "obligation_status": "Status da obrigação",
+        "journal_entry_id": "Lançamento (id)"
       }
     },
     "enumValues": {

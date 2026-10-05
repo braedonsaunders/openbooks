@@ -1857,6 +1857,92 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'month', direction: 'asc' },
   },
+  {
+    key: 'contract_balances',
+    label: 'Contract balances',
+    category: 'transactions',
+    description: 'Billed, recognized and net position per revenue contract on the primary book — contract assets and liabilities.',
+    from: `revenue_contracts rc
+      LEFT JOIN parties cust ON cust.id = rc.customer_id AND cust.org_id = rc.org_id
+      LEFT JOIN LATERAL (
+        SELECT coalesce(sum(b.amount), 0) AS billed
+          FROM revenue_contract_billings b
+         WHERE b.org_id = rc.org_id AND b.contract_id = rc.id
+      ) bill ON true
+      LEFT JOIN LATERAL (
+        SELECT coalesce(sum(l.recognized_amount) FILTER (
+                 WHERE l.journal_entry_id IS NOT NULL AND l.reversal_journal_entry_id IS NULL), 0) AS recognized,
+               coalesce(sum(CASE
+                 WHEN l.superseded_by_change_id IS NOT NULL OR l.reversal_journal_entry_id IS NOT NULL THEN 0
+                 WHEN l.journal_entry_id IS NOT NULL THEN coalesce(l.recognized_amount, 0)
+                 ELSE l.planned_amount END), 0) AS planned
+          FROM performance_obligations o
+          JOIN recognition_schedules s ON s.obligation_id = o.id AND s.org_id = o.org_id
+          JOIN accounting_books bk ON bk.id = s.book_id AND bk.org_id = s.org_id AND bk.is_primary
+          JOIN recognition_schedule_lines l ON l.schedule_id = s.id AND l.org_id = s.org_id
+         WHERE o.org_id = rc.org_id AND o.contract_id = rc.id
+      ) sched ON true`,
+    orgColumn: 'rc.org_id',
+    subsidiaryScope: { column: 'rc.subsidiary_id' },
+    currencyColumn: 'currency',
+    requiredPermission: 'ar.read',
+    featureKey: 'revenueContracts',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'contract_number', label: 'Contract', kind: 'text', expr: 'rc.contract_number' },
+      { key: 'customer', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
+      { key: 'scope', label: 'Coverage', kind: 'enum', expr: 'rc.scope', options: ['invoice', 'order', 'subscription'] },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'rc.status', options: ['draft', 'active', 'complete', 'cancelled'] },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'rc.currency' },
+      { key: 'billed', label: 'Billed', kind: 'money', expr: 'bill.billed', txnCurrency: true },
+      { key: 'recognized', label: 'Recognized', kind: 'money', expr: 'sched.recognized', txnCurrency: true },
+      { key: 'remaining', label: 'Remaining', kind: 'money', expr: 'sched.planned - sched.recognized', txnCurrency: true },
+      { key: 'net', label: 'Net position', kind: 'money', expr: 'bill.billed - sched.recognized', txnCurrency: true },
+      { key: 'position', label: 'Position', kind: 'enum', expr: `CASE WHEN bill.billed - sched.recognized > 0 THEN 'liability' WHEN bill.billed - sched.recognized < 0 THEN 'asset' ELSE 'settled' END`, options: ['asset', 'liability', 'settled'] },
+      { key: 'starts_on', label: 'Starts on', kind: 'date', expr: 'rc.starts_on' },
+      { key: 'ends_on', label: 'Ends on', kind: 'date', expr: 'rc.ends_on' },
+    ],
+    defaultSort: { column: 'contract_number', direction: 'asc' },
+  },
+  {
+    key: 'remaining_performance_obligations',
+    label: 'Remaining performance obligations',
+    category: 'transactions',
+    description: 'Transaction price still to recognize per obligation and month on the primary book, with expected timing (ASC 606-10-50-13).',
+    from: `performance_obligations po
+      JOIN revenue_contracts rc ON rc.id = po.contract_id AND rc.org_id = po.org_id
+      JOIN recognition_schedules rs ON rs.obligation_id = po.id AND rs.org_id = po.org_id
+      JOIN accounting_books bk ON bk.id = rs.book_id AND bk.org_id = rs.org_id AND bk.is_primary
+      JOIN recognition_schedule_lines rsl ON rsl.schedule_id = rs.id AND rsl.org_id = rs.org_id
+      JOIN accounting_periods ap ON ap.id = rsl.period_id AND ap.org_id = rsl.org_id`,
+    orgColumn: 'po.org_id',
+    subsidiaryScope: { column: 'rc.subsidiary_id' },
+    currencyColumn: 'currency',
+    requiredPermission: 'ar.read',
+    featureKey: 'revenueContracts',
+    timeKey: 'month',
+    baseFilter: {
+      combinator: 'and',
+      rules: [
+        { field: 'journal_entry_id', op: 'is_null' },
+        { field: 'schedule_status', op: 'in', value: ['planned', 'in_progress'] },
+        { field: 'obligation_status', op: 'neq', value: 'cancelled' },
+      ],
+    },
+    columns: [
+      { key: 'contract_number', label: 'Contract', kind: 'text', expr: 'rc.contract_number' },
+      { key: 'obligation', label: 'Obligation', kind: 'text', expr: 'po.description' },
+      { key: 'scope', label: 'Coverage', kind: 'enum', expr: 'rc.scope', options: ['invoice', 'order', 'subscription'] },
+      { key: 'month', label: 'Month', kind: 'date', expr: "date_trunc('month', ap.starts_on)::date" },
+      { key: 'timing_band', label: 'Timing', kind: 'enum', expr: `CASE WHEN ap.ends_on <= (current_date + interval '1 year')::date THEN 'within_one_year' WHEN ap.ends_on <= (current_date + interval '2 years')::date THEN 'one_to_two_years' ELSE 'beyond_two_years' END`, options: ['within_one_year', 'one_to_two_years', 'beyond_two_years'] },
+      { key: 'remaining', label: 'Remaining', kind: 'money', expr: 'rsl.planned_amount', txnCurrency: true },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'rs.transaction_currency' },
+      { key: 'schedule_status', label: 'Schedule status', kind: 'enum', expr: 'rs.status', options: ['planned', 'in_progress', 'complete', 'cancelled'] },
+      { key: 'obligation_status', label: 'Obligation status', kind: 'enum', expr: 'po.status', options: ['open', 'satisfied', 'cancelled'] },
+      { key: 'journal_entry_id', label: 'Journal entry (id)', kind: 'uuid', expr: 'rsl.journal_entry_id' },
+    ],
+    defaultSort: { column: 'month', direction: 'asc' },
+  },
   // HR-20 end
 ]
 
