@@ -1596,6 +1596,7 @@ export function PartyDrawer({
             canManageAutopay={autopay?.canManageAutopay ?? false}
             defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
           />
+        ) : null}
         {tab === 'store-credit' && showStoreCreditTab && storedValue ? (
           <StoreCreditPanel balances={storedValue.balances} />
         ) : null}
