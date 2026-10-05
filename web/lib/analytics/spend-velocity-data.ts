@@ -318,43 +318,63 @@ export interface SpendVelocityComparisonWindows {
  * Current queries use `>= from`/`<= to`, while prior queries use
  * `>= priorFrom`/`< from`.
  *
- * With declared fiscal periods the windows are whole periods, never
- * day-shifted fragments: the current window's overlapping periods decide the
- * run length, and each earlier window takes that many whole periods straight
- * before it, so a 4-4-5 or 13-period calendar compares like with like. A
- * window with no declared coverage behind it keeps the calendar behaviour —
- * shifting by the inclusive day count keeps those windows equal in length.
+ * Whole declared periods compare only when the window sits exactly on
+ * period boundaries: a period-to-date, custom or partial window must never
+ * compare its short span against whole prior periods. A misaligned window
+ * takes the same elapsed length anchored to the end of the preceding
+ * declared run; with no declared coverage behind it, windows shift by the
+ * inclusive day count so they stay equal in length either way.
  */
 export function getSpendVelocityComparisonWindows(
   from: string,
   to: string,
   periods: FiscalPeriod[] = [],
 ): SpendVelocityComparisonWindows {
-  const start = new Date(from + "T00:00:00Z");
-  const end = new Date(to + "T00:00:00Z");
-  const periodDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
-  const ymd = (d: Date) => d.toISOString().slice(0, 10);
-  const dayShift = (days: number): string => ymd(new Date(start.getTime() - days * 86_400_000));
+  const day = (iso: string): number => new Date(iso + "T00:00:00Z").getTime();
+  const ymd = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+  const spanDays = (a: string, b: string): number => Math.round((day(b) - day(a)) / 86_400_000) + 1;
+  const back = (iso: string, days: number): string => ymd(day(iso) - days * 86_400_000);
   const ordered = [...periods].sort((a, b) => a.from.localeCompare(b.from));
-  // The run of whole declared periods ending just before `edge`, longest
-  // `count` — null when declared coverage runs out.
-  const snapBack = (edge: string, count: number): { from: string; to: string } | null => {
+  // The longest `count` whole declared periods ending just before `edge`.
+  const runBefore = (edge: string, count: number): { from: string; to: string } | null => {
     if (count < 1) return null;
     const before = ordered.filter((p) => p.to < edge);
     if (before.length < count) return null;
     const run = before.slice(before.length - count);
     return { from: run[0]!.from, to: run[run.length - 1]!.to };
   };
-  const overlapping = ordered.filter((p) => p.from <= to && p.to >= from).length;
-  const prior = overlapping > 0 ? snapBack(from, overlapping) : null;
-  const twoBack = prior ? snapBack(prior.from, overlapping) : null;
-  return {
-    periodDays,
-    priorFrom: prior ? prior.from : dayShift(periodDays),
-    priorTo: prior ? prior.to : dayShift(1),
-    twoBackFrom: twoBack ? twoBack.from : dayShift(2 * periodDays),
-    twoBackTo: twoBack ? twoBack.to : dayShift(periodDays + 1),
+  // One step back from an inclusive window: whole periods when the window
+  // sits on period boundaries, the same elapsed length at the prior run's
+  // end when it does not, day-shifted when declared coverage runs out. An
+  // anchored or shifted window continues contiguously instead of
+  // re-anchoring, so the three windows never leave gaps between them.
+  const stepBack = (cfrom: string, cto: string): { from: string; to: string; snapped: boolean } => {
+    const length = spanDays(cfrom, cto);
+    const dayShifted = { from: back(cfrom, length), to: back(cfrom, 1), snapped: false };
+    const overlapping = ordered.filter((p) => p.from <= cto && p.to >= cfrom);
+    if (
+      overlapping.length > 0 &&
+      overlapping[0]!.from === cfrom &&
+      overlapping[overlapping.length - 1]!.to === cto
+    ) {
+      const run = runBefore(cfrom, overlapping.length);
+      if (run) return { ...run, snapped: true };
+    } else if (overlapping.length > 0) {
+      const run = runBefore(cfrom, overlapping.length);
+      if (run && spanDays(run.from, run.to) >= length) {
+        return { from: back(run.to, length - 1), to: run.to, snapped: false };
+      }
+    }
+    return dayShifted;
   };
+  const start = new Date(from + "T00:00:00Z");
+  const end = new Date(to + "T00:00:00Z");
+  const periodDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const prior = stepBack(from, to);
+  const twoBack = prior.snapped
+    ? stepBack(prior.from, prior.to)
+    : { from: back(prior.from, spanDays(prior.from, prior.to)), to: back(prior.from, 1) };
+  return { periodDays, priorFrom: prior.from, priorTo: prior.to, twoBackFrom: twoBack.from, twoBackTo: twoBack.to };
 }
 
 type SqlNumber = string | number | null;
@@ -402,10 +422,9 @@ export async function spendVelocityData(
   const buckets = await fiscalBucketScope(orgId);
 
   // Period windows for comparison (inclusive current and back-to-back prior):
-  // whole declared periods on a non-monthly calendar, day-shifted otherwise.
-  const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(
-    from, to, buckets.useFiscal ? buckets.periods : [],
-  );
+  // whole declared periods whenever a default calendar exists at any
+  // cadence, day-shifted where it does not.
+  const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to, buckets.periods);
   // Per-period figures annualise by the calendar's own periods per year.
   const periodsPerYear = buckets.useFiscal ? fiscalPeriodsPerYear(buckets.periods, to) : 12;
   // Window captions name declared periods (or calendar months); a window

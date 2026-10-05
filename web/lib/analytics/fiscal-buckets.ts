@@ -16,7 +16,9 @@ import type { FiscalPeriod } from "@openbooks/reports";
 
 export interface FiscalBucketScope {
   useFiscal: boolean;
-  /** Declared non-adjustment periods, ordered by start. Empty unless fiscal. */
+  /** Declared non-adjustment periods, ordered by start. Empty only when the
+   * organization declares no calendar; present at every cadence so callers
+   * beyond bucketing (comparison windows) can snap to them. */
   periods: FiscalPeriod[];
 }
 
@@ -24,11 +26,14 @@ export async function fiscalBucketScope(orgId: string): Promise<FiscalBucketScop
   // No silent fallback: a calendar that fails to resolve must fail the
   // dashboard the same way period resolution fails it, or trend buckets and
   // period labels would quietly disagree about which calendar is in force.
+  // Declared periods ride along at every cadence (monthly included) so
+  // comparison windows can snap to them; only bucketing stays gated on a
+  // non-monthly cadence.
   const cal = await defaultFiscalCalendarPeriods(orgId);
-  if (!cal || cal.cadence === "monthly" || cal.periods.length === 0) {
+  if (!cal || cal.periods.length === 0) {
     return { useFiscal: false, periods: [] };
   }
-  return { useFiscal: true, periods: cal.periods };
+  return { useFiscal: cal.cadence !== "monthly", periods: cal.periods };
 }
 
 /**

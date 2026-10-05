@@ -55,6 +55,24 @@ test("a current window spanning two periods takes two whole periods back", () =>
   assert.equal(windows.priorTo, "2026-03-01");
 });
 
+test("a period-to-date window never compares its short span to whole periods", () => {
+  // From P3's start to mid-period: misaligned, so the same 12-day elapsed
+  // length anchors to the end of the preceding P2 run.
+  assert.deepEqual(getSpendVelocityComparisonWindows("2026-03-30", "2026-04-10", fiscalPeriods), {
+    periodDays: 12,
+    priorFrom: "2026-03-18",
+    priorTo: "2026-03-29",
+    twoBackFrom: "2026-03-06",
+    twoBackTo: "2026-03-17",
+  });
+});
+
+test("a mid-period window with no preceding run keeps the calendar shift", () => {
+  const windows = getSpendVelocityComparisonWindows("2026-03-10", "2026-04-10", fiscalPeriods);
+  assert.equal(windows.priorFrom, "2026-02-06");
+  assert.equal(windows.priorTo, "2026-03-09");
+});
+
 test("flat spend has zero velocity and acceleration", () => {
   assert.deepEqual(velocityAndAcceleration([200, 200, 200, 200, 200, 200]), {
     velocity: 0,
