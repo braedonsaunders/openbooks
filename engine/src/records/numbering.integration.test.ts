@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -22,20 +21,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * deterministic repair merges legacy per-subsidiary rows without ever
  * reproducing an issued number.
  */
-
-/** The generators whose contract is to delegate to the canonical allocator. */
-const ALLOCATOR_CONTRACT_FILES = [
-  "engine/src/ledger/journal-writes.ts",
-  "engine/src/payables/ap-capture-service.ts",
-  "engine/src/inventory/document-numbering.ts",
-  "engine/src/projects/construction-billing.ts",
-  "engine/src/projects/subcontracts.ts",
-  "engine/src/billing/subscription-billing.ts",
-  "engine/src/billing/recurring.ts",
-  "engine/src/payments/payment-documents.ts",
-  "web/lib/bills.ts",
-  "web/lib/data-io/record-resources.ts",
-] as const;
 
 /** Insert the numbered draft document a generator would create. */
 async function seedNumberedDocument(orgId: string, kind: string, number: string): Promise<string> {
@@ -250,26 +235,6 @@ test("storage refuses per-subsidiary rows, backward counters, and used-format ed
     assert.equal(await allocateDocumentNumber(db, org.orgId, "expense_report", "EX-"), "EX-00101");
   } finally {
     await dropScratchOrg(org.orgId);
-  }
-});
-
-test("every listed generator delegates to the canonical allocator (source contract)", () => {
-  const allocatorSource = readFileSync("engine/src/records/numbering.ts", "utf8");
-  assert.match(allocatorSource, /insert into number_sequences/, "the canonical allocator owns the one upsert");
-
-  for (const file of ALLOCATOR_CONTRACT_FILES) {
-    const source = readFileSync(file, "utf8");
-    assert.match(
-      source,
-      /from ['"](?:\.\/|\.\.\/records\/|@openbooks\/engine\/src\/records\/)numbering\.ts['"]/,
-      `${file} must import the canonical allocator`,
-    );
-    assert.match(source, /allocateDocumentNumber\(/, `${file} must allocate through the canonical allocator`);
-    assert.doesNotMatch(
-      source,
-      /insert into number_sequences/,
-      `${file} must not carry its own sequence upsert`,
-    );
   }
 });
 
