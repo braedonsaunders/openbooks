@@ -40,5 +40,7 @@
   "rerun": "Repetir",
   "rerunStarted": "Repetición iniciada",
   "status": "Estado",
-  "objects": "Objetos"
+  "objects": "Objetos",
+  "loadFailed": "No se pudieron cargar las importaciones de facturación.",
+  "requestFailed": "La plataforma de facturación no respondió."
 }

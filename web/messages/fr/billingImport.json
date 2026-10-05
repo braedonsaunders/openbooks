@@ -40,5 +40,7 @@
   "rerun": "Relancer",
   "rerunStarted": "Relance démarrée",
   "status": "Statut",
-  "objects": "Objets"
+  "objects": "Objets",
+  "loadFailed": "Impossible de charger les imports de facturation.",
+  "requestFailed": "La plateforme de facturation n'a pas répondu."
 }

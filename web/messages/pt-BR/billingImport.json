@@ -40,5 +40,7 @@
   "rerun": "Executar novamente",
   "rerunStarted": "Nova execução iniciada",
   "status": "Status",
-  "objects": "Objetos"
+  "objects": "Objetos",
+  "loadFailed": "Não foi possível carregar as importações de cobrança.",
+  "requestFailed": "A plataforma de cobrança não respondeu."
 }

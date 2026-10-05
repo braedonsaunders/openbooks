@@ -87,13 +87,13 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
   failed: "destructive",
 };
 
-async function postJson(url: string, body: unknown): Promise<unknown> {
+async function postJson(url: string, body: unknown, fallback: string): Promise<unknown> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await readApiErrorMessage(res));
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback));
   return res.json();
 }
 
@@ -121,7 +121,7 @@ export function BillingHistoryClient() {
       .then(async (res) => {
         // The status is checked before the body is parsed: a refusal lands
         // in the toast, never in a JSON parse error.
-        if (!res.ok) throw new Error(await readApiErrorMessage(res));
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, t("loadFailed")));
         setRuns((await res.json()) as ImportRun[]);
         setLoading(false);
       })
@@ -151,7 +151,7 @@ export function BillingHistoryClient() {
         externalAccount,
         apiKey,
         site: site || undefined,
-      })) as { runId: string; preflight: Preflight };
+      }, t("requestFailed"))) as { runId: string; preflight: Preflight };
       setRunId(started.runId);
       setPreflight(started.preflight);
       setStep("preflight");
@@ -170,8 +170,8 @@ export function BillingHistoryClient() {
       await postJson("/api/billing-import/accept", {
         runId,
         config: { mode, cutoverOn: cutoverOn || null },
-      });
-      const done = (await postJson("/api/billing-import/import", { runId })) as {
+      }, t("requestFailed"));
+      const done = (await postJson("/api/billing-import/import", { runId }, t("requestFailed"))) as {
         counts: Counts;
         reconciliation: { ties: boolean; differences: Difference[] };
       };
@@ -188,7 +188,7 @@ export function BillingHistoryClient() {
   async function rerun(id: string) {
     setBusy(true);
     try {
-      await postJson("/api/billing-import/import", { runId: id });
+      await postJson("/api/billing-import/import", { runId: id }, t("requestFailed"));
       toast.success(t("rerunStarted"));
       await refresh();
     } catch (error) {
@@ -257,7 +257,7 @@ export function BillingHistoryClient() {
           </Button>
         </div>
       ) : (
-        <ListTable rows={runs} columns={columns} rowKey={(row) => row.id} />
+        <ListTable rows={runs} columns={columns} rowKey={(row) => row.id} empty={<p className="text-sm text-muted-foreground">{t("emptyBody")}</p>} />
       )}
 
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={t("wizardTitle")}>

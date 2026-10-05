@@ -40,5 +40,7 @@
   "rerun": "Erneut ausführen",
   "rerunStarted": "Erneute Ausführung gestartet",
   "status": "Status",
-  "objects": "Objekte"
+  "objects": "Objekte",
+  "loadFailed": "Abrechnungsimporte konnten nicht geladen werden.",
+  "requestFailed": "Die Abrechnungsplattform hat nicht geantwortet."
 }

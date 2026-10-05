@@ -40,5 +40,7 @@
   "rerun": "再実行",
   "rerunStarted": "再実行を開始しました",
   "status": "ステータス",
-  "objects": "オブジェクト"
+  "objects": "オブジェクト",
+  "loadFailed": "請求インポートを読み込めませんでした。",
+  "requestFailed": "請求プラットフォームから応答がありませんでした。"
 }

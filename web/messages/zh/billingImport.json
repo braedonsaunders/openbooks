@@ -40,5 +40,7 @@
   "rerun": "重新运行",
   "rerunStarted": "已开始重新运行",
   "status": "状态",
-  "objects": "对象"
+  "objects": "对象",
+  "loadFailed": "无法加载账单导入记录。",
+  "requestFailed": "账单平台无响应。"
 }
