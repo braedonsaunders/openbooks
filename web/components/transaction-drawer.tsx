@@ -41,8 +41,8 @@ export interface TransactionDrawerProps {
    * one rail, it is one click away from any field.
    */
   keepChildrenMounted?: boolean
-  /** Keep record-specific tab panels mounted and hidden so switching never loses local drafts. */
-  keepRecordTabsMounted?: boolean
+  /** Keep all or named record panels mounted and hidden so switching retains drafts; other panels stay lazy. */
+  keepRecordTabsMounted?: boolean | readonly string[]
   /** Optional controlled tab state for record bodies that render tab-specific content themselves. */
   activeTab?: string
   onActiveTabChange?: (key: string) => void
@@ -209,9 +209,9 @@ function TransactionDrawerFrame({
       {keepRecordTabsMounted ? (
         <>
           <div hidden={activeTab !== 'details'}>{children}</div>
-          {detailTabs.map((tab) => (
+          {detailTabs.map((tab) => (keepRecordTabsMounted === true || keepRecordTabsMounted.includes(tab.key) || activeTab === tab.key) ? (
             <div key={tab.key} hidden={activeTab !== tab.key}>{tab.content}</div>
-          ))}
+          ) : null)}
           {activeTab === 'attachments' ? (
             <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
           ) : activeTab === 'audit' ? (

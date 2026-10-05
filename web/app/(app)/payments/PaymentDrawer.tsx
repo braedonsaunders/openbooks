@@ -869,7 +869,7 @@ export function PaymentDrawer({
       }
       // No approvals tab before the first Save: the history reads the
       // persisted row the drawer has not written yet.
-      keepRecordTabsMounted={showTenders}
+      keepRecordTabsMounted={showTenders ? ['tenders'] : false}
       detailTabs={[
         ...(showTenders ? [{
           key: 'tenders',
