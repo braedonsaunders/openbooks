@@ -307,6 +307,22 @@
     "price": "Preço",
     "amount": "Valor"
   },
+  "assistance": {
+    "loading": "Buscando a solução…",
+    "loadFailed": "Não foi possível carregar a solução proposta. Reexecute o pedido ou tente de novo.",
+    "apply": "Aplicar solução",
+    "applySimilar": "Aplicar a {count} semelhantes",
+    "similar": "{count, plural, one {# pedido compartilha} other {# pedidos compartilham}} esta causa",
+    "reject": "Recusar",
+    "rejectTitle": "Recusar esta solução?",
+    "rejectLabel": "Por que ela está errada?",
+    "rejected": "Recusa registrada no log de auditoria.",
+    "approved": "Solução aplicada: {posted} contabilizados, {parked} ainda bloqueados.",
+    "confirmTitle": "Aplicar esta solução?",
+    "confirmBody": "{fix} Isso reexecuta {count, plural, one {# pedido} other {# pedidos}}. O histórico contabilizado mantém suas contas.",
+    "evidence": "Por que esta solução",
+    "evidenceSummary": "{count, plural, one {# motivo} other {# motivos}}"
+  },
   "posting": {
     "mode": "Modo de contabilização",
     "modePerOrder": "Por pedido",

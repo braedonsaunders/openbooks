@@ -307,6 +307,22 @@
     "price": "单价",
     "amount": "金额"
   },
+  "assistance": {
+    "loading": "正在查找解决方案…",
+    "loadFailed": "未能加载建议的解决方案。请重跑订单或重试。",
+    "apply": "应用修复",
+    "applySimilar": "应用于{count}个类似项",
+    "similar": "有{count}个订单具有相同原因",
+    "reject": "拒绝",
+    "rejectTitle": "拒绝此方案？",
+    "rejectLabel": "为什么它是错误的？",
+    "rejected": "已在审计日志中记录拒绝。",
+    "approved": "已应用修复：{posted}个已过账，{parked}个仍被阻止。",
+    "confirmTitle": "应用此修复？",
+    "confirmBody": "{fix} 这将重跑{count}个订单。已过账的历史记录保留原科目。",
+    "evidence": "为什么是这个方案",
+    "evidenceSummary": "{count}条理由"
+  },
   "posting": {
     "mode": "过账模式",
     "modePerOrder": "逐笔过账",

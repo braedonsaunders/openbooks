@@ -307,6 +307,22 @@
     "price": "Price",
     "amount": "Amount"
   },
+  "assistance": {
+    "loading": "Finding the fix…",
+    "loadFailed": "The proposed fix did not load. Replay the order or try again.",
+    "apply": "Apply fix",
+    "applySimilar": "Apply to {count} similar",
+    "similar": "{count, plural, one {# order shares} other {# orders share}} this cause",
+    "reject": "Reject",
+    "rejectTitle": "Reject this fix?",
+    "rejectLabel": "Why is it wrong?",
+    "rejected": "Rejection recorded in the audit log.",
+    "approved": "Fix applied: {posted} posted, {parked} still blocked.",
+    "confirmTitle": "Apply this fix?",
+    "confirmBody": "{fix} This replays {count, plural, one {# order} other {# orders}}. Posted history keeps its accounts.",
+    "evidence": "Why this fix",
+    "evidenceSummary": "{count, plural, one {# reason} other {# reasons}}"
+  },
   "posting": {
     "mode": "Posting mode",
     "modePerOrder": "Per order",

@@ -307,6 +307,22 @@
     "price": "Prix",
     "amount": "Montant"
   },
+  "assistance": {
+    "loading": "Recherche de la solution…",
+    "loadFailed": "La solution proposée n'a pas pu être chargée. Rejouez la commande ou réessayez.",
+    "apply": "Appliquer la solution",
+    "applySimilar": "Appliquer à {count} similaires",
+    "similar": "{count, plural, one {# commande partage} other {# commandes partagent}} cette cause",
+    "reject": "Refuser",
+    "rejectTitle": "Refuser cette solution ?",
+    "rejectLabel": "Pourquoi est-elle incorrecte ?",
+    "rejected": "Refus enregistré dans le journal d'audit.",
+    "approved": "Solution appliquée : {posted} comptabilisées, {parked} toujours bloquées.",
+    "confirmTitle": "Appliquer cette solution ?",
+    "confirmBody": "{fix} Ceci rejoue {count, plural, one {# commande} other {# commandes}}. L'historique comptabilisé conserve ses comptes.",
+    "evidence": "Pourquoi cette solution",
+    "evidenceSummary": "{count, plural, one {# raison} other {# raisons}}"
+  },
   "posting": {
     "mode": "Mode de comptabilisation",
     "modePerOrder": "Par commande",
