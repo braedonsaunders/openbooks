@@ -29,18 +29,36 @@ export function PortalEmpty({ children }: { children: ReactNode }) {
   return <p className="text-sm text-slate-500 dark:text-slate-400">{children}</p>
 }
 
-export function PortalNav({ token, sections }: { token: string; sections: Array<{ href: string; label: string }> }) {
+export function PortalNav({
+  token,
+  sections,
+  activeHref,
+  ariaLabel = 'Portal sections',
+}: {
+  token: string
+  sections: Array<{ href: string; label: string }>
+  /** Full href of the current link: marked with aria-current and the active tone. */
+  activeHref?: string
+  ariaLabel?: string
+}) {
   return (
-    <nav className="mt-6 flex flex-wrap gap-2" aria-label="Portal sections">
-      {sections.map((section) => (
-        <a
-          key={section.href}
-          href={`/portal/${token}${section.href}`}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
-          {section.label}
-        </a>
-      ))}
+    <nav className="mt-6 flex flex-wrap gap-2" aria-label={ariaLabel}>
+      {sections.map((section) => {
+        const href = `/portal/${token}${section.href}`
+        const active = activeHref === href
+        return (
+          <a
+            key={section.href}
+            href={href}
+            aria-current={active ? 'page' : undefined}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${active
+              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+              : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+          >
+            {section.label}
+          </a>
+        )
+      })}
     </nav>
   )
 }

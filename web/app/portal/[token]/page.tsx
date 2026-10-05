@@ -44,20 +44,21 @@ export default async function PortalTokenPage({ params }: { params: Promise<{ to
       count: home.subscriptions.length,
       empty: t('home.noSubscriptions'),
     }] : []),
-    ...((home.settings.sections.usage || home.settings.sections.giftCards) ? [
-      {
-        href: `/portal/${token}/gift-cards?kind=credit`,
-        label: t('home.storeCredit'),
-        count: home.storeCredit.length,
-        empty: t('giftCards.empty'),
-      },
-      {
-        href: `/portal/${token}/gift-cards?kind=grants`,
-        label: t('home.prepaid'),
-        count: home.prepaidGrants.length,
-        empty: t('giftCards.empty'),
-      },
-    ] : []),
+    // Each balance links only its own allowed section: store credit needs
+    // the gift-cards section, prepaid grants need usage or gift-cards, so a
+    // usage-only portal keeps its balances and never lands on a refusal.
+    ...(home.settings.sections.giftCards ? [{
+      href: `/portal/${token}/gift-cards?kind=credit`,
+      label: t('home.storeCredit'),
+      count: home.storeCredit.length,
+      empty: t('giftCards.empty'),
+    }] : []),
+    ...((home.settings.sections.usage || home.settings.sections.giftCards) ? [{
+      href: `/portal/${token}/gift-cards?kind=grants`,
+      label: t('home.prepaid'),
+      count: home.prepaidGrants.length,
+      empty: t('giftCards.empty'),
+    }] : []),
     ...(home.settings.sections.orders ? [{
       href: `/portal/${token}/orders`,
       label: t('home.orders'),
