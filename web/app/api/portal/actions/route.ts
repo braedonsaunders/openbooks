@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto'
-import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
@@ -14,6 +13,7 @@ import {
   pauseSubscription,
   previewSubscriptionChange,
   resolvePortalSession,
+  resolvePortalSetupCurrency,
   resumeSubscription,
 } from '@openbooks/engine/portal'
 import { createPaymentLink } from '@openbooks/engine/payments/acceptance'
@@ -49,6 +49,10 @@ type Body = z.output<typeof bodySchema>
 export const POST = defineRoute({
   public: 'token',
   body: bodySchema,
+  opaque: {
+    quantity: "quantities are parsed to exact decimals by parsePortalDecimal in previewSubscriptionChange and applySubscriptionChange with a named 422",
+    unitPrice: "prices are parsed to exact decimals by parsePortalDecimal in previewSubscriptionChange and applySubscriptionChange with a named 422",
+  },
   handler: async ({ body }: { body: Body }) => {
     const session = await resolvePortalSession(body.sessionToken)
     if (!session) return NextResponse.json({ error: 'This portal session is invalid or expired' }, { status: 404 })
@@ -86,17 +90,7 @@ export const POST = defineRoute({
       }
       case 'startMethodSetup': {
         const setupToken = randomBytes(32).toString('hex')
-        const currency = await withOrgContext(orgId, async () => {
-          const row = (await db.execute<{ currency: string }>(sql`
-            with ranked as (
-              select currency, row_number() over (order by document_date desc) as rn
-                from documents
-               where org_id = ${orgId} and party_id = ${partyId} and kind = 'customer_invoice'
-            )
-            select coalesce((select currency from ranked where rn = 1),
-                            (select base_currency from orgs where id = ${orgId})) as currency`)).rows[0]
-          return row?.currency ?? 'USD'
-        })
+        const currency = await withOrgContext(orgId, () => resolvePortalSetupCurrency(orgId, partyId))
         const setup = await startMethodSetup(orgId, {
           partyId,
           provider: body.provider,

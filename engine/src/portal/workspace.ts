@@ -246,3 +246,25 @@ export async function portalOrderTracking(
   }
   return tracking;
 }
+
+/**
+ * The currency a payment-method setup collects in: the customer's latest
+ * invoice currency, else the organization's base currency, else USD.
+ * Owned here so the portal route and any future setup surface resolve it
+ * the same way; the setup itself still validates the currency it receives.
+ */
+export async function resolvePortalSetupCurrency(
+  orgId: string,
+  partyId: string,
+  runner: SqlExecutor = db,
+): Promise<string> {
+  const row = (await runner.execute<{ currency: string | null }>(sql`
+    with ranked as (
+      select currency, row_number() over (order by document_date desc) as rn
+        from documents
+       where org_id = ${orgId} and party_id = ${partyId} and kind = 'customer_invoice'
+    )
+    select coalesce((select currency from ranked where rn = 1),
+                    (select base_currency from orgs where id = ${orgId})) as currency`)).rows[0];
+  return row?.currency ?? "USD";
+}

@@ -40,6 +40,7 @@ export {
   portalAcceptanceProviders,
   portalHome,
   portalOrderTracking,
+  resolvePortalSetupCurrency,
   type PortalAcceptanceProvider,
   type PortalChannelOrder,
   type PortalHome,
