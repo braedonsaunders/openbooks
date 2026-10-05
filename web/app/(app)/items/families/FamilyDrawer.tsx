@@ -309,6 +309,9 @@ function CreateFamily() {
         onSave={async (next) => {
           setOptions(next.map((option) => ({ id: null, name: option.name, values: option.values.map((entry) => (typeof entry === 'string' ? entry : entry.value)) })))
         }}
+        // Live sync: without it the chipped values stay editor-local and
+        // Create posts the pristine empty draft it was given.
+        onOptionsChange={setOptions}
       />
       {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
       <button
