@@ -269,6 +269,58 @@ function uscPass(
   return charge;
 }
 
+/**
+ * One week's employee charge at the WEEKLY bands: A0 nil, the AX credit
+ * formula inside the credit band, the flat rate above it. Fortnightly
+ * slices below the €38 weekly floor price nil like A0 rather than refusing
+ * as Class J: the slice is not a standalone weekly payroll, and the
+ * aggregate fortnightly floor already guards degenerate fortnights —
+ * refusing here would strand ordinary variable-hour weeks.
+ */
+function weeklyEmployeeCharge(edition: IeEditionRates, slice: bigint): bigint {
+  const weeklyBands = prsiPeriodBands().weekly;
+  if (slice <= U(weeklyBands.a0Max)) return 0n;
+  if (slice > U(weeklyBands.axMax)) return mulRateCents(slice, edition.prsiEmployeeRate);
+  const gross = mulRateCents(slice, edition.prsiEmployeeRate);
+  // "Reduced by one sixth of earnings in excess of €352.01": the sixth
+  // rounds half-up to the cent (SW14: 24.99 ÷ 6 shows €4.17) and the
+  // credit is the €12 maximum less that rounded sixth (12.00 − 4.17 =
+  // €7.83 in the same example).
+  const excess = slice - U(edition.prsiCreditBase);
+  const sixth = mulRatioCents(excess < 0n ? 0n : excess, 1n, 6n);
+  const credit = max0(U(edition.prsiCreditMax) - sixth);
+  return max0(gross - credit);
+}
+
+/** The weekly subclass a week's pay falls in. */
+function weeklySubclass(slice: bigint): string {
+  const weekly = prsiPeriodBands().weekly;
+  if (slice <= U(weekly.a0Max)) return "A0";
+  if (slice <= U(weekly.axMax)) return "AX";
+  return slice <= U(weekly.alMax) ? "AL" : "A1";
+}
+
+/**
+ * A fortnight priced week by week: each week's employee charge and employer
+ * rate come from that week's pay against the weekly bands. The subclass
+ * reported is the higher-paid week's, the week that sets the charge.
+ */
+function fortnightByWeeks(
+  edition: IeEditionRates,
+  weeks: readonly [bigint, bigint],
+): { employee: bigint; employer: bigint; subclass: string } {
+  const weeklyAlMax = U(prsiPeriodBands().weekly.alMax);
+  const employerFor = (slice: bigint): bigint => mulRateCents(
+    slice,
+    slice <= weeklyAlMax ? edition.prsiEmployerLowerRate : edition.prsiEmployerHigherRate,
+  );
+  return {
+    employee: weeklyEmployeeCharge(edition, weeks[0]) + weeklyEmployeeCharge(edition, weeks[1]),
+    employer: employerFor(weeks[0]) + employerFor(weeks[1]),
+    subclass: weeklySubclass(weeks[0] >= weeks[1] ? weeks[0] : weeks[1]),
+  };
+}
+
 function prsiPass(
   edition: IeEditionRates,
   periodsPerYear: 12 | 26 | 52,
@@ -298,6 +350,13 @@ function prsiPass(
         "€38-a-week Class J proviso — refused by name",
     );
   }
+  // Fortnightly pay is charged on the amount paid in respect of EACH week
+  // worked during the fortnight (DSP Employer Guide 2026) — in every band,
+  // not only the credit band: an uneven fortnight whose total sits in A0
+  // can hold a fully chargeable week, and one whose total sits above AX can
+  // hold a nil week. The recorded week slices price as two weekly payrolls,
+  // employee and employer shares alike, never as two artificial halves.
+  if (weeks !== null) return fortnightByWeeks(edition, weeks);
   if (reckonablePay <= a0Max) {
     // A0: employee Nil, employer lower rate on all reckonable pay.
     return {
@@ -308,26 +367,6 @@ function prsiPass(
   }
   const employerRate =
     reckonablePay <= alMax ? edition.prsiEmployerLowerRate : edition.prsiEmployerHigherRate;
-  // One week's employee charge at the WEEKLY bands: A0 nil, the AX credit
-  // formula inside the credit band, the flat rate above it. Fortnightly
-  // slices below the €38 weekly floor price nil like A0 rather than
-  // refusing as Class J: the slice is not a standalone weekly payroll,
-  // and the aggregate fortnightly floor above already guards degenerate
-  // fortnights — refusing here would strand ordinary variable-hour weeks.
-  const weeklyBands = prsiPeriodBands().weekly;
-  const weeklyCharge = (slice: bigint): bigint => {
-    if (slice <= U(weeklyBands.a0Max)) return 0n;
-    if (slice > U(weeklyBands.axMax)) return mulRateCents(slice, edition.prsiEmployeeRate);
-    const gross = mulRateCents(slice, edition.prsiEmployeeRate);
-    // "Reduced by one sixth of earnings in excess of €352.01": the sixth
-    // rounds half-up to the cent (SW14: 24.99 ÷ 6 shows €4.17) and the
-    // credit is the €12 maximum less that rounded sixth (12.00 − 4.17 =
-    // €7.83 in the same example).
-    const excess = slice - U(edition.prsiCreditBase);
-    const sixth = mulRatioCents(excess < 0n ? 0n : excess, 1n, 6n);
-    const credit = max0(U(edition.prsiCreditMax) - sixth);
-    return max0(gross - credit);
-  };
   if (reckonablePay <= axMax) {
     if (periodsPerYear === 12) {
       fail(
@@ -335,16 +374,8 @@ function prsiPass(
           "publishes no monthly equivalent for — refused by name",
       );
     }
-    if (periodsPerYear === 52) return {
-      employee: weeklyCharge(reckonablePay),
-      employer: mulRateCents(reckonablePay, employerRate),
-      subclass: "AX",
-    };
-    // Fortnightly pay is charged on the amount paid in respect of EACH week
-    // worked during the fortnight (DSP Employer Guide 2026): the recorded
-    // week slices price separately, never as two artificial halves.
     return {
-      employee: weeklyCharge(weeks![0]) + weeklyCharge(weeks![1]),
+      employee: weeklyEmployeeCharge(edition, reckonablePay),
       employer: mulRateCents(reckonablePay, employerRate),
       subclass: "AX",
     };
