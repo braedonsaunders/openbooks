@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { fetchWithConnectorRetry } from "../connectors/http-retry.ts";
-import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
@@ -1698,8 +1698,8 @@ export async function receiveTrackerDelivery(
   // bypass: connector-tracker — see the docblock above.
   const orgId = await withBypassContext(() => resolveTrackerOrgId(provider, parsed.tracker));
   if (!orgId) return { status: "ignored" };
-  return withOrgTransaction(orgId, () =>
-    handleTrackerDelivery(db, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody }),
+  return withOrgContext(orgId, () => db.transaction((tx) =>
+    handleTrackerDelivery(tx, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody })),
   );
 }
 
