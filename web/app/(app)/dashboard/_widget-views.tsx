@@ -488,7 +488,7 @@ function RecentEntriesList({
               </div>
               <div className="shrink-0 text-right">
                 <div className="text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                  {money(e.totalDebits)}
+                  {money(e.totalDebits, { currency: e.currency ?? undefined })}
                 </div>
                 <div className="text-xs text-slate-400 dark:text-slate-500">
                   {t('widgets.recentEntryLines', { count: e.lineCount })}
@@ -549,7 +549,7 @@ function PendingApprovalsList({
               </div>
               {a.amount ? (
                 <div className="shrink-0 text-right text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                  {money(a.amount)}
+                  {money(a.amount, { currency: a.currency ?? undefined })}
                 </div>
               ) : null}
             </Link>
@@ -732,7 +732,7 @@ function InProgressList({
                 </div>
               </div>
               <div className="shrink-0 text-right text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                {money(d.total)}
+                {money(d.total, { currency: d.currency })}
               </div>
             </Link>
           </li>
