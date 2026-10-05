@@ -388,10 +388,6 @@ export function QualificationDrawer({
             <Select id="q-type" value={form.typeId} onChange={(e) => {
               setForm({ ...form, typeId: e.target.value })
               setEvidenceFileId('')
-              setEvidenceQuery('')
-              setEvidenceFiles([])
-              setEvidenceError(null)
-              setEvidenceLoading(false)
             }}>
               <option value="">{tCommon('actions.select')}</option>
               {types.map((type) => (
@@ -411,7 +407,7 @@ export function QualificationDrawer({
             <div>
               <Label htmlFor="q-evidence">{t('qualifications.recordForm.evidence')}</Label>
               <p className="mb-1 text-sm text-amber-700 dark:text-amber-300">{t('qualifications.recordForm.evidenceRequired')}</p>
-              <CabinetFilePicker id="q-evidence" value={evidenceFileId} onChange={setEvidenceFileId} label={t('qualifications.recordForm.evidence')} />
+              <CabinetFilePicker key={form.typeId} id="q-evidence" value={evidenceFileId} onChange={setEvidenceFileId} label={t('qualifications.recordForm.evidence')} />
             </div>
           ) : null}
           <div className="grid grid-cols-2 gap-3">
