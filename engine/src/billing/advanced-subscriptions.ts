@@ -3,7 +3,7 @@ import { db, withOrg } from "../platform/db.ts";
 import { civilDayIndex, isoFromCivilDayIndex } from "../platform/business-date.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
-import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -34,13 +34,15 @@ export class AdvancedSubscriptionError extends Error {
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
-// Resolved through the canonical feature switchboard (orgFeatureEnabled):
-// the previous inline SQL re-implemented the registry defaults and the
-// subscriptionBilling→advancedSubscriptions dependency, and its ::boolean
-// casts threw 22P02 on non-boolean imports. advancedSubscriptions declares
-// requiresAll ['subscriptionBilling'], so one resolver call covers both.
+// Fenced on the writer's transaction (lockAndCheckOrgFeature): every caller
+// runs inside withOrg's transaction on the ambient executor, so the FOR
+// SHARE row lock serializes a concurrent disable against these writes — a
+// plain read could admit a version published between the check and the
+// insert. Resolve through the registry (never inline SQL: stored non-boolean
+// values throw 22P02 on cast). advancedSubscriptions declares requiresAll
+// ['subscriptionBilling'], so one resolver call covers both.
 async function assertEnabled(orgId: string): Promise<void> {
-  if (!(await orgFeatureEnabled(orgId, "advancedSubscriptions"))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, "advancedSubscriptions"))) {
     throw new AdvancedSubscriptionError("Advanced subscriptions feature is disabled");
   }
 }
