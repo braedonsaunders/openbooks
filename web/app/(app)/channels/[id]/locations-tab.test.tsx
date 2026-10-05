@@ -188,8 +188,10 @@ test("a conflict with no push-state row still offers review and opens only its i
   // The s1 row offers review for its one conflict despite zero state rows.
   const review = buttonsNamed("1 conflict");
   assert.equal(review.length, 1);
+  const reviewButton = review[0];
+  assert.ok(reviewButton);
 
-  await click(review[0]);
+  await click(reviewButton);
 
   // The drawer opens for the selected identity only: s1's item shows, the
   // s2 conflict never enters this drawer.

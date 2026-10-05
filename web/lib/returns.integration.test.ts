@@ -256,37 +256,47 @@ test('RMA against an order-governed shipment credits the posted invoice price an
   }
 })
 
-test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, async () => {
-  // Caller-level agreement in fils: the RMA header currency is asserted BHD
-  // so this cannot pass as CAD smoke. A 10.000 BHD sale line credits
-  // original cost 4.0000 as 4000 fils through the registry quantum; a fixed
-  // 1000-fil policy resolves 1000 fils per line with minorUnits 3; preview
-  // and the inspect write path agree on the total and the -1.0000 lines.
+async function runCurrencyCase(
+  currency: 'BHD' | 'JPY',
+  quantum: number,
+  unitPrice: string,
+  feeMinor: string,
+  expectedTotal: string,
+  expectedLine: string,
+): Promise<void> {
+  // Caller-level agreement through preview and inspect, one isolated org
+  // per currency. The RMA header currency is asserted so neither case can
+  // pass as CAD smoke. Original cost 4.0000 credits through the registry
+  // quantum (4000 fils, 4 yen); the fixed policy resolves below the credit
+  // on every line, so preview and inspect agree without capping.
   await withBypassContext(async () => {
     await db.execute(sql`insert into currencies (code, name, minor_units)
-      values ('BHD', 'Bahraini Dinar', 3) on conflict (code) do nothing`)
+      values ('BHD', 'Bahraini Dinar', 3), ('JPY', 'Japanese Yen', 0)
+      on conflict (code) do nothing`)
     const rows = (await db.execute<{ code: string; minor_units: number }>(sql`
-      select code, minor_units from currencies where code = 'BHD'`)).rows
-    assert.deepEqual(rows, [{ code: 'BHD', minor_units: 3 }])
+      select code, minor_units from currencies where code in ('BHD', 'JPY') order by code`)).rows
+    assert.deepEqual(rows, [{ code: 'BHD', minor_units: 3 }, { code: 'JPY', minor_units: 0 }])
   })
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableReturns(org.orgId)
     const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
-    const restockBin = await addBin(org, 'RMA-RESTOCK-BHD')
+    const restockBin = await addBin(org, `RMA-RESTOCK-${currency}`)
     await withOrg(org.orgId, () => receiveInventory(org.orgId, actorId, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '3', unitCost: '4',
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
     }))
     const documentId = randomUUID()
+    const lineAmount = unitPrice
+    const subtotal = currency === 'BHD' ? '30.000' : '30000'
     await withBypassContext(async () => {
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
-        values (${org.orgId}, 'BHD', 'CAD', ${org.date}::date, 'spot', 1, 'manual')`)
+        values (${org.orgId}, ${currency}, 'CAD', ${org.date}::date, 'spot', 1, 'manual')`)
       await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
                                currency, fx_rate, status, subtotal, tax_total, total, custom)
-        values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-RMA-BHD-${documentId.slice(0, 8)}`}, ${org.customerId},
-                ${org.subsidiaryId}, ${org.date}, ${org.date}, 'BHD', 1, 'draft', '30.000', '0', '30.000', '{}'::jsonb)`)
+        values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-RMA-${currency}-${documentId.slice(0, 8)}`}, ${org.customerId},
+                ${org.subsidiaryId}, ${org.date}, ${org.date}, ${currency}, 1, 'draft', ${subtotal}, '0', ${subtotal}, '{}'::jsonb)`)
       for (let lineNumber = 1; lineNumber <= 3; lineNumber++) {
         const lineId = randomUUID()
         await db.execute(sql`
@@ -294,7 +304,7 @@ test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, as
                                       amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
                                       stock_location_id, custom, tax_overridden)
           values (${lineId}, ${org.orgId}, ${documentId}, ${lineNumber}, ${org.items.fifo}, ${org.accounts.revenue},
-                  '1', '10.000', '10.000', '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
+                  '1', ${unitPrice}, ${lineAmount}, '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
       }
       const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`)
       assert.equal(approved.rows.length, 1)
@@ -308,7 +318,7 @@ test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, as
       partyId: org.customerId,
       subsidiaryId: org.subsidiaryId,
       documentDate: org.date,
-      currency: 'BHD',
+      currency,
       lines: issues.map(() => ({
         accountId: org.accounts.revenue,
         itemId: org.items.fifo,
@@ -335,7 +345,7 @@ test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, as
     })
     const header = (await db.execute<{ currency: string }>(sql`
       select currency from documents where org_id = ${org.orgId} and id = ${rma.id}`)).rows[0]
-    assert.equal(header?.currency, 'BHD')
+    assert.equal(header?.currency, currency)
     await receiveReturnAuthorization({
       orgId: org.orgId,
       actorId,
@@ -348,8 +358,8 @@ test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, as
         insert into restocking_fee_policies
           (id, org_id, item_category, item_id, kind, fee_percent, fee_amount_minor,
            currency, income_account_id, effective_from, effective_to, created_by, updated_by)
-        values (${randomUUID()}, ${org.orgId}, null, null, 'fixed', null, '1000',
-                'BHD', ${org.accounts.revenue}, '2020-01-01', null, ${actorId}, ${actorId})`)
+        values (${randomUUID()}, ${org.orgId}, null, null, 'fixed', null, ${feeMinor},
+                ${currency}, ${org.accounts.revenue}, '2020-01-01', null, ${actorId}, ${actorId})`)
     })
     const preview = await previewReturnRestockingFee({
       orgId: org.orgId,
@@ -357,9 +367,9 @@ test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, as
       lines: rma.lines.map(({ lineId }) => ({ lineId, accepted: '1' })),
       allowedSubsidiaryIds: null,
     })
-    assert.equal(preview.currency, 'BHD')
-    assert.equal(preview.minorUnits, 3)
-    assert.equal(preview.totalMinor, '3000')
+    assert.equal(preview.currency, currency)
+    assert.equal(preview.minorUnits, quantum)
+    assert.equal(preview.totalMinor, expectedTotal)
     const inspected = await inspectReturnAuthorization({
       orgId: org.orgId,
       actorId,
@@ -374,8 +384,20 @@ test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, as
       select amount::text from document_lines
        where org_id = ${org.orgId} and document_id = ${inspected.authorization.customerCreditId} and amount::numeric < 0
        order by line_number`)).rows
-    assert.deepEqual(feeLines.map((line) => line.amount), ['-1.0000', '-1.0000', '-1.0000'])
+    assert.deepEqual(feeLines.map((line) => line.amount), [expectedLine, expectedLine, expectedLine])
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
+}
+
+test('BHD return prices ISO fils through preview and inspect', { skip: !DB }, async () => {
+  // 10.000 BHD lines credit cost 4.0000 as 4000 fils; a fixed 1000-fil
+  // policy resolves below the credit on all three lines.
+  await runCurrencyCase('BHD', 3, '10.000', '1000', '3000', '-1.0000')
+})
+
+test('JPY return prices whole yen through preview and inspect', { skip: !DB }, async () => {
+  // 10000 yen lines credit cost 4.0000 as 4 whole yen; a fixed 2-yen policy
+  // resolves below the credit on all three lines.
+  await runCurrencyCase('JPY', 0, '10000', '2', '6', '-2.0000')
 })
