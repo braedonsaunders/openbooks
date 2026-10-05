@@ -157,6 +157,8 @@ export const documents = pgTable(
      */
     externalRef: text("external_ref"),
     externalSource: text("external_source"),
+    /** The storefront channel an order-born document was created from. */
+    sourceChannelId: uuid("source_channel_id"),
     internalNotes: text("internal_notes"),
     paymentHoldReason: text("payment_hold_reason"), // non-null = on hold
     expectedPayDate: date("expected_pay_date"),
@@ -203,6 +205,11 @@ export const documents = pgTable(
       .on(t.orgId, t.partyId)
       .where(sql`${t.voidedAt} is null and ${t.kind} in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')`),
     index("documents_project").on(t.projectId),
+    // Channel order reference (migration 0522): partial, so the NULL
+    // channel on every native document is unconstrained.
+    index("documents_source_channel")
+      .on(t.orgId, t.sourceChannelId)
+      .where(sql`${t.sourceChannelId} is not null`),
     foreignKey({
       columns: [t.orgId, t.partyId],
       foreignColumns: [parties.orgId, parties.id],

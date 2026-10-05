@@ -361,6 +361,12 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // excluded from clones, so this policy documents the classification rather
   // than rewriting rows; a clone path that ever copies the table must empty it.
   { tableName: "integration_inbound_events", columnName: "raw_body", transform: "null_out" },
+  // A channel order carries the buyer's contact snapshot for matching and
+  // the exception queue: the name is faked, the email is faked, and the
+  // address snapshot is removed like every other ship-to snapshot.
+  { tableName: "channel_orders", columnName: "customer_name", transform: "faker_name" },
+  { tableName: "channel_orders", columnName: "customer_email", transform: "faker_email" },
+  { tableName: "channel_orders", columnName: "customer_address", transform: "null_out" },
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the

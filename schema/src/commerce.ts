@@ -17,9 +17,11 @@ import {
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
 import { orgs } from "./core";
+import { documents } from "./documents";
 import { stockLocations } from "./inventory";
+import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
-import { auditColumns, currencyCode, id, orgRef } from "./helpers";
+import { auditColumns, currencyCode, fxRate, id, orgRef } from "./helpers";
 
 export const SALES_CHANNEL_KINDS = ["shopify"] as const;
 export const SALES_CHANNEL_STATUSES = [
@@ -298,6 +300,263 @@ export const externalLinks = pgTable(
       name: "external_links_channel_tenant_fk",
       columns: [t.orgId, t.channelId],
       foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+  ],
+);
+
+export const CHANNEL_ORDER_POSTING_STATUSES = [
+  "pending",
+  "posted",
+  "summarized",
+  "exception",
+  "excluded",
+] as const;
+
+export const CHANNEL_ORDER_EVENT_KINDS = ["refund", "cancellation", "edit", "fulfilment"] as const;
+
+export const CHANNEL_ORDER_EVENT_STATUSES = ["pending", "posted", "exception", "ignored"] as const;
+
+export const CHANNEL_POSTING_MODES = ["per_order", "daily_summary"] as const;
+
+/** Daily summary posting batches per channel, day, stock location and currency. */
+export const channelDailySummaries = pgTable(
+  "channel_daily_summaries",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    summaryDate: date("summary_date").notNull(),
+    stockLocationId: uuid("stock_location_id").notNull(),
+    currency: currencyCode("currency").notNull(),
+    orderCount: integer("order_count").notNull().default(0),
+    subtotalMinor: bigint("subtotal_minor", { mode: "bigint" }).notNull().default(0n),
+    taxMinor: bigint("tax_minor", { mode: "bigint" }).notNull().default(0n),
+    shippingMinor: bigint("shipping_minor", { mode: "bigint" }).notNull().default(0n),
+    discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
+    totalMinor: bigint("total_minor", { mode: "bigint" }).notNull().default(0n),
+    status: text("status", { enum: ["open", "posted"] }).notNull().default("open"),
+    postingDocumentId: uuid("posting_document_id"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_daily_summaries_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_daily_summaries_batch_unique").on(
+      t.orgId,
+      t.channelId,
+      t.summaryDate,
+      t.stockLocationId,
+      t.currency,
+    ),
+    check("channel_daily_summaries_currency_nonblank", sql`length(btrim(${t.currency})) > 0`),
+    check("channel_daily_summaries_status_valid", sql`${t.status} in ('open', 'posted')`),
+    check("channel_daily_summaries_counts_valid", sql`${t.orderCount} >= 0`),
+    foreignKey({
+      name: "channel_daily_summaries_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_daily_summaries_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_daily_summaries_location_tenant_fk",
+      columns: [t.orgId, t.stockLocationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+    }),
+    foreignKey({
+      name: "channel_daily_summaries_document_tenant_fk",
+      columns: [t.orgId, t.postingDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+  ],
+);
+
+/**
+ * Channel subledger: one row per storefront order with normalized lines,
+ * tenders and both currencies. Amounts are minor units in the shop currency.
+ */
+export const channelOrders = pgTable(
+  "channel_orders",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    externalId: text("external_id").notNull(),
+    externalNumber: text("external_number").notNull(),
+    customerExternalId: text("customer_external_id"),
+    customerPartyId: uuid("customer_party_id"),
+    customerName: text("customer_name"),
+    customerEmail: text("customer_email"),
+    customerAddress: jsonb("customer_address"),
+    shopCurrency: currencyCode("shop_currency").notNull(),
+    presentmentCurrency: currencyCode("presentment_currency").notNull(),
+    presentmentRate: fxRate("presentment_rate"),
+    subtotalMinor: bigint("subtotal_minor", { mode: "bigint" }).notNull(),
+    taxMinor: bigint("tax_minor", { mode: "bigint" }).notNull(),
+    shippingMinor: bigint("shipping_minor", { mode: "bigint" }).notNull(),
+    discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
+    totalMinor: bigint("total_minor", { mode: "bigint" }).notNull(),
+    financialStatus: text("financial_status").notNull().default(""),
+    fulfilmentStatus: text("fulfilment_status").notNull().default(""),
+    orderTags: text("order_tags").array().notNull().default(sql`'{}'`),
+    orderSource: text("order_source"),
+    lines: jsonb("lines").notNull().default([]),
+    shippingLines: jsonb("shipping_lines").notNull().default([]),
+    tenders: jsonb("tenders").notNull().default([]),
+    orderedAt: timestamp("ordered_at", { withTimezone: true }).notNull(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    postingStatus: text("posting_status", { enum: CHANNEL_ORDER_POSTING_STATUSES })
+      .notNull()
+      .default("pending"),
+    postingDocumentId: uuid("posting_document_id"),
+    summaryId: uuid("summary_id"),
+    exceptionCode: text("exception_code"),
+    exceptionReason: text("exception_reason"),
+    exceptionRemedy: text("exception_remedy"),
+    excludeReason: text("exclude_reason"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_orders_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_orders_channel_external_unique").on(t.orgId, t.channelId, t.externalId),
+    index("channel_orders_posting_scan").on(t.orgId, t.channelId, t.postingStatus),
+    check("channel_orders_external_id_nonblank", sql`length(btrim(${t.externalId})) > 0`),
+    check("channel_orders_external_number_nonblank", sql`length(btrim(${t.externalNumber})) > 0`),
+    check(
+      "channel_orders_currency_nonblank",
+      sql`length(btrim(${t.shopCurrency})) > 0 AND length(btrim(${t.presentmentCurrency})) > 0`,
+    ),
+    check(
+      "channel_orders_posting_status_valid",
+      sql`${t.postingStatus} in ('pending', 'posted', 'summarized', 'exception', 'excluded')`,
+    ),
+    check(
+      "channel_orders_exception_present",
+      sql`(${t.postingStatus} = 'exception') = (${t.exceptionCode} is not null)`,
+    ),
+    foreignKey({ name: "channel_orders_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "channel_orders_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_orders_customer_tenant_fk",
+      columns: [t.orgId, t.customerPartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
+    foreignKey({
+      name: "channel_orders_document_tenant_fk",
+      columns: [t.orgId, t.postingDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+    foreignKey({
+      name: "channel_orders_summary_tenant_fk",
+      columns: [t.orgId, t.summaryId],
+      foreignColumns: [channelDailySummaries.orgId, channelDailySummaries.id],
+    }),
+  ],
+);
+
+/** Refunds, cancellations, edits and fulfilments per channel order. */
+export const channelOrderEvents = pgTable(
+  "channel_order_events",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    orderId: uuid("order_id").notNull(),
+    kind: text("kind", { enum: CHANNEL_ORDER_EVENT_KINDS }).notNull(),
+    externalId: text("external_id").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    postingStatus: text("posting_status", { enum: CHANNEL_ORDER_EVENT_STATUSES })
+      .notNull()
+      .default("pending"),
+    postingDocumentId: uuid("posting_document_id"),
+    exceptionCode: text("exception_code"),
+    exceptionReason: text("exception_reason"),
+    exceptionRemedy: text("exception_remedy"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_order_events_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_order_events_order_external_unique").on(t.orgId, t.orderId, t.externalId),
+    check("channel_order_events_kind_valid", sql`${t.kind} in ('refund', 'cancellation', 'edit', 'fulfilment')`),
+    check("channel_order_events_external_id_nonblank", sql`length(btrim(${t.externalId})) > 0`),
+    check(
+      "channel_order_events_posting_status_valid",
+      sql`${t.postingStatus} in ('pending', 'posted', 'exception', 'ignored')`,
+    ),
+    foreignKey({
+      name: "channel_order_events_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_order_events_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_order_events_order_tenant_fk",
+      columns: [t.orgId, t.orderId],
+      foreignColumns: [channelOrders.orgId, channelOrders.id],
+    }),
+    foreignKey({
+      name: "channel_order_events_document_tenant_fk",
+      columns: [t.orgId, t.postingDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+  ],
+);
+
+/**
+ * Effective-dated posting policy per channel: the single authority for the
+ * posting mode and order-to-document rules in force from a date.
+ */
+export const salesChannelPostingPolicies = pgTable(
+  "sales_channel_posting_policies",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    mode: text("mode", { enum: CHANNEL_POSTING_MODES }).notNull(),
+    unpaidCreatesSalesOrder: boolean("unpaid_creates_sales_order").notNull().default(false),
+    guestCustomerPartyId: uuid("guest_customer_party_id"),
+    createPromotionOnMatchMiss: boolean("create_promotion_on_match_miss").notNull().default(false),
+    cutoffTz: text("cutoff_tz").notNull().default("UTC"),
+    excludedTags: text("excluded_tags").array().notNull().default(sql`'{}'`),
+    excludedSources: text("excluded_sources").array().notNull().default(sql`'{}'`),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("sales_channel_posting_policies_org_id_id_unique").on(t.orgId, t.id),
+    index("sales_channel_posting_policies_lookup").on(t.orgId, t.channelId, t.effectiveFrom),
+    check("sales_channel_posting_policies_mode_valid", sql`${t.mode} in ('per_order', 'daily_summary')`),
+    check("sales_channel_posting_policies_tz_nonblank", sql`length(btrim(${t.cutoffTz})) > 0`),
+    check(
+      "sales_channel_posting_policies_window_valid",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
+    foreignKey({
+      name: "sales_channel_posting_policies_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "sales_channel_posting_policies_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "sales_channel_posting_policies_guest_tenant_fk",
+      columns: [t.orgId, t.guestCustomerPartyId],
+      foreignColumns: [parties.orgId, parties.id],
     }),
   ],
 );
