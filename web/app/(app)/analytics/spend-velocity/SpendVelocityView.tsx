@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
@@ -29,7 +31,6 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 // 'expenses' moved out: the expense-report analysis now lives on the /expenses dashboard.
 const TABS = ['overview', 'velocity', 'detectors', 'accounts', 'trends', 'config'] as const
-type Tab = (typeof TABS)[number]
 const pct1 = (v: number, d = 1) => `${v.toFixed(d)}%`
 
 /** Velocity pill colouring: hot >15, warm >5, cold <−5, else cool. */
@@ -107,11 +108,13 @@ type Drill = { kind: 'account' | 'vendor'; id: string; name: string } | null
 
 /* ------------------------------------------------------------------- shell */
 
-export function SpendVelocityView({ data, canConfigure }: { data: SpendVelocityData; canConfigure?: boolean }) {
+export function SpendVelocityView({ data: initialData, canConfigure }: { data: SpendVelocityData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('spend-velocity', { data: initialData }, TABS)
+  const { tab, setTab } = read
+  const { data } = read.props
   const [drill, setDrill] = useState<Drill>(null)
   const s = data.summary
 
@@ -127,6 +130,7 @@ export function SpendVelocityView({ data, canConfigure }: { data: SpendVelocityD
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detectors' ? s.totalAlerts : undefined }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} onDrill={setDrill} /> : null}
         {tab === 'velocity' ? <VelocityTab data={data} onDrill={setDrill} /> : null}
@@ -135,6 +139,7 @@ export function SpendVelocityView({ data, canConfigure }: { data: SpendVelocityD
         {tab === 'trends' ? <TrendsTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       <DrillDrawer

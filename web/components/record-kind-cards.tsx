@@ -14,7 +14,7 @@ export interface RecordKindCardOption<V extends string = string> {
 }
 
 /** The shared large selection card, also used for live module previews. */
-export function RecordKindCard({ label, description, icon, metadata, selected, href, onChoose, children, compact = false }: {
+export function RecordKindCard({ label, description, icon, metadata, selected, href, onChoose, children, compact = false, prefetch }: {
   label: string
   description: string
   icon: ReactNode
@@ -24,6 +24,7 @@ export function RecordKindCard({ label, description, icon, metadata, selected, h
   onChoose?: () => void
   children?: ReactNode
   compact?: boolean
+  prefetch?: boolean
 }) {
   const className = cn('group flex h-full w-full flex-col items-start justify-start rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600', compact ? 'p-3.5' : 'p-5', selected && 'border-teal-400 bg-teal-50/30 dark:border-teal-600')
   const body = <>
@@ -36,7 +37,7 @@ export function RecordKindCard({ label, description, icon, metadata, selected, h
     {children}
   </>
   return href
-    ? <Link href={href} className={className}>{body}</Link>
+    ? <Link href={href} prefetch={prefetch} className={className}>{body}</Link>
     : <button type="button" onClick={onChoose} aria-pressed={selected} className={className}>{body}</button>
 }
 

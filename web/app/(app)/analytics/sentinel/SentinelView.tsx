@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
@@ -27,7 +29,6 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 /* ------------------------------------------------------------------ helpers */
 
 const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit', 'config'] as const
-type Tab = (typeof TABS)[number]
 /** Viewer-locale integer grouping: one hook so every tab shares it. */
 function useNum() {
   const locale = useLocale()
@@ -171,13 +172,15 @@ function useConformLabel() {
 
 /* ------------------------------------------------------------------- shell */
 
-export function SentinelView({ data, canConfigure }: { data: SentinelData; canConfigure?: boolean }) {
+export function SentinelView({ data: initialData, canConfigure }: { data: SentinelData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const conformLabel = useConformLabel()
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('sentinel', { data: initialData }, TABS)
+  const { tab, setTab } = read
+  const { data } = read.props
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const s = data.summary
 
@@ -203,6 +206,7 @@ export function SentinelView({ data, canConfigure }: { data: SentinelData; canCo
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detection' ? s.flaggedCount : undefined }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'benford' ? <BenfordTab data={data} /> : null}
@@ -212,6 +216,7 @@ export function SentinelView({ data, canConfigure }: { data: SentinelData; canCo
         {tab === 'audit' ? <AuditTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
@@ -715,7 +720,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
                               {` · `}<span className="tabular-nums">{m.date}</span>
                             </TxnLink>
                           ))}
-                          {g.members.length > 8 ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.members.length - 8 })}</span> : null}
+                          {g.count > 8 ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.count - 8 })}</span> : null}
                         </span>
                         {g.sameReference && g.members[0]?.reference ? <span className="mt-1 block text-[10px] text-slate-400">{t('duplicates.sharedReference', { reference: g.members[0].reference })}</span> : null}
                       </SharedTableCell>

@@ -1,5 +1,6 @@
+import { readAnalyticsDashboard } from '../../../../lib/analytics/dashboard-reader'
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadVendorPerformance, vendorPerformanceSpec } from './view'
+import { vendorPerformanceSpec } from './view'
 import { getTranslations } from 'next-intl/server'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,6 @@ export default async function VendorPerformancePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadVendorPerformance(sp)
+  const data = await readAnalyticsDashboard('vendor-performance', sp)
   return <ModuleView spec={vendorPerformanceSpec(data)} data={data} searchParams={sp} trusted />
 }

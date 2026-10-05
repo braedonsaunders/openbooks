@@ -1,5 +1,6 @@
+import { readAnalyticsDashboard } from '../../../../lib/analytics/dashboard-reader'
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadCustomerIntelligence, customerIntelligenceSpec } from './view'
+import { customerIntelligenceSpec } from './view'
 import { getTranslations } from 'next-intl/server'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,6 @@ export default async function CustomerIntelligencePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadCustomerIntelligence(sp)
+  const data = await readAnalyticsDashboard('customer-intelligence', sp)
   return <ModuleView spec={customerIntelligenceSpec(data)} data={data} searchParams={sp} trusted />
 }

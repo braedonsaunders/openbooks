@@ -1,10 +1,11 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, roundMoney } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
 import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
@@ -249,15 +250,15 @@ type SqlNumber = string | number | null;
 interface AccountSpendRow extends Record<string, unknown> {
   account_id: string; account_name: string | null; month: string; month_num: number;
   bill_amount: SqlNumber; expense_amount: SqlNumber; check_amount: SqlNumber; credit_amount: SqlNumber;
-  total_amount: SqlNumber; transaction_count: SqlNumber; doc_ids: string[] | null; func: string | null; late: string | null;
+  total_amount: SqlNumber; transaction_count: SqlNumber; month_doc_count?: SqlNumber; func: string | null; late: string | null;
 }
 interface VendorSpendRow extends Record<string, unknown> {
   vendor_id: string; vendor_name: string; month: string; total_amount: SqlNumber; transaction_count: SqlNumber;
-  doc_ids: string[] | null; func: string | null; late: string | null;
+  month_doc_count?: SqlNumber; func: string | null; late: string | null;
 }
 interface PriorYearRow extends Record<string, unknown> {
   month_num: string; total_amount: SqlNumber; transaction_count: SqlNumber;
-  doc_ids: string[] | null; func: string | null; late: string | null;
+  month_doc_count?: SqlNumber; func: string | null; late: string | null;
 }
 interface CommitmentRow extends Record<string, unknown> {
   kind: string; month: string; amount: SqlNumber; func: string | null; late: string | null;
@@ -318,59 +319,74 @@ export async function spendVelocityData(
   const [acctRows, vendRows, pyRows, poSoRows, plOpex, spenderRows, catRows, cmpRows] = await Promise.all([
     // 1. Monthly account spend split by transaction kind (PRIMARY). Legs are
     // stamped in their line entity's functional: aggregate per (account,
-    // month, functional) and translate below. Document counts ride
-    // array_agg unions so multi-line documents still count once.
-    db.execute<AccountSpendRow>(sql`
-      select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
-        to_char(e.posting_date, 'YYYY-MM') as month,
-        extract(month from e.posting_date)::int as month_num,
-        sum(l.amount) filter (where d.kind = 'vendor_bill') as bill_amount,
-        sum(l.amount) filter (where d.kind = 'expense_report') as expense_amount,
-        sum(l.amount) filter (where d.kind = 'check') as check_amount,
-        -sum(l.amount) filter (where d.kind = 'vendor_credit') as credit_amount,
-        sum(l.amount) as total_amount,
-        array_agg(distinct d.id) as doc_ids,
-        sub.base_currency as func,
-        max(l.posting_date)::text as late
-      ${spendBaseWithSubs(from, to)}
-      group by 1, 2, 3, 4, 5, 6, sub.base_currency
+    // month, functional) and translate below. Distinct counts stay in SQL; no transaction-sized ID arrays cross the database boundary.
+    analyticsQuery<AccountSpendRow>(sql`
+      with base as materialized (
+        select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
+          to_char(e.posting_date, 'YYYY-MM') as month, extract(month from e.posting_date)::int as month_num,
+          l.amount, d.kind, d.id as document_id, sub.base_currency as func, l.posting_date
+        ${spendBaseWithSubs(from, to)}
+      ), counts as (
+        select account_id, month, count(distinct document_id) as doc_count from base group by account_id, month
+      ), monthly_counts as (
+        select month, count(distinct document_id) as doc_count from base group by month
+      )
+      select b.account_id, b.account_name, b.account_number, b.account_type, b.month, b.month_num,
+        sum(b.amount) filter (where b.kind = 'vendor_bill') as bill_amount,
+        sum(b.amount) filter (where b.kind = 'expense_report') as expense_amount,
+        sum(b.amount) filter (where b.kind = 'check') as check_amount,
+        -sum(b.amount) filter (where b.kind = 'vendor_credit') as credit_amount,
+        sum(b.amount) as total_amount, c.doc_count as transaction_count,
+        mc.doc_count as month_doc_count, b.func, max(b.posting_date)::text as late
+      from base b join counts c on c.account_id = b.account_id and c.month = b.month
+      join monthly_counts mc on mc.month = b.month
+      group by b.account_id, b.account_name, b.account_number, b.account_type, b.month, b.month_num,
+        b.func, c.doc_count, mc.doc_count
     `),
-    // 2. Monthly vendor/party spend (drill-down).
-    db.execute<VendorSpendRow>(sql`
-      select d.party_id as vendor_id, coalesce(p.display_name, 'Unknown') as vendor_name,
-        to_char(e.posting_date, 'YYYY-MM') as month,
-        sum(l.amount) as total_amount,
-        array_agg(distinct d.id) as doc_ids,
-        sub.base_currency as func,
-        max(l.posting_date)::text as late
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-      where l.org_id = ${orgId} and d.voided_at is null
-        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
-        and d.kind in (${spendKindsIn})
-        and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
-        and e.posting_date >= ${from} and e.posting_date <= ${to}
-        and d.party_id is not null
-      group by 1, 2, 3, sub.base_currency
+    // Per-vendor distinct counts remain independent of functional-currency legs.
+    analyticsQuery<VendorSpendRow>(sql`
+      with base as materialized (
+        select d.party_id as vendor_id, coalesce(p.display_name, 'Unknown') as vendor_name,
+          to_char(e.posting_date, 'YYYY-MM') as month, l.amount, d.id as document_id,
+          sub.base_currency as func, l.posting_date
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+        where l.org_id = ${orgId} and d.voided_at is null
+          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+          and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+          and d.kind in (${spendKindsIn})
+          and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
+          and e.posting_date >= ${from} and e.posting_date <= ${to} and d.party_id is not null
+      ), counts as (
+        select vendor_id, month, count(distinct document_id) as doc_count from base group by vendor_id, month
+      )
+      select b.vendor_id, b.vendor_name, b.month, sum(b.amount) as total_amount,
+        c.doc_count as transaction_count, b.func, max(b.posting_date)::text as late
+      from base b join counts c on c.vendor_id = b.vendor_id and c.month = b.month
+      group by b.vendor_id, b.vendor_name, b.month, b.func, c.doc_count
     `),
-    // 3. Prior-YEAR monthly totals for YoY.
-    db.execute<PriorYearRow>(sql`
-      select to_char(e.posting_date, 'MM') as month_num, sum(l.amount) as total_amount,
-        array_agg(distinct d.id) as doc_ids, sub.base_currency as func,
-        max(l.posting_date)::text as late
-      ${spendBaseWithSubs(pyFrom, pyTo)}
-      group by 1, sub.base_currency
-    `),
+    (analyticsSection('spend-velocity', ['overview','trends']) ? analyticsQuery<PriorYearRow>(sql`
+      with base as materialized (
+        select to_char(e.posting_date, 'MM') as month_num, l.amount, d.id as document_id,
+          sub.base_currency as func, l.posting_date
+        ${spendBaseWithSubs(pyFrom, pyTo)}
+      ), counts as (
+        select month_num, count(distinct document_id) as doc_count from base group by month_num
+      )
+      select b.month_num, sum(b.amount) as total_amount, c.doc_count as transaction_count,
+        b.func, max(b.posting_date)::text as late
+      from base b join counts c on c.month_num = b.month_num
+      group by b.month_num, b.func, c.doc_count
+    `) : Promise.resolve({rows:[]})),
     // 4. PO vs SO monthly (commitment cliff). Unposted document totals are
     // transaction currency: translate txn→presentation directly at each
     // bucket's latest document date (same basis as the open-PO tile).
-    db.execute<CommitmentRow>(sql`
+    (analyticsSection('spend-velocity', ["overview","velocity","detectors","accounts","trends","config"]) ? analyticsQuery<CommitmentRow>(sql`
       select kind, to_char(document_date, 'YYYY-MM') as month, sum(total) as amount,
         currency as func, max(document_date)::text as late
       from documents
@@ -378,7 +394,7 @@ export async function spendVelocityData(
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
         and document_date >= ${from} and document_date <= ${to}
       group by 1, 2, 4
-    `),
+    `) : Promise.resolve({rows:[]})),
     // 5. P&L operating expenses + revenue for the OpEx ratio — the shared
     // operating-expenses reader, so this page reports the same "Operating
     // expenses … of revenue" figure as Financial Health. The
@@ -388,7 +404,7 @@ export async function spendVelocityData(
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
     // 7. Top spenders use the same primary-book base-currency actuals as
     // the expense summary; draft headers and transaction totals are not GL spend.
-    db.execute<SpenderRow>(sql`
+    (analyticsSection('spend-velocity', []) ? analyticsQuery<SpenderRow>(sql`
       select d.party_id as employee_id,
         coalesce((select p.display_name from parties p where p.id = d.party_id and p.org_id = d.org_id), 'Unknown') as employee_name,
         sub.base_currency as func,
@@ -401,9 +417,9 @@ export async function spendVelocityData(
       ${spendBaseWithSubs(priorFrom, to)}
         and d.kind = 'expense_report'
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({rows:[]})),
     // 8. Expense categories (accounts on expense reports + bills), current vs prior.
-    db.execute<ExpenseCategoryRow>(sql`
+    (analyticsSection('spend-velocity', []) ? analyticsQuery<ExpenseCategoryRow>(sql`
       select l.account_id as category_id, a.name as category_name,
         sub.base_currency as func,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
@@ -423,9 +439,9 @@ export async function spendVelocityData(
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({rows:[]})),
     // 9. Period comparison: current vs prior vs two-back per account.
-    db.execute<ComparisonRow>(sql`
+    (analyticsSection('spend-velocity', ["accounts"]) ? analyticsQuery<ComparisonRow>(sql`
       select l.account_id, a.name as account_name, sub.base_currency as func,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date >= ${priorFrom} and e.posting_date < ${from}) as prior_amount,
@@ -435,7 +451,7 @@ export async function spendVelocityData(
         max(e.posting_date) filter (where e.posting_date >= ${twoBackFrom} and e.posting_date < ${priorFrom})::text as late_two
       ${spendBaseWithSubs(twoBackFrom, to)}
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({rows:[]})),
   ]);
 
   // ---- presentation translation ---------------------------------------------
@@ -444,12 +460,10 @@ export async function spendVelocityData(
   // leg at its latest posting/document date and merge to the original grain
   // in presentation, so the whole velocity engine downstream — CAGR series,
   // detectors, YoY, cliff, comparisons — runs in one currency. Document
-  // counts union across legs so multi-line documents still count once, and
+  // counts are computed before splitting currency legs, so documents count once, and
   // the old `having sum > 0` filters re-apply on merged month totals.
   // Missing rate coverage fails closed.
   const asDate = (v: unknown, fallback: string): string => String(v ?? fallback).slice(0, 10);
-  const unionIds = (...sets: (readonly string[] | null | undefined)[]): number =>
-    new Set(sets.flatMap((s) => [...(s ?? [])])).size;
   const acctCtx = await flowRates(orgId, acctRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
   const acctMerged = new Map<string, AccountSpendRow>();
   for (const r of acctRows.rows) {
@@ -465,12 +479,12 @@ export async function spendVelocityData(
       cur.check_amount = add(String(cur.check_amount ?? 0), tr(r.check_amount));
       cur.credit_amount = add(String(cur.credit_amount ?? 0), tr(r.credit_amount));
       cur.total_amount = add(String(cur.total_amount ?? 0), tr(r.total_amount));
-      cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
+      cur.transaction_count = r.transaction_count;
     }
   }
   const acctFinal: AccountSpendRow[] = [...acctMerged.values()].map((r) => ({
     ...r,
-    transaction_count: unionIds(r.doc_ids),
+    transaction_count: Number(r.transaction_count ?? 0),
   })).filter((r) => Number(r.total_amount ?? 0) > 0);
 
   const vendCtx = await flowRates(orgId, vendRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
@@ -484,12 +498,12 @@ export async function spendVelocityData(
       vendMerged.set(key, { ...r, total_amount: tr(r.total_amount) });
     } else {
       cur.total_amount = add(String(cur.total_amount ?? 0), tr(r.total_amount));
-      cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
+      cur.transaction_count = r.transaction_count;
     }
   }
   const vendFinal: VendorSpendRow[] = [...vendMerged.values()].map((r) => ({
     ...r,
-    transaction_count: unionIds(r.doc_ids),
+    transaction_count: Number(r.transaction_count ?? 0),
   })).filter((r) => Number(r.total_amount ?? 0) > 0);
 
   const pyCtx = await flowRates(orgId, pyRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, pyTo) })));
@@ -503,12 +517,12 @@ export async function spendVelocityData(
       pyMerged.set(key, { ...r, total_amount: translated });
     } else {
       cur.total_amount = add(String(cur.total_amount ?? 0), translated);
-      cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
+      cur.transaction_count = r.transaction_count;
     }
   }
   const pyFinal: PriorYearRow[] = [...pyMerged.values()].map((r) => ({
     ...r,
-    transaction_count: unionIds(r.doc_ids),
+    transaction_count: Number(r.transaction_count ?? 0),
   }));
 
   // ---- account velocity (primary) -------------------------------------------
@@ -646,8 +660,12 @@ export async function spendVelocityData(
     for (const m of a.months) {
       let t = trendMap.get(m.month);
       if (!t) { t = { total: 0, txns: 0, bill: 0, expense: 0, vendors: new Set() }; trendMap.set(m.month, t); }
-      t.total += m.amount; t.txns += m.txns; t.bill += m.bill; t.expense += m.expense;
+      t.total += m.amount; t.bill += m.bill; t.expense += m.expense;
     }
+  }
+  for (const r of acctFinal) {
+    const month = trendMap.get(r.month);
+    if (month) month.txns = Number(r.month_doc_count ?? 0);
   }
   for (const r of vendRows.rows) trendMap.get(r.month)?.vendors.add(r.vendor_id);
   const monthlyTrends = [...trendMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, t], i, arr) => {

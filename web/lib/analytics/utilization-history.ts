@@ -1,6 +1,6 @@
 import "server-only";
+import { analyticsQuery } from "./query";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/database";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 
 export function timeStatsSource(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null) {
@@ -23,7 +23,7 @@ export async function fetchHistoryHours(orgId: string, plans: { start: string; e
   const from = plans.map((plan) => plan.start).sort()[0]!;
   const to = plans.map((plan) => plan.end).sort().at(-1)!;
   const source = timeStatsSource(orgId, from, to, allowed);
-  const result = await db.execute<HistoryHours & { window_index: number }>(sql`
+  const result = await analyticsQuery<HistoryHours & { window_index: number }>(sql`
     select periods.window_index, t.department_id as department,
       sum(t.hours)::text as total_hours,
       coalesce(sum(t.hours) filter (where t.is_billable), 0)::text as billable_hours

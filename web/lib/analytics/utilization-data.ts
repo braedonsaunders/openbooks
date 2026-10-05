@@ -1,4 +1,6 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { timeStatsSource, fetchHistoryHours } from "./utilization-history";
 import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
@@ -127,7 +129,7 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
   // presentation at its latest worked date before merging. Hours are
   // currency-blind: splitting then re-adding them is exact.
   const source = timeStatsSource(orgId, from, to, allowed);
-  const res = await db.execute<RawStatRow>(sql`
+  const res = await analyticsQuery<RawStatRow>(sql`
     select
       t.employee_party_id as employee,
       coalesce(p.display_name, 'Unknown') as employee_name,
@@ -409,9 +411,9 @@ export async function utilizationData(
       },
       alerts,
     },
-    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours, strings),
-    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours, strings),
-    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours, strings),
+    departments: analyticsSection('utilization', ['overview', 'intelligence', 'departments', 'titles', 'employees']) ? buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours, strings) : [],
+    items: analyticsSection('utilization', ['overview', 'items']) ? buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours, strings) : [],
+    employees: analyticsSection('utilization', ['overview', 'intelligence', 'titles', 'employees']) ? buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours, strings) : [],
     history: { periodMonths, periods },
   };
 }

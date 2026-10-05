@@ -1,4 +1,6 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { REVENUE_TYPES } from "../reports/statements";
@@ -286,7 +288,7 @@ export interface CustomerData {
     overdueOrders: number;
     criticalFriction: number;
     highFriction: number;
-    fakeChampions: number;
+    fakeChampions: number | null;
   };
   segments: SegmentStat[];
   tierBreakdown: { tier: Tier; count: number; revenue: number; invoiced: number; threshold: number }[];
@@ -443,7 +445,7 @@ export async function customerProfitability(
   // The entry window materializes first. Joined inline, the planner drives
   // from accounts and probes the entry primary key once per journal line in
   // the tenant before the date filter narrows anything.
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     with ew as materialized (
       select id, org_id, posting_date from journal_entries
        where posting_date >= ${from} and posting_date <= ${to}
@@ -650,7 +652,7 @@ async function readCustomerData(
     // documents.total is transaction currency: the first leg translates at
     // the posted document rate to the posting subsidiary's functional; the
     // second leg to presentation runs per (party, functional) below.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)})
       select movement.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         movement.func,
@@ -667,7 +669,7 @@ async function readCustomerData(
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
     // Credit value translates per (party, functional) below.
-    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
+    (preview ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_credit', 'cash_refund', 'customer_invoice'], allowed, from, to)})
       select movement.party_id as id, movement.func,
         sum(movement.direction) filter (where movement.kind in ('customer_credit', 'cash_refund')) as credit_count,
@@ -681,7 +683,7 @@ async function readCustomerData(
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
     // application date − invoice date; overdue =
     // past due and not fully paid, as of the reference date.
-    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
+    (preview ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with inv as (
         select d.id, d.party_id, d.posting_date, d.due_date, abs(d.total) as total,
           -- documents.total is denominated in the invoice transaction
@@ -729,7 +731,7 @@ async function readCustomerData(
     // in the window; each party's first month is computed once instead, which
     // is the same test — the invoice itself qualifies, so "no earlier document"
     // and "first document is this month" coincide.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)})
       select to_char(movement.event_date, 'YYYY-MM') as month,
         movement.func,
@@ -740,7 +742,7 @@ async function readCustomerData(
     `)),
     // Growth counts — distinct customers never merge across functionals, so
     // they stay on their own month grain while revenue translates above.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)}),
       monthly as (
         select party_id, date_trunc('month', event_date) as month, sum(direction) as txn_count
@@ -764,7 +766,7 @@ async function readCustomerData(
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
     // Lifetime revenue translates per (party, functional) below.
-    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
+    (preview || !analyticsSection('customer-intelligence', ['growth']) ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed)})
       select movement.party_id as id, movement.func,
         max(movement.posting_date) filter (where movement.direction > 0) as last_order,
@@ -785,7 +787,7 @@ async function readCustomerData(
     // re-derived from document rates, so this cannot drift from the P&L.
     // Reversed entries and their mirrors stay IN (they net, exactly as the P&L
     // nets them); the recon separates their period effect into `voids`.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with ew as materialized (
         select id, posting_date, status, origin, source_document_id,
                (reverses_entry_id is not null or status = 'reversed') as is_void
@@ -850,7 +852,7 @@ async function readCustomerData(
     // Recognized revenue per month (ledger posting month — recognition timing,
     // not billing month; the gap between this and the invoiced series IS the
     // timing story). Invoiced monthly stays on the document query above.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with ew as materialized (
         select id, posting_date, origin
           from journal_entries
@@ -886,7 +888,7 @@ async function readCustomerData(
     `)),
     // Lifetime recognized per customer, for cohorts (lifetime invoiced stays
     // on the document query above).
-    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
+    (preview || !analyticsSection('customer-intelligence', ['growth']) ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with ew as materialized (
         select id, posting_date, origin
           from journal_entries
@@ -919,7 +921,7 @@ async function readCustomerData(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       group by 1, 2
     `)),
-    preview ? Promise.resolve(null) : customerProfitability(period, orgId, allowed),
+    preview || !analyticsSection('customer-intelligence', ['lifetime', 'profitability']) ? Promise.resolve(null) : customerProfitability(period, orgId, allowed),
     // The header "Avg DSO" is the ONE org DSO — the same settlement-weighted
     // trailing mean the cash cockpit, cashflow analytics, MCP cashflow tool,
     // and get_vitals read — never a second per-customer grain computed here.
@@ -1592,7 +1594,7 @@ async function readCustomerData(
       overdueOrders,
       criticalFriction: rows.filter((r) => r.frictionLevel === "critical").length,
       highFriction: rows.filter((r) => r.frictionLevel === "high").length,
-      fakeChampions: profitData!.summary.fakeChampions,
+      fakeChampions: profitData?.summary.fakeChampions ?? null,
     },
     segments,
     tierBreakdown: TIERS.map((tier) => {

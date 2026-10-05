@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { analyticsQuery } from '../analytics/query'
 import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
@@ -70,7 +70,7 @@ export async function openItems(
   // after the date that were open on it. The applied sum reads each leg
   // through its own carrying column (shared engine helper — never a bare
   // sum for both legs, which mixes denominations on cross-currency credits).
-  const result = (await db.execute<OpenItemQueryRow>(sql`
+  const result = (await analyticsQuery<OpenItemQueryRow>(sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,

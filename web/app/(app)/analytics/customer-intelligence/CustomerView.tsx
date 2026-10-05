@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { TableCell as SharedTableCell, TableRow as SharedTableRow, TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableBody as SharedTableBody } from "../../reports/ReportTable"
@@ -58,7 +60,6 @@ import { cmp } from '@openbooks/engine/src/money/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
-type Tab = (typeof TABS)[number]
 
 /* ------------------------------------------------------------ badge styles */
 const PROFIT_TIER_STYLE: Record<ProfitTier, string> = {
@@ -151,13 +152,13 @@ function RetentionBadge({ v }: { v: number }) {
 
 /* -------------------------------------------------------------------- view */
 export function CustomerView({
-  data,
-  profitability,
+  data: initialData,
+  profitability: initialProfitability,
   projectsEnabled = true,
   canConfigure,
 }: {
   data: CustomerData
-  profitability: Profitability
+  profitability: Profitability | null
   projectsEnabled?: boolean
   canConfigure?: boolean
 }) {
@@ -165,7 +166,9 @@ export function CustomerView({
   const fmtMoney = useAnalyticsMoney()
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const tabs = projectsEnabled ? TABS : TABS.filter((key) => key !== 'profitability')
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('customer-intelligence', { data: initialData, profitability: initialProfitability }, tabs)
+  const { tab, setTab } = read
+  const { data, profitability } = read.props
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
   const intel = data.intelligence
@@ -207,6 +210,7 @@ export function CustomerView({
 
       {/* Tabs */}
       <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key: key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'health' ? <HealthTab data={data} onDrill={openCustomer} /> : null}
@@ -214,9 +218,10 @@ export function CustomerView({
         {tab === 'lifetime' ? <LifetimeTab data={data} profitability={profitability} projectsEnabled={projectsEnabled} /> : null}
         {tab === 'churn' ? <ChurnTab data={data} /> : null}
         {tab === 'growth' ? <GrowthTab data={data} /> : null}
-        {tab === 'profitability' && projectsEnabled ? <ProfitabilityTab p={profitability} /> : null}
+        {tab === 'profitability' && projectsEnabled && profitability ? <ProfitabilityTab p={profitability} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
@@ -635,7 +640,7 @@ function LifetimeTab({
   projectsEnabled,
 }: {
   data: CustomerData
-  profitability: Profitability
+  profitability: Profitability | null
   projectsEnabled: boolean
 }) {
   const t = useTranslations('analytics.customer')
@@ -655,10 +660,10 @@ function LifetimeTab({
         <KpiCard icon={Gem} accent="violet" label={t('kpi.totalProjectedClv')} value={money(k.projectedClv)} sub={t('sub.avgPerCustomer', { amount: money(k.avgClv) })} />
         <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.periodRevenue')} value={money(k.totalRevenue)} sub={t('sub.clvBase')} />
         <KpiCard icon={FileText} accent="sky" label={t('kpi.totalInvoiced')} value={money(k.totalInvoiced)} sub={t('sub.invoiced')} />
-        {projectsEnabled ? (
+        {projectsEnabled && profitability ? (
           <>
             <KpiCard icon={HandCoins} accent={cmp(profitability.summary.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={fmtMoney(profitability.summary.totalGrossProfit, { compact: true })} sub={t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
-            <KpiCard icon={AlertTriangle} accent={k.fakeChampions > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin')} tone={k.fakeChampions > 0 ? 'negative' : 'positive'} />
+            <KpiCard icon={AlertTriangle} accent={(k.fakeChampions ?? 0) > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={k.fakeChampions === null ? '—' : String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin')} tone={(k.fakeChampions ?? 0) > 0 ? 'negative' : 'positive'} />
           </>
         ) : null}
       </div>

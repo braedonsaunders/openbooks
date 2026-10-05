@@ -1,4 +1,5 @@
 import "server-only";
+import { analyticsQuery } from "../analytics/query";
 import { sql } from "drizzle-orm";
 import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
 import { advanceAnchoredMonth } from "@openbooks/engine/src/billing/cadence.ts";
@@ -373,7 +374,7 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
        ${subScope(sql`pl.subsidiary_id`, subIds)}
      group by bl.party_id, pl.posting_date
   `;
-  const r = await db.execute<{ id: string; avg_days: string; sd_days: string; n: string }>(sql`
+  const r = await analyticsQuery<{ id: string; avg_days: string; sd_days: string; n: string }>(sql`
     with stats as (${source})
     select party_id as id,
            sum(sum_days) / sum(n) as avg_days,
@@ -402,7 +403,7 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
 
 /** Load configured categories from orgs.settings.analytics.cashflowCategories. */
 export async function loadCategories(orgId: string): Promise<ForecastCategory[]> {
-  const r = (await db.execute(sql`
+  const r = (await analyticsQuery(sql`
     select settings -> 'analytics' -> 'cashflowCategories' as cats from orgs where id = ${orgId}
   `));
   const raw = r.rows[0]?.cats;
@@ -793,7 +794,7 @@ export async function categoryWeekly(
     // the average, weeks inside it act as actuals (). History is cut at
     // asOf: postings after the forecast date must not leak into a historical
     // forecast, so only the current (partial) week can carry actuals.
-    const r = (await db.execute<CashWeeklyHistoryRow>(sql`
+    const r = (await analyticsQuery<CashWeeklyHistoryRow>(sql`
       select (e.posting_date - extract(dow from e.posting_date)::int)::text as wk,
              a.number, a.name,
              sum(l.amount) as net, sum(abs(l.amount)) as gross
@@ -832,7 +833,7 @@ export async function categoryWeekly(
     // account's type and gross, which net mode needs to resolve one
     // normal-balance convention for the orientation below.
     const windowStartIso = toISO(historyStart);
-    const scopeRows = (await db.execute<{ d: string | null; id: string; type: string; gross: string }>(sql`
+    const scopeRows = (await analyticsQuery<{ d: string | null; id: string; type: string; gross: string }>(sql`
       select min(e.posting_date)::text as d, a.id::text as id, a.type as type, sum(abs(l.amount)) as gross
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -893,7 +894,7 @@ export async function categoryWeekly(
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 12));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
-    const r = (await db.execute(sql`
+    const r = (await analyticsQuery(sql`
       -- documents.total is transaction-currency denominated: translate at the
       -- document FX rate into functional currency before adding, exactly like
       -- the purchasing paid values do.
@@ -931,7 +932,7 @@ export async function categoryWeekly(
     const historyStart = addDays(asOf, -lookbackDays);
     const ids = sql.join(accountIds.map((a) => sql`${a}`), sql`, `);
     // Charges push the card liability (amount < 0), payments release it (> 0).
-    const r = (await db.execute<CashDailyRow>(sql`
+    const r = (await analyticsQuery<CashDailyRow>(sql`
       select e.posting_date::text as day,
              sum(case when l.amount < 0 then -l.amount else 0 end) as spend,
              sum(case when l.amount > 0 then l.amount else 0 end) as paid
@@ -942,7 +943,7 @@ export async function categoryWeekly(
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
     `));
-    const balR = (await db.execute(sql`
+    const balR = (await analyticsQuery(sql`
       select coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -1149,7 +1150,7 @@ export async function categoryWeekly(
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 3));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
-    const r = (await db.execute<CashPaymentEventRow>(sql`
+    const r = (await analyticsQuery<CashPaymentEventRow>(sql`
       -- Same functional-currency translation as the payment history above.
       select coalesce(d.document_date, d.posting_date)::text as day, sum(round(abs(d.total * d.fx_rate), 4)) as paid
       from documents d
@@ -1228,7 +1229,7 @@ export async function categoryWeekly(
     const memoFilter = keywords.length
       ? sql` and (${sql.join(keywords.map((k) => sql`coalesce(d.memo, e.memo, '') ilike ${"%" + k + "%"}`), sql` or `)})`
       : sql``;
-    const r = (await db.execute<CashRegisterLineRow>(sql`
+    const r = (await analyticsQuery<CashRegisterLineRow>(sql`
       -- Transfers net PER ENTRY over the in-scope bank legs: a plain move
       -- between two selected banks nets to zero, a fee-bearing one (bank A
       -- -100, bank B +95, fee expense +5) counts only the negative remainder
@@ -1259,7 +1260,7 @@ export async function categoryWeekly(
     // measured in this strategy's own read scope: bank legs matching its
     // kind/memo filters, unbounded in time.
     const windowStartIso = toISO(historyStart);
-    const bankStartRow = (await db.execute<{ d: string | null }>(sql`
+    const bankStartRow = (await analyticsQuery<{ d: string | null }>(sql`
       select min(e.posting_date)::text as d
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -1357,7 +1358,7 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
   // ambient request/session resolution is absent in non-request callers, and
   // an unscoped call there fails instead of reading the caller's tenant.
   const orgId = await resolveOrgId(explicitOrgId);
-  const r = (await db.execute(sql`
+  const r = (await analyticsQuery(sql`
     with bank_accounts as (
       select id from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_summary = false and is_active

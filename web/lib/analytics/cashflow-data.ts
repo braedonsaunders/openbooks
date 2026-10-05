@@ -1,6 +1,7 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
@@ -119,12 +120,12 @@ export async function cashflowData(
     bankBalances(asOfIso, subIds),
     loadCategories(orgId),
     analyticsConfig(orgId, "cashflow"),
-    (db.execute<AccountOptionRow>(sql`
+    (analyticsSection('cashflow', []) ? analyticsQuery<AccountOptionRow>(sql`
       select id, number, name from accounts
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
       order by number nulls last, name
-    `)),
+    `) : Promise.resolve({rows:[]})),
   ]);
   const weeklyCap = normalizeMoneyValue(String(apCfg.weeklyApCap ?? 0));
   const restrictToSafe = (apCfg.restrictToSafe ?? 0) >= 1;
@@ -195,7 +196,7 @@ export async function cashflowData(
     startingCash,
     bankAccounts: banks,
     weeks,
-    partyTotals: { ar: partyTotalsFor("ar"), ap: partyTotalsFor("ap") },
+    partyTotals: analyticsSection('cashflow', ['category']) ? { ar: partyTotalsFor("ar"), ap: partyTotalsFor("ap") } : {ar: [], ap: []},
     summary: {
       startingCash,
       projectedEnd,
@@ -217,7 +218,7 @@ export async function cashflowData(
     categories,
     apSettings: { weeklyCap, restrictToSafe },
     deferredBeyondHorizon: timeline.deferredBeyondHorizon,
-    vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
+    vendorOptions: analyticsSection('cashflow', []) ? [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)) : [],
     accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
   };
 }

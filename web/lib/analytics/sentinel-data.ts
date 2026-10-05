@@ -1,6 +1,7 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { currentAnalyticsRead, analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { presentationCurrency } from "../fx-presentation";
 import { ForbiddenError, type Authz } from "../authz";
@@ -22,7 +23,7 @@ import { englishCatalogMessage } from "./catalog-strings";
  *  - Duplicates: natural-key groups — same vendor + doc kind + document
  *    currency + amount + vendor reference, with the date span inside the
  *    duplicate window (≥$100, credits excluded); ONE finding per group with
- *    every member document listed. Confidence by reference/date proximity.
+ *    full group counts and bounded dashboard evidence. Confidence by reference/date proximity.
  *  - Benford first-digit + first-two-digit distributions with Mean Absolute
  *    Deviation conformity bands (Nigrini), computed PER DOCUMENT CURRENCY —
  *    never on translated or blended amounts.
@@ -280,6 +281,7 @@ export async function sentinelData(
   const baselineFrom = sentinelBaselineFrom(to);
   // Consolidated money label: the org base the document-FX translations land in.
   const presentationCcy = await presentationCurrency(orgId);
+  const evidenceLimit = currentAnalyticsRead() ? 8 : null;
 
   // Shared filter: non-voided spend documents in the period, |total| ≥ 1.
   const periodDocs = sql`
@@ -304,7 +306,7 @@ export async function sentinelData(
     // currency, never blended); every money sum is the document-FX
     // translation (ledger precision), while digit/trap detection reads the
     // transaction amount.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with base as (
         select d.currency as cur,
                abs(d.total) as txn_amt,
@@ -334,7 +336,7 @@ export async function sentinelData(
     // Threshold trap rows (top by amount) — SQL modular arithmetic, full scan.
     // Detection reads the transaction amount (currency-specific psychology);
     // the row also carries its document-FX translation for consolidated sums.
-    (db.execute(sql`
+    ((analyticsSection('sentinel', ["analysis"]) ? analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total) as amount, d.currency as currency, round(abs(d.total) * d.fx_rate, 4) as func_amount,
         d.party_id, coalesce(p.display_name, '') as party_name,
@@ -351,7 +353,7 @@ export async function sentinelData(
         and round((abs(d.total) - trunc(abs(d.total))) * 100) in (0, 99)
       order by abs(d.total) desc
       limit 100
-    `)),
+    `) : Promise.resolve({rows:[]}))),
 
     // Duplicates. The candidate set (payable documents above the floor)
     // materializes ONCE, then groups by the natural key — party, kind,
@@ -360,13 +362,13 @@ export async function sentinelData(
     // in the key kills the cross-currency false positive (a USD 100 bill is
     // not a copy of a CAD 100 bill); the reference in the key keeps recurring
     // same-amount invoices with distinct references out. Each group reports
-    // ONE finding with every member listed; the value at risk is every copy
+    // ONE finding with bounded dashboard evidence; the value at risk is every copy
     // beyond the largest presumed-legitimate original, translated at
     // document FX. The group count and the value at risk come from ONE
     // statement: the qualified set is referenced twice, so Postgres
     // materializes it and the grouping runs once. The name lookup hangs off
     // the top groups only, never the whole set.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with cand as materialized (
         select id, document_number, kind, party_id, memo, reference_number, currency, fx_rate,
                abs(total) as amt, round(abs(total) * fx_rate, 4) as func_amt,
@@ -385,11 +387,7 @@ export async function sentinelData(
           count(*) as cnt, min(ddate) as first_date, max(ddate) as last_date,
           (max(ddate) - min(ddate)) as span_days,
           coalesce(sum(func_amt), 0) as func_total,
-          coalesce(sum(func_amt), 0) - max(func_amt) as value_at_risk,
-          jsonb_agg(jsonb_build_object('docId', id, 'docNumber', document_number,
-            'reference', coalesce(reference_number, ''), 'date', ddate::text,
-            'amount', amt, 'currency', currency, 'funcAmount', func_amt,
-            'memo', memo) order by ddate, id) as members
+          coalesce(sum(func_amt), 0) - max(func_amt) as value_at_risk
         from keyed
         group by party_id, kind, currency, amt, refkey
         having count(*) >= 2 and (max(ddate) - min(ddate)) <= ${DUPLICATE_THRESHOLD_DAYS}
@@ -401,9 +399,22 @@ export async function sentinelData(
       )
       select 'group' as src, t.party_id, coalesce(p.display_name, 'Unknown') as party_name,
         t.kind, t.currency, t.amt, t.refkey, t.cnt, t.first_date::text as first_date,
-        t.last_date::text as last_date, t.span_days, t.func_total, t.value_at_risk, t.members,
+        t.last_date::text as last_date, t.span_days, t.func_total, t.value_at_risk, evidence.members,
         null::bigint as group_count
       from top t
+      cross join lateral (
+        select jsonb_agg(jsonb_build_object('docId', m.id, 'docNumber', m.document_number,
+          'reference', coalesce(m.reference_number, ''), 'date', m.ddate::text,
+          'amount', m.amt, 'currency', m.currency, 'funcAmount', m.func_amt, 'memo', m.memo)
+          order by (m.ddate between ${from} and ${to}) desc, m.ddate, m.id) as members
+        from (
+          select k.* from keyed k
+          where k.party_id = t.party_id and k.kind = t.kind and k.currency = t.currency
+            and k.amt = t.amt and k.refkey = t.refkey
+          order by (k.ddate between ${from} and ${to}) desc, k.ddate, k.id
+          limit ${evidenceLimit}
+        ) m
+      ) evidence
       left join parties p on p.id = t.party_id and p.org_id = ${orgId}
       union all
       select 'agg', null::uuid, null::text, null::text, null::text, null::numeric, null::text,
@@ -413,7 +424,7 @@ export async function sentinelData(
     `)),
 
     // Weekend-dated documents (top rows + full aggregate).
-    (db.execute(sql`
+    (analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total) as amount, d.currency as currency, round(abs(d.total) * d.fx_rate, 4) as func_amount,
         d.party_id, coalesce(p.display_name, '') as party_name,
@@ -440,7 +451,7 @@ export async function sentinelData(
     // neither false-flag against another currency's history nor inflate σ
     // and mask a genuine same-currency outlier. The two result sets come back
     // unioned with a `src` discriminator and are split below.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with baseline as (
         select d.party_id, d.currency, abs(d.total) as amount,
           row_number() over w as rn,
@@ -500,7 +511,7 @@ export async function sentinelData(
     // Sequential invoice runs — gaps-and-islands over vendor reference numbers,
     // one island space per (vendor, document currency): a run is only a run
     // in a single currency. Money totals translate at document FX.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with refs as (
         select d.id, d.document_number, d.reference_number, d.party_id, d.currency,
           coalesce(d.document_date, d.posting_date) as doc_date, abs(d.total) as amount,
@@ -519,15 +530,23 @@ export async function sentinelData(
         select party_id, currency, island, count(*) as cnt, coalesce(sum(func_amount), 0) as total_amount,
           min(ref_num) as start_ref, max(ref_num) as end_ref,
           min(doc_date) as first_date, max(doc_date) as last_date,
-          (max(doc_date) - min(doc_date)) as span_days,
-          jsonb_agg(jsonb_build_object('docId', id, 'docNumber', document_number, 'reference', reference_number,
-            'date', doc_date::text, 'amount', amount, 'currency', currency, 'funcAmount', func_amount) order by ref_num) as invoices
+          (max(doc_date) - min(doc_date)) as span_days
         from numbered
         group by party_id, currency, island
         having count(*) >= ${SEQUENTIAL_MIN} and count(*) = count(distinct ref_num)
       )
-      select i.*, coalesce(p.display_name, 'Unknown') as party_name
-      from islands i
+      select i.*, evidence.invoices, coalesce(p.display_name, 'Unknown') as party_name
+      from (
+        select * from islands where span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
+        order by span_days desc, total_amount desc, party_id, currency, island limit 50
+      ) i
+      cross join lateral (
+        select jsonb_agg(jsonb_build_object('docId', n.id, 'docNumber', n.document_number,
+          'reference', n.reference_number, 'date', n.doc_date::text, 'amount', n.amount,
+          'currency', n.currency, 'funcAmount', n.func_amount) order by n.ref_num, n.id) as invoices
+        from (select * from numbered where party_id = i.party_id and currency = i.currency and island = i.island
+          order by ref_num, id limit 12) n
+      ) evidence
       left join parties p on p.id = i.party_id and p.org_id = ${orgId}
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
       order by i.span_days desc, i.total_amount desc
@@ -539,7 +558,7 @@ export async function sentinelData(
     // address — line1 normalized (punctuation stripped, directional/street-type
     // words abbreviated) + postal code. Weights as designed: name 75 /
     // address 90 / name+address 95.
-    (db.execute(sql`
+    (analyticsQuery(sql`
       with norm_addr as (
         select a.party_id,
           regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
@@ -583,7 +602,7 @@ export async function sentinelData(
     `)),
 
     // Native audit trail — deletes + sensitive-field changes on master data.
-    (db.execute(sql`
+    ((analyticsSection('sentinel', ["audit"]) ? analyticsQuery(sql`
       select a.id, a.table_name, a.row_id::text as row_id, a.action, a.actor_id::text as actor_id, a.at::text as at,
         left(coalesce(a.changes::text, ''), 200) as changes
       from audit_log a
@@ -596,14 +615,14 @@ export async function sentinelData(
         )
       order by a.at desc
       limit 100
-    `)),
-    (db.execute(sql`
+    `) : Promise.resolve({rows:[]}))),
+    ((analyticsSection('sentinel', ["audit"]) ? analyticsQuery(sql`
       select count(*) as total,
         count(*) filter (where action in ('delete', 'DELETE')) as deletes,
         count(*) filter (where changes::text ~* 'bank|routing|iban|account_number|email|address') as sensitive
       from audit_log
       where org_id = ${orgId} and at >= ${from}::date and at < (${to}::date + interval '1 day')
-    `)),
+    `) : Promise.resolve({rows:[]}))),
 
   ]);
 
@@ -787,7 +806,7 @@ export async function sentinelData(
   // keep working. Same-currency and same-reference by construction — the
   // cross-currency false positive cannot appear here either.
   const dupPairs: DuplicatePair[] = [];
-  for (const g of dupGroups) {
+  for (const g of analyticsSection('sentinel', []) ? dupGroups : []) {
     const ms = g.members;
     for (let i = 0; i < ms.length; i++) {
       for (let j = i + 1; j < ms.length; j++) {
@@ -939,10 +958,11 @@ export async function sentinelData(
   for (const g of dupGroups) {
     // The group scan includes the threshold-sized boundary on both sides of
     // the report period. Anchor the single group finding to its earliest
-    // in-period member; the reason lists the whole group.
+    // in-period member. SQL keeps that anchor ahead of bounded evidence; counts
+    // and value at risk still cover the complete group.
     const inPeriod = g.members.filter((m) => m.date >= from && m.date <= to);
     const anchor = inPeriod[0] ?? g.members[0]!;
-    const others = g.members.filter((m) => m.docId !== anchor.docId).map((m) => m.docNumber || m.docId).join(", ");
+    const others = g.members.filter((m) => m.docId !== anchor.docId).map((m) => m.docNumber || m.docId).join(", ") + (g.count > g.members.length ? ", …" : "");
     push({
       docId: anchor.docId,
       docNumber: anchor.docNumber,

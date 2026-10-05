@@ -1,5 +1,7 @@
 'use client'
 
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
@@ -20,7 +22,6 @@ import { escapeTooltipHtml, useAnalyticsMoney, fmtPct } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
-type Tab = (typeof TABS)[number]
 
 const TIER_STYLE: Record<SpendTier, string> = {
   strategic: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
@@ -62,11 +63,13 @@ function SortHeaderCell<K extends string>({
   )
 }
 
-export function VendorView({ data }: { data: VendorData }) {
+export function VendorView({ data: initialData }: { data: VendorData }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
-  const [tab, setTab] = useState<Tab>('overview')
+  const read = useAnalyticsTab('vendor-performance', { data: initialData }, TABS)
+  const { tab, setTab } = read
+  const { data } = read.props
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const totals = data.totals
   const diversification = Math.max(0, Math.min(100, (1 - totals.hhi) * 100))
@@ -89,6 +92,7 @@ export function VendorView({ data }: { data: VendorData }) {
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'payment' ? <PaymentTab data={data} onDrill={openVendor} /> : null}
@@ -96,6 +100,7 @@ export function VendorView({ data }: { data: VendorData }) {
         {tab === 'matrix' ? <MatrixTab data={data} /> : null}
         {tab === 'vendors' ? <VendorsTab data={data} onDrill={openVendor} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />

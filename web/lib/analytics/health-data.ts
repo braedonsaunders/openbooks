@@ -1,6 +1,7 @@
 import "server-only";
+import { analyticsQuery } from "./query";
+import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
@@ -284,7 +285,7 @@ async function monthlySeries(
   // A per-month P&L series is the exact shape gl_month_activity stores, so the
   // whole months read straight from it; only the final (possibly partial)
   // month falls back to the lines. The window always starts on a first-of-month.
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     with movement as (
       select g.account_id, to_char(g.month, 'YYYY-MM') as month,
              sub.base_currency as func,
@@ -401,7 +402,7 @@ async function segmentsBy(
   // dropping lines with no dimension.
   // Keep the date predicate on the line for selectivity; the entry controls
   // posted status and the primary accounting book, just as the headline does.
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
       sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
@@ -494,7 +495,7 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   // Retain the selective line-date predicate while enforcing ledger status/book.
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     select a.id, a.name, a.type, sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
       max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
@@ -568,7 +569,7 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
 async function itemAnalysis(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<HealthData["items"]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     select a.id, a.name, sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
       max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
@@ -832,14 +833,16 @@ export async function healthData(
 
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
     financialHealth(period, orgId, allowedSubsidiaryIds, strings),
-    financialHealth({ from: prior.from, to: prior.to, label: "prior" }, orgId, allowedSubsidiaryIds, strings),
+    analyticsSection('financial-health', ['overview', 'margin'])
+      ? financialHealth({ from: prior.from, to: prior.to, label: "prior" }, orgId, allowedSubsidiaryIds, strings)
+      : Promise.resolve(null),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
-    segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, strings),
-    segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, strings),
-    segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, strings),
-    drivers(orgId, from, to, allowedSubsidiaryIds),
-    itemAnalysis(orgId, from, to, allowedSubsidiaryIds),
-    budgetsOn
+    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, strings) : Promise.resolve([]),
+    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, strings) : Promise.resolve([]),
+    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, strings) : Promise.resolve([]),
+    analyticsSection('financial-health', ['drivers']) ? drivers(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ revenue: [], cost: [] }),
+    analyticsSection('financial-health', ['items']) ? itemAnalysis(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ rows: [], gainers: [], decliners: [], totalCurrent: '0', totalChange: '0' }),
+    budgetsOn && analyticsSection('financial-health', ['budget'])
       ? budgetVariance(orgId, from, to, allowedSubsidiaryIds)
       : Promise.resolve(emptyBudget()),
     insightPolicy(orgId),
@@ -848,7 +851,7 @@ export async function healthData(
   return {
     ...base,
     monthly,
-    pnlSummary: buildPnlSummary(base.figures, priorBase.figures, strings),
+    pnlSummary: priorBase ? buildPnlSummary(base.figures, priorBase.figures, strings) : [],
     marginFlow: buildMarginFlow(base.figures, strings),
     segments: { department: dept, class: cls, location: loc },
     drivers: drv,
@@ -900,7 +903,7 @@ export function exactBudgetVariance(budget: string, actual: string): { variance:
  * cost accounts the reverse.
  */
 export async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
-  const scen = (await db.execute(sql`
+  const scen = (await analyticsQuery(sql`
     select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
     from budget_scenarios bs
     where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status = 'approved'
@@ -919,7 +922,7 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
   // Both sides arrive per (account, functional) and translate to
   // presentation before the variance compares them — the same second leg as
   // the budget-vs-actual report (see budget-report.ts).
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     with b as (
       select bl.account_id, sub.base_currency as func,
         max(p.ends_on)::text as late,

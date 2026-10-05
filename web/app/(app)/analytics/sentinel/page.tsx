@@ -1,5 +1,6 @@
+import { readAnalyticsDashboard } from '../../../../lib/analytics/dashboard-reader'
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadSentinel, sentinelSpec } from './view'
+import { sentinelSpec } from './view'
 import { getTranslations } from 'next-intl/server'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,6 @@ export default async function SentinelPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadSentinel(sp)
+  const data = await readAnalyticsDashboard('sentinel', sp)
   return <ModuleView spec={sentinelSpec(data)} data={data} searchParams={sp} trusted />
 }

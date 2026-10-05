@@ -1,4 +1,6 @@
 'use client'
+
+import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell, TableHeader as SharedTableHeader, TableHead as SharedTableHead } from "../../reports/ReportTable"
 import { toChartNumber } from '../_ui/format'
@@ -147,7 +149,7 @@ async function switchProfile(activeProfileId: string): Promise<ApiResult> {
 
 type CellRef = { catId: string; deptId: string }
 
-export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
+export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
   const rate = useRate()
   const whole = useWholeNumber()
   const percent = usePercent()
@@ -155,7 +157,9 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.trueCost')
   const tabs = MODE_TABS[mode]
-  const [tab, setTab] = useState<Tab>(tabs[0]!)
+  const read = useAnalyticsTab('true-cost', { data: initialData }, tabs)
+  const { tab, setTab } = read
+  const { data } = read.props
   const [openCatId, setOpenCatId] = useState<string | null>(null)
   const [cell, setCell] = useState<CellRef | null>(null)
   const [drill, setDrill] = useState<DrillTarget | null>(null)
@@ -181,6 +185,7 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
 
       {mode === 'analytics' ? <Link href="/admin/setup/overhead" className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"><SlidersHorizontal size={12} aria-hidden /> {t('configureInSetup')}</Link> : null}
       <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
       <div key={tab}>
         {tab === 'categories' ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} onDrill={setCell} /> : null}
@@ -188,6 +193,7 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
         {tab === 'selling' ? <SellingTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
+            </AnalyticsTabContent>
       </RecordTabs>
 
       {openCatId ? <CategoryFlyout catId={openCatId} data={data} onClose={() => setOpenCatId(null)} onDrillAccount={setDrill} /> : null}

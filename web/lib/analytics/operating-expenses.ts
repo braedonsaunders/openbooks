@@ -1,6 +1,6 @@
 import "server-only";
+import { analyticsQuery } from "./query";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { add, mulDecimal, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
@@ -59,7 +59,7 @@ export async function periodOperatingExpenses(
     OPEX_RATIO_REVENUE_TYPES.map((t) => sql`${t}`),
     sql`, `,
   );
-  const r = await db.execute<OpexRevenueRow>(sql`
+  const r = await analyticsQuery<OpexRevenueRow>(sql`
     select sum(case when a.type in (${opexTypes}) then l.amount else 0 end) as opex,
       -sum(case when a.type in (${revenueTypes}) then l.amount else 0 end) as revenue,
       sub.base_currency as func,

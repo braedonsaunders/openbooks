@@ -1,5 +1,6 @@
+import { readAnalyticsDashboard } from '../../../../lib/analytics/dashboard-reader'
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadSpendVelocity, spendVelocitySpec } from './view'
+import { spendVelocitySpec } from './view'
 import { getTranslations } from 'next-intl/server'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,6 @@ export default async function SpendVelocityPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadSpendVelocity(sp)
+  const data = await readAnalyticsDashboard('spend-velocity', sp)
   return <ModuleView spec={spendVelocitySpec(data)} data={data} searchParams={sp} trusted />
 }

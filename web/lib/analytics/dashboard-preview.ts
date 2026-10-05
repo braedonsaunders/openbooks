@@ -4,9 +4,23 @@ import { getMoneyFormatter } from '../money-server'
 import { toChartNumber } from '../chart-number'
 import { formatDecimal } from '../money-format'
 import type { AnalyticsDashboardDefinition, AnalyticsPreview, AnalyticsPreviewChart } from './dashboard-catalog'
+import { requirePermission, ForbiddenError } from '../authz'
+import { analyticsDashboardAvailable } from './dashboard-access'
+import { analyticsSourceQuery } from './query-params'
+import { analyticsCacheIdentity, cachedAnalyticsPreview } from './preview-cache'
+import { currentAnalyticsRead, withAnalyticsRead } from './read-context'
 
 /** Reuse the dashboard loaders: previews never maintain their own financial calculations. */
 export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp: Record<string, string | undefined>, orgId: string): Promise<AnalyticsPreview> {
+  const authz = await requirePermission('reports.read')
+  if (authz.user.orgId !== orgId || !await analyticsDashboardAvailable(authz, dashboard)) throw new ForbiddenError(dashboard.permission ?? dashboard.feature ?? 'reports.read')
+  const query = analyticsSourceQuery(sp)
+  const identity = await analyticsCacheIdentity(orgId)
+  return withAnalyticsRead({ authz, slug: dashboard.slug, tab: '', projection: 'summary', ...identity, observedAt: Date.now() }, () =>
+    cachedAnalyticsPreview(authz, dashboard.slug, query, () => buildDashboardPreview(dashboard, query, orgId)))
+}
+
+async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp: Record<string, string | undefined>, orgId: string): Promise<AnalyticsPreview> {
   const t = await getTranslations('analytics')
   const fmt = await getMoneyFormatter(orgId)
   const number = (value: number | string | null | undefined) => value == null ? '—' : formatDecimal(fmt.locale, value, { maximumFractionDigits: 1 })
@@ -14,7 +28,7 @@ export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDef
   const metric = (key: string, value: string) => ({ label: t(key), value })
   let chart: AnalyticsPreviewChart | undefined
   const trend = (label: string, points: number[], labels: string[]): AnalyticsPreviewChart | undefined => points.length > 1 ? { kind: 'sparkline', label, points, from: labels[0]!, to: labels[labels.length - 1]! } : undefined
-  const result = (periodLabel: string, metrics: AnalyticsPreview['metrics'], notice?: string): AnalyticsPreview => ({ ...(chart ? { chart } : {}), periodLabel, metrics, observedAt: new Date().toISOString(), ...(notice ? { notice } : {}) })
+  const result = (periodLabel: string, metrics: AnalyticsPreview['metrics'], notice?: string): AnalyticsPreview => ({ ...(chart ? { chart } : {}), periodLabel, metrics, observedAt: new Date(currentAnalyticsRead()?.observedAt ?? Date.now()).toISOString(), ...(notice ? { notice } : {}) })
   switch (dashboard.slug) {
     case 'financial-health': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/financial-health/view')).loadFinancialHealthPreview(sp)
