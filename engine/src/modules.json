@@ -708,6 +708,7 @@
       "dependsOn": [
         "connectors",
         "country-tax-packs",
+        "fx",
         "money",
         "organization",
         "platform"
@@ -718,6 +719,7 @@
       "dependsOn": [
         "assets",
         "country-tax-packs",
+        "fx",
         "journal",
         "money",
         "organization",

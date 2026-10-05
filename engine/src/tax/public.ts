@@ -51,4 +51,24 @@ export {
   type SupplyEvidenceInput,
   type ValidateStoredTaxIdOptions,
 } from './cross-border-records.ts';
+export {
+  findSupplyEvidenceConflicts,
+  computeDistanceTurnover,
+  type SupplyEvidenceConflict,
+  type DistanceTurnover,
+  type DistanceTurnoverTranslation,
+} from './cross-border-monitor.ts';
+export {
+  saveAuthorityCredentials,
+  readAuthorityConnectionStatus,
+  refreshHmrcToken,
+  verifyAuthorityConnection,
+  authorityCredentialsForOrg,
+  checkHmrcWithStoredCredentials,
+  checkAbnWithStoredCredentials,
+  type TaxAuthority,
+  type HmrcClientCredentials,
+  type AbnCredentials,
+  type AuthorityConnectionStatus,
+} from './authority-connections.ts';
 export { readTaxRateProviderConfigView } from './rate-providers.ts';

@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { calendarQuarterBounds, endOfMonth, startOfMonth } from "../platform/civil-date.ts";
-import { fromUnits, toUnits } from "../money/money.ts";
+import { fromUnits, mulRate, toUnits } from "../money/money.ts";
+import { lookupSpotRateWithEvidence } from "../fx/spot-rate.ts";
 import { CrossBorderTaxError } from "../tax/cross-border-place-of-supply.ts";
 
 /**
@@ -15,13 +17,16 @@ import { CrossBorderTaxError } from "../tax/cross-border-place-of-supply.ts";
  * Credits and voids posted in a later period return as correction lines for
  * the original quarter; posted history itself is never rewritten.
  *
- * Amounts file in euro. Documents in another currency are refused by name:
- * translating them needs an explicit FX policy the filer owns, and reporting
- * foreign-currency figures as euro would be a silent lie.
+ * Amounts file in euro. Documents in another currency translate at the ECB
+ * spot rate on the last published day on or before the period's last day
+ * (the OSS conversion rule); the rate, its date and its reproducibility
+ * digest travel on the return and are stored as filing evidence. A currency
+ * with no rate refuses by name — reporting foreign-currency figures as euro
+ * would be a silent lie, and so would converting at a guessed rate.
  *
- * Export today is the generic EU OSS semicolon CSV layout. Member-state
- * portal formats (for example file uploads with national line schemas)
- * are not implemented; the CSV carries every filed figure for hand-keying.
+ * Export is the generic EU OSS semicolon CSV layout plus the member-state
+ * transport layouts in oss-exports.ts. Every layout carries every filed
+ * figure for portal hand-keying or upload.
  */
 
 export type OssScheme = "union" | "non_union" | "ioss";
@@ -54,6 +59,28 @@ export interface OssReturn {
   lines: OssReturnLine[];
   totalBase: string;
   totalTax: string;
+  /** ECB translation evidence per translated source currency; empty for euro-only periods. */
+  fx: OssFxEvidence[];
+}
+
+/** One stored translation behind a filed euro figure. */
+export interface OssFxEvidence {
+  currency: string;
+  /** Euro per unit of the source currency on the rate date. */
+  rate: string;
+  /** Last published ECB day on or before the period end. */
+  rateAsOf: string;
+  rateSource: string;
+  /** Reproducibility digest over the observation set. */
+  digest: string;
+}
+
+/** Signed-amount translation: ledger signs live on the amount, never in the rate. */
+function translateSigned(amount: string, rate: string): string {
+  const negative = amount.trim().startsWith("-");
+  const magnitude = negative ? amount.trim().slice(1) : amount;
+  const converted = mulRate(magnitude, rate);
+  return negative ? `-${converted}` : converted;
 }
 
 export function quarterLabel(isoDate: string): string {
@@ -207,17 +234,38 @@ export async function computeOssReturn(
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
          and component.calculation_type = 'standard'`)
   ).rows;
-  const currencies = [...new Set(current.map((row) => row.currency))];
-  if (currencies.length > 1 || (currencies.length === 1 && currencies[0] !== "EUR")) {
-    throw new CrossBorderTaxError(
-      `OSS returns file in euro but this period holds ${currencies.join(", ") || "no supplies"}; translate the documents to euro or file the foreign-currency supplies nationally`,
-    );
+  // Foreign-currency supplies translate at the ECB spot rate on the last
+  // published day on or before the period end — one rate per currency, so
+  // every line in that currency converts identically and deterministically.
+  const currencies = [...new Set(current.map((row) => row.currency))].sort();
+  const fx: OssFxEvidence[] = [];
+  const rates = new Map<string, string>();
+  for (const currency of currencies) {
+    if (currency === "EUR") continue;
+    const evidence = await lookupSpotRateWithEvidence(runner, orgId, currency, "EUR", request.to);
+    if (evidence.rate === null) {
+      throw new CrossBorderTaxError(
+        `OSS returns file in euro but this period holds ${currency} supplies with no ECB rate on or before ${request.to}; sync ECB rates (or add a manual spot rate) in FX setup, then prepare the return again`,
+      );
+    }
+    rates.set(currency, evidence.rate);
+    fx.push({
+      currency,
+      rate: evidence.rate,
+      rateAsOf: evidence.observations[0]?.asOf ?? request.to,
+      rateSource: evidence.observations[0]?.source ?? "unknown",
+      digest: evidence.digest,
+    });
   }
+  const toEuro = (amount: string, currency: string): string => {
+    const rate = rates.get(currency);
+    return rate ? translateSigned(amount, rate) : amount;
+  };
 
   // Voids posted away in this period: the voided supply leaves the filed
   // quarter through a correction, mirroring the credit treatment.
   const voided = (
-    await runner.execute<AttributedLine>(sql`
+    await runner.execute<AttributedLine & { currency: string }>(sql`
       select (d.custom -> 'crossBorderSupply' ->> 'country') as country,
              component.rate_percent::text as "ratePercent",
              -- A void unwinds the document's economic effect: a voided
@@ -225,7 +273,8 @@ export async function computeOssReturn(
              (case when d.kind = 'customer_credit' then component.taxable_amount else -component.taxable_amount end)::text as "baseAmount",
              (case when d.kind = 'customer_credit' then component.tax_amount else -component.tax_amount end)::text as "taxAmount",
              d.document_date::text as "documentDate",
-             d.document_date::text as "originalDate"
+             d.document_date::text as "originalDate",
+             d.currency as currency
         from documents d
         join document_lines line
           on line.org_id = d.org_id and line.document_id = d.id
@@ -236,17 +285,34 @@ export async function computeOssReturn(
          and d.status = 'voided'
          and d.voided_at::date between ${request.from}::date and ${request.to}::date
          and d.document_date < ${request.from}::date
-         and d.currency = 'EUR'
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
          and component.calculation_type = 'standard'`)
   ).rows;
+  for (const row of voided) {
+    if (row.currency !== "EUR" && !rates.has(row.currency)) {
+      const evidence = await lookupSpotRateWithEvidence(runner, orgId, row.currency, "EUR", request.to);
+      if (evidence.rate === null) {
+        throw new CrossBorderTaxError(
+          `OSS returns file in euro but a voided correction holds ${row.currency} with no ECB rate on or before ${request.to}; sync ECB rates (or add a manual spot rate) in FX setup, then prepare the return again`,
+        );
+      }
+      rates.set(row.currency, evidence.rate);
+      fx.push({
+        currency: row.currency,
+        rate: evidence.rate,
+        rateAsOf: evidence.observations[0]?.asOf ?? request.to,
+        rateSource: evidence.observations[0]?.source ?? "unknown",
+        digest: evidence.digest,
+      });
+    }
+  }
 
   const lines = sumLines(
     [...current, ...voided].map((row) => ({
       country: row.country,
       ratePercent: row.ratePercent,
-      baseAmount: row.baseAmount,
-      taxAmount: row.taxAmount,
+      baseAmount: toEuro(row.baseAmount, row.currency),
+      taxAmount: toEuro(row.taxAmount, row.currency),
       documentDate: row.documentDate,
       originalDate: row.originalDate,
     })),
@@ -258,6 +324,7 @@ export async function computeOssReturn(
     totalBase += toUnits(line.baseAmount);
     totalTax += toUnits(line.taxAmount);
   }
+  fx.sort((a, b) => a.currency.localeCompare(b.currency));
   return {
     scheme: request.scheme,
     identificationState: registration.identificationState,
@@ -268,7 +335,52 @@ export async function computeOssReturn(
     lines,
     totalBase: fromUnits(totalBase),
     totalTax: fromUnits(totalTax),
+    fx,
   };
+}
+
+/**
+ * Store the return's translation evidence as filing evidence: one row per
+ * period and source currency with the rate, its date and the digest that
+ * reproduces the filed figures after provider rows change. Re-preparing a
+ * period converges on these rows (upsert), so the conflict is expected and
+ * benign; corrections still travel as return correction lines.
+ */
+export async function recordOssFxEvidence(
+  runner: SqlExecutor,
+  orgId: string,
+  actorId: string | null,
+  oss: OssReturn,
+): Promise<{ stored: number }> {
+  let stored = 0;
+  for (const entry of oss.fx) {
+    const rows = (
+      await runner.execute<{ id: string }>(sql`
+        insert into tax_oss_fx_evidence
+          (id, org_id, scheme, period_from, period_to, currency, rate,
+           rate_as_of, rate_source, evidence_digest, created_by, updated_by)
+        values (${randomUUID()}, ${orgId}, ${oss.scheme}, ${oss.from}::date, ${oss.to}::date,
+                ${entry.currency}, ${entry.rate}, ${entry.rateAsOf}::date,
+                ${entry.rateSource}, ${entry.digest}, ${actorId}, ${actorId})
+        on conflict (org_id, scheme, period_from, period_to, currency) do update
+           set rate = excluded.rate,
+               rate_as_of = excluded.rate_as_of,
+               rate_source = excluded.rate_source,
+               evidence_digest = excluded.evidence_digest,
+               updated_by = excluded.updated_by,
+               updated_at = now()
+        returning id`)
+    ).rows;
+    // A write that matches zero rows is a failure: evidence no read can
+    // observe was not stored, and the filed figures would lose their proof.
+    if (rows.length !== 1) {
+      throw new CrossBorderTaxError(
+        `the ECB translation evidence for ${entry.currency} was not stored; prepare the return again before filing`,
+      );
+    }
+    stored += 1;
+  }
+  return { stored };
 }
 
 /** Exact half-up rounding from ledger scale to filing cents. */
