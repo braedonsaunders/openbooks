@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
+import { PayrollError } from "./error.ts";
 
 const orgId = "10000000-0000-4000-8000-000000000001";
 const componentId = "10000000-0000-4000-8000-000000000002";
@@ -54,11 +55,15 @@ test("replacement-only defaults need no missing assignment values and never pay 
 
 test("bounded inputs and component ownership refuse with usable remedies", () => {
   assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: { allowance: "10000.01" } }), /allowance.*bound.*correct.*assignment/);
-  assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: { allowance: "12,34" } }), /12.34/);
+  assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: { allowance: "12,34" } }),
+    (error: unknown) => error instanceof PayrollError && /write "12,34" as "12.34"/.test(error.message));
   assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: {} }), /allowance.*missing/);
   assert.throws(() => validateCompensationPackage({ ...definition, inputs: [{ ...definition.inputs[0]!, minimum: "1,234" }] }, components), /ambiguous/);
   assert.throws(() => validateCompensationPackage(definition, [{ ...components[0]!, systemKey: "base_pay" }]), /statutory.*owned/);
   assert.throws(() => validateCompensationPackage(definition, [{ ...components[0]!, orgId: bonusId }]), /not visible.*organization/);
+  const longest = "allowance" + " ".repeat(4096 - "allowance".length);
+  assert.ok(validateCompensationPackage({ ...definition, rules: [{ ...definition.rules[0]!, expression: longest, proration: "none" }] }, components));
+  assert.throws(() => validateCompensationPackage({ ...definition, rules: [{ ...definition.rules[0]!, expression: longest }] }, components), /declared calendar proration.*shorten or simplify/);
 });
 
 test("native worked hours and pay cannot receive a second calendar fraction", () => {

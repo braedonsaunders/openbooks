@@ -186,3 +186,33 @@ test("controlled full sandbox cloning preserves approved terms and rebinds only 
     }
   });
 });
+
+test("create retries match immutable evidence after edits and decisions and changed requests never create extra records", { skip: !DB }, async () => {
+  await withHarness(setup, async (f) => {
+    const create = { orgId: f.org.orgId, actorId: f.authorId, subsidiaryId: f.org.subsidiaryId, code: "RETRY", name: "Retry-safe package",
+      country: "CA", currency: "CAD", reason: "Stable creation request", idempotencyKey: randomUUID() };
+    const original = await createCompensationPackage(create);
+    await updateCompensationPackage({ ...create, packageId: original.id, expectedRevision: original.revision, name: "Reviewed package name", description: null, retire: false });
+    const replay = await createCompensationPackage(create);
+    assert.equal(replay.id, original.id); assert.equal(replay.name, "Reviewed package name");
+    await assert.rejects(createCompensationPackage({ ...create, name: "Changed request" }), /already saved with different details.*reopen/);
+    const versionInput = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, effectiveFrom: "2026-02-01", effectiveTo: null,
+      definition: f.definition, reason: "Stable version create", idempotencyKey: randomUUID() };
+    const version = await saveCompensationPackageVersion(versionInput);
+    await transitionCompensationPackageVersion({ ...versionInput, versionId: version.id, expectedRevision: version.revision, action: "submit" });
+    const versionReplay = await saveCompensationPackageVersion(versionInput);
+    assert.equal(versionReplay.id, version.id); assert.equal(versionReplay.status, "submitted");
+    await assert.rejects(saveCompensationPackageVersion({ ...versionInput, effectiveFrom: "2026-03-01" }), /already saved with different details.*reopen/);
+    await approveVersion(f);
+    const assignmentInput = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id, employmentId: f.employmentId,
+      effectiveFrom: "2026-01-01", effectiveTo: null, inputs: { allowance: "310.00" }, reason: "Stable assignment create", idempotencyKey: randomUUID() };
+    const saved = await saveCompensationPackageAssignment(assignmentInput);
+    await transitionCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id,
+      expectedRevision: saved.revision, action: "submit", reason: "Employee proposal" });
+    const assignmentReplay = await saveCompensationPackageAssignment({ ...assignmentInput, inputs: { allowance: "310" } });
+    assert.equal(assignmentReplay.id, saved.id); assert.equal(assignmentReplay.status, "submitted");
+    await assert.rejects(saveCompensationPackageAssignment({ ...assignmentInput, inputs: { allowance: "311" } }), /already saved with different details.*reopen/);
+    const state = await getCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id });
+    assert.equal(state.versions.length, 2); assert.equal(state.assignments.length, 1);
+  });
+});
