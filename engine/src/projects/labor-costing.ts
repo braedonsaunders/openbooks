@@ -265,17 +265,23 @@ export interface ResolvedWage {
  * scope wins (employee > job title > trade > department > subsidiary > org);
  * within a scope the latest effective_from ≤ workedOn wins. Returns null when
  * no rate covers the date.
+ *
+ * A year-basis winning row annualizes through its own annual_hours; only
+ * when that stored value is missing or non-positive does the caller's
+ * `annualHoursDefault` apply — and it must be the org's labor-costing
+ * `settings.annualHours`, passed explicitly. There is no literal fallback:
+ * an assumed divisor would price every yearly rate it touches.
  */
 export async function resolveWage(
   orgId: string,
   employeePartyId: string,
   workedOn: string,
-  opts?: {
+  opts: {
     jobTitle?: string | null;
     tradeId?: string | null;
     departmentId?: string | null;
     subsidiaryId?: string | null;
-    annualHoursDefault?: number;
+    annualHoursDefault: number;
   },
 ): Promise<ResolvedWage | null> {
   let jobTitle = opts?.jobTitle;
@@ -351,7 +357,7 @@ export async function resolveWage(
           String(row.rate),
           cmp(String(row.annual_hours), "0") > 0
             ? String(row.annual_hours)
-            : String(opts?.annualHoursDefault ?? 2080),
+            : String(opts.annualHoursDefault),
         )
       : String(row.rate);
   return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
@@ -361,10 +367,11 @@ export async function resolveWage(
  * Batch annual-hours resolution for analytics scopes: one query returning
  * each employee's winning `labor_cost_rates.annual_hours` under the same
  * scope priority `resolveWage` uses (employee > job title > trade >
- * department > subsidiary > org; latest effective_from wins). Employees with
- * no covering row — or no annual hours on it — are absent from the map:
- * the caller refuses by name when nothing resolves instead of assuming a
- * divisor.
+ * department > subsidiary > org; latest effective_from wins) — among
+ * `basis = 'year'` rows only. Hourly rows carry the column default, not a
+ * measured divisor, so they never resolve: employees covered only by
+ * hourly rows — or by no row at all — are absent from the map, and the
+ * caller refuses by name when nothing resolves instead of assuming 2080.
  */
 export async function resolveAnnualHoursMany(
   orgId: string,
@@ -381,6 +388,7 @@ export async function resolveAnnualHoursMany(
                    from employee_roles where org_id = ${orgId}) er on er.party_id = emp.id
       left join parties p on p.org_id = ${orgId} and p.id = emp.id
       left join labor_cost_rates r on r.org_id = ${orgId} and r.is_active
+        and r.basis = 'year'
         and r.effective_from <= ${onDate}::date
         and (r.effective_to is null or r.effective_to >= ${onDate}::date)
         and (r.employee_party_id = emp.id
