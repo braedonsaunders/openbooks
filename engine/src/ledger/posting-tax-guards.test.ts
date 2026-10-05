@@ -123,6 +123,20 @@ test("fully nonrecoverable purchase tax needs no paid account", () => {
   );
 });
 
+test("reverse-charge purchases refuse one account for output and input tax", () => {
+  // The return tells the collected box from the paid box by account; one
+  // shared account would net both boxes to zero. Distinct accounts post.
+  const rc = (taxPaid: string) => deps({
+    control: { ar: "ar", ap: "ap", bank: "bank", taxCollected: "vat-out", taxPaid },
+    taxComponentsByLine: new Map([["line-1", [component({ calculationType: "reverse_charge" })]]]),
+  });
+  assert.throws(
+    () => validateTaxControlAccounts(doc("vendor_bill"), [docLine({ taxAmount: "0.0000" })], rc("vat-out")),
+    (e: unknown) => e instanceof PostingError && /line 1 reverse-charge tax GST .*collected \(output\) account different/.test(e.message),
+  );
+  assert.equal(validateTaxControlAccounts(doc("vendor_bill"), [docLine({ taxAmount: "0.0000" })], rc("vat-in")), undefined);
+});
+
 test("provider-tax document kinds are exactly the four taxable commercial documents", () => {
   for (const kind of ["customer_invoice", "customer_credit", "vendor_bill", "vendor_credit"]) {
     assert.equal(providerTaxDocumentKind(kind), true, kind);
