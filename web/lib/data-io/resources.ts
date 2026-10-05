@@ -21,6 +21,7 @@ import {
 } from './prior-payroll-register-resource'
 import { PAYROLL_RUN_INPUTS_DESCRIPTOR, PAYROLL_RUN_INPUTS_KEY, payrollRunInputsResource } from './payroll-run-inputs-resource'
 import { PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR, PAYROLL_EMPLOYMENT_LINKS_KEY, payrollEmploymentLinksResource } from './payroll-employment-links-resource'
+import { EMPLOYEE_WORKER_COMP_DESCRIPTOR, EMPLOYEE_WORKER_COMP_KEY, employeeWorkerCompResource } from './employee-worker-comp-resource'
 import {
   PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
   PAYROLL_EMPLOYER_LEVY_OPENINGS_KEY,
@@ -264,6 +265,7 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
         PAYROLL_RUN_INPUTS_DESCRIPTOR,
         PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR,
+        EMPLOYEE_WORKER_COMP_DESCRIPTOR,
       ]
     : []
   const usage = featureEnabled(features, 'usageBilling') ? [USAGE_RECORDS_DESCRIPTOR] : []
@@ -298,6 +300,10 @@ export async function getResource(
   if (key === PAYROLL_EMPLOYMENT_LINKS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(payrollEmploymentLinksResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === EMPLOYEE_WORKER_COMP_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
+    return bindReadScope(employeeWorkerCompResource(orgId), orgId, allowedSubsidiaryIds)
   }
   if (key === PAYROLL_OPENING_BALANCES_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
