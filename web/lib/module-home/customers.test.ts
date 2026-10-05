@@ -25,6 +25,7 @@ const mocks = new Map([
     export function calendarQuarterBounds() { return { start: '2026-07-01', end: '2026-09-30' } }
   `],
   ['../features', 'export async function isFeatureEnabled() { return false }'],
+  ['../periods', `export async function resolvePeriod() { return { presetId: 'this_fiscal_quarter', from: '2026-07-01', to: '2026-09-30', label: 'FQ3 2026' } }`],
   ['../crm', 'export async function calculateForecast() { return [] }'],
   ['../crm-scope', "export function crmOpportunityScope() { throw new Error('CRM is disabled') }"],
   ['../cash/core', `

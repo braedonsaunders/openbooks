@@ -3,6 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { agingBasisDate } from '../aging-basis'
 import { flowRates, translateFlows } from '../fx-presentation'
 import { openItems, parseISO, summariseSide, toISO } from '../cash/core'
 import { isFeatureEnabled } from '../features'
@@ -325,7 +326,11 @@ export async function purchasingHome(
     if (cmp(remaining, '0') > 0) cur.openBills += 1
     cur.billedOpen = add(cur.billedOpen, remaining)
     const due = it.dueDate ? toISO(it.dueDate) : null
-    if (due !== null && due < today) cur.overdue = add(cur.overdue, remaining)
+    // Past due follows the shared aging rule (see customers.ts): an item
+    // ages from its due date, else its posting date.
+    const basis = agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate })
+    const basisIso = basis ? toISO(basis) : null
+    if (basisIso !== null && basisIso < today) cur.overdue = add(cur.overdue, remaining)
     if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
     billedByParty.set(it.partyId, cur)
   }
@@ -353,7 +358,10 @@ export async function purchasingHome(
   // open-line count over the same as-of item set.
   const apSummary = summariseSide(apItems, parseISO(today), '0.0000', 0)
   const apOutstanding = apSummary.outstanding
-  const apCurrent = apSummary.buckets.find((b) => b.label === 'Current')?.amount ?? '0'
+  // Buckets match by index, never by label: summariseSide builds Current
+  // first by construction, so a relabelled "Current" bucket cannot hide
+  // past-due money in the current column here.
+  const apCurrent = apSummary.buckets[0]?.amount ?? '0'
   const apOverdue = cmp(apOutstanding, apCurrent) > 0 ? add(apOutstanding, mulDecimal(apCurrent, '-1')) : '0'
   let openBills = 0
   let dueNext7 = '0'
