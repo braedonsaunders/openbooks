@@ -60,22 +60,12 @@ test('vendor payment tile reads the shared on-time rate with its context', async
   try {
     assert.ok(host.textContent?.includes('95%'), `on-time rate must render, got:\n${host.textContent}`)
     assert.ok(host.textContent?.includes('21'), `average days must ride the hint, got:\n${host.textContent}`)
+    // 95% against the 60% good mark reads healthy.
+    assert.ok(host.innerHTML.includes('bg-emerald-500'), `a good book must tone emerald, got:\n${host.innerHTML}`)
   } finally {
     await unmount()
   }
-})
-
-test('the payment tile tones from the configured on-time good mark', async () => {
-  const good = await mountDashboard(
-    <WidgetCard widgetId="kpi-vendor-payment-performance" data={vendorData()} />,
-    messages('en'),
-  )
-  try {
-    // 95% against a 60% good mark reads healthy.
-    assert.ok(good.host.innerHTML.includes('bg-emerald-500'), `a good book must tone emerald, got:\n${good.host.innerHTML}`)
-  } finally {
-    await good.unmount()
-  }
+  // 40% against the same mark reads poor, never green.
   const poor = vendorData()
   poor.vendorOnTimeRate = { available: true, value: 0.4 }
   const bad = await mountDashboard(
@@ -83,7 +73,6 @@ test('the payment tile tones from the configured on-time good mark', async () =>
     messages('en'),
   )
   try {
-    // 40% against the same mark reads poor, never green.
     assert.ok(bad.host.innerHTML.includes('bg-rose-500'), `a poor book must tone rose, got:\n${bad.host.innerHTML}`)
   } finally {
     await bad.unmount()
