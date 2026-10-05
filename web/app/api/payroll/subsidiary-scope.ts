@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { roeSourceScope } from '@openbooks/engine/src/payroll/yearend.ts'
+import { periodicReturnAccountResolver, roeSourceScope } from '@openbooks/engine/src/payroll/yearend.ts'
 import {
   yearEndFiling,
   type PayrollFilingData,
@@ -184,22 +184,29 @@ async function guardPayroll941Rows(
     const [account, quarter] = id.split(':')
     return { id, account: account || null, quarter: Number(quarter) }
   })
+  // A row's account is the RETURN's account, which for a US 941 is the
+  // employer's EIN even when the stubs name its state SUI accounts — so the
+  // sources are every stub of the requested quarters whose return account,
+  // resolved exactly as the builder resolves it, is the requested one.
+  const returnAccountOf = await periodicReturnAccountResolver(gate.user.orgId, country)
+  const requestedIds = new Set(requested.map(row => row.id))
   const sources = (await db.execute<{
-    account: string | null; quarter: number; subsidiaryId: string | null;
+    account: string | null; quarter: number; subsidiaryId: string | null; employeeSubsidiaryId: string | null;
   }>(sql`
     select distinct s.filing_account_id as account,
            extract(quarter from s.pay_date)::int as quarter,
-           d.subsidiary_id as "subsidiaryId"
+           d.subsidiary_id as "subsidiaryId",
+           p.subsidiary_id as "employeeSubsidiaryId"
       from pay_stubs s
       join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
       left join documents d on d.org_id = r.org_id and d.id = r.document_id
+      left join parties p on p.org_id = s.org_id and p.id = s.employee_party_id
      where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
        and s.country = ${country} and r.run_status in ('committed', 'voided')
-       and (${sql.join(requested.map(row => sql`(
-         s.filing_account_id is not distinct from ${row.account}::uuid
-         and extract(quarter from s.pay_date)::int = ${row.quarter}
-       )`), sql` or `)})
+       and extract(quarter from s.pay_date)::int in (${sql.join(requested.map(row => sql`${row.quarter}`), sql`, `)})
   `)).rows
+    .map(row => ({ ...row, account: returnAccountOf(row.account, row.employeeSubsidiaryId) }))
+    .filter(row => requestedIds.has(`${row.account ?? ''}:${row.quarter}`))
   const resolved = new Set(sources.map(row => `${row.account ?? ''}:${row.quarter}`))
   if (requested.some(row => !resolved.has(row.id))) return notFound("payroll record")
   for (const row of sources) {

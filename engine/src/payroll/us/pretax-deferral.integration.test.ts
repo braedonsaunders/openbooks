@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { normalizeMoney } from "../../money/money.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
@@ -315,6 +316,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const employee = await usEmployee(fx, "Additional Medicare employee");
+      const einId = await seedEin(fx);
       await db.execute(sql`
         update labor_cost_rates set rate = '5330000'
          where org_id = ${fx.orgId} and employee_party_id = ${employee}
@@ -340,10 +342,10 @@ test(
       assert.ok(usPack, "US payroll pack is registered");
       const form941 = usPack.filings().yearEnd.find((filing) => filing.key === "941");
       assert.ok(form941?.slip, "the US pack declares the Form 941 slip");
-      // The worksheet groups by the stubs' assigned filing account, so the
-      // quarter row is addressed under the fixture's Texas SUI account —
-      // the boxed lines asserted below are the same federal figures.
-      const slip = await form941.slip.build(fx.orgId, 2026, `${fx.suiAccountId}:3`);
+      // Form 941 is filed by EIN: the employee's profile names the Texas SUI
+      // account, yet the quarter is the legal employer's EIN return.
+      assert.equal(quarters[0]!.filingAccountId, einId);
+      const slip = await form941.slip.build(fx.orgId, 2026, `${einId}:3`);
       assert.equal(slip.boxes.find((box) => box.code === "5d")?.value, "5000.0000");
       assert.equal(slip.boxes.find((box) => box.code === "5d tax")?.value, "45.0000");
       assert.equal(slip.boxes.find((box) => box.code === "5e")?.value, "28868.0000");
@@ -565,6 +567,26 @@ test(
       assert.equal(factors?.SS, "0.0000");
       assert.equal(factors?.MED, "29.0000");
       assert.equal(factors?.MED2, "9.0000");
+
+      // Year end files the same employer: one W-2 under the EIN carrying the
+      // per-EIN carry-in (never a refusal for an EIN "with no W-2 slip"), and
+      // the quarter's 941 row under that EIN, not the Texas account.
+      await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+      const slips = await w2Slips(fx.orgId, 2026);
+      assert.equal(slips.length, 1);
+      const w2 = slips[0]!;
+      assert.equal(w2.filingAccountId, einId);
+      assert.deepEqual(
+        [w2.box1Wages, w2.box2FederalIncomeTax, w2.box3SsWages, w2.box4SsTax, w2.box5MedicareWages, w2.box6MedicareTax]
+          .map(normalizeMoney),
+        // Box 3 is capped at the $184,500 base; box 5 is $199,000 + $2,000;
+        // box 6 is the stub's $29.00 Medicare plus $9.00 Additional Medicare.
+        ["2000.0000", "156.1500", "184500.0000", "0.0000", "201000.0000", "38.0000"],
+      );
+      assert.deepEqual(w2.stateLines, [], "Texas withholds no income tax: no boxes 15-17");
+      const quarters = await form941Worksheet(fx.orgId, 2026);
+      assert.deepEqual(quarters.map((q) => [q.filingAccountId, q.quarter, normalizeMoney(q.medicareWages)]),
+        [[einId, 3, "2000.0000"]]);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

@@ -4,7 +4,8 @@ import { calculatePub15T } from "./pub15t.ts";
 import { caEttWagesYtd } from "./compute-statutory.ts";
 import { caEttWithholding } from "./states/ca.ts";
 import {
-  resolveUsEmployerScope, resolveUsStateSuiAccount, type UsFilingAccountRef,
+  resolveUsEmployerScope, resolveUsFederalFilingAccount, resolveUsStateSuiAccount, resolveUsW2StateAccount,
+  type UsFilingAccountRef,
 } from "./employer-scope.ts";
 
 const account = (
@@ -59,6 +60,29 @@ test("two live EINs under one legal employer refuse by name instead of merging o
   // A superseded, inactive EIN is history, not a second employer.
   const superseded = accounts.map((row) => row.id === "ein-2" ? { ...row, isActive: false } : row);
   assert.equal(resolveUsEmployerScope(superseded, "nj-sui", ACME).federalAccountId, "ein");
+});
+
+test("W-2 and Form 941 report a state account's wages under its employer's EIN, with box 15 from the state's account", () => {
+  // Filed by EIN: the New Jersey account's stubs belong on Acme's EIN, never
+  // on a return addressed to the state account or to another employer's EIN.
+  assert.equal(resolveUsFederalFilingAccount(ACCOUNTS, "nj-sui", ACME), "ein");
+  assert.equal(resolveUsFederalFilingAccount(ACCOUNTS, "ein", ACME), "ein");
+  assert.equal(resolveUsFederalFilingAccount(ACCOUNTS, "other-nj", OTHER), "other-ein");
+  assert.equal(resolveUsFederalFilingAccount(ACCOUNTS, null, ACME), null);
+  // No EIN on file: the unassigned return, not a state number printed as an EIN.
+  assert.equal(resolveUsFederalFilingAccount([account("tx-sui", "us_state_sui", "solo", "TX")], "tx-sui", "solo"), null);
+  assert.throws(
+    () => resolveUsFederalFilingAccount([...ACCOUNTS, account("ein-2", "us_ein", ACME)], "ny-sui", ACME),
+    /NY-SUI filing account cannot be attributed to one EIN: its legal employer holds 2 EIN accounts \(EIN, EIN-2\)\. Deactivate the superseded EIN/,
+  );
+  // Box 15: an EIN-profile stub worked in New York prints the New York
+  // account; a stub filed under the state's own account keeps it even after
+  // the account is retired; no account for the state prints no ID.
+  assert.equal(resolveUsW2StateAccount(ACCOUNTS, "ein", ACME, "NY"), "ny-sui");
+  assert.equal(resolveUsW2StateAccount(ACCOUNTS, "ny-sui", ACME, "NJ"), "nj-sui");
+  const retired = ACCOUNTS.map((row) => row.id === "ny-sui" ? { ...row, isActive: false } : row);
+  assert.equal(resolveUsW2StateAccount(retired, "ny-sui", ACME, "NY"), "ny-sui");
+  assert.equal(resolveUsW2StateAccount(ACCOUNTS, "ny-sui", ACME, "TX"), null);
 });
 
 test("California ETT consumes the entered California SUI carry-in", () => {

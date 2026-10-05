@@ -209,6 +209,11 @@ test(
     const fx = await usPayrollOrg();
     try {
       await suiAccount(fx, "NY", "NY-0099887");
+      // The employer's EIN: the profile names the New York SUI account, yet
+      // the W-2 is the EIN's slip while box 15 keeps the New York number.
+      await db.execute(sql`
+        insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name, is_default)
+        values (${randomUUID()}, ${fx.orgId}, 'US', 'us_ein', '12-3456789', 'Federal EIN', false)`);
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
         select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
         .subsidiary_id;
@@ -234,6 +239,10 @@ test(
       assert.equal(federal.length, 6, "federal boxes 1-6 are unchanged");
       const byCode = (code: string) => slip.boxes.filter((box) => box.code === code);
 
+      assert.equal(
+        slip.headerFields.find((field) => field.label === "Employer identification number (EIN)")?.value,
+        "12-3456789",
+      );
       assert.deepEqual(byCode("15").map((box) => box.value), ["NY-0099887"]);
       assert.match(byCode("15")[0]!.label, /NY/);
       // Single-state wages reconcile to box 1; the tax reconciles to the stub.

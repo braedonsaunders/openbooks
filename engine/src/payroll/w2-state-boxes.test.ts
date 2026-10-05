@@ -35,8 +35,9 @@ const slip = (overrides: Partial<W2Slip> = {}): W2Slip => ({
   ...overrides,
 });
 
-const localsOf = (byState: Record<string, W2LocalLine[]>) => (province: string) => byState[province] ?? [];
-const stateIdOf = (ids: Record<string, string>) => (province: string) => ids[province] ?? null;
+const localsOf = (byState: Record<string, W2LocalLine[]>) => ({ province }: { province: string }) =>
+  byState[province] ?? [];
+const stateIdOf = (ids: Record<string, string>) => ({ province }: { province: string }) => ids[province] ?? null;
 
 test("two withholding states stay two entries, with their own wages and tax", () => {
   const lines = buildW2StateLines(

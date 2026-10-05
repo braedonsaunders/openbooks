@@ -627,8 +627,8 @@ test(
         costingBasis: 'actual',
       });
 
-      const txSuiAccount = await seedUsSui(org.orgId, actorId, employeeId, "TX", "0.027", "9000");
-      const caSuiAccount = await seedUsSui(org.orgId, actorId, caStateEmployee, "CA", "0.034", "7000");
+      await seedUsSui(org.orgId, actorId, employeeId, "TX", "0.027", "9000");
+      await seedUsSui(org.orgId, actorId, caStateEmployee, "CA", "0.034", "7000");
 
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -733,6 +733,12 @@ test(
         select settings#>'{payroll,countries}' as countries from orgs where id = ${org.orgId}
       `));
       assert.ok(!(markers.rows[0]!.countries as string[] | null ?? []).includes("CA"));
+      // W-2 and Form 941 are filed by the legal employer's EIN: both
+      // employees' state SUI accounts belong to the US entity, so its EIN
+      // carries both slips and every 941 quarter.
+      const usEin = randomUUID();
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id)
+        values(${usEin},${org.orgId},'US','us_ein','12-3456789','US Entity EIN',${usSubId})`);
       const historicalW2 = await w2Slips(org.orgId, 2026);
       const historical941 = await form941Worksheet(org.orgId, 2026);
       assert.equal(historicalW2.length, 2);
@@ -740,11 +746,13 @@ test(
       const countryEvidence = (await db.execute(sql`select country,country_source from pay_stubs
         where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`)).rows;
       assert.deepEqual(countryEvidence,[{country:'US',country_source:'calculation'},{country:'US',country_source:'calculation'}]);
-      assert.deepEqual([...new Set(historicalW2.map((slip) => slip.filingAccountId))].sort(), [caSuiAccount, txSuiAccount].sort());
-      assert.deepEqual([...new Set(historical941.map((quarter) => quarter.filingAccountId))].sort(), [caSuiAccount, txSuiAccount].sort());
+      assert.deepEqual([...new Set(historicalW2.map((slip) => slip.filingAccountId))], [usEin]);
+      assert.deepEqual([...new Set(historical941.map((quarter) => quarter.filingAccountId))], [usEin]);
+      // A later assignment to another legal employer's EIN does not move the
+      // committed history off the employer that paid it.
       const nextFilingAccountId = randomUUID();
-      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name)
-        values(${nextFilingAccountId},${org.orgId},'US','us_ein','98-7654321','Next employer')`);
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id)
+        values(${nextFilingAccountId},${org.orgId},'US','us_ein','98-7654321','Next employer',${org.subsidiaryId})`);
       await db.execute(sql`update employee_payroll_profiles set filing_account_id=${nextFilingAccountId}
         where org_id=${org.orgId}`);
       assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);

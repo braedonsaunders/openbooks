@@ -132,21 +132,76 @@ export function resolveUsStateSuiAccount(
   return best[0]?.id ?? null;
 }
 
+/**
+ * The federal EIN account a committed stub's wages are reported under on the
+ * W-2 and Form 941. Both are filed BY EIN, while a stub records the account
+ * its profile named — often a state SUI account — so year-end groups by the
+ * legal employer's EIN, the same EIN the run accumulated the federal bases
+ * and resolved the per-EIN carry-ins under. Null when the stub names no
+ * account or its legal employer has no EIN account on file: the return is
+ * then the unassigned one and prints no EIN, never a state account number.
+ */
+export function resolveUsFederalFilingAccount(
+  accounts: readonly UsFilingAccountRef[],
+  stubAccountId: string | null,
+  employeeSubsidiaryId: string | null,
+): string | null {
+  if (!stubAccountId) return null;
+  const stub = accounts.find((account) => account.id === stubAccountId);
+  if (!stub) {
+    throw new PayrollError(
+      `committed US payroll is filed under account ${stubAccountId}, which is not a US filing account of this `
+      + "organization, so its W-2 and Form 941 employer cannot be determined. Reconcile the stub's filing account "
+      + "against the original payroll evidence before generating year-end reports.",
+    );
+  }
+  if (stub.programType === EIN) return stub.id;
+  const eins = einsOf(accounts, employerOf(stub, employeeSubsidiaryId), employeeSubsidiaryId);
+  if (eins.length > 1) {
+    throw new PayrollError(
+      `W-2 and Form 941 wages filed under the ${stub.name} filing account cannot be attributed to one EIN: its legal `
+      + `employer holds ${eins.length} EIN accounts (${eins.map((account) => account.name).sort().join(", ")}). `
+      + "Deactivate the superseded EIN, or assign each EIN to its own subsidiary, in Payroll Setup → Filing accounts.",
+    );
+  }
+  return eins[0]?.id ?? null;
+}
+
+/**
+ * The state account whose number prints in W-2 box 15 for a stub's work
+ * state: the stub's own account when it is that state's SUI account, else
+ * the employer's account for the state (as the run resolved it). Null when
+ * the employer has no account for the state — the slip then names the state
+ * with no ID rather than borrowing another employer's number.
+ */
+export function resolveUsW2StateAccount(
+  accounts: readonly UsFilingAccountRef[],
+  stubAccountId: string | null,
+  employeeSubsidiaryId: string | null,
+  state: string,
+): string | null {
+  if (!state) return null;
+  const stub = stubAccountId ? accounts.find((account) => account.id === stubAccountId) : undefined;
+  if (stub?.programType === SUI && stub.stateCode === state) return stub.id;
+  return resolveUsStateSuiAccount(accounts, stubAccountId, employeeSubsidiaryId, state);
+}
+
 /** The org's US filing accounts, active or not (history keeps its employer). */
 export async function loadUsFilingAccounts(
   tx: Pick<typeof db, "execute">,
   orgId: string,
-): Promise<UsFilingAccountRef[]> {
+): Promise<(UsFilingAccountRef & { accountNumber: string })[]> {
   const rows = await tx.execute<{
     id: string; name: string; program_type: string; subsidiary_id: string | null;
-    state_code: string | null; is_active: boolean;
+    state_code: string | null; is_active: boolean; account_number: string;
   }>(sql`
-    select id, name, program_type, subsidiary_id, state_code, is_active
+    select id, name, program_type, subsidiary_id, state_code, is_active, account_number
       from payroll_filing_accounts
      where org_id = ${orgId} and country = 'US'
      order by id`);
   return rows.rows.map((row) => ({
     id: row.id, name: row.name, programType: row.program_type,
     subsidiaryId: row.subsidiary_id, stateCode: row.state_code, isActive: row.is_active,
+    accountNumber: row.account_number,
   }));
 }
