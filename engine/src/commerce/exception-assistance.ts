@@ -20,7 +20,7 @@ import {
 } from "../organization/org-feature-lock.ts";
 import { subsidiaryScopeAllows, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
 import type { PayoutSubsidiaryScope } from "./payout-reconciliation.ts";
-import { db, withOrg } from "../platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 
 /**
  * Classified exception assistance. Every parked channel order gets a
@@ -1006,70 +1006,59 @@ export async function approvePayoutSuggestion(
   }
   // The approval discovers under the same scope as the proposal: the first
   // read already refuses an out-of-scope or unknown-scope line as missing,
-  // before any candidate, count or manual text is built. Discovery reads run
-  // outside the write transaction — each suggestion observes its own
-  // repeatable-read snapshot — and the link writer re-validates every
-  // document inside its own transaction before writing.
-  if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
-    refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
-  }
-  const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
-  const suggestion = await suggestPayoutLineFix(orgId, lineId, allowedSubsidiaryIds);
-  const candidate = suggestion.candidates[input.rank];
-  if (!candidate) {
-    refuse(
-      "payout_assistance_candidate_unknown",
-      "The chosen fix is not one of the proposed candidates.",
-      "Reload the suggestion and approve one of the listed fixes.",
-      "rank",
-    );
-  }
-  if (candidate.action.type !== "link_document") {
-    refuse(
-      "payout_assistance_manual_only",
-      "This line has no document the assistant can link.",
-      candidate.detail,
-      "rank",
-    );
-  }
-  const targets = input.applyToSimilar
-    ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, allowedSubsidiaryIds, 200)
-    : [lineId];
-  const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
-  const plan: Array<{ targetId: string; batchId: string; documentId: string }> = [];
-  let skipped = 0;
-  for (const targetId of ordered) {
-    const live = targetId === lineId ? suggestion : await suggestPayoutLineFix(orgId, targetId, allowedSubsidiaryIds);
-    if (live.groupKey !== suggestion.groupKey) {
-      skipped += 1;
-      continue;
-    }
-    const pick = targetId === lineId ? candidate : live.candidates[0];
-    if (!pick || pick.action.type !== "link_document") {
-      skipped += 1;
-      continue;
-    }
-    const doc = await readSettlementDocument(orgId, pick.action.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
-    if (!doc || doc.status !== "posted") {
-      skipped += 1;
-      continue;
-    }
-    plan.push({ targetId, batchId: live.batchId, documentId: pick.action.documentId });
-  }
-  return withOrg(orgId, async () => {
+  // before any candidate, count or manual text is built. Discovery and links
+  // stay in one repeatable-read writer transaction — the inner discovery
+  // opens no snapshot of its own (nesting a snapshot inside this writer
+  // would refuse), so the fix-all links and their audits stay atomic and
+  // the link writer re-validates every document before writing.
+  return withOrgTransaction(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
       refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
     }
+    const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
+    const suggestion = await suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true);
+    const candidate = suggestion.candidates[input.rank];
+    if (!candidate) {
+      refuse(
+        "payout_assistance_candidate_unknown",
+        "The chosen fix is not one of the proposed candidates.",
+        "Reload the suggestion and approve one of the listed fixes.",
+        "rank",
+      );
+    }
+    if (candidate.action.type !== "link_document") {
+      refuse(
+        "payout_assistance_manual_only",
+        "This line has no document the assistant can link.",
+        candidate.detail,
+        "rank",
+      );
+    }
+    const targets = input.applyToSimilar
+      ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, allowedSubsidiaryIds, 200)
+      : [lineId];
+    const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
     const linked: Array<{ lineId: string; documentId: string }> = [];
-    for (const entry of plan) {
-      const doc = await readSettlementDocument(orgId, entry.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
+    let skipped = 0;
+    for (const targetId of ordered) {
+      const live = targetId === lineId ? suggestion : await suggestPayoutLineFixInner(orgId, targetId, allowedSubsidiaryIds, false);
+      if (live.groupKey !== suggestion.groupKey) {
+        skipped += 1;
+        continue;
+      }
+      const pick = targetId === lineId ? candidate : live.candidates[0];
+      if (!pick || pick.action.type !== "link_document") {
+        skipped += 1;
+        continue;
+      }
+      const doc = await readSettlementDocument(orgId, pick.action.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
       if (!doc || doc.status !== "posted") {
         skipped += 1;
         continue;
       }
-      await setSettlementLineDocument(orgId, entry.batchId, entry.targetId, entry.documentId, actor, allowedSubsidiaryIds);
-      await writePayoutApprovalAudit(orgId, actor, entry.targetId, suggestion.code, `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`);
-      linked.push({ lineId: entry.targetId, documentId: entry.documentId });
+      await setSettlementLineDocument(orgId, live.batchId, targetId, pick.action.documentId, actor, allowedSubsidiaryIds);
+      await writePayoutApprovalAudit(orgId, actor, targetId, suggestion.code, `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`);
+      linked.push({ lineId: targetId, documentId: pick.action.documentId });
     }
     if (linked.length === 0) {
       refuse(
@@ -1084,5 +1073,5 @@ export async function approvePayoutSuggestion(
       ? `${linked.length} line${linked.length === 1 ? "" : "s"} linked${skipped > 0 ? `, ${skipped} skipped (their proposal changed)` : ""}.`
       : `Line linked to ${first.documentId}.`;
     return { applied, linked, skipped };
-  });
+  }, { isolationLevel: "REPEATABLE READ" });
 }
