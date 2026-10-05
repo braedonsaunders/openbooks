@@ -1147,6 +1147,7 @@
     "items_post": "Post inventory movements",
     "items_reverse": "Reverse inventory movements",
     "items_warehouses": "Manage warehouses and locations",
+    "inventory_plan": "Run demand plans and edit planning policies",
     "manufacturing_read": "View manufacturing records",
     "manufacturing_manage": "Manage manufacturing masters and work orders",
     "orders_fulfill": "Pick, pack, and ship orders",
@@ -6010,6 +6011,10 @@
     "itemVariants": {
       "title": "Item variants",
       "description": "Sell products in options such as size and color, with each combination as its own item for stock, pricing, and sales."
+    },
+    "demandPlanning": {
+      "title": "Demand planning",
+      "description": "Statistical forecasts per item and location, with reviewable purchase and transfer suggestions."
     },
     "manufacturing": {
       "title": "Manufacturing",

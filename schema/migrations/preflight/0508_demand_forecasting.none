@@ -1,0 +1,3 @@
+Creates the demand planning tables (item policies, forecast runs, weekly
+forecasts, plan suggestions, period overrides). Every table is new and no
+existing tenant row is read, rewritten, or deleted.

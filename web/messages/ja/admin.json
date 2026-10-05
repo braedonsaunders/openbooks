@@ -1147,6 +1147,7 @@
     "items_post": "在庫変動を記帳",
     "items_reverse": "在庫変動を取消",
     "items_warehouses": "倉庫とロケーションを管理",
+    "inventory_plan": "需要計画を実行し、計画ポリシーを編集",
     "manufacturing_read": "製造データを表示",
     "manufacturing_manage": "製造マスターと製造オーダーを管理",
     "orders_fulfill": "受注のピッキング・梱包・出荷",
@@ -6150,6 +6151,10 @@
     "itemVariants": {
       "title": "商品バリエーション",
       "description": "サイズや色などのオプションで商品を販売し、各組み合わせを在庫・価格・売上のための独立した品目として管理します。"
+    },
+    "demandPlanning": {
+      "title": "需要計画",
+      "description": "品目・ロケーション別の統計予測と、確認可能な購買・振替提案。"
     },
     "manufacturing": {
       "title": "製造",

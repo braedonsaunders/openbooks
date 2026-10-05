@@ -87,6 +87,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // level and price schedules pointing at a party that no longer trades.
   // Simple moves: uniqueness on both tables is id-only, so no collision.
   ["customer_price_level_assignments", "customer_id"],
+  ["demand_item_policies", "preferred_supplier_id"],
   ["field_ticket_policies", "customer_party_id"],
   ["field_tickets", "foreman_party_id"],
   ["fixed_assets", "custodian_party_id"],

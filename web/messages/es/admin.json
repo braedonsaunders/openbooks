@@ -1147,6 +1147,7 @@
     "items_post": "Contabilizar movimientos de inventario",
     "items_reverse": "Revertir movimientos de inventario",
     "items_warehouses": "Gestionar almacenes y ubicaciones",
+    "inventory_plan": "Ejecutar planes de demanda y editar políticas de planificación",
     "manufacturing_read": "Ver registros de fabricación",
     "manufacturing_manage": "Administrar datos maestros y órdenes de fabricación",
     "orders_fulfill": "Preparar, empaquetar y enviar pedidos",
@@ -6002,6 +6003,10 @@
     "itemVariants": {
       "title": "Variantes de artículo",
       "description": "Vende productos con opciones como talla y color, donde cada combinación es un artículo propio para stock, precios y ventas."
+    },
+    "demandPlanning": {
+      "title": "Planificación de la demanda",
+      "description": "Pronósticos estadísticos por artículo y ubicación, con sugerencias revisables de compra y transferencia."
     },
     "manufacturing": {
       "title": "Fabricación",

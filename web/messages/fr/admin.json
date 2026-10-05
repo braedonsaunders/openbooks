@@ -1147,6 +1147,7 @@
     "items_post": "Comptabiliser les mouvements de stock",
     "items_reverse": "Contrepasser les mouvements de stock",
     "items_warehouses": "Gérer les entrepôts et emplacements",
+    "inventory_plan": "Exécuter les plans de demande et modifier les règles de planification",
     "manufacturing_read": "Consulter les données de fabrication",
     "manufacturing_manage": "Gérer les référentiels et les ordres de fabrication",
     "orders_fulfill": "Préparer, emballer et expédier les commandes",
@@ -6002,6 +6003,10 @@
     "itemVariants": {
       "title": "Déclinaisons d'articles",
       "description": "Vendez des produits avec des options telles que la taille et la couleur, chaque combinaison étant un article à part entière pour le stock, les prix et les ventes."
+    },
+    "demandPlanning": {
+      "title": "Planification de la demande",
+      "description": "Prévisions statistiques par article et emplacement, avec suggestions d'achat et de transfert à valider."
     },
     "manufacturing": {
       "title": "Fabrication",
