@@ -190,7 +190,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "Há pagamentos a contabilizar",
-      "message": "{count, plural, one {# lote de liquidação continua em rascunho.} other {# lotes de liquidação continuam em rascunho.}}"
+      "message": "{count, plural, one {# lote de liquidação ou linha de pagamento precisa de lançamento ou vínculo documental antes do fechamento.} other {# lotes de liquidação ou linhas de pagamento precisam de lançamento ou vínculo documental antes do fechamento.}}"
     },
     "commerce-clearing-residual": {
       "title": "Contas de compensação têm saldo",

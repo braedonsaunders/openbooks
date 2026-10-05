@@ -190,7 +190,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "有结算尚未过账",
-      "message": "{count, plural, one {有 # 个结算批次仍为草稿。} other {有 # 个结算批次仍为草稿。}}"
+      "message": "{count, plural, one {有 # 个结算批次或结算明細待过账或关联单据。} other {有 # 个结算批次或结算明細待过账或关联单据。}}"
     },
     "commerce-clearing-residual": {
       "title": "清算科目留有余额",
