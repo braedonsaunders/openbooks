@@ -66,7 +66,10 @@
       "description": "Crie, salve e agende seus próprios relatórios sobre o razão"
     },
     "searchPlaceholder": "Pesquisar relatórios…",
-    "noMatches": "Nenhum relatório corresponde à sua pesquisa."
+    "noMatches": "Nenhum relatório corresponde à sua pesquisa.",
+    "all": "Todos os relatórios",
+    "browseGroups": "Grupos de relatórios",
+    "reportCount": "{count, plural, one {# relatório} other {# relatórios}}"
   },
   "baseCurrency": {
     "title": "Moeda base não configurada",

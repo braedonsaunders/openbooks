@@ -66,7 +66,10 @@
       "description": "総勘定元帳をもとに独自のレポートを作成、保存、スケジュール設定します"
     },
     "searchPlaceholder": "レポートを検索…",
-    "noMatches": "検索に一致するレポートはありません。"
+    "noMatches": "検索に一致するレポートはありません。",
+    "all": "すべてのレポート",
+    "browseGroups": "レポートグループ",
+    "reportCount": "{count, plural, one {# 件のレポート} other {# 件のレポート}}"
   },
   "baseCurrency": {
     "title": "基準通貨が設定されていません",

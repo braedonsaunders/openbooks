@@ -11,12 +11,13 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
 import { savedReportPathVisible } from '../../../lib/report-feature-gates'
 import '../../../lib/resourcing/report-facts'
+import type { HubCard, HubGroup, PaperForm } from './ReportsHub'
 
 /**
  * The reports hub, split into a loader and a spec.
  *
  * The page is an interactive island: `ReportsHub` owns client-side search
- * state, the hub header (a bespoke h1, not PageHeader) and the New-report
+ * and group-tab state, the PageHeader with its search field and New-report
  * create flow, so the spec places the whole content through one widget —
  * the same doctrine as the file cabinet, whose interactive islands stay
  * whole while the spec owns the page structure that is actually static.
@@ -33,9 +34,6 @@ import '../../../lib/resourcing/report-facts'
  * feature-gated group and card filter. Query-string building for saved
  * views (`new URLSearchParams`) runs in the loader, not the spec.
  */
-
-type HubCard = { href: string; title: string; desc: string; icon: string }
-type HubGroup = { key: string; label: string; accent: string; cards: HubCard[] }
 
 export interface ReportsHubData {
   title: string
@@ -150,19 +148,21 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     (row) => !classifiedBuiltInIds.has(row.id),
   )
 
-  const card = (key: string, href: string, icon: string) => ({
+  const card = (key: string, href: string, icon: string, form: PaperForm): HubCard => ({
     href,
     title: t(`hub.cards.${key}Title`),
     desc: t(`hub.cards.${key}Description`),
     icon,
+    form,
   })
 
   // AR/AP aging split into four distinct reports (side × summary/detail).
-  const agingCard = (side: 'ar' | 'ap', view: 'summary' | 'detail') => ({
+  const agingCard = (side: 'ar' | 'ap', view: 'summary' | 'detail'): HubCard => ({
     href: `/reports/aging?side=${side}${view === 'detail' ? '&view=detail' : ''}`,
     title: `${side === 'ap' ? t('aging.payablesTitle') : t('aging.receivablesTitle')} · ${view === 'detail' ? t('aging.detail') : t('aging.summary')}`,
     desc: t('hub.cards.agingDescription'),
     icon: 'CalendarClock',
+    form: 'aging',
   })
 
   const definitionCards = (
@@ -174,6 +174,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     title: definition.name,
     desc: definition.description ?? fallbackDescription,
     icon,
+    form: 'list',
   }))
 
   // Availability and Replenishment compute from the stock engine, so they
@@ -181,8 +182,8 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   // the item read permission their pages require.
   const stockReportCards: HubCard[] = warehousingEnabled && authz && can(authz, 'items.read')
     ? [
-        { href: '/reports/availability', title: tw('availability.title'), desc: tw('availability.hubDescription'), icon: 'Boxes' },
-        { href: '/reports/replenishment', title: tw('replenishment.title'), desc: tw('replenishment.hubDescription'), icon: 'ClipboardList' },
+        { href: '/reports/availability', title: tw('availability.title'), desc: tw('availability.hubDescription'), icon: 'Boxes', form: 'list' },
+        { href: '/reports/replenishment', title: tw('replenishment.title'), desc: tw('replenishment.hubDescription'), icon: 'ClipboardList', form: 'list' },
       ]
     : []
 
@@ -192,11 +193,11 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       label: t('hub.groups.financial'),
       accent: 'teal',
       cards: [
-        card('pnl', '/reports/pnl', 'FileText'),
-        card('balanceSheet', '/reports/balance-sheet', 'Scale'),
-        card('cashFlow', '/reports/cash-flow', 'Waves'),
-        card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves'),
-        card('trialBalance', '/reports/trial-balance', 'ClipboardList'),
+        card('pnl', '/reports/pnl', 'FileText', 'statement'),
+        card('balanceSheet', '/reports/balance-sheet', 'Scale', 'statement'),
+        card('cashFlow', '/reports/cash-flow', 'Waves', 'statement'),
+        card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves', 'statement'),
+        card('trialBalance', '/reports/trial-balance', 'ClipboardList', 'ledger'),
       ],
     },
     {
@@ -204,8 +205,8 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       label: t('hub.groups.ledger'),
       accent: 'sky',
       cards: [
-        card('generalLedger', '/reports/general-ledger', 'BookOpen'),
-        card('journal', '/reports/journal', 'NotebookPen'),
+        card('generalLedger', '/reports/general-ledger', 'BookOpen', 'ledger'),
+        card('journal', '/reports/journal', 'NotebookPen', 'ledger'),
         ...definitionCards(ledgerDefinitions, 'BookOpen', t('hub.cards.builtInDescription')),
       ],
     },
@@ -218,9 +219,9 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
         agingCard('ar', 'detail'),
         agingCard('ap', 'summary'),
         agingCard('ap', 'detail'),
-        card('registers', '/reports/registers?side=ar', 'Receipt'),
-        card('receivables', '/reports/partners?kind=receivable', 'Wallet'),
-        card('payables', '/reports/partners?kind=payable', 'Landmark'),
+        card('registers', '/reports/registers?side=ar', 'Receipt', 'ledger'),
+        card('receivables', '/reports/partners?kind=receivable', 'Wallet', 'aging'),
+        card('payables', '/reports/partners?kind=payable', 'Landmark', 'aging'),
         ...definitionCards(receivablesPayablesDefinitions, 'Receipt', t('hub.cards.builtInDescription')),
       ],
     },
@@ -256,7 +257,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       label: t('hub.groups.orders'),
       accent: 'teal',
       cards: [
-        card('orders', '/reports/orders', 'ClipboardList'),
+        card('orders', '/reports/orders', 'ClipboardList', 'chart'),
         ...definitionCards(orderDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
       ],
     } satisfies HubGroup] : []),
@@ -264,24 +265,24 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       key: 'budgeting',
       label: t('hub.groups.budgeting'),
       accent: 'amber',
-      cards: [card('budget', '/reports/budget', 'Target')],
+      cards: [card('budget', '/reports/budget', 'Target', 'statement')],
     } satisfies HubGroup] : []),
     ...(projectsEnabled ? [{
       key: 'projects',
       label: t('hub.groups.projects'),
       accent: 'sky',
-      cards: [card('projectProfitability', '/reports/project-profitability', 'Coins'),
-        { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator' }],
+      cards: [card('projectProfitability', '/reports/project-profitability', 'Coins', 'chart'),
+        { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator', form: 'statement' }],
     } satisfies HubGroup] : []),
     ...(resourcingEnabled ? [{
       key: 'resourcing',
       label: t('hub.groups.resourcing'),
       accent: 'teal',
       cards: [
-        card('resourcingUtilization', '/reports/resourcing/utilization', 'Gauge'),
-        card('resourcingBench', '/reports/resourcing/bench', 'Users'),
-        card('resourcingCapacityDemand', '/reports/resourcing/capacity-demand', 'Scale'),
-        card('resourcingEngagement', '/reports/resourcing/engagement', 'BriefcaseBusiness'),
+        card('resourcingUtilization', '/reports/resourcing/utilization', 'Gauge', 'chart'),
+        card('resourcingBench', '/reports/resourcing/bench', 'Users', 'list'),
+        card('resourcingCapacityDemand', '/reports/resourcing/capacity-demand', 'Scale', 'chart'),
+        card('resourcingEngagement', '/reports/resourcing/engagement', 'BriefcaseBusiness', 'list'),
       ],
     } satisfies HubGroup] : []),
     ...(payrollDefinitions.length > 0 ? [{
@@ -307,12 +308,13 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       label: t('hub.groups.custom'),
       accent: 'slate',
       cards: [
-        { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles' },
-        ...customDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
+        { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles', form: 'studio' },
+        ...customDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c): HubCard => ({
           href: `/reports/custom/run/${c.id}`,
           title: c.name,
           desc: c.description ?? t('custom.kind.custom'),
           icon: 'Coins',
+          form: c.kind === 'project-profitability' ? 'chart' : 'list',
         })),
         // Saved views hide by the route-gate registry (F1T-16): a view whose
         // route would refuse the operator never lists. The registry derives
@@ -328,16 +330,31 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()
-          return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark' }
+          return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark', form: 'list', saved: true } satisfies HubCard
         }),
       ],
     },
   ]
 
+  // A saved view is a sheet of the report it was saved from, so it is drawn
+  // in that report's form. The lookup derives from the cards above rather
+  // than a second path list; a view over a definition stays a plain list.
+  const formByPath = new Map<string, PaperForm>()
+  for (const hubCard of groups.flatMap((group) => group.cards)) {
+    const path = hubCard.href.split('?')[0]!
+    if (!hubCard.saved && !formByPath.has(path)) formByPath.set(path, hubCard.form)
+  }
+  const sheetGroups = groups.map((group) => ({
+    ...group,
+    cards: group.cards.map((hubCard) => hubCard.saved
+      ? { ...hubCard, form: formByPath.get(hubCard.href.split('?')[0]!) ?? hubCard.form }
+      : hubCard),
+  }))
+
   return {
     title: t('hub.title'),
     description: t('hub.description'),
-    groups,
+    groups: sheetGroups,
     canCreate,
   }
 }
@@ -347,8 +364,8 @@ const f = ref<ReportsHubData>()
 export function reportsHubSpec(): PageSpec {
   return page({
     route: '/reports',
-    // The hub content is one client-interactive island (search state, the
-    // h1 header, the New-report create flow); the PageContainer shell is
+    // The hub content is one client-interactive island (search and tab
+    // state, the header, the New-report create flow); the PageContainer shell is
     // chrome around it. Both arrive whole — the spec owns neither.
     layout: 'bare',
     header: [],

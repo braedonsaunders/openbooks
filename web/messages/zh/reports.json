@@ -66,7 +66,10 @@
       "description": "基于总账构建、保存并安排您自己的报表"
     },
     "searchPlaceholder": "搜索报表…",
-    "noMatches": "没有与您搜索匹配的报表。"
+    "noMatches": "没有与您搜索匹配的报表。",
+    "all": "全部报表",
+    "browseGroups": "报表分组",
+    "reportCount": "{count, plural, one {# 份报表} other {# 份报表}}"
   },
   "baseCurrency": {
     "title": "尚未设置本位币",
