@@ -3,7 +3,7 @@ import { globSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createMoneyFormatter, displayMinorAmount, formatDecimal, minorToMajorText, minorToMajorTextUnits, tryMinorToMajorTextUnits } from './money-format.ts'
+import { createMoneyFormatter, displayMinorAmount, formatDecimal, minorDisplayRefusal, minorToMajorText, minorToMajorTextUnits, tryMinorToMajorTextUnits } from './money-format.ts'
 import { minorToMajor } from './setup/money-fields.ts'
 import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
 
@@ -117,6 +117,26 @@ test('display conversion returns null instead of guessing or throwing', () => {
   assert.equal(tryMinorToMajorTextUnits(null, 2), null)
   assert.equal(tryMinorToMajorTextUnits('', 2), null)
   assert.equal(tryMinorToMajorTextUnits('12x', 2), null)
+})
+
+test('refusals distinguish absent precision from malformed amounts', () => {
+  // Convertible amounts never refuse.
+  assert.equal(minorDisplayRefusal('10450', 2), null)
+  // Absent, non-numeric, or out-of-range precision is a reference-data gap,
+  // even when the stored value is also unreadable.
+  assert.equal(minorDisplayRefusal('100', null), 'unknown-precision')
+  assert.equal(minorDisplayRefusal('100', undefined), 'unknown-precision')
+  assert.equal(minorDisplayRefusal('100', Number.NaN), 'unknown-precision')
+  assert.equal(minorDisplayRefusal('100', 5), 'unknown-precision')
+  assert.equal(minorDisplayRefusal('100', '2'), 'unknown-precision')
+  assert.equal(minorDisplayRefusal('12x', null), 'unknown-precision')
+  // A known precision with a missing or malformed value is stored-value
+  // damage, never a registry gap.
+  assert.equal(minorDisplayRefusal('12x', 2), 'unreadable-amount')
+  assert.equal(minorDisplayRefusal('', 2), 'unreadable-amount')
+  assert.equal(minorDisplayRefusal(undefined, 2), 'unreadable-amount')
+  assert.equal(minorDisplayRefusal(null, 2), 'unreadable-amount')
+  assert.equal(minorDisplayRefusal(10450, 2), 'unreadable-amount')
 })
 
 test('display amounts carry the registry exponent for the formatter', () => {

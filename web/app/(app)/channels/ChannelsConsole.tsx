@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
-import { createMoneyFormatter, displayMinorAmount } from "@/lib/money-format";
+import { createMoneyFormatter, displayMinorAmount, minorDisplayRefusal } from "@/lib/money-format";
 import { toast } from "sonner";
 import Link from "next/link";
 import { Layers, Pause, Play, Plug, Unplug } from "lucide-react";
@@ -287,9 +287,14 @@ export function ChannelsConsole() {
                           ? { revenue: revenueText, cm2: cm2Text, adSpend: adSpendText }
                           : null;
                       if (!amounts) {
+                        const unreadable = [row.revenueMinor, row.cm2Minor, row.adSpendMinor].some(
+                          (minor) => minorDisplayRefusal(minor, row.minorUnits) === 'unreadable-amount',
+                        );
                         return (
                           <div key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-amber-800 dark:text-amber-200">
-                            {t("home.marginPrecisionUnknown", { currency: row.currency })}
+                            {unreadable
+                              ? t("home.marginUnreadable", { currency: row.currency })
+                              : t("home.marginPrecisionUnknown", { currency: row.currency })}
                           </div>
                         );
                       }

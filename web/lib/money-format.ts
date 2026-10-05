@@ -134,6 +134,27 @@ export function tryMinorToMajorTextUnits(minor: unknown, minorUnits: unknown): s
 }
 
 /**
+ * Why a display amount refuses, so the notice can name the true cause: an
+ * absent or out-of-range registry precision is a reference-data gap (the
+ * ISO registry is read-only; the correction runs through the Exceptions
+ * queue and replay), while a non-string or non-numeric minor value is a
+ * stored-value problem (re-import or replay the source event). Null when
+ * the amount converts. Precision is checked first: a missing precision
+ * explains the refusal even when the stored value is also unreadable.
+ */
+export type MinorDisplayRefusal = 'unknown-precision' | 'unreadable-amount'
+
+export function minorDisplayRefusal(minor: unknown, minorUnits: unknown): MinorDisplayRefusal | null {
+  if (typeof minor === 'string' && minor.trim() !== '' && typeof minorUnits === 'number' && minorToMajor(minor, minorUnits) !== null) {
+    return null
+  }
+  if (typeof minorUnits !== 'number' || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    return 'unknown-precision'
+  }
+  return 'unreadable-amount'
+}
+
+/**
  * Display-ready minor-unit amount with its authoritative precision: the
  * shared formatter must render exactly `digits` fraction digits (via
  * minimum/maximumFractionDigits), because Intl defaults follow the

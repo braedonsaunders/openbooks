@@ -63,7 +63,7 @@
     "marginTitle": "Margen del pedido",
     "marginHint": "Contribución de los últimos 30 días por canal, tras envío y comisiones",
     "marginEmpty": "El margen aparece aquí cuando los pedidos del canal se contabilizan con costos. Actualiza un pedido para calcularlo ahora.",
-    "marginPrecisionUnknown": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Si el código es incorrecto, desconecte y vuelva a conectar el canal con el código ISO de tres letras admitido — la moneda de un canal activo no se puede cambiar.",
+    "marginPrecisionUnknown": "El margen en {currency} no se puede mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Corrija la causa en Excepciones y vuelva a reproducir los pedidos afectados.",
     "marginReport": "Informe de margen",
     "marginMeta": "{orders} pedido(s) · {revenue} ingresos · {adSpend} publicidad",
     "marginEstimated": "{count} estimado(s)",
@@ -76,7 +76,8 @@
       "proofsTitle": "Cómo se prueba la integridad",
       "proofsSummary": "{count, plural, one {# prueba} other {# pruebas}}",
       "proven": "Probado"
-    }
+    },
+    "marginUnreadable": "El margen en {currency} no se puede mostrar: un valor almacenado no es legible. Vuelva a importar o reproduzca el evento de origen desde la pestaña Actividad del canal."
   },
   "workspace": {
     "back": "Canales",
@@ -367,7 +368,7 @@
   },
   "drawer": {
     "lines": "Líneas",
-    "unknownPrecision": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Si el código es incorrecto, desconecte y vuelva a conectar el canal con el código ISO de tres letras admitido — la moneda de un canal activo no se puede cambiar.",
+    "unknownPrecision": "Los importes en {currency} no se pueden mostrar: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Si el pedido está retenido, siga su remedio en Excepciones y luego vuelva a reproducir el pedido.",
     "tenders": "Cobros",
     "activity": "Actividad",
     "posting": "Contabilización",
@@ -423,7 +424,8 @@
       "estimate": "Estimación",
       "import": "Importación",
       "manual": "Manual"
-    }
+    },
+    "unreadableAmount": "Un importe en {currency} no se puede mostrar: el valor almacenado no es legible. Vuelva a importar o reproduzca el evento de origen desde la pestaña Actividad del canal."
   },
   "assistance": {
     "loading": "Buscando la solución…",

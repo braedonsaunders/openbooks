@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { Badge, Button, DisclosureSection, Drawer } from "@openbooks/ui";
+import { Badge, Button, Drawer } from "@openbooks/ui";
 import { CockpitPanel } from "../../../components/cockpit/ui";
 import { readApiErrorMessage } from "../../../lib/api-error";
 
@@ -69,6 +69,7 @@ export function CommerceCloseTile() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [openOnly, setOpenOnly] = useState(true);
 
   // State only settles in the fetch continuations, never synchronously in
   // the effect below: the initial useState(true) covers the first load and
@@ -120,6 +121,10 @@ export function CommerceCloseTile() {
   }
   const checks = data?.checks ?? [];
   const open = checks.filter((check) => check.count > 0);
+  // One check collection: every proof with its status, filterable to the
+  // open ones. A collapsed second list is no exemption, so the drawer
+  // holds a single list and the filter only narrows it.
+  const visible = openOnly ? open : checks;
   // The home body keeps one collection (the channel cards): the close checks
   // live behind this summary count and open in a drawer, never as a second
   // stacked list. Every check keeps its reason and drill remedy inside.
@@ -160,39 +165,42 @@ export function CommerceCloseTile() {
             </Button>
           }
         >
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {open.map((check) => (
-              <li key={check.code} className="flex items-center justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Badge variant={SEVERITY_VARIANT[check.severity]}>{check.count}</Badge>
-                    <span className="truncate">{checkTitle(check)}</span>
-                  </div>
-                  <p className="text-sm text-slate-500">{checkMessage(check)}</p>
-                </div>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={drillHref(check) as never}>{t("home.review")}</Link>
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-2">
-            <DisclosureSection
-              title={t("home.completeness.proofsTitle")}
-              summary={t("home.completeness.proofsSummary", { count: checks.length })}
-            >
-              <ul className="space-y-1">
-                {checks.map((check) => (
-                  <li key={check.code} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">{checkTitle(check)}</span>
-                    <Badge variant={check.count > 0 ? SEVERITY_VARIANT[check.severity] : "success"}>
-                      {check.count > 0 ? check.count : t("home.completeness.proven")}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            </DisclosureSection>
+          <div className="mb-2 flex gap-2">
+            <Button size="sm" variant={openOnly ? "outline" : "secondary"} onClick={() => setOpenOnly(false)}>
+              {tCommon("labels.all")} ({checks.length})
+            </Button>
+            <Button size="sm" variant={openOnly ? "secondary" : "outline"} onClick={() => setOpenOnly(true)}>
+              {tCommon("status.open")} ({open.length})
+            </Button>
           </div>
+          {visible.length === 0 ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300">{t("home.completeness.clear")}</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {visible.map((check) => (
+                <li key={check.code} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      {check.count > 0 ? (
+                        <Badge variant={SEVERITY_VARIANT[check.severity]}>{check.count}</Badge>
+                      ) : (
+                        <Badge variant="success">{t("home.completeness.proven")}</Badge>
+                      )}
+                      <span className="truncate">{checkTitle(check)}</span>
+                    </div>
+                    {check.count > 0 ? (
+                      <p className="text-sm text-slate-500">{checkMessage(check)}</p>
+                    ) : null}
+                  </div>
+                  {check.count > 0 ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={drillHref(check) as never}>{t("home.review")}</Link>
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </Drawer>
       ) : null}
     </CockpitPanel>

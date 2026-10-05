@@ -63,7 +63,7 @@
     "marginTitle": "Margem do pedido",
     "marginHint": "Contribuição dos últimos 30 dias por canal, após envio e taxas",
     "marginEmpty": "A margem aparece aqui quando os pedidos do canal são lançados com custos. Atualize um pedido para calculá-la agora.",
-    "marginPrecisionUnknown": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o código estiver errado, desconecte e reconecte o canal com o código ISO de três letras suportado — a moeda de um canal ativo não pode ser alterada.",
+    "marginPrecisionUnknown": "A margem em {currency} não pode ser exibida: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Corrija a causa na fila de Exceções e reprocesse os pedidos afetados.",
     "marginReport": "Relatório de margem",
     "marginMeta": "{orders} pedido(s) · {revenue} de receita · {adSpend} em anúncios",
     "marginEstimated": "{count} estimado(s)",
@@ -76,7 +76,8 @@
       "proofsTitle": "Como a integridade é provada",
       "proofsSummary": "{count, plural, one {# prova} other {# provas}}",
       "proven": "Provado"
-    }
+    },
+    "marginUnreadable": "A margem em {currency} não pode ser exibida: um valor armazenado não é legível. Reimporte ou reprocesse o evento de origem na aba Atividade do canal."
   },
   "workspace": {
     "back": "Canais",
@@ -367,7 +368,7 @@
   },
   "drawer": {
     "lines": "Itens",
-    "unknownPrecision": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o código estiver errado, desconecte e reconecte o canal com o código ISO de três letras suportado — a moeda de um canal ativo não pode ser alterada.",
+    "unknownPrecision": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o pedido estiver retido, siga sua correção em Exceções e reprocesse o pedido.",
     "tenders": "Pagamentos",
     "activity": "Atividade",
     "posting": "Contabilização",
@@ -423,7 +424,8 @@
       "estimate": "Estimativa",
       "import": "Importação",
       "manual": "Manual"
-    }
+    },
+    "unreadableAmount": "Um valor em {currency} não pode ser exibido: o valor armazenado não é legível. Reimporte ou reprocesse o evento de origem na aba Atividade do canal."
   },
   "assistance": {
     "loading": "Buscando a solução…",

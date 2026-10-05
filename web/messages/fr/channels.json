@@ -63,7 +63,7 @@
     "marginTitle": "Marge de la commande",
     "marginHint": "Contribution des 30 derniers jours par canal, après expédition et frais",
     "marginEmpty": "La marge apparaît ici dès que les commandes du canal sont comptabilisées avec leurs coûts. Actualisez une commande pour la calculer.",
-    "marginPrecisionUnknown": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Si le code est incorrect, déconnectez puis reconnectez le canal avec le code ISO à trois lettres pris en charge — la devise d''un canal actif ne peut pas être modifiée.",
+    "marginPrecisionUnknown": "La marge en {currency} ne peut pas être affichée : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Corrigez la cause dans les exceptions puis rejouez les commandes concernées.",
     "marginReport": "Rapport de marge",
     "marginMeta": "{orders} commande(s) · {revenue} de chiffre d’affaires · {adSpend} de publicité",
     "marginEstimated": "{count} estimé(s)",
@@ -76,7 +76,8 @@
       "proofsTitle": "Comment l’exhaustivité est prouvée",
       "proofsSummary": "{count, plural, one {# preuve} other {# preuves}}",
       "proven": "Prouvé"
-    }
+    },
+    "marginUnreadable": "La marge en {currency} ne peut pas être affichée : une valeur enregistrée est illisible. Réimportez ou rejouez l''événement source depuis l''onglet Activité du canal."
   },
   "workspace": {
     "back": "Canaux",
@@ -367,7 +368,7 @@
   },
   "drawer": {
     "lines": "Lignes",
-    "unknownPrecision": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Si le code est incorrect, déconnectez puis reconnectez le canal avec le code ISO à trois lettres pris en charge — la devise d''un canal actif ne peut pas être modifiée.",
+    "unknownPrecision": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Si la commande est en exception, suivez son remède dans les exceptions puis rejouez la commande.",
     "tenders": "Encaissements",
     "activity": "Activité",
     "posting": "Comptabilisation",
@@ -423,7 +424,8 @@
       "estimate": "Estimation",
       "import": "Importation",
       "manual": "Manuel"
-    }
+    },
+    "unreadableAmount": "Un montant en {currency} ne peut pas être affiché : la valeur enregistrée est illisible. Réimportez ou rejouez l''événement source depuis l''onglet Activité du canal."
   },
   "assistance": {
     "loading": "Recherche de la solution…",

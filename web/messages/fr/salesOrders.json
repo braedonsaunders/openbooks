@@ -33,7 +33,7 @@
     "codeTitle": "Appliquer un code promo",
     "codeLabel": "Code promo",
     "applied": "{code} appliquée : {amount} de remise sur {count, plural, one {# ligne} other {# lignes}}",
-    "precisionUnknown": "La remise est appliquée, mais les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Choisissez un code devise pris en charge dans le registre.",
+    "precisionUnknown": "La remise est appliquée, mais son montant ne peut pas être affiché pour {currency}. Vérifiez les lignes de remise sur le document.",
     "loadFailed": "Impossible de charger les promotions",
     "applyFailed": "Impossible d’appliquer la promotion"
   }
