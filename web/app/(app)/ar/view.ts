@@ -4,7 +4,8 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { customerGroupTabs } from '../../../components/module-home/group-tabs'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
-import { normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
+import { ANALYTICS_CONFIG } from '../../../lib/analytics/config-spec'
+import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
 import { arPosition } from '../../../lib/cash/ar-position'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
@@ -43,7 +44,13 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
     customerGroupTabs(authz, '/ar'),
   ])
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const position = await arPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds, locale)
+  // The cockpit reads the org's configured default horizon — the same
+  // setting the banking cash page opens on — never a hardcoded 4 weeks.
+  const horizon = normalizeCashHorizonWeeks(
+    cfg.defaultHorizonWeeks,
+    ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+  )
+  const position = await arPosition(authz.user.orgId, horizon, apSettings, undefined, authz.allowedSubsidiaryIds, locale)
   // The schedule bars need each week's label and amount; the week drill
   // fetches the week a reader actually opens from /api/cash/week-entries.
   // Shipping every week's transactions as well repeated the whole open-item
