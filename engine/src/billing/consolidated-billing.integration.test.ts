@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { billSubscriptionNow } from "./subscription-billing.ts";
 import {
   runConsolidationGroup,
+  runDueConsolidations,
 } from "./consolidated-billing.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -232,6 +233,84 @@ test(
       const accounts = new Set(legs.map((l) => l.account));
       assert.ok(accounts.has(dueFrom) && accounts.has(dueTo), "the pair travels on due-from/due-to legs");
       assert.ok(legs.some((l) => l.subsidiary === branchId), "service-entity legs survive on the branch");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "the scheduler scan consolidates the closed bucket and leaves the open one pending",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await enableFeatures(org.orgId);
+      const payer = await seedCustomer(org.orgId, "Parent Co", org.subsidiaryId);
+      const child = await seedCustomer(org.orgId, "Only Child", org.subsidiaryId);
+      const groupId = await seedGroup(org.orgId, payer);
+      await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
+      const planId = await seedPlan(org, actorId);
+      const july = await seedSubscription(org, actorId, planId, child, "2026-07-15");
+      await billSubscriptionNow(org.orgId, july, "2026-07-15", { actorId }, null);
+      const august = await seedSubscription(org, actorId, planId, child, "2026-08-03");
+      await billSubscriptionNow(org.orgId, august, "2026-08-03", { actorId }, null);
+      const scan = await runDueConsolidations("2026-08-05");
+      assert.equal(scan.failed, 0, `the scan takes no org down: ${JSON.stringify(scan.orgErrors)}`);
+      assert.equal(scan.consolidated, 1, "only the closed July bucket consolidates");
+      const julyInvoice = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents
+         where org_id = ${org.orgId} and kind = 'customer_invoice'
+           and custom->>'consolidationStatus' = 'consolidated'`)).rows[0]!.n;
+      assert.equal(julyInvoice, 1);
+      const augustPending = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents
+         where org_id = ${org.orgId} and kind = 'customer_invoice'
+           and custom->>'consolidationStatus' = 'pending_consolidation'`)).rows[0]!.n;
+      assert.equal(augustPending, 1, "the still-open August bucket keeps collecting");
+      const before = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents where org_id = ${org.orgId}`)).rows[0]!.n;
+      const replay = await runDueConsolidations("2026-08-05");
+      assert.equal(replay.consolidated, 0, "a second scan cuts no second invoice");
+      assert.equal(replay.replayed, 0, "the scan never revisits a bucket with nothing pending");
+      const after = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents where org_id = ${org.orgId}`)).rows[0]!.n;
+      assert.equal(after, before, "the replay writes nothing new");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "the scheduler scan keeps a feature-off organization's drafts untouched",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await enableFeatures(org.orgId);
+      const payer = await seedCustomer(org.orgId, "Parent Co", org.subsidiaryId);
+      const child = await seedCustomer(org.orgId, "Only Child", org.subsidiaryId);
+      const groupId = await seedGroup(org.orgId, payer);
+      await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
+      const planId = await seedPlan(org, actorId);
+      const sub = await seedSubscription(org, actorId, planId, child, "2026-07-15");
+      await billSubscriptionNow(org.orgId, sub, "2026-07-15", { actorId }, null);
+      await db.execute(sql`
+        update orgs set settings = settings || '{"features":{"consolidatedBilling":false}}'::jsonb
+         where id = ${org.orgId}`);
+      const scan = await runDueConsolidations("2026-08-05");
+      assert.equal(scan.failed, 0, `the scan takes no org down: ${JSON.stringify(scan.orgErrors)}`);
+      const runs = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from consolidation_runs where org_id = ${org.orgId}`)).rows[0]!.n;
+      assert.equal(runs, 0, "no run is recorded while the feature is off");
+      const pending = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents
+         where org_id = ${org.orgId} and kind = 'customer_invoice'
+           and custom->>'consolidationStatus' = 'pending_consolidation'`)).rows[0]!.n;
+      assert.equal(pending, 1, "switching off keeps the pending draft, never consolidates it");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
