@@ -227,6 +227,7 @@ async function mintAccount(input: DocumentLoadInput, doc: DocumentFxContext): Pr
         ${input.amountMinor.toString()},
         ${input.amountMinor.toString()}, ${expiresOn}, ${input.documentId},
         ${liabilityAccountId}, ${input.actorId ?? null}, ${input.actorId ?? null})
+      -- A generated code collision mints a new code on the next bounded retry.
       on conflict (org_id, code_hash) do nothing
       returning id
     `)).rows;

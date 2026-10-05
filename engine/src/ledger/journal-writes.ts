@@ -262,6 +262,7 @@ async function insertScriptDraft(
       values (${orgId}, 'journal', ${documentNumber}, ${subsidiaryId}, ${v.documentDate}, ${currency},
               ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId},
               ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb, ${idempotencyKey ?? null})
+      -- An identical idempotent write reuses the winner selected and checked below.
       on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
       returning id`));
     const won = ins.rows[0];

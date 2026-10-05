@@ -171,6 +171,7 @@ export async function ensureAllocationRunOutboxRows(
                 bookId: candidate.book_id,
                 trigger: "scheduled",
               })}::jsonb)
+      -- The existing occurrence already owns this rule, version, period and book delivery.
       on conflict (kind, occurrence_key) do nothing
     `);
     enqueued += inserted.rowCount ?? 0;

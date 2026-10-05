@@ -229,6 +229,7 @@ export async function enqueuePostingEffects(
       ${input.orgId}, ${input.documentId}, ${input.kind}, ${input.entryId},
       ${input.postingDate}, ${input.actorId}, 'pending'
     )
+    -- The existing document effect already owns dispatch and retains its completion/retry state.
     on conflict (document_id) do nothing
   `);
 }

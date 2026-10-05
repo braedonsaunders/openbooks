@@ -135,6 +135,7 @@ export const POST = defineRoute({
          ${JSON.stringify(layout)}::jsonb, 'draft',
          ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
          ${user.id}, ${user.id})
+      -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
     `);

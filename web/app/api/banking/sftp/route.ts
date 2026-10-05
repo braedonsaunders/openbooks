@@ -152,6 +152,7 @@ export const POST = defineRoute({
             insert into sftp_servers (org_id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, created_by, updated_by)
             values (${user.orgId}, ${String(body.name).trim()}, ${username}, ${encryptSecret(password, user.orgId)}, ${authorizedKeys},
                     ${backend}, ${bucket}, ${rootPrefix}, ${user.id}, ${user.id})
+            -- A concurrent username collision causes the bounded loop to mint another suffix.
             on conflict (username) do nothing
             returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
           `))

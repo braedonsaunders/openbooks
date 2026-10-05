@@ -49,6 +49,7 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
       const result = (await runner.execute(sql`
         insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,created_by,updated_by)
         values(${orgId},${leaseId},${charge.id},${period.periodStartsOn},${period.periodEndsOn},${period.dueOn},${period.amount},${actorId},${actorId})
+        -- An existing charge-period line is already materialized; preserve billed and superseded history.
         on conflict(org_id,charge_id,period_starts_on) do nothing returning id
       `));
       created += result.rows.length;

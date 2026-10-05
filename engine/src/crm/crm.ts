@@ -51,6 +51,7 @@ export async function ensureCrmDefaults(
       insert into crm_account_statuses
         (org_id, lifecycle_stage, key, name, sequence, is_qualified, is_closed, is_default, created_by, updated_by)
       values (${orgId}, ${stage}, ${key}, ${name}, ${sequence}, ${qualified}, ${closed}, ${isDefault}, ${actorId}, ${actorId})
+      -- Default provisioning preserves existing account-status configuration and operator edits.
       on conflict (org_id, lifecycle_stage, key) do nothing`);
   }
   for (let sequence = 0; sequence < DEFAULT_OPPORTUNITY_STATUSES.length; sequence++) {
@@ -62,6 +63,7 @@ export async function ensureCrmDefaults(
          requires_win_loss_reason, created_by, updated_by)
       values (${orgId}, ${key}, ${name}, ${sequence}, ${probability}, ${category}, ${closed}, ${won}, ${isDefault},
               ${requiresWinLossReason}, ${actorId}, ${actorId})
+      -- Default provisioning preserves existing opportunity-status configuration and operator edits.
       on conflict (org_id, key) do nothing`);
   }
 }

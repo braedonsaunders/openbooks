@@ -202,6 +202,7 @@ export async function executeIdempotent<T>(args: {
           (${context.authz.user.orgId}, ${context.authz.user.id}, ${context.source},
            ${args.operation}, ${args.idempotencyKey}, ${hash},
            now() + interval '30 days')
+        -- The losing claim executes no command and polls the committed response below.
         on conflict (org_id, actor_id, source, operation, idempotency_key)
         do nothing
         returning id

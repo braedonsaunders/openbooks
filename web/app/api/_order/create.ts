@@ -400,6 +400,7 @@ export async function createOrder(
            ${JSON.stringify(headerDims ? headerDims.cleaned : {})}::jsonb,
            ${body.memo ?? null}, ${subtotal}, ${taxTotal}, ${total},
            ${user.id}, ${user.id})
+        -- A concurrent request-ID collision is refused below, so no second order is reported as created.
         on conflict (id) do nothing
         returning id
       `))

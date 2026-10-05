@@ -242,6 +242,7 @@ export async function linkDependent(query: {
     await db.execute(sql`
       insert into hrm_enrollment_dependents (org_id, enrollment_id, dependent_id, created_by)
       values (${orgId}, ${enrollmentId}, ${dependentId}, ${actorId})
+      -- The same enrollment-dependent pair already records the requested coverage link.
       on conflict do nothing
     `);
   });

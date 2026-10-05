@@ -160,6 +160,7 @@ export async function syncCapabilities(
         ${JSON.stringify(def.dataScope)}::jsonb, ${def.maxAutonomy},
         ${def.reviewerRole}, ${def.noticeRequired}
       )
+      -- Provisioning preserves the existing capability and the organization's lowered autonomy.
       on conflict do nothing
       returning id::text as id`)).rows;
     // The conflict target is the rescan-style (org, key) unique: a conflict

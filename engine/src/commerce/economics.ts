@@ -1138,6 +1138,7 @@ export async function markOrderEconomicsDirty(orgId: string, orderId: string, re
   await db.execute(sql`
     insert into channel_order_economics_pending (org_id, order_id, reason)
     values (${orgId}, ${orderId}, ${reason})
+    -- An existing order mark already requires a full margin restatement; retain the first queued reason.
     on conflict (org_id, order_id) do nothing`);
 }
 
@@ -1380,6 +1381,7 @@ export async function recordChannelAdSpend(
         from channel_orders o
        where o.org_id = ${orgId} and o.channel_id = ${input.channelId}
          and (o.ordered_at at time zone 'UTC')::date = ${input.spendDate}::date
+      -- An existing order mark already requires a full restatement, including the changed ad spend.
       on conflict (org_id, order_id) do nothing`);
     return { spendId: stored.rows[0]!.id };
   });

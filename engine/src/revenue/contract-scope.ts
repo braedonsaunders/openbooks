@@ -198,6 +198,7 @@ export async function ensureScopedContract(
             ${source.kind === "order" ? source.id : null},
             ${source.kind === "subscription" ? source.id : null},
             ${actorId}, ${actorId})
+    -- An idempotent source reuses the existing contract and verifies its identity below.
     on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
     returning id`)).rows[0];
   if (inserted) return { id: inserted.id, created: true };
@@ -275,6 +276,7 @@ export async function recordContractBilling(
     insert into revenue_contract_billings
       (org_id, contract_id, document_id, amount, billed_on, created_by, updated_by)
     values (${orgId}, ${contractId}, ${documentId}, ${amount}, ${billedOn}, ${actorId}, ${actorId})
+    -- A replay reuses the prior billing only when its amount and contract agree below.
     on conflict (org_id, document_id) do nothing
     returning id`)).rows[0];
   // The conflict above is expected and benign: a posted billing replays to

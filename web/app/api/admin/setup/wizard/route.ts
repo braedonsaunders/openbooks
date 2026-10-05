@@ -417,6 +417,7 @@ export const PUT = defineRoute({
                   required_dimensions: a.requiredDimensions ?? [],
                 })),
               )}::jsonb) as t(number text, name text, type text, is_summary boolean, reconcilable boolean, required_dimensions jsonb)
+            -- Existing account numbers remain authoritative and are included in the result union below.
             on conflict (org_id, number) do nothing
             returning id, number
           )

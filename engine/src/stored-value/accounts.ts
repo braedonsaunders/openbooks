@@ -439,6 +439,7 @@ export async function insertStoredValueEntry(orgId: string, entry: EntryInsert):
       ${entry.functionalAmountMinor.toString()}, ${entry.fxRate},
       ${entry.documentId ?? null}, ${entry.documentLineId ?? null}, ${entry.journalEntryId ?? null},
       ${entry.idempotencyKey}, ${entry.reason ?? null}, ${entry.actorId ?? null}, ${entry.actorId ?? null})
+    -- Replays resolve the original entry below; balance-changing callers refuse a replayed insert.
     on conflict (org_id, idempotency_key) do nothing
     returning id
   `)).rows;
@@ -912,6 +913,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
         ${input.amountMinor.toString()},
         ${input.amountMinor.toString()}, ${expiresOn}, ${input.sourceDocumentId ?? null},
         ${liabilityAccountId}, ${input.actorId ?? null}, ${input.actorId ?? null})
+      -- A generated code collision mints a new code on the next bounded retry.
       on conflict (org_id, code_hash) do nothing
       returning id
     `)).rows;
@@ -1601,6 +1603,7 @@ export async function attachDocumentIssue(input: DocumentIssueInput): Promise<Is
         ${input.amountMinor.toString()},
         ${input.amountMinor.toString()}, ${expiresOn}, ${input.sourceDocumentId},
         ${liabilityAccountId}, ${input.actorId ?? null}, ${input.actorId ?? null})
+      -- A generated code collision mints a new code on the next bounded retry.
       on conflict (org_id, code_hash) do nothing
       returning id
     `)).rows;

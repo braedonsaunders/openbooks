@@ -392,6 +392,7 @@ export async function seedDefaultMaskingPolicies(prodOrgId: string): Promise<voi
         columnName: p.columnName,
         transform: p.transform,
       })
+      // Default provisioning preserves an existing masking transform for this column.
       .onConflictDoNothing();
   }
 }

@@ -382,6 +382,7 @@ export async function ingestChannelOrder(
         values (${orgId}, ${channelId}, ${existing.id}, 'edit', ${`edit:${order.externalId}:${order.orderedAt}`},
           ${JSON.stringify({ number: order.number, totalMinor: order.totalMinor.toString() })}::jsonb,
           'ignored', now(), ${actor}, ${actor})
+        -- Repeated delivery of this edit event retains its existing event evidence.
         on conflict (org_id, order_id, external_id) do nothing`);
       await refreshOrderEconomics(orgId, actor, existing.id, "order updated");
       // A fulfilment or cancellation arriving on the order payload can
@@ -412,6 +413,7 @@ export async function ingestChannelOrder(
         ${parts.lines}::jsonb, ${parts.shippingLines}::jsonb, ${parts.tenders}::jsonb,
         ${order.orderedAt}, ${order.cancelledAt},
         ${excludedReason ? "excluded" : "pending"}, ${excludedReason}, ${actor}, ${actor})
+      -- Concurrent ingestion reuses the same channel order selected below.
       on conflict (org_id, channel_id, external_id) do nothing
       returning id`);
     const id = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
@@ -467,6 +469,7 @@ export async function ingestChannelEvent(
       values (${orgId}, ${channelId}, ${order.id}, ${event.kind}, ${event.externalId},
         ${payload ? JSON.stringify(payload, (_key, value) => typeof value === "bigint" ? value.toString() : value) : "{}"}::jsonb,
         'pending', ${event.occurredAt}, ${actor}, ${actor})
+      -- Repeated delivery reuses the same order event selected below.
       on conflict (org_id, order_id, external_id) do nothing
       returning id`);
     const eventId = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`

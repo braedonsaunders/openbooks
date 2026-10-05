@@ -660,6 +660,7 @@ async function provisionTaxPacksInTenant(
         insert into tax_jurisdictions
           (org_id, code, name, country, level, tax_type, is_active, created_by, updated_by)
         values (${orgId}, ${country}, ${countryName}, ${country}, 'country', ${countryTaxType}, true, ${actorId}, ${actorId})
+        -- Country identity already provisioned by an earlier install remains authoritative.
         on conflict (org_id, code) do nothing
         returning id`));
       if (parent.rows[0]) {
@@ -813,6 +814,7 @@ async function provisionTaxPacksInTenant(
         insert into tax_jurisdictions
           (org_id, code, name, country, region, level, tax_type, parent_id, is_active, created_by, updated_by)
         values (${orgId}, ${jurisdictionCode}, ${subdivision.name}, ${subdivision.country}, ${subdivision.region}, 'state', ${subdivision.taxType}, ${parentId}, true, ${actorId}, ${actorId})
+        -- Existing subdivision identity is retained; missing parent linkage is repaired below.
         on conflict (org_id, code) do nothing
         returning id`));
       if (jur.rows[0]) {

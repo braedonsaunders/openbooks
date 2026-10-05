@@ -161,6 +161,7 @@ async function createPaymentRunWithinTransaction(
     const claim = (await db.execute<{ id: string }>(sql`
       insert into payment_schedule_occurrences (org_id, schedule_id, occurrence_at, status)
       values (${opts.orgId}, ${opts.sourceOccurrence.scheduleId}, ${opts.sourceOccurrence.occurrenceAt}, ${opts.sourceOccurrence.status})
+      -- A repeated schedule occurrence adopts the committed payment run selected below.
       on conflict (org_id, schedule_id, occurrence_at) do nothing
       returning id
     `));

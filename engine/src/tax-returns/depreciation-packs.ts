@@ -59,6 +59,7 @@ export async function installTaxDepreciationPack(orgId: string, code: string, ac
         (org_id, code, name, country_code, calculation_model, class_attribute, is_active, created_by, updated_by)
       values (${orgId}, ${regime.code}, ${regime.name}, ${regime.countryCode}, ${regime.calculationModel},
               ${regime.classAttribute}, true, ${actorId}, ${actorId})
+      -- A reinstall preserves the tenant's existing editable regime instead of replacing its policy.
       on conflict (org_id, code) do nothing returning id`));
 
     let classesCreated = 0;
@@ -72,6 +73,7 @@ export async function installTaxDepreciationPack(orgId: string, code: string, ac
                 ${persistPackFxRate(classDef.firstYearFraction)}, ${classDef.allowRecapture}, ${classDef.allowTerminalLoss},
                 ${classDef.costCap == null ? null : persistPackCostCap(classDef.costCap)}, ${classDef.depreciationSystem ?? null}, ${classDef.macrsMethod ?? null},
                 ${classDef.recoveryPeriodYears == null ? null : persistPackFxRate(classDef.recoveryPeriodYears)}, ${classDef.convention ?? null}, true, ${actorId}, ${actorId})
+        -- A reinstall preserves existing tenant class overrides and counts only newly installed classes.
         on conflict (org_id, regime, class_code) do nothing returning id`));
       classesCreated += inserted.rows.length;
     }

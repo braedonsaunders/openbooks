@@ -298,6 +298,7 @@ export async function ensureCloseDefaults(
           (org_id, blueprint_id, step_id, depends_on_step_id, created_by, updated_by)
         values (${orgId}, ${blueprintId}, ${stepIds.get(stepKey)!}, ${stepIds.get(dependencyKey)!},
                 ${actorId ?? null}, ${actorId ?? null})
+          -- Repeated default provisioning retains the same dependency edge.
           on conflict (step_id, depends_on_step_id) do nothing`);
       }
     }
@@ -307,6 +308,7 @@ export async function ensureCloseDefaults(
       values
         (${orgId}, 'controlled-reopen', 'close.defaultData.policies.controlledReopen.name', 'close.defaultData.policies.controlledReopen.description',
          'lock', ${JSON.stringify({ approvalRequired: true, defaultHours: 24 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+      -- Default provisioning preserves an existing organization policy and its operator edits.
       on conflict (org_id, code) do nothing`);
 
     // Source-evidenced bank sign-offs (0158): the mirror may sign reconcilable
@@ -317,6 +319,7 @@ export async function ensureCloseDefaults(
       values
         (${orgId}, ${SOURCE_EVIDENCE_POLICY_CODE}, 'close.defaultData.policies.sourceReconciliationEvidence.name', 'close.defaultData.policies.sourceReconciliationEvidence.description',
          'evidence', ${JSON.stringify({})}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+      -- Default provisioning preserves the existing evidence policy and its activation state.
       on conflict (org_id, code) do nothing`);
 
     if (closeFeatures.advancedClose) {
@@ -327,6 +330,7 @@ export async function ensureCloseDefaults(
            'materiality', ${JSON.stringify({ amount: "10000.0000", percent: 20 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null}),
           (${orgId}, 'independent-approval', 'close.defaultData.policies.independentApproval.name', 'close.defaultData.policies.independentApproval.description',
            'segregation', ${JSON.stringify({ prohibitSelfApproval: true })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+        -- Repeated provisioning preserves existing materiality and approval policy settings.
         on conflict (org_id, code) do nothing`);
 
       const closeApprovalFlow = (await tx.execute<{ id: string }>(sql`

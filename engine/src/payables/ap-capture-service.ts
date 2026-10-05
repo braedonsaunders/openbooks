@@ -1222,6 +1222,7 @@ export async function materializeCapture(input: {
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
       values (${input.orgId}, ${item.file_id}, 'documents', ${documentId}, ${input.actorId})
+      -- An existing attachment already links these same captured bytes to the bill.
       on conflict (org_id, file_id, target_table, target_id) do nothing
     `);
     await tx.execute(sql`

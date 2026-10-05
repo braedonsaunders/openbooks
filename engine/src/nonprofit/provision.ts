@@ -121,6 +121,7 @@ export async function provisionFundAccounting(
         ${input.orgId}, 'fund', 'Fund', 'Funds', 'custom', true,
         true, true, 'fundAccounting', ${input.actorId ?? null}, ${input.actorId ?? null}
       )
+      -- Concurrent provisioning reuses the segment below and verifies its balancing configuration.
       on conflict (org_id, key) do nothing
     `);
 
@@ -212,6 +213,7 @@ export async function provisionFundAccounting(
           ${input.orgId}, ${segment.id}, ${input.defaultFund.code}, ${input.defaultFund.name},
           true, ${input.actorId ?? null}, ${input.actorId ?? null}
         )
+        -- Concurrent default-fund creation reuses and verifies the same segment value below.
         on conflict do nothing
         returning id
       `);
@@ -298,6 +300,7 @@ export async function provisionFundAccounting(
           ${value.id}, ${input.orgId}, ${desired.kind}, ${desired.restrictionClass},
           ${desired.budgetaryControl}, ${input.actorId ?? null}, ${input.actorId ?? null}
         )
+        -- Concurrent fund provisioning verifies the surviving classification below rather than overwriting it.
         on conflict (org_id, id) do nothing
         returning id
       `);

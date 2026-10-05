@@ -107,6 +107,7 @@ export async function recordRecognitionEvent(
               ${amount}, ${input.description ?? null}, ${sourceReference},
               ${unitRate}, ${quantity},
               ${input.actorId}, ${input.actorId})
+      -- A repeated source reference is compared with the committed event below before accepting replay.
       on conflict (org_id, obligation_id, source_reference)
         where source_reference is not null
       do nothing

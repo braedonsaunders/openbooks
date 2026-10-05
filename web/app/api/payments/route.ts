@@ -279,6 +279,7 @@ async function createPayment(request: Request) {
           (${requestId}, ${user.orgId}, ${kind}, 'draft', ${subsidiaryId}, ${documentNumber},
            ${documentDate}, ${currency}, '1', ${partyId}, ${referenceNumber}, ${memo},
            ${JSON.stringify(custom)}::jsonb, ${total}, '0', ${total}, ${user.id}, ${user.id})
+        -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id`))
       if (!inserted.rows[0]) {

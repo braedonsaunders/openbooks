@@ -106,6 +106,7 @@ async function startOrAdoptOccurrenceRun(
     const [inserted] = await db
       .insert(schema.flowRuns)
       .values({ orgId, ...row, status: "running", occurrenceKey })
+      // A concurrent dispatch reuses the occurrence run selected and adopted below.
       .onConflictDoNothing()
       .returning({ id: schema.flowRuns.id });
     if (inserted) return { runId: inserted.id, adoptedStatus: null };

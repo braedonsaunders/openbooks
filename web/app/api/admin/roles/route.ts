@@ -272,6 +272,7 @@ export const POST = defineRoute({
                                subsidiary_restriction, created_by, updated_by)
         values (${actor.orgId}, ${key}, ${name}, ${body.description?.trim() || null}, false,
                 ${JSON.stringify(permissions)}, ${JSON.stringify(restriction)}, ${actor.id}, ${actor.id})
+        -- A concurrent role-key collision returns the explicit duplicate-role refusal below.
         on conflict (org_id, key) do nothing
         returning id`);
       if (!inserted.rows[0]) {
@@ -564,6 +565,7 @@ export const DELETE = defineRoute({
           const inserted = await tx.execute<{ id: string }>(sql`
             insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
             values (${actor.orgId}, ${row.user_id}, ${replacement.id}, ${actor.id}, ${actor.id})
+            -- A user already assigned the replacement role keeps that assignment without a duplicate grant.
             on conflict (org_id, user_id, role_id) do nothing
             returning id`);
           if (!inserted.rows[0]) continue;

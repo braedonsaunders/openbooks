@@ -158,6 +158,7 @@ export async function ensureDefaultPipelineTemplate(
         values (${orgId}, ${templateId}, ${position}, ${stage.key}, ${stage.name}, ${stage.kind},
                 ${stage.kind === "hired" || stage.kind === "rejected"},
                 ${actorId}, ${actorId})
+        -- Concurrent default provisioning retains the same stage in this template.
         on conflict on constraint hrm_pipeline_stages_org_template_key do nothing
       `);
       position += 1;
@@ -171,6 +172,7 @@ export async function ensureDefaultPipelineTemplate(
   await exec.execute(sql`
     insert into hrm_pipeline_templates (org_id, name, is_default, is_active, created_by, updated_by)
     values (${orgId}, ${DEFAULT_TEMPLATE_NAME}, true, true, ${actorId}, ${actorId})
+    -- Concurrent default provisioning reuses the template selected below.
     on conflict on constraint hrm_pipeline_templates_org_name do nothing
   `);
   const id = (await exec.execute<{ id: string }>(sql`
@@ -193,6 +195,7 @@ export async function ensureDefaultPipelineTemplate(
       values (${orgId}, ${id}, ${position}, ${stage.key}, ${stage.name}, ${stage.kind},
               ${stage.kind === "hired" || stage.kind === "rejected"},
               ${actorId}, ${actorId})
+      -- Concurrent default provisioning retains the same stage in the selected template.
       on conflict on constraint hrm_pipeline_stages_org_template_key do nothing
     `);
     position += 1;

@@ -115,6 +115,7 @@ async function createType(
          ${iconKey}, ${description}, ${JSON.stringify(sections)}::jsonb,
          'draft', ${showInNav}, ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
          ${sortOrder}, ${userId}, ${userId})
+      -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
     `))

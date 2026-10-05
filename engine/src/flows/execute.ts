@@ -123,6 +123,7 @@ export async function executeFlowPlan(
     const claimed = await db
       .insert(schema.flowRunEffects)
       .values({ orgId: ctx.orgId, runId, effectKey })
+      // The existing effect claim is locked below before its completion or replay is resolved.
       .onConflictDoNothing()
       .returning({ effectKey: schema.flowRunEffects.effectKey });
     if (claimed.length > 0) return true;
@@ -475,6 +476,7 @@ async function createGate(
       })),
     )
     // Idempotent replays: unique (run_id, node_id, assignee_user_id).
+    // The same run-node-assignee gate is already staged; retain its current decision state.
     .onConflictDoNothing();
 
   const subjectLabel = adapter.label(subjectId, evalCtx.values);

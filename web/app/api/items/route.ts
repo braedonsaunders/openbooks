@@ -297,6 +297,7 @@ export const POST = defineRoute({
            ${references.recognitionRuleId}, ${references.deferredAccountId},
            ${createPlansOn}, ${revenueAllocation}, ${standalonePriceResult.value},
            ${isActive}, ${JSON.stringify(validatedCustom.cleaned)}::jsonb, ${gate.user.id}, ${gate.user.id})
+        -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
       `)

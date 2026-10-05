@@ -103,6 +103,7 @@ export async function projectExtensionPage(
       values (${orgId}, null, ${contribution.route}, ${JSON.stringify(contribution.spec)}::jsonb,
               ${`Projected by extension "${opts.extensionKey}" version ${opts.version}`},
               ${opts.versionId}, ${opts.actorId}, ${opts.actorId})
+      -- An identical projection reuses this live version row and verifies its stored spec below.
       on conflict (org_id, route, extension_version_id) where (is_active and extension_version_id is not null) do nothing
       returning id`)
   ).rows[0] ?? null;

@@ -2359,6 +2359,7 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
          currency, subtotal, tax_total, total, created_by)
       values (${key}, ${orgId}, ${kind}, ${subsidiaryId}, ${documentNumber},
               ${effectiveBody.documentDate}, ${seedCurrency}, '0', '0', '0', ${userId})
+      -- A conflicting document identity returns no row and raises the scoped creation refusal below.
       on conflict (id) do nothing
       returning id`)
     // A same-key same-org row would have been found above under our advisory

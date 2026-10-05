@@ -232,6 +232,7 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
       select ${orgId},x."activityId",x."subjectKind",x."subjectId",${actorId},${actorId}
         from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
           as x("activityId" uuid,"subjectKind" text,"subjectId" uuid)
+      -- Re-importing the same activity retains its existing account association.
       on conflict(activity_id,subject_kind,subject_id) do nothing`)
   }
   await db.execute(sql`
@@ -274,6 +275,7 @@ async function importNativeActivities(orgId: string, actorId: string, creds: Net
           ? await db.execute(sql`update crm_activities set kind=${source.kind},status=${status},subject=${subject || body!.slice(0,120)},body=${body},starts_at=${date(record.startDate ?? record.start)},ends_at=${date(record.endDate ?? record.end)},due_at=${date(record.dueDate)},completed_at=${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},updated_at=now(),updated_by=${actorId} where id=${existing.rows[0].id} and org_id=${orgId} returning id`)
           : await db.execute(sql`insert into crm_activities(org_id,kind,status,subject,body,starts_at,ends_at,due_at,completed_at,custom,created_by,updated_by) values(${orgId},${source.kind},${status},${subject || body!.slice(0,120)},${body},${date(record.startDate ?? record.start)},${date(record.endDate ?? record.end)},${date(record.dueDate)},${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},${JSON.stringify({ netsuite: { id: nsId, recordType: source.type } })}::jsonb,${actorId},${actorId}) returning id`)
         const activityId = (result as unknown as { rows: { id: string }[] }).rows[0]!.id
+        // Re-importing the same activity retains its existing account association.
         if (party) await db.execute(sql`insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by) values(${orgId},${activityId},'account',${party.id},${actorId},${actorId}) on conflict(activity_id,subject_kind,subject_id) do nothing`)
         imported++
       }

@@ -341,6 +341,7 @@ export async function buildRecognitionScheduleOn(
       const ins = (await runner.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, transaction_currency, transaction_fx_rate, created_by, updated_by)
         values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${txCurrency ?? null}, ${txFxRate}, ${actorId}, ${actorId})
+        -- Concurrent schedule creation adopts the same obligation-book schedule selected below.
         on conflict do nothing
         returning id`));
       scheduleId =

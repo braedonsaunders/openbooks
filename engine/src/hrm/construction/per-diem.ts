@@ -743,6 +743,7 @@ export async function approveEntry(
               ${entry.partyId}::uuid, ${entry.componentId}::uuid,
               ${entry.amount}, ${entry.currency}, ${entry.workedOn}::date, 'pending',
               ${actorId}::uuid, ${actorId}::uuid)
+      -- Repeated approval retains the same entry-keyed payroll input instead of paying twice.
       on conflict (org_id, entry_kind, entry_id) do nothing
     `);
     // on conflict do nothing is justified here: approval is idempotent —

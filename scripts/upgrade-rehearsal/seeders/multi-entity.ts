@@ -170,6 +170,7 @@ async function main(): Promise<void> {
       await db.execute(sql`
         insert into currencies (code, name, minor_units)
         values (${code}, ${name}, ${minor})
+        -- Global ISO currency identities may already exist from another rehearsal; preserve them.
         on conflict (code) do nothing`);
     }
     const mk = async (name: string, currency: string, country: string, elim: boolean): Promise<string> => {

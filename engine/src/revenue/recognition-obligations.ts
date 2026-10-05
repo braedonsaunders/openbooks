@@ -174,6 +174,7 @@ export async function createObligationsFromInvoice(
              currency, total_transaction_price, total_consideration, created_by, updated_by)
           values (${orgId}, ${doc.subsidiary_id}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
                   ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${scopedEnabled ? contractTotal : "0"}, ${actorId}, ${actorId})
+          -- Repeated posting reuses the existing source-document contract selected below.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
           returning id
         `);
@@ -216,6 +217,7 @@ export async function createObligationsFromInvoice(
                   ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
                   ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
                   ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
+          -- The existing line obligation already owns its recognition amounts and schedule.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
           returning id`));
         if (insObl.rows[0]) obligationIds.push(insObl.rows[0].id);

@@ -135,6 +135,7 @@ export async function saveSetupBook(
   const idempotentCreate = !before && options.idempotencyKey !== undefined
   const createId = idempotentCreate ? sql`id, ` : sql``
   const createIdValue = idempotentCreate ? sql`${options.idempotencyKey}, ` : sql``
+  // A concurrent create claim is verified against its audited payload below before replaying.
   const createConflict = idempotentCreate ? sql`on conflict (id) do nothing ` : sql``
   const stored = before
     ? await tx.execute<Record<string, unknown>>(sql`

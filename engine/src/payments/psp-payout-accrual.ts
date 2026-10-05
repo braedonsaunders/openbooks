@@ -275,6 +275,7 @@ export async function accruePayoutsInTransit(
                 ${batch.net_amount}, ${batch.currency},
                 ${batch.bank_account_id}, ${batch.clearing_account_id}, ${batch.subsidiary_id},
                 ${posted.entryId}, 'accrued', ${actorId}, ${actorId})
+        -- Concurrent accrual of the same batch and date reuses the accrual selected below.
         on conflict (org_id, batch_id, accrual_date) do nothing
         returning id
       `));

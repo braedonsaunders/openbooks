@@ -111,6 +111,7 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
         values (${schedule.org_id}, ${schedule.id}, ${schedule.definition_id}, 'scheduled', 'queued',
                 ${scheduledFor}, ${JSON.stringify(schedule.recipient_emails ?? [])}::jsonb,
                 ${JSON.stringify(schedule.filters)}::jsonb, now(), ${JSON.stringify(schedule.authorization_snapshot)}::jsonb)
+        -- The existing scheduled occurrence already owns its report run and delivery.
         on conflict (schedule_id, scheduled_for)
           where schedule_id is not null and scheduled_for is not null
         do nothing
@@ -239,12 +240,14 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
             insert into report_run_artifacts
               (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
             values (${row.org_id}, ${runId}, ${filename}, 'application/pdf', ${pdf.length}, ${hash}, ${pdf})
+            -- A rendering retry retains the first committed artifact for this report run.
             on conflict (run_id) do nothing
           `);
           for (const recipient of recipients) {
             await tx.execute(sql`
               insert into report_delivery_outbox (org_id, run_id, recipient, status, next_attempt_at)
               values (${row.org_id}, ${runId}, ${recipient}, 'pending', now())
+              -- An existing recipient row already owns delivery of this run; retain its delivery state.
               on conflict (run_id, recipient) do nothing
             `);
           }

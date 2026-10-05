@@ -511,6 +511,7 @@ export async function executeAutomation(input: {
       values (${input.orgId}, ${input.automationId}, ${automation.version},
               ${JSON.stringify(input.triggerPayload ?? {})}::jsonb,
               ${subjectKind}, ${subjectId}, 'running', now(), ${fingerprint}, ${input.actorId})
+      -- A concurrent identical trigger reuses the existing run selected below.
       on conflict (org_id, automation_id, subject_kind, subject_id, trigger_fingerprint) do nothing
       returning id
     `);

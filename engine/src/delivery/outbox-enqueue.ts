@@ -144,6 +144,7 @@ export async function enqueueFlowEmail(input: {
       (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
     values (${input.orgId}, 'flow_email', ${input.runId}, ${input.occurrenceKey}, 'pending', now(),
             ${JSON.stringify(input.payload)}::jsonb)
+    -- The existing occurrence already owns this email; false reports that no new delivery was queued.
     on conflict (kind, occurrence_key) do nothing
     returning id
   `));
@@ -172,6 +173,7 @@ export async function enqueueApprovalEscalation(input: {
     insert into scheduler_outbox
       (org_id, kind, subject_id, occurrence_key, status, next_attempt_at)
     values (${input.orgId}, 'approval_escalation', ${input.gateId}, ${input.gateId}, 'pending', now())
+    -- The existing gate occurrence already owns its escalation; null reports a duplicate enqueue.
     on conflict (kind, occurrence_key) do nothing
     returning id
   `));
