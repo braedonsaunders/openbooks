@@ -13,6 +13,7 @@ import {
   EmptyState,
   Label,
   Select,
+  SearchSelect,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@openbooks/ui'
+import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { useAppAction } from '@/lib/use-app-action'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
@@ -98,8 +100,8 @@ function labelStatusVariant(status: string): 'success' | 'warning' | 'outline' {
 }
 
 /**
- * The Shipping tab of a shipment drawer: bought labels with print, refresh
- * and void, a tracking timeline per label, and live rate shopping with
+ * The Shipping tab separates rate shopping from purchased labels. Selecting
+ * a label keeps its print, refresh, void and tracking evidence together. Live rate shopping with
  * buy. Rating never spends money; buying stamps the carrier, service and
  * tracking number onto the shipment and posts the label cost, so the drawer
  * refreshes behind every purchase and the existing notify flow picks the
@@ -122,6 +124,8 @@ export function ShippingPanel({
   const locale = useLocale()
   const router = useRouter()
   const { busy, refusal, execute } = useAppAction()
+  const [section, setSection] = useState<'labels' | 'rates'>(draft ? 'rates' : 'labels')
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null)
   const [labels, setLabels] = useState<LabelView[] | null>(null)
   const [labelsError, setLabelsError] = useState<string | null>(null)
   const [accountId, setAccountId] = useState(() => accounts.find((account) => account.isDefault)?.id ?? '')
@@ -219,6 +223,8 @@ export function ShippingPanel({
           successMessage: t('shipping.bought', { carrier: rate.carrier }),
           onOk: () => {
             setQuote(null)
+            setSection('labels')
+            setSelectedLabelId(null)
             void loadLabels()
             router.refresh()
           },
@@ -298,6 +304,8 @@ export function ShippingPanel({
     }
   }
 
+  const selectedLabel = labels?.find((label) => label.id === selectedLabelId) ?? labels?.[0] ?? null
+
   return (
     <div className="space-y-6 p-1">
       <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
@@ -307,14 +315,32 @@ export function ShippingPanel({
         </p>
       ) : null}
 
-      <section aria-label={t('shipping.labelsTitle')} className="space-y-3">
+      {draft ? (
+        <DrawerTabStrip
+          tabs={[{ key: 'rates', label: t('shipping.ratesTitle') }, { key: 'labels', label: t('shipping.labelsTitle'), count: labels?.length }]}
+          activeKey={section}
+          onSelect={setSection}
+          ariaLabel={t('shipping.labelsTitle')}
+        />
+      ) : null}
+      {section === 'labels' || !draft ? <section aria-label={t('shipping.labelsTitle')} className="space-y-3">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('shipping.labelsTitle')}</h3>
         {labels === null ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('shipping.loading')}</p>
         ) : labels.length === 0 ? (
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('shipping.labelsEmpty')}</p>
         ) : (
-          labels.map((label) => {
+          <>
+          {labels.length > 1 ? (
+            <SearchSelect
+              ariaLabel={t('shipping.labelsTitle')}
+              value={selectedLabel?.id ?? ''}
+              onChange={setSelectedLabelId}
+              options={labels.map((label) => ({ value: label.id, label: `${label.carrier} · ${label.service}${label.trackingNumber ? ` · ${label.trackingNumber}` : ''}` }))}
+            />
+          ) : null}
+          {selectedLabel ? (() => {
+            const label = selectedLabel
             const major = minorToMajor(label.amountMinor, label.currency)
             return (
               <article key={label.id} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
@@ -365,11 +391,12 @@ export function ShippingPanel({
                 ) : null}
               </article>
             )
-          })
+          })() : null}
+          </>
         )}
-      </section>
+      </section> : null}
 
-      {draft ? (
+      {draft && section === 'rates' ? (
         <section aria-label={t('shipping.ratesTitle')} className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('shipping.ratesTitle')}</h3>
           {accounts.length === 0 ? (
@@ -383,7 +410,7 @@ export function ShippingPanel({
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping-rate-account">{t('shipping.rateAccount')}</Label>
-                  <Select id="shipping-rate-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+                  <Select id="shipping-rate-account" value={accountId} onChange={(event) => { setAccountId(event.target.value); setQuote(null); setValidation(null) }}>
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name} · {account.provider === 'shippo' ? 'Shippo' : 'EasyPost'} · {account.mode === 'live' ? t('shipping.modeLive') : t('shipping.modeTest')}
@@ -393,7 +420,7 @@ export function ShippingPanel({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping-rate-package">{t('shipping.ratePackage')}</Label>
-                  <Select id="shipping-rate-package" value={presetId} onChange={(event) => setPresetId(event.target.value)}>
+                  <Select id="shipping-rate-package" value={presetId} onChange={(event) => { setPresetId(event.target.value); setQuote(null); setValidation(null) }}>
                     <option value="">{t('shipping.ratePackageAuto')}</option>
                     {presets.map((preset) => (
                       <option key={preset.id} value={preset.id}>{preset.name}</option>
@@ -402,7 +429,7 @@ export function ShippingPanel({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping-rate-direction">{t('shipping.rateDirection')}</Label>
-                  <Select id="shipping-rate-direction" value={direction} onChange={(event) => setDirection(event.target.value as 'outbound' | 'return')}>
+                  <Select id="shipping-rate-direction" value={direction} onChange={(event) => { setDirection(event.target.value as 'outbound' | 'return'); setQuote(null); setValidation(null) }}>
                     <option value="outbound">{t('shipping.direction.outbound')}</option>
                     <option value="return">{t('shipping.direction.return')}</option>
                   </Select>
