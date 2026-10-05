@@ -7,6 +7,7 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { normalizeMoneyValue } from "../../../../lib/cash/core";
 import { analyticsConfig } from "../../../../lib/analytics/config";
+import { ANALYTICS_CONFIG } from "../../../../lib/analytics/config-spec";
 import { notFound } from "@/lib/api/responses";
 
 
@@ -109,6 +110,7 @@ export const GET = defineRoute({
       const apSettings = {
         weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
         restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+        runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
       };
       const position = await cashPosition(
         user.orgId,
