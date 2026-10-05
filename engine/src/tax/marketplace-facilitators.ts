@@ -27,11 +27,68 @@ type Runner = Pick<SqlExecutor, "execute">;
 const ASSET_CLEARING_TYPES = new Set(["asset_receivable", "asset_current_other"]);
 
 /**
+ * The clearing-account suitability behind every facilitator write and every
+ * posting: the account must exist, be an active non-summary asset account
+ * (the marketplace owes the merchant this tax), and must not double as a
+ * tax control (which would smuggle facilitator tax back into the merchant's
+ * returns). One predicate, shared by setup validation and posting.
+ */
+export async function assertSuitableClearingAccount(
+  runner: Runner,
+  orgId: string,
+  facilitatorName: string,
+  clearingAccountId: string,
+  remedy: string,
+): Promise<void> {
+  const account = (await runner.execute<{
+    id: string;
+    type: string;
+    isActive: boolean;
+    isSummary: boolean;
+  }>(sql`
+    select id, type, is_active as "isActive", is_summary as "isSummary"
+      from accounts where org_id = ${orgId} and id = ${clearingAccountId}
+  `)).rows[0];
+  if (!account) {
+    throw new TaxMarketplaceError(
+      `marketplace facilitator "${facilitatorName}" points at a clearing account that no longer exists — ${remedy}`,
+    );
+  }
+  if (!account.isActive || account.isSummary) {
+    throw new TaxMarketplaceError(
+      `marketplace facilitator "${facilitatorName}" points at a clearing account that is ${!account.isActive ? "inactive" : "a summary account"} — ${remedy}`,
+    );
+  }
+  if (!ASSET_CLEARING_TYPES.has(account.type)) {
+    throw new TaxMarketplaceError(
+      `marketplace facilitator "${facilitatorName}" needs an asset clearing account (the marketplace owes the merchant this tax) — ${remedy}`,
+    );
+  }
+  const control = (await runner.execute<{ one: number }>(sql`
+    select 1 as one
+      from tax_codes
+     where org_id = ${orgId}
+       and (collected_account_id = ${clearingAccountId}
+         or paid_account_id = ${clearingAccountId}
+         or withholding_account_id = ${clearingAccountId})
+     limit 1
+  `)).rows[0];
+  const orgControl = (await runner.execute<{ one: number }>(sql`
+    select 1 as one from orgs
+     where id = ${orgId}
+       and (settings->'controlAccounts'->>'taxCollected' = ${clearingAccountId}
+         or settings->'controlAccounts'->>'taxPaid' = ${clearingAccountId})
+  `)).rows[0];
+  if (control ?? orgControl) {
+    throw new TaxMarketplaceError(
+      `marketplace facilitator "${facilitatorName}" uses an account that is also a tax control account — facilitator tax would re-enter the merchant's returns; ${remedy}`,
+    );
+  }
+}
+
+/**
  * Resolve facilitator names to their clearing accounts, failing closed on
- * anything misconfigured: an unknown or inactive facilitator, a missing or
- * unsuitable clearing account, or a clearing account that doubles as a tax
- * control (which would smuggle facilitator tax back into the merchant's
- * returns). Posting calls this before any journal is written.
+ * anything misconfigured. Posting calls this before any journal is written.
  */
 export async function resolveMarketplaceClearing(
   runner: Runner,
@@ -63,50 +120,7 @@ export async function resolveMarketplaceClearing(
         `marketplace facilitator "${name}" is inactive — reactivate it in Setup → Taxes → Marketplace facilitators or move the line back to merchant collection`,
       );
     }
-    const account = (await runner.execute<{
-      id: string;
-      type: string;
-      isActive: boolean;
-      isSummary: boolean;
-    }>(sql`
-      select id, type, is_active as "isActive", is_summary as "isSummary"
-        from accounts where org_id = ${orgId} and id = ${row.clearingAccountId}
-    `)).rows[0];
-    if (!account) {
-      throw new TaxMarketplaceError(
-        `marketplace facilitator "${name}" points at a clearing account that no longer exists — ${remedy}`,
-      );
-    }
-    if (!account.isActive || account.isSummary) {
-      throw new TaxMarketplaceError(
-        `marketplace facilitator "${name}" points at a clearing account that is ${!account.isActive ? "inactive" : "a summary account"} — ${remedy}`,
-      );
-    }
-    if (!ASSET_CLEARING_TYPES.has(account.type)) {
-      throw new TaxMarketplaceError(
-        `marketplace facilitator "${name}" needs an asset clearing account (the marketplace owes the merchant this tax) — ${remedy}`,
-      );
-    }
-    const control = (await runner.execute<{ one: number }>(sql`
-      select 1 as one
-        from tax_codes
-       where org_id = ${orgId}
-         and (collected_account_id = ${row.clearingAccountId}
-           or paid_account_id = ${row.clearingAccountId}
-           or withholding_account_id = ${row.clearingAccountId})
-       limit 1
-    `)).rows[0];
-    const orgControl = (await runner.execute<{ one: number }>(sql`
-      select 1 as one from orgs
-       where id = ${orgId}
-         and (settings->'controlAccounts'->>'taxCollected' = ${row.clearingAccountId}
-           or settings->'controlAccounts'->>'taxPaid' = ${row.clearingAccountId})
-    `)).rows[0];
-    if (control ?? orgControl) {
-      throw new TaxMarketplaceError(
-        `marketplace facilitator "${name}" uses an account that is also a tax control account — facilitator tax would re-enter the merchant's returns; ${remedy}`,
-      );
-    }
+    await assertSuitableClearingAccount(runner, orgId, name, row.clearingAccountId, remedy);
     out.set(name, { name, accountId: row.clearingAccountId, mode: row.mode });
   }
   return out;
