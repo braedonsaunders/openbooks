@@ -1047,12 +1047,12 @@
         "description": "各ペイアウトを精算明細に分解し、紐付け証憑・銀行入金・仕掛引当とともに、ペイアウトの状態と差額付きで1明細1行で表示します。"
       },
       "manufacturing_work_orders": {
-        "label": "Manufacturing work orders",
-        "description": "Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units."
+        "label": "製造指図",
+        "description": "子会社別の製造指図ライフサイクル。件数は指図の数を表し、異なる単位の数量を合算したものではありません。"
       },
       "managed_property_portfolio": {
-        "label": "Managed properties",
-        "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
+        "label": "管理物件",
+        "description": "ユーザーが閲覧を許可された法人に限定した、現在の物件ポートフォリオのライフサイクル。"
       }
     },
     "columns": {
@@ -2653,15 +2653,15 @@
         "accrued_amount": "引当額"
       },
       "manufacturing_work_orders": {
-        "number": "Order number",
-        "status": "Status",
-        "planned_start": "Planned start",
-        "planned_end": "Planned end"
+        "number": "指図番号",
+        "status": "状態",
+        "planned_start": "開始予定日",
+        "planned_end": "終了予定日"
       },
       "managed_property_portfolio": {
-        "code": "Property code",
-        "name": "Property",
-        "status": "Status"
+        "code": "物件コード",
+        "name": "物件",
+        "status": "状態"
       }
     },
     "enumValues": {
@@ -3012,36 +3012,36 @@
       "description": "メーター、評価実行、プラン版、元レコードの追跡情報とともに、評価済みの従量課金請求明細をすべて表示します。"
     },
     "analytics-project-portfolio": {
-      "name": "Project portfolio",
-      "description": "Current project lifecycle: active work, quotations, awards and closed projects."
+      "name": "プロジェクトポートフォリオ",
+      "description": "現在のプロジェクトライフサイクル：進行中の業務、見積、受注済み、完了済みのプロジェクト。"
     },
     "analytics-asset-lifecycle": {
-      "name": "Asset lifecycle",
-      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+      "name": "固定資産ライフサイクル",
+      "description": "現在の固定資産台帳：使用中、償却済み、除却・売却済み、稼働開始待ちの資産。"
     },
     "analytics-production": {
-      "name": "Production overview",
-      "description": "Current production orders: released, in progress, on hold and completed."
+      "name": "生産概要",
+      "description": "現在の製造指図：リリース済み、進行中、保留中、完了済み。"
     },
     "analytics-property-portfolio": {
-      "name": "Property portfolio",
-      "description": "Current managed-property portfolio: active, inactive, sold and total properties."
+      "name": "物件ポートフォリオ",
+      "description": "現在の管理物件ポートフォリオ：有効、無効、売却済みの物件と物件総数。"
     },
     "analytics-grant-portfolio": {
-      "name": "Grant portfolio",
-      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+      "name": "助成金ポートフォリオ",
+      "description": "現在の助成金ライフサイクル：交付決定済み、有効、終了済み、下書き。非営利団体レポートの閲覧権限が必要です。"
     },
     "analytics-allocation-controls": {
-      "name": "Allocation controls",
-      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+      "name": "配賦統制",
+      "description": "現在の配賦処理の統制状況：転記済みの処理、承認待ち、計算失敗、処理総数。"
     },
     "analytics-payroll-reconciliation": {
-      "name": "Payroll reconciliation",
-      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+      "name": "給与照合",
+      "description": "保存済みの給与比較結果：差異、完全一致、許容範囲内の差異、未帰属金額。件数は比較セルの数を表します。"
     },
     "analytics-workforce-capacity": {
-      "name": "Workforce capacity",
-      "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
+      "name": "要員キャパシティ",
+      "description": "現在の要員配置計画：計画済み、予算確保済み、充足済み、未充足のフルタイム換算人員。"
     }
   },
   "generalLedger": {

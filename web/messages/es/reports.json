@@ -1047,12 +1047,12 @@
         "description": "Cada pago del proveedor desglosado en líneas de liquidación con su documento vinculado, su depósito bancario y su provisión en tránsito — una fila por línea con el estado y la diferencia del pago."
       },
       "manufacturing_work_orders": {
-        "label": "Manufacturing work orders",
-        "description": "Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units."
+        "label": "Órdenes de fabricación",
+        "description": "Ciclo de vida de las órdenes de fabricación por filial. Los recuentos corresponden a órdenes, no a cantidades expresadas en unidades diferentes."
       },
       "managed_property_portfolio": {
-        "label": "Managed properties",
-        "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
+        "label": "Inmuebles gestionados",
+        "description": "Ciclo de vida actual de la cartera, limitado a las entidades jurídicas autorizadas para el usuario."
       }
     },
     "columns": {
@@ -2653,15 +2653,15 @@
         "accrued_amount": "Provisionado"
       },
       "manufacturing_work_orders": {
-        "number": "Order number",
-        "status": "Status",
-        "planned_start": "Planned start",
-        "planned_end": "Planned end"
+        "number": "Número de orden",
+        "status": "Estado",
+        "planned_start": "Inicio previsto",
+        "planned_end": "Fin previsto"
       },
       "managed_property_portfolio": {
-        "code": "Property code",
-        "name": "Property",
-        "status": "Status"
+        "code": "Código del inmueble",
+        "name": "Inmueble",
+        "status": "Estado"
       }
     },
     "enumValues": {
@@ -2992,36 +2992,36 @@
       "description": "Enumera cada línea de factura por uso con el medidor, el ciclo de cálculo, la versión del plan y la trazabilidad de los registros de origen."
     },
     "analytics-project-portfolio": {
-      "name": "Project portfolio",
-      "description": "Current project lifecycle: active work, quotations, awards and closed projects."
+      "name": "Cartera de proyectos",
+      "description": "Ciclo de vida actual de los proyectos: trabajo en curso, presupuestos, proyectos adjudicados y proyectos cerrados."
     },
     "analytics-asset-lifecycle": {
-      "name": "Asset lifecycle",
-      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+      "name": "Ciclo de vida de los activos fijos",
+      "description": "Registro actual de activos fijos: activos en servicio, totalmente depreciados, dados de baja y pendientes de activación."
     },
     "analytics-production": {
-      "name": "Production overview",
-      "description": "Current production orders: released, in progress, on hold and completed."
+      "name": "Resumen de producción",
+      "description": "Órdenes de fabricación actuales: liberadas, en curso, suspendidas y completadas."
     },
     "analytics-property-portfolio": {
-      "name": "Property portfolio",
-      "description": "Current managed-property portfolio: active, inactive, sold and total properties."
+      "name": "Cartera inmobiliaria",
+      "description": "Cartera actual de inmuebles gestionados: activos, inactivos, vendidos y total de inmuebles."
     },
     "analytics-grant-portfolio": {
-      "name": "Grant portfolio",
-      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+      "name": "Cartera de subvenciones",
+      "description": "Ciclo de vida actual de las subvenciones: concedidas, activas, cerradas y en borrador. Requiere permiso para consultar informes de organizaciones sin fines de lucro."
     },
     "analytics-allocation-controls": {
-      "name": "Allocation controls",
-      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+      "name": "Controles de distribución",
+      "description": "Controles actuales de los procesos de distribución: procesos contabilizados, aprobaciones pendientes, cálculos fallidos y total de procesos."
     },
     "analytics-payroll-reconciliation": {
-      "name": "Payroll reconciliation",
-      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+      "name": "Conciliación de nómina",
+      "description": "Resultados de comparación de nómina registrados: diferencias, coincidencias exactas, diferencias toleradas e importes sin atribuir. Los recuentos corresponden a celdas de comparación."
     },
     "analytics-workforce-capacity": {
-      "name": "Workforce capacity",
-      "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
+      "name": "Capacidad de la plantilla",
+      "description": "Estructura actual de la plantilla: equivalentes a tiempo completo previstos, financiados, cubiertos y vacantes."
     }
   },
   "generalLedger": {

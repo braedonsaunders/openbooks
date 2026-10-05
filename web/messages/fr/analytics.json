@@ -1,7 +1,7 @@
 {
   "hub": {
     "title": "Analyses",
-    "description": "Tableaux de bord d'intelligence natifs — rentabilité, trésorerie, clients, fournisseurs et risque forensique, calculés en direct depuis votre grand livre.",
+    "description": "Des analyses en direct pour chaque aspect de votre activité. Créez votre espace d’analyses personnel.",
     "searchPlaceholder": "Rechercher des analyses…",
     "noMatches": "Aucun tableau de bord ne correspond à votre recherche.",
     "planned": "Prévu",

@@ -1047,12 +1047,12 @@
         "description": "将每笔付款拆分为结算明细，附带关联凭证、银行到账和在途计提——每行一条明细，含付款状态与差额。"
       },
       "manufacturing_work_orders": {
-        "label": "Manufacturing work orders",
-        "description": "Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units."
+        "label": "生产工单",
+        "description": "按子公司划分的生产工单生命周期。统计的是工单数量，而非不同计量单位的产量合计。"
       },
       "managed_property_portfolio": {
-        "label": "Managed properties",
-        "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
+        "label": "管理物业",
+        "description": "当前物业组合的生命周期，仅涵盖用户获准访问的法律实体。"
       }
     },
     "columns": {
@@ -2653,15 +2653,15 @@
         "accrued_amount": "计提额"
       },
       "manufacturing_work_orders": {
-        "number": "Order number",
-        "status": "Status",
-        "planned_start": "Planned start",
-        "planned_end": "Planned end"
+        "number": "工单编号",
+        "status": "状态",
+        "planned_start": "计划开始日期",
+        "planned_end": "计划结束日期"
       },
       "managed_property_portfolio": {
-        "code": "Property code",
-        "name": "Property",
-        "status": "Status"
+        "code": "物业代码",
+        "name": "物业",
+        "status": "状态"
       }
     },
     "enumValues": {
@@ -3012,36 +3012,36 @@
       "description": "列出每条已计价的用量发票行，以及其计量器、计价运行、计划版本和源记录追踪信息。"
     },
     "analytics-project-portfolio": {
-      "name": "Project portfolio",
-      "description": "Current project lifecycle: active work, quotations, awards and closed projects."
+      "name": "项目组合",
+      "description": "当前项目生命周期：进行中的工作、报价、已中标项目和已关闭项目。"
     },
     "analytics-asset-lifecycle": {
-      "name": "Asset lifecycle",
-      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+      "name": "固定资产生命周期",
+      "description": "当前固定资产台账：使用中、已提足折旧、已处置和待启用的资产。"
     },
     "analytics-production": {
-      "name": "Production overview",
-      "description": "Current production orders: released, in progress, on hold and completed."
+      "name": "生产概览",
+      "description": "当前生产工单：已下达、进行中、暂停和已完成。"
     },
     "analytics-property-portfolio": {
-      "name": "Property portfolio",
-      "description": "Current managed-property portfolio: active, inactive, sold and total properties."
+      "name": "物业组合",
+      "description": "当前管理物业组合：有效、停用、已出售的物业及物业总数。"
     },
     "analytics-grant-portfolio": {
-      "name": "Grant portfolio",
-      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+      "name": "补助金组合",
+      "description": "当前补助金生命周期：已获批、有效、已结项和草稿。需要非营利组织报表权限。"
     },
     "analytics-allocation-controls": {
-      "name": "Allocation controls",
-      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+      "name": "分摊控制",
+      "description": "当前分摊批次控制：已过账批次、待审批、计算失败和批次总数。"
     },
     "analytics-payroll-reconciliation": {
-      "name": "Payroll reconciliation",
-      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+      "name": "薪资对账",
+      "description": "已保存的薪资比较结果：差异、完全匹配、容差内差异和未归属金额。统计的是比较单元格数量。"
     },
     "analytics-workforce-capacity": {
-      "name": "Workforce capacity",
-      "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
+      "name": "人员编制容量",
+      "description": "当前人员编制：计划、已落实经费、已配备和空缺的全职当量。"
     }
   },
   "generalLedger": {
