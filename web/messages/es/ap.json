@@ -111,6 +111,7 @@
     "overdueCol": "Vencido",
     "openCol": "Abierto",
     "noPayables": "Sin deudas pendientes. Está al día.",
+    "refusedAlert": "Previsión incompleta — sin previsión para {names}; las cifras de vencimientos los excluyen.",
     "stats": {
       "openPayables": "Deudas pendientes",
       "overdue": "Vencido",

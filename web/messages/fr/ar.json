@@ -127,6 +127,7 @@
     "customerSearch": "Rechercher des clients…",
     "customerStatus": "Statut du client",
     "customerOverdueOnly": "Avec un solde en retard",
+    "refusedAlert": "Prévision incomplète — aucune prévision pour {names}, les chiffres attendus les excluent.",
     "configure": "Fonctionnement",
     "configTitle": "Modèle d’encaissement",
     "configDescription": "Mode de tri de la liste de travail et de prévision des dates d’encaissement. Lecture seule — les encaissements n’ont pas de plafond ; le moteur prévoit le paiement des clients.",

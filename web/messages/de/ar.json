@@ -127,6 +127,7 @@
     "customerSearch": "Kunden suchen…",
     "customerStatus": "Kundenstatus",
     "customerOverdueOnly": "Mit überfälligem Saldo",
+    "refusedAlert": "Unvollständige Prognose — keine Prognose für {names}, die erwarteten Zahlen schließen sie aus.",
     "configure": "Funktionsweise",
     "configTitle": "Inkassomodell",
     "configDescription": "So werden die Arbeitsliste sortiert und Zahlungstermine prognostiziert. Schreibgeschützt — für Kundenzahlungen gibt es keine Kapazitätsgrenze; das System prognostiziert den Eingang.",

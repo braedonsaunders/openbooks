@@ -2073,7 +2073,8 @@
       "runway": "Cash Runway",
       "runwayCritical": "Critical",
       "runwayCaution": "Caution",
-      "runwayHealthy": "Healthy"
+      "runwayHealthy": "Healthy",
+      "refusedNote": "Forecast excludes {names} — no forecast available, so vitals understate outflows."
     },
     "panels": {
       "bridge": "Cash Flow Bridge",
@@ -4066,7 +4067,8 @@
     },
     "tabs": {
       "arInflows": "AR Inflows",
-      "apOutflows": "AP Outflows"
+      "apOutflows": "AP Outflows",
+      "unavailable": "No forecast"
     },
     "search": {
       "transactions": "Search {party} or document #…",

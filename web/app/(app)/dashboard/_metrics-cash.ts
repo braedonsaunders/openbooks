@@ -21,12 +21,16 @@ export type CashLowestPoint = {
   week: string
   status: 'healthy' | 'caution' | 'critical'
   horizonWeeks: number
+  /** Names of refused forecast categories (empty = full forecast). */
+  refused: string[]
 }
 
 export type CashBurn = {
   weeklyOutflow: string
   netChange: string
   horizonWeeks: number
+  /** Names of refused forecast categories (empty = full forecast). */
+  refused: string[]
 }
 
 export type CashCoverage = {
@@ -49,6 +53,8 @@ export type CashForecast = {
   weeks: CashForecastWeek[]
   projectedEnd: string
   horizonWeeks: number
+  /** Names of refused forecast categories (empty = full forecast). */
+  refused: string[]
 }
 
 export type CashWidgetMetrics = {
@@ -83,8 +89,8 @@ export async function loadCashWidgetMetrics(
     position = await read()
   } catch (error: unknown) {
     // A missing exchange rate refuses per widget with its message (the
-    // runway tile answers the same condition with no-data); anything else
-    // still throws.
+    // runway tile answers the same condition with its reason); anything
+    // else still throws.
     if (error instanceof MissingExchangeRateError) {
       const refused = { available: false as const, reason: error.message }
       const out: Partial<CashWidgetMetrics> = {}
@@ -98,6 +104,9 @@ export async function loadCashWidgetMetrics(
     }
     throw error
   }
+  // Refused categories understate outflows: every figure below names them so
+  // no tile reads as a healthy fact while the forecast is partial.
+  const refused = (position.unavailableCategories ?? []).map((r) => r.name)
   const out: Partial<CashWidgetMetrics> = {}
   if (need('cashLowest')) {
     out.cashLowest = {
@@ -107,6 +116,7 @@ export async function loadCashWidgetMetrics(
         week: position.lowestWeek,
         status: position.runwayStatus,
         horizonWeeks: position.horizonWeeks,
+        refused,
       },
     }
   }
@@ -117,6 +127,7 @@ export async function loadCashWidgetMetrics(
         weeklyOutflow: position.burnRate,
         netChange: position.netChange,
         horizonWeeks: position.horizonWeeks,
+        refused,
       },
     }
   }
@@ -139,6 +150,7 @@ export async function loadCashWidgetMetrics(
         })),
         projectedEnd: position.projectedEnd,
         horizonWeeks: position.horizonWeeks,
+        refused,
       },
     }
   }

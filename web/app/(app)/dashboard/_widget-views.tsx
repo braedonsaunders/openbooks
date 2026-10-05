@@ -174,7 +174,10 @@ export function WidgetCard({
         : data.runwayWeeks === null
           ? t('metricContext.noBurn')
           : t('metricContext.runwayWeeks', { weeks: displayWeeks(Number(data.runwayWeeks)) })
-      return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value={money(data.projectedCash, { currency: data.baseCurrency })} href="/banking/cash" tone={tone} hint={withAsOf(state)} />
+      // A partial forecast names its refused categories — the projection
+      // above understates outflows, so it never stands alone.
+      const refused = data.runwayRefused.length > 0 ? ` · ${t('metricContext.excludesCategories', { names: data.runwayRefused.join(', ') })}` : ''
+      return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value={money(data.projectedCash, { currency: data.baseCurrency })} href="/banking/cash" tone={tone} hint={withAsOf(`${state}${refused}`)} />
     }
     case 'kpi-overdue-payables':
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.overduePayables'), <AlertTriangle size={15} />, '/ap', 'orange')

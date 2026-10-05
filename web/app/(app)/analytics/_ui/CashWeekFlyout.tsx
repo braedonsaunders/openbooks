@@ -33,6 +33,7 @@ import { shortDateLabel } from '@/lib/format'
 import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
 import { exportCsv } from './exportCsv'
+import { categoryRefusalText } from './category-refusal-text'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
 const ZERO_MONEY = '0.0000'
 const PAGE_SIZE = 25
@@ -191,9 +192,13 @@ export function CashWeekFlyout({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt])
-  const weekCats = categories.filter((c) => compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
+  // Refused categories read as zeros but still get their tab: filtering on a
+  // positive week would silently drop them, hiding the refusal.
+  const weekCats = categories.filter((c) => c.unavailable !== undefined || compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
   const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
-  const catOuts = weekCats.filter((c) => c.direction === 'outflow')
+  // Refused outflow categories stay out of the money rows (their tab names
+  // the refusal) — a 0.0000 row would read as "nothing expected".
+  const catOuts = weekCats.filter((c) => c.direction === 'outflow' && c.unavailable === undefined)
   // No outflow is no coverage figure — never a fabricated 100%.
   const coverage = compareMoney(week.outflow, ZERO_MONEY) > 0 ? divideMoney(week.inflow, week.outflow) : null
   // The gauge is visualization-only; the exact ratio remains the source for
@@ -344,7 +349,9 @@ export function CashWeekFlyout({
           >
             <Cog size={13} className={c.direction === 'inflow' ? 'text-teal-500' : 'text-amber-500'} />
             {c.name}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', c.direction === 'inflow' ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300')}>{money(c.weekly[weekIndex] ?? ZERO_MONEY)}</span>
+            {c.unavailable
+              ? <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">{t('tabs.unavailable')}</span>
+              : <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', c.direction === 'inflow' ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300')}>{money(c.weekly[weekIndex] ?? ZERO_MONEY)}</span>}
           </button>
         ))}
       </div>
@@ -471,6 +478,9 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
   const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
   const tMeta = useTranslations('analytics.cashWeek.meta')
+  // Refusals render through the shared code-selected cashflow message — the
+  // same sentence as the category table, not a second copy.
+  const tCashflow = useTranslations('analytics.cashflow')
   // Method names live with the category editor's catalog (one translated set
   // for the method codes, reused here instead of a second copy).
   const tMethods = useTranslations('analytics.categoryManager')
@@ -555,6 +565,11 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
         <List size={11} />
         {cat.logic || '—'}
       </p>
+      {cat.unavailable ? (
+        <p className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          {categoryRefusalText(tCashflow, cat)}
+        </p>
+      ) : null}
       {Object.keys(cat.meta).filter((k) => k !== 'method' && k !== 'formula').length ? (
         <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
           {Object.entries(cat.meta)

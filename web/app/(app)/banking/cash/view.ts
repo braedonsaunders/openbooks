@@ -139,6 +139,7 @@ export async function loadBankingCash(
     apOutstanding: '0',
     arCoverage: null,
     categories: [],
+    unavailableCategories: [],
     apSettings,
     vendorOptions: [],
     accountOptions: [],

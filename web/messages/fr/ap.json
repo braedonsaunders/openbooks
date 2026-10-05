@@ -116,6 +116,7 @@
     "overdueCol": "En retard",
     "openCol": "Ouvert",
     "noPayables": "Aucune dette ouverte. Vous êtes à jour.",
+    "refusedAlert": "Prévision incomplète — aucune prévision pour {names}, les montants dus les excluent.",
     "stats": {
       "openPayables": "Dettes ouvertes",
       "overdue": "En retard",

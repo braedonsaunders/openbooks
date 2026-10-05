@@ -2073,7 +2073,8 @@
       "runway": "现金跑道",
       "runwayCritical": "严重",
       "runwayCaution": "注意",
-      "runwayHealthy": "健康"
+      "runwayHealthy": "健康",
+      "refusedNote": "预测不含 {names} — 暂无预测，指标低估了支出。",
     },
     "panels": {
       "bridge": "现金桥",
@@ -4190,6 +4191,7 @@
     },
     "tabs": {
       "apOutflows": "应付流出",
+      "unavailable": "无预测",
       "arInflows": "应收流入"
     },
     "breakdownTypes": {

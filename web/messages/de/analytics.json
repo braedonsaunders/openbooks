@@ -2073,7 +2073,8 @@
       "runway": "Cash-Reichweite",
       "runwayCritical": "Kritisch",
       "runwayCaution": "Achtung",
-      "runwayHealthy": "Gesund"
+      "runwayHealthy": "Gesund",
+      "refusedNote": "Die Prognose schließt {names} aus — keine Prognose verfügbar, die Vitals unterschätzen die Ausgaben."
     },
     "panels": {
       "bridge": "Cash-Brücke",
@@ -4190,6 +4191,7 @@
     },
     "tabs": {
       "apOutflows": "AP-Abflüsse",
+      "unavailable": "Keine Prognose",
       "arInflows": "AR-Zuflüsse"
     },
     "breakdownTypes": {

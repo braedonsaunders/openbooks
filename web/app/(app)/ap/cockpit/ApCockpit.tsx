@@ -65,6 +65,13 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
         <StatTile icon={Timer} accent="violet" label={t('stats.dpo')} value={data.dpo === null ? '—' : t('stats.days', { n: data.dpo })} sub={t('stats.dpoSub')} />
       </div>
 
+      {data.unavailableCategories.length > 0 ? (
+        <p className="flex shrink-0 items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+          <span>{t('refusedAlert', { names: data.unavailableCategories.map((r) => r.name).join(', ') })}</span>
+        </p>
+      ) : null}
+
       {/* Planner + right column — fill remaining height */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
         <CockpitPanel title={t('panels.payRun')} icon={ListChecks} actions={gear} bodyClassName="min-h-0 overflow-hidden p-0" className="min-h-0 lg:col-span-2">

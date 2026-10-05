@@ -198,6 +198,7 @@
     "overdueCol": "Overdue",
     "openCol": "Open",
     "noPayables": "No open payables. You're all caught up.",
+    "refusedAlert": "Payments forecast incomplete — no forecast for {names}, so due figures exclude them.",
     "stats": {
       "openPayables": "Open payables",
       "overdue": "Overdue",

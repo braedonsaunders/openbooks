@@ -197,6 +197,7 @@
     "overdueCol": "Vencido",
     "openCol": "Em aberto",
     "noPayables": "Sem contas a pagar em aberto. Você está em dia.",
+    "refusedAlert": "Previsão incompleta — sem previsão para {names}; os valores devidos os excluem.",
     "stats": {
       "openPayables": "Contas a pagar em aberto",
       "overdue": "Vencido",

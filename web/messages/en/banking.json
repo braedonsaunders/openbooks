@@ -701,6 +701,7 @@
     "noAccounts": "No bank accounts yet. Connect one on the Banking overview to see balances and runway here.",
     "noAccountsAction": "Go to Banking",
     "negativeAlert": "Projected to go cash-negative — low of {amount} the week of {date}. <ap>Slow payables</ap> or <ar>accelerate collections</ar>.",
+    "refusedAlert": "Forecast incomplete — no forecast for {names}, so the figures exclude them. Set them up in the category editor.",
     "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week.",
     "configure": "Configure forecast",
     "configTitle": "Cash forecast configuration",

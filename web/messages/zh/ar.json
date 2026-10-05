@@ -127,6 +127,7 @@
     "customerSearch": "搜索客户…",
     "customerStatus": "客户状态",
     "customerOverdueOnly": "有逾期余额",
+    "refusedAlert": "预测不完整 — {names} 没有预测，因此预计数据不含这些类别。",
     "configure": "工作原理",
     "configTitle": "收款预测模型",
     "configDescription": "说明工作清单排序和收款日期预测方式。只读——收款没有容量上限；系统预测客户何时付款。",

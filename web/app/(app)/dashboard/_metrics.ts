@@ -261,6 +261,12 @@ export type DashboardMetrics = {
    * when the figures above are authoritative or the widget was never queried.
    */
   runwayRefusal: string | null
+  /**
+   * Names of refused forecast categories behind the runway above (empty =
+   * full forecast) — the tile appends them so a partial forecast never
+   * reads as a healthy figure.
+   */
+  runwayRefused: string[]
   /** Unmatched bank statement lines awaiting reconciliation. A count, never
    * money — there is no currency to mix, by construction. */
   unreconciledItems: number
@@ -512,7 +518,7 @@ export async function loadDashboardMetrics(
   const wantPl = need('revenueMtd', 'expensesMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
-  const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'runwayRefusal')
+  const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'runwayRefusal', 'runwayRefused')
   // One cashPosition call per request, shared by the runway slot below and
   // the cash widget reader (which receives it on the widget context): the
   // first caller runs the config read plus the position, later callers reuse
@@ -688,6 +694,7 @@ export async function loadDashboardMetrics(
           lowest: p.lowestCash,
           lowestWeek: p.lowestWeek,
           refusal: null as string | null,
+          refused: (p.unavailableCategories ?? []).map((r) => r.name),
         }))
         .catch((e: unknown) => {
           if (e instanceof MissingExchangeRateError) {
@@ -698,6 +705,7 @@ export async function loadDashboardMetrics(
               lowest: null,
               lowestWeek: null,
               refusal: e.message,
+              refused: [] as string[],
             }
           }
           throw e
@@ -911,6 +919,7 @@ export async function loadDashboardMetrics(
     lowestCash: runway?.lowest ?? null,
     lowestCashWeek: runway?.lowestWeek ?? null,
     runwayRefusal: runway?.refusal ?? null,
+    runwayRefused: runway?.refused ?? [],
     unreconciledItems: recon?.unreconciledItems ?? 0,
     pendingExpenses: expenses?.pendingExpenses ?? 0,
     closeRuns: closeReadiness.runs ?? [],
@@ -976,7 +985,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'asOfDate'],
   'list-top-customers': ['topCustomers'],
   'list-top-vendors': ['topVendors'],
-  'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'runwayRefusal', 'asOfDate'],
+  'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'runwayRefusal', 'runwayRefused', 'asOfDate'],
   'kpi-items-to-reconcile': ['unreconciledItems'],
   'kpi-expenses-awaiting-approval': ['pendingExpenses'],
   'resourcing-pulse': ['resourcingPulse'],
@@ -1095,6 +1104,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   lowestCash: null,
   lowestCashWeek: null,
   runwayRefusal: null,
+  runwayRefused: [],
   unreconciledItems: 0,
   pendingExpenses: 0,
   closeRuns: [],

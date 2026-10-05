@@ -130,6 +130,7 @@
     "dpo": "DPO {days}",
     "weekOf": "{date}の週",
     "noBurn": "正味の流出なし",
+    "excludesCategories": "{names} を除く",
     "cashShortfall": "資金不足",
     "runwayWeeks": "{weeks, plural, one {# 週間の資金繰り} other {# 週間の資金繰り}}",
     "resourcingPulse": "待機 {bench}人 · 終了予定 {rolloffs}人 · 過剰割当 {overallocated}週"

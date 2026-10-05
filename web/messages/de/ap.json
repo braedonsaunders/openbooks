@@ -198,6 +198,7 @@
     "overdueCol": "Überfällig",
     "openCol": "Offen",
     "noPayables": "Keine offenen Verbindlichkeiten. Sie sind auf dem neuesten Stand.",
+    "refusedAlert": "Unvollständige Prognose — keine Prognose für {names}, die fälligen Zahlen schließen sie aus.",
     "stats": {
       "openPayables": "Offene Verbindlichkeiten",
       "overdue": "Überfällig",

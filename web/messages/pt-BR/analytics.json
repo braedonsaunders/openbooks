@@ -2073,7 +2073,8 @@
       "runway": "Autonomia de caixa",
       "runwayCritical": "Crítica",
       "runwayCaution": "Atenção",
-      "runwayHealthy": "Saudável"
+      "runwayHealthy": "Saudável",
+      "refusedNote": "A previsão exclui {names} — sem previsão disponível, os indicadores subestimam as saídas.",
     },
     "panels": {
       "bridge": "Ponte de caixa",
@@ -4190,6 +4191,7 @@
     },
     "tabs": {
       "apOutflows": "Saídas de contas a pagar",
+      "unavailable": "Sem previsão",
       "arInflows": "Entradas de contas a receber"
     },
     "breakdownTypes": {

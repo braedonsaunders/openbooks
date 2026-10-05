@@ -127,6 +127,7 @@
     "customerSearch": "Buscar clientes…",
     "customerStatus": "Status do cliente",
     "customerOverdueOnly": "Com saldo vencido",
+    "refusedAlert": "Previsão incompleta — sem previsão para {names}; os valores previstos os excluem.",
     "configure": "Como funciona",
     "configTitle": "Modelo de cobrança",
     "configDescription": "Como a lista de trabalho é ordenada e as datas de recebimento são previstas. Somente leitura — cobranças não têm limite; o mecanismo prevê quando os clientes pagarão.",
