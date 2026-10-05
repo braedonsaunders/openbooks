@@ -110,10 +110,13 @@ function parseCode(value: unknown): string {
 
 function parsePercent(value: unknown): string {
   const percent = canonicalDecimal(value, 4);
+  if (percent === null) {
+    throw refusal(`Promotion percent ${String(value)} is not a usable rate`, "invalid_input", 422, "Enter a percent above zero up to 100");
+  }
   // Percent units are ten-thousandths: 10.0000 reads as 100000. Compared as
   // integers, never floats.
-  const units = percent === null ? null : toUnits(percent);
-  if (units === null || units <= 0n || units > 100_0000n) {
+  const units = toUnits(percent);
+  if (units <= 0n || units > 100_0000n) {
     throw refusal(`Promotion percent ${String(value)} is not a usable rate`, "invalid_input", 422, "Enter a percent above zero up to 100");
   }
   return percent;
