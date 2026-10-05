@@ -521,6 +521,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'setup-readiness-check-card',
   'setup-readiness-hero',
   'setup-section',
+  'setup-tax-provider',
   'setup-wizard',
   'show-inactives-toggle',
   'single-book-label',

@@ -2330,6 +2330,40 @@
       "runSummary": "{observations} Beobachtungen · {inserted} eingefügt · {updated} aktualisiert · {preserved} manuelle Überschreibungen beibehalten",
       "overridePolicy": "In der Einrichtung bearbeitete Kurse werden zu geschützten manuellen Überschreibungen. Anbieterimporte ersetzen sie niemals."
     },
+    "taxProvider": {
+      "title": "Steuersatz-Anbieter",
+      "description": "Verkaufssteuer mit Avalara oder TaxJar bepreisen und gebuchte Dokumente übertragen, damit Erklärungen und Meldungen gespeist werden können.",
+      "provider": "Anbieter",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "Eigener Steuerdienst",
+        "manual": "Manuelle Sätze"
+      },
+      "providerHelp": {
+        "avalara": "Bepreist mit SalesOrder und überträgt mit SalesInvoice. Das Stornieren eines Dokuments sendet einen Void.",
+        "taxjar": "Bepreist die Steuer einer Bestellung und überträgt Bestellungen und Erstattungen. Das Stornieren eines Dokuments löscht es.",
+        "custom_http": "Ihr eigener Steuerdienst hinter dem Anbietervertrag. Übertragungen folgen denselben Wiederholungsregeln.",
+        "manual": "Kein Anbieter. Die Steuer bucht aus Ihren eigenen Steuercodes und nichts wird übertragen."
+      },
+      "displayName": "Konfigurationsname",
+      "displayNamePlaceholder": "Produktives AvaTax-Konto",
+      "enabled": "Diesen Anbieter für Steuerberechnungen verwenden",
+      "commitTransactions": "Gebuchte Verkäufe an den Anbieter übertragen",
+      "commitHelp": "Das Buchen einer Verkaufsrechnung, Gutschrift, Barverkaufs oder Erstattung sendet den Vorgang an den Anbieter; Stornieren sendet einen Void. Ausschalten, um weiter zu bepreisen ohne zu übertragen.",
+      "saved": "Steuersatz-Anbieter gespeichert.",
+      "advanced": "Erweitert",
+      "advancedSummary": "Bepreisungspräferenz: {prefer}",
+      "preferOn": "Anbieter zuerst",
+      "preferOff": "eigene Codes zuerst",
+      "preferProvider": "Anbieter gegenüber eigenen Steuercodes bevorzugen",
+      "preferProviderHelp": "Wenn beide eine Position bepreisen könnten, gewinnt der Anbieter. Ihre eigenen Codes bleiben die Rückfallebene.",
+      "status": "Anbieterstatus",
+      "lastSuccess": "Letzter erfolgreicher Aufruf",
+      "commitState": "Übertragungen",
+      "commitOn": "Ein",
+      "commitOff": "Aus"
+    },
     "paymentOperations": {
       "title": "Zahlungen & Banking",
       "description": "Konfigurieren Sie Zahlungswege, Finanzierungsprofile, Zeitpläne, Genehmigungen, Zustellung und Lastschriftmandate.",
@@ -2562,6 +2596,11 @@
         "title": "Steuercodes",
         "singularTitle": "Steuercode",
         "description": "Sätze, die Sie berechnen und zahlen, sowie die Konten, auf die sie gebucht werden."
+      },
+      "marketplace-facilitators": {
+        "title": "Marktplatz-Vermittler",
+        "singularTitle": "Marktplatz-Vermittler",
+        "description": "Marktplätze, die die Steuer für Sie einziehen und abführen, sowie das Verrechnungskonto, auf das ihre Steuer beglichen wird."
       },
       "tax-rates": {
         "title": "Steuersätze",
@@ -3917,7 +3956,13 @@
         "collected": "Vereinnahmte Steuer (Output)",
         "paid": "Gezahlte Steuer / Vorsteuer (Input)",
         "net": "Nettobetrag",
-        "tax": "Steuerbetrag"
+        "tax": "Steuerbetrag",
+        "marketplaceTax": "Vom Marktplatz eingezogene Steuer (gemeldet, nicht geschuldet)",
+        "marketplaceSales": "Marktplatz-Umsätze in staatlichen Erklärungen"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "Der Marktplatz zieht die Steuer ein und begleicht sie",
+        "net": "Das Dokument ist bereits netto der Marktplatz-Steuer"
       },
       "sign": {
         "positive": "Addieren (+)",

@@ -29,6 +29,7 @@ import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/r
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
+import { TaxProviderPage } from './TaxProviderPage'
 import { SetupDrawer } from './SetupDrawer'
 import { setupRecordTabs } from './SetupEntitySection'
 import { TaxReturnBoxesTab, type TaxReturnBoxRow } from './TaxReturnBoxesTab'
@@ -546,4 +547,10 @@ export async function SetupFxSlot() {
   const authz = await requirePermission('admin.setup.manage')
   await requireFeatureEnabled(authz.user.orgId, 'multiCurrency')
   return <FxProviderPage orgId={authz.user.orgId} />
+}
+
+/** Tax rate-provider page, rendered from the session alone. */
+export async function SetupTaxProviderSlot() {
+  const authz = await requirePermission('admin.setup.manage')
+  return <TaxProviderPage orgId={authz.user.orgId} />
 }

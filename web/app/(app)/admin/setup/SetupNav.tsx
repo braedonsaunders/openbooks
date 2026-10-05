@@ -223,6 +223,7 @@ export function SetupNav({
               : group.key === 'taxes'
               ? [
                   { href: '/admin/setup/tax-setup', label: t('taxSetup.navTitle'), iconKey: 'landmark' },
+                  { href: '/admin/setup/tax-provider', label: t('taxProvider.title'), iconKey: 'cloud-upload' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),

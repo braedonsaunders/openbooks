@@ -1,6 +1,21 @@
 /** Setup-registry taxes entities (split from registry.ts; pure moves only). */
-import type { SetupEntity } from '../types'
-import { APPLIES_TO, TAX_CALCULATION_TYPES, TAX_BASIS, SUBMISSION_CHANNELS, GOVERNMENT_FORMATS, TAX_SIGN, JURISDICTION_LEVELS, TAX_TYPES, FILING_FREQUENCIES } from '../options'
+import type { SetupEntity, SetupEntityValidationHook } from '../types'
+import { APPLIES_TO, TAX_CALCULATION_TYPES, TAX_BASIS, MARKETPLACE_COLLECTION_MODES, SUBMISSION_CHANNELS, GOVERNMENT_FORMATS, TAX_SIGN, JURISDICTION_LEVELS, TAX_TYPES, FILING_FREQUENCIES } from '../options'
+
+// The facilitator invariant (suitable clearing account, no tax-control
+// double-use) lives in the engine beside the posting boundary; the hook
+// only adapts its refusal to the Setup write contract (an error string).
+// The engine stays out of the top-level imports: this module rides the
+// client registry bundle and the hook only ever runs server-side.
+const validateMarketplaceFacilitatorWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
+  const { validateMarketplaceFacilitatorWrite } = await import('@openbooks/engine/src/tax/marketplace-facilitators.ts')
+  try {
+    await validateMarketplaceFacilitatorWrite(executor, orgId, body as Record<string, unknown>, rowId)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : 'That marketplace facilitator could not be saved'
+  }
+}
 
 export const TAX_ENTITIES: SetupEntity[] = [
   // --- Taxes ---------------------------------------------------------------
@@ -245,6 +260,36 @@ export const TAX_ENTITIES: SetupEntity[] = [
       { key: 'sign', kind: 'select', options: TAX_SIGN },
       { key: 'formula', kind: 'text' },
       { key: 'pdfField', kind: 'text' },
+    ],
+  },
+  {
+    key: 'marketplace-facilitators',
+    table: 'marketplace_facilitators',
+    singularTitleKey: 'entities.marketplace-facilitators.singularTitle',
+    actorCols: true,
+    groupKey: 'taxes',
+    iconKey: 'store',
+    orgScoped: true,
+    naturalKey: 'name',
+    hasActive: true,
+    docSlug: 'marketplace-facilitator-tax',
+    validateWrite: validateMarketplaceFacilitatorWrite,
+    columns: [
+      { key: 'name', kind: 'code' },
+      { key: 'clearingAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'collectionMode', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true, lockedOnEdit: true },
+      // The asset account the marketplace settlement relieves. Setup
+      // refuses tax control accounts here: facilitator tax must never
+      // re-enter the merchant's returns through its own clearing account.
+      { key: 'clearingAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'collectionMode', kind: 'select', options: MARKETPLACE_COLLECTION_MODES, keepDefault: true },
+      // Two-letter states where this facilitator collects, as chips.
+      { key: 'states', kind: 'stringArray', arrayStorage: 'text' },
+      { key: 'isActive', kind: 'boolean' },
     ],
   },
 ]

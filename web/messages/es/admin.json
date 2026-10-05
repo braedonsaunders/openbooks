@@ -2210,6 +2210,40 @@
       "runSummary": "{observations} observaciones · {inserted} insertadas · {updated} actualizadas · {preserved} anulaciones manuales conservadas",
       "overridePolicy": "Los tipos editados en Configuración se convierten en anulaciones manuales protegidas. Las importaciones nunca los reemplazan."
     },
+    "taxProvider": {
+      "title": "Proveedor de tasas de impuesto",
+      "description": "Calcule el impuesto sobre las ventas con Avalara o TaxJar, y confirme los documentos contabilizados para alimentar declaraciones.",
+      "provider": "Proveedor",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "Servicio fiscal propio",
+        "manual": "Tasas manuales"
+      },
+      "providerHelp": {
+        "avalara": "Cotiza con SalesOrder y confirma con SalesInvoice. Anular un documento envía una anulación.",
+        "taxjar": "Cotiza el impuesto de un pedido y confirma pedidos y reembolsos. Anular un documento lo elimina.",
+        "custom_http": "Su propio servicio fiscal tras el contrato del proveedor. Las confirmaciones siguen las mismas reglas de reintento.",
+        "manual": "Sin proveedor. El impuesto se contabiliza desde sus propios códigos y nada se confirma."
+      },
+      "displayName": "Nombre de la configuración",
+      "displayNamePlaceholder": "Cuenta productiva de AvaTax",
+      "enabled": "Usar este proveedor para cotizar impuestos",
+      "commitTransactions": "Confirmar las ventas contabilizadas al proveedor",
+      "commitHelp": "Contabilizar una factura, nota de crédito, venta en efectivo o reembolso envía la transacción al proveedor; anular envía una anulación. Desactive para seguir cotizando sin confirmar.",
+      "saved": "Proveedor de tasas guardado.",
+      "advanced": "Avanzado",
+      "advancedSummary": "Preferencia de cotización: {prefer}",
+      "preferOn": "proveedor primero",
+      "preferOff": "códigos propios primero",
+      "preferProvider": "Preferir el proveedor sobre sus propios códigos",
+      "preferProviderHelp": "Cuando ambos podrían calcular una línea, gana el proveedor. Sus propios códigos quedan como reserva.",
+      "status": "Estado del proveedor",
+      "lastSuccess": "Última llamada exitosa",
+      "commitState": "Confirmaciones",
+      "commitOn": "Sí",
+      "commitOff": "No"
+    },
     "paymentOperations": {
       "title": "Pagos y banca",
       "description": "Configure redes de pago, perfiles bancarios, programaciones, aprobaciones, entrega y mandatos de débito.",
@@ -2442,6 +2476,11 @@
         "title": "Códigos de impuesto",
         "singularTitle": "Código de impuesto",
         "description": "Las tasas que cobra y paga, y las cuentas en las que se contabilizan."
+      },
+      "marketplace-facilitators": {
+        "title": "Facilitadores de mercado",
+        "singularTitle": "Facilitador de mercado",
+        "description": "Mercados que recaudan e ingresan el impuesto por usted, y la cuenta de compensación a la que se liquida su impuesto."
       },
       "tax-rates": {
         "title": "Tasas de impuesto",
@@ -3797,7 +3836,13 @@
         "collected": "Impuesto cobrado (repercutido)",
         "paid": "Impuesto pagado / créditos (soportado)",
         "net": "Importe neto",
-        "tax": "Importe fiscal"
+        "tax": "Importe fiscal",
+        "marketplaceTax": "Impuesto recaudado por el mercado (informado, no adeudado)",
+        "marketplaceSales": "Ventas del mercado en las declaraciones estatales"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "El mercado recauda el impuesto y lo liquida",
+        "net": "El documento ya es neto del impuesto del mercado"
       },
       "sign": {
         "positive": "Sumar (+)",

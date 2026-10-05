@@ -2255,6 +2255,40 @@
       "runSummary": "{observations} observations · {inserted} inserted · {updated} updated · {preserved} manual overrides preserved",
       "overridePolicy": "Rates edited in Setup become protected manual overrides. Provider imports never replace them."
     },
+    "taxProvider": {
+      "title": "Tax rate provider",
+      "description": "Price sales tax with Avalara or TaxJar, and commit posted documents so returns and filing can be fed.",
+      "provider": "Provider",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "Custom tax service",
+        "manual": "Manual rates"
+      },
+      "providerHelp": {
+        "avalara": "Quotes with SalesOrder and commits with SalesInvoice. Voiding a document sends a void.",
+        "taxjar": "Quotes tax for an order and commits orders and refunds. Voiding a document deletes it.",
+        "custom_http": "Your own tax service behind the provider contract. Commits follow the same retry rules.",
+        "manual": "No provider. Tax posts from your own tax codes and nothing is committed anywhere."
+      },
+      "displayName": "Configuration name",
+      "displayNamePlaceholder": "Production AvaTax account",
+      "enabled": "Use this provider for tax quotes",
+      "commitTransactions": "Commit posted sales to the provider",
+      "commitHelp": "Posting a sales invoice, credit note, cash sale or refund sends the transaction to the provider; voiding sends a void. Turn off to keep quoting without committing.",
+      "saved": "Tax rate provider saved.",
+      "advanced": "Advanced",
+      "advancedSummary": "Quoting preference: {prefer}",
+      "preferOn": "provider first",
+      "preferOff": "own codes first",
+      "preferProvider": "Prefer the provider over your own tax codes",
+      "preferProviderHelp": "When both could price a line, the provider wins. Your own codes stay as the fallback.",
+      "status": "Provider status",
+      "lastSuccess": "Last successful call",
+      "commitState": "Commits",
+      "commitOn": "On",
+      "commitOff": "Off"
+    },
     "paymentOperations": {
       "title": "Payments & Banking",
       "description": "Configure payment rails, funding profiles, schedules, approvals, delivery, and debit mandates.",
@@ -2497,6 +2531,11 @@
         "title": "Tax Codes",
         "singularTitle": "Tax Code",
         "description": "Rates you charge and pay, and the accounts they post to."
+      },
+      "marketplace-facilitators": {
+        "title": "Marketplace Facilitators",
+        "singularTitle": "Marketplace Facilitator",
+        "description": "Marketplaces that collect and remit tax for you, and the clearing account their tax settles to."
       },
       "tax-rates": {
         "title": "Tax Rates",
@@ -3894,7 +3933,13 @@
         "collected": "Tax collected (output)",
         "paid": "Tax paid / ITCs (input)",
         "net": "Net amount",
-        "tax": "Tax amount"
+        "tax": "Tax amount",
+        "marketplaceTax": "Marketplace-collected tax (reported, not owed)",
+        "marketplaceSales": "Marketplace sales on state returns"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "Marketplace collects the tax and settles it",
+        "net": "Document is already net of the marketplace tax"
       },
       "sign": {
         "positive": "Add (+)",

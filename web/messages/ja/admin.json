@@ -2330,6 +2330,40 @@
       "runSummary": "{observations}件の観測値 · {inserted}件挿入 · {updated}件更新 · {preserved}件の手動上書きを保持",
       "overridePolicy": "セットアップで編集されたレートは、保護された手動の上書きになります。プロバイダーのインポートがそれらを置き換えることはありません。"
     },
+    "taxProvider": {
+      "title": "税率プロバイダー",
+      "description": "AvalaraまたはTaxJarで売上税を見積もり、転記済み文書を確定して申告に連携します。",
+      "provider": "プロバイダー",
+      "providers": {
+        "avalara": "Avalara AvaTax",
+        "taxjar": "TaxJar",
+        "custom_http": "自社の税務サービス",
+        "manual": "手動レート"
+      },
+      "providerHelp": {
+        "avalara": "SalesOrderで見積もり、SalesInvoiceで確定します。文書の無効化はボイドを送信します。",
+        "taxjar": "注文の税金を見積もり、注文と返金分を確定します。文書の無効化は削除します。",
+        "custom_http": "プロバイダー契約の背後にある自社の税務サービス。確定は同じ再試行規則に従います。",
+        "manual": "プロバイダーなし。税金は自社の税コードから転記され、何も確定されません。"
+      },
+      "displayName": "構成名",
+      "displayNamePlaceholder": "本番AvaTaxアカウント",
+      "enabled": "税見積もりにこのプロバイダーを使用する",
+      "commitTransactions": "転記済み売上をプロバイダーに確定する",
+      "commitHelp": "売上請求書・クレジットノート・現金売上・返金を転記するとプロバイダーに送信され、無効化するとボイドが送信されます。確定せず見積もりだけ行う場合はオフにします。",
+      "saved": "税率プロバイダーを保存しました。",
+      "advanced": "詳細設定",
+      "advancedSummary": "見積り優先：{prefer}",
+      "preferOn": "プロバイダー優先",
+      "preferOff": "自社コード優先",
+      "preferProvider": "自社の税コードよりプロバイダーを優先する",
+      "preferProviderHelp": "両方が明細を見積もれる場合、プロバイダーが勝ちます。自社のコードは予備として残ります。",
+      "status": "プロバイダーの状態",
+      "lastSuccess": "最後の成功した呼び出し",
+      "commitState": "確定",
+      "commitOn": "オン",
+      "commitOff": "オフ"
+    },
     "paymentOperations": {
       "title": "支払と銀行取引",
       "description": "支払レール、資金調達プロファイル、スケジュール、承認、送付、および口座振替委任状を設定します。",
@@ -2562,6 +2596,11 @@
         "title": "税コード",
         "singularTitle": "税コード",
         "description": "課税および支払するレートと、それらが記帳される勘定。"
+      },
+      "marketplace-facilitators": {
+        "title": "マーケットプレイス仲介者",
+        "singularTitle": "マーケットプレイス仲介者",
+        "description": "あなたに代わって税金を徴収・納付するマーケットプレイスと、その税金が精算される清算勘定。"
       },
       "tax-rates": {
         "title": "税率",
@@ -3917,7 +3956,13 @@
         "collected": "税収受（アウトプット）",
         "paid": "税支払／仕入税額控除（インプット）",
         "net": "正味金額",
-        "tax": "税額"
+        "tax": "税額",
+        "marketplaceTax": "マーケットプレイス徴収税（報告のみ、納付不要）",
+        "marketplaceSales": "州申告におけるマーケットプレイス売上"
+      },
+      "marketplaceCollectionMode": {
+        "gross": "マーケットプレイスが税金を徴収・精算する",
+        "net": "文書はすでにマーケットプレイス税控除後の金額"
       },
       "sign": {
         "positive": "加算（+）",

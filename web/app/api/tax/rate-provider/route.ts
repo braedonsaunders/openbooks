@@ -62,6 +62,7 @@ const taxRateProviderConfigSchema = z.object({
   displayName: z.string().optional(),
   isEnabled: z.boolean({ error: "isEnabled must be a boolean" }),
   preferProvider: z.boolean().optional(),
+  commitTransactions: z.boolean({ error: "commitTransactions must be a boolean" }).optional(),
   // Provider-specific settings are a JSONB column interpreted by the selected provider.
   settings: z.record(z.string(), z.json()).optional(),
   apiKey: z.union([z.string().min(1), z.null()], { error: "apiKey must be null or a non-empty string" }).optional(),
@@ -96,6 +97,7 @@ async function legacyPUT(req: Request, ctx: { params: Promise<unknown> }, inject
         displayName: body.displayName,
         isEnabled: body.isEnabled,
         preferProvider: body.preferProvider ?? true,
+        commitTransactions: body.commitTransactions,
         settings: body.settings ?? {},
         apiKey: body.apiKey,
         accountId: body.accountId,
