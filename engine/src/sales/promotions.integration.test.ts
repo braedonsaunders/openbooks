@@ -229,3 +229,40 @@ test('buy X get Y frees units only from complete buy-plus-get groups', { skip: !
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('a promotion applies once per document and stacked discounts never exceed the lines', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enablePromotions(org.orgId)
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const promotions: Record<string, string> = {}
+    for (const code of ['SIXTY', 'SIXTYMORE', 'TENMORE']) {
+      const promotion = await withOrg(org.orgId, () => db.transaction((tx) => createPromotion(tx, org.orgId, actorId, {
+        code, name: code, kind: 'percent', percentValue: code === 'TENMORE' ? '10' : '60', discountAccountId: org.accounts.revenue,
+      })))
+      await withOrg(org.orgId, () => db.transaction((tx) => setPromotionStatus(tx, org.orgId, actorId, promotion.id, 'active')))
+      promotions[code] = promotion.id
+    }
+    const documentId = await withOrg(org.orgId, () => draftSale(org, [
+      { itemId: org.items.fifo, quantity: '1', unitPrice: '1000', amount: '1000' },
+    ]))
+    const apply = (code: string) => withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
+      documentId, code, allowedSubsidiaryIds: null,
+    })))
+    assert.equal((await apply('SIXTY')).discountMinor, '60000')
+    await assert.rejects(apply('sixty'), (error: unknown) => error instanceof PromotionRefusal
+      && error.code === 'already_applied' && error.status === 409
+      && /SIXTY is already applied to INV-/.test(error.message) && /Remove line/.test(error.remedy ?? ''))
+    assert.deepEqual((await withOrg(org.orgId, () => discountLines(org.orgId, documentId))).map((line) => line.amount), ['-600.0000'])
+    assert.equal(await withOrg(org.orgId, () => usageCount(org.orgId, promotions.SIXTY!)), 1)
+    // A second 60% code is capped at the 400.00 still undiscounted.
+    assert.equal((await apply('SIXTYMORE')).discountMinor, '40000')
+    const stored = await withOrg(org.orgId, () => discountLines(org.orgId, documentId))
+    assert.equal(stored.reduce((sum, line) => sum + toUnits(line.amount), 0n), toUnits('-1000'))
+    await assert.rejects(apply('TENMORE'), (error: unknown) => error instanceof PromotionRefusal
+      && error.code === 'fully_discounted' && /fully discounted/.test(error.message) && /1000\.00 CAD/.test(error.message))
+    assert.equal(await withOrg(org.orgId, () => usageCount(org.orgId, promotions.TENMORE!)), 0)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
