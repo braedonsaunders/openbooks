@@ -672,7 +672,9 @@ export async function loadDashboardMetrics(
   // floored at zero.
   const sideTile = (items: OpenItem[]): { open: string; overdue: string } => {
     const summary = summariseSide(items, parseISO(today), ZERO_MONEY, 0)
-    const current = summary.buckets.find((b) => b.label === 'Current')?.amount ?? ZERO_MONEY
+    // Buckets match by index, never by label: summariseSide builds Current
+    // first by construction (see purchasing.ts).
+    const current = summary.buckets[0]?.amount ?? ZERO_MONEY
     const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY
     return { open: summary.outstanding, overdue }
   }
