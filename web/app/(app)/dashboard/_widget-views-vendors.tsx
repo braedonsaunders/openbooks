@@ -1,6 +1,7 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { formatPercent01 } from '@/lib/format'
 import { Scale, TimerReset, Zap } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
@@ -31,6 +32,7 @@ const BAND_TONE: Record<string, MetricTone> = {
 
 function VendorConcentrationTile({ data }: { data: WidgetCardProps['data'] }) {
   const t = useTranslations('dashboard')
+  const locale = useLocale()
   const { number } = useViewerFormat()
   const hhi = data.concentrationHhi
   const share = data.concentrationTop5Share
@@ -56,7 +58,7 @@ function VendorConcentrationTile({ data }: { data: WidgetCardProps['data'] }) {
       href="/analytics/vendor-performance"
       tone={BAND_TONE[data.concentrationBand ?? ''] ?? 'slate'}
       hint={t('widgets.kpiVendorConcentrationHint', {
-        share: `${Math.round(share.value * 100)}%`,
+        share: formatPercent01(share.value, locale, 0),
         period: period ?? '',
       })}
     />
@@ -65,6 +67,7 @@ function VendorConcentrationTile({ data }: { data: WidgetCardProps['data'] }) {
 
 function VendorPaymentTile({ data }: { data: WidgetCardProps['data'] }) {
   const t = useTranslations('dashboard')
+  const locale = useLocale()
   const ta = useTranslations('analytics')
   const { money } = useMoney()
   const rate = data.vendorOnTimeRate
@@ -91,7 +94,7 @@ function VendorPaymentTile({ data }: { data: WidgetCardProps['data'] }) {
     <MetricTile
       icon={<TimerReset size={15} />}
       label={t('widgets.kpiVendorPayment')}
-      value={`${Math.round(rate.value * 100)}%`}
+      value={formatPercent01(rate.value, locale, 0)}
       href="/analytics/vendor-performance"
       tone={tone}
       hint={t('widgets.kpiVendorPaymentHint', {

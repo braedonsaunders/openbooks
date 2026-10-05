@@ -2948,7 +2948,8 @@
       "cliff": {
         "title": "購買・販売速度の不均衡",
         "message": "購買発注速度（月{po}%）が販売受注速度（月{so}%）を{gap}%上回っています — 発注/受注比率：{ratio}倍",
-        "actionWithMonths": "約{months}か月後に資金圧迫のリスク。購買コミットメントを見直してください。",
+        "actionWithMonths": "約{months}期間後に資金圧迫のリスク。購買コミットメントを見直してください。",
+        "actionBreached": "比率はすでに目標を突破しています — 圧力は目前です。購買コミットメントを直ちに見直してください。",
         "actionMonitor": "購買速度を監視し販売パイプラインと整合させてください。",
         "messageNoVelocity": "発注/受注比率は{ratio}倍ですが、測定可能な速度がありません"
       },
@@ -3205,6 +3206,7 @@
       "velocityEngine": {
         "label": "速度エンジン",
         "note": "（期末/期首）^(1/期間数) − 1、最小基準{minBase}",
+        "noteUnset": "（期末/期首）^(1/期間数) − 1、下限なし — すべての系列は最初の月から評価",
         "value": "月次CAGR"
       },
       "velocityThresholds": {
@@ -3242,7 +3244,7 @@
     },
     "details": {
       "anomaly": "{month}に平均から{sigma}σ",
-      "cliff": "差{gap}%、比率{ratio}倍",
+      "cliff": "差{gap}、比率{ratio}倍",
       "cliffItem": "発注・受注の速度",
       "concentration": "支出の{share}、{trend}",
       "fragmentation": "月{txns}件、平均{avg}",

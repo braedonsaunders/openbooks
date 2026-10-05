@@ -116,7 +116,9 @@ for (const scenario of ['empty', 'balanced', 'excess purchases'] as const) {
         const { summary } = data.commitmentCliff;
         assert.equal(summary.totalPO, scenario === 'empty' ? '0.0000' : scenario === 'excess purchases' ? '250.0000' : '100.0000');
         assert.equal(summary.totalSO, scenario === 'empty' ? '0.0000' : '100.0000');
-        assert.equal(summary.ratio, scenario === 'empty' ? 0 : scenario === 'excess purchases' ? 2.5 : 1);
+        // With no sales-order base the coverage ratio is unknown, not a
+        // healthy-looking zero.
+        assert.equal(summary.ratio, scenario === 'empty' ? null : scenario === 'excess purchases' ? 2.5 : 1);
         assert.equal(summary.status, scenario === 'excess purchases' ? 'critical' : 'healthy');
         // A single commitment month is no measurable velocity: null, never a
         // fabricated 0.

@@ -2948,7 +2948,8 @@
       "cliff": {
         "title": "Desequilibrio entre velocidad de compras y ventas",
         "message": "La velocidad de OC ({po} %/mes) supera la de OV ({so} %/mes) en un {gap} % — ratio OC/OV: {ratio}×",
-        "actionWithMonths": "Riesgo de presión de caja en ~{months} meses. Revisar los compromisos de compra.",
+        "actionWithMonths": "Riesgo de presión de caja en ~{months, plural, one {# período} other {# períodos}}. Revisar los compromisos de compra.",
+        "actionBreached": "La ratio ya supera el objetivo — la presión es ahora. Revisar los compromisos de compra de inmediato.",
         "actionMonitor": "Vigilar la velocidad de compras y alinearla con el pipeline de ventas.",
         "messageNoVelocity": "ratio OC/OV: {ratio}× sin velocidades medibles"
       },
@@ -3205,6 +3206,7 @@
       "velocityEngine": {
         "label": "Motor de velocidad",
         "note": "(fin/inicio)^(1/períodos) − 1 con base mínima de {minBase}",
+        "noteUnset": "(fin/inicio)^(1/períodos) − 1 sin base mínima — cada serie puntúa desde su primer mes",
         "value": "TCAC mensual"
       },
       "velocityThresholds": {
@@ -3242,7 +3244,7 @@
     },
     "details": {
       "anomaly": "{sigma}σ de la media en {month}",
-      "cliff": "brecha {gap} %, ratio {ratio}×",
+      "cliff": "brecha {gap}, ratio {ratio}×",
       "cliffItem": "Velocidad pedidos a proveedores vs pedidos de clientes",
       "concentration": "{share} del gasto, {trend}",
       "fragmentation": "{txns} trans./mes, prom. {avg}",

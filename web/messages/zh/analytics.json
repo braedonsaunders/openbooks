@@ -2948,7 +2948,8 @@
       "cliff": {
         "title": "采购与销售增速失衡",
         "message": "采购订单增速（{po}%/月）超过销售订单增速（{so}%/月）{gap}%——采购/销售比率：{ratio}倍",
-        "actionWithMonths": "约{months}个月后存在现金压力风险，请复核采购承诺。",
+        "actionWithMonths": "约{months}期间后存在现金压力风险，请复核采购承诺。",
+        "actionBreached": "比率已突破目标 — 压力就在眼前。请立即复核采购承诺。",
         "actionMonitor": "请监控采购增速并与销售管道保持一致。",
         "messageNoVelocity": "采购/销售比率为{ratio}倍，但没有可测量的速率"
       },
@@ -3205,6 +3206,7 @@
       "velocityEngine": {
         "label": "速率引擎",
         "note": "（期末/期初）^(1/期数) − 1，最低基数{minBase}",
+        "noteUnset": "（期末/期初）^(1/期数) − 1，无最低基数 — 所有序列均从首月开始评分",
         "value": "月度CAGR"
       },
       "velocityThresholds": {
@@ -3242,7 +3244,7 @@
     },
     "details": {
       "anomaly": "{month}偏离均值{sigma}σ",
-      "cliff": "差距{gap}%，比率{ratio}倍",
+      "cliff": "差距{gap}，比率{ratio}倍",
       "cliffItem": "采购与销售速率",
       "concentration": "占支出的{share}，{trend}",
       "fragmentation": "{txns}笔/月，均值{avg}",
