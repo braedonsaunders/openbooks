@@ -1825,6 +1825,16 @@
       "earnings": "Earnings",
       "deductions": "Deductions",
       "contributions": "Employer contributions"
+    },
+    "installApp": {
+      "action": "Install app",
+      "title": "OpenBooks on your device",
+      "close": "Close",
+      "ios": "In Safari, open Share, choose Add to Home Screen, then confirm Add. If this page is in another app, open it in Safari first.",
+      "mac": "In Safari, open File and choose Add to Dock. In another browser, open its menu and choose Install OpenBooks or Install app.",
+      "browser": "Open your browser menu and choose Install OpenBooks or Install app. If installation is unavailable, use an updated browser that supports installed web apps.",
+      "online": "OpenBooks requires an internet connection. Sign in normally to access your current employee information.",
+      "failed": "The browser could not open installation. Use the browser instructions to add OpenBooks to your device."
     }
   },
   "options": {
