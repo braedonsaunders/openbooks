@@ -1,4 +1,4 @@
--- OpenBooks forward migration 0538_serial_manufacturing_receipt_evidence.
+-- OpenBooks forward migration 0550_serial_manufacturing_receipt_evidence.
 -- A posted manufacturing completion receives a finished serial through an
 -- assembly_build movement. Admit that receipt evidence while preserving
 -- serial identity, unit quantity, location and lifecycle checks.
