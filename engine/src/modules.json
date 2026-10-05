@@ -332,6 +332,7 @@
       "dependsOn": [
         "allocations",
         "compliance",
+        "crm",
         "flows",
         "fx",
         "inventory",

@@ -250,6 +250,19 @@ test('a promotion applies once per document and stacked discounts never exceed t
       documentId, code, allowedSubsidiaryIds: null,
     })))
     assert.equal((await apply('SIXTY')).discountMinor, '60000')
+    // Saving and reordering the draft must keep the discount's native identity,
+    // so the same code still refuses on the next application.
+    const { applyDocumentEdit } = await import('../../../web/lib/documents.ts')
+    const { loadDocumentEditCurrent } = await import('../ledger/document-service.ts')
+    const current = await withOrg(org.orgId, () => loadDocumentEditCurrent(documentId, org.orgId))
+    assert.ok(current)
+    const lines = await withOrg(org.orgId, () => db.execute<{ id: string; account_id: string; item_id: string | null; amount: string; quantity: string; unit_price: string; tax_code_id: string | null; description: string | null }>(sql`
+      select id,account_id,item_id,amount::text,quantity::text,unit_price::text,tax_code_id,description from document_lines
+       where org_id=${org.orgId} and document_id=${documentId} order by line_number desc`))
+    await withOrg(org.orgId, () => applyDocumentEdit(documentId,current,{
+      expectedUpdatedAt:current.updatedAt,
+      lines:lines.rows.map(line=>({lineId:line.id,accountId:line.account_id,itemId:line.item_id,amount:line.amount,quantity:line.quantity,unitPrice:line.unit_price,taxCodeId:line.tax_code_id,description:`${line.description ?? ''} reviewed`})),
+    }, { orgId:org.orgId,userId:actorId,source:'ui',allowedSubsidiaryIds:null,runFlows:false }))
     await assert.rejects(apply('sixty'), (error: unknown) => error instanceof PromotionRefusal
       && error.code === 'already_applied' && error.status === 409
       && /SIXTY is already applied to INV-/.test(error.message) && /Remove line/.test(error.remedy ?? ''))
