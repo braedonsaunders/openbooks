@@ -385,7 +385,7 @@
     "marginPct": "{pct}% de margem",
     "estimated": "Estimado",
     "storedValueNote": "{amount} foi pago com saldo armazenado: quita o passivo do vale e aparece aqui como contexto, nunca como custo.",
-    "mixedCurrencyNote": "Um custo chegou em outra moeda e fica ao lado dos totais em vez de ser convertido por uma taxa que o pedido nunca aceitou.",
+    "mixedCurrencyNote": "Um custo chegou em outra moeda sem taxa para valorá-lo, por isso fica ao lado dos totais. Registre a taxa para recalcular o pedido.",
     "noEconomicsTitle": "Margem ainda não calculada",
     "noEconomicsBody": "Atualize para construir a margem deste pedido a partir de itens, custos e taxas. Custos tardios reexpressam a margem com histórico.",
     "refreshEconomics": "Atualizar margem",

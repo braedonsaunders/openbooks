@@ -385,7 +385,7 @@
     "marginPct": "{pct} % de marge",
     "estimated": "Estimé",
     "storedValueNote": "{amount} a été payé en avoir : il solde la dette des cartes et figure ici pour contexte, jamais en coût.",
-    "mixedCurrencyNote": "Un coût est arrivé dans une autre devise et reste à côté des totaux au lieu d’être converti à un taux que la commande n’a jamais accepté.",
+    "mixedCurrencyNote": "Un coût arrivé dans une autre devise sans taux pour le valoriser reste à côté des totaux. Saisissez le taux pour recalculer la commande.",
     "noEconomicsTitle": "Marge pas encore calculée",
     "noEconomicsBody": "Actualisez pour construire la marge de cette commande depuis ses lignes, coûts et frais. Les coûts tardifs la retraitent avec historique.",
     "refreshEconomics": "Actualiser la marge",

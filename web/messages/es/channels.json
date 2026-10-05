@@ -385,7 +385,7 @@
     "marginPct": "{pct} % de margen",
     "estimated": "Estimado",
     "storedValueNote": "{amount} se pagó con saldo almacenado: liquida el pasivo del vale y aparece aquí como contexto, nunca como costo.",
-    "mixedCurrencyNote": "Un costo llegó en otra moneda y queda junto a los totales en lugar de convertirse con un tipo que el pedido nunca pactó.",
+    "mixedCurrencyNote": "Un costo llegó en otra moneda sin tipo de cambio para valorarlo, por lo que queda junto a los totales. Registre el tipo para recalcular el pedido.",
     "noEconomicsTitle": "Margen aún no calculado",
     "noEconomicsBody": "Actualiza para construir el margen de este pedido desde sus líneas, costos y comisiones. Los costos tardíos reexpresan el margen con historial.",
     "refreshEconomics": "Actualizar margen",

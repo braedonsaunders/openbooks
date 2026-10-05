@@ -385,7 +385,7 @@
     "marginPct": "{pct} % Marge",
     "estimated": "Geschätzt",
     "storedValueNote": "{amount} wurde mit Guthaben bezahlt: Es tilgt die Gutscheinverbindlichkeit und steht hier nur als Hinweis, nie als Kosten.",
-    "mixedCurrencyNote": "Kosten in einer anderen Währung bleiben neben den Summen stehen, statt über einen Kurs umgerechnet zu werden, den der Auftrag nie vereinbart hat.",
+    "mixedCurrencyNote": "Kosten in einer anderen Währung, für die es keinen Kurs gibt, stehen neben den Summen. Erfassen Sie den Kurs, um die Bestellung neu zu berechnen.",
     "noEconomicsTitle": "Marge noch nicht berechnet",
     "noEconomicsBody": "Aktualisieren, um die Marge dieses Auftrags aus Positionen, Kosten und Gebühren zu bilden. Späte Kosten stellen die Marge mit Verlauf neu dar.",
     "refreshEconomics": "Marge aktualisieren",
