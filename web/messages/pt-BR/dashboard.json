@@ -97,7 +97,11 @@
     "kpiSpendVelocity": "Velocidade de gastos",
     "kpiVendorConcentrationHint": "5 maiores: {share} · {period}",
     "kpiVendorPaymentHint": "Média de {days} dias para pagar · {late} em atraso · {period}",
-    "kpiSpendVelocityHint": "{savings} de economia potencial · {period}"
+    "kpiSpendVelocityHint": "{savings} de economia potencial · {period}",
+    "forensicRisk": "Risco forense",
+    "forensicRiskHint": "{flagged} sinalizados · {value} em risco · {period}",
+    "duplicatePayments": "Pagamentos duplicados",
+    "duplicatePaymentsHint": "{value} em risco · {period}"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -213,7 +217,9 @@
     "budgetVariance": "O orçamento aprovado frente ao realizado do período, com as contas fora da meta.",
     "kpiVendorConcentration": "HHI de fornecedores e fatia top 5 do desempenho de fornecedores.",
     "kpiVendorPayment": "Taxa de pagamento em dia e gasto pago em atraso do desempenho de fornecedores.",
-    "kpiSpendVelocity": "Alertas de gasto abertos e economia potencial da velocidade de gastos."
+    "kpiSpendVelocity": "Alertas de gasto abertos e economia potencial da velocidade de gastos.",
+    "forensicRisk": "Pontuação geral de risco do Sentinel, com a contagem sinalizada e o valor em risco.",
+    "duplicatePayments": "Grupos de pagamentos duplicados e seu valor em risco."
   },
   "grid": {
     "customizing": "Personalizando seu painel",

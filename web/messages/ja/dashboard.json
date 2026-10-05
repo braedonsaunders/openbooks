@@ -97,7 +97,11 @@
     "kpiSpendVelocity": "支出速度",
     "kpiVendorConcentrationHint": "上位5社：{share} · {period}",
     "kpiVendorPaymentHint": "平均支払日数{days}日 · 遅延{late} · {period}",
-    "kpiSpendVelocityHint": "節約余地{savings} · {period}"
+    "kpiSpendVelocityHint": "節約余地{savings} · {period}",
+    "forensicRisk": "フォレンジックリスク",
+    "forensicRiskHint": "{flagged} 件のフラグ · {value} のリスク額 · {period}",
+    "duplicatePayments": "重複支払",
+    "duplicatePaymentsHint": "{value} のリスク額 · {period}"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -213,7 +217,9 @@
     "budgetVariance": "期間の承認済み予算と実績、および乖離している勘定。",
     "kpiVendorConcentration": "仕入先実績のサプライヤーHHIと上位5社の支出占有率。",
     "kpiVendorPayment": "仕入先実績の期日遵守率と遅延支払支出。",
-    "kpiSpendVelocity": "支出速度の未対応アラートと節約余地。"
+    "kpiSpendVelocity": "支出速度の未対応アラートと節約余地。",
+    "forensicRisk": "Sentinelの総合リスクスコア。フラグ件数とリスク額付き。",
+    "duplicatePayments": "重複支払グループとそのリスク額。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",

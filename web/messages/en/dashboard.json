@@ -97,7 +97,11 @@
     "kpiSpendVelocity": "Spend velocity",
     "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
     "kpiVendorPaymentHint": "Avg {days} days to pay · {late} late · {period}",
-    "kpiSpendVelocityHint": "{savings} potential savings · {period}"
+    "kpiSpendVelocityHint": "{savings} potential savings · {period}",
+    "forensicRisk": "Forensic risk",
+    "forensicRiskHint": "{flagged} flagged · {value} at risk · {period}",
+    "duplicatePayments": "Duplicate payments",
+    "duplicatePaymentsHint": "{value} at risk · {period}"
   },
   "metricContext": {
     "today": "Posted today",
@@ -213,7 +217,9 @@
     "budgetVariance": "The approved budget against actuals for the period, with the accounts off track.",
     "kpiVendorConcentration": "Supplier HHI and top-5 spend share from Vendor Performance.",
     "kpiVendorPayment": "On-time payment rate and late-paid spend from Vendor Performance.",
-    "kpiSpendVelocity": "Open spend alerts and savings potential from Spend Velocity."
+    "kpiSpendVelocity": "Open spend alerts and savings potential from Spend Velocity.",
+    "forensicRisk": "Overall Sentinel risk score, with the flagged count and value at risk.",
+    "duplicatePayments": "Duplicate payment groups and their value at risk."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

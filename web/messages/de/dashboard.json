@@ -97,7 +97,11 @@
     "kpiSpendVelocity": "Ausgabendynamik",
     "kpiVendorConcentrationHint": "Top-5: {share} · {period}",
     "kpiVendorPaymentHint": "Ø {days} Tage bis zur Zahlung · {late} verspätet · {period}",
-    "kpiSpendVelocityHint": "{savings} Sparpotenzial · {period}"
+    "kpiSpendVelocityHint": "{savings} Sparpotenzial · {period}",
+    "forensicRisk": "Forensisches Risiko",
+    "forensicRiskHint": "{flagged} markiert · {value} gefährdet · {period}",
+    "duplicatePayments": "Doppelte Zahlungen",
+    "duplicatePaymentsHint": "{value} gefährdet · {period}"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -213,7 +217,9 @@
     "budgetVariance": "Das genehmigte Budget gegenüber dem Ist des Zeitraums, mit den abweichenden Konten.",
     "kpiVendorConcentration": "Lieferanten-HHI und Top-5-Ausgabenanteil aus der Lieferantenleistung.",
     "kpiVendorPayment": "Pünktlichkeitsquote und verspätet gezahlte Ausgaben aus der Lieferantenleistung.",
-    "kpiSpendVelocity": "Offene Ausgabenalarme und Sparpotenzial aus der Ausgabendynamik."
+    "kpiSpendVelocity": "Offene Ausgabenalarme und Sparpotenzial aus der Ausgabendynamik.",
+    "forensicRisk": "Sentinel-Risikowert mit Anzahl markierter Vorgänge und gefährdetem Betrag.",
+    "duplicatePayments": "Doppelte Zahlungsgruppen und ihr gefährdeter Betrag."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

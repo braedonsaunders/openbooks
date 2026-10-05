@@ -1605,6 +1605,8 @@ export interface SentinelRiskSummary {
   /** Exact presentation-currency duplicate value at risk. */
   duplicateValue: string;
   duplicateConfigured: boolean;
+  /** Translated reason naming the missing duplicate floor; null when configured. */
+  duplicateUnavailableReason: string | null;
   presentationCurrency: string;
 }
 
@@ -1623,6 +1625,7 @@ export async function sentinelRiskSummary(
     duplicateCount: data.summary.duplicateCount,
     duplicateValue: data.summary.totalDuplicateAmount,
     duplicateConfigured: data.duplicates.unavailable === null,
+    duplicateUnavailableReason: data.duplicates.unavailable,
     presentationCurrency: data.meta.presentationCurrency,
   };
 }
