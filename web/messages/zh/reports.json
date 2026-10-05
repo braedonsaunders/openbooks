@@ -968,12 +968,12 @@
         "description": "按月份和币种预测工时、收入、人工成本和利润。"
       },
       "sales_evidence": {
-        "label": "Sales evidence",
-        "description": "Immutable attributed sales credits and reversals, including historical attribution gaps."
+        "label": "销售凭证",
+        "description": "不可更改的已归属销售积分和冲销，包括历史归属缺口。"
       },
       "sales_quota_attainment": {
-        "label": "Sales quota attainment",
-        "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
+        "label": "销售配额达成",
+        "description": "配额版本、生命周期、员工或团队目标，以及目标货币下不可更改销售凭证的实际值。"
       },
       "cash_tenders": {
         "label": "现销支付手段",
@@ -2351,35 +2351,35 @@
         "cost_status": "人工成本状态"
       },
       "sales_evidence": {
-        "id": "Evidence key",
-        "source_id": "Source record",
-        "source_kind": "Source kind",
-        "source_number": "Source number",
-        "employee": "Employee",
-        "employee_id": "Employee key",
-        "team": "Team",
-        "effective_date": "Effective date",
-        "metric": "Measure",
-        "event_kind": "Event",
-        "currency": "Currency",
-        "amount": "Amount"
+        "id": "凭证键",
+        "source_id": "来源记录",
+        "source_kind": "来源类型",
+        "source_number": "来源编号",
+        "employee": "员工",
+        "employee_id": "员工（ID）",
+        "team": "团队",
+        "effective_date": "生效日期",
+        "metric": "衡量值",
+        "event_kind": "事件类型",
+        "currency": "币种",
+        "amount": "金额"
       },
       "sales_quota_attainment": {
-        "id": "Quota key",
-        "name": "Quota",
-        "target": "Target",
-        "employee_id": "Employee key",
-        "sales_team_id": "Team key",
-        "parent_quota_id": "Parent quota",
-        "supersedes_id": "Replaces quota",
-        "period_start": "Period start",
-        "period_end": "Period end",
-        "lifecycle": "Lifecycle",
-        "metric": "Measure",
-        "currency": "Currency",
-        "amount": "Target amount",
-        "actual": "Actual",
-        "attainment": "Attainment percent"
+        "id": "配额（ID）",
+        "name": "配额",
+        "target": "目标",
+        "employee_id": "员工（ID）",
+        "sales_team_id": "团队（ID）",
+        "parent_quota_id": "上级配额",
+        "supersedes_id": "取代的配额",
+        "period_start": "期间开始",
+        "period_end": "期间结束",
+        "lifecycle": "生命周期",
+        "metric": "衡量值",
+        "currency": "币种",
+        "amount": "目标金额",
+        "actual": "实际",
+        "attainment": "达成率"
       },
       "cash_tenders": {
         "document_date": "单据日期",

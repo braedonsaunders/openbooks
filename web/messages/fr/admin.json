@@ -6599,12 +6599,12 @@
       "description": "Miroir des capacités, registre immuable, mentions et cadence."
     },
     "salesManagement": {
-      "description": "Employee representatives, sales teams, approved quotas and dated territories.",
-      "title": "Sales management"
+      "description": "Commerciaux salariés, équipes de vente, quotas approuvés et territoires datés.",
+      "title": "Gestion des ventes"
     },
     "geographicTerritories": {
-      "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
-      "title": "Geographic territories"
+      "description": "Frontières de pays, provinces/États et comtés avec couverture dessinée et emplacements clients vérifiés.",
+      "title": "Territoires géographiques"
     },
     "revenueContracts": {
       "title": "Contrats de revenus par commande",

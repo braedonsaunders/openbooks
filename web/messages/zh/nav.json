@@ -53,7 +53,7 @@
     "compliance-vendors": "分包商",
     "continuous-close": "结账监控",
     "crm-activities": "活动",
-    "crm-forecasts": "Forecasts",
+    "crm-forecasts": "预测",
     "crm-opportunities": "商机",
     "customers": "客户",
     "dashboard": "仪表板",
@@ -134,10 +134,10 @@
     "hrm-performance-retention": "留任",
     "hrm-performance-settings": "绩效设置",
     "crm-sales": "概览",
-    "crm-sales-representatives": "Representatives",
-    "crm-sales-teams": "Teams",
-    "crm-sales-quotas": "Quotas",
-    "crm-sales-territories": "Territories",
+    "crm-sales-representatives": "销售代表",
+    "crm-sales-teams": "销售团队",
+    "crm-sales-quotas": "销售配额",
+    "crm-sales-territories": "销售区域",
     "hrm-benefits-programs": "计划",
     "hrm-performance-succession": "继任计划",
     "hrm-performance-templates": "考核表单",
@@ -195,7 +195,7 @@
     "inventory-views": "库存",
     "inbox-views": "收件箱",
     "me-views": "我的",
-    "crm-sales": "Sales",
+    "crm-sales": "销售",
     "hrm-compensation": "薪酬"
   },
   "modulesShort": {
@@ -229,7 +229,7 @@
     "setup-tax-depreciation": "税务折旧",
     "setup-overhead": "间接费用",
     "setup-payments": "付款与银行业务",
-    "crm-sales": "Sales",
+    "crm-sales": "销售",
     "hrm-compensation": "薪酬"
   }
 }

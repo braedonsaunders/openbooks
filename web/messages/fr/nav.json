@@ -53,7 +53,7 @@
     "compliance-vendors": "Sous-traitants",
     "continuous-close": "Agents",
     "crm-activities": "Activités",
-    "crm-forecasts": "Forecasts",
+    "crm-forecasts": "Prévisions",
     "crm-opportunities": "Occasions",
     "customers": "Clients",
     "dashboard": "Tableau de bord",
@@ -134,10 +134,10 @@
     "hrm-performance-retention": "Rétention",
     "hrm-performance-settings": "Configuration de la performance",
     "crm-sales": "Vue d’ensemble",
-    "crm-sales-representatives": "Representatives",
-    "crm-sales-teams": "Teams",
-    "crm-sales-quotas": "Quotas",
-    "crm-sales-territories": "Territories",
+    "crm-sales-representatives": "Représentants commerciaux",
+    "crm-sales-teams": "Équipes de vente",
+    "crm-sales-quotas": "Quotas de vente",
+    "crm-sales-territories": "Territoires de vente",
     "hrm-benefits-programs": "Programmes",
     "hrm-performance-succession": "Plans de succession",
     "hrm-performance-templates": "Formulaires d’évaluation",
@@ -200,7 +200,7 @@
     "inventory-views": "Stocks",
     "inbox-views": "Boîte de réception",
     "me-views": "Moi",
-    "crm-sales": "Sales",
+    "crm-sales": "Ventes",
     "hrm-compensation": "Rémunération"
   },
   "localWorkspaces": {
@@ -229,7 +229,7 @@
     "setup-tax-depreciation": "Amortissement fiscal",
     "setup-overhead": "Frais généraux",
     "setup-payments": "Paiements et services bancaires",
-    "crm-sales": "Sales",
+    "crm-sales": "Ventes",
     "hrm-compensation": "Rémunération"
   }
 }

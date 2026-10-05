@@ -53,7 +53,7 @@
     "compliance-vendors": "Subcontratistas",
     "continuous-close": "Agentes",
     "crm-activities": "Actividades",
-    "crm-forecasts": "Forecasts",
+    "crm-forecasts": "Previsiones",
     "crm-opportunities": "Oportunidades",
     "customers": "Clientes",
     "dashboard": "Panel",
@@ -134,10 +134,10 @@
     "hrm-performance-retention": "Retención",
     "hrm-performance-settings": "Configuración del rendimiento",
     "crm-sales": "Resumen",
-    "crm-sales-representatives": "Representatives",
-    "crm-sales-teams": "Teams",
-    "crm-sales-quotas": "Quotas",
-    "crm-sales-territories": "Territories",
+    "crm-sales-representatives": "Representantes de ventas",
+    "crm-sales-teams": "Equipos de ventas",
+    "crm-sales-quotas": "Cuotas de ventas",
+    "crm-sales-territories": "Territorios de ventas",
     "hrm-benefits-programs": "Programas",
     "hrm-performance-succession": "Planes de sucesión",
     "hrm-performance-templates": "Formularios de evaluación",
@@ -200,7 +200,7 @@
     "inventory-views": "Inventario",
     "inbox-views": "Bandeja de entrada",
     "me-views": "Yo",
-    "crm-sales": "Sales",
+    "crm-sales": "Ventas",
     "hrm-compensation": "Compensación"
   },
   "localWorkspaces": {
@@ -229,7 +229,7 @@
     "setup-tax-depreciation": "Depreciación fiscal",
     "setup-overhead": "Gastos generales",
     "setup-payments": "Pagos y banca",
-    "crm-sales": "Sales",
+    "crm-sales": "Ventas",
     "hrm-compensation": "Compensación"
   }
 }
