@@ -86,6 +86,9 @@ export const REVENUE_ENTITIES: SetupEntity[] = [
     key: 'contract-cost-policy',
     table: 'contract_cost_policies',
     actorCols: true,
+    // Supersession is by effective date (a new row ends the old one's
+    // reign), so there is no active flag to toggle.
+    hasActive: false,
     groupKey: 'revenue',
     featureKey: 'contractCosts',
     iconKey: 'trending-up',
