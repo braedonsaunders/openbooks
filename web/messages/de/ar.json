@@ -3,7 +3,7 @@
     "title": "Ausgangsrechnungen",
     "cashTitle": "Barverkäufe",
     "cashDescription": "Bezahlte Kassenzettel und Erstattungen — Geld in der Kasse, keine Debitoren: Entwurf → Zahlungsaufteilung → Buchung.",
-    "description": "Kundenrechnungen und Gutschriften — Ihre Forderungen: Entwurf → Genehmigung → über den Kernel gebucht.",
+    "description": "Kundenrechnungen und Gutschriften — Ihre Forderungen: Entwurf → Genehmigung → gebucht.",
     "searchPlaceholder": "Rechnungen, Gutschriften, Kunden, Referenzen durchsuchen…",
     "emptyTitle": "Noch keine Ausgangsrechnungen",
     "emptyDescription": "Erfassen Sie die erste Ausgangsrechnung oder Gutschrift, um den Forderungs-Workflow zu starten.",

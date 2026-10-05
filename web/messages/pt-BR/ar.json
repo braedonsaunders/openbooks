@@ -3,7 +3,7 @@
     "title": "Faturas",
     "cashTitle": "Vendas à vista",
     "cashDescription": "Recibos pagos no ato e reembolsos — dinheiro em caixa, sem contas a receber.",
-    "description": "Faturas de clientes e notas de crédito — seu contas a receber: rascunho → aprovação → lançado pelo kernel.",
+    "description": "Faturas de clientes e notas de crédito — seu contas a receber: rascunho → aprovação → aprovadas.",
     "searchPlaceholder": "Buscar faturas, créditos, clientes, refs…",
     "emptyTitle": "Nenhuma fatura ainda",
     "emptyDescription": "Registre a primeira fatura de cliente ou nota de crédito para iniciar o fluxo de contas a receber.",

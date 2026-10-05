@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Eingangsrechnungen",
-    "description": "Eingangsrechnungen und Gutschriften — Ihre Kreditorenbuchhaltung: Entwurf → Genehmigung → über den Kernel gebucht.",
+    "description": "Eingangsrechnungen und Gutschriften — Ihre Kreditorenbuchhaltung: Entwurf → Genehmigung → gebucht.",
     "searchPlaceholder": "Rechnungen, Gutschriften, Lieferanten, Referenzen suchen…",
     "columns": {
       "number": "Nummer",

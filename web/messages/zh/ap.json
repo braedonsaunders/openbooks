@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "应付账单",
-    "description": "应付账单与贷记通知单——即您的应付账款：草稿 → 审批 → 经内核过账。",
+    "description": "应付账单与贷记通知单——即您的应付账款：草稿 → 审批 → 过账。",
     "searchPlaceholder": "搜索账单、贷记、供应商、参考…",
     "columns": {
       "number": "编号",

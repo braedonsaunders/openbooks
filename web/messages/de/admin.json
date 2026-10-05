@@ -3025,7 +3025,7 @@
           "systemRule": {
             "title": "Kern-Umlageregel",
             "body": "Jede obige Buchung wird durch die engine-eigene Umlageregel {key} erstellt (Version {version}, gültig {date}, Definition {hash}). Sie spiegelt diese Richtlinie und die veröffentlichte Tariftabelle, daher kann sie hier weder bearbeitet noch gelöscht werden – ändern Sie stattdessen die Richtlinie oder veröffentlichen Sie neue Sätze.",
-            "noVersion": "Keine Regelversion ist in Kraft: Die Richtlinie ist kein aktives Nullsummen-Paar oder die Stundentariftabelle ist leer. Buchungen werden über den Kernel fortgesetzt, sobald beides zutrifft.",
+            "noVersion": "Keine Regelversion ist in Kraft: Die Richtlinie ist kein aktives Nullsummen-Paar oder die Stundentariftabelle ist leer. Buchungen werden fortgesetzt, sobald beides zutrifft.",
             "viewRule": "In Umlagen anzeigen"
           },
           "account": "Konto für angewandte Gemeinkosten",

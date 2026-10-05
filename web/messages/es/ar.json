@@ -3,7 +3,7 @@
     "title": "Facturas de cliente",
     "cashTitle": "Ventas en efectivo",
     "cashDescription": "Recibos pagados al momento y reembolsos — dinero en caja, sin cuentas por cobrar.",
-    "description": "Facturas y notas de crédito de cliente — sus cuentas por cobrar: borrador → aprobación → contabilizadas a través del kernel.",
+    "description": "Facturas y notas de crédito de cliente — sus cuentas por cobrar: borrador → aprobación → contabilizadas.",
     "searchPlaceholder": "Buscar facturas, notas de crédito, clientes, referencias…",
     "emptyTitle": "Aún no hay facturas de cliente",
     "emptyDescription": "Registre la primera factura o nota de crédito de cliente para iniciar el flujo de cuentas por cobrar.",

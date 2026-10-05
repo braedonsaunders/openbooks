@@ -3,7 +3,7 @@
     "title": "发票",
     "cashTitle": "现金销售",
     "cashDescription": "收款时即付清的销售小票与退款 — 现金入库，不经过应收账款。",
-    "description": "客户发票与贷项通知单——您的应收账款：草稿 → 审批 → 通过内核过账。",
+    "description": "客户发票与贷项通知单——您的应收账款：草稿 → 审批 → 过账。",
     "searchPlaceholder": "搜索发票、贷项、客户、参考号……",
     "emptyTitle": "暂无发票",
     "emptyDescription": "录入第一张客户发票或贷项通知单，以启动应收账款流程。",
