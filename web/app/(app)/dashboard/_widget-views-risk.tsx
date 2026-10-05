@@ -1,6 +1,6 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { RISK_SCORE_BANDS } from '@/lib/analytics/sentinel-scoring'
 import { Copy, ShieldAlert } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
@@ -15,7 +15,10 @@ import { CardShell, MetricTile, UnavailableRow, type MetricTone, type WidgetCard
  * shared severity-model bands, so the tile and the Sentinel gauge agree on
  * what a score means.
  */
-function scoreTone(score: number): MetricTone {
+function scoreTone(score: number, partial: boolean): MetricTone {
+  // A partial score never reads healthy: neutral slate until every scoring
+  // source is configured, matching the gauge.
+  if (partial) return 'slate'
   if (score >= RISK_SCORE_BANDS.high) return 'rose'
   if (score >= RISK_SCORE_BANDS.elevated) return 'orange'
   if (score >= RISK_SCORE_BANDS.moderate) return 'amber'
@@ -24,6 +27,7 @@ function scoreTone(score: number): MetricTone {
 
 export function RiskWidgetCard({ widgetId, data }: WidgetCardProps): React.ReactNode {
   const t = useTranslations('dashboard')
+  const locale = useLocale()
   const { money } = useMoney()
   switch (widgetId) {
     case 'kpi-forensic-risk': {
@@ -48,8 +52,8 @@ export function RiskWidgetCard({ widgetId, data }: WidgetCardProps): React.React
           label={t('widgets.forensicRisk')}
           value={String(risk.score)}
           href="/analytics/sentinel"
-          tone={scoreTone(risk.score)}
-          hint={risk.excluded.length > 0 ? `${hint} ${t('widgets.forensicRiskExcluded', { detectors: risk.excluded.join(', ') })}` : hint}
+          tone={scoreTone(risk.score, risk.excluded.length > 0)}
+          hint={risk.excluded.length > 0 ? `${hint} ${t('widgets.forensicRiskExcluded', { detectors: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(risk.excluded) })}` : hint}
         />
       )
     }

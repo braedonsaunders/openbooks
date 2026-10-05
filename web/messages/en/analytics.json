@@ -3918,6 +3918,8 @@
     "scoring": {
       "title": "Scoring model",
       "note": "Fixed severity model: how each signal converts to 0–100 points. Detection thresholds above stay configurable.",
+      "bandsTitle": "Score bands",
+      "bandsNote": "Fixed method: a score means the same severity on the gauge, the tiles and this panel. Bands are not configuration.",
       "trap": "Threshold traps",
       "duplicate": "Duplicates",
       "weekend": "Weekend postings",

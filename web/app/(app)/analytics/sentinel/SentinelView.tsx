@@ -261,6 +261,7 @@ function useConformLabel() {
 
 export function SentinelView({ data: initialData, canConfigure }: { data: SentinelData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.sentinel')
+  const locale = useLocale()
   const num = useNum()
   const dec = useDecimals()
   // Translated consolidations render in the presentation currency they were
@@ -1107,6 +1108,16 @@ function ScoringPanel({ data }: { data: SentinelData }) {
             </ul>
           </div>
         ))}
+        <div>
+          <p className="mb-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{t('scoring.bandsTitle')}</p>
+          <p className="mb-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('scoring.bandsNote')}</p>
+          <ul className="space-y-0.5">
+            <li className="text-xs tabular-nums text-slate-600 dark:text-slate-300">{t('risk.high')}: ≥ {num(RISK_SCORE_BANDS.high)}</li>
+            <li className="text-xs tabular-nums text-slate-600 dark:text-slate-300">{t('risk.elevated')}: ≥ {num(RISK_SCORE_BANDS.elevated)}</li>
+            <li className="text-xs tabular-nums text-slate-600 dark:text-slate-300">{t('risk.moderate')}: ≥ {num(RISK_SCORE_BANDS.moderate)}</li>
+            <li className="text-xs tabular-nums text-slate-600 dark:text-slate-300">{t('risk.low')}: &lt; {num(RISK_SCORE_BANDS.moderate)}</li>
+          </ul>
+        </div>
       </div>
     </Panel>
   )

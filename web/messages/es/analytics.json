@@ -3918,6 +3918,8 @@
     "scoring": {
       "title": "Modelo de puntuación",
       "note": "Modelo fijo de gravedad: cómo cada señal se convierte en puntos de 0–100. Los umbrales de detección anteriores siguen siendo configurables.",
+      "bandsTitle": "Tramos de puntuación",
+      "bandsNote": "Método fijo: una puntuación significa la misma severidad en el indicador, las tarjetas y este panel. Los tramos no son configurables.",
       "trap": "Trampas de umbral",
       "duplicate": "Duplicados",
       "weekend": "Asientos de fin de semana",

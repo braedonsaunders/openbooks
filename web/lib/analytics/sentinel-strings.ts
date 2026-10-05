@@ -12,6 +12,7 @@
 
 import type { CatalogMessageFn } from "./catalog-strings";
 import { viewerNumber } from "../format";
+import { formatDecimal } from "../money-format";
 
 export type ConformityCode = "excellent" | "acceptable" | "marginal" | "nonConforming" | "insufficient";
 
@@ -57,8 +58,9 @@ export interface SentinelStrings {
   ghostAddress(vendor: string, employee: string): string;
   ghostName(vendor: string, employee: string): string;
   /**
-   * One finding per natural-key duplicate group. `amount` is pre-rendered
-   * (legacy String(number)); `others` is the comma-joined peer list (data).
+   * One finding per natural-key duplicate group. `amount` is the exact
+   * document-currency total and renders in the request locale; `others` is
+   * the comma-joined peer list (data).
    */
   duplicateGroupReason(args: {
     count: number;
@@ -189,7 +191,7 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
       t("sentinel.forensics.duplicateGroup", {
         count,
         currency,
-        amount,
+        amount: formatDecimal(locale, amount, {}),
         sharedRef: sharedReference
           ? t("sentinel.forensics.duplicateSharedRef", { reference: sharedReference })
           : "",

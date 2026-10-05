@@ -3918,6 +3918,8 @@
     "scoring": {
       "title": "Modèle de notation",
       "note": "Modèle de gravité fixe : comment chaque signal se convertit en points de 0 à 100. Les seuils de détection ci-dessus restent configurables.",
+      "bandsTitle": "Paliers de score",
+      "bandsNote": "Méthode fixe : un score signifie la même sévérité sur la jauge, les tuiles et ce panneau. Les paliers ne sont pas configurables.",
       "trap": "Pièges de seuil",
       "duplicate": "Doublons",
       "weekend": "Écritures du week-end",

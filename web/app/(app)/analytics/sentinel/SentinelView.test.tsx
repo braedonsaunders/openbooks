@@ -297,7 +297,7 @@ test('analysis tabs name the missing floors and the score names exclusions', asy
   const { host, unmount } = await mount(data)
   try {
     assert.ok(
-      (host.textContent ?? '').includes('Score excludes unconfigured inputs: Duplicates, RSF, Z-Score, Amount tiers.'),
+      (host.textContent ?? '').includes('Score excludes unconfigured inputs: Duplicates, RSF, Z-Score, and Amount tiers.'),
       'the score must name every skipped scoring source',
     )
     await clickButton(host, (text) => text.startsWith('Analysis'), 'the analysis tab')

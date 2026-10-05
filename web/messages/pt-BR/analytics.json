@@ -3918,6 +3918,8 @@
     "scoring": {
       "title": "Modelo de pontuação",
       "note": "Modelo fixo de gravidade: como cada sinal se converte em pontos de 0–100. Os limites de detecção acima continuam configuráveis.",
+      "bandsTitle": "Faixas de pontuação",
+      "bandsNote": "Método fixo: uma pontuação significa a mesma severidade no medidor, nos cartões e neste painel. As faixas não são configuráveis.",
       "trap": "Armadilhas de limite",
       "duplicate": "Duplicados",
       "weekend": "Lançamentos de fim de semana",
