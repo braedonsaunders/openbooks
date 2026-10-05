@@ -1,0 +1,1 @@
+Adds additive columns with safe defaults to dunning_policies, collection_attempts and customer_payment_methods, and widens the collection_attempts decline_kind check to admit two new values. No existing row is read, rewritten, or deleted, so there is nothing to probe before install.
