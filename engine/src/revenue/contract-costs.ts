@@ -286,15 +286,20 @@ export function minorUnitsToCanonical(amountMinor: bigint, exponent: number): st
  * ISO minor-unit exponent for one currency code. Shared with read paths so a
  * missing registry row refuses by name instead of guessing 2dp (which would
  * misprice zero- and three-decimal currencies). History is never
- * reinterpreted: the remedy restores the missing or damaged registry row
- * from the canonical seed, which only repairs precision and leaves every
- * posted amount untouched.
+ * reinterpreted: the remedy restores a supported row from the canonical
+ * seed and sends a legacy code to evidence review, leaving every posted
+ * amount untouched either way. The seed only carries supported ISO
+ * currencies, so the remedy stays conditional instead of promising a
+ * restoration the seed cannot perform.
  */
 export async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
   const row = (await runner.execute<{ minor_units: number }>(sql`
     select minor_units from currencies where code = ${currency}`)).rows[0];
   const restoreRemedy =
-    "Restore the currency row with the canonical registry seed (seedCurrencies), which restores its precision without changing posted history.";
+    "When the code is a supported ISO currency, restore its row with the canonical registry seed " +
+    "(seedCurrencies), which restores its precision without changing posted history; " +
+    "for a legacy code the seed does not carry, review the original-currency evidence " +
+    "without reinterpreting posted costs.";
   if (!row) {
     throw new ContractCostError(`Unknown currency ${currency}.`, {
       code: "contract_cost_currency_unknown",
