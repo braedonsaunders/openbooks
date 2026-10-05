@@ -118,6 +118,54 @@ test('vendor performance translates every spend functional to presentation', { s
   }
 })
 
+/**
+ * A journal AP line carries its own due date with no linked vendor bill
+ * (migrated and opening balances post this way): timeliness reads the
+ * line's date, not the absent bill's. Paid 07-12 against a line due 07-05
+ * is one late bill with late spend — never an undated exclusion.
+ */
+test('vendor performance reads the open item due date without a bill', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    await withBypass(async () => {
+      await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
+        values (${randomUUID()}, ${org.orgId}, ${org.vendorId})`)
+      const billEntry = randomUUID()
+      const billLine = randomUUID()
+      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${billEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEN-1', '2026-07-01', ${org.periodId}, 'draft', 'manual')`)
+      await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, due_date, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${billLine}, ${org.orgId}, ${billEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, '2026-07-05', true, '-100', 'CAD', '-100', 1),
+               (${randomUUID()}, ${org.orgId}, ${billEntry}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.vendorId}, null, false, '100', 'CAD', '100', 1)`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${billEntry}`)
+      const payEntry = randomUUID()
+      const payLine = randomUUID()
+      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${payEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEN-PAY-1', '2026-07-12', ${org.periodId}, 'draft', 'manual')`)
+      await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${payLine}, ${org.orgId}, ${payEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, true, '100', 'CAD', '100', 1),
+               (${randomUUID()}, ${org.orgId}, ${payEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.vendorId}, false, '-100', 'CAD', '-100', 1)`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${payEntry}`)
+      await db.execute(sql`insert into applications (id, org_id, from_line_id, to_line_id, amount, source_amount,
+        source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
+        settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on, created_by)
+        values (${randomUUID()}, ${org.orgId}, ${payLine}, ${billLine}, 100, 100, 100, 'CAD', 100, 'CAD',
+          1, 'same_currency', 'same transaction currency', '2026-07-12', ${org.orgId})`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      const data = await vendorData(P, org.orgId, null)
+      const row = data.rows.find((r) => r.id === org.vendorId)!
+      assert.ok(row, 'the opening-balance vendor is a row')
+      assert.equal(row.paidBills, 1)
+      assert.equal(row.undatedBills, 0, 'the line due date dates the bill')
+      assert.equal(row.onTimePct, 0)
+      assert.equal(row.lateSpend, "100.0000")
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('vendor performance fails closed when a functional has no spot coverage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { org } = await seedTwoCurrencySpend()
   try {
