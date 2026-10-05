@@ -1,7 +1,7 @@
 import { canonicalDecimal, compareDecimal } from "../exact-decimal";
 import { moneyRefusal } from "../payroll-decimal-refusal";
 import { normalizeMoney } from "@openbooks/engine/money";
-import { FORECAST_CONFIDENCE_LEVELS } from "../../app/(app)/analytics/_ui/forecast";
+import { FORECAST_CONFIDENCE_LEVELS } from "./forecast-levels";
 
 /**
  * The single specification of every editable analytics threshold.
@@ -84,6 +84,20 @@ const num = (key: string, labelKey: string, min: number, max: number, step = 1, 
   key, kind: "number", labelKey: `${labelKey}.label`, helpKey: `${labelKey}.help`, min, max, step,
   ...(int ? { int: true as const } : {}),
 });
+
+/**
+ * The forecast macro-adjustment options as one table: adding a code here
+ * offers it in the threshold editor AND prices it in the loader, so a new
+ * option can never throw the dashboard. Factors stay display numbers — the
+ * loader applies them to chart coordinates, never ledger money.
+ */
+export const FORECAST_ADJUSTMENTS: ReadonlyArray<{ code: string; factor: number }> = [
+  { code: "neg10", factor: -0.1 },
+  { code: "neg05", factor: -0.05 },
+  { code: "zero", factor: 0 },
+  { code: "pos05", factor: 0.05 },
+  { code: "pos10", factor: 0.1 },
+];
 
 export const ANALYTICS_CONFIG = {
   financialHealth: {
@@ -203,7 +217,7 @@ export const ANALYTICS_CONFIG = {
       // up. The server maps each code to its exact adjustment factor.
       {
         key: "forecastAdjustment", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastAdjustment.label", helpKey: "analytics.financialHealth.config.fields.forecastAdjustment.help",
-        options: ["neg10", "neg05", "zero", "pos05", "pos10"], optionsKey: "analytics.financialHealth.config.options.forecastAdjustment",
+        options: FORECAST_ADJUSTMENTS.map((a) => a.code), optionsKey: "analytics.financialHealth.config.options.forecastAdjustment",
       },
       num("forecastEtsAlpha", "analytics.financialHealth.config.fields.forecastEtsAlpha", 0.05, 0.95, 0.05),
       num("forecastEtsBeta", "analytics.financialHealth.config.fields.forecastEtsBeta", 0.05, 0.95, 0.05),
