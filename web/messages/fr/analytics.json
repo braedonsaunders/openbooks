@@ -2948,7 +2948,8 @@
       "cliff": {
         "title": "Déséquilibre des vélocités achats-ventes",
         "message": "Vélocité des commandes fournisseurs ({po} %/mois) supérieure à celle des commandes clients ({so} %/mois) de {gap} % — ratio CF/CC : {ratio}×",
-        "actionWithMonths": "Risque de tension de trésorerie dans ~{months} mois. Revoir les engagements d'achat.",
+        "actionWithMonths": "Risque de tension de trésorerie dans ~{months, plural, one {# période} other {# périodes}}. Revoir les engagements d'achat.",
+        "actionBreached": "Le ratio dépasse déjà la cible — la pression est immédiate. Revoir les engagements d'achat sans attendre.",
         "actionMonitor": "Surveiller la vélocité des achats et l'aligner avec le pipeline des ventes.",
         "messageNoVelocity": "ratio CF/CC : {ratio}× sans vélocités mesurables"
       },
@@ -3205,6 +3206,7 @@
       "velocityEngine": {
         "label": "Moteur de vélocité",
         "note": "(fin/début)^(1/périodes) − 1 avec une base minimale de {minBase}",
+        "noteUnset": "(fin/début)^(1/périodes) − 1 sans base minimale — chaque série part de son premier mois",
         "value": "TCAM mensuel"
       },
       "velocityThresholds": {
@@ -3242,7 +3244,7 @@
     },
     "details": {
       "anomaly": "{sigma}σ de la moyenne en {month}",
-      "cliff": "écart {gap} %, ratio {ratio}×",
+      "cliff": "écart {gap}, ratio {ratio}×",
       "cliffItem": "Vélocité commandes fournisseurs vs commandes clients",
       "concentration": "{share} des dépenses, {trend}",
       "fragmentation": "{txns} trans./mois, moy. {avg}",

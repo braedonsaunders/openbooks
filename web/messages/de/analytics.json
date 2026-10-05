@@ -2041,7 +2041,7 @@
     },
     "matrix": {
       "unratedNoPaymentsNote": "{count, plural, one {# Lieferant hat noch keine Zahlungshistorie und wird nicht dargestellt — Rechnungen begleichen, um zu bewerten} other {# Lieferanten haben noch keine Zahlungshistorie und werden nicht dargestellt — Rechnungen begleichen, um zu bewerten}}",
-      "unratedUndatedNote": "{count, plural, one {die beglichenen Rechnungen von # Lieferant haben kein Fälligkeitsdatum und werden nicht dargestellt — Fälligkeitsdaten oder Zahlungsbedingungen ergänzen, um zu bewerten} other {die beglichenen Rechnungen von # Lieferanten haben kein Fälligkeitsdatum und werden nicht dargestellt — Fälligkeitsdaten oder Zahlungsbedingungen ergänzen, um zu bewerten}}"
+      "unratedUndatedNote": "{count, plural, one {Die beglichenen Rechnungen von # Lieferant haben kein Fälligkeitsdatum und werden nicht dargestellt — Fälligkeitsdaten oder Zahlungsbedingungen ergänzen, um zu bewerten} other {Die beglichenen Rechnungen von # Lieferanten haben kein Fälligkeitsdatum und werden nicht dargestellt — Fälligkeitsdaten oder Zahlungsbedingungen ergänzen, um zu bewerten}}"
     }
   },
   "cashflow": {
@@ -2948,7 +2948,8 @@
       "cliff": {
         "title": "Ungleichgewicht Einkaufs- vs. Verkaufsdynamik",
         "message": "Bestelldynamik ({po} %/Mo.) übersteigt die Auftragsdynamik ({so} %/Mo.) um {gap} % — Bestell/Auftrags-Verhältnis: {ratio}×",
-        "actionWithMonths": "Liquiditätsrisiko in ~{months} Monaten. Einkaufsverpflichtungen prüfen.",
+        "actionWithMonths": "Liquiditätsrisiko in ~{months, plural, one {# Periode} other {# Perioden}}. Einkaufsverpflichtungen prüfen.",
+        "actionBreached": "Das Verhältnis hat den Zielwert bereits überschritten — der Druck ist jetzt da. Einkaufsverpflichtungen sofort prüfen.",
         "actionMonitor": "Einkaufsdynamik beobachten und mit der Vertriebspipeline abstimmen.",
         "messageNoVelocity": "Bestell/Auftrags-Verhältnis: {ratio}× ohne messbare Dynamik"
       },
@@ -3205,6 +3206,7 @@
       "velocityEngine": {
         "label": "Dynamik-Engine",
         "note": "(Ende/Start)^(1/Zeiträume) − 1 mit {minBase} Mindestbasis",
+        "noteUnset": "(Ende/Start)^(1/Zeiträume) − 1 ohne Mindestbasis — jede Serie beginnt im ersten Monat",
         "value": "Monatliche CAGR"
       },
       "velocityThresholds": {
@@ -3242,7 +3244,7 @@
     },
     "details": {
       "anomaly": "{sigma}σ vom Mittel in {month}",
-      "cliff": "Lücke {gap} %, Verhältnis {ratio}×",
+      "cliff": "Lücke {gap}, Verhältnis {ratio}×",
       "cliffItem": "Bestell- vs. Auftragsdynamik",
       "concentration": "{share} der Ausgaben, {trend}",
       "fragmentation": "{txns} Trans./Mon., Ø {avg}",

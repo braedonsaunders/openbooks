@@ -3081,7 +3081,7 @@
       "fragmentation": "{txns} txns/mo, avg {avg}",
       "seasonal": "{deviation}% vs average month",
       "cliffItem": "PO vs SO velocity",
-      "cliff": "gap {gap}%, ratio {ratio}×",
+      "cliff": "gap {gap}, ratio {ratio}×",
       "cliffNoVelocity": "ratio {ratio}× — velocities not measurable"
     },
     "severity": {
@@ -3134,7 +3134,8 @@
       "velocityEngine": {
         "label": "Velocity engine",
         "value": "Monthly CAGR",
-        "note": "(end/start)^(1/periods) − 1 with {minBase} minimum base"
+        "note": "(end/start)^(1/periods) − 1 with {minBase} minimum base",
+        "noteUnset": "(end/start)^(1/periods) − 1 with no minimum base — every series scores from its first month"
       },
       "fields": {
         "highVelocity": {
@@ -3426,7 +3427,8 @@
       "cliff": {
         "title": "Purchase-Sales Velocity Imbalance",
         "message": "PO velocity ({po}%/mo) exceeds SO velocity ({so}%/mo) by {gap}% — PO/SO ratio: {ratio}×",
-        "actionWithMonths": "Cash pressure risk in ~{months} months. Review purchase commitments.",
+        "actionWithMonths": "Cash pressure risk in ~{months, plural, one {# period} other {# periods}}. Review purchase commitments.",
+        "actionBreached": "The ratio already breaches the target — pressure is now. Review purchase commitments immediately.",
         "actionMonitor": "Monitor purchase velocity and align with sales pipeline.",
         "messageNoVelocity": "PO/SO ratio is {ratio}× with no measurable velocities"
       },

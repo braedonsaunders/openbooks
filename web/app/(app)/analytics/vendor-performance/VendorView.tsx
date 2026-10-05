@@ -20,7 +20,7 @@ import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
-import { escapeTooltipHtml, useAnalyticsMoney, fmtPct, toChartNumber } from '../_ui/format'
+import { escapeTooltipHtml, useAnalyticsMoney, toChartNumber } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors', 'configuration'] as const
@@ -69,6 +69,7 @@ function SortHeaderCell<K extends string>({
 
 export function VendorView({ data: initialData, canConfigure }: { data: VendorData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.vendor')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const read = useAnalyticsTab('vendor-performance', { data: initialData }, TABS)
@@ -91,9 +92,9 @@ export function VendorView({ data: initialData, canConfigure }: { data: VendorDa
           <Gauge value={diversification} label={t(verdict.gaugeKey)} size={132} thickness={12} showTicks={false} bands={NEUTRAL_GAUGE_BANDS} />
         </div>
         <KpiCard icon={Truck} accent="sky" label={t('kpi.activeVendors')} value={String(totals.vendors)} sub={t('sub.inPeriod')} />
-        <KpiCard icon={Coins} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: fmtPct(totals.yoyPct) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={Clock} accent={(totals.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'amber'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : fmtPct(totals.onTimePct)} sub={t('sub.onTimeBills')} />
-        <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.top5Share')} value={fmtPct(totals.top5SharePct)} sub={t('sub.top5Concentration')} />
+        <KpiCard icon={Coins} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: formatPercent01(totals.yoyPct, locale, 1) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={Clock} accent={totals.onTimePct === null ? 'slate' : totals.onTimePct >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'amber'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : formatPercent01(totals.onTimePct, locale, 1)} sub={t('sub.onTimeBills')} />
+        <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.top5Share')} value={formatPercent01(totals.top5SharePct, locale, 1)} sub={t('sub.top5Concentration')} />
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
@@ -157,6 +158,7 @@ function OverviewTab({ data }: { data: VendorData }) {
 /* --------------------------------------------------------- Payment Behavior */
 function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const t = useTranslations('analytics.vendor')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<'spend' | 'avgDaysToPay' | 'onTimePct' | 'lateSpend'>('lateSpend')
@@ -170,7 +172,7 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Clock} accent={(totals.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'red'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : fmtPct(totals.onTimePct)} sub={t('sub.onTimeBills')} tone={(totals.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'positive' : 'negative'} />
+        <KpiCard icon={Clock} accent={totals.onTimePct === null ? 'slate' : totals.onTimePct >= data.config.onTimeGoodRate / 100 ? 'emerald' : 'red'} label={t('kpi.onTimeRate')} value={totals.onTimePct === null ? t('labels.unrated') : formatPercent01(totals.onTimePct, locale, 1)} sub={t('sub.onTimeBills')} tone={totals.onTimePct === null ? 'neutral' : totals.onTimePct >= data.config.onTimeGoodRate / 100 ? 'positive' : 'negative'} />
         <KpiCard icon={TimerReset} accent="sky" label={t('kpi.avgDaysToPay')} value={totals.avgDaysToPay === null ? '—' : t('days', { days: Math.round(totals.avgDaysToPay) })} sub={t('sub.fromBillToPayment')} />
         <KpiCard icon={HandCoins} accent="amber" label={t('kpi.latePaidSpend')} value={money(totals.lateSpend)} sub={t('sub.paidAfterDue')} tone="negative" />
         <KpiCard icon={ClipboardList} accent="violet" label={t('kpi.vendorsPaid')} value={String(paid.length)} sub={t('sub.withPaymentHistory')} />
@@ -197,7 +199,7 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.paidBills}</SharedTableCell>
                       <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.avgDaysToPay ?? 0) > data.config.slowPayDays ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300')}>{r.avgDaysToPay === null ? '—' : t('days', { days: Math.round(r.avgDaysToPay) })}</SharedTableCell>
-                      <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', (r.onTimePct ?? 0) >= data.config.onTimeGoodRate / 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? t('labels.unrated') : fmtPct(r.onTimePct)}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', r.onTimePct === null ? 'text-slate-600 dark:text-slate-300' : r.onTimePct >= data.config.onTimeGoodRate / 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? t('labels.unrated') : formatPercent01(r.onTimePct, locale, 1)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{toChartNumber(r.lateSpend) > 0 ? money(r.lateSpend) : '—'}</SharedTableCell>
                     </InteractiveTableRow>
                   ))}
@@ -218,6 +220,7 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
 /* -------------------------------------------------------------- Scorecard */
 function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const t = useTranslations('analytics.vendor')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
   const rows = [...data.rows].sort((a, b) => b.score - a.score)
@@ -254,8 +257,8 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.bills}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.yoyPct ?? 0) <= 0 ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')}>{r.yoyPct === null ? '—' : fmtPct(r.yoyPct)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? t('labels.unrated') : fmtPct(r.onTimePct)}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.yoyPct ?? 0) <= 0 ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')}>{r.yoyPct === null ? '—' : formatPercent01(r.yoyPct, locale, 1)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? t('labels.unrated') : formatPercent01(r.onTimePct, locale, 1)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-slate-800 dark:text-slate-200">{Math.round(r.score)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.grade])}>{r.grade}</span></SharedTableCell>
                 </InteractiveTableRow>
@@ -331,6 +334,7 @@ function matrixOption(rows: VendorRow[], money: (value: number) => string, t: Re
 /* ------------------------------------------------------------ Vendors table */
 function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const t = useTranslations('analytics.vendor')
+  const locale = useLocale()
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number | string) => fmtMoney(n, { compact: true })
@@ -350,7 +354,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
       actions={
         <button
           type="button"
-          onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, r.spend, (r.sharePct * 100).toFixed(1), r.bills, r.avgBill, r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
+          onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, r.spend, String(r.sharePct * 100), r.bills, r.avgBill, r.onTimePct === null ? '' : String(r.onTimePct * 100), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
           className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           <Download size={11} /> {t('csv.export')}
@@ -376,10 +380,10 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
               <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                 <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.spend)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{formatPercent01(r.sharePct, locale, 1)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.bills}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.avgBill)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? t('labels.unrated') : fmtPct(r.onTimePct)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? t('labels.unrated') : formatPercent01(r.onTimePct, locale, 1)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-700 dark:text-slate-300">{Math.round(r.score)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
               </InteractiveTableRow>
