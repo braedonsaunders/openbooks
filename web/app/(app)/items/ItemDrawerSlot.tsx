@@ -10,6 +10,9 @@ import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
 import { ItemVariantsTab } from './ItemVariantsTab'
 import { KitComponentsTab } from './KitComponentsTab'
+import { externalLinkUnlinkColumn } from '../channels/external-links-column'
+import { listLinksByNative } from '@openbooks/engine/src/commerce/external-links.ts'
+import { withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 
 /** Item-owned configuration uses the same scoped list and drawer as setup records. */
 export async function ItemDrawerSlot({ drawer, sp }: {
@@ -37,6 +40,22 @@ export async function ItemDrawerSlot({ drawer, sp }: {
         ) : null,
       }]
     : []
+  // External identities resolve through the owning engine service: the
+  // generic parent predicate cannot filter on the native table, so the tab
+  // reads exactly this item's links and unlinks through the audited channel
+  // endpoint instead of the generic setup delete.
+  const showExternalLinks = resolveSetupEntityGate(
+    { featureKey: undefined, featureKeysAny: ['salesChannels', 'usageBilling'] },
+    features,
+  ).enabled
+  const externalLinkIds = showExternalLinks
+    ? new Set(
+        (await withOrgContext(authz.user.orgId, () =>
+          listLinksByNative(authz.user.orgId, 'items', String(props.payload.item.id)),
+        )).map((link) => link.id),
+      )
+    : new Set<string>()
+  const canUnlinkExternal = showExternalLinks && can(authz, 'channels.manage')
   const recordTabs = [
     ...(kitTab ? [kitTab] : []),
     ...variantsTab,
@@ -52,12 +71,18 @@ export async function ItemDrawerSlot({ drawer, sp }: {
             actorId={authz.user.id}
             searchParams={sp}
             basePath="/items"
-            canManage={can(authz, 'items.manage')}
+            canManage={entity.key === 'external-links' ? false : can(authz, 'items.manage')}
             allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
             parent={{ recordKey: 'items', value: String(props.payload.item.id) }}
             rowParam="recordRow"
             paramPrefix="record"
             stacked
+            {...(entity.key === 'external-links'
+              ? {
+                  visibleRowIds: externalLinkIds,
+                  renderColumn: externalLinkUnlinkColumn(canUnlinkExternal),
+                }
+              : {})}
           />
         ) : null,
       })),

@@ -1,0 +1,137 @@
+{
+  "home": {
+    "title": "Canales de venta",
+    "description": "Conexiones de tiendas, sus entregas y lo que necesita atención.",
+    "connect": "Conectar una tienda",
+    "emptyTitle": "Aún no hay tiendas conectadas",
+    "emptyBody": "Los canales conectan tiendas como Shopify con OpenBooks. Cada conexión sincroniza productos, recibe pedidos y registra cada entrega para repetirla.",
+    "emptyFeaturesAction": "Activar Canales de venta",
+    "loadFailedTitle": "Los canales no se cargaron",
+    "tiles": {
+      "active": "Canales activos",
+      "attention": "Entregas que necesitan atención",
+      "attentionSub": "Fallidas o descartadas — revise la cola",
+      "attentionClear": "Todo procesado",
+      "ordersToday": "Pedidos de hoy",
+      "ordersTodaySub": "La sincronización de pedidos llega con el primer conector",
+      "lastDelivery": "Última entrega"
+    },
+    "attentionTitle": "Necesita atención",
+    "attentionHint": "Entregas fallidas o descartadas, con el canal responsable.",
+    "attentionReason": "{failed, plural, =0 {} other {# fallidas · }}{dead, plural, =0 {} other {# descartadas}}",
+    "review": "Revisar",
+    "channelsTitle": "Conexiones",
+    "channelsHint": "Una tarjeta por tienda, con su estado y acciones.",
+    "cardAttention": "{count, plural, one {# entrega necesita} other {# entregas necesitan}} atención",
+    "cardClear": "Todo en orden · última entrega {delivery}",
+    "open": "Abrir",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "disconnect": "Desconectar",
+    "pauseTitle": "¿Pausar {name}?",
+    "pauseBody": "Las entregas nuevas esperan mientras el canal está pausado. Nada guardado se pierde.",
+    "resumeTitle": "¿Reanudar {name}?",
+    "resumeBody": "Las entregas en espera se procesan desde donde se detuvieron.",
+    "disconnectTitle": "¿Desconectar {name}?",
+    "disconnectBody": "La tienda deja de entregar. Los pedidos, enlaces e historial pasados quedan en OpenBooks.",
+    "disconnectVerify": "¿Desconectar {name}? Su historial queda, pero no llegan entregas nuevas.",
+    "reasonLabel": "Motivo",
+    "pauseConfirm": "Pausar canal",
+    "resumeConfirm": "Reanudar canal",
+    "disconnectConfirm": "Desconectar canal",
+    "advancedTitle": "Avanzado",
+    "advancedSummary": "Secretos de webhook y detalle contable",
+    "advancedBody": "La verificación de entregas y el detalle contable por evento viven en el espacio de cada canal, en sus pestañas Actividad y Ajustes.",
+    "connectTitle": "Conectar {kind}",
+    "connectBody": "Nombre la conexión e indique a OpenBooks qué cuenta de tienda es. El secreto de firma siguiente se registra en la tienda.",
+    "connectConfirm": "Conectar tienda",
+    "connectNameLabel": "Nombre del canal",
+    "connectNamePlaceholder": "Tienda web del centro",
+    "connectAccountLabel": "Cuenta de la tienda",
+    "connectAccountPlaceholder": "shop.myshopify.com",
+    "connectCurrencyLabel": "Moneda",
+    "secretBody": "Registre este secreto de firma en la tienda ahora — se sella y no vuelve a mostrarse.",
+    "toast": {
+      "loadFailed": "Los canales no se cargaron (estado {status}).",
+      "actionFailed": "La acción no se completó (estado {status}).",
+      "paused": "Canal pausado.",
+      "resumed": "Canal reanudado.",
+      "disconnected": "Canal desconectado.",
+      "connected": "Tienda conectada.",
+      "createFailed": "La tienda no se conectó (estado {status})."
+    }
+  },
+  "workspace": {
+    "back": "Canales",
+    "tabs": {
+      "overview": "Resumen",
+      "activity": "Actividad",
+      "settings": "Ajustes"
+    },
+    "attentionBanner": "{count, plural, one {# entrega necesita} other {# entregas necesitan}} atención — revise la pestaña Actividad.",
+    "healthTitle": "Estado de sincronización",
+    "healthEmpty": "Aún no informa ningún flujo. El estado aparece cuando el conector funciona.",
+    "recentTitle": "Entregas recientes",
+    "recentEmpty": "Aún no hay entregas. El primer webhook de la tienda aparece aquí.",
+    "settingsHint": "Cuentas contables y ubicaciones de existencias de este canal. Los cambios rigen para pedidos nuevos; el historial nunca se reescribe."
+  },
+  "activity": {
+    "loading": "Cargando entregas…",
+    "loadFailedTitle": "Las entregas no se cargaron",
+    "retry": "Reintentar",
+    "filterLabel": "Filtrar por estado",
+    "filters": {
+      "all": "Todas",
+      "pending": "Pendientes",
+      "failed": "Fallidas",
+      "dead": "Descartadas",
+      "processed": "Procesadas"
+    },
+    "columns": {
+      "received": "Recibida",
+      "topic": "Entrega",
+      "status": "Estado",
+      "error": "Problema"
+    },
+    "emptyTitle": "No hay entregas en este filtro",
+    "emptyBody": "Las entregas de la tienda aparecen aquí con su verificación y estado.",
+    "replaySelected": "Repetir {count, plural, one {# entrega} other {# entregas}}",
+    "replayOne": "Repetir",
+    "replayTitle": "¿Repetir {count, plural, one {# entrega} other {# entregas}}?",
+    "replayBody": "Las entregas pasan de nuevo por el conector. Lo ya aplicado queda aplicado — repetir es idempotente.",
+    "replayConfirm": "Repetir",
+    "status": {
+      "pending": "Pendiente",
+      "processing": "Procesando",
+      "processed": "Procesada",
+      "ignored": "Ignorada",
+      "failed": "Fallida",
+      "dead": "Descartada"
+    },
+    "toast": {
+      "loadFailed": "Las entregas no se cargaron (estado {status}).",
+      "replayFailed": "La repetición no se completó (estado {status}).",
+      "replayed": "{count, plural, one {# entrega} other {# entregas}} en cola de nuevo."
+    }
+  },
+  "status": {
+    "draft": "Borrador",
+    "connecting": "Conectando",
+    "active": "Activo",
+    "paused": "Pausado",
+    "disconnecting": "Desconectando",
+    "disconnected": "Desconectado",
+    "error": "Error"
+  },
+  "links": {
+    "unlinkTitle": "¿Desvincular {externalId}?",
+    "unlinkBody": "El objeto de {provider} en la cuenta {externalAccount} queda, pero OpenBooks deja de asignarlo aquí.",
+    "unlinkConfirm": "Desvincular",
+    "unlink": "Desvincular",
+    "emptyBody": "Aún no hay ID externos. Las identidades de tienda y proveedor vinculadas aparecen aquí.",
+    "toast": {
+      "unlinkFailed": "La desvinculación no se completó (estado {status}).",
+      "unlinked": "ID externo desvinculado."
+    }
+  }
+}

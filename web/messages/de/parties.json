@@ -56,7 +56,8 @@
       "payroll": "Lohnabrechnung",
       "pulse": "Puls",
       "relationship": "Beziehung",
-      "paymentMethods": "Zahlungsmethoden"
+      "paymentMethods": "Zahlungsmethoden",
+      "externalIds": "Externe IDs"
     },
     "autopay": {
       "heading": "Zahlungsmethoden",

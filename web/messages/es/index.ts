@@ -20,6 +20,7 @@ import assistant from './assistant.json'
 import banking from './banking.json'
 import billingImport from './billingImport.json'
 import budgets from './budgets.json'
+import channels from './channels.json'
 import close from './close.json'
 import common from './common.json'
 import compliance from './compliance.json'
@@ -93,6 +94,7 @@ export default {
   banking,
   billingImport,
   budgets,
+  channels,
   close,
   common,
   compliance,

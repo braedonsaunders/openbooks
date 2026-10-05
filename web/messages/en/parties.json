@@ -53,7 +53,8 @@
       "employment": "Employment",
       "pulse": "Pulse",
       "relationship": "Relationship",
-      "paymentMethods": "Payment methods"
+      "paymentMethods": "Payment methods",
+      "externalIds": "External IDs"
     },
     "autopay": {
       "heading": "Payment methods",

@@ -53,7 +53,8 @@
       "payroll": "Paie",
       "pulse": "Pouls",
       "relationship": "Relation",
-      "paymentMethods": "Moyens de paiement"
+      "paymentMethods": "Moyens de paiement",
+      "externalIds": "Identifiants externes"
     },
     "autopay": {
       "heading": "Moyens de paiement",

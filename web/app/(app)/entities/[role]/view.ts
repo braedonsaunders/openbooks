@@ -6,6 +6,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
+import { listLinksByNative } from '@openbooks/engine/src/commerce/external-links.ts'
+import { withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
@@ -142,7 +144,7 @@ export async function loadEntityRole(
   const partyTab: PartyTab = requestedPartyTab === 'benefits' || requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
     || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
-    || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship'
+    || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship' || requestedPartyTab === 'external-ids'
     || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
     || requestedPartyTab === 'paymentMethods'
     ? requestedPartyTab
@@ -296,6 +298,24 @@ export async function loadEntityRole(
               : null,
           canReadCrmAccounts,
           canManageCrmAccounts,
+          // Customer storefront identities: the drawer tab renders rows with
+          // an audited unlink action. Stripe-owned links (no channel) read
+          // without a button — usage billing owns their unlinking.
+          externalIdsTab: role === 'customer' && partyId && isUuid(partyId) &&
+            (await isFeatureEnabled(orgId, 'salesChannels') || await isFeatureEnabled(orgId, 'usageBilling'))
+            ? {
+                links: (await withOrgContext(orgId, () => listLinksByNative(orgId, 'parties', partyId))).map((link) => ({
+                  id: link.id,
+                  channelId: link.channelId,
+                  provider: link.provider,
+                  externalAccount: link.externalAccount,
+                  objectType: link.objectType,
+                  externalId: link.externalId,
+                  lastSyncedAt: link.lastSyncedAt,
+                })),
+                canUnlink: can(authz, 'channels.manage'),
+              }
+            : null,
           lifecycleStage: openLifecycleStage,
           canManageWages: can(authz, 'admin.setup.manage'),
           canReadBenefits: hrmEnabled && can(authz, 'hrm.benefits.read'),

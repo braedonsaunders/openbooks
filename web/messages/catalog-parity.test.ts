@@ -954,6 +954,14 @@ const COGNATES = new Set<string>([
   'de:apps.management.fields.version|Version',
   'de:apps.management.labels.name|Name',
   'de:apps.management.status|Status',
+  // Channels identicals: the connect form's example storefront domain is a
+  // provider-fixed hostname, identical in every locale.
+  'de:channels.home.connectAccountPlaceholder|shop.myshopify.com',
+  'es:channels.home.connectAccountPlaceholder|shop.myshopify.com',
+  'fr:channels.home.connectAccountPlaceholder|shop.myshopify.com',
+  'ja:channels.home.connectAccountPlaceholder|shop.myshopify.com',
+  'pt-BR:channels.home.connectAccountPlaceholder|shop.myshopify.com',
+  'zh:channels.home.connectAccountPlaceholder|shop.myshopify.com',
   'de:apps.management.version|Version',
   'de:apps.title|Apps',
   'de:apps.version|Version {version}',
