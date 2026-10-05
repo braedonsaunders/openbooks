@@ -2946,7 +2946,8 @@
       "seasonalHigh": "支出通常在{months}偏高",
       "seasonalLow": "支出通常在{months}偏低",
       "shadowItReason": "费用报销行没有商户/供应商信息——只有费用科目和自由文本说明——因此无法追踪员工之间病毒式传播的软件采用情况。",
-      "fragmentationUnconfigured": "请在支出增速 → 配置 中设置碎片化金额上限"
+      "fragmentationUnconfigured": "请在支出增速 → 配置 中设置碎片化金额上限",
+      "cliffUnconfigured": "请在支出增速 → 配置 中设置最小基数"
     },
     "banner": {
       "count": "共{total}条预警",
@@ -3200,7 +3201,7 @@
         },
         "minBaseAmount": {
           "label": "最小基数",
-          "help": "低于该金额（{currency}）的序列将被忽略 — 为空表示无下限"
+          "help": "低于该金额（{currency}）的序列将被忽略 — 为空表示无下限，承诺断崖将报告为未配置"
         },
         "opexRatioAlert": {
           "label": "运营费用率预警（%）",

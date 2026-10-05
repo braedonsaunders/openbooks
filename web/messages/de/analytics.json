@@ -2946,7 +2946,8 @@
       "seasonalHigh": "Höhere Ausgaben fallen typischerweise in {months}",
       "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}",
       "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen.",
-      "fragmentationUnconfigured": "Setzen Sie die Fragmentierungs-Obergrenze unter Spend Velocity → Konfiguration"
+      "fragmentationUnconfigured": "Setzen Sie die Fragmentierungs-Obergrenze unter Spend Velocity → Konfiguration",
+      "cliffUnconfigured": "Setzen Sie die Mindestbasis unter Spend Velocity → Konfiguration"
     },
     "banner": {
       "count": "{total} Warnungen gesamt",
@@ -3200,7 +3201,7 @@
         },
         "minBaseAmount": {
           "label": "Mindestbasis",
-          "help": "Serien unter diesem Betrag in {currency} überspringt die Engine — leer heißt: kein Minimum"
+          "help": "Serien unter diesem Betrag in {currency} überspringt die Engine — leer heißt: kein Minimum, und die Klippe meldet sich als nicht konfiguriert"
         },
         "opexRatioAlert": {
           "label": "OpEx-Quotenalarm (%)",

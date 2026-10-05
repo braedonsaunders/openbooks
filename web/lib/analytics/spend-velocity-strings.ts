@@ -54,6 +54,8 @@ export interface SpendVelocityStrings {
   shadowItReason: string;
   /** Named remedy when the fragmentation size cap is not configured. */
   fragmentationUnconfigured: string;
+  /** Named remedy when the minimum base is not configured. */
+  cliffUnconfigured: string;
 }
 
 
@@ -133,5 +135,6 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     seasonalLow: (monthNames) => t("spendVelocity.insights.seasonalLow", { months: list(monthNames) }),
     shadowItReason: t("spendVelocity.insights.shadowItReason"),
     fragmentationUnconfigured: t("spendVelocity.insights.fragmentationUnconfigured"),
+    cliffUnconfigured: t("spendVelocity.insights.cliffUnconfigured"),
   };
 }

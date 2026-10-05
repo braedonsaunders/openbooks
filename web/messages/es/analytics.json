@@ -2946,7 +2946,8 @@
       "seasonalHigh": "El gasto elevado suele concentrarse en {months}",
       "seasonalLow": "El gasto reducido suele concentrarse en {months}",
       "shadowItReason": "Las líneas de informes de gastos no llevan comercio ni proveedor — solo la cuenta de gastos y una descripción libre — por lo que la adopción viral de software entre empleados no se puede rastrear.",
-      "fragmentationUnconfigured": "Configure el tope de fragmentación en Velocidad de gasto → Configuración"
+      "fragmentationUnconfigured": "Configure el tope de fragmentación en Velocidad de gasto → Configuración",
+      "cliffUnconfigured": "Configure la base mínima en Velocidad de gasto → Configuración"
     },
     "banner": {
       "count": "{total} alertas en total",
@@ -3200,7 +3201,7 @@
         },
         "minBaseAmount": {
           "label": "Base mínima",
-          "help": "Las series bajo este importe en {currency} se omiten — vacío significa sin mínimo"
+          "help": "Las series bajo este importe en {currency} se omiten — vacío significa sin mínimo, y el abismo de compromisos se muestra como no configurado"
         },
         "opexRatioAlert": {
           "label": "Alerta de ratio OpEx (%)",
