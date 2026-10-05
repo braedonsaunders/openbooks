@@ -3141,7 +3141,7 @@
       "zombie": "{amount}/mo unchanged for {months} months",
       "concentration": "{share} of spend, {trend}",
       "fragmentation": "{txns} txns/mo, avg {avg}",
-      "seasonal": "{deviation}% vs average month",
+      "seasonal": "{sign}{deviation, number}% vs average month",
       "cliffItem": "PO vs SO velocity",
       "cliff": "gap {gap}, ratio {ratio}×",
       "cliffNoVelocity": "ratio {ratio}× — velocities not measurable"
@@ -3169,7 +3169,7 @@
     },
     "deviationNote": "Monthly deviation from average",
     "unit": {
-      "months": "months"
+      "months": "{count, plural, one {# month} other {# months}}"
     },
     "config": {
       "velocityThresholds": {
@@ -3438,7 +3438,7 @@
       "li2Bold": "Commitment cliff",
       "li2Tail": " compares purchase-order vs sales-order monthly velocity.",
       "li3Bold": "Revenue normalisation",
-      "li3Tail": " uses GL income for the OpEx ratio ({ratio}%).",
+      "li3Tail": " uses GL income for the OpEx ratio ({ratio, number}%).",
       "li4Bold": "Shadow IT",
       "li4Tail": " — unavailable: {reason}",
       "outro": "Drill-downs fetch that account or vendor's full activity for the period on click (searchable, with monthly trend and breakdown); each row links to the real record in its native module."
@@ -3453,7 +3453,7 @@
         "title": "Transaction Type Imbalance",
         "fasterBills": "Bills",
         "fasterExpenses": "Expense Reports",
-        "message": "{faster} growing {pct}% faster than other type",
+        "message": "{faster} growing {pct, number}% faster than other type",
         "action": "Review approval workflows and spending controls"
       },
       "anomalies": {
@@ -3468,7 +3468,7 @@
       },
       "concentration": {
         "title": "High Spend Concentration",
-        "message": "Top expense category accounts for {pct}% of spend",
+        "message": "Top expense category accounts for {pct, number}% of spend",
         "action": "Review for cost optimization opportunities"
       },
       "zombies": {
@@ -3483,12 +3483,12 @@
       },
       "opexRatio": {
         "title": "High OpEx to Revenue Ratio",
-        "message": "Operating expenses are {pct}% of revenue",
+        "message": "Operating expenses are {pct, number}% of revenue",
         "action": "Review cost structure and identify efficiency opportunities"
       },
       "cliff": {
         "title": "Purchase-Sales Velocity Imbalance",
-        "message": "PO velocity ({po}%/mo) exceeds SO velocity ({so}%/mo) by {gap}% — PO/SO ratio: {ratio}×",
+        "message": "PO velocity ({po, number}%/mo) exceeds SO velocity ({so, number}%/mo) by {gap, number}% — PO/SO ratio: {ratio}×",
         "actionWithMonths": "Cash pressure risk in ~{months, plural, one {# period} other {# periods}}. Review purchase commitments.",
         "actionBreached": "The ratio already breaches the target — pressure is now. Review purchase commitments immediately.",
         "actionMonitor": "Monitor purchase velocity and align with sales pipeline.",
@@ -3499,7 +3499,8 @@
       "shadowItReason": "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
       "fragmentationUnconfigured": "Set the fragmentation size cap in Spend Velocity → Configuration",
       "annualizedUnknown": "Annualized figures need the report end inside a declared fiscal period",
-      "cliffUnconfigured": "Set the minimum base in Spend Velocity → Configuration"
+      "cliffUnconfigured": "Set the minimum base in Spend Velocity → Configuration",
+      "cliffNoSalesBase": "No sales-order spend in the window, so PO coverage is unknown"
     },
     "labels": {
       "unknownParty": "Unknown",

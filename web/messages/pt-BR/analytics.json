@@ -2974,7 +2974,7 @@
         "title": "Desequilíbrio entre tipos de transação",
         "fasterBills": "Faturas",
         "fasterExpenses": "Relatórios de despesas",
-        "message": "{faster} crescendo {pct} % mais rápido que o outro tipo",
+        "message": "{faster} crescendo {pct, number} % mais rápido que o outro tipo",
         "action": "Revisar fluxos de aprovação e controles de gastos"
       },
       "anomalies": {
@@ -2989,7 +2989,7 @@
       },
       "concentration": {
         "title": "Alta concentração de gastos",
-        "message": "A principal categoria de despesas representa {pct} % dos gastos",
+        "message": "A principal categoria de despesas representa {pct, number} % dos gastos",
         "action": "Avaliar oportunidades de otimização de custos"
       },
       "zombies": {
@@ -3004,12 +3004,12 @@
       },
       "opexRatio": {
         "title": "Relação alta entre despesas operacionais e receita",
-        "message": "As despesas operacionais representam {pct} % da receita",
+        "message": "As despesas operacionais representam {pct, number} % da receita",
         "action": "Revisar a estrutura de custos e identificar eficiências"
       },
       "cliff": {
         "title": "Desequilíbrio entre velocidade de compras e vendas",
-        "message": "Velocidade de OC ({po} %/mês) supera a de OV ({so} %/mês) em {gap} % — relação OC/OV: {ratio}×",
+        "message": "Velocidade de OC ({po, number} %/mês) supera a de OV ({so, number} %/mês) em {gap, number} % — relação OC/OV: {ratio}×",
         "actionWithMonths": "Risco de pressão de caixa em ~{months, plural, one {# período} other {# períodos}}. Revisar compromissos de compra.",
         "actionBreached": "A razão já ultrapassa a meta — a pressão é agora. Revisar os compromissos de compra imediatamente.",
         "actionMonitor": "Monitorar a velocidade de compras e alinhá-la ao pipeline de vendas.",
@@ -3020,7 +3020,8 @@
       "shadowItReason": "As linhas de relatórios de despesas não trazem estabelecimento nem fornecedor — apenas a conta de despesas e uma descrição livre — portanto a adoção viral de software entre funcionários não pode ser rastreada.",
       "fragmentationUnconfigured": "Defina o teto de fragmentação em Velocidade de gastos → Configuração",
       "annualizedUnknown": "Os valores anualizados precisam do fim do período dentro de um período fiscal declarado",
-      "cliffUnconfigured": "Defina a base mínima em Velocidade de gastos → Configuração"
+      "cliffUnconfigured": "Defina a base mínima em Velocidade de gastos → Configuração",
+      "cliffNoSalesBase": "Sem pedidos de venda no período, portanto a cobertura das compras é desconhecida"
     },
     "banner": {
       "count": "{total} alertas no total",
@@ -3312,7 +3313,7 @@
       "concentration": "{share} dos gastos, {trend}",
       "fragmentation": "{txns} transações/mês, méd. {avg}",
       "frog": "+{rate}/mês por {months} meses",
-      "seasonal": "{deviation}% vs mês médio",
+      "seasonal": "{sign}{deviation, number}% vs mês médio",
       "zombie": "{amount}/mês inalterado por {months} meses",
       "cliffNoVelocity": "razão {ratio}× — velocidades não mensuráveis"
     },
@@ -3445,7 +3446,7 @@
       "li2Bold": "Penhasco de compromissos",
       "li2Tail": " compara a velocidade mensal de pedidos de compra vs pedidos de venda.",
       "li3Bold": "Normalização de receita",
-      "li3Tail": " usa a receita contábil para o índice de despesas operacionais ({ratio}%).",
+      "li3Tail": " usa a receita contábil para o índice de despesas operacionais ({ratio, number}%).",
       "li4Bold": "TI paralela",
       "li4Tail": " — indisponível: {reason}",
       "outro": "Detalhamentos buscam toda a movimentação da conta ou do fornecedor no período ao clicar (pesquisável, com tendência mensal e composição); cada linha leva ao registro real no módulo de origem."
@@ -3499,7 +3500,7 @@
       "stable": "Estável"
     },
     "unit": {
-      "months": "meses"
+      "months": "{count, plural, one {# mês} other {# meses}}"
     },
     "labels": {
       "unknownParty": "Desconhecido",

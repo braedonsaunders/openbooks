@@ -36,7 +36,7 @@ export function spendVelocityFixture(): SpendVelocityData {
     concentration: { summary: { top1Share: 10, top5Share: 40 }, accounts: [] },
     shadowIT: { available: false, reason: 'Expense lines carry no payee vendor' },
     revenue: { hasData: false, totalRevenue: '0', opexRatio: 0 },
-    commitmentCliff: { summary: { velocityGap: null, status: 'healthy', poVelocity: null, soVelocity: null, ratio: 0, monthsToCliff: null, totalPO: '0', totalSO: '0', configured: false, reason: 'Set the minimum base in Spend Velocity → Configuration' }, months: [] },
+    commitmentCliff: { summary: { velocityGap: null, status: 'unknown', poVelocity: null, soVelocity: null, ratio: null, monthsToCliff: null, totalPO: '0', totalSO: '0', configured: false, reason: 'Set the minimum base in Spend Velocity → Configuration' }, months: [] },
     seasonal: { insights: [], patterns: [] },
     accountVelocity: [],
     monthlyTrends: [],

@@ -2974,7 +2974,7 @@
         "title": "Ungleichgewicht der Transaktionsarten",
         "fasterBills": "Rechnungen",
         "fasterExpenses": "Reisekostenabrechnungen",
-        "message": "{faster} wachsen {pct} % schneller als die andere Art",
+        "message": "{faster} wachsen {pct, number} % schneller als die andere Art",
         "action": "Genehmigungsprozesse und Ausgabenkontrollen prüfen"
       },
       "anomalies": {
@@ -2989,7 +2989,7 @@
       },
       "concentration": {
         "title": "Hohe Ausgabenkonzentration",
-        "message": "Die größte Ausgabenkategorie macht {pct} % der Ausgaben aus",
+        "message": "Die größte Ausgabenkategorie macht {pct, number} % der Ausgaben aus",
         "action": "Auf Optimierungspotenzial prüfen"
       },
       "zombies": {
@@ -3004,12 +3004,12 @@
       },
       "opexRatio": {
         "title": "Hohes Verhältnis Betriebskosten zu Umsatz",
-        "message": "Die Betriebskosten betragen {pct} % des Umsatzes",
+        "message": "Die Betriebskosten betragen {pct, number} % des Umsatzes",
         "action": "Kostenstruktur prüfen und Effizienzpotenziale identifizieren"
       },
       "cliff": {
         "title": "Ungleichgewicht Einkaufs- vs. Verkaufsdynamik",
-        "message": "Bestelldynamik ({po} %/Mo.) übersteigt die Auftragsdynamik ({so} %/Mo.) um {gap} % — Bestell/Auftrags-Verhältnis: {ratio}×",
+        "message": "Bestelldynamik ({po, number} %/Mo.) übersteigt die Auftragsdynamik ({so, number} %/Mo.) um {gap, number} % — Bestell/Auftrags-Verhältnis: {ratio}×",
         "actionWithMonths": "Liquiditätsrisiko in ~{months, plural, one {# Periode} other {# Perioden}}. Einkaufsverpflichtungen prüfen.",
         "actionBreached": "Das Verhältnis hat den Zielwert bereits überschritten — der Druck ist jetzt da. Einkaufsverpflichtungen sofort prüfen.",
         "actionMonitor": "Einkaufsdynamik beobachten und mit der Vertriebspipeline abstimmen.",
@@ -3020,7 +3020,8 @@
       "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen.",
       "fragmentationUnconfigured": "Setzen Sie die Fragmentierungs-Obergrenze unter Spend Velocity → Konfiguration",
       "annualizedUnknown": "Annualisierte Werte brauchen das Berichtsende in einer deklarierten Fiskalperiode",
-      "cliffUnconfigured": "Setzen Sie die Mindestbasis unter Spend Velocity → Konfiguration"
+      "cliffUnconfigured": "Setzen Sie die Mindestbasis unter Spend Velocity → Konfiguration",
+      "cliffNoSalesBase": "Keine Verkaufsaufträge im Zeitraum, daher ist die PO-Abdeckung unbekannt"
     },
     "banner": {
       "count": "{total} Warnungen gesamt",
@@ -3312,7 +3313,7 @@
       "concentration": "{share} der Ausgaben, {trend}",
       "fragmentation": "{txns} Trans./Mon., Ø {avg}",
       "frog": "+{rate}/Mon. über {months} Monate",
-      "seasonal": "{deviation} % vs Ø-Monat",
+      "seasonal": "{sign}{deviation, number} % vs Ø-Monat",
       "zombie": "{amount}/Mon. unverändert über {months} Monate",
       "cliffNoVelocity": "Verhältnis {ratio}× — Dynamik nicht messbar"
     },
@@ -3445,7 +3446,7 @@
       "li2Bold": "Verpflichtungsklippe",
       "li2Tail": " vergleicht monatliche Bestell- vs. Auftragsdynamik.",
       "li3Bold": "Umsatznormierung",
-      "li3Tail": " nutzt Hauptbucherlöse für die OpEx-Quote ({ratio} %).",
+      "li3Tail": " nutzt Hauptbucherlöse für die OpEx-Quote ({ratio, number} %).",
       "li4Bold": "Schatten-IT",
       "li4Tail": " — nicht verfügbar: {reason}",
       "outro": "Drilldowns laden beim Anklicken die volle Aktivität des Kontos oder Lieferanten im Zeitraum (durchsuchbar, mit Monatstrend und Aufschlüsselung); jede Zeile verlinkt den echten Datensatz im Stammmodul."
@@ -3499,7 +3500,7 @@
       "stable": "Stabil"
     },
     "unit": {
-      "months": "Monate"
+      "months": "{count, plural, one {# Monat} other {# Monate}}"
     },
     "labels": {
       "unknownParty": "Unbekannt",

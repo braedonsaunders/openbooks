@@ -58,6 +58,8 @@ export interface SpendVelocityStrings {
   fragmentationUnconfigured: string;
   /** Named remedy when the minimum base is not configured. */
   cliffUnconfigured: string;
+  /** Named reason when no sales-order spend leaves PO coverage unknowable. */
+  cliffNoSalesBase: string;
 }
 
 
@@ -123,10 +125,12 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     }),
     cliff: (po, so, gap, ratio) => ({
       title: t("spendVelocity.insights.cliff.title"),
+      // Velocities read through ICU number args; the ratio can be a float
+      // (or the unknown dash), so it renders through the request locale here.
       message:
         po === null || so === null || gap === null
-          ? t("spendVelocity.insights.cliff.messageNoVelocity", { ratio: ratio === null ? "—" : ratio })
-          : t("spendVelocity.insights.cliff.message", { po, so, gap, ratio: ratio === null ? "—" : ratio }),
+          ? t("spendVelocity.insights.cliff.messageNoVelocity", { ratio: ratio === null ? "—" : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ratio) })
+          : t("spendVelocity.insights.cliff.message", { po, so, gap, ratio: ratio === null ? "—" : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ratio) }),
       action: "",
     }),
     cliffAction: (monthsToCliff) =>
@@ -140,5 +144,6 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     shadowItReason: t("spendVelocity.insights.shadowItReason"),
     fragmentationUnconfigured: t("spendVelocity.insights.fragmentationUnconfigured"),
     cliffUnconfigured: t("spendVelocity.insights.cliffUnconfigured"),
+    cliffNoSalesBase: t("spendVelocity.insights.cliffNoSalesBase"),
   };
 }
