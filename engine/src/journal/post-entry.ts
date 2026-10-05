@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { normalizeDecimal, normalizeMoney } from "../money/money.ts";
 import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
 import { inExecutorTransaction, type SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
@@ -90,7 +92,7 @@ export interface PostEntryInput {
   /**
    * Exactly-once identity: stamped into custom and arbitrated by the partial
    * unique index journal_entries_org_idempotency_key — an entry already
-   * carrying it is returned instead of posting a duplicate.
+   * carrying it is returned only when its financial request matches.
    */
   idempotencyKey?: string;
   /** Close modules to check besides the always-implied GL module. */
@@ -123,67 +125,39 @@ type PreparedLine = PostEntryLineInput & {
   fxStated: boolean;
 };
 
+type PostingHeader = Pick<PostEntryInput, "orgId" | "bookId" | "subsidiaryId" | "postingDate" | "periodId" | "memo" | "origin" | "reversesEntryId" | "sourceDocumentId">;
+
+/** Financial identity excludes allocated numbers, actors and replay context. */
+function postingRequestHash(header: PostingHeader, lines: readonly PostEntryLineInput[]): string {
+  const identity = {
+    version: 1,
+    orgId: header.orgId, bookId: header.bookId, subsidiaryId: header.subsidiaryId,
+    postingDate: header.postingDate, periodId: header.periodId, origin: header.origin,
+    memo: header.memo ?? null, reversesEntryId: header.reversesEntryId ?? null,
+    sourceDocumentId: header.sourceDocumentId ?? null,
+    lines: lines.map((line, index) => ({
+      lineNumber: line.lineNumber ?? index + 1, accountId: line.accountId,
+      subsidiaryId: line.subsidiaryId ?? header.subsidiaryId,
+      amount: normalizeMoney(line.amount), currency: line.currency,
+      txnAmount: normalizeMoney(line.txnAmount ?? line.amount), fxRate: normalizeDecimal(line.fxRate ?? "1", 10),
+      memo: line.memo ?? null, partyId: line.partyId ?? null,
+      departmentId: line.departmentId ?? null, projectId: line.projectId ?? null,
+      locationId: line.locationId ?? null, classId: line.classId ?? null,
+      equipmentUnitId: line.equipmentUnitId ?? null, paymentCardId: line.paymentCardId ?? null,
+      taxCodeId: line.taxCodeId ?? null, extraDims: line.extraDims ?? {},
+      quantity: line.quantity == null ? null : normalizeDecimal(line.quantity, 8),
+      unit: line.unit ?? null, dueDate: line.dueDate ?? null,
+      isOpenItem: line.isOpenItem ?? false, custom: line.custom ?? {},
+      contributorKind: line.contributorKind ?? null, contributorRef: line.contributorRef ?? null,
+    })).sort((a, b) => a.lineNumber - b.lineNumber),
+  };
+  return createHash("sha256").update(canonicalJson(identity)).digest("hex");
+}
+
 const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
 
 function fail(message: string): never {
   throw new LedgerPostError(message);
-}
-
-/** A decimal string with insignificant trailing zeros removed ("10.50" -> "10.5"). */
-function canonicalAmount(value: string | null | undefined): string | null {
-  if (value == null) return null;
-  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value ?? null);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, item]) => item !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
-}
-
-/**
- * Fingerprint of everything an idempotent posting asserts about the ledger:
- * the book, entity, date, period, lineage and every line's account, amounts,
- * currency, rate and dimensions. Presentation that a retry may legitimately
- * regenerate (entry number, memos, actor, request id) is excluded, so an
- * identical retry matches and a different posting under a reused key does not.
- */
-function postingFingerprint(input: PostEntryInput, lines: PreparedLine[]): string {
-  const payload = {
-    bookId: input.bookId,
-    subsidiaryId: input.subsidiaryId,
-    postingDate: input.postingDate,
-    periodId: input.periodId,
-    origin: input.origin,
-    reversesEntryId: input.reversesEntryId ?? null,
-    sourceDocumentId: input.sourceDocumentId ?? null,
-    lines: [...lines].sort((a, b) => a.lineNumber - b.lineNumber).map((line) => ({
-      lineNumber: line.lineNumber,
-      accountId: line.accountId,
-      subsidiaryId: line.subsidiaryId,
-      amount: canonicalAmount(line.amount),
-      currency: line.currency,
-      txnAmount: canonicalAmount(line.txnAmount),
-      fxRate: canonicalAmount(line.fxRate),
-      partyId: line.partyId ?? null,
-      departmentId: line.departmentId ?? null,
-      projectId: line.projectId ?? null,
-      locationId: line.locationId ?? null,
-      classId: line.classId ?? null,
-      equipmentUnitId: line.equipmentUnitId ?? null,
-      paymentCardId: line.paymentCardId ?? null,
-      taxCodeId: line.taxCodeId ?? null,
-      extraDims: line.extraDims ?? {},
-      quantity: canonicalAmount(line.quantity),
-      unit: line.unit ?? null,
-      dueDate: line.dueDate ?? null,
-      isOpenItem: line.isOpenItem ?? false,
-    })),
-  };
-  return `sha256:${createHash("sha256").update(canonicalJson(payload)).digest("hex")}`;
 }
 
 export async function postEntry(
@@ -191,6 +165,7 @@ export async function postEntry(
   input: PostEntryInput,
 ): Promise<PostEntryResult> {
   const { orgId } = input;
+  if (input.custom?.postingRequestHash !== undefined) fail("postingRequestHash is reserved posting evidence — remove it from custom input");
   if (!orgId) fail("postEntry requires an organization id");
   if (!input.bookId) fail("postEntry requires a book id");
   if (!input.subsidiaryId) fail("postEntry requires an entry subsidiary id");
@@ -254,53 +229,42 @@ async function writeEntry(
   // and every other guard here reads shared state — so unrelated posts stay
   // parallel instead of serializing onto one row (which deadlocked
   // concurrent multi-post flows with 40P01).
+  // Capture the caller's financial request before providers append balancing legs.
+  // New keyed entries retain this identity; legacy entries are compared against
+  // their persisted header and lines without rewriting immutable history.
+  const requestHash = input.idempotencyKey ? postingRequestHash(input, lines) : null;
   // A keyed replay must return the winner's full posted entry — header AND
   // lines — in the one shape below, whichever path finds it. One statement
   // reads both, and the winner committed both in one transaction, so a
   // visible header always has its lines. A lineless keyed header is damaged
   // ledger data, never a success and never a replay in progress — it is
   // refused by name instead of returned with zero lines.
-  // The fingerprint of the REQUEST (before balancing legs are derived), so a
-  // replay compares like with like.
-  const fingerprint = input.idempotencyKey ? postingFingerprint(input, lines) : null;
   const readKeyedEntry = async (idempotencyKey: string): Promise<PostEntryResult | null> => {
     const rows = (await executor.execute<{
-      entry_id: string;
-      id: string | null;
-      line_number: number | null;
-      book_id: string;
-      subsidiary_id: string;
-      posting_date: string;
-      period_id: string;
-      origin: string;
-      fingerprint: string | null;
+      entry_id: string; id: string | null; line_number: number | null;
+      request_hash: string | null; header: PostingHeader; line: PostEntryLineInput | null;
     }>(sql`
       select je.id as entry_id, jl.id as id, jl.line_number as line_number,
-             je.book_id, je.subsidiary_id, je.posting_date::text as posting_date,
-             je.period_id, je.origin, je.custom->>'idempotencyFingerprint' as fingerprint
+             je.custom->>'postingRequestHash' as request_hash,
+             jsonb_build_object('orgId', je.org_id, 'bookId', je.book_id, 'subsidiaryId', je.subsidiary_id,
+               'postingDate', je.posting_date::text, 'periodId', je.period_id, 'memo', je.memo,
+               'origin', je.origin, 'reversesEntryId', je.reverses_entry_id, 'sourceDocumentId', je.source_document_id) as header,
+             case when jl.id is null then null else jsonb_build_object(
+               'lineNumber', jl.line_number, 'accountId', jl.account_id, 'subsidiaryId', jl.subsidiary_id,
+               'amount', jl.amount::text, 'currency', jl.currency, 'txnAmount', jl.txn_amount::text,
+               'fxRate', jl.fx_rate::text, 'memo', jl.memo, 'partyId', jl.party_id,
+               'departmentId', jl.department_id, 'projectId', jl.project_id, 'locationId', jl.location_id,
+               'classId', jl.class_id, 'equipmentUnitId', jl.equipment_unit_id, 'paymentCardId', jl.payment_card_id,
+               'taxCodeId', jl.tax_code_id, 'extraDims', jl.extra_dims, 'quantity', jl.quantity::text,
+               'unit', jl.unit, 'dueDate', jl.due_date::text, 'isOpenItem', jl.is_open_item,
+               'custom', jl.custom, 'contributorKind', jl.contributor_kind, 'contributorRef', jl.contributor_ref) end as line
         from journal_entries je
         left join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
        where je.org_id = ${orgId} and je.custom->>'idempotencyKey' = ${idempotencyKey}
        order by jl.line_number`)).rows;
     if (rows.length === 0) return null;
-    const head = rows[0]!;
-    const entryId = head.entry_id;
-    // A key names ONE posting. Returning the earlier entry for a different
-    // payload would report success while posting nothing the caller asked
-    // for. The stored header is always compared; the line-level fingerprint
-    // is compared whenever the keyed entry recorded one.
-    const differs =
-      head.book_id !== input.bookId ||
-      head.subsidiary_id !== input.subsidiaryId ||
-      head.posting_date !== input.postingDate ||
-      head.period_id !== input.periodId ||
-      head.origin !== input.origin ||
-      (head.fingerprint !== null && head.fingerprint !== fingerprint);
-    if (differs)
-      fail(
-        `journal entry ${input.entryNumber}: this idempotency key was already used for a different entry (entry ${entryId}) — an identical retry returns that entry, but a different posting needs its own idempotency key`,
-      );
+    const entryId = rows[0]!.entry_id;
     const replayed = rows.flatMap((row) =>
       row.id === null ? [] : [{ id: row.id, lineNumber: row.line_number! }],
     );
@@ -308,6 +272,10 @@ async function writeEntry(
       fail(
         `journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} resolves to entry ${entryId}, which has no lines — a keyed posting commits its header and lines together, so this entry is damaged ledger data, not a replay; retrying resolves to the same entry, so have entry ${entryId} investigated before posting again`,
       );
+    const storedHash = rows[0]!.request_hash ?? postingRequestHash(rows[0]!.header, rows.flatMap((row) => row.line ? [row.line] : []));
+    if (storedHash !== requestHash) {
+      fail(`journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} already identifies entry ${entryId} with different posting content — review that journal entry and correct this request; use a new key only for a separate intended posting`);
+    }
     return { entryId, lines: replayed };
   };
   if (input.idempotencyKey) {
@@ -518,16 +486,13 @@ async function writeEntry(
 
   const custom =
     input.idempotencyKey || input.custom
-      ? {
-          ...(input.custom ?? {}),
-          ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, idempotencyFingerprint: fingerprint } : {}),
-        }
+      ? { ...(input.custom ?? {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, postingRequestHash: requestHash } : {}) }
       : null;
   // With an idempotencyKey the entry insert is ON CONFLICT DO NOTHING on
   // the partial (org_id, custom->>'idempotencyKey') index and a conflicting
   // retry reads back the winner's entry. The DO NOTHING is load-bearing
   // dedupe, not a dropped write: a conflict is only possible when this
-  // exact key already committed, and the follow-up read makes that entry
+  // key already committed, and the follow-up read compares the request and makes that entry
   // the returned effect — every conflict is therefore observed, never
   // swallowed. Unlike a bare 23505 catch, it never leaves a joined caller
   // transaction aborted.
