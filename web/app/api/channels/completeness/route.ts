@@ -1,7 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/database";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/database";
 import { commerceCloseChecks } from "@openbooks/engine/close/commerce";
 import { guardUnrestrictedScope } from "@/lib/authz";
 
@@ -28,13 +27,8 @@ export const GET = defineRoute({
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
       return NextResponse.json({ error: "day must be a YYYY-MM-DD calendar date" }, { status: 400 });
     }
-    const book = (
-      await db.execute<{ id: string }>(sql`
-        select id from accounting_books
-         where org_id = ${gate.user.orgId} and is_primary and is_active and posts_gl
-         limit 1`)
-    ).rows[0];
-    if (!book) {
+    const bookId = await activePostingPrimaryBookId(gate.user.orgId);
+    if (!bookId) {
       return NextResponse.json(
         { error: "no active primary posting book", remedy: "Activate the primary posting book under Accounting → Books." },
         { status: 422 },
@@ -42,7 +36,7 @@ export const GET = defineRoute({
     }
     const checks = await commerceCloseChecks(
       gate.user.orgId,
-      { startsOn: day, endsOn: day, bookId: book.id },
+      { startsOn: day, endsOn: day, bookId },
     );
     return NextResponse.json({
       day,
