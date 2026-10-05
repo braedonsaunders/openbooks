@@ -1,6 +1,7 @@
 {
   "home": {
     "title": "Achats",
+    "unknownVendor": "Fournisseur inconnu",
     "description": "Votre espace achat-à-paiement — engagements, factures, paiements et dépenses fournisseurs au même endroit.",
     "subsidiary": "Filiale",
     "tabs": {

@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "Évaluation à réaliser",
+    "unlimited": "Illimité",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "Dossiers RH en attente",
     "attentionPayrollSetup": "La paie nécessite des comptes de contrôle",
     "attentionBankLines": "Lignes bancaires non rapprochées",

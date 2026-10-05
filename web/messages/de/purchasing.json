@@ -1,6 +1,7 @@
 {
   "home": {
     "title": "Einkauf",
+    "unknownVendor": "Unbekannter Lieferant",
     "description": "Ihr Arbeitsbereich vom Einkauf bis zur Zahlung — Verpflichtungen, Rechnungen, Zahlungen und Lieferantenausgaben an einem Ort.",
     "subsidiary": "Tochtergesellschaft",
     "tabs": {
