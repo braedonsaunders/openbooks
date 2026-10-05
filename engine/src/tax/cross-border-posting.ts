@@ -62,7 +62,7 @@ export function parseCrossBorderElection(raw: unknown): CrossBorderElection | nu
   };
 }
 
-interface PostingDocument {
+type PostingDocument = {
   kind: string;
   status: string;
   partyId: string | null;

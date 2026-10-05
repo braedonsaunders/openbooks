@@ -15,7 +15,7 @@ const POSTBodySchema = z.object({
   value: z.string().min(1).max(40),
 });
 
-interface TaxIdRow {
+type TaxIdRow = {
   id: string
   scheme: string
   value: string

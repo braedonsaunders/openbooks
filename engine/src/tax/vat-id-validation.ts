@@ -51,7 +51,7 @@ export interface TaxIdValidationOutcome {
   revalidateAfter: string | null;
 }
 
-interface PartyTaxIdRow {
+type PartyTaxIdRow = {
   id: string;
   partyId: string;
   scheme: string;

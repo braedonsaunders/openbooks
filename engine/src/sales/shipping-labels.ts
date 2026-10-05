@@ -304,7 +304,7 @@ export async function connectShippingAccount(
       mode: "shipping_account_connect",
       name,
       provider: input.provider,
-      mode: input.mode,
+      accountMode: input.mode,
       keyReplaced: input.apiKey != null,
     });
     return { accountId: input.accountId };
@@ -325,7 +325,7 @@ export async function connectShippingAccount(
     mode: "shipping_account_connect",
     name,
     provider: input.provider,
-    mode: input.mode,
+    accountMode: input.mode,
   });
   return { accountId };
 }
@@ -1698,8 +1698,8 @@ export async function receiveTrackerDelivery(
   // bypass: connector-tracker — see the docblock above.
   const orgId = await withBypassContext(() => resolveTrackerOrgId(provider, parsed.tracker));
   if (!orgId) return { status: "ignored" };
-  return withOrgTransaction(orgId, (tx) =>
-    handleTrackerDelivery(tx, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody }),
+  return withOrgTransaction(orgId, () =>
+    handleTrackerDelivery(db, orgId, TRACKER_SYSTEM_ACTOR_ID, { provider, headers, rawBody }),
   );
 }
 
