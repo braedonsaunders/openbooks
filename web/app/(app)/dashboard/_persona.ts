@@ -8,6 +8,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
 import { nextPeriodAfter } from '@openbooks/engine/src/payroll/run-calendar.ts'
+import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { loadApprovalPerson, loadTeamEmploymentIdsForManager } from '@openbooks/engine/src/hrm/authorization.ts'
 import { listMyReviews } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
@@ -205,13 +206,18 @@ export async function loadPersonaMetrics(
         // Frequency is check-constrained to the four the calendar knows; a
         // rejected anchor leaves nextPayDate null and the tile still shows
         // the last pay date instead of failing the dashboard.
+        //
+        // The tile names the upcoming payday: the first period whose end +
+        // offset reaches today (month-end + 5 on Oct 3 was paid Oct 5, still
+        // upcoming — the next period would skip it). Probing the calendar
+        // from today − offset − 1 lands exactly that period, and the offset
+        // advances by civil days, never setUTCDate.
+        const offset = row.offset ?? 0
         const next = nextPeriodAfter(
           { frequency: row.frequency, anchor_period_end: row.anchor },
-          today,
+          addCalendarDays(today, -offset - 1),
         )
-        const payDate = new Date(`${next.periodEnd}T00:00:00Z`)
-        payDate.setUTCDate(payDate.getUTCDate() + (row.offset ?? 0))
-        nextPayDate = payDate.toISOString().slice(0, 10)
+        nextPayDate = addCalendarDays(next.periodEnd, offset)
       } catch {
         // Anchor validity is enforced at schedule setup.
       }
@@ -269,7 +275,17 @@ export async function loadPersonaMetrics(
            and r.starts_on <= ${end}::date and r.ends_on >= ${start}::date
            and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify(scopeIds)}::jsonb)::uuid)
          order by r.starts_on, p.display_name limit 10`)).rows
-      out.whosOut = rows.map((row) => ({ name: row.name, range: tp('reviewRange', { from: row.starts_on, to: row.ends_on }) }))
+      // Viewer dates, never raw ISO: the range renders in the request
+      // locale, noon-anchored so a bare civil date cannot render a day early
+      // west of Greenwich.
+      const fmtRangeDay = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' })
+      out.whosOut = rows.map((row) => ({
+        name: row.name,
+        range: tp('reviewRange', {
+          from: fmtRangeDay.format(new Date(`${row.starts_on}T12:00:00Z`)),
+          to: fmtRangeDay.format(new Date(`${row.ends_on}T12:00:00Z`)),
+        }),
+      }))
     } else {
       out.whosOut = []
     }
@@ -397,9 +413,17 @@ export async function loadPersonaMetrics(
     }
     if (await isFeatureEnabled(orgId, 'payroll')) {
       const { payrollHome } = await import('@/lib/module-home/payroll')
-      const home = await payrollHome(orgId, authz.allowedSubsidiaryIds ?? undefined).catch(() => null)
-      const missing = home?.missingSettings.length ?? 0
-      if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
+      // A failed cockpit read (a missing YTD translation rate refuses
+      // inside) is unavailable, never a verified zero that would hide the
+      // setup item — the same rule as the bank-lines count below.
+      let missing: number | null
+      try {
+        missing = (await payrollHome(orgId, authz.allowedSubsidiaryIds ?? undefined)).missingSettings.length
+      } catch {
+        missing = null
+      }
+      if (missing === null) attention.push({ label: tp('attentionPayrollSetup'), count: 0, href: '/payroll', unavailable: true })
+      else if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
     }
     // A failed operator-control count reads as unavailable, never as a
     // verified zero that would hide a real backlog. A probe the caller may

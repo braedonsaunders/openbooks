@@ -25,6 +25,7 @@ registerHooks({
 
 const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { loadPersonaMetrics } = await import('./_persona.ts')
 type Authz = import('@/lib/authz.ts').Authz
 
@@ -75,23 +76,14 @@ test('the pay tile follows the employee schedule through the payroll calendar', 
       values (${scratch.orgId}, ${partyId}, ${monthlyId}, 'CA', 'ON')`)
   })
   try {
-    const metrics = await withBypass(() => loadPersonaMetrics(authzFor(scratch.orgId, actorId), new Set(['payTile'])))
+    // Pinned clock: 2026-10-03 with month-end + 5. September's period pays
+    // 2026-10-05, still upcoming, so the tile names it — the next period
+    // would skip a payday the employee has not received yet. Month-end pay
+    // stays month-end — a 28th clamp would land here instead.
+    const metrics = await pinClock('2026-10-03', () =>
+      withBypass(() => loadPersonaMetrics(authzFor(scratch.orgId, actorId), new Set(['payTile']))))
     assert.ok(metrics.payTile, 'the tile renders for a profiled employee')
-    // Hand-derived: the first month-end strictly after the UTC business day,
-    // plus the schedule's 5-day pay-date offset. Month-end pay stays
-    // month-end — a 28th clamp would land here instead.
-    const now = new Date()
-    const todayIso = now.toISOString().slice(0, 10)
-    let year = now.getUTCFullYear()
-    let month = now.getUTCMonth()
-    let end = new Date(Date.UTC(year, month + 1, 0))
-    if (end.toISOString().slice(0, 10) <= todayIso) {
-      month += 1
-      if (month > 11) { month = 0; year += 1 }
-      end = new Date(Date.UTC(year, month + 1, 0))
-    }
-    const expected = new Date(end.getTime() + 5 * 86_400_000).toISOString().slice(0, 10)
-    assert.equal(metrics.payTile.nextPayDate, expected, 'next pay date follows the employee monthly schedule, not the weekly default')
+    assert.equal(metrics.payTile.nextPayDate, '2026-10-05', 'next pay date follows the employee monthly schedule, not the weekly default')
     assert.equal(metrics.payTile.lastPayDate, null)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
