@@ -43,7 +43,7 @@ const cacheModule = new URL('../../../packages/jobs/src/read-cache.ts', import.m
 registerHooks({ resolve(specifier, context, next) {
   let source: string | undefined
   if (specifier === '@openbooks/jobs/read-cache') source = `export * from ${JSON.stringify(cacheModule)}`
-  if (specifier === 'next-intl/server') source = 'export async function getLocale(){return "en"}'
+  if (specifier === 'next-intl/server') source = 'export async function getLocale(){return "en"} export async function getTranslations(){return (key) => key}'
   if (specifier === './connection' && context.parentURL?.endsWith('/jobs/src/read-cache.ts')) source = 'export async function getReadCacheConnection(){return globalThis.__analyticsCacheTransport}'
   return source ? { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(source) } : next(specifier, context)
 } })

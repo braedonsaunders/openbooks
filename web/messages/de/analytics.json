@@ -105,6 +105,10 @@
     "statesShown": "Angezeigte Lebenszykluszustände",
     "calculatedAt": "Stand: {time}"
   },
+  "preview": {
+    "busy": "Analytics-Kennzahlen werden noch berechnet. Versuchen Sie es in einem Moment erneut.",
+    "unavailable": "Analytics-Dashboard-Vorschau ist nicht verfügbar"
+  },
   "financialHealth": {
     "title": "Finanzielle Gesundheit",
     "description": "Rentabilität, Effizienz und Betriebskennzahlen mit einem zusammengesetzten Gesundheitswert.",
