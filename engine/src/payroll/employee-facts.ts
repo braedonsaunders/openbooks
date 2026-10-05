@@ -124,6 +124,33 @@ export interface PayrollEmployeeFact {
   producer: PayrollEmployeeFactProducer;
 }
 
+/**
+ * A date the payroll roster carries from the employee record itself — the
+ * Hire date and termination date on the employee — rather than from any
+ * certificate or profile column. No pack-owned producer exists, so the
+ * producer is the honest `none`; it is never `required`, because readiness
+ * checks required facts against profile columns, and a pack that cannot
+ * price without the date refuses by name at calculation instead.
+ */
+export function employeeRecordDateFact(
+  key: "hired_on" | "terminated_on",
+  refusalReason: string,
+): PayrollEmployeeFact {
+  return {
+    key,
+    kind: "code",
+    label: key === "hired_on" ? "Hire date (employee record)" : "Termination date (employee record)",
+    refusalReason,
+    required: false,
+    producer: {
+      kind: "none",
+      notes: "Carried on the payroll roster from the employee record's "
+        + (key === "hired_on" ? "Hire date" : "termination date")
+        + "; edited on the employee, not on a payroll form.",
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Registration. Populated by each pack's own `<country>/employee-facts.ts`
 // on import — which the pack's compute path imports directly, so a read

@@ -1,4 +1,4 @@
-import { registerEmployeeFacts } from "../employee-facts.ts";
+import { employeeRecordDateFact, registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
 /** Required statutory inputs for the 2026 APEC and RGDU paths, plus the CDD contract flag for CPF-CDD. */
@@ -52,6 +52,15 @@ export const FR_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
       notes: "Resolved for each period from the effective work schedule or approved time entries, then validated through resolveEmployeeFact.",
     },
   },
+  employeeRecordDateFact(
+    "hired_on",
+    "The monthly social-security ceiling accrues only from the month of hire (Urssaf "
+    + "régularisation progressive du plafond); an unknown hire date would accrue it from January.",
+  ),
+  employeeRecordDateFact(
+    "terminated_on",
+    "The month of exit counts only its calendar days of employment toward the ceiling.",
+  ),
 ];
 
 registerEmployeeFacts("FR", FR_EMPLOYEE_FACTS);
