@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { fiscalMonthlyBoxes } = await import("./fiscal-buckets.ts");
+const { fiscalMonthlyBoxes, fiscalPeriodsPerYear } = await import("./fiscal-buckets.ts");
 
 const periods = [
   { fiscalYear: 2026, periodNumber: 1, name: "P1", from: "2026-02-01", to: "2026-03-01" },
@@ -22,6 +22,21 @@ test("declared periods keep their own names and zero-fill empty boxes", () => {
     { month: "2026-02-01", label: "P1", spend: "100.0000" },
     { month: "2026-03-02", label: "P2", spend: "0" },
   ]);
+});
+
+test("a thirteen-period year annualises by thirteen, 4-4-5 by twelve", () => {
+  const year = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      fiscalYear: 2026,
+      periodNumber: i + 1,
+      name: `P${i + 1}`,
+      from: `2026-${String(i + 1).padStart(2, "0")}-01`,
+      to: `2026-${String(i + 1).padStart(2, "0")}-28`,
+    }));
+  assert.equal(fiscalPeriodsPerYear(year(13), "2026-07-15"), 13);
+  assert.equal(fiscalPeriodsPerYear(year(12), "2026-07-15"), 12);
+  assert.equal(fiscalPeriodsPerYear([], "2026-07-15"), 12);
+  assert.equal(fiscalPeriodsPerYear(year(12), "2027-01-01"), 12);
 });
 
 test("spend outside declared coverage renders as labelled fallback boxes, never dropped", () => {
