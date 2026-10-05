@@ -15,6 +15,7 @@ import {
   storedValueLiabilityControlAccount,
   type StoredValueAccountRow,
 } from "./accounts.ts";
+import { accountFunctionalTotal, carryingShare } from "./fx-amounts.ts";
 import { storedValueRefusal } from "./errors.ts";
 
 export interface BreakageOrgError {
@@ -89,17 +90,26 @@ async function recognizeProportional(
   // is cumulative, so that difference is recognized next period.
   const entryKey = `stored-value:breakage-entry:${account.id}:${period}`;
   if (await priorStoredValueEntry(orgId, entryKey, { accountId: account.id, kind: "breakage" })) return false;
+  // Breakage extinguishes the debt without converting it: the recognized
+  // slice carries its historical value, exactly like an expiry.
+  const functionalPrior = await accountFunctionalTotal(db, orgId, account.id);
+  const share = carryingShare(functionalPrior, account.balanceMinor, amount);
   const liabilityAccountId = account.liabilityAccountId ?? (await storedValueLiabilityControlAccount(orgId));
   const journalEntryId = await postStoredValueJournal({
     orgId,
     postingDate,
+    subsidiaryId: account.subsidiaryId,
     memo: `Stored-value breakage — …${account.codeLast4}`,
     origin: "breakage",
     idempotencyKey: `stored-value:breakage:${account.id}:${period}`,
     accountId: liabilityAccountId,
-    amount: fromUnits(amount),
+    amount: fromUnits(share.functional),
+    txnAmount: fromUnits(amount),
     counterAccountId: program.breakageIncomeAccountId,
-    counterAmount: neg(fromUnits(amount)),
+    counterAmount: neg(fromUnits(share.functional)),
+    counterTxnAmount: neg(fromUnits(amount)),
+    fxRate: share.rate,
+    currency: account.currency,
     partyId: account.customerPartyId,
     auditChanges: { accountId: account.id, policy: "proportional" },
   });
@@ -127,6 +137,8 @@ async function recognizeProportional(
     amountMinor: -amount,
     balanceAfter: account.balanceMinor - amount,
     currency: account.currency,
+    functionalAmountMinor: -share.functional,
+    fxRate: share.rate,
     journalEntryId,
     idempotencyKey: entryKey,
   });
@@ -168,17 +180,24 @@ async function recognizeRemote(
       status: 409,
     });
   }
+  const functionalPrior = await accountFunctionalTotal(db, orgId, account.id);
+  const share = carryingShare(functionalPrior, account.balanceMinor, account.balanceMinor);
   const liabilityAccountId = account.liabilityAccountId ?? (await storedValueLiabilityControlAccount(orgId));
   const journalEntryId = await postStoredValueJournal({
     orgId,
     postingDate,
+    subsidiaryId: account.subsidiaryId,
     memo: `Stored-value remote breakage — …${account.codeLast4}`,
     origin: "breakage",
     idempotencyKey: `stored-value:remote:${account.id}`,
     accountId: liabilityAccountId,
-    amount: fromUnits(account.balanceMinor),
+    amount: fromUnits(share.functional),
+    txnAmount: fromUnits(account.balanceMinor),
     counterAccountId: program.breakageIncomeAccountId,
-    counterAmount: neg(fromUnits(account.balanceMinor)),
+    counterAmount: neg(fromUnits(share.functional)),
+    counterTxnAmount: neg(fromUnits(account.balanceMinor)),
+    fxRate: share.rate,
+    currency: account.currency,
     partyId: account.customerPartyId,
     auditChanges: { accountId: account.id, policy: "remote" },
   });
@@ -207,6 +226,8 @@ async function recognizeRemote(
     amountMinor: -account.balanceMinor,
     balanceAfter: 0n,
     currency: account.currency,
+    functionalAmountMinor: -share.functional,
+    fxRate: share.rate,
     journalEntryId,
     idempotencyKey: `stored-value:remote-entry:${account.id}`,
   });

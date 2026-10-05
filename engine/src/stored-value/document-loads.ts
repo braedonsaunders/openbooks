@@ -3,6 +3,13 @@ import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addMonthsClamped, isIsoCalendarDate } from "../platform/civil-date.ts";
 import {
+  functionalMinor,
+  loadDocumentFxContext,
+  resolveEventRate,
+  subsidiaryBaseCurrency,
+  type DocumentFxContext,
+} from "./fx-amounts.ts";
+import {
   insertStoredValueEntry,
   loadStoredValueProgram,
   lockStoredValueAccount,
@@ -72,14 +79,23 @@ export async function attachDocumentLoad(input: DocumentLoadInput): Promise<Docu
   if (replayed) {
     return { accountId: replayed.account_id, code: null, entryId: replayed.id, replayed: true };
   }
+  const doc = await loadDocumentFxContext(db, input.orgId, input.documentId);
   if (input.accountId) {
-    return topUpAccount(input);
+    return topUpAccount(input, doc);
   }
-  return mintAccount(input);
+  return mintAccount(input, doc);
 }
 
-async function topUpAccount(input: DocumentLoadInput): Promise<DocumentLoadResult> {
+async function topUpAccount(input: DocumentLoadInput, doc: DocumentFxContext): Promise<DocumentLoadResult> {
   const account = await lockStoredValueAccount(input.orgId, input.accountId!);
+  if (doc.subsidiaryId !== account.subsidiaryId) {
+    throw storedValueRefusal({
+      message: `Stored-value …${account.codeLast4} belongs to another legal entity than the refunding document: one entity cannot load another's balance.`,
+      code: "stored_value_cross_entity",
+      remedy: "Load the credit on a document of the account's own entity.",
+      status: 409,
+    });
+  }
   if (account.status !== "active") {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} is ${account.status} and cannot be loaded.`,
@@ -98,6 +114,11 @@ async function topUpAccount(input: DocumentLoadInput): Promise<DocumentLoadResul
       remedy: `Load in ${account.currency}, or choose an account in ${input.currency}.`,
     });
   }
+  // The refund's own journal already moved the liability at the document's
+  // rate, so the top-up prices at that same rate — never at par.
+  const baseCurrency = await subsidiaryBaseCurrency(db, input.orgId, account.subsidiaryId);
+  const eventRate = await resolveEventRate(db, input.orgId, input.currency, baseCurrency, doc.postingDate, doc);
+  const functional = functionalMinor(input.amountMinor, eventRate.units);
   const balanceMinor = account.balanceMinor + input.amountMinor;
   const updated = (await db.execute<{ id: string }>(sql`
     update stored_value_accounts
@@ -121,6 +142,8 @@ async function topUpAccount(input: DocumentLoadInput): Promise<DocumentLoadResul
     amountMinor: input.amountMinor,
     balanceAfter: balanceMinor,
     currency: account.currency,
+    functionalAmountMinor: functional,
+    fxRate: eventRate.rate,
     documentId: input.documentId,
     journalEntryId: input.journalEntryId,
     idempotencyKey: `stored-value:load-entry:${input.idempotencyKey}`,
@@ -130,7 +153,7 @@ async function topUpAccount(input: DocumentLoadInput): Promise<DocumentLoadResul
   return { accountId: account.id, code: null, entryId: entry.entryId, replayed: entry.replayed };
 }
 
-async function mintAccount(input: DocumentLoadInput): Promise<DocumentLoadResult> {
+async function mintAccount(input: DocumentLoadInput, doc: DocumentFxContext): Promise<DocumentLoadResult> {
   if (!input.programId) {
     throw storedValueRefusal({
       message: "A new store credit needs its issuing program.",
@@ -172,16 +195,24 @@ async function mintAccount(input: DocumentLoadInput): Promise<DocumentLoadResult
       });
     }
   }
+  // The minted account belongs to the refund's entity and prices at the
+  // refund's rate, like any other document-driven issue.
+  const baseCurrency = await subsidiaryBaseCurrency(db, input.orgId, doc.subsidiaryId);
+  const eventRate = await resolveEventRate(db, input.orgId, input.currency, baseCurrency, doc.postingDate, doc);
+  const functional = functionalMinor(input.amountMinor, eventRate.units);
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateStoredValueCode();
     const codeHash = hashStoredValueCode(input.orgId, code);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into stored_value_accounts
         (org_id, program_id, kind, code_hash, code_last4, customer_party_id, currency,
+         subsidiary_id,
          issued_minor, balance_minor, expires_on, source_document_id, liability_account_id,
          created_by, updated_by)
       values (${input.orgId}, ${program.id}, ${program.kind}, ${codeHash}, ${codeLast4(code)},
-        ${input.customerPartyId}, ${input.currency}, ${input.amountMinor.toString()},
+        ${input.customerPartyId}, ${input.currency},
+        ${doc.subsidiaryId},
+        ${input.amountMinor.toString()},
         ${input.amountMinor.toString()}, ${expiresOn}, ${input.documentId},
         ${liabilityAccountId}, ${input.actorId ?? null}, ${input.actorId ?? null})
       on conflict (org_id, code_hash) do nothing
@@ -196,6 +227,8 @@ async function mintAccount(input: DocumentLoadInput): Promise<DocumentLoadResult
       amountMinor: input.amountMinor,
       balanceAfter: input.amountMinor,
       currency: input.currency,
+      functionalAmountMinor: functional,
+      fxRate: eventRate.rate,
       documentId: input.documentId,
       journalEntryId: input.journalEntryId,
       idempotencyKey: `stored-value:load-entry:${input.idempotencyKey}`,

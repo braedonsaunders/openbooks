@@ -684,6 +684,7 @@
     "stored-value": {
       "description": "Gift card and store credit accounts, issuance, redemption, breakage, and expiry.",
       "dependsOn": [
+        "fx",
         "journal",
         "money",
         "organization",
