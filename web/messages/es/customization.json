@@ -54,7 +54,8 @@
     "rma": "Autorización de devolución",
     "fund": "Fondo",
     "fund_release": "Liberación de fondos",
-    "collection_attempt": "Intento de cobro"
+    "collection_attempt": "Intento de cobro",
+    "tax_provider_transaction": "Envío al proveedor fiscal"
   },
   "resourcing": {
     "fields": {

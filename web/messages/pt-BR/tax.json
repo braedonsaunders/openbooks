@@ -194,7 +194,51 @@
   },
   "tabs": {
     "prepare": "Preparar uma declaração",
-    "history": "Entregas anteriores"
+    "history": "Entregas anteriores",
+    "activity": "Atividade do provedor"
+  },
+  "activity": {
+    "emptyTitle": "Nenhum envio ao provedor ainda",
+    "emptyDescription": "Lance uma fatura de venda ou nota de crédito com um provedor fiscal configurado e cada envio aparecerá aqui com seu status.",
+    "title": "Envio ao provedor de {document}",
+    "document": "Documento",
+    "direction": "Operação",
+    "direction_sale": "Venda",
+    "direction_return": "Crédito",
+    "providerCode": "Código do documento no provedor",
+    "attempts": "Tentativas",
+    "nextAttempt": "Próxima tentativa",
+    "committedAt": "Enviado",
+    "providerDetail": "Evidência do provedor",
+    "postedTax": "Imposto lançado",
+    "merchantTax": "Imposto próprio",
+    "providerTax": "Imposto do provedor",
+    "status": {
+      "pending": "Pendente",
+      "committed": "Enviado",
+      "voided": "Anulado",
+      "failed": "Com falha",
+      "skipped": "Ignorado"
+    },
+    "columns": {
+      "document": "Documento",
+      "provider": "Provedor",
+      "status": "Status",
+      "attempts": "Tentativas",
+      "nextAttempt": "Próxima tentativa",
+      "committedAt": "Enviado"
+    },
+    "summaryPending": "{provider} ainda não enviou {document}.",
+    "summaryCommitted": "{document} foi enviado a {provider}.",
+    "summaryFailed": "{provider} não conseguiu enviar {document}. Verifique o motivo abaixo e tente de novo.",
+    "summaryVoided": "{document} foi anulado em {provider} após a anulação do documento.",
+    "summarySkipped": "{document} não precisa de envio ao provedor e nada foi enviado.",
+    "retryNow": "Tentar de novo",
+    "retryConfirmTitle": "Repetir este envio?",
+    "retryConfirmDescription": "Enviar {document} a {provider} novamente. O envio é repetido com o mesmo código de documento, então o provedor não pode registrá-lo duas vezes.",
+    "retryStarted": "Nova tentativa na fila — o próximo ciclo a enviará.",
+    "retryFailed": "A nova tentativa não foi iniciada. Tente de novo.",
+    "mismatchNotice": "{provider} registrou {providerTax}, mas o OpenBooks lançou {merchantTax} de imposto próprio. O valor do provedor é mantido para revisão e nunca ajustado automaticamente."
   },
   "registration": "Registro para declarações",
   "oss": {

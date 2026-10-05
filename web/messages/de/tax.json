@@ -194,7 +194,51 @@
   },
   "tabs": {
     "prepare": "Erklärung vorbereiten",
-    "history": "Frühere Einreichungen"
+    "history": "Frühere Einreichungen",
+    "activity": "Anbieteraktivität"
+  },
+  "activity": {
+    "emptyTitle": "Noch keine Übermittlungen",
+    "emptyDescription": "Buchen Sie eine Ausgangsrechnung oder Gutschrift, während ein Steueranbieter konfiguriert ist – jede Übermittlung erscheint hier mit ihrem Status.",
+    "title": "Anbieterübermittlung für {document}",
+    "document": "Beleg",
+    "direction": "Vorgang",
+    "direction_sale": "Verkauf",
+    "direction_return": "Gutschrift",
+    "providerCode": "Belegnummer beim Anbieter",
+    "attempts": "Versuche",
+    "nextAttempt": "Nächster Versuch",
+    "committedAt": "Übermittelt",
+    "providerDetail": "Anbieternachweis",
+    "postedTax": "Gebuchte Steuer",
+    "merchantTax": "Eigene Steuer",
+    "providerTax": "Anbieter-Steuer",
+    "status": {
+      "pending": "Ausstehend",
+      "committed": "Übermittelt",
+      "voided": "Storniert",
+      "failed": "Fehlgeschlagen",
+      "skipped": "Übersprungen"
+    },
+    "columns": {
+      "document": "Beleg",
+      "provider": "Anbieter",
+      "status": "Status",
+      "attempts": "Versuche",
+      "nextAttempt": "Nächster Versuch",
+      "committedAt": "Übermittelt"
+    },
+    "summaryPending": "{provider} hat {document} noch nicht übermittelt.",
+    "summaryCommitted": "{document} ist an {provider} übermittelt.",
+    "summaryFailed": "{provider} konnte {document} nicht übermitteln. Prüfen Sie unten den Grund und wiederholen Sie den Vorgang.",
+    "summaryVoided": "{document} wurde nach dem Storno auch bei {provider} storniert.",
+    "summarySkipped": "{document} benötigt keine Anbieterübermittlung – es wurde nichts gesendet.",
+    "retryNow": "Jetzt wiederholen",
+    "retryConfirmTitle": "Diese Übermittlung wiederholen?",
+    "retryConfirmDescription": "{document} wird erneut an {provider} gesendet. Die Übermittlung läuft unter derselben Belegnummer, sodass der Anbieter sie nicht doppelt buchen kann.",
+    "retryStarted": "Wiederholung vorgemerkt – der nächste Lauf übermittelt sie.",
+    "retryFailed": "Die Wiederholung wurde nicht gestartet. Versuchen Sie es erneut.",
+    "mismatchNotice": "{provider} hat {providerTax} erfasst, gebucht sind jedoch {merchantTax} eigene Steuern. Der Anbieterwert bleibt zur Prüfung erhalten und wird nie automatisch angepasst."
   },
   "registration": "Registrierung für Meldungen",
   "oss": {

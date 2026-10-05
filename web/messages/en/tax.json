@@ -4,7 +4,51 @@
   "setup": "Tax filing setup",
   "tabs": {
     "prepare": "Prepare a return",
-    "history": "Previous filings"
+    "history": "Previous filings",
+    "activity": "Provider activity"
+  },
+  "activity": {
+    "emptyTitle": "No provider commits yet",
+    "emptyDescription": "Post a sales invoice or credit memo while a tax provider is configured, and each commit appears here with its status.",
+    "title": "Provider commit for {document}",
+    "document": "Document",
+    "direction": "Direction",
+    "direction_sale": "Sale",
+    "direction_return": "Return",
+    "providerCode": "Provider document code",
+    "attempts": "Attempts",
+    "nextAttempt": "Next try",
+    "committedAt": "Committed",
+    "providerDetail": "Provider evidence",
+    "postedTax": "Posted tax",
+    "merchantTax": "Merchant tax",
+    "providerTax": "Provider tax",
+    "status": {
+      "pending": "Pending",
+      "committed": "Committed",
+      "voided": "Voided",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "columns": {
+      "document": "Document",
+      "provider": "Provider",
+      "status": "Status",
+      "attempts": "Attempts",
+      "nextAttempt": "Next try",
+      "committedAt": "Committed"
+    },
+    "summaryPending": "{provider} has not committed {document} yet.",
+    "summaryCommitted": "{document} is committed with {provider}.",
+    "summaryFailed": "{provider} could not commit {document}. Check the reason below, then retry.",
+    "summaryVoided": "{document} was voided with {provider} after the document was voided.",
+    "summarySkipped": "{document} needs no provider commit, and none was sent.",
+    "retryNow": "Retry now",
+    "retryConfirmTitle": "Retry this commit?",
+    "retryConfirmDescription": "Send {document} to {provider} again. The commit replays under the same document code, so the provider cannot book it twice.",
+    "retryStarted": "Retry queued — the next scan commits it.",
+    "retryFailed": "The retry did not start. Try again.",
+    "mismatchNotice": "{provider} recorded {providerTax} but OpenBooks posted {merchantTax} of merchant tax. The provider figure is kept for review and never adjusted automatically."
   },
   "notice": "Notice",
   "period": "{from} to {to}",

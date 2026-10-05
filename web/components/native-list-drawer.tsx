@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from 'react'
 import { DocumentDrawer } from './document-drawer'
+import { TaxProviderStatusChip, type TaxProviderChipRow } from './tax-provider-chip'
 import { ReturnWorkflowPanel } from '../app/(app)/returns/ReturnWorkflowPanel'
 import type { ReturnAuthorization } from '@openbooks/engine/sales/returns/contracts'
 import { PaymentLinksPanel } from './payment-links-panel'
@@ -35,22 +36,36 @@ const renderers = {
           workflowCurrency?: string | null
           vendors?: { id: string; display_name: string }[]
           supplyEvidence?: { documentId: string; status: string; canManage: boolean } | null
+          taxProvider?: {
+            documentNumber: string
+            provider: string
+            rows: TaxProviderChipRow[]
+            canRetry: boolean
+          } | null
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, supplyEvidence, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, supplyEvidence, taxProvider, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}
         {...rest}
         afterContent={
-          paymentLinks || appliedPayments || creditApplications || workflow || supplyEvidence ? (
+          paymentLinks || appliedPayments || creditApplications || workflow || supplyEvidence || taxProvider ? (
             <>
               {supplyEvidence ? (
                 <SupplyEvidencePanel
                   documentId={supplyEvidence.documentId}
                   status={supplyEvidence.status}
                   canManage={supplyEvidence.canManage}
+                />
+              ) : null}
+              {taxProvider ? (
+                <TaxProviderStatusChip
+                  documentNumber={taxProvider.documentNumber}
+                  provider={taxProvider.provider}
+                  rows={taxProvider.rows}
+                  canRetry={taxProvider.canRetry}
                 />
               ) : null}
               {appliedPayments ? (

@@ -54,7 +54,8 @@
     "rma": "退货授权",
     "fund": "资金",
     "fund_release": "资金发放",
-    "collection_attempt": "托收尝试"
+    "collection_attempt": "托收尝试",
+    "tax_provider_transaction": "税费服务商提交"
   },
   "resourcing": {
     "fields": {

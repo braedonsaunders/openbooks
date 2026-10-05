@@ -194,7 +194,51 @@
   },
   "tabs": {
     "prepare": "Preparar una declaración",
-    "history": "Declaraciones anteriores"
+    "history": "Declaraciones anteriores",
+    "activity": "Actividad del proveedor"
+  },
+  "activity": {
+    "emptyTitle": "Aún no hay envíos al proveedor",
+    "emptyDescription": "Contabilice una factura de venta o una nota de crédito con un proveedor fiscal configurado y cada envío aparecerá aquí con su estado.",
+    "title": "Envío al proveedor de {document}",
+    "document": "Documento",
+    "direction": "Operación",
+    "direction_sale": "Venta",
+    "direction_return": "Crédito",
+    "providerCode": "Código del documento en el proveedor",
+    "attempts": "Intentos",
+    "nextAttempt": "Próximo intento",
+    "committedAt": "Enviado",
+    "providerDetail": "Datos del proveedor",
+    "postedTax": "Impuesto contabilizado",
+    "merchantTax": "Impuesto propio",
+    "providerTax": "Impuesto del proveedor",
+    "status": {
+      "pending": "Pendiente",
+      "committed": "Enviado",
+      "voided": "Anulado",
+      "failed": "Fallido",
+      "skipped": "Omitido"
+    },
+    "columns": {
+      "document": "Documento",
+      "provider": "Proveedor",
+      "status": "Estado",
+      "attempts": "Intentos",
+      "nextAttempt": "Próximo intento",
+      "committedAt": "Enviado"
+    },
+    "summaryPending": "{provider} aún no ha enviado {document}.",
+    "summaryCommitted": "{document} está enviado a {provider}.",
+    "summaryFailed": "{provider} no pudo enviar {document}. Revise el motivo abajo y vuelva a intentarlo.",
+    "summaryVoided": "{document} se anuló en {provider} tras anular el documento.",
+    "summarySkipped": "{document} no necesita envío al proveedor y no se envió nada.",
+    "retryNow": "Reintentar ahora",
+    "retryConfirmTitle": "¿Reintentar este envío?",
+    "retryConfirmDescription": "Enviar {document} a {provider} de nuevo. El envío se repite con el mismo código de documento, por lo que el proveedor no puede registrarlo dos veces.",
+    "retryStarted": "Reintento en cola: el próximo proceso lo enviará.",
+    "retryFailed": "El reintento no se inició. Inténtelo de nuevo.",
+    "mismatchNotice": "{provider} registró {providerTax}, pero OpenBooks contabilizó {merchantTax} de impuesto propio. La cifra del proveedor se conserva para su revisión y nunca se ajusta automáticamente."
   },
   "registration": "Registro para declaraciones",
   "oss": {

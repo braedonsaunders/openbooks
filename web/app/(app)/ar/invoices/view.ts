@@ -17,6 +17,9 @@ import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import type { DocumentDrawer } from '../../../../components/document-drawer'
 import type { AppliedPayment } from '../../../../components/applied-payments-panel'
+import { readProviderTransactionsForDocument } from '@openbooks/engine/tax'
+import type { TaxProviderChipRow } from '../../../../components/tax-provider-chip'
+import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
 
 /**
@@ -78,6 +81,9 @@ export interface ArInvoicesDrawer {
   creditApplications: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
   returnAuthorizationHref: string | null
   promotionsEnabled: boolean
+  /** Provider commit rows for a posted sales document; null while the
+   *  document is a draft or has nothing to commit to. */
+  taxProvider: { documentNumber: string; provider: string; rows: TaxProviderChipRow[]; canRetry: boolean } | null
 }
 
 export interface ArInvoicesData {
@@ -250,6 +256,24 @@ export async function loadArInvoices(
     (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
   }
   const drawerPayload = openDoc ?? createSeed
+  // Provider commit rows for a posted sales document: posting enqueues them
+  // in its own transaction, so by the time the drawer opens they are here.
+  // Drafts and unconfigured providers read null and render no chip.
+  const providerRows = drawerOpen && openDoc && !isCreate && String(openDoc.doc.status) === 'posted'
+    ? await readProviderTransactionsForDocument(authz.user.orgId, String(openDoc.doc.id))
+    : []
+  const taxProvider = providerRows.length > 0 && openDoc
+    ? {
+        documentNumber: String(openDoc.doc.document_number),
+        provider: String(providerRows[0]!.provider),
+        rows: providerRows.map((row): TaxProviderChipRow => ({
+          id: String(row.id),
+          status: String(row.status),
+          lastError: row.lastError,
+        })),
+        canRetry: can(authz, TAX_FILING_WRITE_PERMISSION),
+      }
+    : null
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
@@ -257,6 +281,7 @@ export async function loadArInvoices(
           remountKey: openDoc ? String(openDoc.doc.id) : `new:${drawerKind}`,
           payload: drawerPayload,
           createMode: isCreate,
+          taxProvider,
           allocationsEntryEnabled: featureEnabled(featureState, 'allocationsAtEntry'),
           appliedPayments: appliedRows.length > 0 && openDoc
             ? { payments: appliedRows as AppliedPayment[], currency: String(openDoc.doc.currency) }

@@ -2478,6 +2478,32 @@ const COLLECTION_ATTEMPT: RecordTypeMeta = {
   listFilters: [{ key: "status", labelKey: "ar.collections.attempts.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["initiated", "processing", "succeeded", "failed", "canceled"].map((value) => ({ value })) }],
   defaultSort: { sortKey: "created_at", dir: "desc" },
 };
+/**
+ * Tax provider commits are the AvaTax/TaxJar filing feed: one row per
+ * (document, provider, direction) with the commit outcome. The activity tab
+ * on Tax is the operator's commit queue; retrying happens in the row drawer.
+ * No feature key: provider commits ride the core tax surface, not a gate.
+ */
+const TAX_PROVIDER_TRANSACTION: RecordTypeMeta = {
+  key: "tax_provider_transaction",
+  labelKey: "customization.recordTypes.tax_provider_transaction",
+  category: "entity",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "document", labelKey: "tax.activity.columns.document", kind: "reference", sortable: true, sortKey: "document", locked: true },
+    { key: "provider", labelKey: "tax.activity.columns.provider", kind: "text", sortable: true, sortKey: "provider" },
+    { key: "status", labelKey: "tax.activity.columns.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "attempts", labelKey: "tax.activity.columns.attempts", kind: "text", sortable: true, sortKey: "attempts", defaultWidth: 90 },
+    { key: "next_attempt_at", labelKey: "tax.activity.columns.nextAttempt", kind: "date", sortable: true, sortKey: "next_attempt_at", defaultWidth: 120 },
+    { key: "committed_at", labelKey: "tax.activity.columns.committedAt", kind: "date", sortable: true, sortKey: "committed_at", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [{ key: "status", labelKey: "tax.activity.columns.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["pending", "committed", "voided", "failed", "skipped"].map((value) => ({ value })) }],
+  defaultSort: { sortKey: "created_at", dir: "desc" },
+};
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -2542,6 +2568,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   GRANT,
   ENCUMBRANCE,
   COLLECTION_ATTEMPT,
+  TAX_PROVIDER_TRANSACTION,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = RECORD_TYPES.reduce(

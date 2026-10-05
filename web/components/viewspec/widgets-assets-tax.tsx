@@ -11,6 +11,7 @@ import { TaxDepreciationHeader, TaxDepreciationOverviewSlot } from '../../app/(a
 import { ProvisionDifferencesSection, ProvisionFrameworkBadge, ProvisionPostButton, ProvisionReconSection, ProvisionStatusBadge } from '../../app/(app)/tax/provisions/[id]/sections'
 import { TaxFilingDrawer, TaxHistoryTable, TaxPageHeader, TaxPageShell, TaxPreparePanel, TaxTabPanels, TaxTabs } from '../../app/(app)/tax/sections'
 import { OssConsole } from '../../app/(app)/tax/oss/OssConsole'
+import { ProviderActivityDrawer } from '../../app/(app)/tax/ProviderActivityDrawer'
 import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
 import { NewAssetButton } from '../../app/(app)/assets/NewAssetButton'
 import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
@@ -208,6 +209,14 @@ export const ASSETS_TAX_WIDGETS = {
     const drawer = props.drawer as ComponentProps<typeof TaxFilingDrawer>['drawer']
     if (!drawer) return null
     return <TaxFilingDrawer drawer={drawer} />
+  },
+  /** One provider commit with its retry action. Null (no row open) renders
+   *  nothing — the list owns the empty state, never the drawer. */
+  'tax-provider-activity-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof ProviderActivityDrawer>['drawer'] & { remountKey: string }) | null
+    if (!drawer) return null
+    const { remountKey, ...rest } = drawer
+    return <ProviderActivityDrawer key={remountKey} drawer={rest} />
   },
 
   /* --- fixed assets --------------------------------------------------------- */

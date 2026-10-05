@@ -1704,6 +1704,9 @@ const COGNATES = new Set<string>([
   // Tax provider brand names are proper nouns, identical in every locale.
   'fr:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
   'fr:admin.setup.taxProvider.providers.taxjar|TaxJar',
+  // Document is the correct French word, not an untranslated copy.
+  'fr:tax.activity.document|Document',
+  'fr:tax.activity.columns.document|Document',
   'fr:admin.setup.laborCosting.billing.adjustmentCode|Code',
   'fr:admin.setup.laborCosting.billing.calculations.distance|Distance',
   'fr:admin.setup.laborCosting.billing.categories.minimum|Minimum',

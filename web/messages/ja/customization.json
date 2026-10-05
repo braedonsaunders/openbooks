@@ -54,7 +54,8 @@
     "rma": "返品承認",
     "fund": "資金",
     "fund_release": "資金リリース",
-    "collection_attempt": "回収試行"
+    "collection_attempt": "回収試行",
+    "tax_provider_transaction": "税金プロバイダー送信"
   },
   "resourcing": {
     "fields": {
