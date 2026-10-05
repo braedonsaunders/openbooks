@@ -1,6 +1,8 @@
 {
   "list": {
     "title": "Ausgangsrechnungen",
+    "cashTitle": "Barverkäufe",
+    "cashDescription": "Bezahlte Kassenzettel und Erstattungen — Geld in der Kasse, keine Debitoren: Entwurf → Zahlungsaufteilung → Buchung.",
     "description": "Kundenrechnungen und Gutschriften — Ihre Forderungen: Entwurf → Genehmigung → über den Kernel gebucht.",
     "searchPlaceholder": "Rechnungen, Gutschriften, Kunden, Referenzen durchsuchen…",
     "emptyTitle": "Noch keine Ausgangsrechnungen",
@@ -21,7 +23,27 @@
     "newCredit": "Neue Kundengutschrift",
     "submitForApproval": "Zur Genehmigung einreichen"
   },
-  "drawer": {
+    "tenders": {
+    "title": "Zahlungsmittel",
+    "tenderedOf": "{tendered} von {total} zugeordnet",
+    "balanced": "Ausgeglichen",
+    "unbalanced": "Nicht ausgeglichen",
+    "help": "So wurde dieser Verkauf bezahlt. Die Summe muss dem Belegtotal entsprechen — sonst verweigert die Buchung.",
+    "method": "Art",
+    "account": "Konto",
+    "accountPlaceholder": "Verrechnungs- oder Bankkonto",
+    "amount": "Betrag",
+    "reference": "Referenz",
+    "referencePlaceholder": "Autorisierungs- oder Belegnr.",
+    "remove": "Entfernen",
+    "add": "Zahlungsmittel hinzufügen",
+    "emptyHint": "Vor dem Buchen mindestens ein Zahlungsmittel erfassen.",
+    "refundAction": "Erstatten",
+    "postTitle": "Diesen Beleg buchen?",
+    "postBody": "{number}: {total} einnehmen.\n{tenders}",
+    "kinds": { "cash": "Bar", "card": "Karte", "bank": "Bank" }
+  },
+"drawer": {
     "editingHint": "Bearbeitung — Speichern, um Änderungen zu übernehmen",
     "viewGlImpact": "GL-Auswirkung anzeigen",
     "dateLabel": "Rechnungsdatum",

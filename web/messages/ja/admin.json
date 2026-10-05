@@ -772,6 +772,20 @@
       "november": "11月",
       "december": "12月"
     },
+    "cashSales": {
+      "title": "現金売上の初期値",
+      "description": "得意先不明の店頭売上を計上する相手と、支払方法ごとに初期表示する勘定です。",
+      "customerPlaceholder": "ウォークイン得意先を選択…",
+      "customerSearchPlaceholder": "得意先を検索…",
+      "accountPlaceholder": "仮受・銀行勘定…",
+      "accountSearchPlaceholder": "勘定を検索…",
+      "fields": {
+        "walkInCustomer": { "label": "ウォークイン得意先", "hint": "得意先不明の店頭売上はこの得意先に計上されます。" },
+        "defaultCashAccountId": { "label": "現金の初期勘定", "hint": "新規売上の現金を初期表示します。" },
+        "defaultCardAccountId": { "label": "カードの初期勘定", "hint": "新規売上のカードを初期表示します。" },
+        "defaultBankAccountId": { "label": "銀行の初期勘定", "hint": "新規売上の銀行振込を初期表示します。" }
+      }
+    },
     "controlAccounts": {
       "title": "統制勘定",
       "description": "補助元帳と税金が記帳を経由する総勘定元帳の勘定です。記帳可能な（集計でない）勘定のみが表示されます。",

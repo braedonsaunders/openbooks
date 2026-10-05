@@ -772,6 +772,20 @@
       "november": "November",
       "december": "Dezember"
     },
+    "cashSales": {
+      "title": "Standardwerte Barverkauf",
+      "description": "Gegen welchen Kunden anonyme Thekenverkäufe gebucht werden und welche Konten neue Zahlungsmittel vorbelegen.",
+      "customerPlaceholder": "Laufkunden wählen…",
+      "customerSearchPlaceholder": "Kunden suchen…",
+      "accountPlaceholder": "Verrechnungs- oder Bankkonto…",
+      "accountSearchPlaceholder": "Konten suchen…",
+      "fields": {
+        "walkInCustomer": { "label": "Laufkunde", "hint": "Thekenverkäufe ohne namentlichen Kunden laufen auf diesen Kunden." },
+        "defaultCashAccountId": { "label": "Standard-Barkonto", "hint": "Belegt Barzahlungsmittel neuer Verkäufe vor." },
+        "defaultCardAccountId": { "label": "Standard-Kartenverrechnung", "hint": "Belegt Kartenzahlungen neuer Verkäufe vor." },
+        "defaultBankAccountId": { "label": "Standard-Bankkonto", "hint": "Belegt Bankzahlungen neuer Verkäufe vor." }
+      }
+    },
     "controlAccounts": {
       "title": "Kontrollkonten",
       "description": "Die Hauptbuchkonten, über die Nebenbücher und Steuer buchen. Es werden nur bebuchbare (Nicht-Sammel-)Konten angezeigt.",

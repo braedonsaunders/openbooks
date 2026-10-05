@@ -772,6 +772,20 @@
       "november": "November",
       "december": "December"
     },
+    "cashSales": {
+      "title": "Cash sales till defaults",
+      "description": "Who unattributed counter sales post against, and which accounts new tenders prefill per channel.",
+      "customerPlaceholder": "Pick the walk-in customer…",
+      "customerSearchPlaceholder": "Search customers…",
+      "accountPlaceholder": "Clearing or bank account…",
+      "accountSearchPlaceholder": "Search accounts…",
+      "fields": {
+        "walkInCustomer": { "label": "Walk-in customer", "hint": "Counter sales with no named customer post against this customer." },
+        "defaultCashAccountId": { "label": "Default cash account", "hint": "Prefills cash tenders on new sales." },
+        "defaultCardAccountId": { "label": "Default card clearing account", "hint": "Prefills card tenders on new sales." },
+        "defaultBankAccountId": { "label": "Default bank account", "hint": "Prefills bank-transfer tenders on new sales." }
+      }
+    },
     "controlAccounts": {
       "title": "Control accounts",
       "description": "The general-ledger accounts subledgers and tax post through. Only postable (non-summary) accounts appear.",

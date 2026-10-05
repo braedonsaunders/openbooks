@@ -1,6 +1,8 @@
 {
   "list": {
     "title": "Faturas",
+    "cashTitle": "Vendas à vista",
+    "cashDescription": "Recibos pagos no ato e reembolsos — dinheiro em caixa, sem contas a receber.",
     "description": "Faturas de clientes e notas de crédito — seu contas a receber: rascunho → aprovação → lançado pelo kernel.",
     "searchPlaceholder": "Buscar faturas, créditos, clientes, refs…",
     "emptyTitle": "Nenhuma fatura ainda",
@@ -21,7 +23,27 @@
     "newCredit": "Novo crédito de cliente",
     "submitForApproval": "Enviar para aprovação"
   },
-  "drawer": {
+    "tenders": {
+    "title": "Formas de pagamento",
+    "tenderedOf": "{tendered} recebidos de {total}",
+    "balanced": "Fechado",
+    "unbalanced": "Divergente",
+    "help": "Como esta venda foi paga. Devem somar o total do documento — o lançamento recusa qualquer diferença.",
+    "method": "Meio",
+    "account": "Conta",
+    "accountPlaceholder": "Conta transitória ou bancária",
+    "amount": "Valor",
+    "reference": "Referência",
+    "referencePlaceholder": "Autorização ou comprovante",
+    "remove": "Remover",
+    "add": "Adicionar pagamento",
+    "emptyHint": "Adicione ao menos uma forma de pagamento antes de lançar.",
+    "refundAction": "Reembolsar",
+    "postTitle": "Lançar este recibo?",
+    "postBody": "{number}: receber {total}.\n{tenders}",
+    "kinds": { "cash": "Dinheiro", "card": "Cartão", "bank": "Banco" }
+  },
+"drawer": {
     "editingHint": "Editando — Salve para aplicar as alterações",
     "viewGlImpact": "Ver impacto no razão",
     "dateLabel": "Data da fatura",

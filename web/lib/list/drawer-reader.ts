@@ -10,6 +10,7 @@ export async function readListDrawer(source: ListDrawerSource, params: Params): 
   const readers = {
     vendor_bill: async () => (await import('../../app/(app)/ap/bills/view')).loadApBills(params),
     customer_invoice: async () => (await import('../../app/(app)/ar/invoices/view')).loadArInvoices(params),
+  cash_sale: async () => (await import('../../app/(app)/cash-sales/view')).loadCashSales(params),
     bank_transaction: async () => (await import('../../app/(app)/banking/transactions/view')).loadBankingTransactions(params),
     quote: async () => (await import('../../app/(app)/estimates/view')).loadEstimates(params),
     sales_order: async () => (await import('../../app/(app)/sales-orders/view')).loadSalesOrders(params),

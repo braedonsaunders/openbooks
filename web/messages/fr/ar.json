@@ -1,6 +1,8 @@
 {
   "list": {
     "title": "Factures clients",
+    "cashTitle": "Ventes au comptant",
+    "cashDescription": "Reçus payés immédiatement et remboursements — de l’argent en caisse, sans créances.",
     "description": "Factures et notes de crédit clients — vos comptes clients : brouillon → approbation → comptabilisées par le noyau.",
     "searchPlaceholder": "Rechercher factures, notes de crédit, clients, réf.…",
     "emptyTitle": "Aucune facture client pour l’instant",
@@ -21,7 +23,27 @@
     "newCredit": "Nouvelle note de crédit",
     "submitForApproval": "Soumettre pour approbation"
   },
-  "drawer": {
+    "tenders": {
+    "title": "Modes de règlement",
+    "tenderedOf": "{tendered} encaissés sur {total}",
+    "balanced": "Équilibré",
+    "unbalanced": "Déséquilibré",
+    "help": "Comment cette vente a été payée. Le total doit égaler le document — la comptabilisation refuse tout écart.",
+    "method": "Moyen",
+    "account": "Compte",
+    "accountPlaceholder": "Compte d’attente ou bancaire",
+    "amount": "Montant",
+    "reference": "Référence",
+    "referencePlaceholder": "Autorisation ou ticket",
+    "remove": "Retirer",
+    "add": "Ajouter un règlement",
+    "emptyHint": "Ajoutez au moins un règlement avant de comptabiliser.",
+    "refundAction": "Rembourser",
+    "postTitle": "Comptabiliser ce reçu ?",
+    "postBody": "{number} : encaisser {total}.\n{tenders}",
+    "kinds": { "cash": "Espèces", "card": "Carte", "bank": "Banque" }
+  },
+"drawer": {
     "editingHint": "Modification — Enregistrer pour appliquer",
     "viewGlImpact": "Voir l’impact au GL",
     "dateLabel": "Date de la facture",

@@ -75,6 +75,8 @@
     "items": {
       "invoice": "Facture client",
       "creditMemo": "Note de crédit",
+      "cashSale": "Vente au comptant",
+      "cashRefund": "Remboursement au comptant",
       "estimate": "Devis",
       "salesOrder": "Commande client",
       "customerPayment": "Paiement client",

@@ -33,6 +33,7 @@ import {
 } from './allocations/distribution-groups'
 import { useEntryCandidates } from './allocations/use-entry-candidates'
 import { DistributionDialog, type DistributionDialogChild } from './allocations/DistributionDialog'
+import { CashTendersSection, parseTenderDrafts } from './cash-tenders-section'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
@@ -1055,6 +1056,15 @@ export interface DocumentDrawerProps {
    *  no promotion action or chip instead of probing an endpoint the server
    *  must refuse. Undefined preserves the hidden default. */
   promotionsEnabled?: boolean
+  /** Tender settlement accounts for paid-at-sale kinds (bank + asset
+   *  clearing). Only passed by the cash-sales loader; absent renders no
+   *  tenders section. */
+  tenderAccounts?: { id: string; number: string | null; name: string | null }[] | null
+  /** Prefilled-refund entry link for a posted cash sale, resolved by the
+   *  cash-sales loader's permission and feature gates. */
+  refundHref?: string | null
+  /** Org default tender account (till defaults) prefill for new tenders. */
+  defaultTenderAccountId?: string | null
 }
 
 export function DocumentDrawer({
@@ -1093,6 +1103,9 @@ export function DocumentDrawer({
   allocationsEntryEnabled,
   returnAuthorizationHref,
   promotionsEnabled,
+  tenderAccounts,
+  refundHref,
+  defaultTenderAccountId,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
@@ -1111,6 +1124,11 @@ export function DocumentDrawer({
   const isDraft = doc.status === 'draft'
   const isPosted = doc.status === 'posted'
   const isTransfer = config.kind === 'transfer'
+  const isCashKind = config.kind === 'cash_sale' || config.kind === 'cash_refund'
+  const tenderAccountOptions = (tenderAccounts ?? []).map((a) => ({
+    value: a.id,
+    label: `${a.number ?? ''} ${a.name ?? ''}`.trim(),
+  }))
 
   const canEditStatus =
     (doc.status === 'draft' && canCreate) ||
@@ -1956,6 +1974,28 @@ export function DocumentDrawer({
     if (blockCurrencyMismatch()) {
       return
     }
+    // Consequence before commit for till money: state in plain words what
+    // posting settles — per tender account — before the kernel runs. The
+    // section above already cross-foots tendered against the total; this
+    // restates it at the commit point so a mis-tendered tap cannot slip
+    // through on muscle memory.
+    if (action === 'post' && isCashKind) {
+      const drafts = parseTenderDrafts(customValues.tenders)
+      const tenderLines = drafts.map((draft) => {
+        const account = tenderAccountOptions.find((option) => option.value === draft.accountId)?.label ?? draft.accountId
+        return `· ${money(draft.amount || '0', { currency: doc.currency })} ${draft.kind} → ${account}`
+      })
+      const confirmed = await confirmDialog({
+        title: t('tenders.postTitle'),
+        message: t('tenders.postBody', {
+          number: doc.document_number ?? '',
+          total: money(effectiveTotals.total, { currency: doc.currency }),
+          tenders: tenderLines.join('\n'),
+        }),
+        confirmLabel: tCommon('actions.post'),
+      })
+      if (!confirmed) return
+    }
     await execute(
       () =>
         fetchAction('/api/documents/actions', {
@@ -2790,6 +2830,9 @@ export function DocumentDrawer({
             {doc.kind === 'customer_invoice' && returnAuthorizationHref ? (
               <Button variant="outline" asChild><Link href={returnAuthorizationHref}>{tReturns('actions.new')}</Link></Button>
             ) : null}
+            {doc.kind === 'cash_sale' && isPosted && refundHref && canCreate ? (
+              <Button variant="outline" asChild><Link href={refundHref}>{t('tenders.refundAction')}</Link></Button>
+            ) : null}
           </>
         )
       }
@@ -3075,6 +3118,17 @@ export function DocumentDrawer({
               distribution={distribution}
             />
           </div>
+        ) : null}
+        {isCashKind && tenderAccounts ? (
+          <CashTendersSection
+            value={customValues.tenders}
+            onChange={(next) => setCustomValues((c) => ({ ...c, tenders: next }))}
+            editable={editable}
+            total={effectiveTotals.total}
+            currency={doc.currency}
+            accountOptions={tenderAccountOptions}
+            defaultAccountId={defaultTenderAccountId}
+          />
         ) : null}
         {splitTarget !== null && rows[splitTarget] ? (
           <DistributionDialog

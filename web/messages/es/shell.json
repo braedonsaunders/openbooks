@@ -75,6 +75,8 @@
     "items": {
       "invoice": "Factura de venta",
       "creditMemo": "Nota de crédito",
+      "cashSale": "Venta en efectivo",
+      "cashRefund": "Reembolso en efectivo",
       "estimate": "Presupuesto",
       "salesOrder": "Pedido de venta",
       "customerPayment": "Pago de cliente",
