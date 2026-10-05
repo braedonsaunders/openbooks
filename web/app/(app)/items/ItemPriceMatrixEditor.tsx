@@ -152,6 +152,19 @@ export function ItemPriceMatrixEditor({ itemId, familyId, canManage }: { itemId?
   const scopeKey = (schedule: Schedule) => `${schedule.customer_id ?? ''}|${schedule.price_level_id ?? ''}|${schedule.currency}`
   const ownKeys = useMemo(() => new Set((data?.schedules ?? []).map(scopeKey)), [data])
   const inherited = useMemo(() => data?.inherited ?? [], [data])
+  /**
+   * One price-schedule table: own rows first, then the family rows this
+   * variant inherits. A second stacked table would hide inheritance beside
+   * the list instead of inside it, so the source badge carries the split.
+   */
+  type CombinedRow = Schedule & { inheritedRow: boolean }
+  const combinedRows = useMemo<CombinedRow[]>(
+    () => [
+      ...(data?.schedules ?? []).map((schedule) => ({ ...schedule, inheritedRow: false })),
+      ...inherited.map((schedule) => ({ ...schedule, inheritedRow: true })),
+    ],
+    [data, inherited],
+  )
 
   /**
    * Override an inherited family row: open the create form prefilled from
@@ -202,46 +215,41 @@ export function ItemPriceMatrixEditor({ itemId, familyId, canManage }: { itemId?
         </CardContent></Card>
       ) : null}
 
-      <PagedTable
-        rows={data?.schedules ?? []} rowKey={(row) => row.id} searchable emptyAsRow
-        empty={<span>{t('empty')}</span>} onRowClick={canManage ? beginEdit : undefined}
-        toolbarAfter={canManage && editingId === null ? <Button size="sm" onClick={() => beginNew('base')}>{t('addSchedule')}</Button> : undefined}
-        columns={[
-          { key: 'target', header: t('target'), cell: targetLabel, search: targetLabel },
-          { key: 'currency', header: t('currency'), cell: (row) => row.currency, search: (row) => row.currency },
-          { key: 'basis', header: t('quantityBasis'), cell: (row) => t(row.quantity_basis === 'overall_item_quantity' ? 'quantityBases.overallItem' : 'quantityBases.line') },
-          { key: 'dates', header: t('effective'), cell: (row) => `${row.effective_from} → ${row.effective_to ?? '∞'}` },
-          { key: 'breaks', header: t('breaks'), cell: (row) => row.breaks.map((entry) => `${entry.minimumQuantity}+: ${row.currency} ${entry.unitPrice}`).join(' · '), search: (row) => row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ') },
-          { key: 'status', header: common('labels.status'), cell: (row) => <Badge variant={row.is_active ? 'success' : 'secondary'}>{row.is_active ? common('status.active') : common('status.inactive')}</Badge> },
-          { key: 'actions', header: '', cell: (row) => canManage ? <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); void remove(row) }}>{common('actions.delete')}</Button> : null },
-        ]}
-      />
-      {inherited.length > 0 ? (
-        <div className="space-y-2">
-          <div><h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('inheritedTitle')}</h4><p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('inheritedDescription')}</p></div>
-          <PagedTable
-            rows={inherited} rowKey={(row) => row.id} searchable emptyAsRow
-            empty={<span>{t('empty')}</span>}
-            columns={[
-              { key: 'target', header: t('target'), cell: targetLabel, search: targetLabel },
-              { key: 'currency', header: t('currency'), cell: (row) => row.currency, search: (row) => row.currency },
-              { key: 'breaks', header: t('breaks'), cell: (row) => row.breaks.map((entry) => `${entry.minimumQuantity}+: ${row.currency} ${entry.unitPrice}`).join(' · '), search: (row) => row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ') },
-              {
-                key: 'source', header: t('source'), cell: (row) => {
-                  const shadowed = ownKeys.has(scopeKey(row))
-                  return (
-                    <span className="flex items-center gap-1.5">
-                      <Badge variant={shadowed ? 'secondary' : 'outline'}>
-                        {shadowed ? t('overriddenBadge') : t('inheritedBadge', { family: row.inheritedFrom?.familyName ?? '' })}
-                      </Badge>
-                    </span>
-                  )
-                },
+      {editingId === null ? (
+        <PagedTable
+          rows={combinedRows} rowKey={(row) => `${row.inheritedRow ? 'inherited' : 'own'}:${row.id}`} searchable emptyAsRow
+          empty={<span>{t('empty')}</span>} onRowClick={canManage ? (row) => { if (!row.inheritedRow) beginEdit(row) } : undefined}
+          toolbarAfter={canManage ? <Button size="sm" onClick={() => beginNew('base')}>{t('addSchedule')}</Button> : undefined}
+          columns={[
+            { key: 'target', header: t('target'), cell: targetLabel, search: targetLabel },
+            { key: 'currency', header: t('currency'), cell: (row) => row.currency, search: (row) => row.currency },
+            { key: 'basis', header: t('quantityBasis'), cell: (row) => t(row.quantity_basis === 'overall_item_quantity' ? 'quantityBases.overallItem' : 'quantityBases.line') },
+            { key: 'dates', header: t('effective'), cell: (row) => `${row.effective_from} → ${row.effective_to ?? '∞'}` },
+            { key: 'breaks', header: t('breaks'), cell: (row) => row.breaks.map((entry) => `${entry.minimumQuantity}+: ${row.currency} ${entry.unitPrice}`).join(' · '), search: (row) => row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ') },
+            {
+              key: 'source', header: t('source'), cell: (row) => {
+                if (!row.inheritedRow) return null
+                const shadowed = ownKeys.has(scopeKey(row))
+                return (
+                  <span className="flex items-center gap-1.5">
+                    <Badge variant={shadowed ? 'secondary' : 'outline'}>
+                      {shadowed ? t('overriddenBadge') : t('inheritedBadge', { family: row.inheritedFrom?.familyName ?? '' })}
+                    </Badge>
+                  </span>
+                )
               },
-              { key: 'actions', header: '', cell: (row) => canManage && !ownKeys.has(scopeKey(row)) ? <Button variant="ghost" size="sm" onClick={() => beginOverride(row)}>{t('override')}</Button> : null },
-            ]}
-          />
-        </div>
+            },
+            { key: 'status', header: common('labels.status'), cell: (row) => <Badge variant={row.is_active ? 'success' : 'secondary'}>{row.is_active ? common('status.active') : common('status.inactive')}</Badge> },
+            {
+              key: 'actions', header: '', cell: (row) => {
+                if (row.inheritedRow) {
+                  return canManage && !ownKeys.has(scopeKey(row)) ? <Button variant="ghost" size="sm" onClick={() => beginOverride(row)}>{t('override')}</Button> : null
+                }
+                return canManage ? <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); void remove(row) }}>{common('actions.delete')}</Button> : null
+              },
+            },
+          ]}
+        />
       ) : null}
     </section>
   )
