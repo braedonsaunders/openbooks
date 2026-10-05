@@ -15,6 +15,7 @@ import {
   type VatAuthorityVerdict,
 } from "../connectors/vat-validation.ts";
 import { CrossBorderTaxError } from "./cross-border-place-of-supply.ts";
+import { authorityCredentialsForOrg } from "./authority-connections.ts";
 
 /**
  * Business VAT ID validation with cached verdicts and scheduled revalidation.
@@ -271,7 +272,12 @@ export async function runTaxIdRevalidationScanForOrg(
   }
   const today = options.today ?? isoDateOf(new Date());
   const limit = options.batchLimit ?? REVALIDATION_BATCH;
-  const credentials = options.credentialsForOrg ? await options.credentialsForOrg(orgId) : {};
+  // Stored authority credentials are the default: without them every HMRC
+  // and ABN revalidation lands unverified with the connect-in-Tax-setup
+  // remedy. An explicit override (tests, manual runs) still wins.
+  const credentials = options.credentialsForOrg
+    ? await options.credentialsForOrg(orgId)
+    : await authorityCredentialsForOrg(db, orgId);
   await withOrgContext(orgId, async () => {
     const due = (
       await db.execute<PartyTaxIdRow>(sql`
