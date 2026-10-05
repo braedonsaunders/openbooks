@@ -18,6 +18,11 @@ import {
   restockingFeeCreditLines,
   type ResolveRestockingFeeResult,
 } from '@openbooks/engine/sales/restocking-fees'
+import {
+  UnknownCurrencyPrecisionError,
+  currencyPrecisionRemedy,
+  resolveCurrencyQuantum,
+} from '@openbooks/engine/src/sales/currency-precision.ts'
 import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { postedReturnEvidenceScope, SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/inventory'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -381,22 +386,21 @@ async function customerCreditLine(
 type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMinor: bigint }
 
 /**
- * The return currency's ISO quantum from the authoritative registry.
- * Credited line values enter fee math as ISO minors of the credit
- * currency (Setup stores fixed policy amounts the same way); an unknown
- * precision refuses before any fee resolves instead of guessing hundredths.
+ * The return currency's ISO quantum through the single Sales-owned
+ * resolver, mapped to this surface's typed refusal. Credited line values
+ * enter fee math as ISO minors of the credit currency (Setup stores fixed
+ * policy amounts the same way); an unknown precision refuses before any
+ * fee resolves instead of guessing hundredths.
  */
 async function creditQuantum(orgId: string, currency: string): Promise<number> {
-  const row = (await db.execute<{ minor_units: number | null }>(sql`
-    select minor_units from currencies where code = ${currency}`)).rows[0]
-  const quantum = row?.minor_units
-  if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
-    throw new ReturnRefusal(
-      `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
-      'currency_precision_unknown', 422,
-      'Ask your system administrator to restore the missing row with the platform currency seed')
+  try {
+    return await resolveCurrencyQuantum(db, currency)
+  } catch (error) {
+    if (error instanceof UnknownCurrencyPrecisionError) {
+      throw new ReturnRefusal(error.message, 'currency_precision_unknown', 422, currencyPrecisionRemedy(currency))
+    }
+    throw error
   }
-  return quantum
 }
 
 /**

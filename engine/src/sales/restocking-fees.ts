@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import {
+  UnknownCurrencyPrecisionError,
+  currencyPrecisionRemedy,
+  resolveCurrencyQuantum,
+} from "./currency-precision.ts";
 import { fromUnits, quantumScale, roundDiv, toUnits } from "../money/money.ts";
 import { assertReturnAuthorizationsFeature } from "./returns.ts";
 
@@ -203,27 +208,20 @@ export type ResolveRestockingFeeResult = {
 };
 
 /**
- * The credit currency's ISO quantum from the authoritative registry.
- * Refuses before any fee resolves when the row is missing or unusable, so
- * fixed ISO policy amounts and percent shares share one quantum without
- * guessing hundredths.
+ * The credit currency's ISO quantum, resolved before any fee resolves
+ * through the single Sales-owned resolver and mapped to this writer's
+ * typed refusal, so fixed ISO policy amounts and percent shares share one
+ * quantum without guessing hundredths.
  */
 async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<number> {
-  const row = (await runner.execute<{ minor_units: number | null }>(sql`
-    select minor_units from currencies where code = ${currency}
-  `)).rows[0];
-  const quantum = row?.minor_units;
-  if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
-    // Same deliberate shape as the promotion writer: the registry row is the
-    // only thing consulted, so no fx edge is declared.
-    throw refusal(
-      `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
-      "currency_precision_unknown",
-      422,
-      `If ${currency} is a supported ISO 4217 code, ask your system administrator to restore the missing row with the platform currency seed; otherwise choose a supported currency code from the ISO currency registry`,
-    );
+  try {
+    return await resolveCurrencyQuantum(runner, currency);
+  } catch (error) {
+    if (error instanceof UnknownCurrencyPrecisionError) {
+      throw refusal(error.message, "currency_precision_unknown", 422, currencyPrecisionRemedy(currency));
+    }
+    throw error;
   }
-  return quantum;
 }
 
 /**

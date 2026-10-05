@@ -10,6 +10,11 @@ import {
   roundDiv,
   toUnits,
 } from "../money/money.ts";
+import {
+  UnknownCurrencyPrecisionError,
+  currencyPrecisionRemedy,
+  resolveCurrencyQuantum,
+} from "./currency-precision.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
@@ -391,27 +396,20 @@ export type ApplyPromotionResult = {
 };
 
 /**
- * The document currency's ISO quantum from the authoritative registry.
- * Refuses before any write when the row is missing or unusable, so later
- * math can rely on ISO minors without guessing hundredths.
+ * The document currency's ISO quantum, resolved before any write through
+ * the single Sales-owned resolver and mapped to this writer's typed
+ * refusal, so later math can rely on ISO minors without guessing
+ * hundredths.
  */
 async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<number> {
-  const row = (await runner.execute<{ minor_units: number | null }>(sql`
-    select minor_units from currencies where code = ${currency}
-  `)).rows[0];
-  const quantum = row?.minor_units;
-  if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
-    // No fx edge is declared on purpose: the registry row is the only thing
-    // consulted. A supported-but-missing row is restored by the platform
-    // seed; a code outside ISO 4217 never has a row to restore.
-    throw refusal(
-      `Currency ${currency} has no usable minor-unit precision in the ISO currency registry`,
-      "currency_precision_unknown",
-      422,
-      `If ${currency} is a supported ISO 4217 code, ask your system administrator to restore the missing row with the platform currency seed; otherwise choose a supported currency code from the ISO currency registry`,
-    );
+  try {
+    return await resolveCurrencyQuantum(runner, currency);
+  } catch (error) {
+    if (error instanceof UnknownCurrencyPrecisionError) {
+      throw refusal(error.message, "currency_precision_unknown", 422, currencyPrecisionRemedy(currency));
+    }
+    throw error;
   }
-  return quantum;
 }
 
 /**
