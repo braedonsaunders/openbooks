@@ -289,11 +289,11 @@ test('analysis tabs name the missing floors and the score names exclusions', asy
   const data = fixture()
   data.rsf.unavailable = 'Set the relative-size baseline floor in Sentinel → Configuration.'
   data.zscore.unavailable = 'Set the z-score noise floor in Sentinel → Configuration.'
-  data.summary.excludedDetectors = ['Duplicates', '99-Trap', 'RSF', 'Z-Score', 'Amount tiers']
+  data.summary.excludedDetectors = ['Duplicates', 'RSF', 'Z-Score', 'Amount tiers']
   const { host, unmount } = await mount(data)
   try {
     assert.ok(
-      (host.textContent ?? '').includes('Score excludes unconfigured inputs: Duplicates, 99-Trap, RSF, Z-Score, Amount tiers.'),
+      (host.textContent ?? '').includes('Score excludes unconfigured inputs: Duplicates, RSF, Z-Score, Amount tiers.'),
       'the score must name every skipped scoring source',
     )
     await clickButton(host, (text) => text.startsWith('Analysis'), 'the analysis tab')

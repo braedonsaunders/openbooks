@@ -37,7 +37,6 @@ export interface SentinelStrings {
   spotRateMissing(detail: string): string;
   /** Translated names of detectors the score had to skip, for the exclusion note. */
   detectorDuplicate: string;
-  detectorTrap: string;
   detectorRsf: string;
   detectorZscore: string;
   /** "Amount tiers" as a skipped scoring source when any tier is unset. */
@@ -152,7 +151,6 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
     zscoreFloorUnset: t("sentinel.forensics.zscoreFloorUnset"),
     spotRateMissing: (detail) => t("sentinel.forensics.spotRateMissing", { detail }),
     detectorDuplicate: t("sentinel.detectors.duplicates"),
-    detectorTrap: t("sentinel.detectors.trap"),
     detectorRsf: t("sentinel.detectors.rsf"),
     detectorZscore: t("sentinel.detectors.zscore"),
     detectorAmountTiers: t("sentinel.detectors.amountTiers"),
