@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { portalRefusal } from "./errors.ts";
 import { readPortalSettings, type PortalSettings } from "./settings.ts";
 
 export type PortalInvoice = {
@@ -249,9 +250,13 @@ export async function portalOrderTracking(
 
 /**
  * The currency a payment-method setup collects in: the customer's latest
- * invoice currency, else the organization's base currency, else USD.
- * Owned here so the portal route and any future setup surface resolve it
- * the same way; the setup itself still validates the currency it receives.
+ * invoice currency, else the organization's base currency. Owned here so
+ * the portal route and any future setup surface resolve it the same way;
+ * the setup itself still validates the currency it receives. Latest means
+ * latest invoiced day, breaking same-day ties by record order, so two
+ * invoices on one day never resolve ambiguously. When neither source names
+ * a currency the organization is outside the caller's scope, so the lookup
+ * refuses as not-found — it never invents one.
  */
 export async function resolvePortalSetupCurrency(
   orgId: string,
@@ -260,11 +265,19 @@ export async function resolvePortalSetupCurrency(
 ): Promise<string> {
   const row = (await runner.execute<{ currency: string | null }>(sql`
     with ranked as (
-      select currency, row_number() over (order by document_date desc) as rn
+      select currency, row_number() over (order by document_date desc, created_at desc, id desc) as rn
         from documents
        where org_id = ${orgId} and party_id = ${partyId} and kind = 'customer_invoice'
     )
     select coalesce((select currency from ranked where rn = 1),
                     (select base_currency from orgs where id = ${orgId})) as currency`)).rows[0];
-  return row?.currency ?? "USD";
+  if (!row?.currency) {
+    throw portalRefusal(
+      "No payment currency is on file for this account",
+      "not_found",
+      404,
+      "Request a new link from the portal sign-in",
+    );
+  }
+  return row.currency;
 }
