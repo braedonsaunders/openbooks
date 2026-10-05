@@ -203,56 +203,100 @@ test("simulate writes nothing: row counts identical before and after", { skip: !
   }, { bypass: true });
 });
 
-test("webhook actions refuse at publish with the missing transport named", { skip: !DB }, async () => {
+test("webhook actions publish, and the run refuses by name while the gate is off", { skip: !DB }, async () => {
   await withHarness(setupAutomationsHarness, async (h) => {
-    await assert.rejects(
-      createAutomation({
-        orgId: h.org.orgId,
-        actorId: h.adminId,
-        name: "webhook probe",
-        trigger: { kind: "manual" },
-        rules: {},
-        conditions: {},
-        actions: [{ kind: "webhook", endpointKey: "nope" }],
-      }),
-      (e: unknown) =>
-        e instanceof AutomationContractError &&
-        /no outbound webhook transport/.test((e as Error).message) &&
-        /send_notification/.test((e as Error).message),
-    );
-    const rows = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from automations where org_id = ${h.org.orgId} and name = 'webhook probe'
-    `)).rows[0]!.n;
-    assert.equal(rows, 0, "the refused publish stores nothing");
-  }, { bypass: true });
-});
-
-test("a legacy stored webhook action fails the run by name and sends nothing", { skip: !DB }, async () => {
-  await withHarness(setupAutomationsHarness, async (h) => {
-    // Rows predating the publish refusal bypass the service: insert
-    // directly so execution of a legacy row is what is under test.
-    const legacyId = (await db.execute<{ id: string }>(sql`
-      insert into automations (org_id, name, status, trigger, rules, conditions, actions, created_by, updated_by)
-      values (${h.org.orgId}, 'legacy webhook', 'enabled',
-              '{"kind":"manual"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-              '[{"kind":"webhook","endpointKey":"legacy"}]'::jsonb, ${h.adminId}, ${h.adminId})
-      returning id
-    `)).rows[0]!.id;
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "webhook probe",
+      trigger: { kind: "manual" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "webhook", endpointKey: "nope" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
     const result = await executeAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
-      automationId: legacyId,
+      automationId: recipe.id,
       allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "failed");
-    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /no outbound webhook transport/);
-    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /send_notification/);
-    const queued = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from scheduler_outbox
-       where org_id = ${h.org.orgId} and subject_id = ${result.runId}
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /switched off/);
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /Company Settings → Features/);
+    const events = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from webhook_events where org_id = ${h.org.orgId}
     `)).rows[0]!.n;
-    assert.equal(queued, 0, "a refused webhook enqueues no outbox job");
+    assert.equal(events, 0, "a gate-refused webhook stores no event");
+  }, { bypass: true });
+});
+
+test("a webhook action enqueues a targeted delivery to its named endpoint", { skip: !DB }, async () => {
+  await withHarness(setupAutomationsHarness, async (h) => {
+    await setFeatures(h.org.orgId, { apiAccess: true, outboundWebhooks: true });
+    const { sealSecret } = await import("../platform/secrets.ts");
+    const endpointId = (await db.execute<{ id: string }>(sql`
+      insert into webhook_endpoints (org_id, key, url, description, events, status, secret_sealed, created_by, updated_by)
+      values (${h.org.orgId}, 'crm', 'https://crm.example.test/hook', 'CRM',
+              '{"document.posted"}'::text[], 'active',
+              ${sealSecret("test-secret", { orgId: h.org.orgId, purpose: "webhook.endpoint.secret" })},
+              ${h.adminId}, ${h.adminId})
+      returning id
+    `)).rows[0]!.id;
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "webhook delivery probe",
+      trigger: { kind: "manual" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "webhook", endpointKey: "crm" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    const result = await executeAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      automationId: recipe.id,
+      allowedSubsidiaryIds: null,
+      triggerPayload: { kind: "manual" },
+    });
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.steps[0]!.output, "webhook→crm");
+    const events = (await db.execute<{ eventType: string; endpointId: string }>(sql`
+      select e.event_type as "eventType", d.endpoint_id as "endpointId"
+        from webhook_events e join webhook_deliveries d on d.event_id = e.id and d.org_id = e.org_id
+       where e.org_id = ${h.org.orgId}
+    `)).rows;
+    assert.equal(events.length, 1, "one event with one targeted delivery");
+    assert.equal(events[0]!.eventType, "automation.fired");
+    assert.equal(events[0]!.endpointId, endpointId);
+  }, { bypass: true });
+});
+
+test("a webhook action to a missing endpoint fails the run naming the remedy", { skip: !DB }, async () => {
+  await withHarness(setupAutomationsHarness, async (h) => {
+    await setFeatures(h.org.orgId, { apiAccess: true, outboundWebhooks: true });
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "webhook missing probe",
+      trigger: { kind: "manual" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "webhook", endpointKey: "ghost" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    const result = await executeAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      automationId: recipe.id,
+      allowedSubsidiaryIds: null,
+      triggerPayload: { kind: "manual" },
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /does not exist/);
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /Settings → Developers → Webhooks/);
   }, { bypass: true });
 });
 

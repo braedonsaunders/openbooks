@@ -176,6 +176,7 @@ async function runActionLive(
   subjectId: string | null,
   initiatorUserId: string | null,
   automationName: string,
+  automationId: string,
 ): Promise<string> {
   switch (action.kind) {
     case "send_notification": {
@@ -302,13 +303,74 @@ async function runActionLive(
       });
       return `process started`;
     }
+    case "webhook": {
+      return await runWebhookAction(orgId, runId, index, action, subject, subjectId, automationName, automationId);
+    }
     case "start_flow":
     case "approve_step":
-    case "delay":
-    case "webhook": {
+    case "delay": {
       return await runDeferredAction(orgId, runId, index, action);
     }
   }
+}
+
+/**
+ * Point-to-point webhook call to the recipe's named endpoint. The gate,
+ * the endpoint's existence, and its enabled state refuse by name with the
+ * operable remedy; the delivery itself leaves as a durable targeted
+ * delivery in the run's transaction, attempted by the webhook worker.
+ */
+async function runWebhookAction(
+  orgId: string,
+  runId: string,
+  index: number,
+  action: Extract<AutomationAction, { kind: "webhook" }>,
+  subject: SubjectSnapshot | null,
+  subjectId: string | null,
+  automationName: string,
+  automationId: string,
+): Promise<string> {
+  const { orgFeatureEnabled } = await import("../organization/org-feature-lock.ts");
+  if (!(await orgFeatureEnabled(orgId, "outboundWebhooks"))) {
+    throw new AutomationExecuteError(
+      `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
+      `for this organization — enable them in Company Settings → Features, then run again`,
+    );
+  }
+  const { resolveAutomationEndpoint } = await import("../webhooks/endpoints.ts");
+  const { enqueueTargetedDelivery } = await import("../webhooks/emit.ts");
+  let endpoint: { id: string; key: string };
+  try {
+    endpoint = await resolveAutomationEndpoint(orgId, action.endpointKey);
+  } catch (error) {
+    throw new AutomationExecuteError(
+      `webhook action to endpoint '${action.endpointKey}' cannot run: ` +
+      `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const enqueued = await enqueueTargetedDelivery(db, {
+    orgId,
+    endpointId: endpoint.id,
+    type: "automation.fired",
+    entityKind: subject?.entity ?? null,
+    entityId: subjectId,
+    dedupeKey: `automation.fired:${runId}:${index}`,
+    payload: {
+      v: 1,
+      occurredAt: new Date().toISOString(),
+      automationId,
+      automationName,
+      subjectKind: subject?.entity ?? null,
+      subjectId,
+    },
+  });
+  if (!enqueued) {
+    throw new AutomationExecuteError(
+      `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
+      `for this organization — enable them in Company Settings → Features, then run again`,
+    );
+  }
+  return `webhook→${action.endpointKey}`;
 }
 
 async function runDeferredAction(
@@ -317,24 +379,15 @@ async function runDeferredAction(
   _index: number,
   action: AutomationAction,
 ): Promise<string> {
-  // Every formerly "deferred" kind refuses: delay has no continuation
+  // Every remaining "deferred" kind refuses: delay has no continuation
   // store, approve_step cannot mint a gate, start_flow has no dispatch
-  // entrypoint, webhook has no transport. Returning a success string
-  // would stamp the step succeeded for work that never happened, so each
-  // branch throws the same named remedy publish-time validation gives.
+  // entrypoint. (The webhook action used to refuse here too, before the
+  // outbound transport existed.) Returning a success string would stamp
+  // the step succeeded for work that never happened, so each branch
+  // throws the same named remedy publish-time validation gives.
   if (action.kind === "delay" || action.kind === "approve_step" || action.kind === "start_flow") {
     throw new AutomationExecuteError(
       `${unsupportedAutomationActionRefusal(action)} — edit the automation to remove the action, then re-enable it`,
-    );
-  }
-  if (action.kind === "webhook") {
-    // No outbound webhook transport exists (no outbox kind, no worker, no
-    // endpoint caller), so a stored webhook action can never send: refuse
-    // by name instead of failing every run inside email validation. The
-    // run fails, the recipe surfaces error, and the remedy names the
-    // replacement — publish-time validation stops new rows from arriving.
-    throw new AutomationExecuteError(
-      `${unsupportedAutomationActionRefusal(action)} — edit the automation to replace the webhook action, then re-enable it`,
     );
   }
   throw new AutomationExecuteError(`action kind '${(action as { kind: string }).kind}' is not executable yet — remove it and save again`);
@@ -427,7 +480,7 @@ export async function executeAutomation(input: {
         const verdict = evaluateAutomation(rules, conditions, subject);
         if (verdict === "no_match") return { runId: "simulated", status: "simulated", steps: [] };
       }
-      const steps = await simulateSteps(actions, subject);
+      const steps = await simulateSteps(input.orgId, actions, subject);
       return { runId: "simulated", status: "simulated", steps };
     }
 
@@ -501,7 +554,7 @@ export async function executeAutomation(input: {
         let i = 0;
         for (const action of actions) {
           i += 1;
-          const output = await runActionLive(input.orgId, runId, i, action, subject, subjectId, input.actorId, automation.name);
+          const output = await runActionLive(input.orgId, runId, i, action, subject, subjectId, input.actorId, automation.name, input.automationId);
           steps.push({ index: i, kind: action.kind, status: "succeeded", output });
         }
       });
@@ -551,24 +604,64 @@ export async function executeAutomation(input: {
   });
 }
 
-async function simulateSteps(actions: AutomationAction[], subject: SubjectSnapshot | null): Promise<RunStep[]> {
-  return actions.map((action, i) => {
+async function simulateSteps(
+  orgId: string,
+  actions: AutomationAction[],
+  subject: SubjectSnapshot | null,
+): Promise<RunStep[]> {
+  const steps: RunStep[] = [];
+  for (const [position, action] of actions.entries()) {
+    const i = position + 1;
     // Simulate refuses what live refuses: a step that can never run must
     // never preview as "simulated" success.
     const refusal = unsupportedAutomationActionRefusal(action);
     if (refusal) {
-      return { index: i + 1, kind: action.kind, status: "failed" as const, error: refusal };
+      steps.push({ index: i, kind: action.kind, status: "failed" as const, error: refusal });
+      continue;
+    }
+    if (action.kind === "webhook") {
+      // Reads only, no writes: preview the same gate and endpoint checks
+      // the live run enforces.
+      const { orgFeatureEnabled } = await import("../organization/org-feature-lock.ts");
+      if (!(await orgFeatureEnabled(orgId, "outboundWebhooks"))) {
+        steps.push({
+          index: i,
+          kind: action.kind,
+          status: "failed" as const,
+          error: `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
+            `for this organization — enable them in Company Settings → Features, then run again`,
+        });
+        continue;
+      }
+      try {
+        const { resolveAutomationEndpoint } = await import("../webhooks/endpoints.ts");
+        await resolveAutomationEndpoint(orgId, action.endpointKey);
+      } catch (error) {
+        steps.push({
+          index: i,
+          kind: action.kind,
+          status: "failed" as const,
+          error: `webhook action to endpoint '${action.endpointKey}' cannot run: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        });
+        continue;
+      }
+      steps.push({ index: i, kind: action.kind, status: "simulated" as const, output: "no writes in simulate mode" });
+      continue;
     }
     if (action.kind === "update_field") {
       try {
         assertWritableField(action.entity, action.field);
       } catch (e) {
-        return { index: i + 1, kind: action.kind, status: "failed" as const, error: e instanceof Error ? e.message : String(e) };
+        steps.push({ index: i, kind: action.kind, status: "failed" as const, error: e instanceof Error ? e.message : String(e) });
+        continue;
       }
     }
     if ((action.kind === "start_process" || action.kind === "update_field") && !subject) {
-      return { index: i + 1, kind: action.kind, status: "skipped" as const, output: "needs a subject — pick one and simulate again" };
+      steps.push({ index: i, kind: action.kind, status: "skipped" as const, output: "needs a subject — pick one and simulate again" });
+      continue;
     }
-    return { index: i + 1, kind: action.kind, status: "simulated" as const, output: "no writes in simulate mode" };
-  });
+    steps.push({ index: i, kind: action.kind, status: "simulated" as const, output: "no writes in simulate mode" });
+  }
+  return steps;
 }

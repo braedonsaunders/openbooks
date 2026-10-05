@@ -54,15 +54,9 @@ test("actions need at least one valid action", () => {
   assert.equal(actions.length, 2);
 });
 
-test("webhook actions refuse publishing with the transport named and a replacement", () => {
+test("webhook actions publish — the gate and endpoint checks live at execution", () => {
   const actions = parseAutomationActions([{ kind: "webhook", endpointKey: "crm" }]);
-  assert.throws(
-    () => assertPublishableAutomationActions(actions),
-    (e: unknown) =>
-      e instanceof AutomationContractError &&
-      /no outbound webhook transport/.test((e as Error).message) &&
-      /send_notification/.test((e as Error).message),
-  );
+  assertPublishableAutomationActions(actions);
   // Deliverable actions still publish.
   assertPublishableAutomationActions(
     parseAutomationActions([{ kind: "send_notification", to: "manager", body: "hi" }]),
