@@ -1,48 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// jsdom first: the dashboard reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/collections",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
-Object.assign(globalThis, { __recoveryToasts: [] as [string, ...unknown[]][] });
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(...a){globalThis.__recoveryToasts.push(['success',...a])},error(...a){globalThis.__recoveryToasts.push(['error',...a])}}",
-      };
-    }
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
-      };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},replace(){},refresh(){}}};export function useSearchParams(){return new URLSearchParams()};export function usePathname(){return'/collections'}",
-      };
-    }
-    return next(specifier, context);
+await bootJsdomEnvironment({ url: 'http://localhost:4800/collections', matchMediaMatches: false })
+Object.assign(globalThis, { __recoveryToasts: [] as [string, ...unknown[]][] })
+stubModules({
+  navigation: { pathname: '/collections' },
+  extra: {
+    sonner: "export const toast={success(...a){globalThis.__recoveryToasts.push(['success',...a])},error(...a){globalThis.__recoveryToasts.push(['error',...a])}}",
+    'next/link': "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
   },
 });
 
