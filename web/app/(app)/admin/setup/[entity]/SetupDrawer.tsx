@@ -35,7 +35,7 @@ import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
 
-type RefOption = { value: string; label: string; scopeValue?: string | null }
+type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string }
 
 /** Icons a registry `createChooser` card may name. */
 const CHOOSER_ICONS: Record<string, LucideIcon> = {
