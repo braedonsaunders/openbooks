@@ -1,10 +1,18 @@
 /** Invoice-to-obligation creation. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { cmp, sum } from "../money/money.ts";
 import { allocateByRelativeSSP, fairValueRangeFlag } from "./recognition-apportionment.ts";
 import { RevenueRecognitionError, revenueRecognitionFeatureEnabled } from "./recognition-transaction-price.ts";
 import { buildAllRecognitionSchedulesOn } from "./recognition-schedule-build.ts";
+import {
+  ensureScopedContract,
+  recordContractBilling,
+  resolveBillingSource,
+  revenueContractsEnabled,
+  type BillingSource,
+} from "./contract-scope.ts";
 
 // ---------------------------------------------------------------------------
 // createObligationsFromInvoice — turn a posted invoice into obligations
@@ -51,6 +59,19 @@ export async function createObligationsFromInvoice(
       from documents where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'`));
   const doc = docRes.rows[0];
   if (!doc || !doc.party_id) return { created: 0, contractId: null, obligationIds: [] };
+
+  // Scoped contracts (order/subscription) accumulate every billing of one
+  // agreement into a single contract. When the gate is off — or the invoice
+  // bills no agreement — the invoice keeps its own contract, exactly as
+  // before. Resolving the source here raises a multi-source billing before
+  // any row is written.
+  const scopedEnabled = await revenueContractsEnabled(db, orgId);
+  const billingSource: BillingSource | null = scopedEnabled
+    ? await resolveBillingSource(db, orgId, documentId)
+    : null;
+  // Narrowed once: the guard above returned when the party was missing, and
+  // property narrowing does not survive into the transaction closure below.
+  const partyId: string = doc.party_id;
 
   // Fair-value range policy: 'warn' (default) flags out-of-range allocations
   // for review; 'off' disables the check. Configured in Company & Accounting.
@@ -120,28 +141,58 @@ export async function createObligationsFromInvoice(
   const contractId = await db.transaction(async (tx) => {
     let cId: string | null = null;
     if (lines.length > 0) {
-      // One contract per invoice. The unique storage key is the concurrency
-      // authority; contract_number remains business display data, not a mutex.
-      const contractKey = revenueContractPostingEffectKey(documentId);
-      const insertedContract = await tx.execute<{ id: string }>(sql`
-        insert into revenue_contracts
-          (org_id, subsidiary_id, customer_id, contract_number, idempotency_key, status, starts_on,
-           currency, total_transaction_price, created_by, updated_by)
-        values (${orgId}, ${doc.subsidiary_id}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
-                ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${actorId}, ${actorId})
-        on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-        returning id
-      `);
-      const existingContract = insertedContract.rows[0]
-        ? null
-        : await tx.execute<{ id: string; total_transaction_price: string }>(sql`
-            select id, total_transaction_price from revenue_contracts
-             where org_id=${orgId} and idempotency_key=${contractKey}
-          `);
-      cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id ?? null;
-      if (!cId) throw new Error("revenue contract idempotency winner was not visible");
-      if (existingContract?.rows[0] && cmp(existingContract.rows[0].total_transaction_price, contractTotal) !== 0) {
-        throw new RevenueRecognitionError("Partial revenue allocation conflicts with the existing contract total; reconcile the contract before retrying");
+      // A concurrent disable must not interleave scoped writes: recheck the
+      // gate on the writer's transaction and fall back to the invoice's own
+      // contract when it is off. The fallback is today's shape — no scoped
+      // row is written while the surface is off.
+      const scoped = billingSource
+        && (await lockAndCheckOrgFeature(tx, orgId, "revenueContracts"))
+        ? billingSource
+        : null;
+      if (scoped) {
+        // The agreement's contract accumulates this billing: shared across
+        // every invoice of the order or subscription (created on first
+        // billing, or waiting as a booking shell), with billed consideration
+        // recorded alongside the new obligations in the same commit.
+        const scopedContract = await ensureScopedContract(
+          tx, orgId, scoped, partyId, doc.currency, actorId,
+        );
+        cId = scopedContract.id;
+        await recordContractBilling(
+          tx, orgId, cId, documentId, contractTotal, doc.document_date, actorId,
+        );
+      } else {
+        // One contract per invoice. The unique storage key is the concurrency
+        // authority; contract_number remains business display data, not a mutex.
+        const contractKey = revenueContractPostingEffectKey(documentId);
+        // Consideration mirrors the billing rows written in this same commit:
+        // a contract created while scoped writes are off carries none, so a
+        // later replay that records its billing accumulates exactly once.
+        const insertedContract = await tx.execute<{ id: string }>(sql`
+          insert into revenue_contracts
+            (org_id, subsidiary_id, customer_id, contract_number, idempotency_key, status, starts_on,
+             currency, total_transaction_price, total_consideration, created_by, updated_by)
+          values (${orgId}, ${doc.subsidiary_id}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
+                  ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${scopedEnabled ? contractTotal : "0"}, ${actorId}, ${actorId})
+          on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
+          returning id
+        `);
+        const existingContract = insertedContract.rows[0]
+          ? null
+          : await tx.execute<{ id: string; total_transaction_price: string }>(sql`
+              select id, total_transaction_price from revenue_contracts
+               where org_id=${orgId} and idempotency_key=${contractKey}
+            `);
+        cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id ?? null;
+        if (!cId) throw new Error("revenue contract idempotency winner was not visible");
+        if (existingContract?.rows[0] && cmp(existingContract.rows[0].total_transaction_price, contractTotal) !== 0) {
+          throw new RevenueRecognitionError("Partial revenue allocation conflicts with the existing contract total; reconcile the contract before retrying");
+        }
+        if (scopedEnabled) {
+          await recordContractBilling(
+            tx, orgId, cId, documentId, contractTotal, doc.document_date, actorId,
+          );
+        }
       }
 
       for (const l of lines) {

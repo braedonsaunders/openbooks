@@ -532,7 +532,8 @@
         "periods",
         "platform",
         "receivables",
-        "records"
+        "records",
+        "revenue"
       ]
     },
     "sample-companies": {

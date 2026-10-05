@@ -156,7 +156,7 @@ export const revenueContracts = pgTable(
     subscriptionId: uuid("subscription_id"),
     /** Billed consideration accumulated across every billing of this contract. */
     totalConsideration: money("total_consideration").notNull().default("0"),
-    /** Count of billings after the one that created the contract. */
+    /** Count of billings recorded against the contract. */
     modificationSeq: integer("modification_seq").notNull().default(0),
     ...auditColumns,
   },

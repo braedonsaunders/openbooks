@@ -41,6 +41,10 @@ export const FEATURES: FeatureDef[] = [
   { key: 'geographicTerritories', defaultEnabled: false, category: 'sales', parentKey: 'salesManagement' },
   { key: 'orders', defaultEnabled: true, category: 'sales', navModules: ['estimates', 'sales-orders', 'purchase-orders'] },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'sales', navModules: ['revenue'] },
+  // Revenue contracts spanning orders, subscriptions and several invoices.
+  // Off by default: without it every invoice keeps its own contract. A child
+  // of revenueRecognition, so it can never resolve on while recognition is off.
+  { key: 'revenueContracts', defaultEnabled: false, category: 'sales', parentKey: 'revenueRecognition' },
   // Subscription billing: plans + subscriptions that auto-generate recurring
   // invoices (SaaS/retainer style). Off by default — recurring document
   // schedules + dunning work without it; this adds the plan/subscription model.

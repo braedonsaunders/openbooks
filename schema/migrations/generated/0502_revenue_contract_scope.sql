@@ -94,11 +94,13 @@ CREATE POLICY org_isolation ON public.revenue_contract_billings
       OR org_id::text = current_setting('app.current_org', true));
 COMMENT ON POLICY org_isolation ON public.revenue_contract_billings IS 'openbooks:org_isolation:v1';
 
+-- New columns append after the existing ones: replacing the view with a
+-- different column order is rejected, so the historical order is preserved.
 CREATE OR REPLACE VIEW openbooks_query.revenue_contracts WITH (security_barrier = 'true') AS
   SELECT id, org_id, customer_id, contract_number, status, starts_on, ends_on,
     total_transaction_price, memo, created_at, created_by, updated_at, updated_by,
-    currency, project_id, pricing, subsidiary_id, revision, last_change_id,
-    parent_contract_id, idempotency_key, scope, source_document_id,
+    currency, project_id, pricing, idempotency_key, subsidiary_id, revision,
+    last_change_id, parent_contract_id, scope, source_document_id,
     subscription_id, total_consideration, modification_seq
     FROM public.revenue_contracts
    WHERE (org_id = public.openbooks_query_org_id());
