@@ -4,13 +4,13 @@ import { toUnits } from "../money/money.ts";
 import { attachDocumentIssue, loadStoredValueProgram } from "./accounts.ts";
 import { storedValueRefusal } from "./errors.ts";
 
-interface GiftCardLine {
+type GiftCardLine = {
   id: string;
   amount: string;
   currency: string;
   programId: string | null;
   description: string | null;
-}
+};
 
 /**
  * Post-commit issue for gift card sales. The invoice's own journal already

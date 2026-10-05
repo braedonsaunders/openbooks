@@ -174,9 +174,9 @@ async function recognizeRemote(
   return true;
 }
 
-interface ScanCandidate {
+type ScanCandidate = {
   id: string;
-}
+};
 
 /** Orgs with the gate on, resolved through the same machinery the Features
  * page uses. */
