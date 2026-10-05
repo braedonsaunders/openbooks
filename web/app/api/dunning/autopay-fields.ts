@@ -4,7 +4,7 @@ import {
   AutopayError,
   parseFinalAction,
   parseRetryOffsetsDays,
-} from '@openbooks/engine/src/payments/autopay.ts'
+} from '@openbooks/engine/payments/autopay'
 import { guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '@/lib/features'
 import { notFound } from '@/lib/api/responses'

@@ -5,7 +5,7 @@ import {
   AutopayError,
   removeMethod,
   setDefaultMethod,
-} from '@openbooks/engine/src/payments/autopay.ts'
+} from '@openbooks/engine/payments/autopay'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
 

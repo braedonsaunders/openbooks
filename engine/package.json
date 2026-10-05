@@ -83,6 +83,7 @@
     "./hrm/benefits/calculation": "./src/hrm/public-benefit-calculation.ts",
     "./banking/csv": "./src/banking/public-csv.ts",
     "./hrm/processes": "./src/hrm/public-processes.ts",
-    "./hrm/recruiting": "./src/hrm/public-recruiting.ts"
+    "./hrm/recruiting": "./src/hrm/public-recruiting.ts",
+    "./payments/autopay": "./src/payments/public-autopay.ts"
   }
 }

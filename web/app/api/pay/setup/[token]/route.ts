@@ -1,7 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { AutopayError, setupContinueUrl, setupTokenOrgId } from "@openbooks/engine/src/payments/autopay.ts";
+import { AutopayError, setupContinueUrl, setupTokenOrgId } from "@openbooks/engine/payments/autopay";
 import { isFeatureEnabled } from "@/lib/features";
 import { notFound } from "@/lib/api/responses";
 

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import {
   AutopayError,
   saveAutopayPolicy,
-} from '@openbooks/engine/src/payments/autopay.ts'
+} from '@openbooks/engine/payments/autopay'
 import { uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 

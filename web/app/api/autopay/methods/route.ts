@@ -2,12 +2,12 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { randomBytes } from 'node:crypto'
-import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
+import { appBaseUrl } from '@openbooks/engine/payments/autopay'
 import {
   AutopayError,
   listPaymentMethods,
   startMethodSetup,
-} from '@openbooks/engine/src/payments/autopay.ts'
+} from '@openbooks/engine/payments/autopay'
 import { uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
