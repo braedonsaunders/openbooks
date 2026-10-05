@@ -2205,9 +2205,11 @@ export async function listBulkCandidates(
     shipment_id: string; document_number: string; customer_name: string | null;
     promised_date: string | null; label_count: string;
   };
+  // The promised date is the shipment document's due date: fulfillment
+  // documents carry stage, not dates, so there is no fd.promised_date.
   const base = sql`
     select d.id as shipment_id, d.document_number, p.display_name as customer_name,
-           fd.promised_date::text, count(l.id)::text as label_count
+           d.due_date::text as promised_date, count(l.id)::text as label_count
       from documents d
       join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -2215,7 +2217,7 @@ export async function listBulkCandidates(
         and l.status = 'purchased'
      where d.org_id = ${orgId} and d.kind = 'shipment' and d.status = 'draft' and fd.stage = 'open'`;
   const tail = sql`
-     group by d.id, d.document_number, p.display_name, fd.promised_date
+     group by d.id, d.document_number, p.display_name, d.due_date
      order by d.document_number`;
   const rows = scope
     ? (await runner.execute<CandidateRow>(sql`${base} and d.subsidiary_id = any(${[...scope]}) ${tail}`)).rows
