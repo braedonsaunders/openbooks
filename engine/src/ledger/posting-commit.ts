@@ -1,5 +1,7 @@
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
 import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts';
+import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
+import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { and, eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, withTransactionSavepoint } from "../platform/db.ts";
 
@@ -37,6 +39,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     // period fences below remain narrower and protect their own state.
     await lockLedgerSetupFence(tx, doc.orgId, "shared");
     try {await assertCanadianGoodsTaxEvidence(tx,doc.orgId,documentId)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
+    try {await assertCrossBorderSupplyEvidence(tx,doc.orgId,documentId,{persist:true})} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
     if (doc.kind === "vendor_bill") {
       await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
     }

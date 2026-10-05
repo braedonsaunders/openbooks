@@ -1,5 +1,7 @@
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
 import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts'
+import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
+import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { resolveAgencyPosting,AgencyError } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
@@ -53,6 +55,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     );
   }
   try {await assertCanadianGoodsTaxEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
+  try {await assertCrossBorderSupplyEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
   assertCreditMemoDirection(doc, deps.migration);
   if (
     (doc.kind === "journal" ||
