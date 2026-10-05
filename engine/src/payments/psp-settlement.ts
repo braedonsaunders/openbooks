@@ -7,6 +7,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { cmp, fromUnits, isZero, mulRate, neg, toUnits } from "../money/money.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
@@ -1412,6 +1413,10 @@ function sameStoredImport(
 
   return parsed.lines.every((line, index) => {
     const stored = lines[index];
+    // The document link is operator matching evidence, never provider
+    // evidence: no parser sets documentId, so a stored link must not turn a
+    // same-reference refetch into a conflict. Provider evidence (kind, ref,
+    // description, amount, currency, meta) still refuses on any drift.
     return stored !== undefined
       && stored.line_number === index + 1
       && stored.kind === line.kind
@@ -1419,7 +1424,6 @@ function sameStoredImport(
       && stored.description === (line.description ?? null)
       && sameAmount(stored.amount, line.amount)
       && stored.currency === (line.currency ?? null)
-      && stored.document_id === (line.documentId ?? null)
       && stableJson(stored.meta) === stableJson(line.meta ?? {});
   });
 }
@@ -2469,4 +2473,380 @@ export async function savePspProviderConfig(
       updated_at = now(), updated_by = ${actorId}
     where psp_provider_configs.org_id = ${orgId}
   `);
+}
+
+/**
+ * Payout-to-order reconciliation. A settlement line is matchable when its
+ * kind can name a native document (a charge settles a receipt, a refund
+ * reverses one, a dispute claims one); fees, adjustments, transfers and FX
+ * legs are provider economics, never order evidence, so they stay out of the
+ * unmatched queue by construction.
+ */
+export const MATCHABLE_SETTLEMENT_LINE_KINDS: ReadonlySet<SettlementLineKind> = new Set([
+  "charge",
+  "refund",
+  "dispute",
+  "dispute_reversal",
+]);
+
+export function isMatchableSettlementLineKind(kind: string): boolean {
+  return (MATCHABLE_SETTLEMENT_LINE_KINDS as ReadonlySet<string>).has(kind);
+}
+
+/** Fail closed when the banking surface is off: hidden means refused. */
+async function requireBankingFeature(orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
+    throw new PspSettlementError(
+      "Payout reconciliation is disabled; enable Banking in Company Settings → Features before matching payout lines",
+    );
+  }
+}
+
+type SettlementLineLock = {
+  id: string;
+  kind: string;
+  document_id: string | null;
+  amount: string;
+  currency: string | null;
+};
+
+function auditSettlementLine(
+  orgId: string,
+  lineId: string,
+  action: string,
+  changes: Record<string, unknown>,
+  actorId: string | null,
+): Promise<unknown> {
+  return db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'psp_settlement_lines', ${lineId}, ${action},
+            ${JSON.stringify(changes)}::jsonb, ${actorId})
+  `);
+}
+
+/**
+ * Link one settlement line to its native document. The link is matching
+ * evidence, never posted history: the journal stays untouched, and a later
+ * reimport of the same provider reference converges onto the stored link
+ * instead of conflicting. The document must be a posted record of this
+ * organization — linking an unposted or foreign record would pretend the
+ * payout settled something the ledger never booked.
+ */
+export async function setSettlementLineDocument(
+  orgId: string,
+  batchId: string,
+  lineId: string,
+  documentId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ lineId: string; documentId: string }> {
+  if (!isUuid(documentId)) {
+    throw new PspSettlementError(
+      "a settlement line links only to a native document; choose the posted receipt, refund or payment this line settles",
+    );
+  }
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      select id, subsidiary_id from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    const line = (await db.execute<SettlementLineLock>(sql`
+      select id, kind, document_id, amount::text, currency from psp_settlement_lines
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
+    `)).rows[0];
+    if (!line) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and link the line again`,
+      );
+    }
+    const doc = (await db.execute<{ id: string; kind: string; status: string; document_number: string | null }>(sql`
+      select id, kind, status, document_number from documents
+       where id = ${documentId} and org_id = ${orgId}
+    `)).rows[0];
+    if (!doc) {
+      throw new PspSettlementError(
+        "the linked record does not belong to this organization; choose a posted sales document in this organization",
+      );
+    }
+    if (doc.status !== "posted") {
+      throw new PspSettlementError(
+        `document ${doc.document_number ?? documentId} is ${doc.status}, not posted; post it first, then link the settlement line`,
+      );
+    }
+    const before = line.document_id;
+    if (before === documentId) return { lineId, documentId };
+    const updated = await db.execute(sql`
+      update psp_settlement_lines set document_id = ${documentId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
+    `);
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement line ${lineId} could not be linked; reload the payout and try again`);
+    }
+    await auditSettlementLine(orgId, lineId, "link", { before: { documentId: before }, after: { documentId } }, actorId);
+    return { lineId, documentId };
+  });
+}
+
+/**
+ * Clear a line's document link. Matching evidence comes off; the journal
+ * stays exactly as posted.
+ */
+export async function clearSettlementLineDocument(
+  orgId: string,
+  batchId: string,
+  lineId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ lineId: string }> {
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      select id, subsidiary_id from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    const line = (await db.execute<SettlementLineLock>(sql`
+      select id, kind, document_id, amount::text, currency from psp_settlement_lines
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
+    `)).rows[0];
+    if (!line) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
+      );
+    }
+    if (line.document_id === null) return { lineId };
+    const updated = await db.execute(sql`
+      update psp_settlement_lines set document_id = null, updated_at = now(), updated_by = ${actorId}
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
+    `);
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement line ${lineId} could not be unlinked; reload the payout and try again`);
+    }
+    await auditSettlementLine(orgId, lineId, "unlink", { before: { documentId: line.document_id }, after: { documentId: null } }, actorId);
+    return { lineId };
+  });
+}
+
+/**
+ * Reclassify an unmatched line as a provider adjustment. Draft batches only:
+ * the kind feeds the stored batch totals, and posted totals are history.
+ * Totals are recomputed from the stored lines through the same summarizer
+ * posting uses, so the batch still foots after the move.
+ */
+export async function markSettlementLineAdjustment(
+  orgId: string,
+  batchId: string,
+  lineId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ lineId: string; kind: SettlementLineKind }> {
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(sql`
+      select id, status, subsidiary_id from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (batch.status !== "draft") {
+      throw new PspSettlementError(
+        `batch is ${batch.status}; a posted payout's line kinds are history — reverse the batch and re-import it to reclassify`,
+      );
+    }
+    const line = (await db.execute<SettlementLineLock>(sql`
+      select id, kind, document_id, amount::text, currency from psp_settlement_lines
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
+    `)).rows[0];
+    if (!line) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
+      );
+    }
+    if (line.kind === "adjustment") return { lineId, kind: "adjustment" };
+    if (line.document_id !== null) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is linked to document ${line.document_id}; unlink it before reclassifying as an adjustment`,
+      );
+    }
+    if (line.kind === "fee" || line.kind === "fx_adjustment") {
+      throw new PspSettlementError(
+        `a ${line.kind} line is provider cost evidence, never an adjustment; link it to nothing and leave its kind alone`,
+      );
+    }
+    const moved = await db.execute(sql`
+      update psp_settlement_lines set kind = 'adjustment', updated_at = now(), updated_by = ${actorId}
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
+    `);
+    if ((moved.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement line ${lineId} could not be reclassified; reload the payout and try again`);
+    }
+    const stored = (await db.execute<{ kind: string; amount: string; currency: string | null }>(sql`
+      select kind, amount::text, currency from psp_settlement_lines
+       where batch_id = ${batchId} and org_id = ${orgId}
+    `)).rows;
+    const totals = summarizeSettlement(
+      stored.map((row) => ({ kind: row.kind as SettlementLineKind, amount: row.amount, currency: row.currency })),
+    );
+    const restamped = await db.execute(sql`
+      update psp_settlement_batches
+         set gross_amount = ${totals.grossAmount}, fee_amount = ${totals.feeAmount},
+             refund_amount = ${totals.refundAmount}, dispute_amount = ${totals.disputeAmount},
+             adjustment_amount = ${totals.adjustmentAmount}, net_amount = ${totals.netAmount},
+             updated_at = now(), updated_by = ${actorId}
+       where id = ${batchId} and org_id = ${orgId}
+    `);
+    if ((restamped.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement batch ${batchId} could not be refooted after reclassification`);
+    }
+    await auditSettlementLine(
+      orgId, lineId, "reclassify",
+      { before: { kind: line.kind }, after: { kind: "adjustment", netAmount: totals.netAmount } },
+      actorId,
+    );
+    return { lineId, kind: "adjustment" };
+  });
+}
+
+export type DepositTieoutLine = {
+  statementLineId: string;
+  statementId: string;
+  postedOn: string;
+  amount: string;
+  currency: string;
+  description: string | null;
+  bankTransactionId: string | null;
+};
+
+export type DepositTieout =
+  | { status: "not_posted"; batchId: string }
+  | {
+    status: "tied" | "untied";
+    batchId: string;
+    provider: string;
+    externalRef: string;
+    netAmount: string;
+    currency: string;
+    settlementDate: string;
+    depositLines: DepositTieoutLine[];
+    /** Net minus tied deposit total; null when currencies differ. */
+    gapAmount: string | null;
+  };
+
+/**
+ * Tie a posted payout to its bank deposit through the existing bank
+ * reconciliation matches: the batch's bank-leg journal lines matched to
+ * statement lines ARE the deposit. No parallel link table — the tie-out is
+ * derived, so unmatching in Banking moves the payout back to in-transit
+ * with no sync step. Draft batches have no journal legs yet and report
+ * not_posted.
+ */
+export async function batchDepositTieout(
+  orgId: string,
+  batchId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<DepositTieout> {
+  return withOrg(orgId, async () => {
+    const batch = (await db.execute<{
+      id: string;
+      provider: string;
+      external_ref: string;
+      status: string;
+      currency: string;
+      net_amount: string;
+      settlement_date: string;
+      bank_account_id: string | null;
+      journal_entry_id: string | null;
+      subsidiary_id: string | null;
+    }>(sql`
+      select id, provider, external_ref, status, currency, net_amount::text,
+             settlement_date::text, bank_account_id, journal_entry_id, subsidiary_id
+        from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId}
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (batch.status !== "posted" || !batch.journal_entry_id || !batch.bank_account_id) {
+      return { status: "not_posted", batchId };
+    }
+    // Ledger sums name their book state: only live legs tie to a deposit.
+    const legs = (await db.execute<{ id: string }>(sql`
+      select jl.id from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where jl.org_id = ${orgId} and jl.entry_id = ${batch.journal_entry_id}
+         and jl.account_id = ${batch.bank_account_id}
+         and je.status in ('posted', 'reversed')
+    `)).rows;
+    if (legs.length === 0) return {
+      status: "untied",
+      batchId,
+      provider: batch.provider,
+      externalRef: batch.external_ref,
+      netAmount: batch.net_amount,
+      currency: batch.currency,
+      settlementDate: batch.settlement_date,
+      depositLines: [],
+      gapAmount: batch.net_amount,
+    };
+    const legIds = legs.map((leg) => leg.id);
+    const deposits = (await db.execute<{
+      statement_line_id: string;
+      statement_id: string;
+      posted_on: string;
+      amount: string;
+      currency: string;
+      description: string | null;
+      bank_transaction_id: string | null;
+    }>(sql`
+      select sl.id as statement_line_id, sl.statement_id, sl.posted_on::text,
+             sl.amount::text, sl.currency, sl.description, sl.bank_transaction_id
+        from reconciliation_matches m
+        join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
+       where m.org_id = ${orgId}
+         and m.journal_line_id in (${sql.join(legIds.map((legId) => sql`${legId}::uuid`), sql`, `)})
+       order by sl.posted_on, sl.id
+    `)).rows;
+    if (deposits.length === 0) {
+      return {
+        status: "untied",
+        batchId,
+        provider: batch.provider,
+        externalRef: batch.external_ref,
+        netAmount: batch.net_amount,
+        currency: batch.currency,
+        settlementDate: batch.settlement_date,
+        depositLines: [],
+        gapAmount: batch.net_amount,
+      };
+    }
+    const foreign = deposits.find((row) => row.currency.toUpperCase() !== batch.currency.toUpperCase());
+    let gapAmount: string | null = null;
+    if (!foreign) {
+      let tied = 0n;
+      for (const row of deposits) tied += toUnits(row.amount);
+      gapAmount = fromUnits(toUnits(batch.net_amount) - tied);
+    }
+    return {
+      status: "tied",
+      batchId,
+      provider: batch.provider,
+      externalRef: batch.external_ref,
+      netAmount: batch.net_amount,
+      currency: batch.currency,
+      settlementDate: batch.settlement_date,
+      depositLines: deposits.map((row) => ({
+        statementLineId: row.statement_line_id,
+        statementId: row.statement_id,
+        postedOn: row.posted_on,
+        amount: row.amount,
+        currency: row.currency,
+        description: row.description,
+        bankTransactionId: row.bank_transaction_id,
+      })),
+      gapAmount,
+    };
+  });
 }

@@ -1,11 +1,15 @@
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db, orgContext, withBypass, withOrg } from "../platform/db.ts";
+import { unsealJson } from "../platform/secrets.ts";
+import { addCalendarDays, isoDateOf } from "../platform/civil-date.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import type { FetchFn } from "./acceptance.ts";
 import {
   importSettlementBatch,
   parsePaypalTransactions,
   parseStripeBalanceTransactions,
+  PspSettlementError,
   type ImportAccounts,
   type ParsedSettlement,
   type PspProvider,
@@ -246,7 +250,7 @@ export async function importPulledSettlements(
   actorId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ batchIds: string[] }> {
-  if (provider !== "stripe" && provider !== "paypal") {
+  if (provider !== "stripe" && provider !== "paypal" && provider !== "shopify_payments") {
     throw new PaymentError(`scheduled pull is not available for ${provider}`);
   }
   return withOrg(orgId, async () => {
@@ -291,4 +295,114 @@ export async function importPulledSettlements(
     }
     return { batchIds };
   });
+}
+
+export interface PspPayoutPullScanResult {
+  ran: number;
+  failed: number;
+  orgErrors: { orgId: string; error: string }[];
+}
+
+type PullConfigRow = {
+  orgId: string;
+  provider: string;
+  secrets: string | null;
+  lastPullAt: string | null;
+};
+
+function pullApiKey(orgId: string, provider: string, secrets: string | null): string {
+  if (!secrets) {
+    throw new PaymentError(
+      `${provider} pull credentials are not configured; store an API key under Setup → Payment providers, then enable scheduled pull`,
+    );
+  }
+  let apiKey: unknown;
+  try {
+    apiKey = unsealJson<{ apiKey?: unknown }>(secrets, { orgId, purpose: "payment.provider.secrets" }).apiKey;
+  } catch {
+    throw new PaymentError(
+      `${provider} pull credentials could not be opened; store a fresh API key under Setup → Payment providers`,
+    );
+  }
+  if (typeof apiKey !== "string" || apiKey === "") {
+    throw new PaymentError(
+      `${provider} pull credentials are not configured; store an API key under Setup → Payment providers, then enable scheduled pull`,
+    );
+  }
+  return apiKey;
+}
+
+/**
+ * Scheduled payout pull for Stripe and PayPal (the `psp_payout_pull` scan).
+ * Every org with a pull-enabled provider config fetches its recent payouts
+ * into settlement batches through importPulledSettlements — idempotent on
+ * (provider, payout ref), so a refetch converges instead of duplicating.
+ * Shopify pull lives with the channel credentials in commerce/shopify.
+ */
+export async function runDuePspPayoutPulls(
+  now: Date = new Date(),
+  fetchFn: PullFetchFn = defaultFetch,
+): Promise<PspPayoutPullScanResult> {
+  const result: PspPayoutPullScanResult = { ran: 0, failed: 0, orgErrors: [] };
+  // Simulation (and other tenant-scoped callers) run this helper while an
+  // ambient org context is active. Keep that context as a hard candidate
+  // boundary even though the scheduler's unscoped invocation legitimately
+  // scans every production tenant under bypass: without this predicate, one
+  // tenant's scan would pull another tenant's payouts.
+  const scopedOrgId = orgContext.getStore()?.orgId;
+  const orgScope = scopedOrgId ? sql`and c.org_id = ${scopedOrgId}` : sql``;
+  // bypass: scheduler-tick — the unscoped scan finds pull-enabled provider
+  // configs across every production organization.
+  const configs = await withBypass(async () =>
+    (await db.execute<PullConfigRow>(sql`
+      select c.org_id as "orgId", c.provider, c.secrets, c.last_pull_at::text as "lastPullAt"
+        from psp_provider_configs c
+       where c.provider in ('stripe', 'paypal') and c.is_enabled and c.pull_enabled ${orgScope}
+       order by c.org_id, c.provider`)).rows);
+  for (const config of configs) {
+    const gated = await withOrg(config.orgId, () => orgFeatureEnabled(config.orgId, "banking"));
+    if (!gated) {
+      console.info(`[psp-payout-pull] scan skipped org ${config.orgId}: feature off`);
+      continue;
+    }
+    try {
+      const today = isoDateOf(now);
+      if (config.provider === "stripe") {
+        const apiKey = pullApiKey(config.orgId, config.provider, config.secrets);
+        const payouts = await fetchStripePayouts({ apiKey }, fetchFn, { limit: 20 });
+        const settlements: ParsedSettlement[] = [];
+        for (const payout of payouts) {
+          // Sequential fetches share one pull cursor: parallel pages would
+          // interleave their imports and could advance the cursor past a
+          // failed payout.
+          settlements.push(await fetchStripePayoutSettlement({ apiKey }, payout, fetchFn));
+        }
+        await importPulledSettlements(config.orgId, "stripe", settlements, null, null);
+      } else {
+        const apiKey = pullApiKey(config.orgId, config.provider, config.secrets);
+        const startDate = config.lastPullAt ? config.lastPullAt.slice(0, 10) : addCalendarDays(today, -7);
+        let settlements: ParsedSettlement[] = [];
+        try {
+          settlements = [
+            await fetchPaypalSettlement(
+              { apiKey },
+              `paypal-transactions|${startDate}|${today}`,
+              { startDate, endDate: today },
+              fetchFn,
+            ),
+          ];
+        } catch (e) {
+          // A quiet window is not a failure: importing zero batches still
+          // advances the pull cursor past the empty range.
+          if (!(e instanceof PspSettlementError) || e.message !== "settlement batch has no evidence lines") throw e;
+        }
+        await importPulledSettlements(config.orgId, "paypal", settlements, null, null);
+      }
+      result.ran += 1;
+    } catch (e) {
+      result.failed += 1;
+      result.orgErrors.push({ orgId: config.orgId, error: (e instanceof Error ? e.message : String(e)).slice(0, 1000) });
+    }
+  }
+  return result;
 }
