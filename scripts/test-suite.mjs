@@ -3,6 +3,7 @@ import { createConnection } from 'node:net'
 import { existsSync, globSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
 import { filesWithoutTests } from './verify-test-registration.mjs'
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname)
@@ -16,6 +17,26 @@ const ROOT = resolve(new URL('..', import.meta.url).pathname)
 // --test-force-exit and output draining. Production runtime flags are unchanged.
 // Upstream: https://github.com/nodejs/node/issues/54918
 export const TEST_RUNTIME_FLAGS = Object.freeze(['--no-concurrent-sparkplug', '--no-concurrent-recompilation'])
+
+export function validateForwardedOptions(args) {
+  const valued = ['test-reporter', 'test-reporter-destination', 'test-concurrency', 'test-timeout',
+    'test-name-pattern', 'test-skip-pattern', 'test-shard', 'test-isolation', 'test-coverage-include',
+    'test-coverage-exclude', 'test-coverage-lines', 'test-coverage-branches', 'test-coverage-functions',
+    'import', 'require', 'conditions', 'inspect-port', 'watch-path']
+  const options = Object.fromEntries(valued.map((name) => [name, { type: 'string', multiple: true }]))
+  options.require.short = 'r'
+  options.conditions.short = 'C'
+  try {
+    parseArgs({ args, strict: false, allowPositionals: false, options })
+  } catch (error) {
+    if (error.code !== 'ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL') throw error
+    throw new Error('test-suite runs complete partitions and does not accept positional filenames. '
+      + 'For one file, use: node ' + TEST_RUNTIME_FLAGS.join(' ')
+      + ' --import ./scripts/test-output-drain.mjs --import tsx --import ./scripts/test-hooks.mjs'
+      + ' --import ./engine/src/testing/database-bypass.ts --test --test-force-exit --test-concurrency=1 <file>. '
+      + 'Pass other forwarded option values as --option=value.', { cause: error })
+  }
+}
 
 
 // Keep this list in one place. Every CI suite and the developer-facing `npm
@@ -482,6 +503,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
 
 async function main() {
   const [suite, ...forwarded] = process.argv.slice(2)
+  validateForwardedOptions(forwarded)
   if (suite === 'manifest') printManifest()
   else if (suite === 'all') {
     // Keep the no-database and restore partitions on their historical
