@@ -57,7 +57,8 @@
       "pulse": "パルス",
       "relationship": "関係",
       "paymentMethods": "お支払い方法",
-      "externalIds": "外部ID"
+      "externalIds": "外部ID",
+      "billing": "請求"
     },
     "autopay": {
       "heading": "お支払い方法",
@@ -361,6 +362,48 @@
       "valid": "VAT ID有効 ({scheme})",
       "invalid": "VAT ID無効 ({scheme})",
       "unverified": "VAT ID未検証 ({scheme})"
+    }
+  },
+  "billingRelationships": {
+    "heading": "請求",
+    "invoicesGoTo": "請求書の送付先: {name}",
+    "consolidatedLine": "{cadence}統合 · 支払者 {payer}",
+    "standalone": "この顧客は自社に請求されます。請求リレーションは設定されていません。",
+    "childrenHeading": "この顧客経由で請求される顧客",
+    "child": "顧客",
+    "window": "期間",
+    "relationshipsHeading": "請求リレーション",
+    "new": "請求リレーションを追加",
+    "billTo": "請求先",
+    "payer": "支払者",
+    "group": "統合請求グループ",
+    "groupNone": "単独（統合なし）",
+    "effectiveFrom": "適用開始日",
+    "effectiveTo": "適用終了日",
+    "openEnded": "終了日なし",
+    "consequence": "{from}から、この顧客の請求書は{billTo}に送付されます。",
+    "advancedHeading": "統合の詳細",
+    "advancedSummary": "グループ別の明細グループ化・締め日・請求エンティティ",
+    "groupDetail": "{code} · {name} · 締め日 {day}",
+    "billingEntity": "請求元: {name}",
+    "billingEntityFallback": "支払者のエンティティが請求",
+    "empty": "請求リレーションがありません。この顧客は自社に請求されます。",
+    "loadFailed": "請求リレーションを読み込めませんでした。",
+    "created": "請求リレーションを保存しました",
+    "updated": "請求リレーションを更新しました",
+    "removed": "請求リレーションを削除しました",
+    "confirmTitle": "請求リレーションの削除",
+    "confirmDelete": "この請求リレーションを削除しますか？",
+    "errors": {
+      "invalidRecord": "有効な顧客とグループを選択してください。",
+      "dates": "有効な適用日を選択してください。",
+      "dateOrder": "終了日は開始日より前にできません。",
+      "references": "この組織の顧客とグループを選択してください。",
+      "noRedirect": "顧客とは異なる請求先または支払者を選択してください。",
+      "group": "グループは有効で、このリレーションの支払者に請求するものでなければなりません。支払者のグループから選択するか、空欄のままにしてください。",
+      "overlap": "この顧客はその期間の一部ですでに別の支払者経由で請求されています。既存の期間を先に終了してから、新しい期間を追加してください。",
+      "featureOff": "統合請求が無効になりました。会社設定の機能で再度有効にしてからお試しください。",
+      "save": "請求リレーションを保存できませんでした。"
     }
   }
 }

@@ -996,3 +996,75 @@ test("employee Benefits presents native program and assignment destinations for 
     assert.equal(navigation.at(-1), expected);
   }
 });
+
+const BILLING_GRANTS = { consolidatedBilling: { canManage: true } };
+
+function billingRoutes(): Record<string, () => Response> {
+  return {
+    "/api/billing-relationships": () =>
+      Response.json({
+        summary: {
+          billToPartyId: "child-1",
+          billToName: "Child Co",
+          payerPartyId: "child-1",
+          payerName: "Child Co",
+          consolidationGroupId: null,
+          groupCode: null,
+          groupName: null,
+          groupCadence: null,
+        },
+        relationships: [],
+        children: [],
+        groups: [],
+        parties: [],
+        canManage: true,
+      }),
+  };
+}
+
+function renderBillingDrawer(options: Parameters<typeof renderDrawer>[0] = {}) {
+  return renderDrawer({
+    payload: CUSTOMER_PAYLOAD,
+    role: "customer",
+    recordType: "customer",
+    fetchHandler: routeFetch(billingRoutes()),
+    ...options,
+  });
+}
+
+test("the customer rail gains a billing tab only with the consolidated-billing read surface", async (t) => {
+  const label = en("parties.drawer.tabs.billing");
+  let prior: (() => Promise<void>) | null = null;
+  const names = async (options: Parameters<typeof renderDrawer>[0]): Promise<string[]> => {
+    if (prior) {
+      const unmount = prior;
+      prior = null;
+      await unmount();
+    }
+    const { done } = await renderBillingDrawer(options);
+    prior = done;
+    return railTabs().map((button) => button.textContent?.trim() ?? "");
+  };
+
+  const ungranted = await names({});
+  assert.ok(!ungranted.includes(label), "the billing tab stays hidden without the consolidated-billing read surface");
+
+  const granted = await names({ grants: BILLING_GRANTS });
+  assert.ok(granted.includes(label), "the read surface opens the billing tab");
+  const tab = railTabNamed(label);
+  assert.ok(tab, "the billing tab must ride the customer rail");
+  await clickTab(tab);
+  assert.ok(
+    await waitForText(en("parties.billingRelationships.standalone")),
+    "clicking the rail must open the billing panel with its everyday summary",
+  );
+
+  const vendor = await names({
+    payload: VENDOR_PAYLOAD,
+    role: "vendor",
+    recordType: "vendor",
+    grants: BILLING_GRANTS,
+  });
+  assert.ok(!vendor.includes(label), "the billing tab never rides a vendor drawer");
+  if (prior) t.after(prior);
+});

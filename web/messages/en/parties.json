@@ -54,7 +54,8 @@
       "pulse": "Pulse",
       "relationship": "Relationship",
       "paymentMethods": "Payment methods",
-      "externalIds": "External IDs"
+      "externalIds": "External IDs",
+      "billing": "Billing"
     },
     "autopay": {
       "heading": "Payment methods",
@@ -361,6 +362,48 @@
       "valid": "VAT ID valid ({scheme})",
       "invalid": "VAT ID invalid ({scheme})",
       "unverified": "VAT ID unverified ({scheme})"
+    }
+  },
+  "billingRelationships": {
+    "heading": "Billing",
+    "invoicesGoTo": "Invoices go to {name}",
+    "consolidatedLine": "Consolidated {cadence} · payer {payer}",
+    "standalone": "This customer bills itself — no billing relationship redirects its invoices.",
+    "childrenHeading": "Customers billed through here",
+    "child": "Customer",
+    "window": "Window",
+    "relationshipsHeading": "Billing relationships",
+    "new": "Add billing relationship",
+    "billTo": "Bill to",
+    "payer": "Payer",
+    "group": "Consolidation group",
+    "groupNone": "Standalone (no consolidation)",
+    "effectiveFrom": "Effective from",
+    "effectiveTo": "Effective to",
+    "openEnded": "No end date",
+    "consequence": "From {from}, this customer's invoices go to {billTo}.",
+    "advancedHeading": "Consolidation details",
+    "advancedSummary": "Grouping, cut-off day and billing entity per group",
+    "groupDetail": "{code} · {name} · cut-off day {day}",
+    "billingEntity": "Billed by {name}",
+    "billingEntityFallback": "Billed by the payer's own entity",
+    "empty": "No billing relationships — this customer bills itself.",
+    "loadFailed": "Could not load billing relationships.",
+    "created": "Billing relationship saved",
+    "updated": "Billing relationship updated",
+    "removed": "Billing relationship removed",
+    "confirmTitle": "Remove billing relationship",
+    "confirmDelete": "Remove this billing relationship?",
+    "errors": {
+      "invalidRecord": "Choose valid customers and groups.",
+      "dates": "Choose valid effective dates.",
+      "dateOrder": "The end date cannot precede the start date.",
+      "references": "Choose customers and a group from this organization.",
+      "noRedirect": "Choose a bill-to or payer different from the customer.",
+      "group": "The group must be active and bill to this relationship's payer — pick one of the payer's groups, or leave it empty.",
+      "overlap": "This customer already bills through another payer for part of that window — close the existing window first, then add the new one.",
+      "featureOff": "Consolidated billing was turned off — turn it back on under Company Settings, Features, then retry.",
+      "save": "Could not save the billing relationship."
     }
   }
 }

@@ -57,7 +57,8 @@
       "pulse": "Puls",
       "relationship": "Beziehung",
       "paymentMethods": "Zahlungsmethoden",
-      "externalIds": "Externe IDs"
+      "externalIds": "Externe IDs",
+      "billing": "Abrechnung"
     },
     "autopay": {
       "heading": "Zahlungsmethoden",
@@ -361,6 +362,48 @@
       "valid": "USt-IdNr. gültig ({scheme})",
       "invalid": "USt-IdNr. ungültig ({scheme})",
       "unverified": "USt-IdNr. ungeprüft ({scheme})"
+    }
+  },
+  "billingRelationships": {
+    "heading": "Abrechnung",
+    "invoicesGoTo": "Rechnungen gehen an {name}",
+    "consolidatedLine": "Konsolidiert {cadence} · Zahler {payer}",
+    "standalone": "Dieser Kunde rechnet selbst ab — keine Abrechnungsbeziehung leitet seine Rechnungen um.",
+    "childrenHeading": "Über diesen Kunden abgerechnete Kunden",
+    "child": "Kunde",
+    "window": "Zeitraum",
+    "relationshipsHeading": "Abrechnungsbeziehungen",
+    "new": "Abrechnungsbeziehung hinzufügen",
+    "billTo": "Rechnung an",
+    "payer": "Zahler",
+    "group": "Konsolidierungsgruppe",
+    "groupNone": "Einzeln (keine Konsolidierung)",
+    "effectiveFrom": "Gültig ab",
+    "effectiveTo": "Gültig bis",
+    "openEnded": "Kein Enddatum",
+    "consequence": "Ab dem {from} gehen die Rechnungen dieses Kunden an {billTo}.",
+    "advancedHeading": "Konsolidierungsdetails",
+    "advancedSummary": "Gruppierung, Stichtag und abrechnende Einheit je Gruppe",
+    "groupDetail": "{code} · {name} · Stichtag {day}",
+    "billingEntity": "Abgerechnet durch {name}",
+    "billingEntityFallback": "Abgerechnet durch die Einheit des Zahlers",
+    "empty": "Keine Abrechnungsbeziehungen — dieser Kunde rechnet selbst ab.",
+    "loadFailed": "Abrechnungsbeziehungen konnten nicht geladen werden.",
+    "created": "Abrechnungsbeziehung gespeichert",
+    "updated": "Abrechnungsbeziehung aktualisiert",
+    "removed": "Abrechnungsbeziehung entfernt",
+    "confirmTitle": "Abrechnungsbeziehung entfernen",
+    "confirmDelete": "Diese Abrechnungsbeziehung entfernen?",
+    "errors": {
+      "invalidRecord": "Wählen Sie gültige Kunden und Gruppen.",
+      "dates": "Wählen Sie gültige Gültigkeitsdaten.",
+      "dateOrder": "Das Enddatum darf nicht vor dem Startdatum liegen.",
+      "references": "Wählen Sie Kunden und eine Gruppe aus dieser Organisation.",
+      "noRedirect": "Wählen Sie einen Rechnungsempfänger oder Zahler, der sich vom Kunden unterscheidet.",
+      "group": "Die Gruppe muss aktiv sein und an den Zahler dieser Beziehung abrechnen — wählen Sie eine der Gruppen des Zahlers oder lassen Sie das Feld leer.",
+      "overlap": "Dieser Kunde rechnet für einen Teil dieses Zeitraums bereits über einen anderen Zahler ab — schließen Sie zuerst das bestehende Fenster und fügen Sie dann das neue hinzu.",
+      "featureOff": "Die konsolidierte Abrechnung wurde deaktiviert — aktivieren Sie sie unter Unternehmenseinstellungen, Funktionen, und versuchen Sie es erneut.",
+      "save": "Die Abrechnungsbeziehung konnte nicht gespeichert werden."
     }
   }
 }

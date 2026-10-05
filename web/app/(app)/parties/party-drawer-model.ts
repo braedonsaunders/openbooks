@@ -179,7 +179,7 @@ export const serializeContacts = (rows: ContactRow[]) => rows.map((row) => {
  * that named nothing. Here the party owns the whole strip and hands the shell
  * a controlled tab; `overview` is the shell's `details` slot, renamed.
  */
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'paymentMethods' | 'store-credit' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | 'benefits' | 'employment' | 'pulse' | 'relationship' | 'external-ids' | 'attachments' | 'audit'
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'billing' | 'paymentMethods' | 'store-credit' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | 'benefits' | 'employment' | 'pulse' | 'relationship' | 'external-ids' | 'attachments' | 'audit'
 
 /** The rail key the shared shell knows the leading tab by. */
 const SHELL_DETAILS_TAB = 'details'
