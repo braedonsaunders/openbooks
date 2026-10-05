@@ -73,7 +73,9 @@
     "healthEmpty": "Noch melden keine Sync-Ströme. Der Zustand erscheint, sobald der Connector läuft.",
     "recentTitle": "Neueste Lieferungen",
     "recentEmpty": "Noch keine Lieferungen. Der erste Webhook der Storefront erscheint hier.",
-    "settingsHint": "Buchungskonten und Lagerorte für diesen Kanal. Änderungen gelten für neue Bestellungen; der Verlauf wird nie umgeschrieben."
+    "settingsHint": "Buchungskonten und Lagerorte für diesen Kanal. Änderungen gelten für neue Bestellungen; der Verlauf wird nie umgeschrieben.",
+    "reviewBanner": "Diese Verbindung hat den Import abgeschlossen und ist bereit zur Prüfung: Treffer, Standorte und Buchungskonten werden vorgeschlagen.",
+    "reviewCta": "Prüfen und Synchronisierung starten"
   },
   "activity": {
     "loading": "Lieferungen werden geladen…",
@@ -112,7 +114,16 @@
       "loadFailed": "Lieferungen wurden nicht geladen (Status {status}).",
       "replayFailed": "Wiederholung wurde nicht abgeschlossen (Status {status}).",
       "replayed": "{count, plural, one {# Lieferung} other {# Lieferungen}} erneut eingereiht."
-    }
+    },
+    "title": "Webhook-Lieferungen",
+    "emptyHint": "Geprüfte Shopify-Lieferungen landen hier, neueste zuerst, mit ihrem Ergebnis.",
+    "replayHint": "Diese Lieferung mit Begründung erneut einreihen. Der Versuch wird protokolliert.",
+    "columnReceived": "Empfangen",
+    "columnTopic": "Thema",
+    "columnEvent": "Ereignis",
+    "columnStatus": "Status",
+    "columnAttempts": "Versuche",
+    "columnOutcome": "Ergebnis"
   },
   "status": {
     "draft": "Entwurf",
@@ -133,5 +144,107 @@
       "unlinkFailed": "Trennen wurde nicht abgeschlossen (Status {status}).",
       "unlinked": "Externe ID getrennt."
     }
+  },
+  "tabs": {
+    "products": "Produkte",
+    "locations": "Standorte"
+  },
+  "actions": {
+    "connect": "Shopify verbinden",
+    "match": "Zuordnen",
+    "createItem": "Artikel anlegen",
+    "createFamily": "Familie anlegen",
+    "ignore": "Ignorieren",
+    "unmatch": "Zuordnung lösen",
+    "map": "Zuordnen",
+    "applySimilar": "Auf {count} ähnliche anwenden",
+    "startSyncing": "Synchronisierung starten",
+    "backToChannels": "Zurück zu Kanäle",
+    "reimport": "Neu importieren"
+  },
+  "connect": {
+    "title": "Shopify verbinden",
+    "stepShop": "Shop",
+    "stepMethod": "Zugang",
+    "stepReview": "Prüfung",
+    "shopLabel": "Shop-Domain",
+    "shopHint": "Die Domain xxx.myshopify.com aus den Shopify-Einstellungen.",
+    "oauthTitle": "Mit Shopify anmelden",
+    "oauthHint": "Bestätigen Sie OpenBooks in einem Shopify-Tab und kehren Sie hierher zur Prüfung zurück.",
+    "openShopify": "Shopify-Zustimmung öffnen",
+    "waitingOAuth": "Warte auf Shopify-Bestätigung…",
+    "tokenTitle": "Token einer eigenen App",
+    "tokenLabel": "Admin-API-Zugriffstoken",
+    "tokenHint": "Aus Shopify-Admin Apps → Apps entwickeln → Installieren, mit den unter Einstellungen genannten Berechtigungen.",
+    "secretLabel": "Client-Secret",
+    "secretHint": "Das Client-Secret der eigenen App — Webhook-Lieferungen werden dagegen geprüft.",
+    "pushLabel": "Katalogänderungen an Shopify senden",
+    "pushHint": "Aus, außer Sie pflegen Preise in OpenBooks. Erlaubt Preis- und Titeländerungen zurück in Varianten zu schreiben.",
+    "reviewTitle": "Vor der Synchronisierung prüfen",
+    "matchedLine": "{sku} per SKU zugeordnet · {barcode} per Barcode · {queued} brauchen eine Entscheidung",
+    "locationsLine": "{mapped} von {total} Standorten zugeordnet",
+    "accountsTitle": "Buchungskonten",
+    "accountsHint": "Nicht zugeordnete Rollen verweigern beim Buchen — frühes Bestätigen bucht nie falsch.",
+    "unmapped": "Nicht zugeordnet",
+    "acceptHint": "Speichern legt die Konten fest und aktiviert den Kanal."
+  },
+  "products": {
+    "searchPlaceholder": "Titel, SKU oder Barcode suchen…",
+    "selected": "{count} ausgewählt",
+    "matchTitle": "„{title}“ zuordnen",
+    "matchHint": "Diese Variante mit dem Artikel verknüpfen, der sie bereits ist.",
+    "createItemTitle": "Artikel aus „{title}“ anlegen",
+    "createFamilyTitle": "Familie aus „{title}“ anlegen",
+    "createFamilyHint": "Jede wartende Variante wird ein eigener Artikel; die Shopify-SKU wird zum Artikelcode, wenn frei.",
+    "ignoreHint": "Diese Zeile ohne Verknüpfung parken. Neuimport hebt das nie auf.",
+    "unmatchHint": "Die Verknüpfung mit Begründung entfernen. Die Zeile reiht sich wieder ein.",
+    "codeLabel": "Code",
+    "nameLabel": "Name",
+    "reasonLabel": "Begründung",
+    "itemLabel": "Artikel",
+    "emptyTitle": "Alles zugeordnet.",
+    "emptyHint": "Neue und geänderte Storefront-Varianten reihen sich hier zur Entscheidung ein.",
+    "proposalSkuChanged": "SKU in Shopify geändert von {from} zu {to}. Bestätigen Sie, dass sie weiter diesen Artikel meint.",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "In Shopify gelöscht. Zuordnung lösen, um die Verknüpfung freizugeben.",
+    "proposalRefused": "{message}",
+    "columnProduct": "Produkt",
+    "columnMatch": "Zuordnung",
+    "columnProposal": "Prüfen",
+    "queueBadge": "In Warteschlange"
+  },
+  "locations": {
+    "emptyTitle": "Noch keine Standorte importiert.",
+    "emptyHint": "Importieren Sie die Storefront-Standorte und ordnen Sie jeden dem Lager zu, aus dem er liefert.",
+    "unmapped": "Nicht zugeordnet",
+    "unmappedHint": "Bestellungen mit diesem Standort parken in der Ausnahme-Warteschlange — nichts bewegt sich bis zur Zuordnung.",
+    "mapTitle": "„{name}“ zuordnen",
+    "stockLabel": "Lagerort",
+    "syncStock": "Bestände synchronisieren",
+    "fulfils": "Liefert Bestellungen",
+    "columnShopify": "Shopify",
+    "columnStock": "Lagerort"
+  },
+  "settings": {
+    "title": "Kanaleinstellungen",
+    "autoImport": "Neue Produkte automatisch importieren",
+    "autoImportHint": "Neue Storefront-Varianten reihen sich von selbst in die Abgleich-Warteschlange ein.",
+    "syncInventory": "Bestände verfolgen",
+    "syncInventoryHint": "Storefront-Bestände werden auf ihren Lieferungen festgehalten.",
+    "push": "Katalogänderungen an Shopify senden",
+    "pushHint": "Erlaubt Preis- und Titeländerungen von Artikeln zurück in verknüpfte Varianten zu schreiben. Standardmäßig aus.",
+    "advanced": "Erweitert",
+    "advancedSummary": "API-Version, Ratenbudget und Webhook-Themen",
+    "apiVersion": "Admin-API-Version",
+    "apiVersionHint": "Fixierte Quartalsversion für jeden Aufruf. Nur ändern, um ein neueres Shopify-Release zu übernehmen.",
+    "rateLimit": "Import-Ratenbudget",
+    "rateLimitHint": "Maximale API-Kosten pro Import vor dem Stopp. Neuimport setzt fort.",
+    "topics": "Abonnierte Webhook-Themen",
+    "saveSettings": "Einstellungen speichern",
+    "webhookUrl": "Webhook-URL",
+    "webhookUrlHint": "Zeigen Sie die Benachrichtigungen der Shopify-App hierher. Lieferungen werden gegen das gespeicherte App-Secret geprüft."
+  },
+  "toast": {
+    "loadFailed": "Konnte nicht geladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
   }
 }

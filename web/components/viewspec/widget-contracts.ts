@@ -532,6 +532,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'subsidiary-switcher': { props: ['label', 'picker', 'value'] },
   'billing-history-console': { props: [] },
   'sync-console': { props: [] },
+  'shopify-connect': { props: [] },
   'tab-nav': { props: ['ariaLabel', 'tabs'] },
   'tax-depreciation-header': { props: ['description', 'descriptionClassName', 'tabs', 'tabsAria', 'title'] },
   'tax-depreciation-overview': { props: ['overview'] },

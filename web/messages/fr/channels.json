@@ -73,7 +73,9 @@
     "healthEmpty": "Aucun flux ne rend compte pour l'instant. L'état apparaît quand le connecteur tourne.",
     "recentTitle": "Livraisons récentes",
     "recentEmpty": "Aucune livraison pour l'instant. Le premier webhook de la boutique apparaît ici.",
-    "settingsHint": "Comptes comptables et emplacements de stock de ce canal. Les changements valent pour les nouvelles commandes ; l'historique n'est jamais réécrit."
+    "settingsHint": "Comptes comptables et emplacements de stock de ce canal. Les changements valent pour les nouvelles commandes ; l'historique n'est jamais réécrit.",
+    "reviewBanner": "Cette connexion a terminé l’import et est prête à être vérifiée : correspondances, emplacements et comptes proposés.",
+    "reviewCta": "Vérifier et démarrer la synchronisation"
   },
   "activity": {
     "loading": "Chargement des livraisons…",
@@ -112,7 +114,16 @@
       "loadFailed": "Les livraisons ne se sont pas chargées (statut {status}).",
       "replayFailed": "La relecture ne s'est pas terminée (statut {status}).",
       "replayed": "{count, plural, one {# livraison} other {# livraisons}} remise(s) en file."
-    }
+    },
+    "title": "Livraisons webhook",
+    "emptyHint": "Les livraisons Shopify vérifiées arrivent ici, récentes d’abord, avec leur résultat.",
+    "replayHint": "Remettez cette livraison en file avec un motif. La tentative est auditée.",
+    "columnReceived": "Reçue",
+    "columnTopic": "Sujet",
+    "columnEvent": "Événement",
+    "columnStatus": "Statut",
+    "columnAttempts": "Tentatives",
+    "columnOutcome": "Résultat"
   },
   "status": {
     "draft": "Brouillon",
@@ -133,5 +144,107 @@
       "unlinkFailed": "La dissociation ne s'est pas terminée (statut {status}).",
       "unlinked": "Identifiant externe dissocié."
     }
+  },
+  "tabs": {
+    "products": "Produits",
+    "locations": "Emplacements"
+  },
+  "actions": {
+    "connect": "Connecter Shopify",
+    "match": "Rapprocher",
+    "createItem": "Créer l’article",
+    "createFamily": "Créer la famille",
+    "ignore": "Ignorer",
+    "unmatch": "Dissocier",
+    "map": "Affecter",
+    "applySimilar": "Appliquer à {count} similaires",
+    "startSyncing": "Démarrer la synchronisation",
+    "backToChannels": "Retour aux canaux",
+    "reimport": "Réimporter"
+  },
+  "connect": {
+    "title": "Connecter Shopify",
+    "stepShop": "Boutique",
+    "stepMethod": "Accès",
+    "stepReview": "Relecture",
+    "shopLabel": "Domaine de la boutique",
+    "shopHint": "Le domaine xxx.myshopify.com dans les réglages Shopify.",
+    "oauthTitle": "Se connecter avec Shopify",
+    "oauthHint": "Approuvez OpenBooks dans un onglet Shopify, puis revenez ici pour la relecture.",
+    "openShopify": "Ouvrir le consentement Shopify",
+    "waitingOAuth": "En attente de l’approbation Shopify…",
+    "tokenTitle": "Jeton d’app personnalisée",
+    "tokenLabel": "Jeton d’accès Admin API",
+    "tokenHint": "Depuis Apps → Développer des apps → Installer dans Shopify, avec les portées listées en Paramètres.",
+    "secretLabel": "Secret client",
+    "secretHint": "Le secret client de l’app personnalisée — les livraisons sont vérifiées contre lui.",
+    "pushLabel": "Renvoyer les changements catalogue vers Shopify",
+    "pushHint": "Désactivé sauf tarification dans OpenBooks. Permet de réécrire prix et titre vers les variantes.",
+    "reviewTitle": "Relire avant de synchroniser",
+    "matchedLine": "{sku} par SKU · {barcode} par code-barres · {queued} en attente",
+    "locationsLine": "{mapped} emplacements affectés sur {total}",
+    "accountsTitle": "Comptes d’imputation",
+    "accountsHint": "Les rôles non affectés sont refusés à la comptabilisation — accepter tôt ne comptabilise jamais faux.",
+    "unmapped": "Non affecté",
+    "acceptHint": "Enregistrer stocke les comptes et active le canal."
+  },
+  "products": {
+    "searchPlaceholder": "Titre, SKU ou code-barres…",
+    "selected": "{count} sélectionnés",
+    "matchTitle": "Rapprocher « {title} »",
+    "matchHint": "Liez cette variante à l’article qu’elle est déjà.",
+    "createItemTitle": "Créer l’article depuis « {title} »",
+    "createFamilyTitle": "Créer la famille depuis « {title} »",
+    "createFamilyHint": "Chaque variante en file devient son propre article ; le SKU Shopify devient le code si libre.",
+    "ignoreHint": "Garez cette ligne sans la lier. La réimporter ne la réactive jamais.",
+    "unmatchHint": "Retirez le lien avec un motif. La ligne repart en file.",
+    "codeLabel": "Code",
+    "nameLabel": "Nom",
+    "reasonLabel": "Motif",
+    "itemLabel": "Article",
+    "emptyTitle": "Tout est rapproché.",
+    "emptyHint": "Les variantes nouvelles et modifiées attendent ici une décision.",
+    "proposalSkuChanged": "SKU changé dans Shopify de {from} à {to}. Confirmez qu’il désigne toujours cet article.",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "Supprimé dans Shopify. Dissociez pour libérer le lien.",
+    "proposalRefused": "{message}",
+    "columnProduct": "Produit",
+    "columnMatch": "Lien",
+    "columnProposal": "À revoir",
+    "queueBadge": "En file"
+  },
+  "locations": {
+    "emptyTitle": "Aucun emplacement importé pour l’instant.",
+    "emptyHint": "Importez les emplacements de la boutique, puis affectez chacun au stock depuis lequel il expédie.",
+    "unmapped": "Non affecté",
+    "unmappedHint": "Les commandes nommant cet emplacement patientent en file d’exceptions — rien ne bouge avant affectation.",
+    "mapTitle": "Affecter « {name} »",
+    "stockLabel": "Emplacement de stock",
+    "syncStock": "Synchroniser les stocks",
+    "fulfils": "Expédie les commandes",
+    "columnShopify": "Shopify",
+    "columnStock": "Emplacement de stock"
+  },
+  "settings": {
+    "title": "Paramètres du canal",
+    "autoImport": "Importer les nouveaux produits seuls",
+    "autoImportHint": "Les nouvelles variantes rejoignent seules la file de rapprochement.",
+    "syncInventory": "Suivre les niveaux de stock",
+    "syncInventoryHint": "Les stocks boutique sont consignés sur leurs livraisons.",
+    "push": "Renvoyer les changements catalogue vers Shopify",
+    "pushHint": "Permet de réécrire prix et titre des articles vers les variantes liées. Désactivé par défaut.",
+    "advanced": "Avancé",
+    "advancedSummary": "Version d’API, budget de requêtes et sujets",
+    "apiVersion": "Version de l’Admin API",
+    "apiVersionHint": "Version trimestrielle figée pour chaque appel. À changer pour adopter un Shopify plus récent.",
+    "rateLimit": "Budget de requêtes d’import",
+    "rateLimitHint": "Coût API maximal d’un import avant l’arrêt. Réimporter reprend.",
+    "topics": "Sujets webhook souscrits",
+    "saveSettings": "Enregistrer",
+    "webhookUrl": "URL webhook",
+    "webhookUrlHint": "Pointez les notifications de l’app Shopify ici. Les livraisons sont vérifiées contre le secret stocké."
+  },
+  "toast": {
+    "loadFailed": "Chargement impossible. Vérifiez votre connexion et réessayez."
   }
 }

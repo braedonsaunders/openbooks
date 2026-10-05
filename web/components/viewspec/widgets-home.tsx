@@ -30,6 +30,7 @@ import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
 import { BillingHistoryClient } from '../../app/(app)/sync/billing-history/BillingHistoryClient'
 import { ChannelsConsole } from '../../app/(app)/channels/ChannelsConsole'
 import { ChannelWorkspace } from '../../app/(app)/channels/[id]/ChannelWorkspace'
+import { ShopifyConnectWizard } from '../../app/(app)/channels/connect/ShopifyConnectWizard'
 import { AppNotice, AppRuntimeChrome } from '../../app/(app)/apps/[key]/sections'
 import { DashboardBuilder } from '../../app/(app)/insights/dashboards/[id]/DashboardBuilder'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
@@ -188,6 +189,8 @@ export const HOME_WIDGETS = {
    *  while a run is in flight, run/test/toggle-mirror/schedule/delete with
    *  busy flags, `window.open` for OAuth and the QWC download. */
   'sync-console': () => <PlatformClient />,
+  /** Connect Shopify: shop, access method, then review before syncing. */
+  'shopify-connect': () => <ShopifyConnectWizard />,
   /** No props. The billing-history wizard holds every fetch and mutation —
    *  connect, preflight review, accept-and-run, and the reconciliation
    *  differences — behind one drawer shell. */

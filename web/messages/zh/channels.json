@@ -73,7 +73,9 @@
     "healthEmpty": "尚无同步流上报。连接器运行后将在此显示。",
     "recentTitle": "最近交付",
     "recentEmpty": "尚无交付。网店的第一个 Webhook 将显示在这里。",
-    "settingsHint": "该渠道的记账科目与库存地点。更改适用于新订单；历史永不改写。"
+    "settingsHint": "该渠道的记账科目与库存地点。更改适用于新订单；历史永不改写。",
+    "reviewBanner": "此连接已完成导入，可供复核：已推荐匹配、地点和记账科目。",
+    "reviewCta": "复核并开始同步"
   },
   "activity": {
     "loading": "正在加载交付…",
@@ -112,7 +114,16 @@
       "loadFailed": "交付加载失败（状态 {status}）。",
       "replayFailed": "重放未完成（状态 {status}）。",
       "replayed": "已将 {count} 次交付重新排队。"
-    }
+    },
+    "title": "Webhook 推送",
+    "emptyHint": "已验证的 Shopify 推送按最新优先列在此处，并附处理结果。",
+    "replayHint": "填写理由以重新排队此推送。尝试会被审计。",
+    "columnReceived": "接收时间",
+    "columnTopic": "主题",
+    "columnEvent": "事件",
+    "columnStatus": "状态",
+    "columnAttempts": "尝试",
+    "columnOutcome": "结果"
   },
   "status": {
     "draft": "草稿",
@@ -133,5 +144,107 @@
       "unlinkFailed": "取消关联未完成（状态 {status}）。",
       "unlinked": "外部 ID 已取消关联。"
     }
+  },
+  "tabs": {
+    "products": "商品",
+    "locations": "地点"
+  },
+  "actions": {
+    "connect": "连接 Shopify",
+    "match": "匹配",
+    "createItem": "创建物料",
+    "createFamily": "创建系列",
+    "ignore": "忽略",
+    "unmatch": "取消匹配",
+    "map": "映射",
+    "applySimilar": "应用于{count}个类似项",
+    "startSyncing": "开始同步",
+    "backToChannels": "返回渠道",
+    "reimport": "重新导入"
+  },
+  "connect": {
+    "title": "连接 Shopify",
+    "stepShop": "商店",
+    "stepMethod": "访问方式",
+    "stepReview": "检查",
+    "shopLabel": "商店域名",
+    "shopHint": "Shopify 后台设置中的 xxx.myshopify.com 域名。",
+    "oauthTitle": "使用 Shopify 登录",
+    "oauthHint": "在 Shopify 标签页中授权 OpenBooks，然后回到此处检查。",
+    "openShopify": "打开 Shopify 授权页",
+    "waitingOAuth": "等待 Shopify 批准…",
+    "tokenTitle": "自定义应用令牌",
+    "tokenLabel": "Admin API 访问令牌",
+    "tokenHint": "来自 Shopify 后台“应用 → 开发应用 → 安装”，需具备设置中所列权限。",
+    "secretLabel": "客户端密钥",
+    "secretHint": "自定义应用的客户端密钥，Webhook 推送据此验签。",
+    "pushLabel": "将目录更改推送到 Shopify",
+    "pushHint": "除非在 OpenBooks 中定价，否则保持关闭。允许将物料价格与标题写回款式。",
+    "reviewTitle": "同步前检查",
+    "matchedLine": "按 SKU 匹配{sku} · 按条码匹配{barcode} · {queued}待处理",
+    "locationsLine": "地点{total}个中已映射{mapped}个",
+    "accountsTitle": "记账科目",
+    "accountsHint": "未映射的角色在记账时会被拒绝，提前确认不会误记账。",
+    "unmapped": "未映射",
+    "acceptHint": "保存将确定科目并激活渠道。"
+  },
+  "products": {
+    "searchPlaceholder": "搜索标题、SKU 或条码…",
+    "selected": "已选{count}项",
+    "matchTitle": "匹配“{title}”",
+    "matchHint": "将此款式链接到它本来的物料。",
+    "createItemTitle": "从“{title}”创建物料",
+    "createFamilyTitle": "从“{title}”创建系列",
+    "createFamilyHint": "队列中的每个款式成为独立物料；空闲时 Shopify SKU 即为物料编码。",
+    "ignoreHint": "不链接而搁置此行。重新导入不会恢复它。",
+    "unmatchHint": "填写理由以解除链接。该行回到队列。",
+    "codeLabel": "编码",
+    "nameLabel": "名称",
+    "reasonLabel": "理由",
+    "itemLabel": "物料",
+    "emptyTitle": "已全部匹配。",
+    "emptyHint": "新增与变更的款式在此等待处理。",
+    "proposalSkuChanged": "Shopify 中的 SKU 已从{from}变为{to}。请确认仍是该物料。",
+    "proposalConflict": "{message}",
+    "proposalDeleted": "已在 Shopify 删除。取消匹配以释放链接。",
+    "proposalRefused": "{message}",
+    "columnProduct": "商品",
+    "columnMatch": "匹配",
+    "columnProposal": "待查看",
+    "queueBadge": "待处理"
+  },
+  "locations": {
+    "emptyTitle": "尚未导入地点。",
+    "emptyHint": "导入店面地点，并将每个地点映射到其发货的库存地点。",
+    "unmapped": "未映射",
+    "unmappedHint": "使用此地点的订单将滞留在异常队列，映射之前不会移动。",
+    "mapTitle": "映射“{name}”",
+    "stockLabel": "库存地点",
+    "syncStock": "同步库存数量",
+    "fulfils": "履行订单",
+    "columnShopify": "Shopify",
+    "columnStock": "库存地点"
+  },
+  "settings": {
+    "title": "渠道设置",
+    "autoImport": "自动导入新商品",
+    "autoImportHint": "新款式自动进入匹配队列。",
+    "syncInventory": "跟踪库存数量",
+    "syncInventoryHint": "店面库存记录在其推送中。",
+    "push": "将目录更改推送到 Shopify",
+    "pushHint": "允许将物料价格与标题写回已链接款式。默认关闭。",
+    "advanced": "高级",
+    "advancedSummary": "API 版本、速率预算与 Webhook 主题",
+    "apiVersion": "Admin API 版本",
+    "apiVersionHint": "每次调用固定的季度版本。仅在适配新版 Shopify 时更改。",
+    "rateLimit": "导入速率预算",
+    "rateLimitHint": "单次导入可用 API 成本上限，超限即停。重新导入可继续。",
+    "topics": "已订阅的 Webhook 主题",
+    "saveSettings": "保存设置",
+    "webhookUrl": "Webhook 地址",
+    "webhookUrlHint": "将 Shopify 应用通知指向此处。推送按已存应用密钥验签。"
+  },
+  "toast": {
+    "loadFailed": "加载失败。请检查连接后重试。"
   }
 }
