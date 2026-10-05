@@ -605,6 +605,33 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
+  'kpi-customer-concentration': {
+    id: 'kpi-customer-concentration',
+    category: 'analytics',
+    labelKey: 'widgets.customerConcentration',
+    descriptionKey: 'catalog.customerConcentration',
+    defaultSize: { w: 3, h: 3 },
+    minSize: { w: 2, h: 2 },
+    analyticsSource: 'customer-intelligence',
+  },
+  'kpi-customers-at-risk': {
+    id: 'kpi-customers-at-risk',
+    category: 'analytics',
+    labelKey: 'widgets.customersAtRisk',
+    descriptionKey: 'catalog.customersAtRisk',
+    defaultSize: { w: 3, h: 3 },
+    minSize: { w: 2, h: 2 },
+    analyticsSource: 'customer-intelligence',
+  },
+  'list-customers-at-risk': {
+    id: 'list-customers-at-risk',
+    category: 'analytics',
+    labelKey: 'widgets.atRiskCustomers',
+    descriptionKey: 'catalog.atRiskCustomers',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 4 },
+    analyticsSource: 'customer-intelligence',
+  },
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
 

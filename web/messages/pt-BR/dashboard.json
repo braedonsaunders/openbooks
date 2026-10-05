@@ -42,6 +42,9 @@
     "expectedPayments": "Pagamentos previstos",
     "topCustomers": "Principais clientes",
     "topVendors": "Principais fornecedores",
+    "customerConcentration": "Concentração de clientes",
+    "customersAtRisk": "Clientes em risco",
+    "atRiskCustomers": "Clientes em risco",
     "openCount": "{count, plural, one {# em aberto} other {# em aberto}}",
     "runway": "Autonomia de caixa",
     "inboxList": "Minhas tarefas",
@@ -148,6 +151,9 @@
     "expectedPayments": "Pagamentos a fornecedores previstos para os próximos 30 dias, na moeda base.",
     "topCustomers": "Os cinco maiores saldos de clientes em aberto.",
     "topVendors": "Os cinco maiores saldos de fornecedores em aberto.",
+    "customerConcentration": "Concentração de receita (HHI) e participação do maior cliente no período.",
+    "customersAtRisk": "Clientes com alto risco de evasão e sua receita no período.",
+    "atRiskCustomers": "Clientes com risco de perda crítico ou alto.",
     "runway": "Saldo projetado e autonomia das próximas semanas, na moeda base.",
     "inboxList": "Suas principais tarefas com link para a caixa.",
     "payTile": "Próximo pagamento e último holerite.",
@@ -311,6 +317,14 @@
     "approver": "Aprovador",
     "viewer": "Leitor"
   },
+  "concentrationLevels": {
+    "low": "Baixa",
+    "moderate": "Moderada",
+    "high": "Alta"
+  },
+  "concentrationHint": "{level} · maior {share}",
+  "atRiskCount": "{count, plural, one {# cliente} other {# clientes}}",
+  "churnScore": "pontuação de evasão {score}",
   "analytics": {
     "loading": "Os números ainda não estão disponíveis.",
     "nothingFlagged": "Nada sinalizado neste período.",

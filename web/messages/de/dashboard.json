@@ -42,6 +42,9 @@
     "expectedPayments": "Anstehende Zahlungen",
     "topCustomers": "Top-Kunden",
     "topVendors": "Top-Lieferanten",
+    "customerConcentration": "Kundenkonzentration",
+    "customersAtRisk": "Gefährdete Kunden",
+    "atRiskCustomers": "Gefährdete Kunden",
     "openCount": "{count, plural, one {# offen} other {# offene}}",
     "runway": "Liquiditätsreichweite",
     "inboxList": "Meine Aufgaben",
@@ -148,6 +151,9 @@
     "expectedPayments": "Prognostizierte Lieferantenzahlungen der nächsten 30 Tage, in Basiswährung.",
     "topCustomers": "Die fünf größten offenen Kundensalden.",
     "topVendors": "Die fünf größten offenen Lieferantensalden.",
+    "customerConcentration": "HHI-Umsatzkonzentration und Anteil des größten Kunden am Periodenumsatz.",
+    "customersAtRisk": "Kunden mit hohem Abwanderungsrisiko und ihr Umsatz im Zeitraum.",
+    "atRiskCustomers": "Kunden mit kritischem oder hohem Abwanderungsrisiko.",
     "runway": "Prognostizierter Bestand und Reichweite der kommenden Wochen, in Basiswährung.",
     "inboxList": "Ihre wichtigsten Aufgaben mit Link zum Posteingang.",
     "payTile": "Nächster Zahltag und letzte Abrechnung.",
@@ -311,6 +317,14 @@
     "approver": "Genehmiger",
     "viewer": "Leseberechtigter"
   },
+  "concentrationLevels": {
+    "low": "Niedrig",
+    "moderate": "Mittel",
+    "high": "Hoch"
+  },
+  "concentrationHint": "{level} · Top-Anteil {share}",
+  "atRiskCount": "{count, plural, one {# Kunde} other {# Kunden}}",
+  "churnScore": "Abwanderungsscore {score}",
   "analytics": {
     "loading": "Die Werte sind noch nicht verfügbar.",
     "nothingFlagged": "Für diesen Zeitraum liegt nichts vor.",

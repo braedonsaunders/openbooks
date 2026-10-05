@@ -1930,6 +1930,15 @@ const COGNATES = new Set<string>([
   'fr:analytics.categoryManager.form.type|Type',
   'fr:analytics.common.monthYear|{month} \'\'{yy}',
   'fr:analytics.customer.csv.segment|Segment',
+  // Configuration section headings that share their French spelling
+  // ("concentration" and "friction" are French nouns), like Segment above.
+  'fr:analytics.customer.config.groups.concentration|Concentration',
+  'fr:analytics.customer.config.groups.friction|Friction',
+  // "Budget" is a French noun too, in the dashboard catalog as in
+  // financialHealth.tabs.budget below.
+  'fr:dashboard.analytics.budget|Budget',
+  // "Budget" (das Budget) is a German noun as well.
+  'de:dashboard.analytics.budget|Budget',
   'fr:analytics.customer.insights.scoreExcellent|Excellent',
   'fr:analytics.customer.kpi.champions|Champions',
   'fr:analytics.customer.kpi.excellent|Excellent',

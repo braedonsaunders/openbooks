@@ -42,6 +42,9 @@
     "expectedPayments": "预计付款",
     "topCustomers": "主要客户",
     "topVendors": "主要供应商",
+    "customerConcentration": "客户集中度",
+    "customersAtRisk": "流失风险客户",
+    "atRiskCustomers": "流失风险客户",
     "openCount": "{count, plural, one {# 笔未结} other {# 笔未结}}",
     "runway": "现金可维持",
     "inboxList": "我的任务",
@@ -148,6 +151,9 @@
     "expectedPayments": "未来30天预计供应商付款（本位币）。",
     "topCustomers": "排名前五的客户未结余额。",
     "topVendors": "排名前五的供应商未结余额。",
+    "customerConcentration": "HHI收入集中度及期间收入中最大客户占比。",
+    "customersAtRisk": "高流失风险客户及其本期收入。",
+    "atRiskCustomers": "流失风险为严重或高的客户。",
     "runway": "未来几周的预计现金与可维持期（本位币）。",
     "inboxList": "您的主要任务，附收件箱链接。",
     "payTile": "下次发薪日与上期工资单。",
@@ -311,6 +317,14 @@
     "approver": "审批人",
     "viewer": "查看者"
   },
+  "concentrationLevels": {
+    "low": "低",
+    "moderate": "中等",
+    "high": "高"
+  },
+  "concentrationHint": "{level}·最大占比 {share}",
+  "atRiskCount": "{count, plural, one {# 家客户} other {# 家客户}}",
+  "churnScore": "流失评分 {score}",
   "analytics": {
     "loading": "数据尚不可用。",
     "nothingFlagged": "本期无发现。",

@@ -42,6 +42,9 @@
     "expectedPayments": "Upcoming payments",
     "topCustomers": "Top customers",
     "topVendors": "Top vendors",
+    "customerConcentration": "Customer concentration",
+    "customersAtRisk": "Customers at risk",
+    "atRiskCustomers": "At-risk customers",
     "openCount": "{count, plural, one {# open} other {# open}}",
     "runway": "Cash runway",
     "inboxList": "My tasks",
@@ -148,6 +151,9 @@
     "expectedPayments": "Predicted vendor payments in the next 30 days, in base currency.",
     "topCustomers": "Largest open customer balances, top five.",
     "topVendors": "Largest open vendor balances, top five.",
+    "customerConcentration": "HHI revenue concentration and the top-customer share of period revenue.",
+    "customersAtRisk": "Customers at or above the high churn score and their trailing revenue.",
+    "atRiskCustomers": "Customers at critical or high churn risk.",
     "runway": "Projected cash and runway over the coming weeks, in base currency.",
     "inboxList": "Your top tasks with a link to the inbox.",
     "payTile": "Next pay date and last payslip.",
@@ -311,6 +317,14 @@
     "approver": "Approver",
     "viewer": "Viewer"
   },
+  "concentrationLevels": {
+    "low": "Low",
+    "moderate": "Moderate",
+    "high": "High"
+  },
+  "concentrationHint": "{level} · top {share}",
+  "atRiskCount": "{count, plural, one {# customer} other {# customers}}",
+  "churnScore": "churn score {score}",
   "analytics": {
     "loading": "Figures are not available yet.",
     "nothingFlagged": "Nothing flagged for this period.",

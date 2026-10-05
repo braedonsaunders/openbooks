@@ -4,7 +4,7 @@ import { exactMarginPercent, exactProfit } from './customer-profitability-money'
 import { ANALYTICS_CONFIG } from './config-spec'
 import { englishCatalogMessage } from './catalog-strings'
 import { customerStrings } from './customer-strings'
-import { compositeScoreOf, healthScoreOf, isProfitLeak, profitTierOf, ratePayment, scorePayment, weightsRefusal } from './customer-data'
+import { atRiskCustomersOf, compositeScoreOf, concentrationOf, healthScoreOf, isProfitLeak, profitTierOf, rankAtRiskCustomers, ratePayment, scorePayment, weightsRefusal, type CustomerData, type CustomerRow } from './customer-data'
 
 const bands = {
   highDays: 60, highPenalty: 40,
@@ -96,4 +96,34 @@ test('a profit leak is a revenue share with margin below target, never an absolu
   assert.equal(isProfitLeak({ revenue: '200', totalRevenue: '1000', marginPct: 20 }, cuts), false)
   assert.equal(isProfitLeak({ revenue: '200', totalRevenue: '1000', marginPct: null }, cuts), false)
   assert.equal(isProfitLeak({ revenue: '0', totalRevenue: '0', marginPct: 5 }, cuts), false)
+})
+
+test('at-risk is critical or high churn only: medium and low stay off the widget', () => {
+  const rows = ['critical', 'high', 'medium', 'low'].map((churnLevel, i) => ({
+    id: `c${i}`, name: `Co ${i}`, churnLevel,
+  })) as CustomerRow[]
+  assert.deepEqual(atRiskCustomersOf(rows).map((r) => r.id), ['c0', 'c1'])
+})
+
+test('the at-risk list ranks the five highest churn scores, medium and low never included', () => {
+  const rows = [
+    { id: 'a', name: 'A', churnLevel: 'high', churnScore: 60 },
+    { id: 'b', name: 'B', churnLevel: 'critical', churnScore: 95 },
+    { id: 'c', name: 'C', churnLevel: 'medium', churnScore: 99 },
+    { id: 'd', name: 'D', churnLevel: 'critical', churnScore: 80 },
+    { id: 'e', name: 'E', churnLevel: 'high', churnScore: 70 },
+    { id: 'f', name: 'F', churnLevel: 'low', churnScore: 5 },
+    { id: 'g', name: 'G', churnLevel: 'critical', churnScore: 75 },
+    { id: 'h', name: 'H', churnLevel: 'high', churnScore: 65 },
+  ] as CustomerRow[]
+  // Highest churn first; the medium 99 and the low stay off the tile even
+  // though the medium outscores every at-risk row.
+  assert.deepEqual(rankAtRiskCustomers(rows).map((r) => r.id), ['b', 'd', 'g', 'e', 'h'])
+})
+
+test('concentration reads the dashboard KPIs, never a recomputation', () => {
+  const kpis = { hhiScaled: 2450, hhiLevel: 'moderate', customersFor80Pct: 3, topCustomerShare: 42.5 } as CustomerData['kpis']
+  assert.deepEqual(concentrationOf(kpis), {
+    hhi: 2450, level: 'moderate', customersFor80Pct: 3, topSharePct: 42.5,
+  })
 })
