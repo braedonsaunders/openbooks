@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, type SqlExecutor } from "../platform/db.ts";
-import { cmp, neg } from "../money/money.ts";
+import { add, cmp, neg } from "../money/money.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import {
@@ -294,12 +294,18 @@ async function loadCommitDocument(orgId: string, documentId: string): Promise<Co
      where org_id = ${orgId} and document_id = ${documentId}
      order by line_number
   `)).rows;
-  const entity = (await db.execute<{ country: string | null }>(sql`
-    select country from subsidiaries where org_id = ${orgId} and id = ${doc.subsidiaryId ?? ""}
-    union all
-    select country from orgs where id = ${orgId} and ${doc.subsidiaryId ?? null} is null
-    limit 1
-  `)).rows[0];
+  // The selling entity's country is the commit's origin address: the
+  // document subsidiary when set, else the organization itself.
+  let entityCountry: string | null = null;
+  if (doc.subsidiaryId) {
+    entityCountry = (await db.execute<{ country: string | null }>(sql`
+      select country from subsidiaries where org_id = ${orgId} and id = ${doc.subsidiaryId}
+    `)).rows[0]?.country ?? null;
+  } else {
+    entityCountry = (await db.execute<{ country: string | null }>(sql`
+      select country from orgs where id = ${orgId}
+    `)).rows[0]?.country ?? null;
+  }
   let merchantTax = "0";
   for (const line of lines) {
     if (!line.marketplace) merchantTax = add(merchantTax, line.taxAmount);
@@ -314,7 +320,7 @@ async function loadCommitDocument(orgId: string, documentId: string): Promise<Co
     subsidiaryId: doc.subsidiaryId,
     shipToCountry: doc.shipToCountry,
     shipToRegion: doc.shipToRegion,
-    entityCountry: entity?.country ?? null,
+    entityCountry,
     lines: lines.map((l) => ({
       lineNumber: Number(l.lineNumber),
       amount: l.amount,

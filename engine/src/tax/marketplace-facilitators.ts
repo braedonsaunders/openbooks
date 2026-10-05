@@ -123,6 +123,11 @@ export interface SaveMarketplaceFacilitatorInput {
 
 const STATE_RE = /^[A-Z]{2}$/;
 
+/** Serialize validated codes as a Postgres array literal (drizzle cannot bind a JS array to a text[] cast). */
+function toTextArrayLiteral(values: string[]): string {
+  return `{${values.map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
 /**
  * Validate a facilitator write before it lands: names are unique per org,
  * the clearing account must exist and be an asset account that is not a tax
@@ -181,7 +186,7 @@ export async function saveMarketplaceFacilitator(
     const updated = (await runner.execute<{ id: string }>(sql`
       update marketplace_facilitators
          set name = ${name}, clearing_account_id = ${input.clearingAccountId},
-             collection_mode = ${mode}, states = ${states}::text[],
+             collection_mode = ${mode}, states = ${toTextArrayLiteral(states)}::text[],
              is_active = ${input.isActive ?? true},
              updated_at = now(), updated_by = ${actorId}
        where id = ${input.id} and org_id = ${orgId}
@@ -195,7 +200,7 @@ export async function saveMarketplaceFacilitator(
   const inserted = (await runner.execute<{ id: string }>(sql`
     insert into marketplace_facilitators
       (org_id, name, clearing_account_id, collection_mode, states, is_active, created_by, updated_by)
-    values (${orgId}, ${name}, ${input.clearingAccountId}, ${mode}, ${states}::text[],
+    values (${orgId}, ${name}, ${input.clearingAccountId}, ${mode}, ${toTextArrayLiteral(states)}::text[],
             ${input.isActive ?? true}, ${actorId}, ${actorId})
     returning id
   `));
