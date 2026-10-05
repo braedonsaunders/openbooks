@@ -138,6 +138,7 @@ export async function lineExternalDocumentIds(
 export type LineSourceOrder = {
   id: string;
   channelId: string;
+  channelSubsidiaryId: string | null;
   externalId: string;
   externalNumber: string;
   postingStatus: string;
@@ -147,19 +148,23 @@ export type LineSourceOrder = {
 
 /**
  * Channel orders behind a settlement line's source order reference. Only
- * orders on channels the caller may see are returned: a restricted caller
- * never learns another entity's order numbers through the payout queue.
+ * orders on channels the caller may see, in the payout's legal entity, are
+ * returned: a restricted caller never learns another entity's order numbers
+ * through the payout queue, and an order from a visible but foreign entity
+ * can neither force an ambiguity nor lend its documents to the queue.
  */
 export async function findLineSourceOrders(
   orgId: string,
   sourceOrderId: string,
   allowedSubsidiaryIds: PayoutSubsidiaryScope,
+  batchSubsidiaryId: string | null,
 ): Promise<LineSourceOrder[]> {
   if (allowedSubsidiaryIds === undefined) return [];
   const ids = orderIdCandidates(sourceOrderId);
   if (ids.length === 0) return [];
-  return (await db.execute<LineSourceOrder>(sql`
-    select o.id, o.channel_id as "channelId", o.external_id as "externalId",
+  const rows = (await db.execute<LineSourceOrder>(sql`
+    select o.id, o.channel_id as "channelId", c.subsidiary_id as "channelSubsidiaryId",
+           o.external_id as "externalId",
            o.external_number as "externalNumber", o.posting_status as "postingStatus",
            o.posting_document_id as "postingDocumentId", o.summary_id as "summaryId"
       from channel_orders o
@@ -169,6 +174,11 @@ export async function findLineSourceOrders(
        and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
      order by o.id
   `)).rows;
+  const kept: LineSourceOrder[] = [];
+  for (const row of rows) {
+    if (await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.channelSubsidiaryId)) kept.push(row);
+  }
+  return kept;
 }
 
 /** The sale document id behind a channel order: per-order cash, else the posted summary, else null. */
@@ -242,29 +252,24 @@ async function resolveLineDocument(
     typeof meta.sourceOrderId === "string" ? meta.sourceOrderId : null,
   ]);
   if (distinct.length > 0) {
-    if (distinct.length > 1) {
+    // Claims resolve before they count: hidden or foreign-entity documents
+    // read as missing here, so only receipts visible in the payout's entity
+    // can force an ambiguity or win the link.
+    const visible: LineDocumentEvidence[] = [];
+    for (const id of distinct) {
+      const doc = await postedDocument(orgId, id, allowedSubsidiaryIds, batchSubsidiaryId);
+      if (doc) visible.push(doc);
+    }
+    const posted = visible.filter((doc) => doc.status === "posted");
+    if (posted.length > 1) {
       return {
         status: "unmatched",
         reason: "ambiguous_link",
         remedy: "Several documents claim this provider reference; link the line to the right receipt manually.",
       };
     }
-    if (distinct.length === 1) {
-      const doc = await postedDocument(orgId, distinct[0]!, allowedSubsidiaryIds, batchSubsidiaryId);
-      if (!doc) {
-        return {
-          status: "unmatched",
-          reason: "linked_missing",
-          remedy: "The claimed reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
-        };
-      }
-      if (doc.status !== "posted") {
-        return {
-          status: "unmatched",
-          reason: "document_unposted",
-          remedy: `Document ${doc.documentNumber ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
-        };
-      }
+    if (posted.length === 1) {
+      const doc = posted[0]!;
       return {
         status: "matched",
         documentId: doc.id,
@@ -273,9 +278,23 @@ async function resolveLineDocument(
         via: "external_link",
       };
     }
+    const unposted = visible.filter((doc) => doc.status !== "posted");
+    if (unposted.length > 0) {
+      const doc = unposted[0]!;
+      return {
+        status: "unmatched",
+        reason: "document_unposted",
+        remedy: `Document ${doc.documentNumber ?? doc.id} is ${doc.status}; post it, then match the payout again.`,
+      };
+    }
+    return {
+      status: "unmatched",
+      reason: "linked_missing",
+      remedy: "The claimed reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+    };
   }
   if (provider === "shopify_payments" && typeof meta.sourceOrderId === "string" && meta.sourceOrderId.trim() !== "") {
-    const orders = await findLineSourceOrders(orgId, meta.sourceOrderId, allowedSubsidiaryIds);
+    const orders = await findLineSourceOrders(orgId, meta.sourceOrderId, allowedSubsidiaryIds, batchSubsidiaryId);
     if (orders.length === 0) {
       return {
         status: "unmatched",
@@ -292,29 +311,36 @@ async function resolveLineDocument(
     }
     const order = orders[0]!;
     if (line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal") {
-      const docs = await findOrderRefundDocumentIds(orgId, order.id);
-      if (docs.length === 0) {
+      const claimed = await findOrderRefundDocumentIds(orgId, order.id);
+      if (claimed.length === 0) {
         return {
           status: "unmatched",
           reason: "refund_unposted",
           remedy: "The order's refund has not posted yet; post it from the channel order, then match the payout again.",
         };
       }
-      if (docs.length > 1) {
-        return {
-          status: "unmatched",
-          reason: "ambiguous_refund",
-          remedy: "The order has several posted refunds; link the line to the right one manually.",
-        };
+      // Same resolve-before-count as the external branch above: only posted
+      // refunds visible in the payout's entity can force an ambiguity.
+      const postedRefunds: LineDocumentEvidence[] = [];
+      for (const id of claimed) {
+        const doc = await postedDocument(orgId, id, allowedSubsidiaryIds, batchSubsidiaryId);
+        if (doc && doc.status === "posted") postedRefunds.push(doc);
       }
-      const doc = await postedDocument(orgId, docs[0]!, allowedSubsidiaryIds, batchSubsidiaryId);
-      if (!doc || doc.status !== "posted") {
+      if (postedRefunds.length === 0) {
         return {
           status: "unmatched",
           reason: "refund_unposted",
           remedy: "The order's refund is not posted; post it from the channel order, then match the payout again.",
         };
       }
+      if (postedRefunds.length > 1) {
+        return {
+          status: "unmatched",
+          reason: "ambiguous_refund",
+          remedy: "The order has several posted refunds; link the line to the right one manually.",
+        };
+      }
+      const doc = postedRefunds[0]!;
       return {
         status: "matched",
         documentId: doc.id,
