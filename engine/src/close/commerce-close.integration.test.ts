@@ -36,6 +36,7 @@ interface Fixture {
   clearing: string;
   giftLiability: string;
   programId: string;
+  sweepEntryId: string;
 }
 
 const DAY = "2026-07-15";
@@ -93,7 +94,7 @@ async function seedCommerceOrg(): Promise<Fixture> {
   );
   // The payout run sweeps clearing to the bank: captured money that reached
   // its deposit leaves no residual.
-  await withBypass(() =>
+  const sweep = await withBypass(() =>
     postEntry(db, {
       orgId: org.orgId,
       bookId: org.bookId,
@@ -120,7 +121,7 @@ async function seedCommerceOrg(): Promise<Fixture> {
       values (${org.orgId}, ${channelId}, '1001', '#1001', 'CAD', 'CAD',
               6300, 586, 0, 6886, 'paid', 'unfulfilled', ${`${DAY}T12:00:00Z`}::timestamptz, 'posted')`);
   });
-  return { org, actor, channelId, clearing, giftLiability, programId: program.id };
+  return { org, actor, channelId, clearing, giftLiability, programId: program.id, sweepEntryId: sweep.entryId };
 }
 
 function matchingProvider(count = 1, grossMinor = 6886n) {
@@ -231,6 +232,35 @@ test("a draft payout fails naming the provider reference", { skip: !DB }, async 
     const batches = (payouts.details as { batches: { provider: string; externalRef: string }[] }).batches;
     assert.equal(batches[0]!.provider, "stripe");
     assert.equal(batches[0]!.externalRef, "po_draft_1");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("a posted payout with an unmatched charge fails naming the line", { skip: !DB }, async () => {
+  const fx = await seedCommerceOrg();
+  try {
+    await withBypass(async () => {
+      const batchId = (await db.execute<{ id: string }>(sql`
+        insert into psp_settlement_batches
+          (org_id, provider, external_ref, currency, settlement_date, status, journal_entry_id, posted_at)
+        values (${fx.org.orgId}, 'stripe', 'po_posted_1', 'CAD', ${DAY}::date, 'posted',
+                ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)
+        returning id`)).rows[0]!.id;
+      await db.execute(sql`
+        insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, amount, currency)
+        values (${fx.org.orgId}, ${batchId}, 1, 'fee', 'fee_1', 100, 'CAD'),
+               (${fx.org.orgId}, ${batchId}, 2, 'charge', 'ch_1', 5000, 'CAD')`);
+    });
+    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const payouts = byCode(checks, "commerce-payouts-unposted");
+    // The fee needs no receipt; the charge without a document link does.
+    assert.equal(payouts.count, 1);
+    const lines = (payouts.details as { unmatchedLines: { kind: string; lineRef: string; batchRef: string }[] }).unmatchedLines;
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]!.kind, "charge");
+    assert.equal(lines[0]!.lineRef, "ch_1");
+    assert.equal(lines[0]!.batchRef, "po_posted_1");
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }

@@ -190,7 +190,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "未転記の精算があります",
-      "message": "{count, plural, one {# 件の精算バッチが下書きのままです。} other {# 件の精算バッチが下書きのままです。}}"
+      "message": "{count, plural, one {# 件の精算バッチまたは精算明細が転記または証憑リンクを待っています。} other {# 件の精算バッチまたは精算明細が転記または証憑リンクを待っています。}}"
     },
     "commerce-clearing-residual": {
       "title": "クリアリング勘定に残高があります",

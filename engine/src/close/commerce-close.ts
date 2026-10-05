@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { MATCHABLE_SETTLEMENT_LINE_KINDS } from "../payments/psp-settlement.ts";
 import { fetchChannelDayTotals } from "../commerce/shopify/day-totals.ts";
 import { addCloseEvidence } from "./tasks.ts";
 
@@ -255,22 +256,54 @@ type PayoutRow = {
   net_amount: string;
 };
 
+type UnmatchedLineRow = {
+  provider: string;
+  batch_ref: string;
+  settlement_date: string;
+  line_number: string;
+  kind: string;
+  line_ref: string | null;
+  amount: string;
+  currency: string | null;
+};
+
 /**
- * Every payout settled in the window must be posted. A dedicated
- * payout-to-order reconciliation record does not exist on main yet, so the
- * proof is the posted settlement batch itself: a draft batch holds money
- * the ledger has never seen.
+ * Every payout settled in the window must be posted and reconciled. Draft
+ * batches hold money the ledger has never seen; a posted batch whose
+ * matchable lines (charges, refunds, disputes — the same kinds the payout
+ * matcher resolves) point at nothing, or at a document that no longer
+ * posts, is money without a receipt. The link is re-verified, never
+ * trusted: a stale document id counts as unmatched.
  */
 async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
+  const subsidiaryList = `{${subsidiaryIds.join(",")}}`;
   const rows = (
     await db.execute<PayoutRow>(sql`
       select provider, external_ref, settlement_date::text, currency, net_amount::text
         from psp_settlement_batches
        where org_id = ${orgId} and status = 'draft'
          and settlement_date between ${scope.startsOn}::date and ${scope.endsOn}::date
-         and (${subsidiaryIds.length === 0} or subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+         and (${subsidiaryIds.length === 0} or subsidiary_id = any(${subsidiaryList}::uuid[]))
        order by settlement_date, provider`)
+  ).rows;
+  // The matchable kinds stay C30's single source of truth; only the
+  // literal form is inlined for the ANY() comparison.
+  const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
+  const lines = (
+    await db.execute<UnmatchedLineRow>(sql`
+      select b.provider, b.external_ref as batch_ref, b.settlement_date::text,
+             l.line_number::text, l.kind, l.external_ref as line_ref,
+             l.amount::text, l.currency
+        from psp_settlement_lines l
+        join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
+        left join documents d on d.org_id = l.org_id and d.id = l.document_id
+       where l.org_id = ${orgId} and b.status = 'posted'
+         and b.settlement_date between ${scope.startsOn}::date and ${scope.endsOn}::date
+         and (${subsidiaryIds.length === 0} or b.subsidiary_id = any(${subsidiaryList}::uuid[]))
+         and l.kind = any(${matchableList}::text[])
+         and (l.document_id is null or d.id is null or d.status <> 'posted')
+       order by b.settlement_date, b.provider, l.line_number`)
   ).rows;
   return {
     code: "commerce-payouts-unposted",
@@ -279,7 +312,7 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
     severity: "critical",
     title: "close.diagnostics.commerce-payouts-unposted.title",
     message: "close.diagnostics.commerce-payouts-unposted.message",
-    count: rows.length,
+    count: rows.length + lines.length,
     details: {
       batches: rows.map((row) => ({
         provider: row.provider,
@@ -287,6 +320,17 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
         settlementDate: row.settlement_date,
         currency: row.currency,
         netAmount: row.net_amount,
+        remedyHref: "/banking/psp-settlements",
+      })),
+      unmatchedLines: lines.map((row) => ({
+        provider: row.provider,
+        batchRef: row.batch_ref,
+        settlementDate: row.settlement_date,
+        lineNumber: Number(row.line_number),
+        kind: row.kind,
+        lineRef: row.line_ref,
+        amount: row.amount,
+        currency: row.currency,
         remedyHref: "/banking/psp-settlements",
       })),
     },

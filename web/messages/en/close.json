@@ -190,7 +190,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "Payouts remain unposted",
-      "message": "{count, plural, one {# settlement batch is still a draft.} other {# settlement batches are still drafts.}}"
+      "message": "{count, plural, one {# settlement batch or payout line needs its posting or document link before close.} other {# settlement batches or payout lines need their posting or document link before close.}}"
     },
     "commerce-clearing-residual": {
       "title": "Clearing accounts hold a residual",
