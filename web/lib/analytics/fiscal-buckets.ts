@@ -57,6 +57,20 @@ export function fiscalBucketKey(dateExpr: SQL, useFiscal: boolean): SQL {
   return sql`coalesce(fbp.starts_on::text, to_char(${dateExpr}, 'YYYY-MM'))`;
 }
 
+/**
+ * Periods per fiscal year around a date, for annualising per-period figures
+ * (13 for a thirteen-period year, 12 for 4-4-5 or monthly calendars).
+ * Unknown coverage annualises by calendar months.
+ */
+export function fiscalPeriodsPerYear(periods: FiscalPeriod[], asOf: string): number {
+  const perYear = new Map<number, number>();
+  for (const p of periods) perYear.set(p.fiscalYear, (perYear.get(p.fiscalYear) ?? 0) + 1);
+  for (const p of periods) {
+    if (p.from <= asOf && asOf <= p.to) return perYear.get(p.fiscalYear) ?? 12;
+  }
+  return 12;
+}
+
 export interface FiscalMonthBox {
   month: string;
   label: string;

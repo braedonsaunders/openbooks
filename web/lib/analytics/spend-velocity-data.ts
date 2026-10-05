@@ -4,9 +4,10 @@ import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
+import type { FiscalPeriod } from "@openbooks/reports";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig, ANALYTICS_CONFIG, type ConfigValuesOf } from "./config";
-import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope } from "./fiscal-buckets";
+import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalPeriodsPerYear } from "./fiscal-buckets";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
 import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { englishCatalogMessage } from "./catalog-strings";
@@ -290,22 +291,44 @@ export interface SpendVelocityComparisonWindows {
 /**
  * Build the back-to-back comparison windows for an inclusive current period.
  * Current queries use `>= from`/`<= to`, while prior queries use
- * `>= priorFrom`/`< from`; shifting by the inclusive day count keeps those
- * windows equal in length.
+ * `>= priorFrom`/`< from`.
+ *
+ * With declared fiscal periods the windows are whole periods, never
+ * day-shifted fragments: the current window's overlapping periods decide the
+ * run length, and each earlier window takes that many whole periods straight
+ * before it, so a 4-4-5 or 13-period calendar compares like with like. A
+ * window with no declared coverage behind it keeps the calendar behaviour —
+ * shifting by the inclusive day count keeps those windows equal in length.
  */
-export function getSpendVelocityComparisonWindows(from: string, to: string): SpendVelocityComparisonWindows {
+export function getSpendVelocityComparisonWindows(
+  from: string,
+  to: string,
+  periods: FiscalPeriod[] = [],
+): SpendVelocityComparisonWindows {
   const start = new Date(from + "T00:00:00Z");
   const end = new Date(to + "T00:00:00Z");
   const periodDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
-  const priorStart = new Date(start.getTime() - periodDays * 86_400_000);
-  const twoBackStart = new Date(priorStart.getTime() - periodDays * 86_400_000);
   const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const dayShift = (days: number): string => ymd(new Date(start.getTime() - days * 86_400_000));
+  const ordered = [...periods].sort((a, b) => a.from.localeCompare(b.from));
+  // The run of whole declared periods ending just before `edge`, longest
+  // `count` — null when declared coverage runs out.
+  const snapBack = (edge: string, count: number): { from: string; to: string } | null => {
+    if (count < 1) return null;
+    const before = ordered.filter((p) => p.to < edge);
+    if (before.length < count) return null;
+    const run = before.slice(before.length - count);
+    return { from: run[0]!.from, to: run[run.length - 1]!.to };
+  };
+  const overlapping = ordered.filter((p) => p.from <= to && p.to >= from).length;
+  const prior = overlapping > 0 ? snapBack(from, overlapping) : null;
+  const twoBack = prior ? snapBack(prior.from, overlapping) : null;
   return {
     periodDays,
-    priorFrom: ymd(priorStart),
-    priorTo: ymd(new Date(start.getTime() - 86_400_000)),
-    twoBackFrom: ymd(twoBackStart),
-    twoBackTo: ymd(new Date(priorStart.getTime() - 86_400_000)),
+    priorFrom: prior ? prior.from : dayShift(periodDays),
+    priorTo: prior ? prior.to : dayShift(1),
+    twoBackFrom: twoBack ? twoBack.from : dayShift(2 * periodDays),
+    twoBackTo: twoBack ? twoBack.to : dayShift(periodDays + 1),
   };
 }
 
@@ -353,8 +376,29 @@ export async function spendVelocityData(
   const C = await analyticsConfig(orgId, "spendVelocity");
   const buckets = await fiscalBucketScope(orgId);
 
-  // Period windows for comparison (inclusive current and back-to-back prior).
-  const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to);
+  // Period windows for comparison (inclusive current and back-to-back prior):
+  // whole declared periods on a non-monthly calendar, day-shifted otherwise.
+  const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(
+    from, to, buckets.useFiscal ? buckets.periods : [],
+  );
+  // Per-period figures annualise by the calendar's own periods per year.
+  const periodsPerYear = buckets.useFiscal ? fiscalPeriodsPerYear(buckets.periods, to) : 12;
+  // Window captions name declared periods (or calendar months); a window
+  // with no declared coverage behind it keeps its honest ISO range.
+  const windowName = (wFrom: string, wTo: string): string => {
+    const names = buckets.periods.filter((p) => p.from <= wTo && p.to >= wFrom).map((p) => p.name);
+    if (names.length > 1) return `${names[0]} – ${names[names.length - 1]}`;
+    if (names.length === 1) return names[0]!;
+    return `${wFrom} → ${wTo}`;
+  };
+  const monthName = (day: string): string => strings.monthLabel(day.slice(0, 7));
+  const monthRange = (wFrom: string, wTo: string): string => {
+    const a = monthName(wFrom);
+    const b = monthName(wTo);
+    return a === b ? a : `${a} – ${b}`;
+  };
+  const priorLabel = buckets.useFiscal ? windowName(priorFrom, priorTo) : monthRange(priorFrom, priorTo);
+  const twoBackLabel = buckets.useFiscal ? windowName(twoBackFrom, twoBackTo) : monthRange(twoBackFrom, twoBackTo);
   // Prior YEAR window for YoY trends.
   const pyFrom = addMonthsClamped(from, -12);
   const pyTo = addMonthsClamped(to, -12);
@@ -817,7 +861,7 @@ export async function spendVelocityData(
         avgMonthlyIncrease: increases > 0 ? r1(totalCreep / increases) : 0,
         totalCreep: Math.round(totalCreep),
         startAmount, endAmount, monthCount,
-        annualizedCreep: div(mulDecimal(add(endAmount, neg(startAmount)), "12"), String(monthCount)),
+        annualizedCreep: div(mulDecimal(add(endAmount, neg(startAmount)), String(periodsPerYear)), String(monthCount)),
         monthlyAmounts: amounts,
         severity: totalCreep > C.boilingFrogCriticalCreep ? "critical" : totalCreep > C.boilingFrogWarningCreep ? "warning" : "info",
       });
@@ -866,7 +910,7 @@ export async function spendVelocityData(
     if (isZombie && cmp(first, ZERO) > 0) {
       zombieList.push({
         vendorId: v.id, vendorName: v.name, amount: first, monthCount: v.buckets.length,
-        annualCost: mulDecimal(first, "12"), firstMonth: v.buckets[0]!.bucket, lastMonth: v.buckets[v.buckets.length - 1]!.bucket,
+        annualCost: mulDecimal(first, String(periodsPerYear)), firstMonth: v.buckets[0]!.bucket, lastMonth: v.buckets[v.buckets.length - 1]!.bucket,
         severity: v.buckets.length >= C.zombieCriticalMonths ? "critical" : "warning",
       });
     }
@@ -1050,8 +1094,8 @@ export async function spendVelocityData(
             ? Math.min(overallChange / 100, capTotal)
             : Math.max(overallChange / 100, -capTotal)).toFixed(4))),
       changePct: overallChange,
-      priorLabel: `${priorFrom} → ${priorTo}`,
-      twoBackLabel: `${twoBackFrom} → ${twoBackTo}`,
+      priorLabel,
+      twoBackLabel,
     },
     accounts: cmpAccounts,
   };
