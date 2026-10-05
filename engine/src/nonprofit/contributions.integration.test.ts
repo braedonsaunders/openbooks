@@ -200,8 +200,10 @@ test("pledges book and reverse through the ledger while gifts receive engine num
       select jl.account_id, sum(jl.amount)::text as amount from journal_lines jl
         join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
        where jl.org_id = ${org.orgId} and je.status in ('posted', 'reversed')
-         and (je.id = (select booking_entry_id from pledges where org_id = ${org.orgId} and id = ${activityPledge.id})
-           or je.custom #>> '{nonprofitPledge,pledgeId}' = ${activityPledge.id})
+         and coalesce(je.reverses_entry_id, je.id) in (
+           select e.id from journal_entries e where e.org_id = ${org.orgId}
+              and (e.custom #>> '{nonprofitPledge,pledgeId}' = ${activityPledge.id}
+                or e.id = (select booking_entry_id from pledges where org_id = ${org.orgId} and id = ${activityPledge.id})))
          and jl.account_id in (${accounts.receivable}, ${accounts.discount}, ${accounts.allowance})
        group by jl.account_id`));
     assert.deepEqual(pledgeBalances.rows.map((row) => row.amount), ["0.0000", "0.0000", "0.0000"],
