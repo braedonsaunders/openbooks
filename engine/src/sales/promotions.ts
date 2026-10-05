@@ -4,6 +4,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import {
   allocateLargestRemainder,
   apportion,
+  formatMoney,
   fromUnits,
   roundDiv,
   toCents,
@@ -26,6 +27,8 @@ export type PromotionRefusalCode =
   | "wrong_channel"
   | "no_discountable_lines"
   | "below_threshold"
+  | "already_applied"
+  | "fully_discounted"
   | "discount_account_missing"
   | "free_shipping_unsupported"
   | "currency_mismatch"
@@ -374,7 +377,9 @@ export type ApplyPromotionResult = {
  * Apply a promotion code to a draft sales document: resolve the promotion,
  * compute the discount in minor units, insert one discount line per
  * benefiting document line, and count the redemption under the promotion's
- * row lock so concurrent checkouts cannot overspend a usage limit.
+ * row lock so concurrent checkouts cannot overspend a usage limit. A
+ * promotion applies to a document once, and stacked promotions together
+ * never discount more than the document's discountable lines.
  */
 export async function applyPromotion(
   runner: SqlExecutor,
@@ -393,6 +398,9 @@ export async function applyPromotion(
   await assertPromotionsFeature(runner, orgId);
   const document = await lockDocument(runner, orgId, input.documentId, input.allowedSubsidiaryIds);
   const promotion = await lockPromotion(runner, orgId, input);
+  // Checked while the document row is locked, so two concurrent applications
+  // of one code to one document serialize and the second sees the first.
+  await refuseRepeatApplication(runner, orgId, document, promotion);
   checkPromotionUsable(promotion, input.channelId ?? null);
   const discountAccountId = promotion.discountAccountId;
   if (!discountAccountId) {
@@ -403,7 +411,7 @@ export async function applyPromotion(
       "Set the discount account on the promotion in Setup → Sales → Promotions",
     );
   }
-  const lines = await loadEligibleLines(runner, orgId, document.id);
+  const { lines, eligibleUnits, offsetUnits } = await loadEligibleLines(runner, orgId, document.id);
   if (lines.length === 0) {
     throw refusal(
       `Document ${document.document_number} has no lines a promotion can discount`,
@@ -412,10 +420,25 @@ export async function applyPromotion(
       "Add a positively priced line before applying the promotion",
     );
   }
-  const shares = computeDiscountShares(promotion, lines, document);
-  if (shares.every((share) => share === 0n)) {
+  // What is left to discount, in whole minor units, rounded down so the
+  // stacked discounts can never take the discountable lines below zero.
+  const remainingMinor = (eligibleUnits - offsetUnits) / 100n;
+  if (remainingMinor <= 0n) {
+    throw refusal(
+      `Document ${document.document_number} is already fully discounted: its discount and credit lines offset all ${formatMoney(fromUnits(eligibleUnits))} ${document.currency} of discountable lines`,
+      "fully_discounted",
+      409,
+      "Remove a discount line from the draft (Remove line in the line grid) and save before applying another promotion",
+    );
+  }
+  const computed = computeDiscountShares(promotion, lines, document);
+  if (computed.every((share) => share === 0n)) {
     throw refusal(`Promotion ${promotion.code} gives no discount on this document`, "below_threshold", 422, "Check the promotion value against the document lines");
   }
+  const computedMinor = computed.reduce((sum, share) => sum + share, 0n);
+  // A stacked promotion is capped at the remaining undiscounted amount and
+  // re-dealt across the same lines in proportion, summing exactly.
+  const shares = computedMinor > remainingMinor ? apportion(remainingMinor, computed) : computed;
   const inserted = await insertDiscountLines(runner, orgId, actorId, document, promotion, lines, shares, discountAccountId);
   await countRedemption(runner, orgId, promotion);
   const total = shares.reduce((sum, share) => sum + share, 0n);
@@ -424,6 +447,7 @@ export async function applyPromotion(
     promotionId: promotion.id,
     code: promotion.code,
     discountMinor: total.toString(),
+    ...(total < computedMinor ? { cappedFromMinor: computedMinor.toString() } : {}),
     currency: document.currency,
     lineIds: inserted.map((line) => line.lineId),
   });
@@ -522,23 +546,58 @@ function checkPromotionUsable(promotion: Promotion, channelId: string | null): v
   }
 }
 
-async function loadEligibleLines(runner: SqlExecutor, orgId: string, documentId: string): Promise<EligibleLine[]> {
+async function refuseRepeatApplication(
+  runner: SqlExecutor,
+  orgId: string,
+  document: LockedDocument,
+  promotion: Promotion,
+): Promise<void> {
+  const applied = (await runner.execute<{ applied: boolean }>(sql`
+    select exists (select 1 from document_lines
+                    where org_id = ${orgId} and document_id = ${document.id}
+                      and promotion_id = ${promotion.id}) as applied`)).rows[0];
+  if (applied?.applied) {
+    throw refusal(
+      `Promotion ${promotion.code} is already applied to ${document.document_number}`,
+      "already_applied",
+      409,
+      `Remove the ${promotion.code} discount lines from the draft (Remove line in the line grid) and save before applying it again`,
+    );
+  }
+}
+
+async function loadEligibleLines(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<{ lines: EligibleLine[]; eligibleUnits: bigint; offsetUnits: bigint }> {
   // Only positively priced, promotion-free lines can be discounted: existing
-  // discount and credit lines are never discounted twice.
-  const rows = (await runner.execute<{ line_id: string; line_number: number; amount: string; quantity: string; unit_price: string }>(sql`
-    select id as line_id, line_number, amount::text, quantity::text, unit_price::text
+  // discount and credit lines are never discounted twice. Every negative
+  // line, tagged with a promotion or not, already reduces what is left to
+  // discount, so it is summed as an offset. All lines are locked so the
+  // offsets cannot move while the new discount is sized.
+  const rows = (await runner.execute<{ line_id: string; line_number: number; amount: string; quantity: string; unit_price: string; promotion_id: string | null }>(sql`
+    select id as line_id, line_number, amount::text, quantity::text, unit_price::text, promotion_id
       from document_lines
-     where org_id = ${orgId} and document_id = ${documentId} and promotion_id is null
+     where org_id = ${orgId} and document_id = ${documentId}
      order by line_number for update`)).rows;
-  return rows
-    .map((row) => ({
+  const lines: EligibleLine[] = [];
+  let eligibleUnits = 0n;
+  let offsetUnits = 0n;
+  for (const row of rows) {
+    const amountUnits = toUnits(row.amount);
+    if (amountUnits < 0n) offsetUnits -= amountUnits;
+    if (row.promotion_id !== null || amountUnits <= 0n) continue;
+    eligibleUnits += amountUnits;
+    lines.push({
       line_id: row.line_id,
       line_number: row.line_number,
-      amount_units: toUnits(row.amount),
+      amount_units: amountUnits,
       quantity_units: toUnits(row.quantity),
       unit_price_units: toUnits(row.unit_price),
-    }))
-    .filter((line) => line.amount_units > 0n);
+    });
+  }
+  return { lines, eligibleUnits, offsetUnits };
 }
 
 const MICRO_PER_UNIT = 1_000_000n;
