@@ -519,11 +519,45 @@ export const ANALYTICS_CONFIG = {
   },
   utilization: {
     slug: "utilization",
-    defaults: { targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 },
+    // The spike threshold is money in the presentation currency: it starts
+    // unset (no alert) so no figure is ever read in the wrong currency.
+    defaults: {
+      targetBillablePct: 70, costSpikeThreshold: "", minHours: 10, reallocWarnPp: 15, reallocActionPp: 20,
+      watchBandPp: 10, warnBandPp: 20, anomalyDropPp: 15, overtimeBillableGapPp: 20, titleDriftPp: 5,
+      peerOutlierSigma: 1.5, peerSpreadWarnPp: 20, peerSpreadActionPp: 30, peerMinCount: 2,
+    },
     fields: [
       pct("targetBillablePct", "analytics.utilization.config.fields.targetBillable", 10, 100),
-      num("costSpikeThreshold", "analytics.utilization.config.fields.costSpike", 0, 1_000_000, 100),
+      { key: "costSpikeThreshold", kind: "money", optional: true, labelKey: "analytics.utilization.config.fields.costSpike.label", helpKey: "analytics.utilization.config.fields.costSpike.help", maxAmount: "100000000" },
       num("minHours", "analytics.utilization.config.fields.minHours", 0, 500),
+      num("reallocWarnPp", "analytics.utilization.config.fields.reallocWarn", 1, 50),
+      num("reallocActionPp", "analytics.utilization.config.fields.reallocAction", 1, 50),
+      num("watchBandPp", "analytics.utilization.config.fields.watchBand", 1, 50),
+      num("warnBandPp", "analytics.utilization.config.fields.warnBand", 1, 50),
+      num("anomalyDropPp", "analytics.utilization.config.fields.anomalyDrop", 1, 50),
+      num("overtimeBillableGapPp", "analytics.utilization.config.fields.overtimeGap", 1, 50),
+      num("titleDriftPp", "analytics.utilization.config.fields.titleDrift", 1, 50),
+      { key: "peerOutlierSigma", kind: "number", labelKey: "analytics.utilization.config.fields.peerSigma.label", helpKey: "analytics.utilization.config.fields.peerSigma.help", min: 0.5, max: 5, step: 0.1 },
+      num("peerSpreadWarnPp", "analytics.utilization.config.fields.peerSpreadWarn", 1, 50),
+      num("peerSpreadActionPp", "analytics.utilization.config.fields.peerSpreadAction", 1, 50),
+      num("peerMinCount", "analytics.utilization.config.fields.peerMin", 1, 10),
+    ],
+    ordered: [["reallocWarnPp", "reallocActionPp"], ["watchBandPp", "warnBandPp"], ["peerSpreadWarnPp", "peerSpreadActionPp"]],
+    groups: [
+      { labelKey: "analytics.utilization.config.groups.targets", fields: ["targetBillablePct"] },
+      { labelKey: "analytics.utilization.config.groups.floors", fields: ["costSpikeThreshold", "minHours"] },
+      { labelKey: "analytics.utilization.config.groups.scenarioBands", fields: ["reallocWarnPp", "reallocActionPp", "watchBandPp", "warnBandPp"] },
+      { labelKey: "analytics.utilization.config.groups.anomalyBands", fields: ["anomalyDropPp", "overtimeBillableGapPp", "titleDriftPp", "peerOutlierSigma", "peerSpreadWarnPp", "peerSpreadActionPp", "peerMinCount"] },
+    ],
+  },
+  trueCost: {
+    slug: "true-cost",
+    defaults: { matrixUnderperformPct: 15 },
+    fields: [
+      num("matrixUnderperformPct", "analytics.trueCost.config.fields.matrixUnderperform", 1, 100),
+    ],
+    groups: [
+      { labelKey: "analytics.trueCost.config.groups.performance", fields: ["matrixUnderperformPct"] },
     ],
   },
   vendorPerformance: {

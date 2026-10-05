@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "コストへのマークアップ {margin}",
       "overtime": "時間外勤務",
       "doubleTime": "倍額勤務",
+      "presetHint": "タイムタイプからのプリセット",
+      "presetTitle": "{name} ×{multiplier} を使用",
       "explorerTarget": "目標{mode}",
       "markupPctLabel": "マークアップ率（%）",
       "per1kLabel": "1,000時間あたり"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "基本労働レート（時間単価）",
       "baseLaborRateHelp": "期間にコスト化された労働時間がない場合の代替時間単価。レートを想定せず拒否する場合は空欄にしてください。",
       "baseLaborRatePlaceholder": "例：45.00",
-      "baseLaborRateSave": "レートを保存"
+      "baseLaborRateSave": "レートを保存",
+      "groups": {
+        "performance": "パフォーマンスバンド"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "マトリックス低迷バンド (pp)",
+          "help": "平均からこのバンド外の部門がハイライトされる"
+        }
+      }
     },
     "custom": {
       "remove": "削除",
@@ -2633,7 +2644,7 @@
       "fields": {
         "costSpike": {
           "help": "前回期間比で請求対象外コストがこの額を超えて増加したら警告します",
-          "label": "コスト急増アラート（$）"
+          "label": "コスト急増アラート ({currency})"
         },
         "minHours": {
           "help": "この時間未満の従業員は異常・ピア分析から除外されます",
@@ -2642,12 +2653,62 @@
         "targetBillable": {
           "help": "全社の稼働率ベンチマーク",
           "label": "目標請求可能率"
+        },
+        "reallocWarn": {
+          "label": "目標未達で警告 (pp)",
+          "help": "目標を下回る部門はシナリオで人員を提供する"
+        },
+        "reallocAction": {
+          "label": "目標未達で対応 (pp)",
+          "help": "このラインを下回る人員は異動候補として提案される"
+        },
+        "watchBand": {
+          "label": "目標未達の注意バンド (ポイント)",
+          "help": "このポイント数だけ目標を下回ると注意として表示"
+        },
+        "warnBand": {
+          "label": "目標未達の危険バンド (ポイント)",
+          "help": "これ以上下回ると危険として表示"
+        },
+        "anomalyDrop": {
+          "label": "急低下のしきい値 (ポイント)",
+          "help": "これを超える低下は急低下として検出"
+        },
+        "overtimeGap": {
+          "label": "残業の低請求ギャップ (ポイント)",
+          "help": "請求可能率が目標をこれだけ下回ると残業を検出"
+        },
+        "titleDrift": {
+          "label": "役割ドリフトのしきい値 (ポイント)",
+          "help": "平均低下がこれを超え全員が低下傾向の役割を検出"
+        },
+        "peerSigma": {
+          "label": "外れ値の感度 (σ)",
+          "help": "平均からこの標準偏差を超えると外れ値"
+        },
+        "peerSpreadWarn": {
+          "label": "ばらつき注意 (ポイント)",
+          "help": "これを超えるばらつきは注意として表示"
+        },
+        "peerSpreadAction": {
+          "label": "ばらつき対応 (ポイント)",
+          "help": "これを超えるばらつきは対応として表示"
+        },
+        "peerMin": {
+          "label": "比較の最小人数",
+          "help": "これより少ない役割は比較分析から除外"
         }
       },
       "historyNote": "直近{months}か月のローリング期間がトレンドと予測の入力",
       "historyPeriods": "履歴期間",
       "priorRange": "前回期間",
-      "priorRangeNote": "選択期間の直前の同期間"
+      "priorRangeNote": "選択期間の直前の同期間",
+      "groups": {
+        "targets": "目標",
+        "floors": "下限と最小値",
+        "scenarioBands": "シナリオバンド",
+        "anomalyBands": "異常バンド"
+      }
     },
     "empCount": "{count}名",
     "empty": {
@@ -2717,7 +2778,7 @@
       "belowTarget": "目標未達",
       "bestTitle": "最良役職",
       "billableHours": "請求可能時間",
-      "costPerDay": "日次コスト",
+      "costPerDay": "暦日あたりコスト",
       "employees": "従業員",
       "highestCost": "最高コスト",
       "jobTitles": "役職",
@@ -2742,7 +2803,7 @@
     "lowHoursCount": "{minHours}時間未満の従業員{count}名",
     "metric": {
       "billableHours": "請求可能時間",
-      "costPerDay": "日次コスト",
+      "costPerDay": "暦日あたりコスト",
       "nonBillableCost": "請求対象外コスト",
       "nonBillableHours": "請求対象外時間",
       "percentBilled": "請求可能率",
@@ -2766,12 +2827,13 @@
       "improvementOpportunities": "改善機会",
       "modelAssumptions": "モデルと前提",
       "noBillableExpectation": "請求可能見込みなし",
-      "overtimeHint": "平均より20%以上多い時間、請求可能率が目標を20ポイント下回る",
+      "overtimeHint": "予定時間を超過し、請求可能率が目標を{gap}ポイント下回る",
+      "overtimeUnscheduled": "{count}名に従業員に適用されるスケジュールがなく、残業は不明",
       "peerComparison": "役職別ピア比較",
       "peerHint": "類似業務の従業員を比較",
       "reallocationIdeas": "再配分案",
       "suddenDrop": "急低下",
-      "suddenDropHint": "前回比で請求可能率が15ポイント超低下",
+      "suddenDropHint": "請求可能率が前期比{pp}ポイント以上低下",
       "titleDriftHint": "全従業員が低下傾向の役割",
       "topDepartments": "上位部門",
       "topDepartmentsHint": "請求対象外コスト順",
@@ -2796,7 +2858,7 @@
       "jobTitleBold": "役職",
       "jobTitleItem": " （最も多くの時間を記録したサービス品目、例：“MECH:Foreman”）。",
       "jobTitleMid": " — 従業員には役職フィールドがないため、個人の役職はその人の ",
-      "noBillItem": " — 請求可能時間がゼロの部門（当期＋前回）は自動でフラグ付けされ、全社率から除外されます（例：間接部門）。",
+      "noBillItem": " — 全社率から除外するには、部門レコードで請求可能見込みなしフラグを設定します（例：間接部門）。",
       "nonBillCostBold": "請求対象外コスト",
       "nonBillCostItem": " — Σ 時間 × 請求対象外時間の入力自体の原価レート。",
       "timeEntries": "作業時間入力"
@@ -2806,9 +2868,9 @@
       "acrossItems": "品目横断",
       "belowTargetCount": "目標未達{count}件",
       "billableThreshold": "請求可能しきい値",
-      "daysInRange": "範囲内{days}日間",
+      "daysInRange": "範囲内{days}暦日間",
       "detectedAnomalies": "検出済み異常",
-      "drop15pp": "15ポイント超低下の従業員",
+      "dropNpp": "{pp}ポイント超低下の従業員",
       "employeesPerTitle": "1役職あたり従業員数",
       "highHoursLowBillable": "長時間・低請求可能",
       "hoursWeighted": "時間加重",
@@ -2826,7 +2888,7 @@
       "trajectory": "{arrow} {amount}の推移",
       "trendArrow": "{arrow} {trend}ポイントのトレンド",
       "uniqueRoles": "固有の役割（労務区分）",
-      "with2Plus": "2名以上の従業員",
+      "withNPlus": "{count}名以上の従業員",
       "withActivity": "アクティブあり"
     },
     "subTabs": {

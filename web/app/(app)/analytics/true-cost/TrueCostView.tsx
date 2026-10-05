@@ -16,8 +16,9 @@ import {
   TrendingDown, TrendingUp, UserRound, Wand2, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Drawer } from '@openbooks/ui'
-import { add, cmp as compareMoney, div, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/src/money/money.ts'
 import type { CustomCategory, TrueCostData, TrueCostProfile } from '../../../../lib/analytics/true-cost-data'
+import type { RateFormat } from '../../../../lib/analytics/true-cost-engine'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut } from '../_ui/charts'
@@ -64,6 +65,29 @@ const usePercent = () => {
   })
 }
 const FALLBACK = '#94a3b8'
+
+/**
+ * A rate in its category's own format: $/hr, %, $/FTE or $/unit — never
+ * $/hr for every format. The composite family shares the blend's single
+ * format (mixed units refuse, so a surviving composite is uniform).
+ */
+const useCategoryRate = () => {
+  const rate = useRate()
+  const percent = usePercent()
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
+  const t = useTranslations('analytics.trueCost')
+  return (value: number | null | undefined, format: RateFormat | null | undefined) => {
+    if (value == null) return '—'
+    switch (format ?? 'per_hour') {
+      case 'percent_labor':
+      case 'percent_cost': return percent(value, 1)
+      case 'per_fte': return t('formats.perFte', { amount: money(value) })
+      case 'per_unit': return t('formats.perUnit', { amount: money(value) })
+      default: return rate(value)
+    }
+  }
+}
 
 /** Pill wrapper for inline filter selects (the .srb-filter). */
 function FilterPill({ icon: Icon, children }: { icon: typeof Building2; children: React.ReactNode }) {
@@ -151,6 +175,7 @@ type CellRef = { catId: string; deptId: string }
 
 export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
   const rate = useRate()
+  const catRate = useCategoryRate()
   const whole = useWholeNumber()
   const percent = usePercent()
   const fmtMoney = useAnalyticsMoney()
@@ -173,7 +198,7 @@ export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: 
         /* Hero — the 5 KPIs verbatim (dashboard surface only) */
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <KpiCard
-            icon={GaugeIcon} accent="sky" label={t('hero.compositeRate')} value={k.compositeRate === null ? '—' : rate(k.compositeRate)}
+            icon={GaugeIcon} accent="sky" label={t('hero.compositeRate')} value={catRate(k.compositeRate, k.compositeFormat)}
             sub={k.compositeRateChangePct == null ? t('hero.compositeSubDefault') : t('hero.vsPrior', { arrow: k.compositeRateChangePct > 0 ? '↑' : '↓', change: percent(Math.abs(k.compositeRateChangePct), 1) })}
             tone={k.compositeRateChangePct != null && k.compositeRateChangePct > 0 ? 'negative' : 'neutral'}
           />
@@ -216,7 +241,7 @@ export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: 
 
 function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: string; data: TrueCostData; onClose: () => void; onDrillAccount: (t: DrillTarget) => void }) {
   const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
+  const catRate = useCategoryRate()
   const { currency } = useMoney()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
@@ -326,7 +351,7 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
             return (
               <div key={d.id} className="rounded-lg bg-slate-50 p-2 text-center dark:bg-slate-800/50">
                 <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{d.name}</p>
-                <p className="text-sm font-bold tabular-nums" style={{ color: cat.color ?? undefined }}>{deptRate == null ? '—' : rate(deptRate)}</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: cat.color ?? undefined }}>{catRate(deptRate, cat.rateFormat)}</p>
               </div>
             )
           })}
@@ -406,6 +431,7 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
 function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData; onClose: () => void }) {
   const t = useTranslations('analytics.trueCost')
   const rate = useRate()
+  const catRate = useCategoryRate()
   const whole = useWholeNumber()
   const percent = usePercent()
   const fmtMoney = useAnalyticsMoney()
@@ -436,7 +462,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
         {[
           { label: t('cellFlyout.expenseInDept'), value: money0(cellData.amount) },
           { label: t('cellFlyout.deptBilledHours'), value: whole(dept.billedHours) },
-          { label: t('cellFlyout.rate'), value: cellData.rate == null ? '—' : rate(cellData.rate) },
+          { label: t('cellFlyout.rate'), value: catRate(cellData.rate, cat.rateFormat) },
         ].map((s, i) => (
           <div key={i} className="bg-white p-3.5 text-center dark:bg-slate-900">
             <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{s.value}</p>
@@ -487,7 +513,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
 
 function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: string) => void }) {
   const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
+  const catRate = useCategoryRate()
   const whole = useWholeNumber()
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: string | number) => fmtMoney(n)
@@ -543,14 +569,14 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
                 <SharedTableCell className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">{t(`bases.${c.allocationBase}`)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.categoryType === 'expense' ? whole(c.accounts.length) : '—'}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">{money0(c.totalAmount)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{c.rate == null ? '—' : rate(c.rate)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{catRate(c.rate, c.rateFormat)}</SharedTableCell>
               </InteractiveTableRow>
             ))}
             <SharedTableRow className="bg-slate-50/70 font-semibold dark:bg-slate-800/40">
               <SharedTableCell className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{t('deptFlyout.composite')}</SharedTableCell>
               <SharedTableCell /><SharedTableCell /><SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500">{whole(data.kpis.overheadAccounts)}</SharedTableCell>
               <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-800 dark:text-slate-200">{money0(data.kpis.totalOverhead)}</SharedTableCell>
-              <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100">{data.kpis.compositeRate == null ? '—' : rate(data.kpis.compositeRate)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100">{catRate(data.kpis.compositeRate, data.kpis.compositeFormat)}</SharedTableCell>
             </SharedTableRow>
           </SharedTableBody>
         </SharedTable>
@@ -607,16 +633,19 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
 function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef) => void }) {
   const t = useTranslations('analytics.trueCost')
   const today = useBusinessToday()
-  const rate = useRate()
+  const catRate = useCategoryRate()
   const { currency } = useMoney()
   const rates = data.categories.map((c) => c.rate).filter((r): r is number => r != null && r > 0)
   // Refused rates export as blank, never 0.00: a zero would read as priced.
-  const csvRate = (r: number | null | undefined): string => (r == null ? '' : r.toFixed(2))
+  const csvRate = (r: number | null | undefined): string => (r == null ? '' : String(r))
   const avg = rates.length ? rates.reduce((s, v) => s + v, 0) / rates.length : 0
+  // The under/over-performance band is dashboard configuration (percentage
+  // points around the average), never a client constant.
+  const band = data.config.matrixBandPp / 100
   const cellTone = (r: number) => {
     if (r === 0) return 'text-slate-300 dark:text-slate-600'
-    if (r < avg * 0.85) return 'text-emerald-600 dark:text-emerald-400'
-    if (r > avg * 1.15) return 'text-rose-600 dark:text-rose-400'
+    if (r < avg * (1 - band)) return 'text-emerald-600 dark:text-emerald-400'
+    if (r > avg * (1 + band)) return 'text-rose-600 dark:text-rose-400'
     return 'text-slate-600 dark:text-slate-300'
   }
   return (
@@ -674,12 +703,12 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
                         className={cn('w-full px-3 py-2 text-right tabular-nums transition-colors hover:bg-teal-50 dark:hover:bg-teal-950/40', cellTone(r ?? 0))}
                         title={t('matrix.cellTitle', { cat: c.name, dept: d.name })}
                       >
-                        {r == null ? '—' : rate(r)}
+                        {catRate(r, c.rateFormat)}
                       </button>
                     </SharedTableCell>
                   )
                 })}
-                <SharedTableCell className="bg-slate-50/70 px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:bg-slate-800/40 dark:text-slate-200">{c.rate == null ? '—' : rate(c.rate)}</SharedTableCell>
+                <SharedTableCell className="bg-slate-50/70 px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:bg-slate-800/40 dark:text-slate-200">{c.rate == null ? '—' : c.rateDisplay}</SharedTableCell>
               </SharedTableRow>
             ))}
             <SharedTableRow className="border-t-2 border-slate-200 bg-slate-50/70 font-bold dark:border-slate-700 dark:bg-slate-800/40">
@@ -688,10 +717,10 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
               {data.departments.map((d) => {
                 const deptTotal = data.totals.byDept[d.id];
                 return (
-                  <SharedTableCell key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{deptTotal == null ? '—' : rate(deptTotal)}</SharedTableCell>
+                  <SharedTableCell key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{catRate(deptTotal, data.kpis.compositeFormat)}</SharedTableCell>
                 )
               })}
-              <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{data.totals.overall == null ? '—' : rate(data.totals.overall)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{catRate(data.totals.overall, data.kpis.compositeFormat)}</SharedTableCell>
             </SharedTableRow>
           </SharedTableBody>
         </SharedTable>
@@ -719,6 +748,7 @@ const PRESET_MIX: Record<PresetKey, { rate: number; hours: number; cost: number;
 function AbsorptionTab({ data }: { data: TrueCostData }) {
   const t = useTranslations('analytics.trueCost')
   const rate = useRate()
+  const catRate = useCategoryRate()
   const whole = useWholeNumber()
   const percent = usePercent()
   const fmtMoney = useAnalyticsMoney()
@@ -875,7 +905,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
                       <SharedTableRow key={d.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                         <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
                         <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('absorption.hrsShort', { count: Math.round(d.billedHours) })}</SharedTableCell>
-                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.composite == null ? '—' : rate(d.composite)}</SharedTableCell>
+                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{catRate(d.composite, data.kpis.compositeFormat)}</SharedTableCell>
                         <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', contribution < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{contribution < 0 ? '−' : '+'}{money(Math.abs(contribution))}</SharedTableCell>
                         <SharedTableCell className="w-40 px-4 py-2">
                           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.min(100, pct)}%` }} /></div>
@@ -900,6 +930,7 @@ interface CostRow { name: string; type: 'percent_labor' | 'percent_subtotal' | '
 function SellingTab({ data }: { data: TrueCostData }) {
   const t = useTranslations('analytics.trueCost')
   const rate = useRate()
+  const catRate = useCategoryRate()
   const percent = usePercent()
   const format = useFormatter()
   const { currency } = useMoney()
@@ -908,77 +939,110 @@ function SellingTab({ data }: { data: TrueCostData }) {
   const k = data.kpis
   const emp = data.labor
 
+  // Planner inputs start from measured owners, never invented constants: the
+  // manual labor seed is the employees' own hours-weighted average, the
+  // burden seed is the computed composite, additional costs start empty,
+  // and margin and premium multipliers start unset (no assumed margin).
+  const seedManualRate = () => {
+    const hours = emp.employees.reduce((s, e) => add(s, String(e.hours)), '0.0000')
+    if (compareMoney(hours, '0') <= 0) return 0
+    const cost = emp.employees.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), '0.0000')
+    return toChartNumber(div(cost, hours))
+  }
   const [laborSource, setLaborSource] = useState<'employee' | 'manual'>('employee')
   const [laborDept, setLaborDept] = useState('')
   const [laborTitle, setLaborTitle] = useState('')
   const [laborAgg, setLaborAgg] = useState<'average' | 'median' | 'weighted'>('weighted')
-  const [laborManual, setLaborManual] = useState(45)
+  const [laborManual, setLaborManual] = useState<number>(seedManualRate)
   const [burdenSource, setBurdenSource] = useState('all')
-  const [burdenManual, setBurdenManual] = useState(k.compositeRate)
-  const [costs, setCosts] = useState<CostRow[]>([{ name: t('selling.defaultAdditionalName'), type: 'percent_labor', value: 10 }])
+  const [burdenManual, setBurdenManual] = useState<number | null>(k.compositeRate)
+  const [costs, setCosts] = useState<CostRow[]>([])
   const [marginType, setMarginType] = useState<'margin' | 'markup'>('margin')
-  const [margin, setMargin] = useState(25)
-  const [otMult, setOtMult] = useState(1.5)
-  const [dtMult, setDtMult] = useState(2)
+  const [margin, setMargin] = useState(0)
+  const [otMult, setOtMult] = useState<number | null>(null)
+  const [dtMult, setDtMult] = useState<number | null>(null)
 
   const titles = useMemo(() => [...new Set(emp.employees.map((e) => e.title))].sort(), [emp.employees])
 
   const laborPool = useMemo(() => emp.employees.filter((e) => (!laborDept || e.deptId === laborDept) && (!laborTitle || e.title === laborTitle)), [emp.employees, laborDept, laborTitle])
-  const laborRate = useMemo(() => {
-    if (laborSource === 'manual') return laborManual
-    if (!laborPool.length) return 0
-    if (laborAgg === 'average') return laborPool.reduce((s, e) => s + e.rate, 0) / laborPool.length
+  // Every derived planner figure is an exact decimal string (or null when an
+  // input is missing): operator entries convert through their decimal text,
+  // never through float arithmetic. Display formatters round at render.
+  const laborRate = useMemo<string | null>(() => {
+    if (laborSource === 'manual') return String(laborManual)
+    if (!laborPool.length) return null
+    if (laborAgg === 'average') {
+      const sum = laborPool.reduce((s, e) => add(s, String(e.rate)), '0.0000')
+      return div(sum, String(laborPool.length))
+    }
     if (laborAgg === 'median') {
       const sorted = [...laborPool].sort((a, b) => a.rate - b.rate)
-      return sorted[Math.floor(sorted.length / 2)]?.rate ?? 0
+      const mid = sorted[Math.floor(sorted.length / 2)]
+      return mid == null ? null : String(mid.rate)
     }
-    const h = laborPool.reduce((s, e) => s + e.hours, 0)
-    return h > 0 ? laborPool.reduce((s, e) => s + e.rate * e.hours, 0) / h : 0
+    const h = laborPool.reduce((s, e) => add(s, String(e.hours)), '0.0000')
+    if (compareMoney(h, '0') <= 0) return null
+    return div(laborPool.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), '0.0000'), h)
   }, [laborSource, laborManual, laborPool, laborAgg])
-  const laborMin = laborPool.length ? Math.min(...laborPool.map((e) => e.rate)) : 0
-  const laborMax = laborPool.length ? Math.max(...laborPool.map((e) => e.rate)) : 0
+  const laborMin = laborPool.length ? String(Math.min(...laborPool.map((e) => e.rate))) : null
+  const laborMax = laborPool.length ? String(Math.max(...laborPool.map((e) => e.rate))) : null
 
   // The burden leg is null while the composite refuses: every figure built
   // on it renders '—' (with the refusal banner above the tabs) instead of
   // planning against a zero burden.
-  const burdenRate: number | null = burdenSource === 'manual' ? burdenManual : burdenSource === 'all' ? k.compositeRate : (data.totals.byDept[burdenSource] ?? k.compositeRate)
+  const burdenRate: string | null = burdenSource === 'manual'
+    ? (burdenManual == null ? null : String(burdenManual))
+    : burdenSource === 'all'
+      ? (k.compositeRate == null ? null : String(k.compositeRate))
+      // A department whose composite refused contributes null, never the
+      // Overall rate: planning against another scope's number hides the refusal.
+      : ((v) => (v == null ? null : String(v)))(data.totals.byDept[burdenSource] ?? null)
   const burdenDeptName = burdenSource === 'all' ? t('selling.allDepartments') : burdenSource === 'manual' ? t('selling.manual') : data.departments.find((d) => d.id === burdenSource)?.name ?? '—'
 
-  const subtotal = burdenRate === null ? null : laborRate + burdenRate
-  const additional = costs.reduce<number | null>((s, c) => {
+  const subtotal = laborRate === null || burdenRate === null ? null : add(laborRate, burdenRate)
+  const costShare = (base: string | null, pct: number): string | null =>
+    base === null ? null : mulDecimal(base, div(String(pct), '100'))
+  const additional = costs.reduce<string | null>((s, c) => {
     if (s === null) return null
-    if (c.type === 'percent_labor') return s + laborRate * (c.value / 100)
-    if (c.type === 'percent_subtotal') return subtotal === null ? null : s + subtotal * (c.value / 100)
-    return s + c.value
-  }, 0)
-  const totalCost = subtotal === null || additional === null ? null : subtotal + additional
-  const sellingRate = totalCost === null ? null : marginType === 'margin' ? (margin < 100 ? totalCost / (1 - margin / 100) : totalCost) : totalCost * (1 + margin / 100)
-  const profit = sellingRate === null || totalCost === null ? null : sellingRate - totalCost
-  const grossMargin = sellingRate != null && sellingRate > 0 && profit !== null ? (profit / sellingRate) * 100 : 0
-  const markup = totalCost != null && totalCost > 0 && profit !== null ? (profit / totalCost) * 100 : 0
-  const seg = (v: number | null) => (sellingRate != null && sellingRate > 0 && v !== null ? `${Math.max(0, (v / sellingRate) * 100)}%` : '0%')
-  const premium = (mult: number) => {
-    if (burdenRate === null || additional === null) return null
-    const cost = laborRate * mult + burdenRate + additional
-    return marginType === 'margin' ? (margin < 100 ? cost / (1 - margin / 100) : cost) : cost * (1 + margin / 100)
+    if (c.type === 'percent_labor') return add(s, costShare(laborRate, c.value) ?? '0.0000')
+    if (c.type === 'percent_subtotal') return subtotal === null ? null : add(s, costShare(subtotal, c.value) ?? '0.0000')
+    return add(s, String(c.value))
+  }, '0.0000')
+  const totalCost = subtotal === null || additional === null ? null : add(subtotal, additional)
+  const applyMargin = (cost: string): string =>
+    marginType === 'margin'
+      ? (margin < 100 ? div(mulDecimal(cost, '100'), String(100 - margin)) : cost)
+      : div(mulDecimal(cost, String(100 + margin)), '100')
+  const sellingRate = totalCost === null ? null : applyMargin(totalCost)
+  const profit = sellingRate === null || totalCost === null ? null : add(sellingRate, neg(totalCost))
+  const ratioPct = (part: string | null, whole: string | null): number =>
+    part === null || whole === null || compareMoney(whole, '0') <= 0 ? 0 : toChartNumber(mulDecimal(div(part, whole), '100'))
+  const grossMargin = ratioPct(profit, sellingRate)
+  const markup = ratioPct(profit, totalCost)
+  const seg = (v: string | null) => (sellingRate != null && compareMoney(sellingRate, '0') > 0 && v !== null
+    ? `${Math.max(0, toChartNumber(mulDecimal(div(v, sellingRate), '100')))}%`
+    : '0%')
+  const premium = (mult: number | null) => {
+    if (mult === null || laborRate === null || burdenRate === null || additional === null) return null
+    return applyMargin(add(add(mulDecimal(laborRate, String(mult)), burdenRate), additional))
   }
 
   const setCost = (i: number, patch: Partial<CostRow>) => setCosts(costs.map((c, j) => (j === i ? { ...c, ...patch } : c)))
-  const costAmount = (c: CostRow): number | null => (c.type === 'percent_labor' ? laborRate * (c.value / 100) : c.type === 'percent_subtotal' ? (subtotal === null ? null : subtotal * (c.value / 100)) : c.value)
+  const costAmount = (c: CostRow): string | null => (c.type === 'percent_labor' ? costShare(laborRate, c.value) : c.type === 'percent_subtotal' ? (subtotal === null ? null : costShare(subtotal, c.value)) : String(c.value))
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Calculator} accent="sky" label={t('selling.sellingRate')} value={sellingRate == null ? '—' : rate(sellingRate)} sub={t('selling.costMultiple', { multiple: format.number(totalCost != null && totalCost > 0 && sellingRate != null ? sellingRate / totalCost : 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} />
-        <KpiCard icon={Layers} accent="violet" label={t('selling.totalCost')} value={totalCost == null ? '—' : rate(totalCost)} sub={t('selling.costStack')} />
-        <KpiCard icon={DollarSign} accent="emerald" label={t('selling.profitPerHour')} value={profit == null ? '—' : rate(profit)} sub={profit == null ? '—' : t('selling.per1kHours', { money: money(profit * 1000) })} tone="positive" />
+        <KpiCard icon={Calculator} accent="sky" label={t('selling.sellingRate')} value={sellingRate == null ? '—' : rate(toChartNumber(sellingRate))} sub={t('selling.costMultiple', { multiple: format.number(totalCost != null && compareMoney(totalCost, '0') > 0 && sellingRate != null ? toChartNumber(div(sellingRate, totalCost)) : 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} />
+        <KpiCard icon={Layers} accent="violet" label={t('selling.totalCost')} value={totalCost == null ? '—' : rate(toChartNumber(totalCost))} sub={t('selling.costStack')} />
+        <KpiCard icon={DollarSign} accent="emerald" label={t('selling.profitPerHour')} value={profit == null ? '—' : rate(toChartNumber(profit))} sub={profit == null ? '—' : t('selling.per1kHours', { money: money(mulDecimal(profit, '1000')) })} tone="positive" />
         <KpiCard icon={Percent} accent="amber" label={t('selling.grossMargin')} value={percent(grossMargin)} sub={t('selling.markupPct', { markup: percent(markup) })} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         {/* Builder */}
         <div className="lg:col-span-7">
-          <Panel title={t('panels.sellingBuilder')} icon={Calculator} actions={<button type="button" onClick={() => { setLaborSource('employee'); setLaborDept(''); setLaborTitle(''); setLaborAgg('weighted'); setBurdenSource('all'); setCosts([{ name: t('selling.defaultAdditionalName'), type: 'percent_labor', value: 10 }]); setMargin(25); setMarginType('margin') }} className="rounded-md border border-slate-200 p-1.5 text-slate-400 hover:text-slate-600 dark:border-slate-700" title={t('actions.reset')}><RotateCcw size={13} /></button>} bodyClassName="p-0">
+          <Panel title={t('panels.sellingBuilder')} icon={Calculator} actions={<button type="button" onClick={() => { setLaborSource('employee'); setLaborDept(''); setLaborTitle(''); setLaborAgg('weighted'); setBurdenSource('all'); setCosts([]); setMargin(0); setMarginType('margin') }} className="rounded-md border border-slate-200 p-1.5 text-slate-400 hover:text-slate-600 dark:border-slate-700" title={t('actions.reset')}><RotateCcw size={13} /></button>} bodyClassName="p-0">
             {/* Direct Labor */}
             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
               <div className="flex items-center gap-3">
@@ -986,10 +1050,10 @@ function SellingTab({ data }: { data: TrueCostData }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('selling.directLabor')}</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {laborSource === 'manual' ? t('selling.manualEntry') : laborPool.length ? t('selling.weightedFrom', { count: laborPool.length, min: rate(laborMin), max: rate(laborMax) }) : t('selling.noMatchingEmployees')}
+                    {laborSource === 'manual' ? t('selling.manualEntry') : laborPool.length ? t('selling.weightedFrom', { count: laborPool.length, min: rate(toChartNumber(laborMin ?? '0')), max: rate(toChartNumber(laborMax ?? '0')) }) : t('selling.noMatchingEmployees')}
                   </p>
                 </div>
-                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(laborRate)}</p>
+                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{laborRate == null ? '—' : rate(toChartNumber(laborRate))}</p>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
                 <FilterPill icon={Wand2}>
@@ -1037,22 +1101,22 @@ function SellingTab({ data }: { data: TrueCostData }) {
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('selling.overheadBurden')}</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{burdenDeptName}</p>
                 </div>
-                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{burdenRate == null ? '—' : rate(burdenRate)}</p>
+                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{burdenRate == null ? '—' : rate(toChartNumber(burdenRate))}</p>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
                 <FilterPill icon={Building2}>
                   <Select value={burdenSource} onChange={(e) => setBurdenSource(e.target.value)} className="w-60" triggerClassName={PILL_TRIGGER} aria-label={t('selling.overheadSource')}>
-                    <option value="all">{t('selling.allDepartmentsRate', { rate: k.compositeRate == null ? '—' : rate(k.compositeRate) })}</option>
+                    <option value="all">{t('selling.allDepartmentsRate', { rate: catRate(k.compositeRate, k.compositeFormat) })}</option>
                     {data.departments.map((d) => {
                       const optionRate = data.totals.byDept[d.id];
-                      return (<option key={d.id} value={d.id}>{d.name} ({optionRate == null ? '—' : rate(optionRate)})</option>)
+                      return (<option key={d.id} value={d.id}>{d.name} ({catRate(optionRate, k.compositeFormat)})</option>)
                     })}
                     <option value="manual">{t('selling.manualEntryOption')}</option>
                   </Select>
                 </FilterPill>
                 {burdenSource === 'manual' ? (
                   <span className="flex items-center gap-1 text-xs text-slate-500">
-                    <span>{currency}</span><input type="number" value={burdenManual.toFixed(2)} step={0.5} onChange={(e) => setBurdenManual(Number(e.target.value) || 0)} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /><span>{t('selling.perHour')}</span>
+                    <span>{currency}</span><input type="number" value={burdenManual ?? ''} step={0.5} onChange={(e) => setBurdenManual(e.target.value === '' ? null : Number(e.target.value))} placeholder={t('selling.perHour')} aria-label={t('selling.overheadBurden')} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /><span>{t('selling.perHour')}</span>
                   </span>
                 ) : null}
               </div>
@@ -1066,7 +1130,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('selling.additionalCosts')}</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{t('selling.gaFees')}</p>
                 </div>
-                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(additional)}</p>
+                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{additional == null ? '—' : rate(toChartNumber(additional))}</p>
               </div>
               <div className="mt-2 space-y-1.5 pl-11">
                 {costs.map((c, i) => (
@@ -1078,7 +1142,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                       <option value="flat">{t('selling.flatPerHour', { currency })}</option>
                     </Select>
                     <input type="number" value={c.value} step={0.5} onChange={(e) => setCost(i, { value: Number(e.target.value) || 0 })} className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-                    <span className="flex-1 text-right text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{(() => { const amt = costAmount(c); return amt == null ? '—' : rate(amt) })()}</span>
+                    <span className="flex-1 text-right text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{(() => { const amt = costAmount(c); return amt == null ? '—' : rate(toChartNumber(amt)) })()}</span>
                     <button type="button" onClick={() => setCosts(costs.filter((_, j) => j !== i))} aria-label={t('selling.removeCostComponent', { name: c.name || t('selling.unnamedCostComponent') })} className="rounded-md bg-rose-50 px-1.5 py-1 text-[10px] text-rose-500 hover:bg-rose-100 dark:bg-rose-950/40">✕</button>
                   </div>
                 ))}
@@ -1096,7 +1160,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                   <option value="markup">{t('selling.markup')}</option>
                 </Select>
               </div>
-              <input type="range" min={0} max={50} value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="flex-1 accent-amber-500" />
+              <input type="number" value={margin} min={0} step={0.5} onChange={(e) => setMargin(Number(e.target.value) || 0)} aria-label={t('selling.targetMargin')} className="h-8 w-20 rounded-md border border-amber-200 bg-white px-2 text-right tabular-nums dark:border-amber-900/40 dark:bg-slate-950" />
               <p className="w-12 text-right text-lg font-bold tabular-nums text-amber-800 dark:text-amber-300">{percent(margin)}</p>
             </div>
 
@@ -1119,12 +1183,12 @@ function SellingTab({ data }: { data: TrueCostData }) {
             {/* Totals */}
             <div className="space-y-1 border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-800/30">
               {[
-                [t('selling.rowLaborCost'), rate(laborRate)], [t('selling.rowOverheadCost'), burdenRate == null ? '—' : rate(burdenRate)], [t('selling.rowAdditionalCosts'), additional == null ? '—' : rate(additional)],
+                [t('selling.rowLaborCost'), laborRate == null ? '—' : rate(toChartNumber(laborRate))], [t('selling.rowOverheadCost'), burdenRate == null ? '—' : rate(toChartNumber(burdenRate))], [t('selling.rowAdditionalCosts'), additional == null ? '—' : rate(toChartNumber(additional))],
               ].map(([l, v]) => (
                 <div key={l} className="flex justify-between"><span className="text-xs text-slate-500 dark:text-slate-400">{l}</span><span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">{v}</span></div>
               ))}
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 dark:border-slate-700"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('selling.rowTotalCost')}</span><span className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{totalCost == null ? '—' : rate(totalCost)}</span></div>
-              <div className="flex justify-between"><span className="text-xs text-slate-500 dark:text-slate-400">{t('selling.rowProfitMargin')}</span><span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+{profit == null ? '—' : rate(profit)}</span></div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 dark:border-slate-700"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('selling.rowTotalCost')}</span><span className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{totalCost == null ? '—' : rate(toChartNumber(totalCost))}</span></div>
+              <div className="flex justify-between"><span className="text-xs text-slate-500 dark:text-slate-400">{t('selling.rowProfitMargin')}</span><span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+{profit == null ? '—' : rate(toChartNumber(profit))}</span></div>
             </div>
 
             {/* Final rate banner */}
@@ -1133,7 +1197,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                 <p className="text-xs opacity-90">{t('selling.sellingRate')}</p>
                 <p className="text-[10px] opacity-70">{marginType === 'margin' ? t('selling.bannerSubMargin', { margin: percent(margin) }) : t('selling.bannerSubMarkup', { margin: percent(margin) })}</p>
               </div>
-              <p className="text-2xl font-bold tabular-nums">{sellingRate == null ? '—' : rate(sellingRate)}</p>
+              <p className="text-2xl font-bold tabular-nums">{sellingRate == null ? '—' : rate(toChartNumber(sellingRate))}</p>
             </div>
 
             {/* Premium rates */}
@@ -1141,12 +1205,28 @@ function SellingTab({ data }: { data: TrueCostData }) {
               {[{ label: t('selling.overtime'), mult: otMult, set: setOtMult }, { label: t('selling.doubleTime'), mult: dtMult, set: setDtMult }].map((p) => (
                 <div key={p.label} className="flex items-center gap-2 text-xs">
                   <span className="w-20 text-slate-500 dark:text-slate-400">{p.label}</span>
-                  <input type="number" value={p.mult} step={0.1} min={1} max={3} onChange={(e) => p.set(Number(e.target.value) || 1)} className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1.5 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                  <input type="number" value={p.mult ?? ''} step={0.1} min={1} onChange={(e) => p.set(e.target.value === '' ? null : Number(e.target.value))} placeholder="×" aria-label={p.label} className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1.5 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
                   <span className="text-slate-400">×</span>
-                  <span className="flex-1 rounded-md bg-slate-50 px-2 py-1 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">{(() => { const p2 = premium(p.mult); return p2 == null ? '—' : rate(p2) })()}</span>
+                  <span className="flex-1 rounded-md bg-slate-50 px-2 py-1 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">{(() => { const p2 = premium(p.mult); return p2 == null ? '—' : rate(toChartNumber(p2)) })()}</span>
                 </div>
               ))}
             </div>
+            {emp.premiumPresets.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-4 py-2.5 text-xs dark:border-slate-800">
+                <span className="text-slate-400 dark:text-slate-500">{t('selling.presetHint')}</span>
+                {emp.premiumPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    title={t('selling.presetTitle', { name: preset.name, multiplier: preset.multiplier })}
+                    onClick={() => (preset.classification === 'overtime' ? setOtMult : setDtMult)(toChartNumber(preset.multiplier))}
+                    className="rounded-full border border-slate-200 px-2 py-0.5 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {preset.name} ×{preset.multiplier}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </Panel>
         </div>
 
@@ -1157,13 +1237,13 @@ function SellingTab({ data }: { data: TrueCostData }) {
               <p className="text-4xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{percent(margin)}</p>
               <p className="text-xs text-slate-400 dark:text-slate-500">{t('selling.explorerTarget', { mode: marginType === 'margin' ? t('selling.margin') : t('selling.markup') })}</p>
             </div>
-            <input type="range" min={0} max={50} value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="my-3 w-full accent-teal-500" />
+            <input type="number" value={margin} min={0} step={0.5} onChange={(e) => setMargin(Number(e.target.value) || 0)} aria-label={t('selling.targetMargin')} className="my-3 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950" />
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                [t('selling.sellingRate'), sellingRate == null ? '—' : rate(sellingRate), 'text-sky-600 dark:text-sky-400'],
-                [t('selling.profitPerHour'), profit == null ? '—' : rate(profit), 'text-emerald-600 dark:text-emerald-400'],
+                [t('selling.sellingRate'), sellingRate == null ? '—' : rate(toChartNumber(sellingRate)), 'text-sky-600 dark:text-sky-400'],
+                [t('selling.profitPerHour'), profit == null ? '—' : rate(toChartNumber(profit)), 'text-emerald-600 dark:text-emerald-400'],
                 [t('selling.markupPctLabel'), percent(markup), ''],
-                [t('selling.per1kLabel'), profit == null ? '—' : money(profit * 1000), ''],
+                [t('selling.per1kLabel'), profit == null ? '—' : money(mulDecimal(profit, '1000')), ''],
               ].map(([l, v, tone]) => (
                 <div key={l as string} className="rounded-lg bg-slate-50/80 p-2.5 text-center dark:bg-slate-800/40">
                   <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{l}</p>
@@ -1185,7 +1265,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                 { name: t('selling.overheadBurden'), value: burdenRate },
                 { name: t('selling.legendAdditional'), value: additional },
                 { name: t('selling.segProfit'), value: profit },
-              ].filter((s) => (s.value ?? 0) > 0).map((s) => ({ name: s.name, value: s.value ?? 0 }))}
+              ].filter((s) => s.value != null && compareMoney(s.value, '0') > 0).map((s) => ({ name: s.name, value: toChartNumber(s.value ?? '0') }))}
             />
           </Panel>
         </div>
@@ -1199,7 +1279,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
 /** Composite method + active-profile switcher ( + getActiveProfile). */
 function CompositePanel({ data }: { data: TrueCostData }) {
   const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
+  const catRate = useCategoryRate()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const run = async (fn: () => Promise<ApiResult>) => {
@@ -1218,7 +1298,7 @@ function CompositePanel({ data }: { data: TrueCostData }) {
             <option value="weighted">{t('config.methodWeighted')}</option>
             <option value="cascading">{t('config.methodCascading')}</option>
           </Select>
-          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">{t('config.currentComposite', { rate: data.kpis.compositeRate == null ? '—' : rate(data.kpis.compositeRate) })}</span>
+          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">{t('config.currentComposite', { rate: catRate(data.kpis.compositeRate, data.kpis.compositeFormat) })}</span>
         </label>
 
         {/* The remedy the cascading refusal names: an explicit hourly rate

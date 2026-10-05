@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "{margin} de majoration sur le coût",
       "overtime": "Heures supplémentaires",
       "doubleTime": "Taux double",
+      "presetHint": "Pr\u00e9r\u00e9glages de vos types de temps",
+      "presetTitle": "Utiliser {name} \u00d7{multiplier}",
       "explorerTarget": "{mode} cible",
       "markupPctLabel": "Majoration %",
       "per1kLabel": "Par millier d’heures"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "Taux de base horaire",
       "baseLaborRateHelp": "Taux horaire de repli quand la période ne contient aucun temps chiffré. Laisser vide pour refuser plutôt que supposer un taux.",
       "baseLaborRatePlaceholder": "p. ex. 45,00",
-      "baseLaborRateSave": "Enregistrer le taux"
+      "baseLaborRateSave": "Enregistrer le taux",
+      "groups": {
+        "performance": "Bandes de performance"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "Bande de sous-performance de la matrice (pp)",
+          "help": "Les départements hors de cette bande autour de la moyenne sont mis en évidence"
+        }
+      }
     },
     "custom": {
       "remove": "Supprimer",
@@ -2633,7 +2644,7 @@
       "fields": {
         "costSpike": {
           "help": "Alerter quand le coût non facturable augmente de plus de ce montant par rapport à la période précédente",
-          "label": "Alerte pic de coût ($)"
+          "label": "Alerte de flambée des coûts ({currency})"
         },
         "minHours": {
           "help": "Les employés en dessous de ce seuil sont exclus de l’analyse des anomalies / par les pairs",
@@ -2642,12 +2653,62 @@
         "targetBillable": {
           "help": "Référence d’utilisation à l’échelle de l’entreprise",
           "label": "% facturable cible"
+        },
+        "reallocWarn": {
+          "label": "Alerter en dessous de l’objectif (pp)",
+          "help": "Les départements sous l’objectif fournissent du personnel dans les scénarios"
+        },
+        "reallocAction": {
+          "label": "Agir en dessous de l’objectif (pp)",
+          "help": "Le personnel sous cette ligne est proposé à déplacer"
+        },
+        "watchBand": {
+          "label": "Surveiller sous l’objectif (points)",
+          "help": "Zone ambre : aussi loin sous l’objectif se lit comme à surveiller"
+        },
+        "warnBand": {
+          "label": "À risque sous l’objectif (points)",
+          "help": "Au-delà se lit comme à risque"
+        },
+        "anomalyDrop": {
+          "label": "Seuil de chute brutale (points)",
+          "help": "Une baisse plus forte est signalée comme brutale"
+        },
+        "overtimeGap": {
+          "label": "Écart d’heures sup. sans valeur (points)",
+          "help": "Les heures sup. planifiées comptent quand le facturable est aussi loin sous l’objectif"
+        },
+        "titleDrift": {
+          "label": "Seuil de dérive de rôle (points)",
+          "help": "Un rôle dérive quand sa baisse moyenne le dépasse et que tous baissent"
+        },
+        "peerSigma": {
+          "label": "Sensibilité aux valeurs aberrantes (σ)",
+          "help": "Au-delà de ces écarts à la moyenne, valeur aberrante"
+        },
+        "peerSpreadWarn": {
+          "label": "Dispersion à surveiller (points)",
+          "help": "Une dispersion plus large se lit comme à surveiller"
+        },
+        "peerSpreadAction": {
+          "label": "Dispersion à traiter (points)",
+          "help": "Une dispersion plus large se lit comme à traiter"
+        },
+        "peerMin": {
+          "label": "Minimum pour comparer",
+          "help": "Les rôles avec moins d’employés sont ignorés des analyses"
         }
       },
       "historyNote": "Périodes glissantes de {months} mois alimentant tendance et prévision",
       "historyPeriods": "Périodes d’historique",
       "priorRange": "Période précédente",
-      "priorRangeNote": "Même durée précédant immédiatement la période sélectionnée"
+      "priorRangeNote": "Même durée précédant immédiatement la période sélectionnée",
+      "groups": {
+        "targets": "Objectif",
+        "floors": "Seuils et minimums",
+        "scenarioBands": "Bandes de scénario",
+        "anomalyBands": "Bandes d’anomalies"
+      }
     },
     "empCount": "{count} empl.",
     "empty": {
@@ -2717,7 +2778,7 @@
       "belowTarget": "Sous l’objectif",
       "bestTitle": "Meilleur intitulé",
       "billableHours": "Heures facturables",
-      "costPerDay": "Coût par jour",
+      "costPerDay": "Coût par jour calendaire",
       "employees": "Employés",
       "highestCost": "Coût le plus élevé",
       "jobTitles": "Intitulés de poste",
@@ -2742,7 +2803,7 @@
     "lowHoursCount": "{count} employés avec <{minHours} heures",
     "metric": {
       "billableHours": "Heures facturables",
-      "costPerDay": "Coût par jour",
+      "costPerDay": "Coût par jour calendaire",
       "nonBillableCost": "Coût non facturable",
       "nonBillableHours": "Heures non facturables",
       "percentBilled": "Pourcentage facturé",
@@ -2766,12 +2827,13 @@
       "improvementOpportunities": "Opportunités d’amélioration",
       "modelAssumptions": "Modèle et hypothèses",
       "noBillableExpectation": "Sans attente de facturation",
-      "overtimeHint": "20 % d’heures en plus que la moy., facturable 20 points sous l’objectif",
+      "overtimeHint": "Au-delà des heures planifiées, facturable {gap} points sous l’objectif",
+      "overtimeUnscheduled": "{count} employés n’ont aucun horaire applicable ; les heures sup. sont inconnues pour eux",
       "peerComparison": "Comparaison par les pairs et par intitulé",
       "peerHint": "Comparez les employés effectuant un travail similaire",
       "reallocationIdeas": "Idées de réaffectation",
       "suddenDrop": "Chute brutale",
-      "suddenDropHint": "% facturable en baisse de >15 points vs période précédente",
+      "suddenDropHint": "Facturable % en baisse de {pp} points ou plus sur la période précédente",
       "titleDriftHint": "Rôles où TOUS les employés sont en baisse",
       "topDepartments": "Meilleurs services",
       "topDepartmentsHint": "Par coût non facturable",
@@ -2796,7 +2858,7 @@
       "jobTitleBold": "Intitulé de poste",
       "jobTitleItem": " (l’article de service sur lequel la personne saisit le plus d’heures, p. ex. « MECH:Foreman »).",
       "jobTitleMid": " — les employés n’ont pas de champ intitulé, l’intitulé d’une personne est donc sa ",
-      "noBillItem": " — les services avec zéro heure facturable (actuelle + précédente) sont signalés automatiquement et exclus du % de l’entreprise, p. ex. Structure.",
+      "noBillItem": " — signalez un service sans attente de facturation sur sa fiche service pour l’exclure du % de l’entreprise, p. ex. Structure.",
       "nonBillCostBold": "Coût non facturable",
       "nonBillCostItem": " — Σ heures × le taux de coût propre de la saisie sur le temps non facturable.",
       "timeEntries": "saisies de temps"
@@ -2806,9 +2868,9 @@
       "acrossItems": "tous articles",
       "belowTargetCount": "{count} sous l’objectif",
       "billableThreshold": "seuil facturable",
-      "daysInRange": "{days} jours sur la période",
+      "daysInRange": "{days} jours calendaires sur la période",
       "detectedAnomalies": "anomalies détectées",
-      "drop15pp": "employés avec une baisse >15 points",
+      "dropNpp": "employés avec une baisse >{pp} points",
       "employeesPerTitle": "employés par intitulé",
       "highHoursLowBillable": "beaucoup d’heures, peu facturable",
       "hoursWeighted": "pondéré par les heures",
@@ -2826,7 +2888,7 @@
       "trajectory": "trajectoire {arrow} {amount}",
       "trendArrow": "tendance {arrow} {trend} points",
       "uniqueRoles": "rôles uniques (classe de main-d’œuvre)",
-      "with2Plus": "avec 2 employés ou plus",
+      "withNPlus": "avec {count} employés ou plus",
       "withActivity": "avec activité"
     },
     "subTabs": {

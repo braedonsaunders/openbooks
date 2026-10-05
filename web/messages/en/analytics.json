@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "{margin} markup on cost",
       "overtime": "Overtime",
       "doubleTime": "Double Time",
+      "presetHint": "Presets from your time types",
+      "presetTitle": "Use {name} \u00d7{multiplier}",
       "explorerTarget": "Target {mode}",
       "markupPctLabel": "Markup %",
       "per1kLabel": "Per 1K Hours"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "Base labor rate per hour",
       "baseLaborRateHelp": "Fallback hourly rate when the period has no costed labor. Leave empty to refuse instead of assuming a rate.",
       "baseLaborRatePlaceholder": "e.g. 45.00",
-      "baseLaborRateSave": "Save rate"
+      "baseLaborRateSave": "Save rate",
+      "groups": {
+        "performance": "Performance bands"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "Matrix underperformance band (pp)",
+          "help": "Departments beyond this band from the average are highlighted"
+        }
+      }
     },
     "custom": {
       "remove": "Remove",
@@ -2625,7 +2636,7 @@
       "totalHours": "Total hours",
       "billableHours": "Billable hours",
       "nonBillableHours": "Non-billable hours",
-      "costPerDay": "Cost per day"
+      "costPerDay": "Cost per calendar day"
     },
     "table": {
       "metric": "Metric",
@@ -2706,7 +2717,7 @@
     "noTitle": "No Title",
     "kpi": {
       "nonBillableCost": "Non-Billable Cost",
-      "costPerDay": "Cost Per Day",
+      "costPerDay": "Cost Per Calendar Day",
       "totalHours": "Total Hours",
       "billableHours": "Billable Hours",
       "projectedBillablePct": "Projected Billable %",
@@ -2737,17 +2748,17 @@
     },
     "sub": {
       "totalForRange": "total for range",
-      "daysInRange": "{days} days in range",
+      "daysInRange": "{days} calendar days in range",
       "recordedTime": "recorded time",
       "revenueGenerating": "revenue generating",
       "trendArrow": "{arrow} {trend}pp trend",
       "trajectory": "{arrow} {amount} trajectory",
       "targetPct": "target: {target}%",
       "detectedAnomalies": "detected anomalies",
-      "drop15pp": "employees with >15pp drop",
+      "dropNpp": "employees with >{pp}pp drop",
       "highHoursLowBillable": "high hours, low billable",
       "rolesTrendingDown": "roles trending down",
-      "with2Plus": "with 2+ employees",
+      "withNPlus": "with {count}+ employees",
       "performanceVariance": "performance variance",
       "maxMinusMin": "max − min within title",
       "billableThreshold": "billable threshold",
@@ -2773,8 +2784,9 @@
       "noBillableExpectation": "No Billable Expectation",
       "forecastTrend": "Billable % Trend with Forecast",
       "suddenDrop": "Sudden Drop",
-      "suddenDropHint": "Billable % dropped >15pp vs prior",
-      "overtimeHint": "20%+ more hours than avg, billable 20pp below target",
+      "suddenDropHint": "Billable % dropped {pp}pp or more vs prior",
+      "overtimeHint": "Over scheduled hours, billable {gap}pp below target",
+      "overtimeUnscheduled": "{count} employees have no resolving schedule; overtime is unknown for them",
       "titleDriftHint": "Roles where ALL employees trend down",
       "peerComparison": "Peer Comparison by Job Title",
       "peerHint": "Compare employees doing similar work",
@@ -2875,13 +2887,63 @@
           "help": "Company-wide utilization benchmark"
         },
         "costSpike": {
-          "label": "Cost spike alert ($)",
+          "label": "Cost spike alert ({currency})",
           "help": "Alert when non-billable cost rises more than this vs the prior range"
         },
         "minHours": {
           "label": "Minimum hours",
           "help": "Employees below this are excluded from anomaly / peer analysis"
+        },
+        "reallocWarn": {
+          "label": "Warn below target by (pp)",
+          "help": "Departments this far below target donate staff in scenarios"
+        },
+        "reallocAction": {
+          "label": "Act below target by (pp)",
+          "help": "Staff below this line are suggested movers"
+        },
+        "watchBand": {
+          "label": "Watch below target by (pp)",
+          "help": "Amber band: this far below target reads as watch"
+        },
+        "warnBand": {
+          "label": "At-risk below target by (pp)",
+          "help": "Beyond this far below target reads as at risk"
+        },
+        "anomalyDrop": {
+          "label": "Sudden-drop threshold (pp)",
+          "help": "A period fall larger than this flags a sudden drop"
+        },
+        "overtimeGap": {
+          "label": "Overtime low-billable gap (pp)",
+          "help": "Scheduled overtime counts when billable trails target by this much"
+        },
+        "titleDrift": {
+          "label": "Title-drift threshold (pp)",
+          "help": "A role counts as drifting when its average fall exceeds this and all trend down"
+        },
+        "peerSigma": {
+          "label": "Peer outlier sensitivity (σ)",
+          "help": "A title-mate further than this many deviations from the mean is an outlier"
+        },
+        "peerSpreadWarn": {
+          "label": "Peer spread watch (pp)",
+          "help": "A title spread beyond this reads as watch"
+        },
+        "peerSpreadAction": {
+          "label": "Peer spread act (pp)",
+          "help": "A title spread beyond this reads as action"
+        },
+        "peerMin": {
+          "label": "Peer minimum headcount",
+          "help": "Titles with fewer employees are skipped in peer and drift analysis"
         }
+      },
+      "groups": {
+        "targets": "Target",
+        "floors": "Floors and minimums",
+        "scenarioBands": "Scenario bands",
+        "anomalyBands": "Anomaly bands"
       }
     },
     "sources": {
@@ -2896,7 +2958,7 @@
       "jobTitleMid": " — employees carry no title field, so a person's title is their ",
       "dominantClass": "dominant labour class",
       "jobTitleItem": " (the service item they log the most hours to, e.g. “MECH:Foreman”).",
-      "noBillItem": " — departments with zero billable hours (current + prior) are auto-flagged and excluded from company %, e.g. Overhead."
+      "noBillItem": " — flag a department with no billable expectation on its department record to exclude it from company %, e.g. Overhead."
     }
   },
   "spendVelocity": {

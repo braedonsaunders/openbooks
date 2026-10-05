@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "{margin} Aufschlag auf Kosten",
       "overtime": "Überstunden",
       "doubleTime": "Doppelter Satz",
+      "presetHint": "Vorgaben aus Ihren Zeitarten",
+      "presetTitle": "{name} \u00d7{multiplier} \u00fcbernehmen",
       "explorerTarget": "Ziel-{mode}",
       "markupPctLabel": "Aufschlag %",
       "per1kLabel": "Je 1.000 Stunden"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "Basislohnsatz pro Stunde",
       "baseLaborRateHelp": "Ersatz-Stundensatz, wenn der Zeitraum keine kalkulierten Arbeitszeiten enthält. Leer lassen, um zu verweigern statt einen Satz anzunehmen.",
       "baseLaborRatePlaceholder": "z. B. 45,00",
-      "baseLaborRateSave": "Satz speichern"
+      "baseLaborRateSave": "Satz speichern",
+      "groups": {
+        "performance": "Leistungsbänder"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "Matrix-Band für Minderleistung (PP)",
+          "help": "Abteilungen außerhalb dieses Bands um den Durchschnitt werden hervorgehoben"
+        }
+      }
     },
     "custom": {
       "remove": "Entfernen",
@@ -2633,7 +2644,7 @@
       "fields": {
         "costSpike": {
           "help": "Warnen, wenn nicht abrechenbare Kosten stärker als hier steigen ggü. Vorzeitraum",
-          "label": "Kostenspitzen-Alarm ($)"
+          "label": "Kostenanstiegs-Warnung ({currency})"
         },
         "minHours": {
           "help": "Mitarbeiter darunter bleiben aus Anomalie-/Peer-Analyse ausgeschlossen",
@@ -2642,12 +2653,62 @@
         "targetBillable": {
           "help": "Unternehmensweite Auslastungs-Richtmarke",
           "label": "Abrechenbar-Ziel %"
+        },
+        "reallocWarn": {
+          "label": "Warnen ab Zielunterschreitung (PP)",
+          "help": "Abteilungen mit dieser Zielunterschreitung stellen Personal in Szenarien bereit"
+        },
+        "reallocAction": {
+          "label": "Handeln ab Zielunterschreitung (PP)",
+          "help": "Personal unterhalb dieser Linie wird als umsetzbar vorgeschlagen"
+        },
+        "watchBand": {
+          "label": "Beobachten ab Zielunterschreitung (PP)",
+          "help": "Gelbe Zone: so weit unter Ziel gilt als Beobachtung"
+        },
+        "warnBand": {
+          "label": "Riskant ab Zielunterschreitung (PP)",
+          "help": "Weiter darunter gilt als riskant"
+        },
+        "anomalyDrop": {
+          "label": "Schwelle für plötzlichen Rückgang (PP)",
+          "help": "Ein größerer Periodenrückgang gilt als plötzlicher Einbruch"
+        },
+        "overtimeGap": {
+          "label": "Lücke für Überstunden ohne Wert (PP)",
+          "help": "Planmäßige Überstunden zählen, wenn abrechenbar so weit hinter Ziel liegt"
+        },
+        "titleDrift": {
+          "label": "Schwelle für Rollendrift (PP)",
+          "help": "Eine Rolle driftet, wenn ihr mittlerer Rückgang größer ist und alle nachlassen"
+        },
+        "peerSigma": {
+          "label": "Ausreißer-Empfindlichkeit (σ)",
+          "help": "Ab dieser Abweichungszahl vom Mittel gilt als Ausreißer"
+        },
+        "peerSpreadWarn": {
+          "label": "Streuung beobachten (PP)",
+          "help": "Eine größere Rollenstreuung gilt als Beobachtung"
+        },
+        "peerSpreadAction": {
+          "label": "Streuung handeln (PP)",
+          "help": "Eine größere Rollenstreuung gilt als Handlungsbedarf"
+        },
+        "peerMin": {
+          "label": "Mindestzahl für Vergleiche",
+          "help": "Rollen mit weniger Mitarbeitern werden in Vergleichen übersprungen"
         }
       },
       "historyNote": "Gleitende {months}-Monats-Zeiträume für Trend & Prognose",
       "historyPeriods": "Historienzeiträume",
       "priorRange": "Vorzeitraum",
-      "priorRangeNote": "Gleiche Dauer unmittelbar vor dem gewählten Zeitraum"
+      "priorRangeNote": "Gleiche Dauer unmittelbar vor dem gewählten Zeitraum",
+      "groups": {
+        "targets": "Ziel",
+        "floors": "Grenzen und Minima",
+        "scenarioBands": "Szenario-Bänder",
+        "anomalyBands": "Anomalie-Bänder"
+      }
     },
     "empCount": "{count} MA",
     "empty": {
@@ -2717,7 +2778,7 @@
       "belowTarget": "Unter Ziel",
       "bestTitle": "Beste Bezeichnung",
       "billableHours": "Abrechenbare Stunden",
-      "costPerDay": "Kosten pro Tag",
+      "costPerDay": "Kosten pro Kalendertag",
       "employees": "Mitarbeiter",
       "highestCost": "Höchste Kosten",
       "jobTitles": "Stellenbezeichnungen",
@@ -2742,7 +2803,7 @@
     "lowHoursCount": "{count} Mitarbeiter mit <{minHours} Stunden",
     "metric": {
       "billableHours": "Abrechenbare Stunden",
-      "costPerDay": "Kosten pro Tag",
+      "costPerDay": "Kosten pro Kalendertag",
       "nonBillableCost": "Nicht abrechenbare Kosten",
       "nonBillableHours": "Nicht abrechenbare Stunden",
       "percentBilled": "Abrechenbarer Anteil",
@@ -2766,12 +2827,13 @@
       "improvementOpportunities": "Verbesserungschancen",
       "modelAssumptions": "Modell & Annahmen",
       "noBillableExpectation": "Keine Abrechnungserwartung",
-      "overtimeHint": "20 %+ mehr Stunden als Ø, abrechenbar 20 Punkte unter Ziel",
+      "overtimeHint": "Über Planstunden, abrechenbar {gap} Punkte unter Ziel",
+      "overtimeUnscheduled": "{count} Mitarbeiter haben keinen gültigen Arbeitszeitplan; Überstunden sind für sie unbekannt",
       "peerComparison": "Kollegenvergleich nach Bezeichnung",
       "peerHint": "Vergleichen Sie Mitarbeiter mit ähnlicher Arbeit",
       "reallocationIdeas": "Umverteilungsideen",
       "suddenDrop": "Plötzlicher Einbruch",
-      "suddenDropHint": "Abrechenbar % >15 Punkte ggü. Vorjahr gefallen",
+      "suddenDropHint": "Abrechenbar % ≥{pp} Punkte ggü. Vorjahr gefallen",
       "titleDriftHint": "Rollen, in denen ALLE Mitarbeiter nachlassen",
       "topDepartments": "Top-Abteilungen",
       "topDepartmentsHint": "Nach nicht abrechenbaren Kosten",
@@ -2796,7 +2858,7 @@
       "jobTitleBold": "Stellenbezeichnung",
       "jobTitleItem": " (der Leistungsartikel, auf den die Person die meisten Stunden bucht, z. B. „MECH:Foreman“).",
       "jobTitleMid": " — Mitarbeiter tragen kein Bezeichnungsfeld, die Bezeichnung einer Person ist daher ihre ",
-      "noBillItem": " — Abteilungen ohne abrechenbare Stunden (aktuell + vorher) werden automatisch markiert und aus dem Unternehmens-% ausgeschlossen, z. B. Overhead.",
+      "noBillItem": " — markieren Sie eine Abteilung ohne Abrechnungserwartung im Abteilungsdatensatz, um sie aus dem Unternehmens-% auszuschließen, z. B. Overhead.",
       "nonBillCostBold": "Nicht abrechenbare Kosten",
       "nonBillCostItem": " — Σ Stunden × eigener Kostensatz der Buchung für nicht abrechenbare Zeit.",
       "timeEntries": "Zeitbuchungen"
@@ -2806,9 +2868,9 @@
       "acrossItems": "alle Artikel",
       "belowTargetCount": "{count} unter Ziel",
       "billableThreshold": "Abrechenbar-Schwelle",
-      "daysInRange": "{days} Tage im Zeitraum",
+      "daysInRange": "{days} Kalendertage im Zeitraum",
       "detectedAnomalies": "erkannte Anomalien",
-      "drop15pp": "Mitarbeiter mit >15-Punkte-Rückgang",
+      "dropNpp": "Mitarbeiter mit >{pp}-Punkte-Rückgang",
       "employeesPerTitle": "Mitarbeiter pro Bezeichnung",
       "highHoursLowBillable": "viele Stunden, wenig abrechenbar",
       "hoursWeighted": "stundengewichtet",
@@ -2826,7 +2888,7 @@
       "trajectory": "Verlauf {arrow} {amount}",
       "trendArrow": "Trend {arrow} {trend} Punkte",
       "uniqueRoles": "eigene Rollen (Lohnart)",
-      "with2Plus": "mit 2+ Mitarbeitern",
+      "withNPlus": "mit {count}+ Mitarbeitern",
       "withActivity": "mit Aktivität"
     },
     "subTabs": {

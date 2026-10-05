@@ -32,7 +32,7 @@ function dataWithHours(hours: number): UtilizationData {
   return {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026', days: 31 },
     prior: { from: '2026-06-01', to: '2026-06-30' },
-    config: { target: 75, costSpike: 20, minHours: 1 },
+    config: { target: 75, costSpike: '20.0000', minHours: 1, reallocWarnPp: 15, reallocActionPp: 20, watchBandPp: 10, warnBandPp: 20, anomalyDropPp: 15, overtimeBillableGapPp: 20, titleDriftPp: 5, peerOutlierSigma: 1.5, peerSpreadWarnPp: 20, peerSpreadActionPp: 30, peerMinCount: 2 },
     company: {
       range: stat(hours),
       prior: stat(hours),

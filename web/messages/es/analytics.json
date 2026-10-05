@@ -2516,6 +2516,8 @@
       "bannerSubMarkup": "{margin} de recargo sobre el costo",
       "overtime": "Horas extra",
       "doubleTime": "Horas al doble",
+      "presetHint": "Preajustes de sus tipos de tiempo",
+      "presetTitle": "Usar {name} \u00d7{multiplier}",
       "explorerTarget": "Objetivo: {mode}",
       "markupPctLabel": "% de recargo",
       "per1kLabel": "Por 1.000 horas"
@@ -2584,7 +2586,16 @@
       "baseLaborRate": "Tarifa laboral base por hora",
       "baseLaborRateHelp": "Tarifa por hora alternativa cuando el período no tiene mano de obra valorizada. Déjala vacía para rechazar en lugar de suponer una tarifa.",
       "baseLaborRatePlaceholder": "p. ej. 45,00",
-      "baseLaborRateSave": "Guardar tarifa"
+      "baseLaborRateSave": "Guardar tarifa",
+      "groups": {
+        "performance": "Bandas de rendimiento"
+      },
+      "fields": {
+        "matrixUnderperform": {
+          "label": "Banda de bajo rendimiento de la matriz (pp)",
+          "help": "Se destacan los departamentos fuera de esta banda alrededor del promedio"
+        }
+      }
     },
     "custom": {
       "remove": "Eliminar",
@@ -2633,7 +2644,7 @@
       "fields": {
         "costSpike": {
           "help": "Avisar cuando el costo no facturable suba más que esto frente al período anterior",
-          "label": "Alerta de pico de costo ($)"
+          "label": "Alerta de aumento de costos ({currency})"
         },
         "minHours": {
           "help": "Los empleados por debajo de este umbral quedan fuera del análisis de anomalías / por pares",
@@ -2642,12 +2653,62 @@
         "targetBillable": {
           "help": "Referencia de utilización para toda la empresa",
           "label": "% facturable objetivo"
+        },
+        "reallocWarn": {
+          "label": "Avisar por debajo del objetivo (pp)",
+          "help": "Los departamentos por debajo del objetivo aportan personal en los escenarios"
+        },
+        "reallocAction": {
+          "label": "Actuar por debajo del objetivo (pp)",
+          "help": "Se sugiere mover al personal por debajo de esta línea"
+        },
+        "watchBand": {
+          "label": "Vigilar por debajo del objetivo (puntos)",
+          "help": "Franja ámbar: tan por debajo del objetivo se lee como vigilancia"
+        },
+        "warnBand": {
+          "label": "En riesgo por debajo del objetivo (puntos)",
+          "help": "Más allá se lee como en riesgo"
+        },
+        "anomalyDrop": {
+          "label": "Umbral de caída brusca (puntos)",
+          "help": "Una caída mayor se marca como brusca"
+        },
+        "overtimeGap": {
+          "label": "Brecha de horas extra sin valor (puntos)",
+          "help": "Las horas extra programadas cuentan cuando lo facturable va tan por detrás del objetivo"
+        },
+        "titleDrift": {
+          "label": "Umbral de deriva de rol (puntos)",
+          "help": "Un rol deriva cuando su caída media lo supera y todos empeoran"
+        },
+        "peerSigma": {
+          "label": "Sensibilidad de atípicos (σ)",
+          "help": "Más allá de estas desviaciones de la media es atípico"
+        },
+        "peerSpreadWarn": {
+          "label": "Dispersión en vigilancia (puntos)",
+          "help": "Una dispersión mayor se lee como vigilancia"
+        },
+        "peerSpreadAction": {
+          "label": "Dispersión para actuar (puntos)",
+          "help": "Una dispersión mayor se lee como actuación"
+        },
+        "peerMin": {
+          "label": "Mínimo para comparar",
+          "help": "Los roles con menos empleados se omiten en los análisis"
         }
       },
       "historyNote": "Períodos móviles de {months} meses que alimentan tendencia y previsión",
       "historyPeriods": "Períodos históricos",
       "priorRange": "Período anterior",
-      "priorRangeNote": "Misma duración justo antes del período seleccionado"
+      "priorRangeNote": "Misma duración justo antes del período seleccionado",
+      "groups": {
+        "targets": "Objetivo",
+        "floors": "Límites y mínimos",
+        "scenarioBands": "Bandas de escenario",
+        "anomalyBands": "Bandas de anomalías"
+      }
     },
     "empCount": "{count} empl.",
     "empty": {
@@ -2717,7 +2778,7 @@
       "belowTarget": "Bajo el objetivo",
       "bestTitle": "Mejor puesto",
       "billableHours": "Horas facturables",
-      "costPerDay": "Costo por día",
+      "costPerDay": "Costo por día calendario",
       "employees": "Empleados",
       "highestCost": "Costo más alto",
       "jobTitles": "Puestos",
@@ -2742,7 +2803,7 @@
     "lowHoursCount": "{count} empleados con <{minHours} horas",
     "metric": {
       "billableHours": "Horas facturables",
-      "costPerDay": "Costo por día",
+      "costPerDay": "Costo por día calendario",
       "nonBillableCost": "Costo no facturable",
       "nonBillableHours": "Horas no facturables",
       "percentBilled": "Porcentaje facturado",
@@ -2766,12 +2827,13 @@
       "improvementOpportunities": "Oportunidades de mejora",
       "modelAssumptions": "Modelo y supuestos",
       "noBillableExpectation": "Sin expectativa de facturación",
-      "overtimeHint": "20 % más horas que la media, facturable 20 puntos bajo el objetivo",
+      "overtimeHint": "Sobre las horas programadas, facturable {gap} puntos bajo el objetivo",
+      "overtimeUnscheduled": "{count} empleados no tienen un horario aplicable; las horas extra se desconocen para ellos",
       "peerComparison": "Comparación por pares y por puesto",
       "peerHint": "Compara empleados que hacen trabajo similar",
       "reallocationIdeas": "Ideas de reasignación",
       "suddenDrop": "Caída brusca",
-      "suddenDropHint": "% facturable cayó >15 puntos vs anterior",
+      "suddenDropHint": "Facturable % cayó {pp} puntos o más frente al anterior",
       "titleDriftHint": "Roles donde TODOS los empleados van a la baja",
       "topDepartments": "Principales departamentos",
       "topDepartmentsHint": "Por costo no facturable",
@@ -2796,7 +2858,7 @@
       "jobTitleBold": "Puesto",
       "jobTitleItem": " (el artículo de servicio al que la persona registra más horas, p. ej. «MECH:Foreman»).",
       "jobTitleMid": " — los empleados no tienen campo de puesto, así que el puesto de una persona es su ",
-      "noBillItem": " — los departamentos con cero horas facturables (actuales + anteriores) se marcan solos y quedan fuera del % de la empresa, p. ej. Estructura.",
+      "noBillItem": " — marque un departamento sin expectativa de facturación en su ficha de departamento para excluirlo del % de la empresa, p. ej. Estructura.",
       "nonBillCostBold": "Costo no facturable",
       "nonBillCostItem": " — Σ horas × la tarifa de costo propia del registro en tiempo no facturable.",
       "timeEntries": "registros de tiempo"
@@ -2806,9 +2868,9 @@
       "acrossItems": "todos los artículos",
       "belowTargetCount": "{count} bajo el objetivo",
       "billableThreshold": "umbral facturable",
-      "daysInRange": "{days} días en el período",
+      "daysInRange": "{days} días calendario en el período",
       "detectedAnomalies": "anomalías detectadas",
-      "drop15pp": "empleados con caída >15 puntos",
+      "dropNpp": "empleados con caída >{pp} puntos",
       "employeesPerTitle": "empleados por puesto",
       "highHoursLowBillable": "muchas horas, poco facturable",
       "hoursWeighted": "ponderado por horas",
@@ -2826,7 +2888,7 @@
       "trajectory": "trayectoria {arrow} {amount}",
       "trendArrow": "tendencia {arrow} {trend} puntos",
       "uniqueRoles": "roles únicos (clase de mano de obra)",
-      "with2Plus": "con 2+ empleados",
+      "withNPlus": "con {count}+ empleados",
       "withActivity": "con actividad"
     },
     "subTabs": {

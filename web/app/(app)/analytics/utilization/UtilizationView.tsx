@@ -38,10 +38,11 @@ function useHrs0() {
   return (n: number) => `${countLabel(Math.round(n), locale)}`
 }
 
-/** Status colouring vs target: on / near (−10) / below. */
-function statusTone(pct: number, target: number) {
+/** Status colouring vs target: on / watch / warn / below (bands from dashboard configuration). */
+function statusTone(pct: number, target: number, watchPp: number, warnPp: number) {
   if (pct >= target) return { text: 'text-emerald-600 dark:text-emerald-400', bar: 'bg-emerald-500', hex: '#10b981' }
-  if (pct >= target - 10) return { text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500', hex: '#f59e0b' }
+  if (pct >= target - watchPp) return { text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500', hex: '#f59e0b' }
+  if (pct >= target - warnPp) return { text: 'text-orange-600 dark:text-orange-400', bar: 'bg-orange-500', hex: '#f97316' }
   return { text: 'text-rose-600 dark:text-rose-400', bar: 'bg-rose-500', hex: '#ef4444' }
 }
 
@@ -65,11 +66,11 @@ function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: numbe
 }
 
 /** the risk-meter billable gauge (semicircle arc coloured vs target). */
-function BillableGauge({ pct, target }: { pct: number; target: number }) {
+function BillableGauge({ pct, target, watchPp, warnPp }: { pct: number; target: number; watchPp: number; warnPp: number }) {
   const t = useTranslations('analytics.utilization')
   const diff = pct - target
-  const color = diff >= 0 ? '#10b981' : diff >= -10 ? '#f59e0b' : diff >= -20 ? '#f97316' : '#ef4444'
-  const label = diff >= 0 ? t('gauge.onTarget') : diff >= -10 ? t('gauge.nearTarget') : diff >= -20 ? t('gauge.belowTarget') : t('gauge.atRisk')
+  const color = diff >= 0 ? '#10b981' : diff >= -watchPp ? '#f59e0b' : diff >= -warnPp ? '#f97316' : '#ef4444'
+  const label = diff >= 0 ? t('gauge.onTarget') : diff >= -watchPp ? t('gauge.nearTarget') : diff >= -warnPp ? t('gauge.belowTarget') : t('gauge.atRisk')
   const arcLength = 141.37
   const offset = arcLength * (1 - Math.min(pct, 100) / 100)
   return (
@@ -362,7 +363,7 @@ export function UtilizationView({ data: initialData, canConfigure }: { data: Uti
     <div className="space-y-5">
       {/* Hero row: gauge + 4 KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <BillableGauge pct={c.percentBilled} target={target} />
+        <BillableGauge pct={c.percentBilled} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} />
         <KpiCard icon={DollarSign} accent="red" label={t('kpi.nonBillableCost')} value={money(c.nonBillableCost)} sub={t('sub.totalForRange')} tone="negative" />
         <KpiCard icon={Clock} accent="slate" label={t('kpi.costPerDay')} value={money(c.nonBillableCostPerDay)} sub={t('sub.daysInRange', { days: data.period.days })} />
         <KpiCard icon={UserRound} accent="violet" label={t('kpi.totalHours')} value={hrs0(c.hours)} sub={t('sub.recordedTime')} />
@@ -486,7 +487,7 @@ function OverviewTab({ data }: { data: UtilizationData }) {
             <Panel title={t('panels.topDepartments')} hint={t('panels.topDepartmentsHint')}>
               <div className="space-y-2.5">
                 {topDepts.map((x) => {
-                  const tone = statusTone(x.range.percentBilled, target)
+                  const tone = statusTone(x.range.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp)
                   const max = topDepts[0]?.range.nonBillableCost ?? '0'
                   // A decimal zero string is truthy. With no cost across the
                   // departments, show empty bars without dividing by zero.
@@ -677,22 +678,28 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
   )
 }
 
-/** , verbatim thresholds. */
+/** Anomaly cutoffs come from dashboard configuration, never client constants. */
 function useAnomalies(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
     const { employees } = intelligenceScope(data)
     const target = data.config.target
     const minHours = data.config.minHours
+    const dropPp = data.config.anomalyDropPp
+    const overtimeGapPp = data.config.overtimeBillableGapPp
+    const driftPp = data.config.titleDriftPp
+    const peerMin = data.config.peerMinCount
 
     const suddenDrops = employees
-      .filter((e) => e.range.hours >= minHours && e.deltas.pctDelta < -15)
+      .filter((e) => e.range.hours >= minHours && e.deltas.pctDelta < -dropPp)
       .map((e) => ({ name: e.name, drop: e.deltas.pctDelta }))
       .sort((a, b) => a.drop - b.drop)
       .slice(0, 10)
 
-    const avgHours = employees.length ? employees.reduce((s, e) => s + e.range.hours, 0) / employees.length : 0
+    // Overtime is actual hours above the employee's own work schedule (the
+    // loader resolves it exactly); without a schedule it is unknown, never
+    // flagged. The billable gap that makes it "no value" is configured.
     const overtimeNoValue = employees
-      .filter((e) => e.range.hours >= avgHours * 1.2 && e.range.percentBilled < target - 20)
+      .filter((e) => e.overtimeVsSchedule === true && e.range.percentBilled < target - overtimeGapPp)
       .map((e) => ({ name: e.name, hours: e.range.hours, pct: e.range.percentBilled }))
       .sort((a, b) => b.hours - a.hours)
       .slice(0, 10)
@@ -706,11 +713,11 @@ function useAnomalies(data: UtilizationData, t: ReturnType<typeof useTranslation
     }
     const titleDrift = [...titleGroups.entries()]
       .map(([title, deltas]) => {
-        if (deltas.length < 2) return null
+        if (deltas.length < peerMin) return null
         const avgDrop = deltas.reduce((a, b) => a + b, 0) / deltas.length
         return { title, avgDrop, count: deltas.length, allNegative: deltas.every((d) => d < 0) }
       })
-      .filter((t): t is NonNullable<typeof t> => !!t && t.avgDrop < -5 && t.allNegative)
+      .filter((t): t is NonNullable<typeof t> => !!t && t.avgDrop < -driftPp && t.allNegative)
       .sort((a, b) => a.avgDrop - b.avgDrop)
       .slice(0, 5)
 
@@ -736,12 +743,12 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={AlertTriangle} accent={a.total > 0 ? 'red' : 'emerald'} label={t('kpi.totalIssues')} value={String(a.total)} sub={t('sub.detectedAnomalies')} tone={a.total > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={ArrowDown} accent="red" label={t('kpi.suddenDrops')} value={String(a.suddenDrops.length)} sub={t('sub.drop15pp')} />
+        <KpiCard icon={ArrowDown} accent="red" label={t('kpi.suddenDrops')} value={String(a.suddenDrops.length)} sub={t('sub.dropNpp', { pp: data.config.anomalyDropPp })} />
         <KpiCard icon={Clock} accent="amber" label={t('kpi.overtimeNoValue')} value={String(a.overtimeNoValue.length)} sub={t('sub.highHoursLowBillable')} />
         <KpiCard icon={UserRound} accent="violet" label={t('kpi.titleDrift')} value={String(a.titleDrift.length)} sub={t('sub.rolesTrendingDown')} />
       </div>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel title={t('panels.suddenDrop')} hint={t('panels.suddenDropHint')} bodyClassName="p-0">
+        <Panel title={t('panels.suddenDrop')} hint={t('panels.suddenDropHint', { pp: data.config.anomalyDropPp })} bodyClassName="p-0">
           <AnomalyList
             empty={t('empty.noSuddenDrops')}
             items={a.suddenDrops.map((x, i) => (
@@ -752,7 +759,7 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
             ))}
           />
         </Panel>
-        <Panel title={t('kpi.overtimeNoValue')} hint={t('panels.overtimeHint')} bodyClassName="p-0">
+        <Panel title={t('kpi.overtimeNoValue')} hint={t('panels.overtimeHint', { gap: data.config.overtimeBillableGapPp })} bodyClassName="p-0">
           <AnomalyList
             empty={t('empty.noIssues')}
             items={a.overtimeNoValue.map((x, i) => (
@@ -762,6 +769,9 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
               </li>
             ))}
           />
+          {data.overtimeUnscheduled > 0 ? (
+            <p className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{t('panels.overtimeUnscheduled', { count: data.overtimeUnscheduled })}</p>
+          ) : null}
         </Panel>
         <Panel title={t('kpi.titleDrift')} hint={t('panels.titleDriftHint')} bodyClassName="p-0">
           <AnomalyList
@@ -780,11 +790,13 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
   )
 }
 
-/** . */
+/** Peer cutoffs come from dashboard configuration, never client constants. */
 function usePeers(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
     const { employees } = intelligenceScope(data)
     const minHours = data.config.minHours
+    const peerMin = data.config.peerMinCount
+    const sigma = data.config.peerOutlierSigma
     const groups = new Map<string, number[]>()
     for (const e of employees) {
       if (e.range.hours < minHours) continue
@@ -793,12 +805,12 @@ function usePeers(data: UtilizationData, t: ReturnType<typeof useTranslations>) 
       groups.get(title)!.push(e.range.percentBilled)
     }
     return [...groups.entries()]
-      .filter(([, pcts]) => pcts.length >= 2)
+      .filter(([, pcts]) => pcts.length >= peerMin)
       .map(([title, pcts]) => {
         const avg = pcts.reduce((a, b) => a + b, 0) / pcts.length
         const min = Math.min(...pcts), max = Math.max(...pcts)
         const stdDev = Math.sqrt(pcts.reduce((s, p) => s + (p - avg) ** 2, 0) / pcts.length)
-        const outliers = pcts.filter((p) => Math.abs(p - avg) > stdDev * 1.5).length
+        const outliers = pcts.filter((p) => Math.abs(p - avg) > stdDev * sigma).length
         return { title, count: pcts.length, avg, min, max, spread: max - min, outliers }
       })
       .sort((a, b) => b.count - a.count)
@@ -814,7 +826,7 @@ function PeersSub({ data }: { data: UtilizationData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={UserRound} accent="sky" label={t('kpi.jobTitlesAnalyzed')} value={String(peers.length)} sub={t('sub.with2Plus')} />
+        <KpiCard icon={UserRound} accent="sky" label={t('kpi.jobTitlesAnalyzed')} value={String(peers.length)} sub={t('sub.withNPlus', { count: data.config.peerMinCount })} />
         <KpiCard icon={AlertTriangle} accent={withOutliers > 0 ? 'amber' : 'emerald'} label={t('kpi.titlesWithOutliers')} value={String(withOutliers)} sub={t('sub.performanceVariance')} />
         <KpiCard icon={ArrowRightLeft} accent="violet" label={t('kpi.avgSpread')} value={pct1(avgSpread, 0)} sub={t('sub.maxMinusMin')} />
         <KpiCard icon={Target} accent="emerald" label={t('kpi.target')} value={`${target}%`} sub={t('sub.billableThreshold')} />
@@ -838,10 +850,10 @@ function PeersSub({ data }: { data: UtilizationData }) {
                 <SharedTableRow key={p.title} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                   <SharedTableCell className="max-w-52 truncate px-4 py-2 font-medium text-slate-700 dark:text-slate-300" title={p.title}>{p.title}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{p.count}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', statusTone(p.avg, target).text)}>{pct1(p.avg, 0)}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', statusTone(p.avg, target, data.config.watchBandPp, data.config.warnBandPp).text)}>{pct1(p.avg, 0)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{pct1(p.min, 0)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{pct1(p.max, 0)}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', p.spread > 30 ? 'text-rose-600 dark:text-rose-400' : p.spread > 20 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>{pct1(p.spread, 0)}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', p.spread > data.config.peerSpreadActionPp ? 'text-rose-600 dark:text-rose-400' : p.spread > data.config.peerSpreadWarnPp ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>{pct1(p.spread, 0)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-center">{p.outliers > 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{p.outliers}</span> : <span className="text-emerald-500">—</span>}</SharedTableCell>
                 </SharedTableRow>
               )) : (
@@ -865,6 +877,11 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
     const { employees, depts } = intelligenceScope(data)
     const target = data.config.target
     const minHours = data.config.minHours
+    // Reallocation bands come from the dashboard's configuration, never
+    // client constants: how far below target a department must sit to donate
+    // staff, and how far below target a donor must sit to move.
+    const reallocWarnPp = data.config.reallocWarnPp
+    const reallocActionPp = data.config.reallocActionPp
 
     const titleGroups = new Map<string, { employees: UGroupRow[]; totalCost: string; avgPct: number }>()
     for (const e of employees) {
@@ -891,12 +908,12 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
       .sort((a, b) => compareMoney(b.totalCost, a.totalCost))
 
     const highDepts = depts.filter((d) => d.range.percentBilled >= target)
-    const lowDepts = depts.filter((d) => d.range.percentBilled < target - 15)
+    const lowDepts = depts.filter((d) => d.range.percentBilled < target - reallocWarnPp)
     const reallocations: { from: string; to: string; employees: number }[] = []
     for (const from of lowDepts) {
       for (const to of highDepts) {
         if (from.id === to.id) continue
-        const movable = employees.filter((e) => e.departmentId === from.id && e.range.percentBilled < target - 20)
+        const movable = employees.filter((e) => e.departmentId === from.id && e.range.percentBilled < target - reallocActionPp)
         if (movable.length) reallocations.push({ from: from.name, to: to.name, employees: Math.min(2, movable.length) })
       }
     }
@@ -912,7 +929,7 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
     const costPerNonBillableHour = nonBillableHoursAcrossEmployees > 0 ? div(totalCost, String(nonBillableHoursAcrossEmployees)) : '0.0000'
 
     const titlePerf = [...titleGroups.entries()]
-      .filter(([, g]) => g.employees.length >= 2)
+      .filter(([, g]) => g.employees.length >= data.config.peerMinCount)
       .map(([title, g]) => ({ title, avgPct: g.avgPct, count: g.employees.length }))
       .sort((a, b) => b.avgPct - a.avgPct)
     const bestTitle = titlePerf[0]
@@ -1126,8 +1143,8 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5 text-xs">
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">≥{target}%</span>
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{target - 10}–{target}%</span>
-          <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">&lt;{target - 10}%</span>
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{target - data.config.watchBandPp}–{target}%</span>
+          <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">&lt;{target - data.config.watchBandPp}%</span>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('noBillExpectation')}</span>
         </div>
         <div className="flex gap-1">
@@ -1140,7 +1157,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {data.departments.map((d) => {
             const pct = d.range.percentBilled
-            const tone = d.noBillable ? { text: 'text-slate-400 dark:text-slate-500', bar: 'bg-slate-400' } : statusTone(pct, target)
+            const tone = d.noBillable ? { text: 'text-slate-400 dark:text-slate-500', bar: 'bg-slate-400' } : statusTone(pct, target, data.config.watchBandPp, data.config.warnBandPp)
             return (
               <div key={d.id} className={cn('rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900', d.noBillable ? 'border-slate-200 opacity-80 dark:border-slate-800' : 'border-slate-200/80 dark:border-slate-800')}>
                 <div className="flex items-start justify-between gap-2">
@@ -1148,7 +1165,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
                   {d.noBillable
                     ? <span className="shrink-0 text-[10px] font-medium text-slate-400">{t('noBillExpShort')}</span>
                     : pct >= target ? <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
-                      : pct >= target - 10 ? <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                      : pct >= target - data.config.watchBandPp ? <AlertTriangle size={16} className="shrink-0 text-amber-500" />
                         : <AlertTriangle size={16} className="shrink-0 text-rose-500" />}
                 </div>
                 <div className="my-3 text-center">
@@ -1178,7 +1195,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
           })}
         </div>
       ) : (
-        <GroupTable rows={data.departments} target={target} kind="department" />
+        <GroupTable rows={data.departments} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} kind="department" />
       )}
     </div>
   )
@@ -1188,7 +1205,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
 
 type SortKey = 'name' | 'percentBilled' | 'delta' | 'nonBillableCost' | 'hours'
 
-function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target: number; kind: 'department' | 'item' | 'employee'; onDrill?: (r: UGroupRow) => void }) {
+function GroupTable({ rows, target, watchPp, warnPp, kind, onDrill }: { rows: UGroupRow[]; target: number; watchPp: number; warnPp: number; kind: 'department' | 'item' | 'employee'; onDrill?: (r: UGroupRow) => void }) {
   const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: MoneyValue) => fmtMoney(n)
@@ -1243,7 +1260,7 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
                   {r.noBillable ? <span className="ml-2 text-[10px] text-slate-400">{t('noBillExpShort')}</span> : null}
                   {kind === 'employee' && r.title ? <span className="block text-xs text-slate-400 dark:text-slate-500">{r.title}</span> : null}
                 </SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', r.noBillable ? 'text-slate-400' : statusTone(r.range.percentBilled, target).text)}>{pct1(r.range.percentBilled)}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', r.noBillable ? 'text-slate-400' : statusTone(r.range.percentBilled, target, watchPp, warnPp).text)}>{pct1(r.range.percentBilled)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{pct1(r.prior.percentBilled)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right"><TrendDelta delta={r.deltas.pctDelta} goodIfUp /></SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(r.range.nonBillableCost)}</SharedTableCell>
@@ -1277,7 +1294,7 @@ function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyou
   const billableHours = all.reduce((s, i) => s + i.range.billableHours, 0)
   const avgBillable = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
   const above = all.filter((i) => i.range.percentBilled >= target).length
-  const below = all.filter((i) => i.range.percentBilled < target - 10).length
+  const below = all.filter((i) => i.range.percentBilled < target - data.config.watchBandPp).length
   const highest = all[0]
 
   return (
@@ -1296,7 +1313,7 @@ function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyou
         </div>
         <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{t('itemsWithActivity', { count: items.length })}</span>
       </div>
-      <GroupTable rows={items} target={target} kind="item" onDrill={(r) => onDrill({ kind: 'item', id: r.id, name: r.name, sub: `${hrs0(r.range.hours)} ${t('unit.hrs')} · ${pct1(r.range.percentBilled)} ${t('unit.billable')}` })} />
+      <GroupTable rows={items} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} kind="item" onDrill={(r) => onDrill({ kind: 'item', id: r.id, name: r.name, sub: `${hrs0(r.range.hours)} ${t('unit.hrs')} · ${pct1(r.range.percentBilled)} ${t('unit.billable')}` })} />
     </div>
   )
 }
@@ -1341,7 +1358,7 @@ function TitlesTab({ data }: { data: UtilizationData }) {
   const best = sortedByPct[0]
   const worst = sortedByPct[sortedByPct.length - 1]
   const aboveT = titles.filter((t) => t.percentBilled >= target).length
-  const belowT = titles.filter((t) => t.percentBilled < target - 10).length
+  const belowT = titles.filter((t) => t.percentBilled < target - data.config.watchBandPp).length
 
   return (
     <div className="space-y-4">
@@ -1369,7 +1386,7 @@ function TitlesTab({ data }: { data: UtilizationData }) {
               <InteractiveTableRow key={t.title} onClick={() => setOpen(t)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
                 <SharedTableCell className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">{t.title}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{t.employees.length}</SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2.5 text-right font-bold tabular-nums', statusTone(t.percentBilled, target).text)}>{pct1(t.percentBilled)}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2.5 text-right font-bold tabular-nums', statusTone(t.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp).text)}>{pct1(t.percentBilled)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{hrs0(t.hours)}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-rose-600 dark:text-rose-400">{money0(t.nonBillableCost)}</SharedTableCell>
               </InteractiveTableRow>
@@ -1397,7 +1414,7 @@ function TitlesTab({ data }: { data: UtilizationData }) {
                     <span className="font-medium text-slate-800 dark:text-slate-200">{e.name}</span>
                     <span className="block text-xs text-slate-400 dark:text-slate-500">{e.departmentName}</span>
                   </SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', statusTone(e.range.percentBilled, target).text)}>{pct1(e.range.percentBilled)}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', statusTone(e.range.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp).text)}>{pct1(e.range.percentBilled)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{hrs0(e.range.hours)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{hrs0(e.range.billableHours)}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2 text-right tabular-nums text-rose-500">{money0(e.range.nonBillableCost)}</SharedTableCell>
@@ -1437,15 +1454,15 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
   const qBillable = qualified.reduce((s, e) => s + e.range.billableHours, 0)
   const avgBillable = qHours > 0 ? (qBillable / qHours) * 100 : 0
   const above = qualified.filter((e) => e.range.percentBilled >= target).length
-  const near = qualified.filter((e) => e.range.percentBilled >= target - 10 && e.range.percentBilled < target).length
-  const belowN = qualified.filter((e) => e.range.percentBilled < target - 10).length
+  const near = qualified.filter((e) => e.range.percentBilled >= target - data.config.watchBandPp && e.range.percentBilled < target).length
+  const belowN = qualified.filter((e) => e.range.percentBilled < target - data.config.watchBandPp).length
   const top = [...qualified].sort((a, b) => b.range.percentBilled - a.range.percentBilled)[0]
   const avgHours = filtered.length ? filtered.reduce((s, e) => s + e.range.hours, 0) / filtered.length : 0
 
   const drill = (e: UGroupRow) => {
     // Peer strip: this employee vs same-title peers' average billable %.
     const peers = e.title ? data.employees.filter((p) => p.title === e.title && p.range.hours >= minHours) : []
-    const peer = e.title && peers.length >= 2
+    const peer = e.title && peers.length >= data.config.peerMinCount
       ? { title: e.title, empPct: e.range.percentBilled, peerAvg: peers.reduce((a, p) => a + p.range.percentBilled, 0) / peers.length, peerCount: peers.length }
       : undefined
     onDrill({ kind: 'employee', id: e.id, name: e.name, sub: `${e.title ?? ''} · ${e.departmentName ?? ''} · ${pct1(e.range.percentBilled)} ${t('unit.billable')}`, peer })
@@ -1482,7 +1499,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
         <>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {qualified.map((e) => {
-              const tone = statusTone(e.range.percentBilled, target)
+              const tone = statusTone(e.range.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp)
               return (
                 <button key={e.id} type="button" onClick={() => drill(e)} className="rounded-lg border-l-4 bg-white p-2.5 text-left shadow-sm ring-1 ring-slate-200/70 transition-shadow hover:shadow dark:bg-slate-900 dark:ring-slate-800" style={{ borderLeftColor: tone.hex }}>
                   <div className="flex items-start justify-between gap-1">
@@ -1523,7 +1540,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
           ) : null}
         </>
       ) : (
-        <GroupTable rows={filtered} target={target} kind="employee" onDrill={drill} />
+        <GroupTable rows={filtered} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} kind="employee" onDrill={drill} />
       )}
     </div>
   )
