@@ -11,6 +11,35 @@ import {
   type CataloguePermission,
 } from "./permissions.ts";
 
+test("stored value permissions are catalogued, grouped, and split by duty", () => {
+  const keys: CataloguePermission[] = ["stored_value.read", "stored_value.manage", "stored_value.adjust"];
+  for (const perm of keys) {
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
+      `${perm} must be seeded so someone can hold it`,
+    );
+    assert.equal(permissionLabelKey(perm), `permissions.${perm.replace(/\./g, "_")}`);
+  }
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "stored_value");
+  assert.ok(group, "stored value needs its own catalogue group for the role picker");
+  assert.equal(group.labelKey, "permissions.groups.stored_value");
+  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const perm of keys) {
+    assert.equal(holds("controller", perm), true, `controller must hold ${perm}`);
+    assert.equal(holds("admin", perm), true, `admin must hold ${perm}`);
+  }
+  assert.equal(holds("accountant", "stored_value.read"), true);
+  assert.equal(holds("accountant", "stored_value.manage"), true);
+  assert.equal(holds("accountant", "stored_value.adjust"), false, "adjusting balances outside documents is not an accounting duty");
+  assert.equal(holds("sales_manager", "stored_value.manage"), true, "sales managers sell and redeem gift cards");
+  assert.equal(holds("sales_manager", "stored_value.adjust"), false);
+  assert.equal(holds("sales_rep", "stored_value.read"), true);
+  assert.equal(holds("sales_rep", "stored_value.manage"), false);
+});
+
 test("usage permissions are catalogued and granted wherever invoice creation is allowed", () => {
   const keys: CataloguePermission[] = ["usage.read", "usage.manage", "usage.bill"];
   for (const permission of keys) {
