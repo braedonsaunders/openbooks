@@ -427,6 +427,21 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
   assert.deepEqual([withFunds.income_tax, withFunds.qc_income_tax], ["9.6900", "13.9500"]);
 });
 
+test("a bonus never reduces the default basic personal amount of the step without it", () => {
+  // No TD1 on file: BPAF phases out on each step's own net income (NI = A + HD).
+  // Step 2 (A 178,255.20) sits below the 181,440 phase-out start and keeps the full
+  // 16,452, so the periodic tax only moves by the enhanced-CPP split the bonus changes;
+  // step 1 (A 237,673.60) takes the phased 15,267.36. Pricing step 2 on step 1's
+  // claim would cost the periodic tax 1,184.64 × 14% / 12 ≈ 13.82 more.
+  const base = { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, income: "15000.00" } as const;
+  const plain = calculateT4127(base);
+  const withBonus = calculateT4127({ ...base, nonPeriodic: "60000.00" });
+  assert.equal(plain.periodicTax, "4424.7900");
+  assert.equal(withBonus.periodicTax, "4425.5500");
+  assert.equal(withBonus.bonusTax, "28997.9800");
+  assert.equal(withBonus.factors.TC, "15267.3600");
+});
+
 test("federal and provincial tax round to the cent separately before they add", () => {
   // 0.26 a year over 52 periods is half a cent on each leg: each leg rounds
   // up to 0.01, so the period owes 0.02 where rounding the combined 0.52
