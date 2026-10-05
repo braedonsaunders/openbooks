@@ -5286,7 +5286,37 @@
       },
       "subtitle": "納税義務が生じ得るすべての国・州・準州・特別区を選択してください。カナダと米国は第一レベルの管轄区域を完全に網羅しています。",
       "title": "税務設定",
-      "toggleStates": "{country} の管轄区域を表示"
+      "toggleStates": "{country} の管轄区域を表示",
+      "authorities": {
+        "title": "税務当局の接続",
+        "description": "税番号をリアルタイムに検証する当局を接続します: 英国番号用のHMRC VAT APIと豪州番号用のABN Lookup。秘密情報は封印され、再表示されることはありません。",
+        "hmrcTitle": "HMRC VAT API (英国)",
+        "hmrcDescription": "HMRC開発者ハブのOAuthクライアント。英国VAT番号を検証し、アクセストークンを更新します。",
+        "abnTitle": "ABN Lookup (オーストラリア)",
+        "abnDescription": "ABN LookupウェブサービスのGUID。豪州事業者番号を検証します。",
+        "status": {
+          "missing": "未接続",
+          "ready": "接続済み",
+          "error": "要対応",
+          "expired": "トークン期限切れ"
+        },
+        "clientId": "クライアントID",
+        "clientSecret": "クライアントシークレット",
+        "scope": "スコープ",
+        "guid": "ABN Lookup GUID",
+        "save": "接続を保存",
+        "saving": "保存中…",
+        "verify": "今すぐ検証",
+        "verifying": "検証中…",
+        "refresh": "トークンを更新",
+        "refreshing": "更新中…",
+        "saved": "接続を保存しました。ライブ検証に利用する前に検証してください。",
+        "verified": "当局に対して検証済み。",
+        "actionFailed": "当局の操作を完了できませんでした。",
+        "lastError": "直近の失敗: {error}",
+        "lastVerified": "最終検証 {at}",
+        "neverVerified": "当局に対する検証は未実施。"
+      }
     },
     "payroll": {
       "navTitle": "給与"
@@ -5957,7 +5987,7 @@
         "account": "配送業者アカウント",
         "accountPlaceholder": "アカウントを選択",
         "paste": "配送業者の請求エクスポート",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "プレビュー",
         "import": "{count}件の調整をインポート",
         "columns": {

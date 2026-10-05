@@ -5286,7 +5286,37 @@
         "title": "Nexus deklarieren"
       },
       "subtitle": "Wählen Sie jedes Land, jede Provinz, jedes Territorium, jeden Bundesstaat und jeden Bezirk, in dem Steuerpflichten entstehen können. Kanada und die Vereinigten Staaten verfügen über eine vollständige Abdeckung der Jurisdiktionen der ersten Ebene.",
-      "title": "Steuereinrichtung"
+      "title": "Steuereinrichtung",
+      "authorities": {
+        "title": "Steuerbehörden-Anbindungen",
+        "description": "Binden Sie die Behörden an, die Steuernummern live prüfen: die HMRC-VAT-API für britische Nummern und ABN Lookup für australische Nummern. Zugangsdaten werden versiegelt und nie wieder angezeigt.",
+        "hmrcTitle": "HMRC VAT API (Vereinigtes Königreich)",
+        "hmrcDescription": "OAuth-Client aus dem HMRC-Developer-Hub. Prüft britische USt-IdNrn. und erneuert das Zugriffstoken.",
+        "abnTitle": "ABN Lookup (Australien)",
+        "abnDescription": "GUID aus den ABN-Lookup-Webservices. Prüft australische Unternehmensnummern.",
+        "status": {
+          "missing": "Nicht angebunden",
+          "ready": "Verbunden",
+          "error": "Handlungsbedarf",
+          "expired": "Token abgelaufen"
+        },
+        "clientId": "Client-ID",
+        "clientSecret": "Client Secret",
+        "scope": "Scope",
+        "guid": "ABN-Lookup-GUID",
+        "save": "Anbindung speichern",
+        "saving": "Speichert…",
+        "verify": "Jetzt prüfen",
+        "verifying": "Prüft…",
+        "refresh": "Token erneuern",
+        "refreshing": "Erneuert…",
+        "saved": "Anbindung gespeichert. Prüfen Sie sie, bevor Sie sich auf Live-Prüfungen verlassen.",
+        "verified": "Gegenüber der Behörde geprüft.",
+        "actionFailed": "Die Behördenaktion konnte nicht abgeschlossen werden.",
+        "lastError": "Letzter Fehler: {error}",
+        "lastVerified": "Zuletzt geprüft {at}",
+        "neverVerified": "Noch nie gegenüber der Behörde geprüft."
+      }
     },
     "payroll": {
       "navTitle": "Lohnabrechnung"
@@ -5957,7 +5987,7 @@
         "account": "Carrier-Konto",
         "accountPlaceholder": "Konto wählen",
         "paste": "Abrechnungsexport des Carriers",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "Vorschau",
         "import": "{count, plural, one {# Korrektur importieren} other {# Korrekturen importieren}}",
         "columns": {

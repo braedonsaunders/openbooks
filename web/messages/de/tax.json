@@ -270,9 +270,52 @@
     },
     "current": "Laufend",
     "correction": "Korrektur {quarter}",
-    "exportCsv": "CSV exportieren",
-    "exportNote": "Generisches EU-OSS-Layout zur manuellen Portal-Eingabe. Nationale Portal-Dateiformate sind nicht implementiert.",
     "noLinesTitle": "Keine grenzüberschreitenden Umsätze",
-    "noLinesDescription": "In diesem Zeitraum wurde nichts mit Kundenland-Feststellung gebucht."
+    "noLinesDescription": "In diesem Zeitraum wurde nichts mit Kundenland-Feststellung gebucht.",
+    "format": "Dateilayout",
+    "export": "Erklärung exportieren",
+    "formats": {
+      "generic": "Generische EU-CSV",
+      "DE": "Deutschland (BOP-Portal-CSV)",
+      "FR": "Frankreich (Portal-CSV)",
+      "NL": "Niederlande (Portal-CSV)",
+      "IE": "Irland (ROS-XML)"
+    },
+    "exportNotes": {
+      "generic": "Generisches EU-OSS-Layout zur manuellen Portalübertragung.",
+      "DE": "Deutsches Portal-Layout: dieselben Erklärungswerte, gruppiert für den BOP-Upload. Prüfen Sie vor dem Hochladen die Portalvorlage.",
+      "FR": "Französisches Portal-Layout: dieselben Erklärungswerte, gruppiert für den Portal-Upload. Prüfen Sie vor dem Hochladen die Portalvorlage.",
+      "NL": "Niederländisches Portal-Layout: dieselben Erklärungswerte, gruppiert für den Portal-Upload. Prüfen Sie vor dem Hochladen die Portalvorlage.",
+      "IE": "Irisches ROS-XML: dieselben Erklärungswerte im Upload-Layout von Revenue. Prüfen Sie vor dem Hochladen die ROS-Vorlage."
+    },
+    "conflicts": {
+      "badge": "{count, plural, one {# Dokument braucht Aufmerksamkeit} other {# Dokumente brauchen Aufmerksamkeit}}",
+      "title": "Nachweiskonflikte vor dem Buchen beheben",
+      "description": "Diese noch nicht gebuchten Dokumente beanspruchen eine grenzüberschreitende Behandlung, doch ihre Standortnachweise nennen mehr als ein Land. Das Buchen bleibt verweigert, bis die Nachweise übereinstimmen — korrigieren Sie jedes Dokument dort, wo es liegt.",
+      "countries": "Nachweise nennen {countries}",
+      "fix": "Dokument öffnen"
+    },
+    "advanced": {
+      "title": "Nachweise und Schwelle",
+      "summary": "EZB-Umrechnungsnachweise und die Versandhandelsschwelle"
+    },
+    "fx": {
+      "title": "EZB-Umrechnungsnachweise",
+      "pending": "Für diesen Zeitraum sind noch keine Nachweise gespeichert — sie werden beim Export der Erklärung gespeichert, damit die eingereichten Euro-Werte reproduzierbar bleiben.",
+      "columns": {
+        "currency": "Währung",
+        "rate": "Euro je Einheit",
+        "asOf": "Kursdatum",
+        "source": "Quelle"
+      }
+    },
+    "threshold": {
+      "title": "Versandhandelsschwelle (EUR 10.000)",
+      "crossed": "Schwelle überschritten",
+      "within": "Unter der Schwelle",
+      "status": "€{total} von €{threshold} gebuchtem B2C-Umsatz in {year}, ohne MwSt.",
+      "translated": "{currency}-Basis {base} zu {rate} am {asOf}",
+      "uncovered": "Kein EZB-Kurs für {currencies} — die Summe schließt sie aus. Ergänzen Sie die Kurse, bevor Sie sich auf diesen Wert verlassen."
+    }
   }
 }

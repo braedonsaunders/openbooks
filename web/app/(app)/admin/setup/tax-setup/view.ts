@@ -4,8 +4,10 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { supportedTaxCountries } from '@openbooks/engine/src/tax/pack-provisioning.ts'
+import { readAuthorityConnectionStatus } from '@openbooks/engine/src/tax/authority-connections.ts'
 import { grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
+import type { AuthorityConnectionView } from './AuthorityConnectionsClient'
 import type { TaxSetupGuideProps } from './sections'
 
 /**
@@ -35,6 +37,7 @@ export interface TaxSetupData {
   title: string
   subtitle: string
   guide: TaxSetupGuideProps
+  connections: AuthorityConnectionView[]
 }
 
 export async function loadTaxSetup(
@@ -45,7 +48,7 @@ export async function loadTaxSetup(
   const t = await getTranslations('admin.setup.taxSetup')
   const orgId = authz.user.orgId
 
-  const [installed, installedJurisdictions, jurisdictions, registrations] = await Promise.all([
+  const [installed, installedJurisdictions, jurisdictions, registrations, hmrc, abn] = await Promise.all([
     db.execute<{ code: string }>(sql`select distinct code from tax_return_forms where org_id = ${orgId} and is_active`),
     db.execute<{ code: string }>(sql`
       select code from tax_jurisdictions
@@ -53,6 +56,8 @@ export async function loadTaxSetup(
     `),
     db.execute<{ n: number }>(sql`select count(*)::int as n from tax_jurisdictions where org_id = ${orgId} and is_active`),
     db.execute<{ n: number }>(sql`select count(*)::int as n from tax_registrations where org_id = ${orgId} and is_active`),
+    readAuthorityConnectionStatus(db, orgId, 'hmrc'),
+    readAuthorityConnectionStatus(db, orgId, 'abn'),
   ])
 
   return {
@@ -75,6 +80,7 @@ export async function loadTaxSetup(
       step3Href: '/admin/setup/tax-jurisdictions?setupTab=tax-registrations',
       step3Cta: t('step3.cta'),
     },
+    connections: [hmrc, abn],
   }
 }
 
@@ -104,6 +110,9 @@ export function taxSetupSpec(data: TaxSetupData): PageSpec {
         // INSIDE the guide component (the native `TaxSetupGuide` owns steps
         // 2 and 3), so there is nothing for the spec to omit.
         widgetBlock('tax-setup-guide', { guide: data.guide }),
+        // Authority connections always render: the empty state teaches what
+        // the HMRC and ABN connections unlock (live ID validation).
+        widgetBlock('tax-authority-connections', { connections: data.connections }),
       ]),
     ],
   })

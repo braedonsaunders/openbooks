@@ -1997,6 +1997,36 @@
         "description": "Open a jurisdiction and use its Tax Nexus tab to record the registration number, filing frequency, return form, and effective dates.",
         "stat": "{count, plural, =0 {No registrations yet} one {# registration} other {# registrations}}",
         "cta": "Set up nexus"
+      },
+      "authorities": {
+        "title": "Tax authority connections",
+        "description": "Connect the authorities that verify tax IDs live: the HMRC VAT API for British numbers and ABN Lookup for Australian numbers. Secrets are sealed and never shown back.",
+        "hmrcTitle": "HMRC VAT API (United Kingdom)",
+        "hmrcDescription": "OAuth client from the HMRC developer hub. Used to verify GB VAT numbers and refresh the access token.",
+        "abnTitle": "ABN Lookup (Australia)",
+        "abnDescription": "GUID from ABN Lookup web services. Used to verify Australian business numbers.",
+        "status": {
+          "missing": "Not connected",
+          "ready": "Connected",
+          "error": "Needs attention",
+          "expired": "Token expired"
+        },
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "scope": "Scope",
+        "guid": "ABN Lookup GUID",
+        "save": "Save connection",
+        "saving": "Saving…",
+        "verify": "Verify now",
+        "verifying": "Verifying…",
+        "refresh": "Refresh token",
+        "refreshing": "Refreshing…",
+        "saved": "Connection saved. Verify it before relying on live checks.",
+        "verified": "Verified against the authority.",
+        "actionFailed": "The authority action could not be completed.",
+        "lastError": "Last failure: {error}",
+        "lastVerified": "Last verified {at}",
+        "neverVerified": "Never verified against the authority."
       }
     },
     "taxOfficial": {
@@ -5957,7 +5987,7 @@
         "account": "Carrier account",
         "accountPlaceholder": "Choose an account",
         "paste": "Carrier billing export",
-        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "pastePlaceholder": "['{' \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" '}']",
         "preview": "Preview",
         "import": "{count, plural, one {Import # adjustment} other {Import # adjustments}}",
         "columns": {

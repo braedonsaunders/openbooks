@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ArrowRight, BadgeCheck, MapPin } from 'lucide-react'
 import { Button, Card, CardContent } from '@openbooks/ui'
 import type { SupportedCountry } from '@openbooks/engine/src/tax/pack-provisioning.ts'
+import { AuthorityConnectionsClient, type AuthorityConnectionView } from './AuthorityConnectionsClient'
 import { TaxSetupGuide } from './TaxSetupGuide'
 
 /**
@@ -102,6 +103,15 @@ export function TaxSetupGuideSlot({ guide }: { guide: TaxSetupGuideProps }) {
       }
     />
   )
+}
+
+/**
+ * Authority-connections slot: the loader resolves both connection states
+ * (state only, never credential material) and the slot spreads them onto
+ * the client component that owns the save/verify forms.
+ */
+export function TaxAuthorityConnectionsSlot({ connections }: { connections: AuthorityConnectionView[] }) {
+  return <AuthorityConnectionsClient initial={connections} />
 }
 
 export function StepLink({

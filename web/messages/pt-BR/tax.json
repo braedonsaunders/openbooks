@@ -270,9 +270,52 @@
     },
     "current": "Corrente",
     "correction": "Correção {quarter}",
-    "exportCsv": "Exportar CSV",
-    "exportNote": "Leiaute OSS genérico da UE para digitação no portal. Os formatos de arquivo dos portais nacionais não estão implementados.",
     "noLinesTitle": "Sem vendas transfronteiriças",
-    "noLinesDescription": "Nada lançado com veredicto de país do cliente cai neste período."
+    "noLinesDescription": "Nada lançado com veredicto de país do cliente cai neste período.",
+    "format": "Layout do arquivo",
+    "export": "Exportar declaração",
+    "formats": {
+      "generic": "CSV genérico da UE",
+      "DE": "Alemanha (CSV do portal BOP)",
+      "FR": "França (CSV do portal)",
+      "NL": "Holanda (CSV do portal)",
+      "IE": "Irlanda (XML do ROS)"
+    },
+    "exportNotes": {
+      "generic": "Layout OSS genérico da UE para digitação manual no portal.",
+      "DE": "Layout do portal alemão: os mesmos valores declarados, agrupados para o upload BOP. Confirme o modelo do portal antes de enviar.",
+      "FR": "Layout do portal francês: os mesmos valores declarados, agrupados para o upload do portal. Confirme o modelo do portal antes de enviar.",
+      "NL": "Layout do portal holandês: os mesmos valores declarados, agrupados para o upload do portal. Confirme o modelo do portal antes de enviar.",
+      "IE": "XML do ROS irlandês: os mesmos valores declarados no layout de upload da Revenue. Confirme o modelo do ROS antes de enviar."
+    },
+    "conflicts": {
+      "badge": "{count, plural, one {# documento precisa de atenção} other {# documentos precisam de atenção}}",
+      "title": "Corrija os conflitos de evidência antes de contabilizar",
+      "description": "Estes documentos não contabilizados declaram tratamento transfronteiriço, mas seus sinais de localização nomeiam mais de um país. A contabilização continua recusada até a evidência concordar — corrija cada documento onde ele está.",
+      "countries": "os sinais nomeiam {countries}",
+      "fix": "Abrir documento"
+    },
+    "advanced": {
+      "title": "Evidência e limite da declaração",
+      "summary": "Evidência de conversão do BCE e o limite de vendas a distância"
+    },
+    "fx": {
+      "title": "Evidência de conversão do BCE",
+      "pending": "Nenhuma evidência salva para este período ainda — ela é salva ao exportar a declaração, para que os valores em euros declarados continuem reproduzíveis.",
+      "columns": {
+        "currency": "Moeda",
+        "rate": "Euros por unidade",
+        "asOf": "Data da taxa",
+        "source": "Fonte"
+      }
+    },
+    "threshold": {
+      "title": "Limite de vendas a distância (EUR 10.000)",
+      "crossed": "Limite ultrapassado",
+      "within": "Dentro do limite",
+      "status": "€{total} de €{threshold} de faturamento B2C contabilizado em {year}, IVA excluído.",
+      "translated": "base em {currency} {base} a {rate} em {asOf}",
+      "uncovered": "Sem taxa do BCE para {currencies} — o total as exclui. Adicione as taxas antes de confiar neste valor."
+    }
   }
 }

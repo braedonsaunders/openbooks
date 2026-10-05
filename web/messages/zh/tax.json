@@ -270,9 +270,52 @@
     },
     "current": "当期",
     "correction": "更正 {quarter}",
-    "exportCsv": "导出CSV",
-    "exportNote": "用于门户手工录入的欧盟通用OSS格式。各国门户文件格式暂未实现。",
     "noLinesTitle": "无跨境销售",
-    "noLinesDescription": "本期间没有带客户国判定的过账记录。"
+    "noLinesDescription": "本期间没有带客户国判定的过账记录。",
+    "format": "文件格式",
+    "export": "导出申报",
+    "formats": {
+      "generic": "通用欧盟CSV",
+      "DE": "德国 (BOP门户CSV)",
+      "FR": "法国 (门户CSV)",
+      "NL": "荷兰 (门户CSV)",
+      "IE": "爱尔兰 (ROS XML)"
+    },
+    "exportNotes": {
+      "generic": "用于门户手工录入的通用欧盟OSS版式。",
+      "DE": "德国门户版式: 同样的申报数据, 按BOP上传分组。上传前请确认门户模板。",
+      "FR": "法国门户版式: 同样的申报数据, 按门户上传分组。上传前请确认门户模板。",
+      "NL": "荷兰门户版式: 同样的申报数据, 按门户上传分组。上传前请确认门户模板。",
+      "IE": "爱尔兰ROS XML: 同样的申报数据, 采用Revenue上传版式。上传前请确认ROS模板。"
+    },
+    "conflicts": {
+      "badge": "{count, plural, other {有#份单据需要注意}}",
+      "title": "过账前先解决证据冲突",
+      "description": "这些未过账单据申报了跨境待遇, 但其位置信号指向一个以上国家。在证据一致之前过账仍会被拒绝 — 请在单据所在位置逐一修正。",
+      "countries": "信号指向{countries}",
+      "fix": "打开单据"
+    },
+    "advanced": {
+      "title": "申报证据与阈值",
+      "summary": "欧洲央行折算证据与远程销售阈值"
+    },
+    "fx": {
+      "title": "欧洲央行折算证据",
+      "pending": "本期尚无已存证据 — 将在导出申报时保存, 以保证已申报欧元金额可重现。",
+      "columns": {
+        "currency": "货币",
+        "rate": "每单位欧元",
+        "asOf": "汇率日期",
+        "source": "来源"
+      }
+    },
+    "threshold": {
+      "title": "远程销售阈值 (10,000欧元)",
+      "crossed": "已超过阈值",
+      "within": "未超过阈值",
+      "status": "{year}年已过账B2C营业额€{total} / €{threshold}, 不含增值税。",
+      "translated": "{currency}基数{base}, {asOf}汇率{rate}",
+      "uncovered": "{currencies}没有欧洲央行汇率 — 合计已将其排除。采信此数值前请先补足汇率。"
+    }
   }
 }

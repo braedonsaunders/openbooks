@@ -547,6 +547,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'tax-pools': { props: ['canConfigure', 'canRun', 'defaultTaxYear', 'regimes'] },
   'tax-provider-activity-drawer': { props: ['drawer'] },
   'tax-return-library': { props: ['closeHref', 'installedCodes', 'open', 'openHref', 'packs'] },
+  'tax-authority-connections': { props: ['connections'] },
   'tax-setup-guide': { props: ['guide'] },
   'tax-setup-header': { props: ['subtitle', 'title'] },
   'timesheet-drawer': { props: ['drawer'] },
