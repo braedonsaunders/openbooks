@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "Order economics",
         "description": "Stored contribution-margin facts per channel order line, with margin as formula measures."
+      },
+      "collection_recovery": {
+        "label": "Collection recovery",
+        "description": "One row per invoice the automatic-collection engine has charged — attempts, the first decline class, whether a later position recovered it and by which path, and days to recover. Group by decline class and provider for recovery rates."
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "Costing",
         "currency": "Currency",
         "amount": "Amount"
+      },
+      "collection_recovery": {
+        "invoice": "Invoice",
+        "customer": "Customer",
+        "invoice_day": "Invoice day",
+        "due_day": "Due day",
+        "currency": "Currency",
+        "invoice_total": "Invoice total",
+        "attempts": "Attempts",
+        "failed_attempts": "Failed attempts",
+        "first_decline_class": "First decline class",
+        "provider": "Provider",
+        "recovered": "Recovered",
+        "recovered_via": "Recovered via",
+        "recovered_amount": "Recovered amount",
+        "recovered_day": "Recovered day",
+        "days_to_recover": "Days to recover",
+        "first_attempt_day": "First attempt day"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "Import",
       "manual": "Manual",
       "settled": "Settled",
-      "estimated": "Estimated"
+      "estimated": "Estimated",
+      "hard": "Hard decline",
+      "soft": "Soft decline",
+      "insufficient_funds": "Insufficient funds",
+      "needs_authentication": "Needs authentication",
+      "primary": "Primary method",
+      "backup": "Backup method"
     }
   },
   "operators": {

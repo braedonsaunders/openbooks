@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "Margem do pedido",
         "description": "Fatos de margem de contribuição guardados por item do pedido do canal, com a margem como medidas de fórmula."
+      },
+      "collection_recovery": {
+        "label": "Recuperação de cobranças",
+        "description": "Uma linha por fatura cobrada pelo motor de cobrança automática — tentativas, primeira classe de recusa, se uma posição posterior a recuperou e por qual caminho, e dias até a recuperação. Agrupe por classe de recusa e provedor para ver as taxas de recuperação."
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "Situação do custo",
         "currency": "Moeda",
         "amount": "Valor"
+      },
+      "collection_recovery": {
+        "invoice": "Fatura",
+        "customer": "Cliente",
+        "invoice_day": "Data da fatura",
+        "due_day": "Vencimento",
+        "currency": "Moeda",
+        "invoice_total": "Total da fatura",
+        "attempts": "Tentativas",
+        "failed_attempts": "Tentativas com falha",
+        "first_decline_class": "Primeira classe de recusa",
+        "provider": "Provedor",
+        "recovered": "Recuperado",
+        "recovered_via": "Recuperado via",
+        "recovered_amount": "Valor recuperado",
+        "recovered_day": "Data de recuperação",
+        "days_to_recover": "Dias até recuperar",
+        "first_attempt_day": "Data da primeira tentativa"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "Importação",
       "manual": "Manual",
       "settled": "Liquidado",
-      "estimated": "Estimado"
+      "estimated": "Estimado",
+      "hard": "Recusa definitiva",
+      "soft": "Recusa temporária",
+      "insufficient_funds": "Fundos insuficientes",
+      "needs_authentication": "Requer autenticação",
+      "primary": "Método principal",
+      "backup": "Método reserva"
     }
   },
   "operators": {

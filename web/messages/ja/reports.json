@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "受注の采算",
         "description": "チャネル受注明細ごとの貢献利益ファクトを保存し、マージンを数式メジャーで表示します。"
+      },
+      "collection_recovery": {
+        "label": "回収実績",
+        "description": "自動回収エンジンが請求した請求書ごとに1行 — 試行回数、最初の拒否クラス、後のポジションで回収できたかとその経路、回収までの日数。拒否クラス別・プロバイダー別に集計して回収率を確認できます。"
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "コスト状態",
         "currency": "通貨",
         "amount": "金額"
+      },
+      "collection_recovery": {
+        "invoice": "請求書",
+        "customer": "顧客",
+        "invoice_day": "請求日",
+        "due_day": "支払期限",
+        "currency": "通貨",
+        "invoice_total": "請求合計",
+        "attempts": "試行回数",
+        "failed_attempts": "失敗した試行",
+        "first_decline_class": "最初の拒否クラス",
+        "provider": "プロバイダー",
+        "recovered": "回収済み",
+        "recovered_via": "回収経路",
+        "recovered_amount": "回収額",
+        "recovered_day": "回収日",
+        "days_to_recover": "回収までの日数",
+        "first_attempt_day": "初回試行日"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "インポート",
       "manual": "手動",
       "settled": "確定済み",
-      "estimated": "見積もり"
+      "estimated": "見積もり",
+      "hard": "ハードな拒否",
+      "soft": "ソフトな拒否",
+      "insufficient_funds": "残高不足",
+      "needs_authentication": "認証が必要",
+      "primary": "プライマリ方法",
+      "backup": "バックアップ方法"
     }
   },
   "operators": {

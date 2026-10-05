@@ -16,6 +16,7 @@ import { DEMAND_REPORT_ENTITIES } from './demand-entities'
 import { defaultRowsQuery } from './custom-query'
 import { utcCivilDate } from './fiscal-calendar'
 import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
+import { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
 import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
 import { HRM_REPORT_ENTITIES, REPORT_ENTITY_MAP, entityColumn } from './entities'
 import type { ReportCustomQuery, ReportFilterOperator, ReportRule } from './types'
@@ -324,6 +325,31 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...BILLING_IMPORT_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  ...RECOVERY_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  {
+    slug: 'collection-recovery-rate',
+    name: 'Collection recovery rate',
+    description: 'Recovered invoices, recovered revenue and the recovery rate by decline class, provider and month — the involuntary-churn story of automatic collection.',
+    query: {
+      entity: 'collection_recovery',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'first_decline_class' }, { column: 'provider' }, { column: 'first_attempt_day', bin: 'month' }, { column: 'currency' }],
+      measures: [
+        { fn: 'count', key: 'charged_invoices', label: 'Charged invoices' },
+        { fn: 'sum', column: 'recovered', key: 'recovered_invoices', label: 'Recovered invoices' },
+        { fn: 'sum', column: 'recovered_amount', key: 'recovered_amount', label: 'Recovered revenue' },
+        {
+          fn: 'formula', key: 'recovery_rate', label: 'Recovery rate', format: 'percent',
+          undefinedLabel: 'No failed invoices',
+          expr: { op: '/', left: { ref: 'recovered_invoices' }, right: { ref: 'charged_invoices' } },
+        },
+      ],
+      filters: null,
+      groupBy: null,
+      limit: 1000,
+    },
+  },
   {
     slug: 'stored-value-liability-roll-forward',
     name: 'Stored-value liability roll-forward',

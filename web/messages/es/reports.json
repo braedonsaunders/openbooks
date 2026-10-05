@@ -1034,6 +1034,10 @@
       "order_economics": {
         "label": "Margen del pedido",
         "description": "Datos de margen de contribución guardados por línea de pedido del canal, con el margen como medidas de fórmula."
+      },
+      "collection_recovery": {
+        "label": "Recuperación de cobros",
+        "description": "Una fila por factura que el cobro automático ha cargado: intentos, primera clase de rechazo, si una posición posterior la recuperó y por qué vía, y días hasta la recuperación. Agrupe por clase de rechazo y proveedor para ver las tasas de recuperación."
       }
     },
     "columns": {
@@ -2590,6 +2594,24 @@
         "costing": "Situación del costo",
         "currency": "Moneda",
         "amount": "Importe"
+      },
+      "collection_recovery": {
+        "invoice": "Factura",
+        "customer": "Cliente",
+        "invoice_day": "Fecha de factura",
+        "due_day": "Vencimiento",
+        "currency": "Moneda",
+        "invoice_total": "Total de factura",
+        "attempts": "Intentos",
+        "failed_attempts": "Intentos fallidos",
+        "first_decline_class": "Primera clase de rechazo",
+        "provider": "Proveedor",
+        "recovered": "Recuperado",
+        "recovered_via": "Recuperado vía",
+        "recovered_amount": "Importe recuperado",
+        "recovered_day": "Fecha de recuperación",
+        "days_to_recover": "Días hasta recuperar",
+        "first_attempt_day": "Fecha del primer intento"
       }
     },
     "enumValues": {
@@ -2710,7 +2732,13 @@
       "import": "Importación",
       "manual": "Manual",
       "settled": "Liquidado",
-      "estimated": "Estimado"
+      "estimated": "Estimado",
+      "hard": "Rechazo definitivo",
+      "soft": "Rechazo temporal",
+      "insufficient_funds": "Fondos insuficientes",
+      "needs_authentication": "Requiere autenticación",
+      "primary": "Método principal",
+      "backup": "Método de respaldo"
     }
   },
   "operators": {
