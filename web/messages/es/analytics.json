@@ -2904,7 +2904,7 @@
     "insights": {
       "highGrowth": {
         "title": "Categorías de gasto de alto crecimiento",
-        "message": "{count, plural, one {# cuenta de gastos con crecimiento superior al 20 %/mes} other {# cuentas de gastos con crecimiento superior al 20 %/mes}}",
+        "message": "{count, plural, one {# cuenta de gastos con crecimiento superior al {alertAt, number} %/mes} other {# cuentas de gastos con crecimiento superior al {alertAt, number} %/mes}}",
         "action": "Revisar las políticas de gasto de estas categorías"
       },
       "typeImbalance": {
@@ -2980,7 +2980,7 @@
       },
       "boilingFrog": {
         "label": "Rana hirviendo",
-        "note": "Meses mínimos de pequeñas alzas monótonas (<10 %)"
+        "note": "Meses mínimos de pequeñas alzas monótonas (<{stepCap, number} %)"
       },
       "fields": {
         "anomalySigma": {
@@ -3212,7 +3212,7 @@
       },
       "zombieWindow": {
         "label": "Ventana zombi",
-        "note": "Totales recurrentes idénticos de proveedores (desviación <1 %)"
+        "note": "Totales recurrentes idénticos de proveedores (desviación <{maxDeviation, number} %)"
       },
       "unsetMinimum": "Sin mínimo — cada serie se evalúa desde su primer mes",
       "groups": {

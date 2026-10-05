@@ -750,8 +750,8 @@ function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolea
   const items = [
     { label: t('config.velocityThresholds.label'), value: `${c.velocityMediumThreshold}% / ${c.velocityHighThreshold}%`, note: t('config.velocityThresholds.note') },
     { label: t('config.anomalyThreshold.label'), value: `${c.anomalyStdDevThreshold}σ`, note: t('config.anomalyThreshold.note', { critical: c.anomalyStdDevThreshold + c.anomalyCriticalOffset }) },
-    { label: t('config.boilingFrog.label'), value: `${c.boilingFrogMonths} ${t('unit.months')}`, note: t('config.boilingFrog.note') },
-    { label: t('config.zombieWindow.label'), value: `${c.zombieMinMonths} ${t('unit.months')}`, note: t('config.zombieWindow.note') },
+    { label: t('config.boilingFrog.label'), value: `${c.boilingFrogMonths} ${t('unit.months')}`, note: t('config.boilingFrog.note', { stepCap: c.boilingFrogStepCap }) },
+    { label: t('config.zombieWindow.label'), value: `${c.zombieMinMonths} ${t('unit.months')}`, note: t('config.zombieWindow.note', { maxDeviation: c.zombieMaxDeviation }) },
     { label: t('config.fragmentation.label'), value: c.fragmentationMaxAvgSize === '' ? t('config.unsetMinimum') : t('config.fragmentation.value', { txns: c.fragmentationMinTxns, max: fmtMoney(c.fragmentationMaxAvgSize) }), note: t('config.fragmentation.note') },
     { label: t('config.velocityEngine.label'), value: t('config.velocityEngine.value'), note: t('config.velocityEngine.note', { minBase: c.minBaseAmount === '' ? t('config.unsetMinimum') : fmtMoney(c.minBaseAmount) }) },
   ]

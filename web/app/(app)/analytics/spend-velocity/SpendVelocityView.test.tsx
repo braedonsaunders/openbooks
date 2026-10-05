@@ -232,6 +232,10 @@ test('the configuration tab renders the fixed scoring rubric read-only', async (
       host.textContent?.includes('Deduction cap'),
       `the rubric rows must name their weights, got:\n${host.textContent}`,
     )
+    assert.ok(
+      host.textContent?.includes('(<10%)'),
+      `the frog note must show the configured step cap, got:\n${host.textContent}`,
+    )
   } finally {
     await act(async () => {
       root.unmount()

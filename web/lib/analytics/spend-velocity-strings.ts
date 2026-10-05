@@ -36,7 +36,8 @@ export interface SpendVelocityStrings {
   displayPartyName(name: string): string;
   /** Name an account whose display name is missing, without leaking the id raw. */
   displayAccountName(name: string | null, id: string): string;
-  highGrowth(count: number): SpendVelocityInsightText;
+  /** `alertAt` is the configured high-velocity alert threshold (percent/month). */
+  highGrowth(count: number, alertAt: number): SpendVelocityInsightText;
   /** `faster` is "bills" | "expenses"; `gapPct` is the rounded |bills−expenses|. */
   typeImbalance(faster: "bills" | "expenses", gapPct: number): SpendVelocityInsightText;
   anomalies(criticalCount: number): SpendVelocityInsightText;
@@ -76,9 +77,9 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     displayPartyName: (name) => (name === "Unknown" ? t("spendVelocity.labels.unknownParty") : name),
     displayAccountName: (name, id) =>
       name && name !== "" ? name : t("spendVelocity.labels.accountFallback", { id }),
-    highGrowth: (count) => ({
+    highGrowth: (count, alertAt) => ({
       title: t("spendVelocity.insights.highGrowth.title"),
-      message: t("spendVelocity.insights.highGrowth.message", { count }),
+      message: t("spendVelocity.insights.highGrowth.message", { count, alertAt }),
       action: t("spendVelocity.insights.highGrowth.action"),
     }),
     typeImbalance: (faster, gapPct) => ({

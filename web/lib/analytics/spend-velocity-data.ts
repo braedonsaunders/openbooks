@@ -1275,7 +1275,7 @@ export async function spendVelocityData(
   const insights: SVInsight[] = [];
   const fmtK = (n: string) => money(n, { maximumFractionDigits: 0 });
   const highVelAlerts = accountVelocity.filter((a) => a.velocity > C.highVelocityAlert);
-  if (highVelAlerts.length) insights.push({ type: "alert", ...strings.highGrowth(highVelAlerts.length) });
+  if (highVelAlerts.length) insights.push({ type: "alert", ...strings.highGrowth(highVelAlerts.length, C.highVelocityAlert) });
   if (Math.abs(billsVelocity - expensesVelocity) > C.typeImbalanceGap) {
     insights.push({
       type: "warning",

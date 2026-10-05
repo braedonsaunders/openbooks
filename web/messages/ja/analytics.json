@@ -2904,7 +2904,7 @@
     "insights": {
       "highGrowth": {
         "title": "急成長中の経費科目",
-        "message": "{count, plural, one {# 件の経費科目が月20%超で増加中} other {# 件の経費科目が月20%超で増加中}}",
+        "message": "{count, plural, one {# 件の経費科目が月{alertAt, number}%超で増加中} other {# 件の経費科目が月{alertAt, number}%超で増加中}}",
         "action": "これらのカテゴリの支出ポリシーを見直してください"
       },
       "typeImbalance": {
@@ -2980,7 +2980,7 @@
       },
       "boilingFrog": {
         "label": "ゆでガエル",
-        "note": "10%未満の単調増加が続く最小月数"
+        "note": "{stepCap, number}%未満の単調増加が続く最小月数"
       },
       "fields": {
         "anomalySigma": {
@@ -3212,7 +3212,7 @@
       },
       "zombieWindow": {
         "label": "ゾンビ期間",
-        "note": "同一の定期仕入先合計（偏差1%未満）"
+        "note": "同一の定期仕入先合計（偏差{maxDeviation, number}%未満）"
       },
       "unsetMinimum": "下限なし — すべての系列は最初の月から評価されます",
       "groups": {
