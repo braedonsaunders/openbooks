@@ -11,6 +11,7 @@ import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { PagedTable } from '../../../components/paged-table'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import type { StoredValueDrawerData, StoredValueIssueData } from './view'
 
 /**
@@ -44,10 +45,7 @@ export function StoredValueDrawer({ drawer }: { drawer: StoredValueDrawerData })
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ to, reason: reason || undefined }),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.error ?? res.statusText)
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, common('actions.save')))
       toast.success(t(`status.${to}`))
       router.refresh()
     } catch (error) {
@@ -206,10 +204,7 @@ function AdjustForm({ accountId, currency, liabilityAccountName, offsetAccounts 
           idempotencyKey: crypto.randomUUID(),
         }),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.error ?? res.statusText)
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, common('actions.save')))
       toast.success(t('entryKind.adjust'))
       router.refresh()
     } catch (error) {
@@ -287,10 +282,7 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
           idempotencyKey: crypto.randomUUID(),
         }),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.error ?? res.statusText)
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, common('actions.save')))
       const body = await res.json()
       setCode(String(body.code))
       router.refresh()

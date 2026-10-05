@@ -21,7 +21,14 @@ export async function apiErrorResponse(
 ): Promise<NextResponse> {
   if (typedRefusal(error, options.safeStatus)) {
     const status = ('status' in error ? error.status : 'statusCode' in error ? error.statusCode : options.safeStatus) as number
-    return NextResponse.json({ error: error.message, ...options.details }, { status })
+    // A typed business refusal's remedy is part of its public result. Keep
+    // only its named contract fields; unrelated Error internals stay private.
+    const metadata: Record<string, string> = {}
+    for (const key of ['code', 'remedy', 'field'] as const) {
+      const value = (error as Error & { code?: unknown; remedy?: unknown; field?: unknown })[key]
+      if (typeof value === 'string' && value.trim() !== '') metadata[key] = value
+    }
+    return NextResponse.json({ error: error.message, ...metadata, ...options.details }, { status })
   }
 
   const requestId = randomUUID()
