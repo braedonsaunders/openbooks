@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import { getChannel, updateChannel } from "@openbooks/engine/src/commerce/channels.ts";
+import { catalogQueueCounts } from "@openbooks/engine/src/commerce/shopify/catalog.ts";
+import { SHOPIFY_WEBHOOK_TOPICS } from "@openbooks/engine/src/commerce/shopify/subscriptions.ts";
+import { can } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 
 export const runtime = "nodejs";
@@ -38,7 +41,11 @@ export const GET = defineRoute({
     if (!isUuid(id)) return notFound("channel");
     const channel = await loadOr404(gate.user.orgId, id);
     if (!channel) return notFound("channel");
-    return NextResponse.json({ channel });
+    // The workspace header also wants match counts, webhook topics and the
+    // manage grant; all three stay read-scoped to this channel.
+    const counts = channel.kind === "shopify" ? await catalogQueueCounts(gate.user.orgId, id) : null;
+    const topics = channel.kind === "shopify" ? [...SHOPIFY_WEBHOOK_TOPICS] : [];
+    return NextResponse.json({ channel, counts, topics, canManage: can(gate, "channels.manage") });
   },
 });
 

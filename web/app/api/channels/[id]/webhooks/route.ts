@@ -14,6 +14,26 @@ export const runtime = "nodejs";
 const WEBHOOK_MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 /**
+ * Refusal codes that mean "unverifiable delivery": the adapter computed
+ * the refusal and named its remedy, so the route answers 401 with both.
+ * Anything else is a real fault and throws. Adapter codes live beside
+ * the generic channel codes because the route, not the adapter, owns
+ * the HTTP mapping.
+ */
+const VERIFICATION_REFUSALS = new Set([
+  "channel_webhook_signature_invalid",
+  "channel_webhook_unverified",
+  "shopify_webhook_id_missing",
+  "shopify_topic_missing",
+  "shopify_signature_missing",
+  "shopify_signature_invalid",
+]);
+
+function isVerificationRefusal(code: string): boolean {
+  return VERIFICATION_REFUSALS.has(code);
+}
+
+/**
  * Storefront webhook deliveries. Sessionless BY DESIGN: the provider holds
  * no session cookie and never sends an org header — the channel id in the
  * path resolves the organization, and the adapter verifies the HMAC over
@@ -53,11 +73,12 @@ export const POST = defineRoute({
       if (error instanceof CommerceError && error.code === "channel_not_found") {
         return NextResponse.json({ error: "not_found" }, { status: 404 });
       }
-      if (
-        error instanceof CommerceError &&
-        (error.code === "channel_webhook_signature_invalid" || error.code === "channel_webhook_unverified")
-      ) {
-        return NextResponse.json({ error: error.message, code: error.code }, { status: 401 });
+      // Every verification refusal — a failed HMAC, a missing signature,
+      // id or topic — answers 401 and stores nothing; only real faults
+      // throw. The remedy travels with the refusal so the operator sees
+      // what to fix instead of a bare status.
+      if (error instanceof CommerceError && isVerificationRefusal(error.code)) {
+        return NextResponse.json({ error: error.message, code: error.code, remedy: error.remedy }, { status: 401 });
       }
       throw error;
     }

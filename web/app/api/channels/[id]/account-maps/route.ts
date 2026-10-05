@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CHANNEL_ACCOUNT_ROLES } from "@openbooks/engine/src/commerce/contracts.ts";
 import { listAccountMaps, upsertAccountMap } from "@openbooks/engine/src/commerce/account-maps.ts";
+import { proposeShopifyAccountMaps } from "@openbooks/engine/src/commerce/shopify/connect.ts";
 import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import { isUuid } from "@/lib/list-params";
 
@@ -24,9 +25,16 @@ export const GET = defineRoute({
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
     // An unknown channel reads as an empty map list: the channel GET above
-    // already answers 404, so this list never oracles existence.
-    const maps = await listAccountMaps(gate.user.orgId, id);
-    return NextResponse.json({ maps });
+    // already answers 404, so this list never oracles existence. Proposals
+    // exist only for Shopify channels; other kinds read as no proposals.
+    const [maps, proposals] = await Promise.all([
+      listAccountMaps(gate.user.orgId, id),
+      proposeShopifyAccountMaps(gate.user.orgId, id).catch((error: unknown) => {
+        if (error instanceof CommerceError && error.code === "channel_not_found") return [];
+        throw error;
+      }),
+    ]);
+    return NextResponse.json({ maps, proposals });
   },
 });
 
