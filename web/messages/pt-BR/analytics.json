@@ -3184,6 +3184,14 @@
           "label": "Unidade zumbi",
           "help": "Dedução por assinatura zumbi não crítica"
         },
+        "hhiCritical": {
+          "label": "Nível crítico HHI",
+          "help": "A concentração da categoria acima disso é alta"
+        },
+        "hhiWarning": {
+          "label": "Nível de alerta HHI",
+          "help": "A concentração da categoria acima disso é moderada"
+        },
         "highVelocityAlert": {
           "label": "Alerta de alta velocidade (%/mês)",
           "help": "Contas acima desta velocidade geram um aviso"

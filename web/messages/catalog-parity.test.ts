@@ -2031,6 +2031,7 @@ const COGNATES = new Set<string>([
   'fr:analytics.vendor.kpi.hhi|Concentration (HHI)',
   'fr:analytics.vendor.quadrant.niche.label|Niche',
   'fr:analytics.vendor.table.score|Score',
+  'fr:analytics.vendor.tabs.configuration|Configuration',
   'fr:reports.aggs.max|Max',
   'fr:reports.aggs.min|Min',
   'fr:reports.aging.buckets.b1|1–30',
