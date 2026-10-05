@@ -2390,7 +2390,7 @@
       "expenseInDept": "Aufwand der Abteilung",
       "deptBilledHours": "Verrechnete Stunden der Abteilung",
       "rate": "Satz",
-      "expenseMath": "{direct} direkt auf {dept} gebucht + {allocated} aus nicht zugeordnetem Aufwand verteilt ({share} Anteil an verrechneten Stunden), ÷ {billed, plural, one {# verrechnete Stunde} other {# verrechnete Stunden}}.",
+      "expenseMath": "{direct} direkt auf {dept} gebucht + {allocated} aus nicht zugeordnetem Aufwand verteilt (Anteil {share} nach {base}), ÷ {billed, plural, one {# verrechnete Stunde} other {# verrechnete Stunden}}.",
       "colAccount": "Konto",
       "colDeptTagged": "Abteilungsspezifisch",
       "colAllocated": "Verteilt",

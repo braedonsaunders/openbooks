@@ -2390,7 +2390,7 @@
       "expenseInDept": "Charge du service",
       "deptBilledHours": "Heures facturées du service",
       "rate": "Taux",
-      "expenseMath": "{direct} comptabilisé directement dans {dept} + {allocated} réparti depuis les charges non affectées (part de {share} des heures facturées), ÷ {billed, plural, one {# heure facturée} other {# heures facturées}}.",
+      "expenseMath": "{direct} comptabilisé directement dans {dept} + {allocated} réparti depuis les charges non affectées (part de {share} selon {base}), ÷ {billed, plural, one {# heure facturée} other {# heures facturées}}.",
       "colAccount": "Compte",
       "colDeptTagged": "Affecté au service",
       "colAllocated": "Réparti",

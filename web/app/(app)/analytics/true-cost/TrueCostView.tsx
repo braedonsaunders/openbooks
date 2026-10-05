@@ -413,22 +413,10 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
   const cat = data.categories.find((c) => c.id === cell.catId)
   const dept = data.departments.find((d) => d.id === cell.deptId)
   if (!cat || !dept) return null
-  // The untagged share follows the category's own allocation base with exact
-  // decimal math — the same base and the same proportional split the loader
-  // applies, so the drawer reconciles to the cell instead of re-deriving a
-  // float billed-hours share.
-  const baseValue = (deptId: string): string => {
-    const byDept = (record: Record<string, number> | undefined): string => String(record?.[deptId] ?? 0)
-    switch (cat.allocationBase) {
-      case 'headcount': return byDept(data.bases.headcount.byDept)
-      case 'revenue': return byDept(data.bases.revenue.byDept)
-      case 'direct_cost': return byDept(data.bases.directCost.byDept)
-      case 'labor_dollars': return byDept(data.bases.laborDollars.byDept)
-      default: return String(data.departments.find((d) => d.id === deptId)?.billedHours ?? 0)
-    }
-  }
-  const baseTotal = data.departments.reduce((sum, d) => add(sum, baseValue(d.id)), '0.0000')
-  const deptShare = compareMoney(baseTotal, '0') > 0 ? div(baseValue(dept.id), baseTotal) : '0.0000'
+  // The loader's exact untagged split for this category's own allocation
+  // base — rendered, never re-derived, so the drawer reconciles to the cell
+  // for every base (total_hours, square_feet, units and custom included).
+  const deptShare = cat.deptShare[dept.id] ?? '0'
   const cellData = cat.byDept[dept.id] ?? { amount: 0, rate: null }
   const rows = cat.accounts
     .map((a) => {
@@ -459,7 +447,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
       {cat.categoryType === 'expense' ? (
         <>
           <p className="border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
-            {t('cellFlyout.expenseMath', { direct: money0(taggedSum), dept: dept.name, allocated: money0(allocatedSum), share: percent(toChartNumber(mulDecimal(deptShare, '100')), 1), billed: Math.round(dept.billedHours) })}
+            {t('cellFlyout.expenseMath', { direct: money0(taggedSum), dept: dept.name, allocated: money0(allocatedSum), share: percent(toChartNumber(mulDecimal(deptShare, '100')), 1), base: t(`bases.${cat.allocationBase}`), billed: Math.round(dept.billedHours) })}
           </p>
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">

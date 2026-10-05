@@ -2390,7 +2390,7 @@
       "expenseInDept": "Expense in dept",
       "deptBilledHours": "Dept billed hours",
       "rate": "Rate",
-      "expenseMath": "{direct} posted directly to {dept} + {allocated} allocated from untagged expense ({share} billed-hours share), ÷ {billed, plural, one {# billed hour} other {# billed hours}}.",
+      "expenseMath": "{direct} posted directly to {dept} + {allocated} allocated from untagged expense ({share} share by {base}), ÷ {billed, plural, one {# billed hour} other {# billed hours}}.",
       "colAccount": "Account",
       "colDeptTagged": "Dept-tagged",
       "colAllocated": "Allocated",

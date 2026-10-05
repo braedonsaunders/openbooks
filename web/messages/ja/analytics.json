@@ -2390,7 +2390,7 @@
       "expenseInDept": "部門内の経費",
       "deptBilledHours": "部門の請求可能時間",
       "rate": "レート",
-      "expenseMath": "{dept} に直接転記された {direct} + 未タグ経費から配賦された {allocated}（請求可能時間シェア {share}）を、{billed, plural, one {# 時間の請求可能時間} other {# 時間の請求可能時間}}で除算します。",
+      "expenseMath": "{dept} に直接転記された {direct} + 未タグ経費から配賦された {allocated}（{base}ベースのシェア {share}）を、{billed, plural, one {# 時間の請求可能時間} other {# 時間の請求可能時間}}で除算します。",
       "colAccount": "勘定科目",
       "colDeptTagged": "部門タグ付き",
       "colAllocated": "配賦額",
