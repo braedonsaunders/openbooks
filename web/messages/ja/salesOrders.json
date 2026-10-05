@@ -33,6 +33,7 @@
     "codeTitle": "プロモーションコードを適用",
     "codeLabel": "プロモーションコード",
     "applied": "{code}を適用しました：{amount}の割引（{count}明細）",
+    "precisionUnknown": "割引は適用されましたが、{currency}の金額には設定 → 通貨での精度設定が必要です。",
     "loadFailed": "プロモーションを読み込めませんでした",
     "applyFailed": "プロモーションを適用できませんでした"
   }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
-import { createMoneyFormatter, minorToMajorText } from "@/lib/money-format";
+import { createMoneyFormatter, minorToMajorTextUnits } from "@/lib/money-format";
 import { toast } from "sonner";
 import Link from "next/link";
 import { Layers, Pause, Play, Plug, Unplug } from "lucide-react";
@@ -76,13 +76,15 @@ export function ChannelsConsole() {
   }, [t]);
 
   // Trailing order margin loads beside the channels: a margin failure hides
-  // the panel, never the console.
+  // the rows, never the console.
+  const [marginReportHref, setMarginReportHref] = useState("/reports");
   useEffect(() => {
     fetch("/api/channels/economics/summary?days=30")
       .then(async (res) => {
         if (!res.ok) return;
-        const payload = (await res.json()) as { channels: MarginChannel[] };
+        const payload = (await res.json()) as { channels: MarginChannel[]; marginReportHref?: string };
         setMargin(payload.channels);
+        if (typeof payload.marginReportHref === "string") setMarginReportHref(payload.marginReportHref);
       })
       .catch(() => {});
   }, []);
@@ -222,7 +224,7 @@ export function ChannelsConsole() {
             hint={t("home.channelsHint")}
             actions={
               <Button size="sm" variant="outline" asChild>
-                <Link href="/reports">{t("home.marginReport")}</Link>
+                <Link href={marginReportHref}>{t("home.marginReport")}</Link>
               </Button>
             }
           >
@@ -268,20 +270,40 @@ export function ChannelsConsole() {
                     )}
                     {marginRows.map((row) => {
                       const money = createMoneyFormatter(locale, row.currency);
-                      const formatted = (minor: string) =>
-                        money.money(minorToMajorText(minor), { currency: row.currency });
+                      const formatAmount = (minor: string) =>
+                        money.money(minorToMajorTextUnits(minor, row.minorUnits ?? Number.NaN), {
+                          currency: row.currency,
+                        });
+                      let amounts: { revenue: string; cm2: string; adSpend: string } | null = null;
+                      try {
+                        amounts = {
+                          revenue: formatAmount(row.revenueMinor),
+                          cm2: formatAmount(row.cm2Minor),
+                          adSpend: formatAmount(row.adSpendMinor),
+                        };
+                      } catch {
+                        amounts = null;
+                      }
+                      if (!amounts) {
+                        return (
+                          <div key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                            {t("home.marginPrecisionUnknown", { currency: row.currency })}
+                          </div>
+                        );
+                      }
+                      const shown = amounts;
                       const revenue = BigInt(row.revenueMinor);
                       const cm2 = BigInt(row.cm2Minor);
                       const pct = revenue > 0n ? Number((cm2 * 10000n) / revenue) / 100 : null;
                       return (
-                        <p key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-slate-500">
+                        <div key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-slate-500">
                           {t("home.marginMeta", {
                             orders: row.orders,
-                            revenue: formatted(row.revenueMinor),
-                            adSpend: formatted(row.adSpendMinor),
+                            revenue: shown.revenue,
+                            adSpend: shown.adSpend,
                           })}{" "}
                           <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
-                            {formatted(row.cm2Minor)}
+                            {shown.cm2}
                           </span>
                           {pct != null ? (
                             <Badge variant="secondary">{t("home.marginPct", { pct: pct.toFixed(2) })}</Badge>
@@ -291,7 +313,7 @@ export function ChannelsConsole() {
                               {t("home.marginEstimated", { count: row.estimatedOrders })}
                             </Badge>
                           ) : null}
-                        </p>
+                        </div>
                       );
                     })}
                     <div className="mt-3 flex flex-wrap gap-2">

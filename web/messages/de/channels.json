@@ -63,6 +63,7 @@
     "marginTitle": "Auftragsmarge",
     "marginHint": "Deckungsbeitrag der letzten 30 Tage je Kanal, nach Versand und Gebühren",
     "marginEmpty": "Die Marge erscheint hier, sobald Kanalaufträge mit Kosten gebucht sind. Einen Auftrag aktualisieren, um sie sofort zu bilden.",
+    "marginPrecisionUnknown": "Beträge in {currency} brauchen ihre Genauigkeit unter Setup → Währungen.",
     "marginReport": "Margenbericht",
     "marginMeta": "{orders} Auftrag/Aufträge · {revenue} Umsatz · {adSpend} Werbeausgaben",
     "marginEstimated": "{count} geschätzt",
@@ -366,6 +367,7 @@
   },
   "drawer": {
     "lines": "Positionen",
+    "unknownPrecision": "Beträge in {currency} brauchen ihre Genauigkeit unter Setup → Währungen.",
     "tenders": "Zahlungen",
     "activity": "Verlauf",
     "posting": "Buchung",

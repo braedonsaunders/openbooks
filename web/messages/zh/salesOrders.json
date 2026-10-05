@@ -33,6 +33,7 @@
     "codeTitle": "应用促销代码",
     "codeLabel": "促销代码",
     "applied": "已应用 {code}：{amount}折扣，共{count}行",
+    "precisionUnknown": "折扣已应用，但{currency}金额需要在设置 → 币种中设置精度。",
     "loadFailed": "无法加载促销",
     "applyFailed": "无法应用促销"
   }

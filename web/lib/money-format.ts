@@ -91,10 +91,29 @@ function decimalFallback(
  * here is a 100x display error.
  */
 export function minorToMajorText(minor: string): string {
+  return minorToMajorTextUnits(minor, 2)
+}
+
+/**
+ * Currency minor units to an exact major-unit decimal string for the money
+ * formatter. The precision always comes from the authoritative currencies
+ * registry (`minor_units`); unknown or out-of-range precision refuses by
+ * name instead of guessing hundredths — guessing misprices BHD 10x and
+ * JPY 100x.
+ */
+export function minorToMajorTextUnits(minor: string, minorUnits: number): string {
+  if (!Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    throw new Error(
+      `unsupported currency precision "${String(minorUnits)}": configure minor units for the currency in Setup → Currencies`,
+    )
+  }
+  const factor = 10n ** BigInt(minorUnits)
   const units = BigInt(minor)
   const sign = units < 0n ? '-' : ''
   const abs = units < 0n ? -units : units
-  return `${sign}${(abs / 100n).toString()}.${(abs % 100n).toString().padStart(2, '0')}`
+  const major = (abs / factor).toString()
+  if (minorUnits === 0) return `${sign}${major}`
+  return `${sign}${major}.${(abs % factor).toString().padStart(minorUnits, '0')}`
 }
 
 /** Locale-aware decimal presentation that preserves exact numeric strings. */

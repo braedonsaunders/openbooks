@@ -3,7 +3,7 @@ import { globSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createMoneyFormatter, formatDecimal, minorToMajorText } from './money-format.ts'
+import { createMoneyFormatter, formatDecimal, minorToMajorText, minorToMajorTextUnits } from './money-format.ts'
 import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -59,6 +59,24 @@ test('minor units convert to an exact major-unit decimal string', () => {
   assert.equal(minorToMajorText('10450'), '104.50')
   assert.equal(minorToMajorText('-250'), '-2.50')
   assert.equal(minorToMajorText('900719925474099393'), '9007199254740993.93')
+})
+
+test('registry precision converts per currency without guessing hundredths', () => {
+  assert.equal(minorToMajorTextUnits('10450', 2), '104.50')
+  assert.equal(minorToMajorTextUnits('1234', 3), '1.234')
+  assert.equal(minorToMajorTextUnits('1234', 0), '1234')
+  assert.equal(minorToMajorTextUnits('-250', 3), '-0.250')
+  assert.equal(minorToMajorTextUnits('5', 0), '5')
+})
+
+test('unknown currency precision refuses by name with the remedy', () => {
+  for (const units of [Number.NaN, 1.5, -1, 5]) {
+    assert.throws(() => minorToMajorTextUnits('100', units), /unsupported currency precision/)
+  }
+  assert.throws(
+    () => minorToMajorTextUnits('100', Number.NaN),
+    /Setup → Currencies/,
+  )
 })
 
 test('decimal strings never cross the binary floating-point boundary', () => {
