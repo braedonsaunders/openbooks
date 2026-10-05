@@ -84,6 +84,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "saas_metrics",
   "stored_value_breakage",
   "stripe_billing_import",
+  "billing_import_sync",
   "autopay_collection",
   "webhook_delivery",
   "usage_rating",
@@ -606,6 +607,25 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "stripe_billing_import_scan_failed",
       href: "/admin/setup/payment-providers",
       remedy: "Review the Stripe connection under Setup → Payment providers; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "billing_import_sync") {
+    const { runDueBillingImports } = await import("../sync/billing-history-import.ts");
+    const result = await runDueBillingImports();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.runs) {
+      if (failure.error) {
+        problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+      }
+    }
+    await surfaceScanOrgFailures({
+      scan: "Billing history import",
+      noticeKind: "billing_import_sync_scan_failed",
+      href: "/sync/billing-history",
+      remedy: "Review the billing connection on the billing history console; the scan retries automatically.",
       problems,
       unattributed: [],
     });

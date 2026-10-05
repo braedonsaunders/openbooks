@@ -1465,12 +1465,22 @@ async function loadRunRow(orgId: string, runId: string): Promise<BillingRunRecor
   };
 }
 
-export async function listBillingImportRuns(orgId: string): Promise<BillingRunRecord[]> {
+export interface BillingRunSummary extends BillingRunRecord {
+  mode: "post_historical" | "opening_balances";
+  counts: BillingImportCounts | null;
+  lastError: string | null;
+  updatedAt: string;
+}
+
+export async function listBillingImportRuns(orgId: string, provider?: BillingHistoryProvider): Promise<BillingRunSummary[]> {
   const found = await (db.execute<{
-    id: string; provider: string; external_account: string; status: string; config: unknown; cursor: unknown;
+    id: string; provider: string; external_account: string; mode: string; status: string;
+    config: unknown; cursor: unknown; counts: unknown; last_error: string | null; updated_at: Date;
   }>(sql`
-    select id, provider, external_account, status, config, cursor
-      from billing_import_runs where org_id = ${orgId} order by created_at desc limit 50
+    select id, provider, external_account, mode, status, config, cursor, counts, last_error, updated_at
+      from billing_import_runs where org_id = ${orgId}
+       ${provider ? sql`and provider = ${provider}` : sql``}
+      order by created_at desc limit 50
   `));
   return found.rows.map((row) => ({
     id: row.id,
@@ -1479,6 +1489,10 @@ export async function listBillingImportRuns(orgId: string): Promise<BillingRunRe
     status: row.status,
     config: configFromRow({ config: row.config }),
     cursor: (row.cursor ?? {}) as Record<string, string>,
+    mode: row.mode === "opening_balances" ? "opening_balances" : "post_historical",
+    counts: (row.counts ?? null) as BillingImportCounts | null,
+    lastError: row.last_error,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
   }));
 }
 
@@ -1865,6 +1879,107 @@ function maxCursor(cursor: Record<string, string>): string | null {
   return days.length ? days[days.length - 1]! : null;
 }
 
+/**
+ * Accept the preflight configuration: the operator's plan, customer and
+ * ledger mappings. Every reference is validated by name — a mapping to a
+ * record that does not exist refuses instead of importing against nothing.
+ */
+export async function acceptBillingImportRun(
+  orgId: string,
+  actorId: string,
+  runId: string,
+  config: Partial<BillingImportConfig>,
+): Promise<{ runId: string; status: string }> {
+  const existing = await loadRunRow(orgId, runId);
+  if (!["preflight", "ready", "failed"].includes(existing.status)) {
+    refuse("billing_import_run_state", `Import run ${runId} is ${existing.status} and cannot accept mappings.`, "Start a new import from the billing history console.", 409);
+  }
+  const merged: BillingImportConfig = {
+    ...existing.config,
+    ...config,
+    mode: config.mode ?? existing.config.mode,
+    planMap: config.planMap ?? existing.config.planMap,
+    customerMap: config.customerMap ?? existing.config.customerMap,
+  };
+  if (merged.cutoverOn) validCutover(merged.cutoverOn, "cut-over date");
+  await withOrg(orgId, async () => {
+    await acquireOrgFeatureGateLock(db, orgId);
+    if (!(await lockAndCheckOrgFeature(db, orgId, FEATURE))) {
+      refuse("billing_import_feature_off", "Billing history import is turned off for this organization.", FEATURE_REMEDY, 409);
+    }
+    for (const [externalId, planId] of Object.entries(merged.planMap)) {
+      const found = await db.execute(sql`select 1 from subscription_plans where id = ${planId} and org_id = ${orgId}`);
+      if (!found.rows.length) {
+        refuse("billing_import_plan_missing", `Plan mapping for ${externalId} names an OpenBooks plan that does not exist.`, "Map the plan to an existing OpenBooks plan on the preflight list, then accept again.");
+      }
+    }
+    for (const [externalId, partyId] of Object.entries(merged.customerMap)) {
+      const found = await db.execute(sql`select 1 from parties where id = ${partyId} and org_id = ${orgId} and kind = 'customer'`);
+      if (!found.rows.length) {
+        refuse("billing_import_customer_missing", `Customer mapping for ${externalId} names an OpenBooks customer that does not exist.`, "Map the customer to an existing OpenBooks customer on the preflight list, then accept again.");
+      }
+    }
+    for (const [label, table, id] of [
+      ["income account", "accounts", merged.incomeAccountId],
+      ["clearing account", "accounts", merged.clearingAccountId],
+      ["tax code", "tax_codes", merged.taxCodeId],
+    ] as const) {
+      if (!id) continue;
+      const found = await db.execute(sql`select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`);
+      if (!found.rows.length) {
+        refuse("billing_import_account_missing", `The mapped ${label} does not exist in this organization.`, "Choose an existing record in the import settings, then accept again.");
+      }
+    }
+  });
+  await updateRunRow(orgId, runId, { status: "ready", config: { ...merged, updatedBy: actorId } });
+  return { runId, status: "ready" };
+}
+
+/** Atomically claim a run for execution: only one worker runs a connection at a time. */
+async function claimRunRow(orgId: string, runId: string): Promise<void> {
+  const done = await db.execute(sql`
+    update billing_import_runs set status = 'running', updated_at = now()
+     where id = ${runId} and org_id = ${orgId} and status in ('ready', 'failed', 'preflight')
+  `);
+  if ((done.rowCount ?? 0) === 0) {
+    refuse("billing_import_run_busy", "The import run is already running or has completed.", "Wait for the running import, or start a new run from the billing history console.", 409);
+  }
+}
+
+/**
+ * Run an accepted import by id with its sealed credentials — the API and the
+ * scheduler share this entry point, so interactive and scheduled runs persist
+ * identically.
+ */
+export async function runBillingImportById(
+  orgId: string,
+  actorId: string,
+  runId: string,
+  transport?: ConnectorTransport,
+): Promise<BillingImportResult> {
+  const existing = await loadRunRow(orgId, runId);
+  if (!existing.config.sealedCredentials) {
+    refuse("billing_import_credentials_missing", "The import run has no stored credential.", "Reconnect the billing platform from the billing history console, then run the import again.");
+  }
+  await withOrg(orgId, async () => {
+    await acquireOrgFeatureGateLock(db, orgId);
+    await claimRunRow(orgId, runId);
+  });
+  const sealed = existing.config.sealedCredentials!;
+  const cursor = existing.cursor;
+  const source: BillingHistorySource = {
+    provider: existing.provider,
+    externalAccount: existing.externalAccount,
+    pull: () => pullBillingHistory(existing.provider, existing.externalAccount, sealed, orgId, cursor, transport),
+  };
+  return runBillingHistoryImport(source, {
+    orgId,
+    actorId,
+    mode: existing.config.mode,
+    runId,
+  });
+}
+
 // --- Scheduler -----------------------------------------------------------------------
 // The `billing_import_sync` scan replays every connection whose operator left
 // auto-sync on: incremental by updated_at until cut-over, idempotent by
@@ -1896,13 +2011,6 @@ export async function runDueBillingImports(
       continue;
     }
     try {
-      const sealed = runConfig.sealedCredentials;
-      const cursor = (row.cursor ?? {}) as Record<string, string>;
-      const source: BillingHistorySource = {
-        provider,
-        externalAccount: row.external_account,
-        pull: () => pullBillingHistory(provider, row.external_account, sealed, row.org_id, cursor, transport),
-      };
       const users = await db.execute<{ id: string }>(sql`
         select created_by as id from billing_import_runs where id = ${row.id}
       `);
@@ -1911,12 +2019,7 @@ export async function runDueBillingImports(
         runs.push({ runId: row.id, orgId: row.org_id, provider, externalAccount: row.external_account, completed: false, error: "No recorded operator" });
         continue;
       }
-      const result = await runBillingHistoryImport(source, {
-        orgId: row.org_id,
-        actorId,
-        mode: runConfig.mode,
-        runId: row.id,
-      });
+      const result = await runBillingImportById(row.org_id, actorId, row.id, transport);
       runs.push({
         runId: result.runId,
         orgId: row.org_id,
