@@ -15,7 +15,7 @@ import {
 } from "../tax/authority-connections.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
-// First-wave follow-ups for cross-border tax: foreign-currency OSS
+// Follow-ups for cross-border tax: foreign-currency OSS
 // translation at the period-end ECB rate with stored evidence, member-state
 // transport layouts, the pre-posting evidence-conflict queue, the EUR 10,000
 // threshold monitor, and sealed HMRC/ABN credentials.
