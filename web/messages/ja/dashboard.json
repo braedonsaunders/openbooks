@@ -95,6 +95,7 @@
     "agentClear": "問題なし",
     "monthToDate": "月初来",
     "noData": "データなし",
+    "noBaseCurrency": "基準通貨が設定されていません",
     "next30Days": "今後30日間",
     "dso": "DSO {days}",
     "dpo": "DPO {days}",

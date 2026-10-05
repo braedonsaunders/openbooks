@@ -95,6 +95,7 @@
     "agentClear": "Alles in Ordnung",
     "monthToDate": "Seit Monatsbeginn",
     "noData": "Keine Daten",
+    "noBaseCurrency": "Keine Basiswährung konfiguriert",
     "next30Days": "Nächste 30 Tage",
     "dso": "DSO {days}",
     "dpo": "DPO {days}",

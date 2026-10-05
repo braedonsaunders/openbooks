@@ -95,6 +95,7 @@
     "agentClear": "一切正常",
     "monthToDate": "本月至今",
     "noData": "暂无数据",
+    "noBaseCurrency": "未配置本位币",
     "next30Days": "未来30天",
     "dso": "DSO {days}",
     "dpo": "DPO {days}",
