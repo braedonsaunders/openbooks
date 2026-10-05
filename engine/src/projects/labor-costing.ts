@@ -357,6 +357,53 @@ export async function resolveWage(
   return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
 }
 
+/**
+ * Batch annual-hours resolution for analytics scopes: one query returning
+ * each employee's winning `labor_cost_rates.annual_hours` under the same
+ * scope priority `resolveWage` uses (employee > job title > trade >
+ * department > subsidiary > org; latest effective_from wins). Employees with
+ * no covering row — or a zero annual-hours row — are absent from the map:
+ * the caller refuses by name when nothing resolves instead of assuming a
+ * divisor.
+ */
+export async function resolveAnnualHoursMany(
+  orgId: string,
+  employeePartyIds: readonly string[],
+  onDate: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(employeePartyIds)];
+  if (ids.length === 0) return out;
+  const r = await db.execute<{ employee_party_id: string; annual_hours: string | null }>(sql`
+    select distinct on (emp.id) emp.id as employee_party_id, r.annual_hours::text as annual_hours
+      from (values ${sql.join(ids.map((id) => sql`(${id}::uuid)`), sql`, `)}) as emp(id)
+      left join (select distinct on (party_id) *
+                   from employee_roles where org_id = ${orgId}) er on er.party_id = emp.id
+      left join parties p on p.org_id = ${orgId} and p.id = emp.id
+      left join labor_cost_rates r on r.org_id = ${orgId} and r.is_active
+        and r.effective_from <= ${onDate}::date
+        and (r.effective_to is null or r.effective_to >= ${onDate}::date)
+        and (r.employee_party_id = emp.id
+             or (r.employee_party_id is null and r.job_title is not null and lower(r.job_title) = lower(er.job_title))
+             or (r.employee_party_id is null and r.trade_id is not distinct from er.trade_id and r.trade_id is not null)
+             or (r.employee_party_id is null and r.department_id is not distinct from er.department_id and r.department_id is not null)
+             or (r.employee_party_id is null and r.subsidiary_id is not distinct from p.subsidiary_id and r.subsidiary_id is not null)
+             or (num_nonnulls(r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0))
+     order by emp.id,
+              case when r.employee_party_id is not null then 0
+                   when r.job_title is not null then 1
+                   when r.trade_id is not null then 2
+                   when r.department_id is not null then 3
+                   when r.subsidiary_id is not null then 4 else 5 end,
+              r.effective_from desc nulls last`);
+  for (const row of r.rows) {
+    if (row.annual_hours !== null && cmp(String(row.annual_hours), "0") > 0) {
+      out.set(row.employee_party_id, String(row.annual_hours));
+    }
+  }
+  return out;
+}
+
 export interface StandardLaborRate {
   /** The winning labor_cost_rates row (evidence, not a re-query key). */
   rateId: string;
