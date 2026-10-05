@@ -121,6 +121,7 @@ export async function requestPortalLink(rawEmail: unknown): Promise<{ sent: bool
       "Use the billing or contact email your supplier has on file",
     );
   }
+  // bypass: public-token-lookup — the anonymous requester names only an email, so the owning orgs are resolved from that identifier before every write runs inside each candidate org's scope.
   return withBypassContext(async () => {
     const candidates = await portalCandidates(email);
     const links: RequestedPortalLink[] = [];
@@ -200,6 +201,7 @@ export async function consumePortalLink(token: unknown): Promise<ConsumedPortalL
   if (typeof token !== "string" || token.length < 16) {
     throw portalRefusal("This portal link is invalid", "invalid_link", 404, "Request a new link from the portal sign-in");
   }
+  // bypass: public-token-lookup — the magic-link token resolves the owning org from one row before the consume runs in that org's scope.
   return withBypassContext(async () => {
     const row = (await db.execute<PortalLinkRow>(sql`
       select id, org_id, party_id, purpose, expires_at::text as expires_at,
@@ -285,6 +287,7 @@ async function bumpDeadLinkAttempts(row: PortalLinkRow): Promise<void> {
  */
 export async function resolvePortalSession(token: unknown): Promise<PortalSession | null> {
   if (typeof token !== "string" || token.length < 16) return null;
+  // bypass: public-token-lookup — the session token resolves the owning org from one row; the caller re-enters that org's scope.
   return withBypassContext(async () => {
     const row = (await db.execute<PortalLinkRow>(sql`
       select id, org_id, party_id, purpose, expires_at::text as expires_at,
@@ -303,6 +306,7 @@ export async function resolvePortalSession(token: unknown): Promise<PortalSessio
 /** End the session now; a missing row is already ended. */
 export async function revokePortalSession(token: unknown): Promise<void> {
   if (typeof token !== "string" || token.length < 16) return;
+  // bypass: public-token-lookup — the session token resolves the owning org from one row before the revoke runs in that org's scope.
   await withBypassContext(async () => {
     const row = (await db.execute<{ org_id: string; id: string }>(sql`
       select org_id, id from customer_portal_links
