@@ -329,6 +329,7 @@ export async function mutatePayRunAdjustment(input: {
         insert into pay_run_adjustments
           (org_id, pay_run_document_id, employee_party_id, adjustment_type, created_by, updated_by)
         values (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'exclude', ${actorId}, ${actorId})
+        -- An existing exclusion already omits this employee; changed=false records a repeated request.
         on conflict (pay_run_document_id, employee_party_id)
           where adjustment_type = 'exclude'
         do nothing
