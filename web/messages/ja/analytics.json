@@ -137,7 +137,10 @@
       "growth": "前年比 {pct}",
       "grossProfit": "売上総利益: {amount}",
       "opex": "販管費: {amount}",
-      "perMonth": "月あたり"
+      "perMonth": "月あたり",
+      "noPriorYear": "前年同期間の売上なし",
+      "forPeriod": "当期間に必要な売上高",
+      "noBreakeven": "正の売上総利益率が必要です"
     },
     "score": {
       "title": "財務健全性スコア",
@@ -145,12 +148,16 @@
       "excellent": "優秀",
       "good": "良好",
       "average": "平均",
-      "needsWork": "要改善"
+      "needsWork": "要改善",
+      "notScored": "この期間はまだ評価できる項目がありません。",
+      "unscored": "未評価"
     },
     "categories": {
       "profitability": "収益性",
       "efficiency": "効率性",
-      "operating": "オペレーション"
+      "operating": "オペレーション",
+      "liquidity": "流動性",
+      "solvency": "安全性"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "売上総利益率",
         "formula": "売上総利益 / 売上高",
         "desc": "直接費控除後に残る売上の割合。",
-        "interpret": "高いほど良い。サービス業は通常35–50%を目標にします。"
+        "interpret": "高いほど良好です。業種によって水準が大きく異なるため、自社に合った目標を設定してください。"
       },
       "operating_margin": {
         "label": "営業利益率",
         "formula": "営業利益 / 売上高",
         "desc": "金利・営業外項目控除前の本業の収益性。",
-        "interpret": "15%超は多くの事業で力強い水準です。"
+        "interpret": "高いほど良好です。設定した目標と比較してください。"
       },
       "ebitda_margin": {
         "label": "EBITDAマージン",
         "formula": "（営業利益＋減価償却費） / 売上高",
         "desc": "非現金費用・資金調達前の営業収益性。",
-        "interpret": "20%超は健全。資本構成の異なる企業同士の比較に有用です。"
+        "interpret": "資本構成の異なる企業の比較に有用です。設定した目標と比較してください。"
       },
       "net_margin": {
         "label": "純利益率",
         "formula": "純利益 / 売上高",
         "desc": "すべて控除後の最終利益の売上割合。",
-        "interpret": "10%超は多くの業種で健全です。"
+        "interpret": "高いほど良好です。設定した目標と比較してください。"
       },
       "roa": {
         "label": "総資産利益率",
         "formula": "純利益 / 総資産",
-        "desc": "資産がどれだけ効率的に利益を生むか。",
-        "interpret": "8%超は資産の効率的な活用を示します。"
+        "desc": "資産がどれだけ効率的に利益を生むか（1年未満の期間は年換算）。",
+        "interpret": "高いほど良好です。設定した目標と比較してください。"
       },
       "roe": {
         "label": "自己資本利益率",
         "formula": "純利益 / 自己資本",
-        "desc": "株主資本に対するリターン。",
-        "interpret": "15%超は一般に力強いとされます。"
+        "desc": "株主資本に対するリターン（1年未満の期間は年換算）。純資産がマイナスの場合は意味を持ちません。",
+        "interpret": "高いほど良好です。設定した目標と比較してください。"
       },
       "roic": {
         "label": "投下資本利益率",
         "formula": "NOPAT / 投下資本",
-        "desc": "投下資本全体のリターン。NOPAT＝営業利益×（1−想定税率25%）。投下資本＝自己資本＋長期有利子負債。",
-        "interpret": "資本コスト（通常8–12%）を上回れば価値を創造します。"
+        "desc": "投下された全資本に対するリターン。NOPAT = 営業利益 ×（1 − 税率）。税率は期間に計上された実効税率、なければ税設定の法定税率を使用します。投下資本 = 純資産 + 分類した有利子負債。",
+        "interpret": "資本コストを上回れば価値を生みます。設定した目標と比較してください。"
       },
       "roce": {
         "label": "使用資本利益率",
-        "formula": "営業利益 / 投下資本",
-        "desc": "使用資本の税引前営業リターン。",
-        "interpret": "15%超は効率的な資本配分を示します。"
+        "formula": "営業利益 /（総資産 − 流動負債）",
+        "desc": "事業に投下された長期資本に対する税引前営業リターン（1年未満の期間は年換算）。",
+        "interpret": "高いほど良好です。設定した目標と比較してください。"
       },
       "rev_per_employee": {
         "label": "従業員一人当たり売上",
-        "formula": "売上高 / 期末人員",
+        "formula": "年換算売上高 / 期末従業員数",
         "desc": "従業員の販売生産性。",
-        "interpret": "ベンチマークは業種・地域・通貨で大きく異なります。"
+        "interpret": "基準は業種・地域・通貨によって異なります。設定した目標がある場合にのみ評価されます。"
       },
       "gp_per_employee": {
         "label": "従業員一人当たり売上総利益",
-        "formula": "売上総利益 / 期末人員",
+        "formula": "年換算売上総利益 / 期末従業員数",
         "desc": "直接費控除後に各従業員が生む価値。",
         "interpret": "一人当たり売上より純粋な生産性指標です。"
       },
       "asset_turnover": {
         "label": "総資産回転率",
         "formula": "売上高 / 総資産",
-        "desc": "資産1単位が生む売上。",
-        "interpret": "1.0倍超は資産が年1回転超であることを意味します。"
+        "desc": "資産1単位当たりの売上高（1年未満の期間は年換算）。",
+        "interpret": "1.0倍を超えると、資産が年1回以上回転していることを示します。"
       },
       "cogs_ratio": {
         "label": "売上原価率",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "インタレスト・カバレッジ",
-        "formula": "営業利益 / 営業外費用",
-        "desc": "営業利益が営業外（金利）費用の何倍か。",
-        "interpret": "5倍超は余裕あり。1.5倍割れは危険信号です。"
+        "formula": "営業利益 / 支払利息",
+        "desc": "営業利益が、利息として分類した勘定の支払利息を何倍カバーしているか。",
+        "interpret": "高いほど安全です。設定した目標や貸し手の財務制限条項と比較してください。"
       },
       "rule_of_40": {
         "label": "ルール・オブ・40",
         "formula": "売上成長率% ＋ 営業利益率%",
         "desc": "成長と収益性を一つの数字でバランス評価。",
-        "interpret": "40以上は優秀 — 成長と利益率をトレードオフしてください。"
+        "interpret": "成長と利益率はトレードオフです。設定した目標と比較してください。"
+      },
+      "current_ratio": {
+        "label": "流動比率",
+        "formula": "流動資産 / 流動負債",
+        "desc": "1年以内に期限が来る債務1単位に対する短期資産。",
+        "interpret": "1.0倍未満は、流動負債が流動資産を上回っていることを示します。"
+      },
+      "quick_ratio": {
+        "label": "当座比率",
+        "formula": "（現金 + 売掛金）/ 流動負債",
+        "desc": "在庫を売却せずに、現金と売掛金だけで1年以内の債務をどれだけカバーできるか。",
+        "interpret": "1.0倍以上なら、在庫なしで短期債務をカバーできます。"
+      },
+      "working_capital": {
+        "label": "運転資本",
+        "formula": "流動資産 − 流動負債",
+        "desc": "1年以内の債務を履行した後に残る短期資源。",
+        "interpret": "運転資本がマイナスの場合、流動負債が流動資産を上回っています。"
+      },
+      "debt_to_equity": {
+        "label": "負債資本倍率",
+        "formula": "有利子負債 / 純資産",
+        "desc": "財務レバレッジ：分類した負債勘定に基づく、純資産1単位当たりの借入額。低いほど安全です。",
+        "interpret": "低いほど安全です。設定した目標や貸し手の財務制限条項と比較してください。"
+      },
+      "liabilities_to_equity": {
+        "label": "負債比率",
+        "formula": "負債合計 / 純資産",
+        "desc": "純資産1単位当たりの負債総額。低いほど安全です。",
+        "interpret": "低いほど安全です。設定した目標と比較してください。"
       }
     },
     "ratioNotes": {
-      "noDA": "減価償却科目が見つかりません",
+      "noDA": "固定資産の残高はありますが、期間中の減価償却費・償却費が見つかりません",
       "noBalanceSheet": "貸借対照表データがありません",
       "noHeadcount": "在籍従業員の記録がありません",
       "noInterestExpense": "支払利息がありません",
       "unavailable": "データがありません",
-      "perEmployees": "{revenue} / {count, plural, one {# 名} other {# 名}}"
+      "perEmployees": "{revenue} / {count, plural, one {# 名} other {# 名}}",
+      "noRevenue": "期間中の売上がありません",
+      "noCurrentLiabilities": "期末に流動負債がありません",
+      "noPriorComparison": "前年同期間の売上が必要です",
+      "equityNotPositive": "純資産がゼロまたはマイナスです",
+      "investedCapitalNotPositive": "投下資本がゼロまたはマイナスです",
+      "debtNotClassified": "財務健全性 → 設定 で有利子負債の勘定を選択してください",
+      "interestNotClassified": "財務健全性 → 設定 で支払利息の勘定を選択してください",
+      "noTaxRate": "期間中に法人税等が計上されておらず、税率も設定されていません — セットアップ → 税 → 法人税率 で追加してください",
+      "mixedTaxRates": "表示中のエンティティは法定税率が異なります。期間の法人税等が計上されると、投下資本利益率は実効税率を使用します",
+      "annualized": "{yearDays}日中{periodDays}日から年換算",
+      "effectiveTaxRate": "実効税率 {rate}",
+      "statutoryTaxRate": "法定税率 {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "ROIC評価の基準（貸借対照表データが必要）"
         },
         "revenuePerEmployee": {
-          "label": "従業員1人当たり売上高（{currency}）",
-          "help": "従業員の生産性の基準"
+          "label": "従業員1人当たり売上高の目標（{currency}）",
+          "help": "従業員1人当たりの年額。空欄にすると評価なしで比率を表示します"
         },
         "gpPerEmployee": {
-          "label": "従業員1人当たり売上総利益（{currency}）",
-          "help": "従業員の生産性の基準"
+          "label": "従業員1人当たり売上総利益の目標（{currency}）",
+          "help": "従業員1人当たりの年額。空欄にすると評価なしで比率を表示します"
+        },
+        "roceTarget": {
+          "label": "使用資本利益率の目標（%）",
+          "help": "ROCE評価の基準（貸借対照表データが必要）"
+        },
+        "currentRatioTarget": {
+          "label": "流動比率の目標（倍）",
+          "help": "目標達成とみなす流動負債1単位当たりの流動資産"
+        },
+        "quickRatioTarget": {
+          "label": "当座比率の目標（倍）",
+          "help": "目標達成とみなす流動負債1単位当たりの現金・売掛金"
+        },
+        "debtToEquityTarget": {
+          "label": "負債資本倍率の上限（倍）",
+          "help": "低いほど良好：この値以下で目標達成"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "負債比率の上限（倍）",
+          "help": "低いほど良好：この値以下で目標達成"
+        },
+        "interestCoverageTarget": {
+          "label": "インタレスト・カバレッジの目標（倍）",
+          "help": "営業利益が支払利息を何倍カバーすべきか"
+        },
+        "assetTurnoverTarget": {
+          "label": "総資産回転率の目標（倍）",
+          "help": "目標達成とみなす資産1単位当たりの年間売上高"
+        },
+        "cogsRatioTarget": {
+          "label": "売上原価率の上限（売上高比 %）",
+          "help": "低いほど良好：この値以下で目標達成"
+        },
+        "opexRatioTarget": {
+          "label": "営業費用率の上限（売上高比 %）",
+          "help": "低いほど良好：この値以下で目標達成"
+        },
+        "operatingLeverageTarget": {
+          "label": "営業レバレッジの目標（倍）",
+          "help": "売上成長1単位当たりの営業利益の伸び"
+        },
+        "ruleOf40Target": {
+          "label": "Rule of 40 の目標（ポイント）",
+          "help": "目標達成とみなす売上成長率%と営業利益率%の合計"
+        },
+        "gradeDPercent": {
+          "label": "D評価の基準（目標比 %）",
+          "help": "この評価に必要な目標達成度（低いほど良い比率は反転）。D未満はF"
+        },
+        "gradeCPercent": {
+          "label": "C評価の基準（目標比 %）",
+          "help": "この評価に必要な目標達成度（低いほど良い比率は反転）。D未満はF"
+        },
+        "gradeBPercent": {
+          "label": "B評価の基準（目標比 %）",
+          "help": "この評価に必要な目標達成度（低いほど良い比率は反転）。D未満はF"
+        },
+        "gradeAPercent": {
+          "label": "A評価の基準（目標比 %）",
+          "help": "この評価に必要な目標達成度（低いほど良い比率は反転）。D未満はF"
+        },
+        "scoreAverage": {
+          "label": "「平均」のスコア下限",
+          "help": "このラベルに必要な総合スコア（0〜100）"
+        },
+        "scoreGood": {
+          "label": "「良好」のスコア下限",
+          "help": "このラベルに必要な総合スコア（0〜100）"
+        },
+        "scoreExcellent": {
+          "label": "「優秀」のスコア下限",
+          "help": "このラベルに必要な総合スコア（0〜100）"
+        },
+        "insightCriticalPercent": {
+          "label": "重大な指摘とする水準（目標比 %）",
+          "help": "目標に対してこの割合を下回る利益率は重大として報告されます"
+        },
+        "insightWarningPercent": {
+          "label": "警告とする水準（目標比 %）",
+          "help": "目標に対してこの割合を下回る利益率は大きく未達として報告されます"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "売上減少アラート（%）",
+          "help": "前年同期比でこれを超える減少は売上減少として報告されます"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "3か月売上トレンドのアラート（%）",
+          "help": "直近3か月でこれを超える減少は下降トレンドとして報告されます"
+        },
+        "marginCompressionPoints": {
+          "label": "利益率低下アラート（ポイント）",
+          "help": "直近3か月で売上総利益率がこのポイントを超えて低下した場合"
+        },
+        "breakevenSafetyPercent": {
+          "label": "損益分岐点の安全余裕（%）",
+          "help": "損益分岐点をこの割合以内で上回る売上は薄い利益として報告されます"
+        },
+        "anomalySigma": {
+          "label": "異常検知のしきい値（σ）",
+          "help": "平均からこの標準偏差を超えて乖離した月は異常として報告されます"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "該当なし",
+      "ungraded": "目標なし",
+      "noTarget": "目標未設定 — 評価なし",
+      "target": "目標：{target}",
+      "versusTarget": "目標 {target} に対して",
+      "formula": "計算式",
+      "meaning": "意味",
+      "interpretation": "解釈",
+      "thisPeriod": "当期間"
+    },
+    "dupont": {
+      "title": "デュポン分析",
+      "hint": "ROE = 純利益率 × 総資産回転率 × 財務レバレッジ",
+      "netMargin": "純利益率",
+      "netMarginSub": "純利益 ÷ 売上高",
+      "assetTurnover": "総資産回転率",
+      "assetTurnoverSub": "年換算売上高 ÷ 総資産",
+      "equityMultiplier": "財務レバレッジ",
+      "equityMultiplierSub": "総資産 ÷ 純資産（レバレッジ）",
+      "roe": "自己資本利益率"
+    },
+    "grading": {
+      "title": "評価の算出方法",
+      "body": "各比率は目標と比較されます。目標の{a}以上でA、{b}以上でB、{c}以上でC、{d}以上でD、それ未満はFです。低いほど良い比率（コスト、レバレッジ）は比較が反転します。目標のない比率や必要なデータのない比率は表示されますが評価されません。",
+      "labels": "健全性スコアは評価済みカテゴリの平均です：{excellent}以上は優秀、{good}以上は良好、{average}以上は平均、それ未満は要改善。これらの値はすべて「しきい値」で設定します。"
+    },
+    "ratioInputs": {
+      "title": "比率の入力",
+      "hint": "レバレッジ比率が参照する勘定",
+      "notDecided": "未選択です — これを必要とする比率には利用できない理由が表示されます。",
+      "add": "勘定を追加…",
+      "remove": "{account} を削除",
+      "save": "保存",
+      "saved": "保存しました — 比率を再計算します。",
+      "saveFailed": "分類を保存できませんでした。",
+      "loadFailed": "分類を読み込めませんでした。",
+      "interest_expense": {
+        "title": "支払利息",
+        "help": "借入金の利息を計上する費用勘定。インタレスト・カバレッジは営業利益をその合計で割ります。",
+        "none": "支払利息の勘定なし — インタレスト・カバレッジは対象外となります。",
+        "confirmNone": "支払利息はありません"
+      },
+      "interest_bearing_debt": {
+        "title": "有利子負債",
+        "help": "借入金、与信枠、社債などを計上する負債勘定（流動・固定の両方）。負債資本倍率と投下資本利益率がその残高を参照します。",
+        "none": "有利子負債なし — 負債資本倍率はゼロとなります。",
+        "confirmNone": "有利子負債はありません"
       }
     }
   },

@@ -137,7 +137,10 @@
       "growth": "im Jahresvergleich {pct}",
       "grossProfit": "BG: {amount}",
       "opex": "Betriebskosten: {amount}",
-      "perMonth": "pro Monat"
+      "perMonth": "pro Monat",
+      "noPriorYear": "Kein Umsatz im Vorjahreszeitraum",
+      "forPeriod": "In diesem Zeitraum benötigter Umsatz",
+      "noBreakeven": "Erfordert eine positive Bruttomarge"
     },
     "score": {
       "title": "Finanzieller Gesundheitswert",
@@ -145,12 +148,16 @@
       "excellent": "Ausgezeichnet",
       "good": "Gut",
       "average": "Durchschnittlich",
-      "needsWork": "Verbesserungsbedarf"
+      "needsWork": "Verbesserungsbedarf",
+      "notScored": "Für diesen Zeitraum konnte noch nichts bewertet werden.",
+      "unscored": "Nicht bewertet"
     },
     "categories": {
       "profitability": "Rentabilität",
       "efficiency": "Effizienz",
-      "operating": "Betrieb"
+      "operating": "Betrieb",
+      "liquidity": "Liquidität",
+      "solvency": "Solvenz"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "Bruttomarge",
         "formula": "Bruttoergebnis / Umsatz",
         "desc": "Anteil des Umsatzes nach direkten Lieferkosten.",
-        "interpret": "Höher ist besser. Dienstleister zielen typisch auf 35–50 %."
+        "interpret": "Höher ist besser; übliche Werte variieren stark je Branche – legen Sie ein passendes Ziel fest."
       },
       "operating_margin": {
         "label": "Operative Marge",
         "formula": "Betriebsergebnis / Umsatz",
         "desc": "Rentabilität des Kerngeschäfts vor Zinsen und sonstigen Posten.",
-        "interpret": "Über 15 % ist stark für die meisten Unternehmen."
+        "interpret": "Höher ist besser; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "ebitda_margin": {
         "label": "EBITDA-Marge",
         "formula": "(Betriebsergebnis + Abschreibungen) / Umsatz",
         "desc": "Operative Rentabilität vor nicht zahlungswirksamen Posten und Finanzierung.",
-        "interpret": "Über 20 % ist gesund; nützlich zum Vergleich von Kapitalstrukturen."
+        "interpret": "Nützlich für den Vergleich unterschiedlicher Kapitalstrukturen; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "net_margin": {
         "label": "Nettomarge",
         "formula": "Nettoergebnis / Umsatz",
         "desc": "Endergebnis als Anteil des Umsatzes, nach allem.",
-        "interpret": "Über 10 % ist in den meisten Branchen gesund."
+        "interpret": "Höher ist besser; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "roa": {
         "label": "Gesamtkapitalrendite",
         "formula": "Nettoergebnis / Gesamtvermögen",
-        "desc": "Effizienz, mit der das Vermögen Gewinn erwirtschaftet.",
-        "interpret": "Über 8 % zeigt effizienten Vermögeneinsatz."
+        "desc": "Wie effizient das Vermögen Gewinn erzeugt, für unterjährige Zeiträume annualisiert.",
+        "interpret": "Höher ist besser; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "roe": {
         "label": "Eigenkapitalrendite",
         "formula": "Nettoergebnis / Eigenkapital",
-        "desc": "Rendite auf das Eigenkapital der Anteilseigner.",
-        "interpret": "Über 15 % gilt allgemein als stark."
+        "desc": "Rendite auf das Eigenkapital, für unterjährige Zeiträume annualisiert. Bei negativem Eigenkapital nicht aussagekräftig.",
+        "interpret": "Höher ist besser; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "roic": {
         "label": "Rendite auf investiertes Kapital",
         "formula": "NOPAT / Investiertes Kapital",
-        "desc": "Rendite auf das gesamte investierte Kapital. NOPAT = Betriebsergebnis × (1 − 25 % angenommene Steuer). Investiertes Kapital = Eigenkapital + langfristige Schulden.",
-        "interpret": "Über den Kapitalkosten (typisch 8–12 %) schafft Wert."
+        "desc": "Rendite auf das gesamte investierte Kapital. NOPAT = Betriebsergebnis × (1 − Steuersatz), mit dem für den Zeitraum gebuchten effektiven Satz oder sonst dem gesetzlichen Satz aus der Steuereinrichtung. Investiertes Kapital = Eigenkapital + die von Ihnen klassifizierten verzinslichen Schulden.",
+        "interpret": "Über Ihren Kapitalkosten entsteht Wert; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "roce": {
         "label": "Rendite auf eingesetztes Kapital",
-        "formula": "Betriebsergebnis / Investiertes Kapital",
-        "desc": "Operative Vorsteuerrendite des eingesetzten Kapitals.",
-        "interpret": "Über 15 % signalisiert effizienten Kapitaleinsatz."
+        "formula": "Betriebsergebnis / (Bilanzsumme − kurzfristige Verbindlichkeiten)",
+        "desc": "Operative Rendite vor Steuern auf das langfristig eingesetzte Kapital, für unterjährige Zeiträume annualisiert.",
+        "interpret": "Höher ist besser; vergleichen Sie mit Ihrem festgelegten Ziel."
       },
       "rev_per_employee": {
         "label": "Umsatz pro Mitarbeiter",
-        "formula": "Umsatz / Mitarbeiterzahl am Periodenende",
+        "formula": "Annualisierter Umsatz / Mitarbeiterzahl zum Periodenende",
         "desc": "Vertriebsproduktivität der Belegschaft.",
-        "interpret": "Benchmarks variieren stark nach Branche, Region und Währung."
+        "interpret": "Richtwerte variieren nach Branche, Region und Währung; bewertet wird nur gegen ein von Ihnen gesetztes Ziel."
       },
       "gp_per_employee": {
         "label": "Bruttoergebnis pro Mitarbeiter",
-        "formula": "Bruttoergebnis / Mitarbeiterzahl am Periodenende",
+        "formula": "Annualisierter Bruttogewinn / Mitarbeiterzahl zum Periodenende",
         "desc": "Wertbeitrag jedes Mitarbeiters nach direkten Kosten.",
         "interpret": "Ein reineres Produktivitätssignal als Umsatz pro Kopf."
       },
       "asset_turnover": {
         "label": "Vermögensumschlag",
         "formula": "Umsatz / Gesamtvermögen",
-        "desc": "Umsatz pro Euro Vermögen.",
-        "interpret": "Über 1,0x schlägt das Vermögen mehr als einmal pro Jahr um."
+        "desc": "Umsatz je Vermögenseinheit, für unterjährige Zeiträume annualisiert.",
+        "interpret": "Über 1,0× bedeutet, dass sich das Vermögen mehr als einmal pro Jahr umschlägt."
       },
       "cogs_ratio": {
         "label": "COGS-Quote",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "Zinsdeckung",
-        "formula": "Betriebsergebnis / Sonstiger Aufwand",
-        "desc": "Wie oft das Betriebsergebnis den nicht operativen (Zins-)Aufwand deckt.",
-        "interpret": "Über 5x ist komfortabel; unter 1,5x ist ein Warnsignal."
+        "formula": "Betriebsergebnis / Zinsaufwand",
+        "desc": "Wie oft das Betriebsergebnis den Zinsaufwand der von Ihnen als Zinsen klassifizierten Konten deckt.",
+        "interpret": "Höher ist sicherer; vergleichen Sie mit Ihrem Ziel und den Auflagen Ihrer Kreditgeber."
       },
       "rule_of_40": {
         "label": "Rule of 40",
         "formula": "Umsatzwachstum % + operative Marge %",
         "desc": "Balanciert Wachstum und Rentabilität in einer Zahl.",
-        "interpret": "40 oder mehr ist exzellent — Wachstum gegen Marge tauschen oder umgekehrt."
+        "interpret": "Tauschen Sie Wachstum gegen Marge oder umgekehrt; vergleichen Sie mit Ihrem festgelegten Ziel."
+      },
+      "current_ratio": {
+        "label": "Liquidität dritten Grades",
+        "formula": "Umlaufvermögen / kurzfristige Verbindlichkeiten",
+        "desc": "Kurzfristiges Vermögen je Einheit der innerhalb eines Jahres fälligen Verpflichtungen.",
+        "interpret": "Unter 1,0× übersteigen die kurzfristigen Verpflichtungen das Umlaufvermögen."
+      },
+      "quick_ratio": {
+        "label": "Liquidität zweiten Grades",
+        "formula": "(Liquide Mittel + Forderungen) / kurzfristige Verbindlichkeiten",
+        "desc": "Deckung der innerhalb eines Jahres fälligen Verpflichtungen allein durch liquide Mittel und Forderungen, ohne Vorräte zu verkaufen.",
+        "interpret": "Ab 1,0× sind kurzfristige Verpflichtungen ohne Vorräte gedeckt."
+      },
+      "working_capital": {
+        "label": "Working Capital",
+        "formula": "Umlaufvermögen − kurzfristige Verbindlichkeiten",
+        "desc": "Die kurzfristigen Mittel, die nach Erfüllung der innerhalb eines Jahres fälligen Verpflichtungen verbleiben.",
+        "interpret": "Negatives Working Capital bedeutet, dass die kurzfristigen Verpflichtungen das Umlaufvermögen übersteigen."
+      },
+      "debt_to_equity": {
+        "label": "Verschuldungsgrad",
+        "formula": "Verzinsliche Schulden / Eigenkapital",
+        "desc": "Finanzieller Hebel: Fremdkapital je Einheit Eigenkapital, auf Basis der von Ihnen klassifizierten Schuldkonten. Niedriger ist sicherer.",
+        "interpret": "Niedriger ist sicherer; vergleichen Sie mit Ihrem Ziel und den Auflagen Ihrer Kreditgeber."
+      },
+      "liabilities_to_equity": {
+        "label": "Verbindlichkeiten zu Eigenkapital",
+        "formula": "Gesamtverbindlichkeiten / Eigenkapital",
+        "desc": "Alle Verbindlichkeiten je Einheit Eigenkapital. Niedriger ist sicherer.",
+        "interpret": "Niedriger ist sicherer; vergleichen Sie mit Ihrem festgelegten Ziel."
       }
     },
     "ratioNotes": {
-      "noDA": "Keine Abschreibungskonten gefunden",
+      "noDA": "Es gibt Anlagevermögen, aber für den Zeitraum wurden keine Abschreibungen gefunden",
       "noBalanceSheet": "Keine Bilanzdaten",
       "noHeadcount": "Keine aktiven Mitarbeiter",
       "noInterestExpense": "Kein Zinsaufwand",
       "unavailable": "Keine Daten verfügbar",
-      "perEmployees": "{revenue} / {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}"
+      "perEmployees": "{revenue} / {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}",
+      "noRevenue": "Kein Umsatz im Zeitraum",
+      "noCurrentLiabilities": "Keine kurzfristigen Verbindlichkeiten zum Periodenende",
+      "noPriorComparison": "Erfordert Umsatz im gleichen Zeitraum des Vorjahres",
+      "equityNotPositive": "Das Eigenkapital ist null oder negativ",
+      "investedCapitalNotPositive": "Das investierte Kapital ist null oder negativ",
+      "debtNotClassified": "Wählen Sie Ihre verzinslichen Schuldkonten unter Finanzielle Gesundheit → Konfiguration",
+      "interestNotClassified": "Wählen Sie Ihre Zinsaufwandskonten unter Finanzielle Gesundheit → Konfiguration",
+      "noTaxRate": "Für den Zeitraum ist keine Ertragsteuer gebucht und kein Ertragsteuersatz eingerichtet – legen Sie einen unter Einrichtung → Steuern → Ertragsteuersätze an",
+      "mixedTaxRates": "Die angezeigten Einheiten unterliegen unterschiedlichen gesetzlichen Steuersätzen; die Kapitalrendite nutzt den effektiven Satz, sobald für den Zeitraum Ertragsteuer gebucht ist",
+      "annualized": "annualisiert aus {periodDays} von {yearDays} Tagen",
+      "effectiveTaxRate": "effektiver Steuersatz {rate}",
+      "statutoryTaxRate": "gesetzlicher Steuersatz {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "Richtwert für die ROIC-Bewertung (erfordert Bilanzdaten)"
         },
         "revenuePerEmployee": {
-          "label": "Umsatz pro Mitarbeiter ({currency})",
-          "help": "Richtwert für die Produktivität der Belegschaft"
+          "label": "Ziel Umsatz pro Mitarbeiter ({currency})",
+          "help": "Jahresbetrag pro Mitarbeiter; leer lassen, um die Kennzahl ohne Bewertung anzuzeigen"
         },
         "gpPerEmployee": {
-          "label": "Bruttogewinn pro Mitarbeiter ({currency})",
-          "help": "Richtwert für die Produktivität der Belegschaft"
+          "label": "Ziel Bruttogewinn pro Mitarbeiter ({currency})",
+          "help": "Jahresbetrag pro Mitarbeiter; leer lassen, um die Kennzahl ohne Bewertung anzuzeigen"
+        },
+        "roceTarget": {
+          "label": "Ziel Rendite auf das eingesetzte Kapital (%)",
+          "help": "Richtwert für die ROCE-Bewertung (erfordert Bilanzdaten)"
+        },
+        "currentRatioTarget": {
+          "label": "Ziel Liquidität dritten Grades (×)",
+          "help": "Umlaufvermögen je Einheit kurzfristiger Verbindlichkeiten, das als zielkonform gilt"
+        },
+        "quickRatioTarget": {
+          "label": "Ziel Liquidität zweiten Grades (×)",
+          "help": "Liquide Mittel und Forderungen je Einheit kurzfristiger Verbindlichkeiten, die als zielkonform gelten"
+        },
+        "debtToEquityTarget": {
+          "label": "Obergrenze Verschuldungsgrad (×)",
+          "help": "Niedriger ist besser: auf oder unter diesem Wert gilt als zielkonform"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "Obergrenze Verbindlichkeiten zu Eigenkapital (×)",
+          "help": "Niedriger ist besser: auf oder unter diesem Wert gilt als zielkonform"
+        },
+        "interestCoverageTarget": {
+          "label": "Ziel Zinsdeckungsgrad (×)",
+          "help": "Wie oft das Betriebsergebnis den Zinsaufwand decken soll"
+        },
+        "assetTurnoverTarget": {
+          "label": "Ziel Kapitalumschlag (×)",
+          "help": "Jahresumsatz je Vermögenseinheit, der als zielkonform gilt"
+        },
+        "cogsRatioTarget": {
+          "label": "Obergrenze Umsatzkosten (% vom Umsatz)",
+          "help": "Niedriger ist besser: auf oder unter diesem Wert gilt als zielkonform"
+        },
+        "opexRatioTarget": {
+          "label": "Obergrenze Betriebsaufwand (% vom Umsatz)",
+          "help": "Niedriger ist besser: auf oder unter diesem Wert gilt als zielkonform"
+        },
+        "operatingLeverageTarget": {
+          "label": "Ziel operativer Hebel (×)",
+          "help": "Wachstum des Betriebsergebnisses je Einheit Umsatzwachstum"
+        },
+        "ruleOf40Target": {
+          "label": "Ziel Rule of 40 (Punkte)",
+          "help": "Umsatzwachstum in % plus operative Marge in %, die als zielkonform gelten"
+        },
+        "gradeDPercent": {
+          "label": "Note D ab (% des Ziels)",
+          "help": "Zielerreichung (bei „niedriger ist besser“ invertiert), die für diese Note nötig ist; unter Note D gilt F"
+        },
+        "gradeCPercent": {
+          "label": "Note C ab (% des Ziels)",
+          "help": "Zielerreichung (bei „niedriger ist besser“ invertiert), die für diese Note nötig ist; unter Note D gilt F"
+        },
+        "gradeBPercent": {
+          "label": "Note B ab (% des Ziels)",
+          "help": "Zielerreichung (bei „niedriger ist besser“ invertiert), die für diese Note nötig ist; unter Note D gilt F"
+        },
+        "gradeAPercent": {
+          "label": "Note A ab (% des Ziels)",
+          "help": "Zielerreichung (bei „niedriger ist besser“ invertiert), die für diese Note nötig ist; unter Note D gilt F"
+        },
+        "scoreAverage": {
+          "label": "„Durchschnittlich“ ab Punktzahl",
+          "help": "Gesamtpunktzahl (0–100), die für diese Bezeichnung nötig ist"
+        },
+        "scoreGood": {
+          "label": "„Gut“ ab Punktzahl",
+          "help": "Gesamtpunktzahl (0–100), die für diese Bezeichnung nötig ist"
+        },
+        "scoreExcellent": {
+          "label": "„Ausgezeichnet“ ab Punktzahl",
+          "help": "Gesamtpunktzahl (0–100), die für diese Bezeichnung nötig ist"
+        },
+        "insightCriticalPercent": {
+          "label": "Kritischer Hinweis unter (% des Ziels)",
+          "help": "Eine Marge unter diesem Anteil ihres Ziels wird als kritisch gemeldet"
+        },
+        "insightWarningPercent": {
+          "label": "Warnhinweis unter (% des Ziels)",
+          "help": "Eine Marge unter diesem Anteil ihres Ziels wird als deutlich unter Ziel gemeldet"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "Warnung bei Umsatzrückgang (%)",
+          "help": "Ein Rückgang gegenüber dem Vorjahreszeitraum über diesem Wert wird als fallender Umsatz gemeldet"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "Warnung bei Dreimonats-Umsatztrend (%)",
+          "help": "Ein Rückgang über die letzten drei Umsatzmonate über diesem Wert wird als Abwärtstrend gemeldet"
+        },
+        "marginCompressionPoints": {
+          "label": "Warnung bei Margenrückgang (Punkte)",
+          "help": "Ein Rückgang der Bruttomarge über die letzten drei Monate um mehr als so viele Prozentpunkte"
+        },
+        "breakevenSafetyPercent": {
+          "label": "Sicherheitsabstand zum Break-even (%)",
+          "help": "Umsatz innerhalb dieses Anteils über dem Break-even wird als knappe Marge gemeldet"
+        },
+        "anomalySigma": {
+          "label": "Anomalie-Schwelle (σ)",
+          "help": "Monate, die um mehr als so viele Standardabweichungen vom Mittel abweichen, werden als Anomalien gemeldet"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "k. A.",
+      "ungraded": "Kein Ziel",
+      "noTarget": "Kein Ziel festgelegt – nicht bewertet",
+      "target": "Ziel: {target}",
+      "versusTarget": "gegenüber Ziel {target}",
+      "formula": "Formel",
+      "meaning": "Bedeutung",
+      "interpretation": "Einordnung",
+      "thisPeriod": "Dieser Zeitraum"
+    },
+    "dupont": {
+      "title": "DuPont-Analyse",
+      "hint": "ROE = Nettomarge × Kapitalumschlag × Eigenkapitalmultiplikator",
+      "netMargin": "Nettomarge",
+      "netMarginSub": "Jahresergebnis ÷ Umsatz",
+      "assetTurnover": "Kapitalumschlag",
+      "assetTurnoverSub": "Annualisierter Umsatz ÷ Bilanzsumme",
+      "equityMultiplier": "Eigenkapitalmultiplikator",
+      "equityMultiplierSub": "Bilanzsumme ÷ Eigenkapital (Hebel)",
+      "roe": "Eigenkapitalrendite"
+    },
+    "grading": {
+      "title": "So werden Noten berechnet",
+      "body": "Jede Kennzahl wird mit ihrem Ziel verglichen. Ab {a} des Ziels gibt es ein A, ab {b} ein B, ab {c} ein C und ab {d} ein D; darunter ein F. Bei Kennzahlen, bei denen niedriger besser ist (Kosten, Verschuldung), wird der Vergleich umgekehrt. Kennzahlen ohne Ziel oder ohne die nötigen Daten werden angezeigt, aber nicht bewertet.",
+      "labels": "Die Gesundheitsbewertung mittelt die bewerteten Kategorien: ab {excellent} „Ausgezeichnet“, ab {good} „Gut“, ab {average} „Durchschnittlich“, darunter „Verbesserungsbedarf“. Alle diese Werte legen Sie unter Schwellenwerte fest."
+    },
+    "ratioInputs": {
+      "title": "Kennzahlen-Grundlagen",
+      "hint": "Welche Konten die Verschuldungskennzahlen lesen",
+      "notDecided": "Noch nicht gewählt – die betroffenen Kennzahlen zeigen, warum sie nicht verfügbar sind.",
+      "add": "Konto hinzufügen…",
+      "remove": "{account} entfernen",
+      "save": "Speichern",
+      "saved": "Gespeichert – Kennzahlen werden neu berechnet.",
+      "saveFailed": "Die Zuordnung konnte nicht gespeichert werden.",
+      "loadFailed": "Die Zuordnungen konnten nicht geladen werden.",
+      "interest_expense": {
+        "title": "Zinsaufwand",
+        "help": "Aufwandskonten mit Zinsen auf Finanzierungen. Der Zinsdeckungsgrad teilt das Betriebsergebnis durch ihre Summe.",
+        "none": "Keine Zinsaufwandskonten – der Zinsdeckungsgrad gilt als nicht anwendbar.",
+        "confirmNone": "Wir haben keinen Zinsaufwand"
+      },
+      "interest_bearing_debt": {
+        "title": "Verzinsliche Schulden",
+        "help": "Verbindlichkeitskonten mit Darlehen, Kreditlinien, Anleihen und anderen Finanzierungen – kurz- wie langfristige Anteile. Verschuldungsgrad und Kapitalrendite lesen ihre Salden.",
+        "none": "Keine verzinslichen Schulden – der Verschuldungsgrad ist null.",
+        "confirmNone": "Wir haben keine verzinslichen Schulden"
       }
     }
   },

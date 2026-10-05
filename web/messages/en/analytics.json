@@ -137,7 +137,10 @@
       "growth": "YoY {pct}",
       "grossProfit": "GP: {amount}",
       "opex": "OpEx: {amount}",
-      "perMonth": "per month"
+      "perMonth": "per month",
+      "noPriorYear": "No revenue in the same period last year",
+      "forPeriod": "Revenue needed this period",
+      "noBreakeven": "Needs a positive gross margin"
     },
     "score": {
       "title": "Financial Health Score",
@@ -145,12 +148,16 @@
       "excellent": "Excellent",
       "good": "Good",
       "average": "Average",
-      "needsWork": "Needs Work"
+      "needsWork": "Needs Work",
+      "notScored": "Nothing could be graded for this period yet.",
+      "unscored": "Not scored"
     },
     "categories": {
       "profitability": "Profitability",
       "efficiency": "Efficiency",
-      "operating": "Operations"
+      "operating": "Operations",
+      "liquidity": "Liquidity",
+      "solvency": "Solvency"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "Gross Margin",
         "formula": "Gross Profit / Revenue",
         "desc": "Share of revenue left after the direct cost of delivery.",
-        "interpret": "Higher is better. Services firms typically target 35–50%."
+        "interpret": "Higher is better; typical levels vary widely by industry, so set a target that fits yours."
       },
       "operating_margin": {
         "label": "Operating Margin",
         "formula": "Operating Income / Revenue",
         "desc": "Profitability from core operations, before interest and non-operating items.",
-        "interpret": "Above 15% is strong for most operating businesses."
+        "interpret": "Higher is better; compare it with the target you set."
       },
       "ebitda_margin": {
         "label": "EBITDA Margin",
         "formula": "(Operating Income + Depreciation + Amortization) / Revenue",
         "desc": "Operating profitability before non-cash charges and financing.",
-        "interpret": "Above 20% is healthy; useful for comparing capital structures."
+        "interpret": "Useful for comparing businesses with different capital structures; compare it with the target you set."
       },
       "net_margin": {
         "label": "Net Profit Margin",
         "formula": "Net Income / Revenue",
         "desc": "Bottom-line profit as a share of revenue, after everything.",
-        "interpret": "Above 10% is healthy for most industries."
+        "interpret": "Higher is better; compare it with the target you set."
       },
       "roa": {
         "label": "Return on Assets",
         "formula": "Net Income / Total Assets",
-        "desc": "How efficiently the asset base generates profit.",
-        "interpret": "Above 8% indicates efficient asset use."
+        "desc": "How efficiently the asset base generates profit, annualized for part-year periods.",
+        "interpret": "Higher is better; compare it with the target you set."
       },
       "roe": {
         "label": "Return on Equity",
         "formula": "Net Income / Total Equity",
-        "desc": "Return generated on shareholders' equity.",
-        "interpret": "Above 15% is generally considered strong."
+        "desc": "Return generated on shareholders' equity, annualized for part-year periods. Not meaningful when equity is negative.",
+        "interpret": "Higher is better; compare it with the target you set."
       },
       "roic": {
         "label": "Return on Invested Capital",
         "formula": "NOPAT / Invested Capital",
-        "desc": "Return on all capital invested. NOPAT = Operating Income × (1 − 25% assumed tax). Invested Capital = Equity + Long-term Debt.",
-        "interpret": "Above your cost of capital (typically 8–12%) creates value."
+        "desc": "Return on all capital invested. NOPAT = operating income × (1 − tax rate), using the effective rate booked for the period or else the statutory rate from tax setup. Invested capital = equity + the interest-bearing debt you classify.",
+        "interpret": "Above your cost of capital creates value; compare it with the target you set."
       },
       "roce": {
         "label": "Return on Capital Employed",
-        "formula": "Operating Income / Invested Capital",
-        "desc": "Pre-tax operating return on capital employed.",
-        "interpret": "Above 15% signals efficient capital deployment."
+        "formula": "Operating Income / (Total Assets − Current Liabilities)",
+        "desc": "Pre-tax operating return on the long-term capital employed in the business, annualized for part-year periods.",
+        "interpret": "Higher is better; compare it with the target you set."
       },
       "rev_per_employee": {
         "label": "Revenue per Employee",
-        "formula": "Revenue / Period-end Headcount",
+        "formula": "Annualized Revenue / Period-end Headcount",
         "desc": "Top-line productivity of the workforce.",
-        "interpret": "Benchmarks vary materially by industry, geography, and reporting currency."
+        "interpret": "Benchmarks vary by industry, geography and currency; it is graded only against a target you set."
       },
       "gp_per_employee": {
         "label": "Gross Profit per Employee",
-        "formula": "Gross Profit / Period-end Headcount",
+        "formula": "Annualized Gross Profit / Period-end Headcount",
         "desc": "Value each employee contributes after direct costs.",
         "interpret": "A cleaner productivity signal than revenue per head."
       },
       "asset_turnover": {
         "label": "Asset Turnover",
         "formula": "Revenue / Total Assets",
-        "desc": "Revenue generated per dollar of assets.",
-        "interpret": "Above 1.0x means assets turn over faster than once a year."
+        "desc": "Revenue generated per unit of assets, annualized for part-year periods.",
+        "interpret": "Above 1.0× means assets turn over more than once a year."
       },
       "cogs_ratio": {
         "label": "COGS Ratio",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "Interest Coverage",
-        "formula": "Operating Income / Other Expense",
-        "desc": "How many times operating income covers non-operating (interest) expense.",
-        "interpret": "Above 5x is comfortable; below 1.5x is a red flag."
+        "formula": "Operating Income / Interest Expense",
+        "desc": "How many times operating income covers the interest expense on the accounts you classify as interest.",
+        "interpret": "Higher is safer; compare it with the target you set and your lenders' covenants."
       },
       "rule_of_40": {
         "label": "Rule of 40",
         "formula": "Revenue Growth % + Operating Margin %",
         "desc": "Balances growth against profitability in a single number.",
-        "interpret": "40 or above is excellent — trade growth for margin or vice versa."
+        "interpret": "Trade growth for margin or vice versa; compare it with the target you set."
+      },
+      "current_ratio": {
+        "label": "Current Ratio",
+        "formula": "Current Assets / Current Liabilities",
+        "desc": "Short-term assets available for each unit of obligations due within a year.",
+        "interpret": "Below 1.0× means current obligations exceed current assets."
+      },
+      "quick_ratio": {
+        "label": "Quick Ratio",
+        "formula": "(Cash + Receivables) / Current Liabilities",
+        "desc": "Obligations due within a year covered by cash and receivables alone, without selling inventory.",
+        "interpret": "At or above 1.0× means near-term obligations are covered without inventory."
+      },
+      "working_capital": {
+        "label": "Working Capital",
+        "formula": "Current Assets − Current Liabilities",
+        "desc": "The short-term resources left after meeting obligations due within a year.",
+        "interpret": "Negative working capital means current obligations exceed current assets."
+      },
+      "debt_to_equity": {
+        "label": "Debt to Equity",
+        "formula": "Interest-bearing Debt / Total Equity",
+        "desc": "Financial leverage: borrowed money per unit of owners' equity, using the debt accounts you classify. Lower is safer.",
+        "interpret": "Lower is safer; compare it with the target you set and your lenders' covenants."
+      },
+      "liabilities_to_equity": {
+        "label": "Liabilities to Equity",
+        "formula": "Total Liabilities / Total Equity",
+        "desc": "Everything the business owes per unit of owners' equity. Lower is safer.",
+        "interpret": "Lower is safer; compare it with the target you set."
       }
     },
     "ratioNotes": {
-      "noDA": "No depreciation/amortization accounts found",
+      "noDA": "Fixed assets carry a balance but no depreciation or amortization was found for the period",
       "noBalanceSheet": "No balance sheet data",
       "noHeadcount": "No active employee records",
       "noInterestExpense": "No interest expense",
       "unavailable": "Data not available",
-      "perEmployees": "{revenue} / {count, plural, one {# employee} other {# employees}}"
+      "perEmployees": "{revenue} / {count, plural, one {# employee} other {# employees}}",
+      "noRevenue": "No revenue in the period",
+      "noCurrentLiabilities": "No current liabilities at period end",
+      "noPriorComparison": "Needs revenue in the same period last year",
+      "equityNotPositive": "Equity is zero or negative",
+      "investedCapitalNotPositive": "Invested capital is zero or negative",
+      "debtNotClassified": "Choose your interest-bearing debt accounts in Financial Health → Configuration",
+      "interestNotClassified": "Choose your interest expense accounts in Financial Health → Configuration",
+      "noTaxRate": "No income tax is booked for the period and no income tax rate is set up — add one in Setup → Taxes → Income tax rates",
+      "mixedTaxRates": "The entities in view are taxed at different statutory rates; return on invested capital uses the effective rate once income tax is booked for the period",
+      "annualized": "annualized from {periodDays} of {yearDays} days",
+      "effectiveTaxRate": "effective tax rate {rate}",
+      "statutoryTaxRate": "statutory tax rate {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "Benchmark for the ROIC grade (needs balance-sheet data)"
         },
         "revenuePerEmployee": {
-          "label": "Revenue per employee ({currency})",
-          "help": "Workforce productivity benchmark"
+          "label": "Revenue per employee target ({currency})",
+          "help": "Annual amount per employee; leave empty to show the ratio without a grade"
         },
         "gpPerEmployee": {
-          "label": "Gross profit per employee ({currency})",
-          "help": "Workforce productivity benchmark"
+          "label": "Gross profit per employee target ({currency})",
+          "help": "Annual amount per employee; leave empty to show the ratio without a grade"
+        },
+        "roceTarget": {
+          "label": "Return on capital employed target (%)",
+          "help": "Benchmark for the ROCE grade (needs balance-sheet data)"
+        },
+        "currentRatioTarget": {
+          "label": "Current ratio target (×)",
+          "help": "Current assets per unit of current liabilities that grades as on target"
+        },
+        "quickRatioTarget": {
+          "label": "Quick ratio target (×)",
+          "help": "Cash and receivables per unit of current liabilities that grades as on target"
+        },
+        "debtToEquityTarget": {
+          "label": "Debt to equity ceiling (×)",
+          "help": "Lower is better: at or below this grades as on target"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "Liabilities to equity ceiling (×)",
+          "help": "Lower is better: at or below this grades as on target"
+        },
+        "interestCoverageTarget": {
+          "label": "Interest coverage target (×)",
+          "help": "Times operating income should cover interest expense"
+        },
+        "assetTurnoverTarget": {
+          "label": "Asset turnover target (×)",
+          "help": "Annual revenue per unit of assets that grades as on target"
+        },
+        "cogsRatioTarget": {
+          "label": "Cost of sales ceiling (% of revenue)",
+          "help": "Lower is better: at or below this grades as on target"
+        },
+        "opexRatioTarget": {
+          "label": "Operating expense ceiling (% of revenue)",
+          "help": "Lower is better: at or below this grades as on target"
+        },
+        "operatingLeverageTarget": {
+          "label": "Operating leverage target (×)",
+          "help": "Growth in operating income per unit of revenue growth"
+        },
+        "ruleOf40Target": {
+          "label": "Rule of 40 target (points)",
+          "help": "Revenue growth % plus operating margin % that grades as on target"
+        },
+        "gradeDPercent": {
+          "label": "Grade D at (% of target)",
+          "help": "Achievement against target, inverted for lower-is-better ratios, needed for this grade; below grade D is F"
+        },
+        "gradeCPercent": {
+          "label": "Grade C at (% of target)",
+          "help": "Achievement against target, inverted for lower-is-better ratios, needed for this grade; below grade D is F"
+        },
+        "gradeBPercent": {
+          "label": "Grade B at (% of target)",
+          "help": "Achievement against target, inverted for lower-is-better ratios, needed for this grade; below grade D is F"
+        },
+        "gradeAPercent": {
+          "label": "Grade A at (% of target)",
+          "help": "Achievement against target, inverted for lower-is-better ratios, needed for this grade; below grade D is F"
+        },
+        "scoreAverage": {
+          "label": "“Average” score from",
+          "help": "Overall health score (0–100) needed for this label"
+        },
+        "scoreGood": {
+          "label": "“Good” score from",
+          "help": "Overall health score (0–100) needed for this label"
+        },
+        "scoreExcellent": {
+          "label": "“Excellent” score from",
+          "help": "Overall health score (0–100) needed for this label"
+        },
+        "insightCriticalPercent": {
+          "label": "Critical finding below (% of target)",
+          "help": "A margin below this share of its target is reported as critical"
+        },
+        "insightWarningPercent": {
+          "label": "Warning finding below (% of target)",
+          "help": "A margin below this share of its target is reported as well below target"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "Revenue decline alert (%)",
+          "help": "A fall against the same period last year beyond this is reported as falling revenue"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "Three-month revenue trend alert (%)",
+          "help": "A fall across the last three months with revenue beyond this is reported as trending down"
+        },
+        "marginCompressionPoints": {
+          "label": "Margin compression alert (points)",
+          "help": "A gross-margin drop across the last three months beyond this many percentage points"
+        },
+        "breakevenSafetyPercent": {
+          "label": "Breakeven safety margin (%)",
+          "help": "Revenue within this share above breakeven is reported as a thin margin"
+        },
+        "anomalySigma": {
+          "label": "Anomaly threshold (σ)",
+          "help": "Months beyond this many standard deviations from the mean are reported as anomalies"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "N/A",
+      "ungraded": "No target",
+      "noTarget": "No target set — not graded",
+      "target": "Target: {target}",
+      "versusTarget": "vs {target} target",
+      "formula": "Formula",
+      "meaning": "What it means",
+      "interpretation": "Interpretation",
+      "thisPeriod": "This period"
+    },
+    "dupont": {
+      "title": "DuPont Analysis",
+      "hint": "ROE = Net Margin × Asset Turnover × Equity Multiplier",
+      "netMargin": "Net Margin",
+      "netMarginSub": "Net income ÷ revenue",
+      "assetTurnover": "Asset Turnover",
+      "assetTurnoverSub": "Annualized revenue ÷ total assets",
+      "equityMultiplier": "Equity Multiplier",
+      "equityMultiplierSub": "Total assets ÷ equity (leverage)",
+      "roe": "Return on Equity"
+    },
+    "grading": {
+      "title": "How grades are computed",
+      "body": "Each ratio is compared with its target. Achieving {a} of the target or more earns an A, {b} a B, {c} a C and {d} a D; below that is an F. For lower-is-better ratios (costs, leverage) the comparison is inverted. A ratio without a target, or without the data it needs, is shown but not graded.",
+      "labels": "The health score averages the graded categories: {excellent}+ reads Excellent, {good}+ Good, {average}+ Average, and below that Needs Work. Every one of these values is set in Thresholds."
+    },
+    "ratioInputs": {
+      "title": "Ratio inputs",
+      "hint": "Which accounts the leverage ratios read",
+      "notDecided": "Not chosen yet — the ratios that need this show why they are unavailable.",
+      "add": "Add an account…",
+      "remove": "Remove {account}",
+      "save": "Save",
+      "saved": "Saved — ratios recompute.",
+      "saveFailed": "The classification could not be saved.",
+      "loadFailed": "The classifications could not be loaded.",
+      "interest_expense": {
+        "title": "Interest expense",
+        "help": "Expense accounts that record interest on borrowings. Interest coverage divides operating income by their total.",
+        "none": "No interest expense accounts — interest coverage reads as not applicable.",
+        "confirmNone": "We have no interest expense"
+      },
+      "interest_bearing_debt": {
+        "title": "Interest-bearing debt",
+        "help": "Liability accounts holding loans, credit lines, bonds and other borrowings — current and long-term portions alike. Debt to equity and return on invested capital read their balances.",
+        "none": "No interest-bearing debt — debt to equity reads as zero.",
+        "confirmNone": "We carry no interest-bearing debt"
       }
     }
   },
