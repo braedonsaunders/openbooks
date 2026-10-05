@@ -64,7 +64,10 @@ async function assertPaymentRunComposition(
      order by kind, source_open_line_id
      for update
   `)).rows;
-  const cashItems = rows.filter((row) => row.kind !== "credit");
+  // A bill the run settles wholly with credits is reserved by the run but
+  // carries no cash allocation; its credits are checked with the credit items.
+  const cashItems = rows.filter((row) => row.kind !== "credit"
+    && toUnits(row.gross_amount) - toUnits(row.credit_amount) !== 0n);
   const creditItems = rows.filter((row) => row.kind === "credit");
   const actualCash = new Map(allocations.map((allocation) => [allocation.openLineId, allocation]));
   const expectedDiscount = cashItems.reduce((total, row) => total + toUnits(row.discount_amount), 0n);

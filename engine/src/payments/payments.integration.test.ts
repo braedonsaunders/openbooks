@@ -558,6 +558,86 @@ test("run posting is bound to stored cash and credit targets", { skip: !DB }, as
   }
 });
 
+async function postVendorDocument(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  actorId: string,
+  kind: "vendor_bill" | "vendor_credit",
+  documentNumber: string,
+  amount: string,
+): Promise<{ documentId: string; openLineId: string }> {
+  const documentId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+       document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+    values (${documentId}, ${org.orgId}, ${kind}, 'draft', ${documentNumber}, ${org.subsidiaryId},
+            ${org.vendorId}, ${org.date}, 'CAD', '1', ${amount}, '0', ${amount}, ${actorId})`);
+  await db.execute(sql`
+    insert into document_lines
+      (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+    values (${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '1', ${amount}, ${amount}, '0',
+            ${kind === "vendor_credit" ? amount : null})`);
+  await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+  await postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  const openLineId = (await db.execute<{ id: string }>(sql`
+    select jl.id from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+     where je.source_document_id = ${documentId} and je.status = 'posted' and jl.is_open_item
+  `)).rows[0]!.id;
+  return { documentId, openLineId };
+}
+
+test("a bill a run settles wholly with credit is reserved by that run and settles when it posts", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+    await withOrgContext(org.orgId, async () => {
+      // Oldest first: the 30 credit covers the 20 bill whole and 10 of the 125 bill.
+      const covered = await postVendorDocument(org, options.actorId, "vendor_bill", "BILL-CREDIT-COVERED", "20");
+      await postVendorDocument(org, options.actorId, "vendor_credit", "CREDIT-COVERS-BILL", "30");
+      const runFor = (billDocumentIds: string[]) => createPaymentRun({ allowedSubsidiaryIds: null,
+        orgId: org.orgId, createdBy: options.actorId, paymentBankProfileId: options.profileId,
+        billDocumentIds, scheduledFor: org.date,
+      });
+      const run = await runFor([covered.documentId, options.billId]);
+      const items = (await db.execute<{ document_number: string; kind: string; cash_free: boolean; status: string }>(sql`
+        select d.document_number, item.kind, item.payment_amount = 0 as cash_free, item.status
+          from payment_run_items item
+          join documents d on d.id = item.source_document_id and d.org_id = item.org_id
+         where item.payment_run_id = ${run.id} and item.org_id = ${org.orgId}
+         order by d.document_number
+      `)).rows;
+      assert.deepEqual(items, [
+        { document_number: "BILL-CREDIT-COVERED", kind: "bill", cash_free: true, status: "selected" },
+        { document_number: "BILL-RESERVE-1", kind: "bill", cash_free: false, status: "selected" },
+        { document_number: "CREDIT-COVERS-BILL", kind: "credit", cash_free: true, status: "selected" },
+      ]);
+      // A second run cannot pay the credit-covered bill in cash.
+      await assert.rejects(runFor([covered.documentId]), (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.equal(error.message, `BILL-CREDIT-COVERED (${run.runNumber}) is already selected in another live payment run`);
+        return true;
+      });
+
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where org_id = ${org.orgId} and id in (
+           select payment_document_id from payment_instructions where payment_run_id = ${run.id} and org_id = ${org.orgId})`);
+      await db.execute(sql`update payment_runs set status = 'generated' where id = ${run.id} and org_id = ${org.orgId}`);
+      const posting = await postPaymentRun(run.id, org.orgId, options.actorId);
+      assert.deepEqual(posting.failures, []);
+      const settled = (await db.execute<{ document_number: string; open: string }>(sql`
+        select document_number, open_balance::text as open from documents
+         where org_id = ${org.orgId} and id in (${covered.documentId}, ${options.billId})
+         order by document_number
+      `)).rows.map((row) => [row.document_number, toUnits(row.open)]);
+      assert.deepEqual(settled, [["BILL-CREDIT-COVERED", 0n], ["BILL-RESERVE-1", 0n]]);
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("an open item can be reserved by only one live payment run at a time", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
