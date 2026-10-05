@@ -313,6 +313,7 @@ export async function loadCompensationHome(
   const newItems = [
     ...(canRunCycles ? [{ key: 'cycle', label: t('compensation.newCycle'), href: '/hrm/compensation?view=cycles&cycle=new' }] : []),
     ...(canManage ? [{ key: 'plan', label: t('compensation.newPlan'), href: '/hrm/compensation?view=plans&plan=new' }] : []),
+    ...(canManage && authz.allowedSubsidiaryIds === null ? [{ key: 'snapshot', label: t('compensation.workspace.newSnapshot'), href: '/hrm/compensation/equity?generate=1' }] : []),
     ...(canSetup ? [
       { key: 'family', label: t('compensation.workspace.newFamily'), href: '/hrm/compensation?view=families&family=new' },
       { key: 'level', label: t('compensation.workspace.newLevel'), href: '/hrm/compensation?view=levels&level=new' },
@@ -1206,7 +1207,7 @@ export async function loadEquity(
     categoriesEmpty: t('equity.categoriesEmpty'),
     canManage,
     generateHref: '/hrm/compensation/equity?generate=1',
-    generateLabel: t('equity.generate'),
+    generateLabel: t('compensation.workspace.newSnapshot'),
     generateOpen,
     generateDialog,
     emptyTitle: t('equity.emptyTitle'),
