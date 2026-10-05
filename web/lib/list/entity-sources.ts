@@ -1537,9 +1537,11 @@ const SOURCES: Record<string, EntityListSource> = {
     statusExpr: sql`sva.status`,
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
     // The caller's entity visibility applies here like everywhere else: a
-    // scoped operator lists only the entities they may see.
+    // scoped operator lists only the entities they may see. An unresolved
+    // (undefined) scope is an empty set, never the unrestricted null — the
+    // list reads nothing rather than everything.
     where: (view, adhoc, orgId, allowedSubsidiaryIds) =>
-      sql`${storedValueAccountWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`sva.subsidiary_id`, allowedSubsidiaryIds ?? null)}`,
+      sql`${storedValueAccountWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`sva.subsidiary_id`, allowedSubsidiaryIds === undefined ? new Set<string>() : allowedSubsidiaryIds)}`,
     drawerParam: 'account',
     basePath: '/stored-value',
     readPermission: 'stored_value.read',

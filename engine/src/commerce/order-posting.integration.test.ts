@@ -364,7 +364,7 @@ test("gift card tender redeems stored value", { skip: !DB }, async () => {
       liabilityAccountId: org.accounts.taxOutput, actorId: actor,
     }));
     const issued = await withBypass(() => issueStoredValue({
-      orgId: org.orgId, programId: program.id, amountMinor: units4("50"), currency: "CAD",
+      orgId: org.orgId, allowedSubsidiaryIds: null, programId: program.id, amountMinor: units4("50"), currency: "CAD",
       debitAccountId: org.accounts.bank, idempotencyKey: `test-gc-1004`, postingDate: org.date, actorId: actor,
     }));
     await withBypass(() => linkExternal(org.orgId, actor, {

@@ -55,7 +55,7 @@ export async function lookupStoredValueBalance(
   const code = input.code.trim();
   if (!code) throw invalidInput("code is required");
   const orgId = context.authz.user.orgId;
-  const found = await withOrgContext(orgId, () => lookupStoredValueByCode(orgId, code));
+  const found = await withOrgContext(orgId, () => lookupStoredValueByCode(orgId, code, context.authz.allowedSubsidiaryIds));
   if (!found) throw notFound("stored value");
   return {
     kind: found.kind,
@@ -105,7 +105,7 @@ export async function redeemStoredValueForInvoice(
     execute: async () => {
       try {
         return await withOrgTransaction(orgId, async () => {
-          const resolved = await resolveStoredValueTender(orgId, code);
+          const resolved = await resolveStoredValueTender(orgId, code, context.authz.allowedSubsidiaryIds);
           if (!resolved) throw notFound("stored value");
           const invoice = (await db.execute<{
             id: string; status: string; currency: string; partyId: string | null; subsidiaryId: string | null;

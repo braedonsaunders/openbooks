@@ -21,6 +21,7 @@ export const POST = defineRoute({
     amount: exactMoney(),
     currency: z.string().regex(/^[A-Z]{3}$/),
     customerPartyId: uuidId.nullable().optional(),
+    subsidiaryId: uuidId.nullable().optional(),
     expiresOn: isoDate().nullable().optional(),
     debitAccountId: uuidId,
     postingDate: isoDate().optional(),
@@ -35,6 +36,11 @@ export const POST = defineRoute({
           programId: body.programId,
           amountMinor: toUnits(body.amount),
           currency: body.currency,
+          // The engine validates this against the actor's authoritative
+          // scope: restricted callers name a visible entity (or default to
+          // their single one), never the org root by omission.
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+          subsidiaryId: body.subsidiaryId ?? null,
           customerPartyId: body.customerPartyId ?? null,
           expiresOn: body.expiresOn ?? null,
           debitAccountId: body.debitAccountId,

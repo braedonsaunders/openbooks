@@ -159,7 +159,7 @@ test("two concurrent redemptions cannot overdraw: one wins, the other is refused
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         programId: fx.giftProgram,
         amountMinor: toUnits("100"),
         currency: "CAD",
@@ -172,7 +172,7 @@ test("two concurrent redemptions cannot overdraw: one wins, the other is refused
     const attempt = (key: string) =>
       withOrgTransaction(org.orgId, () =>
         redeemStoredValue({
-          orgId: org.orgId,
+          orgId: org.orgId, allowedSubsidiaryIds: null,
           accountId: issued.accountId,
           amountMinor: toUnits("60"),
           idempotencyKey: key,
@@ -199,7 +199,7 @@ test("proportional breakage recognizes redemptions times r/(1-r) in minor units"
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         programId: fx.giftProgram,
         amountMinor: toUnits("100"),
         currency: "CAD",
@@ -211,7 +211,7 @@ test("proportional breakage recognizes redemptions times r/(1-r) in minor units"
     );
     await withBypass(() =>
       redeemStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         accountId: issued.accountId,
         amountMinor: toUnits("90"),
         idempotencyKey: `brk-redeem-${randomUUID()}`,
@@ -248,7 +248,7 @@ test("a second scan in one period and a replayed redemption each move the balanc
     await withSimClock("2026-10-15T12:00:00Z", async () => {
       const issued = await withBypass(() =>
         issueStoredValue({
-          orgId: org.orgId,
+          orgId: org.orgId, allowedSubsidiaryIds: null,
           programId: fx.giftProgram,
           amountMinor: toUnits("100"),
           currency: "CAD",
@@ -260,7 +260,7 @@ test("a second scan in one period and a replayed redemption each move the balanc
       );
       const redeem = (amount: string, key: string) =>
         withBypass(() =>
-          redeemStoredValue({ orgId: org.orgId, accountId: issued.accountId, amountMinor: toUnits(amount), idempotencyKey: key, actorId }),
+          redeemStoredValue({ orgId: org.orgId, allowedSubsidiaryIds: null, accountId: issued.accountId, amountMinor: toUnits(amount), idempotencyKey: key, actorId }),
         );
       const scan = async () =>
         (await runStoredValueBreakage()).orgErrors.filter((failure) => failure.orgId === org.orgId);
@@ -297,7 +297,7 @@ test("a card redeems through its expiry date and the scan sweeps it the day afte
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         programId: fx.giftProgram,
         amountMinor: toUnits("30"),
         currency: "CAD",
@@ -310,7 +310,7 @@ test("a card redeems through its expiry date and the scan sweeps it the day afte
     );
     const redeem = () =>
       withBypass(() =>
-        redeemStoredValue({ orgId: org.orgId, accountId: issued.accountId, amountMinor: toUnits("10"), idempotencyKey: `lastday-${randomUUID()}`, actorId }),
+        redeemStoredValue({ orgId: org.orgId, allowedSubsidiaryIds: null, accountId: issued.accountId, amountMinor: toUnits("10"), idempotencyKey: `lastday-${randomUUID()}`, actorId }),
       );
     await withSimClock("2026-10-15T12:00:00Z", async () => {
       await runStoredValueBreakage();
@@ -335,7 +335,7 @@ test("the scan expires lapsed cards and releases dormant remote balances", { ski
   try {
     const expiring = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         programId: fx.giftProgram,
         amountMinor: toUnits("30"),
         currency: "CAD",
@@ -348,7 +348,7 @@ test("the scan expires lapsed cards and releases dormant remote balances", { ski
     );
     const dormant = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         programId: fx.creditProgram,
         amountMinor: toUnits("25"),
         currency: "CAD",
@@ -384,7 +384,7 @@ test("stored-value entries are immutable", { skip: !DB }, async () => {
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId,
+        orgId: org.orgId, allowedSubsidiaryIds: null,
         programId: fx.giftProgram,
         amountMinor: toUnits("10"),
         currency: "CAD",
@@ -421,7 +421,7 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: first.org.orgId,
+        orgId: first.org.orgId, allowedSubsidiaryIds: null,
         programId: first.giftProgram,
         amountMinor: toUnits("10"),
         currency: "CAD",
@@ -442,7 +442,7 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
     await assert.rejects(
       withOrgTransaction(second.org.orgId, () =>
         redeemStoredValue({
-          orgId: first.org.orgId,
+          orgId: first.org.orgId, allowedSubsidiaryIds: null,
           accountId: issued.accountId,
           amountMinor: toUnits("1"),
           idempotencyKey: `rls-redeem-${randomUUID()}`,
@@ -456,7 +456,7 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
     await assert.rejects(
       withBypass(() =>
         redeemStoredValue({
-          orgId: first.org.orgId,
+          orgId: first.org.orgId, allowedSubsidiaryIds: null,
           accountId: randomUUID(),
           amountMinor: toUnits("1"),
           idempotencyKey: `rls-missing-${randomUUID()}`,

@@ -275,6 +275,7 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
   const common = useTranslations('common')
   const router = useRouter()
   const [programId, setProgramId] = useState(issue.programs[0]?.id ?? '')
+  const [subsidiaryId, setSubsidiaryId] = useState(issue.subsidiaries[0]?.id ?? '')
   const [amount, setAmount] = useState('')
   const [customerId, setCustomerId] = useState('')
   const [debitId, setDebitId] = useState(issue.debitAccounts[0]?.id ?? '')
@@ -284,7 +285,7 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
   const [pending, setPending] = useState(false)
   const program = issue.programs.find((p) => p.id === programId) ?? null
   const storeCredit = program?.kind === 'store_credit'
-  const valid = programId !== '' && amount.trim() !== '' && debitId !== '' && (!storeCredit || customerId !== '')
+  const valid = programId !== '' && subsidiaryId !== '' && amount.trim() !== '' && debitId !== '' && (!storeCredit || customerId !== '')
 
   async function submit() {
     if (!valid || busy) return
@@ -298,6 +299,7 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
           programId,
           amount: amount.trim(),
           currency: program?.currency,
+          subsidiaryId,
           customerPartyId: storeCredit ? customerId : undefined,
           debitAccountId: debitId,
           idempotencyKey: requestKey,
@@ -359,6 +361,17 @@ export function StoredValueIssueDrawer({ issue }: { issue: StoredValueIssueData 
               options={issue.programs.map((p) => ({ value: p.id, label: `${p.name} · ${p.kindLabel}` }))}
               placeholder={t('issue.programLabel')}
               ariaLabel={t('issue.programLabel')}
+            />
+          </div>
+          <div>
+            <Label htmlFor="sv-issue-subsidiary">{common('labels.subsidiary')}</Label>
+            <SearchSelect
+              disabled={pending}
+              value={subsidiaryId}
+              onChange={setSubsidiaryId}
+              options={issue.subsidiaries.map((s) => ({ value: s.id, label: s.name }))}
+              placeholder={common('labels.subsidiary')}
+              ariaLabel={common('labels.subsidiary')}
             />
           </div>
           <div>

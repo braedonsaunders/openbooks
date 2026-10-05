@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
@@ -28,6 +29,8 @@ export const GET = defineRoute({
     if (!party.rows[0]) return notFound('record')
     const scopeDenied = guardSubsidiaryScope(authz, party.rows[0].subsidiaryId, { orgWideNull: true })
     if (scopeDenied) return scopeDenied
+    // The party gate above is not enough: each credit carries its own
+    // entity, and a restricted caller reads only the entities they may see.
     const credits = (await db.execute<{
       accountId: string; codeLast4: string; currency: string; balance: string
     }>(sql`
@@ -36,6 +39,7 @@ export const GET = defineRoute({
         from stored_value_accounts
        where org_id = ${authz.user.orgId} and customer_party_id = ${partyId}
          and status in ('active', 'frozen') and balance_minor > 0
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by currency, code_last4
     `)).rows
     return NextResponse.json({ credits })

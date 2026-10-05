@@ -156,7 +156,7 @@ test("a sale resolves its stored-value tender and refuses an overdraw by name", 
     );
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId, programId: program.id, amountMinor: toUnits("80"),
+        orgId: org.orgId, allowedSubsidiaryIds: null, programId: program.id, amountMinor: toUnits("80"),
         currency: "CAD", debitAccountId: org.accounts.bank, postingDate: org.date,
         idempotencyKey: `writer-gift-${randomUUID()}`, actorId,
       }),

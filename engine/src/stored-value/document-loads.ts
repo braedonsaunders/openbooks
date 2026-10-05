@@ -26,6 +26,8 @@ import { storedValueRefusal } from "./errors.ts";
 
 export interface DocumentLoadInput {
   orgId: string;
+  /** REQUIRED actor scope; posting-commit steps pass explicit null — the refund document's entity was gated at draft creation and the top-up asserts it matches. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Existing account to top up. Absent mints one from programId. */
   accountId?: string | null;
   /** Issuing program for the mint path. Must be an active store_credit program. */
@@ -88,7 +90,7 @@ export async function attachDocumentLoad(input: DocumentLoadInput): Promise<Docu
 }
 
 async function topUpAccount(input: DocumentLoadInput, doc: DocumentFxContext): Promise<DocumentLoadResult> {
-  const account = await lockStoredValueAccount(input.orgId, input.accountId!);
+  const account = await lockStoredValueAccount(input.orgId, input.accountId!, input.allowedSubsidiaryIds);
   if (doc.subsidiaryId !== account.subsidiaryId) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} belongs to another legal entity than the refunding document: one entity cannot load another's balance.`,

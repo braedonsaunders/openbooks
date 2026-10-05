@@ -101,7 +101,10 @@ export const POST = defineRoute({
         return NextResponse.json({ setupToken: setup.setupToken, setupUrl: `/pay/setup/${setupToken}`, redirectUrl: setup.redirectUrl })
       }
       case 'lookupGiftCard': {
-        const balance = await lookupStoredValueByCode(orgId, body.code)
+        // Customer portal code-Bearer [REDACTED] the secret code is the credential, and
+        // the session's party binding is asserted separately — there is no
+        // actor entity set to scope by, so explicit null is intentional here.
+        const balance = await lookupStoredValueByCode(orgId, body.code, null)
         if (!balance) return NextResponse.json({ error: 'No gift card or credit matches that code' }, { status: 404 })
         return NextResponse.json({ kind: balance.kind, balanceMinor: balance.balanceMinor, currency: balance.currency, status: balance.status })
       }

@@ -15,7 +15,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default
 const { StoredValueIssueDrawer, StoredValueDrawer } = await import('./StoredValueDrawers')
 const accountId = '01a10c33-abb8-797a-bd5a-058e59065554'
-const issue = { programs: [{ id: 'program', name: 'Gift cards', kind: 'gift_card', kindLabel: 'Gift card', currency: 'USD' }], customers: [], debitAccounts: [{ id: 'cash', name: 'Cash' }], closeHref: '/stored-value' }
+const issue = { programs: [{ id: 'program', name: 'Gift cards', kind: 'gift_card', kindLabel: 'Gift card', currency: 'USD' }], customers: [], debitAccounts: [{ id: 'cash', name: 'Cash' }], subsidiaries: [{ id: 'entity-hq', name: 'HQ' }], closeHref: '/stored-value' }
 const errors = () => (globalThis as unknown as { __storedErrors: string[] }).__storedErrors
 const successes = () => (globalThis as unknown as { __storedSuccess: string[] }).__storedSuccess
 async function click(label: string) {
@@ -39,8 +39,10 @@ test('issue retry preserves the applied intent and a replay names the existing a
   const oldFetch = globalThis.fetch
   const keys: string[] = []; const effects = new Set<string>()
   globalThis.fetch = async (_url, init) => {
-    const key = JSON.parse(String(init?.body)).idempotencyKey
+    const payload = JSON.parse(String(init?.body))
+    const key = payload.idempotencyKey
     keys.push(key); const prior = effects.has(key); effects.add(key)
+    assert.equal(payload.subsidiaryId, 'entity-hq', 'the issue must name its visible issuing entity')
     if (keys.length === 1) throw new Error('Response lost after issue')
     return Response.json({ accountId, code: prior ? null : 'second-card-code', replayed: prior })
   }
