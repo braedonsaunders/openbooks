@@ -4516,6 +4516,11 @@
       "retentionRegions": {
         "all": "所有区域",
         "countries": "选定国家"
+      },
+      "autopayFinalAction": {
+        "none": "继续开票（无最终处理）",
+        "suspend": "暂停订阅",
+        "cancel": "取消订阅"
       }
     },
     "payroll": {
@@ -5617,7 +5622,14 @@
       "criteria": "适用条件与发送",
       "description": "设置催收条件并编排提醒顺序。",
       "reminderNumber": "提醒 {number}",
-      "addReminder": "添加提醒"
+      "addReminder": "添加提醒",
+      "autopay": "自动托收",
+      "retryOffsetsDays": "重试间隔（天）",
+      "retryDay": "天数",
+      "addRetry": "添加重试",
+      "retryOffsetsHelp": "每次扣款失败后间隔多少天重试。用完列表后将执行下面的最终处理。",
+      "finalAction": "重试用尽时",
+      "finalActionHelp": "暂停会停止开票但保留合同，之后付款成功即恢复。取消将终止订阅。"
     },
     "no": "否",
     "payComponentChooser": {

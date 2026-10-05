@@ -64,6 +64,8 @@ interface Policy {
   isActive: boolean;
   stages: Stage[];
   updatedAt?: string;
+  retryOffsetsDays?: { days: number }[];
+  finalAction?: string;
 }
 
 const CADENCES = [
@@ -1313,6 +1315,8 @@ function DunningPanel() {
         min_balance: selected.minBalance,
         reply_to: (selected as Policy & { replyTo?: string | null }).replyTo,
         is_active: selected.isActive,
+        retryOffsetsDays: selected.retryOffsetsDays ?? [],
+        finalAction: selected.finalAction ?? 'none',
       }
     : null;
   return (

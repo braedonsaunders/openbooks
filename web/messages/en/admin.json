@@ -4516,6 +4516,11 @@
       "retentionRegions": {
         "all": "All regions",
         "countries": "Selected countries"
+      },
+      "autopayFinalAction": {
+        "none": "Keep billing (no final action)",
+        "suspend": "Suspend the subscription",
+        "cancel": "Cancel the subscription"
       }
     },
     "payroll": {
@@ -5617,7 +5622,14 @@
       "criteria": "Eligibility and delivery",
       "description": "Set collection criteria and compose the reminder sequence.",
       "reminderNumber": "Reminder {number}",
-      "addReminder": "Add reminder"
+      "addReminder": "Add reminder",
+      "autopay": "Automatic collection",
+      "retryOffsetsDays": "Retry after (days)",
+      "retryDay": "Days",
+      "addRetry": "Add retry",
+      "retryOffsetsHelp": "Days after each failed charge to try again. When the list runs out, the final action below applies.",
+      "finalAction": "When retries run out",
+      "finalActionHelp": "Suspend stops billing but keeps the contract; a later successful payment resumes it. Cancel ends the subscription."
     },
     "no": "No",
     "payComponentChooser": {
