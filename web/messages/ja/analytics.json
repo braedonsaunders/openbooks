@@ -2221,7 +2221,8 @@
       "defaultProfile": "デフォルト",
       "formulaError": "数式の結果が無効です",
       "absorptionNoAccount": "間接費適用勘定が設定されていません — Setup → Overhead で設定してください。",
-      "absorptionNoPostings": "設定された間接費適用勘定には、この期間の適用仕訳がありません。"
+      "absorptionNoPostings": "設定済み間接費適用勘定には今期の適用済み仕訳がありません — 今期のプロジェクト時間を承認してください（承認により間接費が転嫁します）、またはSetup → Overhead ModelのBackfillで過去時間を繰り越してください。",
+      "absorptionNoCards": "今期の適用済み間接費はありません — Setup → Overhead Model（Publish）で間接費レートを公開し、実績プロジェクト時間をカード対照で価格付けしてください。"
     },
     "refusals": {
       "mixedUnits": "同一コンポジットに{formats}を混合できません（{categories}） — 含める全カテゴリに同一レート形式を設定し、異なるものをSetup → Overhead Modelでコンポジットから除外してください。",
@@ -2453,7 +2454,8 @@
       "monthShort": "{months}か月",
       "monthCell": "第{n}月",
       "contributionByDept": "部門別の不足額寄与",
-      "hrsShort": "{count, plural, one {# 時間} other {# 時間}}"
+      "hrsShort": "{count, plural, one {# 時間} other {# 時間}}",
+      "pricedFromCards": "公開済み標準レートから価格付け — 今期の適用済み仕訳はありません。"
     },
     "selling": {
       "sellingRate": "販売レート",

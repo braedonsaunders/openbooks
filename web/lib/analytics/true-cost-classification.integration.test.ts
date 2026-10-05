@@ -113,6 +113,183 @@ test('true cost reads applied overhead from the configured account and origin', 
 })
 
 /**
+ * Applied legs are identified by the posting origin, never by the current
+ * application account: after the configured account changes, history posted
+ * to the old account still counts — a changed account must not erase the
+ * period it replaces.
+ */
+test('true cost keeps applied history after the application account changes', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const { org } = await seedClassificationTrap()
+  const nextAccount = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${nextAccount}, ${org.orgId}, '7821', 'Applied Overhead Account Two', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const before = await trueCostData(org.orgId, JULY, null)
+      assert.equal(before.kpis.burdenApplied, 100)
+      assert.equal(before.appliedSource, 'postings')
+      await withBypass(async () => {
+        await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ overheadApplication: { mode: 'net_zero_pair', accountId: nextAccount } })}::jsonb
+          where id = ${org.orgId}`)
+      })
+      const after = await trueCostData(org.orgId, JULY, null)
+      assert.equal(after.hasBurdenGL, true)
+      assert.equal(
+        after.kpis.burdenApplied,
+        100,
+        'applied posted to the old account must survive the account change',
+      )
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * A report_only org never carries applied journals, so its eligible project
+ * time prices against the published standard cards: 8 approved project
+ * hours at a 25.00 card apply 200 against the 800 burden — absorption by
+ * pricing, never by modelling.
+ */
+test('true cost prices absorption from published standard cards with no postings', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const dept = randomUUID()
+  const emp = randomUUID()
+  const proj = randomUUID()
+  const groupId = randomUUID()
+  const rentAccount = randomUUID()
+  const cardId = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'employee', 'Card Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${proj}, ${org.orgId}, ${org.subsidiaryId}, 'CARD-1', 'Card job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, project_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, ${proj}, null, null, null, '{}'::jsonb)`)
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${rentAccount}, ${org.orgId}, '7850', 'Rent', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
+    const entry = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'CARD-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${entry}, 1, ${rentAccount}, ${org.subsidiaryId}, ${dept}, '800', 'CAD', '800', '1'),
+             (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${dept}, '-800', 'CAD', '-800', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+    await db.execute(sql`insert into overhead_rates (id, org_id, department_id, category, method, rate_kind, rate_percent, effective_from)
+      values (${cardId}, ${org.orgId}, ${dept}, 'Published', 'standard', 'per_hour', '25.0000', '2026-01-01')`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.hasBurdenGL, true)
+      assert.equal(data.appliedSource, 'standard-cards')
+      assert.equal(data.kpis.burdenApplied, 200)
+      assert.equal(data.kpis.gap, -600)
+      assert.equal(data.kpis.absorptionPct, 25)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * Absorption math stays in exact decimals to the display boundary: applied
+ * 0.10 + 0.20 against a 0.30 burden gaps exactly zero — a float path would
+ * read 0.30000000000000004 as under-absorbed.
+ */
+test('true cost gaps exactly zero on exact decimal absorption', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const dept = randomUUID()
+  const proj = randomUUID()
+  const appliedAccount = randomUUID()
+  const rentAccount = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${proj}, ${org.orgId}, ${org.subsidiaryId}, 'EXACT-1', 'Exact job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+    for (const [id, number, name] of [
+      [appliedAccount, '7820', 'Applied Overhead Account'],
+      [rentAccount, '7850', 'Rent'],
+    ] as const) {
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${id}, ${org.orgId}, ${number}, ${name}, 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    }
+    await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ overheadApplication: { mode: 'net_zero_pair', accountId: appliedAccount } })}::jsonb
+      where id = ${org.orgId}`)
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, match, is_catch_all, is_active)
+      values (${randomUUID()}, ${org.orgId}, 'burden', 'rent', 'Rent', '{"accountTypes":["expense"],"numberPrefixes":["7"]}'::jsonb, false, true)`)
+    const applied = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${applied}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'EXACT-OVH', ${D}, ${org.periodId}, 'draft', 'overhead_applied')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, project_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${applied}, 1, ${appliedAccount}, ${org.subsidiaryId}, ${dept}, ${proj}, '0.10', 'CAD', '0.10', '1'),
+             (${org.orgId}, ${applied}, 2, ${appliedAccount}, ${org.subsidiaryId}, ${dept}, ${proj}, '0.20', 'CAD', '0.20', '1'),
+             (${org.orgId}, ${applied}, 3, ${appliedAccount}, ${org.subsidiaryId}, ${dept}, null, '-0.30', 'CAD', '-0.30', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${applied}`)
+    const burden = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${burden}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'EXACT-B', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${burden}, 1, ${rentAccount}, ${org.subsidiaryId}, ${dept}, '0.30', 'CAD', '0.30', '1'),
+             (${org.orgId}, ${burden}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${dept}, '-0.30', 'CAD', '-0.30', '1')`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${burden}`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.hasBurdenGL, true)
+      assert.equal(data.kpis.burdenApplied, 0.3)
+      assert.equal(data.kpis.gap, 0)
+      assert.equal(data.kpis.absorptionPct, 100)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * Company utilization excludes departments with zero billable hours across
+ * the current and prior windows (the Utilization dashboard's no-bill rule):
+ * 8 billed + 8 non-billable reads 100%, never 50%.
+ */
+test('true cost utilization excludes departments with no billable hours', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const billable = randomUUID()
+  const nonbill = randomUUID()
+  const empA = randomUUID()
+  const empB = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${billable}, ${org.orgId}, 'Billable', true, '{}'::jsonb),
+             (${nonbill}, ${org.orgId}, 'Nonbill', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${empA}, ${org.orgId}, 'employee', 'Billable Worker', ${org.subsidiaryId}, true, '{}'::jsonb),
+             (${empB}, ${org.orgId}, 'employee', 'Nonbill Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${empA}, ${D}, '8.0000', 'approved', true, ${billable}, null, null, null, '{}'::jsonb),
+             (${randomUUID()}, ${org.orgId}, ${empB}, ${D}, '8.0000', 'approved', false, ${nonbill}, null, null, null, '{}'::jsonb),
+             (${randomUUID()}, ${org.orgId}, ${empA}, '2026-06-10', '8.0000', 'approved', true, ${billable}, null, null, null, '{}'::jsonb)`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.kpis.utilization, 1)
+      assert.equal(data.kpis.billedHours, 8)
+      assert.equal(data.kpis.totalHours, 8)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
  * With no applied postings there is nothing to compare against actuals:
  * applied, gap and absorption refuse by name instead of modelling
  * overhead × utilization (0 here) or falling back to 100%. The reason names

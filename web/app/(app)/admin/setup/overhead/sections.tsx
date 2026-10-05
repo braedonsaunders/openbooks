@@ -204,8 +204,8 @@ export async function OverheadLifecycleTabSlot() {
     cadence: (lifecycleCfg.cadence === 'quarterly' ? 'quarterly' : 'monthly') as 'monthly' | 'quarterly',
   }
   const drift: DriftRow[] = data.departments
-    .filter((d) => d.composite > 0 || publishedRates.has(d.id))
-    .map((d) => ({ id: d.id, name: d.name, live: Math.round(d.composite * 100) / 100, published: publishedRates.get(d.id) ?? null }))
+    .filter((d) => (d.composite ?? 0) > 0 || publishedRates.has(d.id))
+    .map((d) => ({ id: d.id, name: d.name, live: d.composite == null ? null : Math.round(d.composite * 100) / 100, published: publishedRates.get(d.id) ?? null }))
   return <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
 }
 

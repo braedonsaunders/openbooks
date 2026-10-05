@@ -2221,7 +2221,8 @@
       "defaultProfile": "默认",
       "formulaError": "公式结果无效",
       "absorptionNoAccount": "未配置间接费用应用科目 — 请在 Setup → Overhead 中设置。",
-      "absorptionNoPostings": "配置的间接费用应用科目在本期间没有已应用分录。"
+      "absorptionNoPostings": "已配置的间接费用应用科目在本期无已应用记账 — 请批准本期的项目时间（批准将转移间接费用），或在Setup → Overhead Model中用Backfill结转过去时间。",
+      "absorptionNoCards": "本期无已应用间接费用 — 请在Setup → Overhead Model（Publish）中发布间接费用费率，以便实际项目工时按卡片定价。"
     },
     "refusals": {
       "mixedUnits": "无法在同一综合费率中混合{formats}（{categories}） — 请在Setup → Overhead Model中为每个包含的类别设置相同的费率格式，或将异常类别从综合费率中排除。",
@@ -2453,7 +2454,8 @@
       "monthShort": "{months}个月",
       "monthCell": "第 {n} 月",
       "contributionByDept": "各部门缺口贡献",
-      "hrsShort": "{count, plural, one {# 小时} other {# 小时}}"
+      "hrsShort": "{count, plural, one {# 小时} other {# 小时}}",
+      "pricedFromCards": "按已发布标准费率定价 — 本期无已应用记账。"
     },
     "selling": {
       "sellingRate": "销售费率",

@@ -7,7 +7,7 @@ import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, cmp, div, fromUnits, mulDecimal, mulRatio, normalizeMoney, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulRatio, neg, normalizeMoney, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   deriveOverheadCategoryDeptRates,
   deriveOverheadOverallRate,
@@ -22,7 +22,11 @@ import {
 } from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
-import { overheadApplicationSettings } from "@openbooks/engine/allocations/overhead-application";
+import {
+  overheadApplicationSettings,
+  overheadRateAppliesToDriver,
+  OVERHEAD_ZERO_APPLIED_MARKER,
+} from "@openbooks/engine/allocations/overhead-application";
 import { resolveAnnualHoursMany } from "@openbooks/engine/projects/labor-costing";
 import { loadWorkSchedules, pickWorkSchedule } from "@openbooks/engine/payroll/work-schedules";
 import {
@@ -245,6 +249,12 @@ export interface TrueCostData {
   hasBurdenGL: boolean; // the configured application account carries applied postings
   /** Translated reason when absorption is unavailable; null when available. */
   absorptionUnavailable: string | null;
+  /**
+   * Where the applied burden came from: posted `overhead_applied` legs, or
+   * eligible project time priced against the published standard cards (the
+   * source for report_only orgs, which never post). Null when unavailable.
+   */
+  appliedSource: "postings" | "standard-cards" | null;
   /** Allocation base values () for the engine + UI. */
   bases: AllocationBaseBundle;
   /**
@@ -412,13 +422,14 @@ export async function trueCostData(
   const laborFilter = laborIdList.length > 0
     ? sql`l.account_id in (${sql.join(laborIdList.map((id) => sql`${id}::uuid`), sql`, `)})`
     : sql`1 = 0`;
-  // With no configured application account the mechanism is absent: the
-  // applied scan matches nothing and absorption reports unavailable.
+  // Applied legs are identified by the posting origin, never by the
+  // CURRENT application account: a changed account keeps its history, and
+  // the pair's offsetting untagged leg nets to zero on the same account, so
+  // the project tag excludes it. The configured account only decides which
+  // unavailable message names the remedy.
   const appliedAccountId = appliedSettings.accountId;
-  const appliedFilter = appliedAccountId
-    ? sql`l.account_id = ${appliedAccountId}::uuid and e.origin = 'overhead_applied' and l.project_id is not null`
-    : sql`1 = 0`;
-  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, deptRows, baseRows, hcRows] = await Promise.all([
+  const appliedFilter = sql`e.origin = 'overhead_applied' and l.project_id is not null`;
+  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
     // translate to presentation before the burden math ever sees them.
@@ -521,10 +532,10 @@ export async function trueCostData(
       where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}
       group by 1
     `) : Promise.resolve({rows:[]})),
-    // Applied burden: project-tagged legs on the configured application
-    // account with origin 'overhead_applied' — the same legs
-    // listOverheadApplications sums. The pair's offsetting untagged leg nets
-    // to zero on the same account, so it is excluded by the project tag.
+    // Applied burden: project-tagged legs with origin 'overhead_applied' —
+    // the same legs listOverheadApplications sums. The pair's offsetting
+    // untagged leg nets to zero on the same account, so it is excluded by
+    // the project tag.
     analyticsQuery(sql`
       select sub.base_currency as func, max(e.posting_date)::text as late,
         coalesce(sum(l.amount), 0) as applied, count(*) as lines
@@ -534,6 +545,58 @@ export async function trueCostData(
       where l.org_id = ${orgId} ${ledgerScope} and ${appliedFilter}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
+    `),
+    // Standard-card pricing of the period's eligible project time: approved,
+    // project-tagged, actual-basis entries a posting could carry (dust
+    // stamped applied-with-zero excluded, 'none'-method projects excluded —
+    // the same eligibility countUnappliedOverheadTime counts), priced at the
+    // published standard per-hour cards in force on the worked day through
+    // the shared selection kernel. Rates are org-base denominated, so the
+    // priced total needs no translation. This prices absorption for
+    // report_only orgs (the default), which never carry applied journals;
+    // posted legs always win when they exist.
+    analyticsQuery(sql`
+      select coalesce(sum(t.hours * card.rate), 0) as priced, count(*) as entries
+      from time_entries t
+      join lateral (
+        select coalesce(sum(r.rate_percent), 0) as rate
+          from overhead_rates r
+         where r.rate_kind = 'per_hour'
+           and ${overheadRateAppliesToDriver("r", {
+             orgId: sql`t.org_id`,
+             workedOn: sql`t.worked_on`,
+             departmentId: sql`t.department_id`,
+           }, { method: "standard" })}
+      ) card on true
+     where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
+       and t.status = 'approved' and t.project_id is not null and t.costing_basis = 'actual'
+       and (t.custom ->> ${OVERHEAD_ZERO_APPLIED_MARKER}) is distinct from 'true'
+       and not exists (
+         select 1 from projects p
+         join project_types pt on pt.id = p.project_type_id and pt.org_id = t.org_id
+        where p.id = t.project_id and p.org_id = t.org_id
+          and (
+            select v.financial_profile->'overhead'->>'method'
+              from project_financial_profile_versions v
+             where v.org_id = t.org_id
+               and v.project_type_id = pt.id
+               and v.effective_from <= t.worked_on
+               and (v.effective_to is null or v.effective_to >= t.worked_on)
+             order by v.effective_from desc
+             limit 1
+          ) = 'none'
+       )
+    `),
+    // Prior-window billed/total hours per department: the utilization scope
+    // excludes departments with zero billable hours across current + prior
+    // (the Utilization dashboard's no-bill rule), so it needs both windows.
+    analyticsQuery(sql`
+      select t.department_id,
+        coalesce(sum(t.hours) filter (where t.is_billable), 0) as billed_hours,
+        coalesce(sum(t.hours), 0) as total_hours
+      from time_entries t
+     where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}
+     group by 1
     `),
     analyticsQuery(sql`select id, name from departments where org_id = ${orgId} order by name`),
     // Allocation bases by department (): labour $,
@@ -791,6 +854,23 @@ export async function trueCostData(
     appliedLines += Number(r.lines ?? 0);
     appliedTotal = add(appliedTotal, translateLeg(String(r.applied ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
   }
+  // Standard-card pricing of eligible project time (org-base denominated, so
+  // no translation): the fallback source when no applied legs posted.
+  const cardPricedLegs = cardPricedRows.rows as unknown as { priced: TrueCostSqlNumeric; entries: string | number }[];
+  let cardPricedTotal = "0";
+  let cardPricedEntries = 0;
+  for (const r of cardPricedLegs) {
+    cardPricedEntries += Number(r.entries ?? 0);
+    cardPricedTotal = add(cardPricedTotal, String(r.priced ?? 0));
+  }
+  // Prior-window billed/total hours per department for the no-bill rule.
+  const priorDeptBilled = new Map<string, string>();
+  const priorDeptTotal = new Map<string, string>();
+  for (const r of (priorDeptHoursRows.rows as unknown as { department_id: string | null; billed_hours: TrueCostSqlNumeric; total_hours: TrueCostSqlNumeric }[])) {
+    const key = r.department_id ?? "none";
+    priorDeptBilled.set(key, add(priorDeptBilled.get(key) ?? "0.0000", normalizeMoney(String(r.billed_hours ?? 0))));
+    priorDeptTotal.set(key, add(priorDeptTotal.get(key) ?? "0.0000", normalizeMoney(String(r.total_hours ?? 0))));
+  }
   // Allocation bases merged per department; headcount joins once per
   // department from its own currency-blind scan (never summed per leg).
   type BaseCell = { labor_dollars: string; headcount: number; revenue: string; direct_cost: string };
@@ -845,6 +925,26 @@ export async function trueCostData(
     nonbillCostByMonth.set(r.month, (nonbillCostByMonth.get(r.month) ?? 0) + nonbill);
     nonbillCostByDeptMonth.set(`${dept}|${r.month}`, (nonbillCostByDeptMonth.get(`${dept}|${r.month}`) ?? 0) + nonbill);
     billedHours += billed; totalHours += total;
+  }
+
+  // Utilization scope = the Utilization dashboard's no-bill rule: a named
+  // department with zero billable hours across current + prior is not a
+  // billable department, so its hours leave the company utilization (but
+  // never the allocation denominators above). Untagged time has no
+  // department to flag and stays included, as it does there.
+  const noBillDeptIds = new Set<string>();
+  for (const [dept, currTotal] of deptTotalExact) {
+    if (dept === "none") continue;
+    const total = add(currTotal, priorDeptTotal.get(dept) ?? "0.0000");
+    const billed = add(deptBilledExact.get(dept) ?? "0.0000", priorDeptBilled.get(dept) ?? "0.0000");
+    if (cmp(total, "0") > 0 && cmp(billed, "0") === 0) noBillDeptIds.add(dept);
+  }
+  let utilBilledHours = 0, utilTotalHours = 0;
+  let utilBilledHoursExact = "0.0000";
+  for (const [dept, h] of deptHours) {
+    if (noBillDeptIds.has(dept)) continue;
+    utilBilledHours += h.billed; utilTotalHours += h.total;
+    utilBilledHoursExact = add(utilBilledHoursExact, deptBilledExact.get(dept) ?? "0.0000");
   }
 
   // Burden centres = departments with BILLED hours (a dept that bills nothing
@@ -1466,14 +1566,20 @@ export async function trueCostData(
   const compositeRefusal: TrueCostRefusal | null = overallBlendRefusal ?? firstDeptRefusal;
 
   // ---- absorption (actual applied burden only) ---------------------------------
-  // With no applied postings there is nothing to compare against actuals:
-  // the comparison is unavailable by name — never modelled from
-  // utilization, never 100%.
-  const glApplied = Number(appliedTotal);
-  const hasBurdenGL = appliedLines > 0 && Math.abs(glApplied) > 0;
-  const utilization = totalHours > 0 ? billedHours / totalHours : 0;
-  const burdenApplied = hasBurdenGL ? glApplied : null;
-  const gap = burdenApplied === null ? null : burdenApplied - totalOverhead;
+  // Posted legs win; without them the period's eligible project time prices
+  // against the published standard cards, so report_only orgs (the default,
+  // which never post) get absorption too. Both totals stay exact decimals
+  // until the display boundary: a float gap would read a 0.30/0.30 period
+  // as under-absorbed by a rounding hair.
+  const postedAvailable = appliedLines > 0 && cmp(appliedTotal, "0") !== 0;
+  const cardAvailable = !postedAvailable && cardPricedEntries > 0 && cmp(cardPricedTotal, "0") !== 0;
+  const appliedExact = postedAvailable ? appliedTotal : cardAvailable ? cardPricedTotal : null;
+  const appliedSource: "postings" | "standard-cards" | null = postedAvailable ? "postings" : cardAvailable ? "standard-cards" : null;
+  const hasBurdenGL = appliedExact !== null;
+  const utilization = utilTotalHours > 0 ? utilBilledHours / utilTotalHours : 0;
+  const burdenApplied = appliedExact === null ? null : toChartNumber(appliedExact);
+  const gapExact = appliedExact === null ? null : add(appliedExact, neg(totalOverheadExact));
+  const gap = gapExact === null ? null : toChartNumber(gapExact);
 
   // ---- prior-window composite for the change chip (same classification) -----------
   const priorBilled = priorBilledHours;
@@ -1558,10 +1664,10 @@ export async function trueCostData(
       overheadAccounts: categories.reduce((s, c) => s + c.accounts.length, 0),
       burdenApplied,
       gap,
-      gapPerHour: gap === null || billedHours <= 0 ? null : gap / billedHours,
-      absorptionPct: burdenApplied === null || totalOverhead <= 0 ? null : (burdenApplied / totalOverhead) * 100,
-      billedHours,
-      totalHours,
+      gapPerHour: gapExact === null || cmp(utilBilledHoursExact, "0") <= 0 ? null : toChartNumber(div(gapExact, utilBilledHoursExact)),
+      absorptionPct: appliedExact === null || cmp(totalOverheadExact, "0") <= 0 ? null : toChartNumber(div(mulDecimal(appliedExact, "100"), totalOverheadExact)),
+      billedHours: utilBilledHours,
+      totalHours: utilTotalHours,
       utilization,
       employeeCount: employees.length,
     },
@@ -1579,9 +1685,14 @@ export async function trueCostData(
     monthly,
     forecast,
     hasBurdenGL,
+    appliedSource,
     absorptionUnavailable: hasBurdenGL
       ? null
-      : (appliedAccountId ? strings.absorptionNoPostings : strings.absorptionNoAccount),
+      : !appliedAccountId
+        ? strings.absorptionNoAccount
+        : appliedSettings.mode === "net_zero_pair"
+          ? strings.absorptionNoPostings
+          : strings.absorptionNoCards,
     bases,
     ratePublication: { supported: exactSupported, blockers: publishBlockers },
     config: {

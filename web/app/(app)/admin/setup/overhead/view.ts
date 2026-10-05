@@ -146,8 +146,8 @@ export async function loadOverhead(
     {
       n: 2,
       title: t('setup.entities.overhead-model.step2t'),
-      desc: t('setup.entities.overhead-model.step2d', { rate: data.kpis.compositeRate.toFixed(2) }),
-      done: data.kpis.compositeRate > 0,
+      desc: t('setup.entities.overhead-model.step2d', { rate: data.kpis.compositeRate == null ? '—' : data.kpis.compositeRate.toFixed(2) }),
+      done: (data.kpis.compositeRate ?? 0) > 0,
     },
     {
       n: 3,

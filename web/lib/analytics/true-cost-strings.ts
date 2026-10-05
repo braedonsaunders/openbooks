@@ -60,8 +60,13 @@ export interface TrueCostStrings {
   formulaError: string;
   /** Absorption refused: no overhead application account is configured. */
   absorptionNoAccount: string;
-  /** Absorption refused: the configured account has no applied postings. */
+  /** Absorption refused under a net-zero-pair application with no applied
+   * postings and no cards: approve project time (approvals carry overhead)
+   * or Backfill in Setup → Overhead Model. */
   absorptionNoPostings: string;
+  /** Absorption refused with no applied postings and no published cards:
+   * publish standard rates in Setup → Overhead Model. */
+  absorptionNoCards: string;
   /** `utilPct` is pre-rendered (legacy toFixed(0)); `hours` is round2. */
   scenarioHire(count: number, utilPct: string, hours: number): string;
   /** `savings` is pre-formatted money; `hours` is round2. */
@@ -99,6 +104,7 @@ export function trueCostStrings(t: CatalogMessageFn, locale: string, currency = 
     formulaError: t("trueCost.labels.formulaError"),
     absorptionNoAccount: t("trueCost.labels.absorptionNoAccount"),
     absorptionNoPostings: t("trueCost.labels.absorptionNoPostings"),
+    absorptionNoCards: t("trueCost.labels.absorptionNoCards"),
     scenarioHire: (count, utilPct, hours) =>
       t("trueCost.scenarios.hire", { count, util: utilPct, hours }),
     scenarioTerminate: (count, savings, hours) =>

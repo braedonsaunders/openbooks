@@ -17,6 +17,7 @@ import { healthStrings } from "../analytics/health-strings";
 import { customerStrings } from "../analytics/customer-strings";
 import { vendorStrings } from "../analytics/vendor-strings";
 import { trueCostStrings } from "../analytics/true-cost-strings";
+import { presentationCurrency } from "../fx-presentation";
 import { utilizationStrings } from "../analytics/utilization-strings";
 import { spendVelocityStrings } from "../analytics/spend-velocity-strings";
 import { sentinelStrings } from "../analytics/sentinel-strings";
@@ -418,7 +419,7 @@ const trueCostTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
-    const strings = trueCostStrings(translate, locale);
+    const strings = trueCostStrings(translate, locale, await presentationCurrency(authz.user.orgId));
     const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
     return {
       ok: true,
@@ -426,13 +427,17 @@ const trueCostTool: AssistantToolDef = {
         period: r.period,
         kpis: r.kpis,
         hasBurdenGL: r.hasBurdenGL,
+        // The model must see WHY a composite is null: the typed refusal
+        // (with its remedy) travels alongside the figures, never as a throw.
+        compositeRefusal: r.compositeRefusal,
+        appliedSource: r.appliedSource,
         departments: capList(
           r.departments.map((d) => ({
             id: d.id,
             name: d.name,
             billedHours: numberValue(d.billedHours),
             totalHours: numberValue(d.totalHours),
-            composite: numberValue(d.composite),
+            composite: d.composite,
           })),
           50,
         ),
@@ -444,7 +449,7 @@ const trueCostTool: AssistantToolDef = {
             categoryType: c.categoryType,
             totalAmount: numberValue(c.totalAmount),
             rate: c.rate,
-            rawRate: numberValue(c.rawRate),
+            rawRate: c.rawRate,
             rateDisplay: c.rateDisplay,
             allocationBase: c.allocationBase,
             allocationMethod: c.allocationMethod,
