@@ -939,7 +939,7 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
           from journal_lines jl
           join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
           join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
-         where ${scope} and jl.party_id is null and je.status = 'posted'
+         where ${scope} and jl.party_id is null
            and jl.account_id = any(${uuidArray([...subawardAccounts.keys()].filter((id) => !excludedAccounts.has(id)))}::uuid[])
          order by je.entry_number limit 5
       `);
