@@ -181,6 +181,7 @@ type ClaimedDelivery = {
 };
 
 async function claimDueDeliveries(limit: number, now: Date): Promise<ClaimedDelivery[]> {
+  // bypass: scheduler-tick — the delivery scan claims due items by id before their organization is in scope.
   return withBypassContext(async () => {
     const candidates = (await db.execute<{ id: string }>(sql`
       select id from webhook_deliveries

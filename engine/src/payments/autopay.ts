@@ -430,6 +430,7 @@ export async function startMethodSetup(
 /** Resolve a hosted setup token to its org (public page + return handler). */
 export async function setupTokenOrgId(setupToken: string): Promise<string | null> {
   if (!setupToken || setupToken.length < 16) return null;
+  // bypass: connector-token — the setup link's token hash resolves its organization; no session exists to scope the read.
   return withBypassContext(async () => {
     const row = (await db.execute<{ org_id: string }>(sql`
       select org_id from customer_payment_methods
@@ -456,6 +457,7 @@ export interface PublicSetupPage {
  */
 export async function publicSetupPage(setupToken: string): Promise<PublicSetupPage> {
   if (!setupToken || setupToken.length < 16) throw new AutopayError("this setup link is not valid; ask for a new one");
+  // bypass: connector-token — the setup link's token hash resolves its organization; no session exists to scope the read.
   return withBypassContext(async () => {
     const row = (await db.execute<{
       org_id: string;
@@ -499,6 +501,7 @@ export async function setupContinueUrl(setupToken: string): Promise<string> {
         : "this setup link was withdrawn; ask for a new one",
     );
   }
+  // bypass: connector-token — the setup link's token hash resolves its organization; no session exists to scope the read.
   const url = await withBypassContext(async () => {
     return (await db.execute<{ setup_redirect_url: string | null }>(sql`
       select setup_redirect_url from customer_payment_methods
@@ -512,6 +515,7 @@ export async function setupContinueUrl(setupToken: string): Promise<string> {
 /** Complete a setup from the hosted return page (token-authenticated). */
 export async function completeSetupByToken(setupToken: string, fetchFn?: FetchFn): Promise<StoredPaymentMethod> {
   const page = await publicSetupPage(setupToken);
+  // bypass: connector-token — the setup link's token hash resolves its organization; no session exists to scope the read.
   const methodId = await withBypassContext(async () => {
     return (await db.execute<{ id: string }>(sql`
       select id from customer_payment_methods
