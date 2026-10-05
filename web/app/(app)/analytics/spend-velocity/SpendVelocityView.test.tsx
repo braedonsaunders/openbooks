@@ -29,7 +29,12 @@ test('spend velocity CSV exports retain account amount decimals', async () => {
 })
 
 test('unconfigured detectors name remedies with single percents and worded trends', async () => {
-  const { host, cleanup } = await mountView(<SpendVelocityView data={alertFixture()} />, 'Detectors')
+  // The headlines stay silent here (no omitted detectors), so the remedies
+  // below can only come from the detector tiles themselves — the headline
+  // caveat on other fixtures would satisfy these assertions on every tab.
+  const data = alertFixture()
+  data.summary.unconfiguredDetectors = []
+  const { host, cleanup } = await mountView(<SpendVelocityView data={data} />, 'Detectors')
   try {
     const text = host.textContent ?? ''
     assert.ok(text.includes('Set the minimum base in Spend Velocity → Configuration'), `the cliff tile must name its remedy, got:\n${text}`)
