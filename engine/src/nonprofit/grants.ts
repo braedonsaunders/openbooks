@@ -48,6 +48,9 @@ export interface GrantRecord {
   costShareAmount: string;
   fundId: string;
   allowableAccountGroupId: string;
+  mtdcExclusionAccountGroupId: string | null;
+  mtdcSubawardAccountGroupId: string | null;
+  mtdcSubawardThreshold: string | null;
   status: GrantStatus;
   awardEntryId: string | null;
   version: number;
@@ -82,6 +85,12 @@ export interface CreateGrantInput {
   costShareAmount?: string;
   fundId: string;
   allowableAccountGroupId: string;
+  /** Modified total direct costs only: the account group whose costs leave the indirect base. */
+  mtdcExclusionAccountGroupId?: string | null;
+  /** Modified total direct costs only: the account group holding subaward costs. */
+  mtdcSubawardAccountGroupId?: string | null;
+  /** The part of each subrecipient's subaward that stays in the base; paired with the subaward group. */
+  mtdcSubawardThreshold?: string | null;
   custom?: Record<string, unknown>;
   actorId: string;
 }
@@ -115,6 +124,9 @@ interface GrantRow extends Record<string, unknown> {
   cost_share_amount: string;
   fund_id: string;
   allowable_account_group_id: string;
+  mtdc_exclusion_account_group_id: string | null;
+  mtdc_subaward_account_group_id: string | null;
+  mtdc_subaward_threshold: string | null;
   status: GrantStatus;
   award_entry_id: string | null;
   version: number;
@@ -301,6 +313,9 @@ function mapGrant(row: GrantRow): GrantRecord {
     costShareAmount: row.cost_share_amount,
     fundId: row.fund_id,
     allowableAccountGroupId: row.allowable_account_group_id,
+    mtdcExclusionAccountGroupId: row.mtdc_exclusion_account_group_id,
+    mtdcSubawardAccountGroupId: row.mtdc_subaward_account_group_id,
+    mtdcSubawardThreshold: row.mtdc_subaward_threshold,
     status: row.status,
     awardEntryId: row.award_entry_id,
     version: row.version,
@@ -323,6 +338,35 @@ export function calculateIndirectCost(input: {
 }): Money {
   const base = input.base === "direct_costs" ? input.directCosts : input.modifiedTotalDirect;
   return parseMoney(mulPercent(parseMoney(base), parseGrantRate(input.ratePercent)));
+}
+
+/**
+ * Modified total direct costs: the allowable direct costs less every cost in
+ * the grant's excluded-cost group, and less the part of each subrecipient's
+ * subaward above the per-subrecipient threshold. Subaward amounts are the net
+ * subaward cost of each subrecipient, already outside the excluded-cost group.
+ */
+export function modifiedTotalDirectCosts(input: {
+  directCosts: string;
+  excludedCosts: string;
+  subawardsBySubrecipient: readonly string[];
+  subawardThreshold: string | null;
+}): Money {
+  let base = addMoney(parseGrantMoney(input.directCosts, "directCosts"), negMoney(parseMoney(input.excludedCosts)));
+  if (input.subawardsBySubrecipient.length === 0) return base;
+  if (input.subawardThreshold === null) {
+    throw refusal({
+      message: "Subaward costs were measured without a per-subrecipient threshold.",
+      code: "grant_mtdc_subaward_threshold_missing",
+      remedy: "Set the subaward amount kept in the base on the grant's indirect terms.",
+    });
+  }
+  const threshold = parseGrantMoney(input.subawardThreshold, "mtdcSubawardThreshold");
+  for (const subaward of input.subawardsBySubrecipient) {
+    const amount = parseMoney(subaward);
+    if (cmpMoney(amount, threshold) > 0) base = addMoney(base, negMoney(addMoney(amount, negMoney(threshold))));
+  }
+  return base;
 }
 
 export function calculateAllowableSpend(input: {
@@ -399,6 +443,99 @@ async function validateGrantReferences(
   }
 }
 
+interface MtdcTerms {
+  exclusionGroupId: string | null;
+  subawardGroupId: string | null;
+  subawardThreshold: Money | null;
+}
+
+/**
+ * The modified-total-direct-cost configuration is grant terms: it applies only
+ * to a grant measured on that base, the subaward group and its threshold come
+ * together, and each named group must classify accounts in a different
+ * account-group dimension than the allowable-cost group. An account belongs to
+ * one group per dimension, so a group in the allowable-cost dimension could
+ * never hold an allowable cost and would exclude nothing.
+ */
+async function validateMtdcTerms(
+  runner: SqlExecutor,
+  orgId: string,
+  input: {
+    indirectBase: GrantIndirectBase;
+    allowableAccountGroupId: string;
+    exclusionGroupId: string | null | undefined;
+    subawardGroupId: string | null | undefined;
+    subawardThreshold: string | null | undefined;
+  },
+): Promise<MtdcTerms> {
+  const exclusionGroupId = input.exclusionGroupId ?? null;
+  const subawardGroupId = input.subawardGroupId ?? null;
+  const thresholdInput = input.subawardThreshold ?? null;
+  if (input.indirectBase !== "modified_total_direct") {
+    if (exclusionGroupId !== null || subawardGroupId !== null || thresholdInput !== null) {
+      throw refusal({
+        message: "Excluded-cost and subaward groups apply only to a grant whose indirect base is modified total direct costs.",
+        code: "grant_mtdc_config_base_invalid",
+        remedy: "Choose modified total direct costs as the indirect base, or clear the excluded-cost and subaward settings.",
+        field: "indirectBase",
+      });
+    }
+    return { exclusionGroupId: null, subawardGroupId: null, subawardThreshold: null };
+  }
+  if ((subawardGroupId === null) !== (thresholdInput === null)) {
+    throw refusal({
+      message: "A subaward account group and the subaward amount kept in the base per subrecipient are set together.",
+      code: "grant_mtdc_subaward_pair_invalid",
+      remedy: "Enter both the subaward account group and the per-subrecipient amount, or clear both.",
+      field: subawardGroupId === null ? "mtdcSubawardAccountGroupId" : "mtdcSubawardThreshold",
+    });
+  }
+  const subawardThreshold = thresholdInput === null ? null : parseGrantMoney(thresholdInput, "mtdcSubawardThreshold");
+  if (exclusionGroupId !== null) requireUuid(exclusionGroupId, "mtdcExclusionAccountGroupId");
+  if (subawardGroupId !== null) requireUuid(subawardGroupId, "mtdcSubawardAccountGroupId");
+  if (exclusionGroupId !== null && exclusionGroupId === subawardGroupId) {
+    throw refusal({
+      message: "The excluded-cost group and the subaward group must be different account groups.",
+      code: "grant_mtdc_group_conflict",
+      remedy: "Choose a separate account group for subaward costs, or clear the subaward settings.",
+      field: "mtdcSubawardAccountGroupId",
+    });
+  }
+  const named = [
+    { id: exclusionGroupId, field: "mtdcExclusionAccountGroupId", label: "excluded-cost" },
+    { id: subawardGroupId, field: "mtdcSubawardAccountGroupId", label: "subaward" },
+  ].filter((entry): entry is { id: string; field: string; label: string } => entry.id !== null);
+  if (named.length > 0) {
+    const groups = await runner.execute<{ id: string; dimension: string; name: string; is_active: boolean }>(sql`
+      select id, dimension, name, is_active from account_groups
+       where org_id = ${orgId} and id = any(${uuidArray([input.allowableAccountGroupId, ...named.map((entry) => entry.id)])}::uuid[])
+       for key share
+    `);
+    const byId = new Map(groups.rows.map((row) => [row.id, row]));
+    const allowableDimension = byId.get(input.allowableAccountGroupId)?.dimension;
+    for (const entry of named) {
+      const group = byId.get(entry.id);
+      if (!group?.is_active) {
+        throw refusal({
+          message: `The ${entry.label} account group is not active in this organization.`,
+          code: "grant_mtdc_group_invalid",
+          remedy: "Choose an active account group from this organization's account-group setup.",
+          field: entry.field,
+        });
+      }
+      if (group.dimension === allowableDimension) {
+        throw refusal({
+          message: `The ${entry.label} account group "${group.name}" classifies accounts in the same dimension (${group.dimension}) as the allowable-cost group, so no allowable cost can belong to it.`,
+          code: "grant_mtdc_group_dimension_conflict",
+          remedy: "Choose an account group from a different account-group dimension; create one under Setup → Account Groups if none exists.",
+          field: entry.field,
+        });
+      }
+    }
+  }
+  return { exclusionGroupId, subawardGroupId, subawardThreshold };
+}
+
 function validateGrantTerms(input: CreateGrantInput): {
   code: string;
   name: string;
@@ -461,7 +598,8 @@ async function loadGrantById(runner: SqlExecutor, orgId: string, grantId: string
            award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
            indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
            cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-           award_entry_id, version, supersedes_id, custom, created_at::text as created_at,
+           award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold, created_at::text as created_at,
            created_by, updated_at::text as updated_at, updated_by
       from grants where org_id = ${orgId} and id = ${grantId}
       ${lock ? sql`for update` : sql``}
@@ -486,7 +624,8 @@ async function loadCurrentGrant(runner: SqlExecutor, orgId: string, grantId: str
            award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
            indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
            cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-           award_entry_id, version, supersedes_id, custom, created_at::text as created_at,
+           award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold, created_at::text as created_at,
            created_by, updated_at::text as updated_at, updated_by
       from grants where org_id = ${orgId} and code = ${requested.code}
       order by version desc limit 1 ${lock ? sql`for update` : sql``}
@@ -637,6 +776,7 @@ async function resolveGroupMembers(
   runner: SqlExecutor,
   orgId: string,
   targetGroupId: string,
+  label = "allowable-cost",
 ): Promise<Map<string, string>> {
   const target = await runner.execute<{ id: string; dimension: string; is_active: boolean }>(sql`
     select id, dimension, is_active from account_groups
@@ -645,7 +785,7 @@ async function resolveGroupMembers(
   const targetRow = target.rows[0];
   if (!targetRow?.is_active) {
     throw refusal({
-      message: "The allowable-cost account group is missing or inactive.",
+      message: `The ${label} account group is missing or inactive.`,
       code: "grant_allowable_group_invalid",
       remedy: "Choose an active account group from this organization's account-group setup.",
     });
@@ -713,16 +853,38 @@ async function resolveGroupMembers(
   return included;
 }
 
+interface GrantSpend {
+  /** Allowable direct costs. */
+  direct: Money;
+  /** The amount the indirect rate applies to: direct costs, or modified total direct costs. */
+  indirectBase: Money;
+  indirect: Money;
+  allowable: Money;
+}
+
 /**
- * The grant's allowable direct costs: expense posted to the grant's fund, on
- * accounts in its allowable-cost group, dated inside its period of
- * performance. A cost incurred before the award starts or after it ends is
- * not chargeable to the award, so it never counts toward reimbursement.
+ * The grant's allowable spend. Direct costs are expense posted to the grant's
+ * fund, on accounts in its allowable-cost group, dated inside its period of
+ * performance: a cost incurred before the award starts or after it ends is not
+ * chargeable to it. The indirect rate applies to those direct costs, or, on
+ * the modified-total-direct-cost base, to the direct costs less the grant's
+ * excluded-cost group and less each subrecipient's subaward above the grant's
+ * threshold. An MTDC grant with no excluded-cost group refuses rather than
+ * treating every direct cost as base, and a subaward cost without a
+ * subrecipient refuses rather than being guessed into or out of the base.
  */
-async function grantExpenseTotal(runner: SqlExecutor, grant: GrantRow): Promise<Money> {
+async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<GrantSpend> {
+  const mtdc = grant.indirect_base === "modified_total_direct";
+  if (mtdc && !grant.mtdc_exclusion_account_group_id) {
+    throw refusal({
+      message: `Grant ${grant.code} applies its indirect rate to modified total direct costs, but no excluded-cost account group is configured, so its indirect cost base cannot be determined.`,
+      code: "grant_mtdc_exclusions_unconfigured",
+      remedy: "Amend the grant's indirect-cost terms to choose the excluded-cost account group (equipment, capital expenditures, rental costs, patient care, tuition remission, participant support); choose an account group with no accounts if the award excludes nothing.",
+      status: 409,
+    });
+  }
   const grouped = await resolveGroupMembers(runner, grant.org_id, grant.allowable_account_group_id);
   const accountIds = [...grouped].filter(([, type]) => EXPENSE_TYPES.has(type)).map(([id]) => id);
-  if (accountIds.length === 0) return parseMoney("0");
   const defaultFund = await runner.execute<{ id: string | null }>(sql`
     select default_value_id as id from segment_definitions
      where org_id = ${grant.org_id} and key = 'fund' and source_kind = 'custom'
@@ -738,18 +900,73 @@ async function grantExpenseTotal(runner: SqlExecutor, grant: GrantRow): Promise<
       status: 409,
     });
   }
-  const result = await runner.execute<{ total: string }>(sql`
-    select coalesce(sum(jl.amount), 0)::text as total
+  const scope = sql`
+          jl.org_id = ${grant.org_id} and je.book_id = ${primaryBook.rows[0].id}
+      and je.status in ('posted', 'reversed') and a.type in ('cogs', 'expense', 'expense_other')
+      and jl.account_id = any(${uuidArray(accountIds)}::uuid[])
+      and coalesce(jl.extra_dims->>'fund', ${defaultFund.rows[0]?.id ?? null}) = ${grant.fund_id}
+      and je.posting_date between ${grant.period_from}::date and ${grant.period_to}::date`;
+  const rows = accountIds.length === 0 ? [] : (await runner.execute<{ account_id: string; party_id: string | null; total: string }>(sql`
+    select jl.account_id, jl.party_id, sum(jl.amount)::text as total
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
       join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
-     where jl.org_id = ${grant.org_id} and je.book_id = ${primaryBook.rows[0].id}
-       and je.status in ('posted', 'reversed') and a.type in ('cogs', 'expense', 'expense_other')
-       and jl.account_id = any(${uuidArray(accountIds)}::uuid[])
-       and coalesce(jl.extra_dims->>'fund', ${defaultFund.rows[0]?.id ?? null}) = ${grant.fund_id}
-       and je.posting_date between ${grant.period_from}::date and ${grant.period_to}::date
-  `);
-  return parseMoney(result.rows[0]?.total ?? "0");
+     where ${scope}
+     group by jl.account_id, jl.party_id
+     order by jl.account_id, jl.party_id
+  `)).rows;
+  let direct = parseMoney("0");
+  for (const row of rows) direct = addMoney(direct, parseMoney(row.total));
+  let indirectBase = direct;
+  if (mtdc) {
+    const excludedAccounts = await resolveGroupMembers(runner, grant.org_id, grant.mtdc_exclusion_account_group_id!, "excluded-cost");
+    const subawardAccounts = grant.mtdc_subaward_account_group_id
+      ? await resolveGroupMembers(runner, grant.org_id, grant.mtdc_subaward_account_group_id, "subaward")
+      : new Map<string, string>();
+    let excluded = parseMoney("0");
+    const subawards = new Map<string | null, Money>();
+    for (const row of rows) {
+      if (excludedAccounts.has(row.account_id)) {
+        excluded = addMoney(excluded, parseMoney(row.total));
+      } else if (subawardAccounts.has(row.account_id)) {
+        subawards.set(row.party_id, addMoney(subawards.get(row.party_id) ?? parseMoney("0"), parseMoney(row.total)));
+      }
+    }
+    const unattributed = subawards.get(null);
+    if (unattributed !== undefined && cmpMoney(unattributed, "0.0000") !== 0) {
+      const entries = await runner.execute<{ entry_number: string }>(sql`
+        select distinct je.entry_number
+          from journal_lines jl
+          join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
+          join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
+         where ${scope} and jl.party_id is null and je.status = 'posted'
+           and jl.account_id = any(${uuidArray([...subawardAccounts.keys()].filter((id) => !excludedAccounts.has(id)))}::uuid[])
+         order by je.entry_number limit 5
+      `);
+      throw refusal({
+        message: `Grant ${grant.code} has ${unattributed} of subaward cost posted without a subrecipient` +
+          `${entries.rows.length > 0 ? ` (entries ${entries.rows.map((row) => row.entry_number).join(", ")})` : ""}, ` +
+          "so the part of each subaward that stays in the modified total direct cost base cannot be determined.",
+        code: "grant_mtdc_subaward_party_missing",
+        remedy: "Reverse each named entry and re-enter its subaward cost with the subrecipient as the line's party, then retry.",
+        status: 409,
+      });
+    }
+    subawards.delete(null);
+    indirectBase = modifiedTotalDirectCosts({
+      directCosts: direct,
+      excludedCosts: excluded,
+      subawardsBySubrecipient: [...subawards.values()],
+      subawardThreshold: grant.mtdc_subaward_threshold,
+    });
+  }
+  const allowable = calculateAllowableSpend({
+    directCosts: direct,
+    modifiedTotalDirect: indirectBase,
+    ratePercent: grant.indirect_rate,
+    base: grant.indirect_base,
+  });
+  return { direct, indirectBase, indirect: addMoney(allowable, negMoney(direct)), allowable };
 }
 
 async function drawdownTotals(runner: SqlExecutor, grant: GrantRow, exceptId?: string): Promise<{ all: Money; reimbursements: Money }> {
@@ -857,13 +1074,7 @@ async function requireDrawdownCapacity(
   }
   if (kind === "advance") return;
   await lockFundForReimbursement(runner, grant);
-  const directCosts = await grantExpenseTotal(runner, grant);
-  const allowable = calculateAllowableSpend({
-    directCosts,
-    modifiedTotalDirect: directCosts,
-    ratePercent: grant.indirect_rate,
-    base: grant.indirect_base,
-  });
+  const { allowable } = await measureGrantSpend(runner, grant);
   const claims = await fundReimbursementClaims(runner, grant, exceptId);
   const remainingAllowable = addMoney(allowable, negMoney(claims.total));
   if (cmpMoney(amount, remainingAllowable) > 0) {
@@ -930,24 +1141,34 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRecord>
   return withGrantWrite(input.orgId, async (runner) => {
     const terms = validateGrantTerms(input);
     await validateGrantReferences(runner, input.orgId, terms);
+    const mtdc = await validateMtdcTerms(runner, input.orgId, {
+      indirectBase: terms.indirectBase,
+      allowableAccountGroupId: terms.allowableAccountGroupId,
+      exclusionGroupId: input.mtdcExclusionAccountGroupId,
+      subawardGroupId: input.mtdcSubawardAccountGroupId,
+      subawardThreshold: input.mtdcSubawardThreshold,
+    });
     const inserted = await runner.execute<GrantRow>(sql`
       insert into grants
         (org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier, right_of_return,
          award_amount, period_from, period_to, indirect_rate, indirect_base, cost_share_required,
-         cost_share_amount, fund_id, allowable_account_group_id, status, version, custom, created_by, updated_by)
+         cost_share_amount, fund_id, allowable_account_group_id, mtdc_exclusion_account_group_id,
+         mtdc_subaward_account_group_id, mtdc_subaward_threshold, status, version, custom, created_by, updated_by)
       values
         (${input.orgId}, ${terms.code}, ${terms.name}, ${terms.sponsorPartyId}, ${input.sponsorKind},
          ${input.determination}, ${input.determination === "contribution_conditional" ? input.barrier!.trim() : null},
          ${input.determination === "contribution_conditional" ? true : input.rightOfReturn ?? false},
          ${terms.awardAmount}, ${terms.periodFrom}, ${terms.periodTo}, ${terms.indirectRate}, ${terms.indirectBase},
          ${input.costShareRequired ?? false}, ${terms.costShareAmount}, ${terms.fundId}, ${terms.allowableAccountGroupId},
+         ${mtdc.exclusionGroupId}, ${mtdc.subawardGroupId}, ${mtdc.subawardThreshold},
          'draft', 1, ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId}, ${input.actorId})
       returning id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
                 barrier_met_at::text as barrier_met_at, barrier_evidence, right_of_return,
                 award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
                 indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
                 cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-                award_entry_id, version, supersedes_id, custom
+                award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
     `);
     const row = inserted.rows[0];
     if (!row) {
@@ -993,7 +1214,8 @@ export async function awardGrant(input: {
                  award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
                  indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-                 award_entry_id, version, supersedes_id, custom
+                 award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
     `);
     const row = updated.rows[0];
     if (!row) throw refusal({ message: `Grant ${grant.code} was not advanced to awarded.`, code: "grant_award_write_missing", remedy: "Reload the grant and retry the award action.", status: 409 });
@@ -1015,7 +1237,8 @@ export async function activateGrant(input: { orgId: string; grantId: string; act
                  award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
                  indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-                 award_entry_id, version, supersedes_id, custom
+                 award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
     `);
     const row = updated.rows[0];
     if (!row) throw refusal({ message: `Grant ${grant.code} was not activated.`, code: "grant_activation_write_missing", remedy: "Reload the grant and retry activation.", status: 409 });
@@ -1046,7 +1269,8 @@ export async function satisfyGrantBarrier(input: {
                  award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
                  indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-                 award_entry_id, version, supersedes_id, custom
+                 award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
     `);
     const row = updated.rows[0];
     if (!row) throw refusal({ message: `Grant ${grant.code}'s barrier evidence was not recorded.`, code: "grant_barrier_write_missing", remedy: "Reload the grant and retry after confirming the barrier is still open.", status: 409 });
@@ -1247,7 +1471,8 @@ export async function amendGrant(input: {
   changes: Partial<Pick<CreateGrantInput,
     "name" | "sponsorPartyId" | "sponsorKind" | "determination" | "barrier" | "rightOfReturn" |
     "awardAmount" | "periodFrom" | "periodTo" | "indirectRate" | "indirectBase" |
-    "costShareRequired" | "costShareAmount" | "fundId" | "allowableAccountGroupId">>;
+    "costShareRequired" | "costShareAmount" | "fundId" | "allowableAccountGroupId" |
+    "mtdcExclusionAccountGroupId" | "mtdcSubawardAccountGroupId" | "mtdcSubawardThreshold">>;
   accounts: GrantPostingAccounts;
   postingDate: string;
   actorId: string;
@@ -1298,25 +1523,42 @@ export async function amendGrant(input: {
       throw refusal({ message: `The active terms for grant ${previous.code} cannot change its sponsor, determination, barrier, or fund.`, code: "grant_amendment_structural_conflict", remedy: "Create a separate grant for different legal terms, then reverse the original award through the grant activity.", status: 409 });
     }
     await validateGrantReferences(runner, input.orgId, { sponsorPartyId: next.sponsorPartyId, fundId: next.fundId, allowableAccountGroupId: next.allowableAccountGroupId });
+    // Unchanged MTDC settings carry forward only while the base stays modified
+    // total direct costs; moving to the direct-cost base retires them, and the
+    // amendment's before/after audit records that they were cleared.
+    const keepsMtdc = next.indirectBase === "modified_total_direct";
+    const mtdc = await validateMtdcTerms(runner, input.orgId, {
+      indirectBase: next.indirectBase,
+      allowableAccountGroupId: next.allowableAccountGroupId,
+      exclusionGroupId: change.mtdcExclusionAccountGroupId !== undefined
+        ? change.mtdcExclusionAccountGroupId : keepsMtdc ? previous.mtdc_exclusion_account_group_id : null,
+      subawardGroupId: change.mtdcSubawardAccountGroupId !== undefined
+        ? change.mtdcSubawardAccountGroupId : keepsMtdc ? previous.mtdc_subaward_account_group_id : null,
+      subawardThreshold: change.mtdcSubawardThreshold !== undefined
+        ? change.mtdcSubawardThreshold : keepsMtdc ? previous.mtdc_subaward_threshold : null,
+    });
     const inserted = await runner.execute<GrantRow>(sql`
       insert into grants
         (org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier, barrier_met_at,
          barrier_evidence, right_of_return, award_amount, period_from, period_to, indirect_rate, indirect_base,
-         cost_share_required, cost_share_amount, fund_id, allowable_account_group_id, status, award_entry_id,
+         cost_share_required, cost_share_amount, fund_id, allowable_account_group_id,
+         mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold, status, award_entry_id,
          version, supersedes_id, custom, created_by, updated_by)
       values
         (${input.orgId}, ${previous.code}, ${next.name}, ${next.sponsorPartyId}, ${next.sponsorKind},
          ${next.determination}, ${next.barrier}, ${previous.barrier_met_at}, ${previous.barrier_evidence},
          ${next.rightOfReturn}, ${next.awardAmount}, ${next.periodFrom}, ${next.periodTo}, ${next.indirectRate},
          ${next.indirectBase}, ${next.costShareRequired}, ${next.costShareAmount}, ${next.fundId},
-         ${next.allowableAccountGroupId}, ${previous.status}, null, ${previous.version + 1}, ${previous.id},
+         ${next.allowableAccountGroupId}, ${mtdc.exclusionGroupId}, ${mtdc.subawardGroupId}, ${mtdc.subawardThreshold},
+         ${previous.status}, null, ${previous.version + 1}, ${previous.id},
          ${JSON.stringify(previous.custom ?? {})}::jsonb, ${input.actorId}, ${input.actorId})
       returning id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
                 barrier_met_at::text as barrier_met_at, barrier_evidence, right_of_return,
                 award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
                 indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
                 cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-                award_entry_id, version, supersedes_id, custom
+                award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
     `);
     const created = inserted.rows[0];
     if (!created) throw refusal({ message: `A new version of grant ${previous.code} was not created.`, code: "grant_amendment_write_missing", remedy: "Retry the amendment after checking the grant version history.", status: 409 });
@@ -1530,7 +1772,8 @@ async function transitionGrant(input: { orgId: string; grantId: string; actorId:
                  award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
                  indirect_rate::text as indirect_rate, indirect_base, cost_share_required,
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
-                 award_entry_id, version, supersedes_id, custom
+                 award_entry_id, version, supersedes_id, custom,
+                mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
     `);
     const row = updated.rows[0];
     if (!row) throw refusal({ message: `Grant ${grant.code} was not moved to ${input.to}.`, code: "grant_status_write_missing", remedy: "Reload the grant and retry the lifecycle change.", status: 409 });
@@ -1590,35 +1833,50 @@ export async function getGrantTerms(orgId: string, grantId: string): Promise<Gra
   return withGrantRead(orgId, async (runner) => mapGrant(await loadCurrentGrant(runner, orgId, grantId)));
 }
 
+/**
+ * The grant budget. When allowable spend cannot be measured (for example an
+ * MTDC grant with no excluded-cost group), the measured figures are null and
+ * the refusal travels with the budget, so the drawer shows the reason and its
+ * remedy instead of a figure the reimbursement path would refuse.
+ */
 export async function getGrantBudget(orgId: string, grantId: string): Promise<{
   awardAmount: string;
   drawnAmount: string;
   remainingAward: string;
-  allowableDirectCosts: string;
-  indirectCost: string;
-  allowableSpend: string;
+  allowableDirectCosts: string | null;
+  indirectCostBase: string | null;
+  indirectCost: string | null;
+  allowableSpend: string | null;
   reimbursedAmount: string;
   /** Reimbursements by other grants on the same fund, which consume the same costs. */
   reimbursedByOtherGrants: string;
-  remainingAllowableSpend: string;
+  remainingAllowableSpend: string | null;
+  measurementRefusal: { code: string; message: string; remedy: string } | null;
 }> {
   return withGrantRead(orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, orgId, grantId);
     const totals = await drawdownTotals(runner, grant);
-    const direct = await grantExpenseTotal(runner, grant);
-    const allowable = calculateAllowableSpend({ directCosts: direct, modifiedTotalDirect: direct, ratePercent: grant.indirect_rate, base: grant.indirect_base });
-    const indirect = addMoney(allowable, negMoney(direct));
     const claims = await fundReimbursementClaims(runner, grant);
+    let spend: GrantSpend | null = null;
+    let measurementRefusal: { code: string; message: string; remedy: string } | null = null;
+    try {
+      spend = await measureGrantSpend(runner, grant);
+    } catch (error) {
+      if (!(error instanceof NonprofitError)) throw error;
+      measurementRefusal = { code: error.code, message: error.message, remedy: error.remedy };
+    }
     return {
       awardAmount: grant.award_amount,
       drawnAmount: totals.all,
       remainingAward: addMoney(grant.award_amount, negMoney(totals.all)),
-      allowableDirectCosts: direct,
-      indirectCost: indirect,
-      allowableSpend: allowable,
+      allowableDirectCosts: spend?.direct ?? null,
+      indirectCostBase: spend?.indirectBase ?? null,
+      indirectCost: spend?.indirect ?? null,
+      allowableSpend: spend?.allowable ?? null,
       reimbursedAmount: totals.reimbursements,
       reimbursedByOtherGrants: addMoney(claims.total, negMoney(totals.reimbursements)),
-      remainingAllowableSpend: addMoney(allowable, negMoney(claims.total)),
+      remainingAllowableSpend: spend ? addMoney(spend.allowable, negMoney(claims.total)) : null,
+      measurementRefusal,
     };
   });
 }

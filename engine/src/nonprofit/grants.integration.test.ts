@@ -309,6 +309,99 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       [secondBudget.allowableDirectCosts, secondBudget.reimbursedByOtherGrants, secondBudget.remainingAllowableSpend],
       ["100.0000", "100.0000", "0.0000"],
     );
+
+    // Modified total direct costs: excluded costs leave the indirect base,
+    // and each subrecipient's subaward stays in it only up to the threshold.
+    const mtdcFund = await createFund({
+      orgId: org.orgId, code: "GRANT-MTDC", name: "Research Fund",
+      kind: "restricted", restrictionClass: "with_donor_restrictions", actorId,
+    });
+    const { exclusionGroup, subawardGroup, equipmentAccount, subawardAccount } = await withOrgTransaction(org.orgId, async () => {
+      const group = async (dimension: string, name: string) => (await db.execute<{ id: string }>(sql`
+        insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
+        values (${org.orgId}, ${dimension}, ${dimension}, ${name}, '{}'::jsonb, false, true, ${actorId}, ${actorId}) returning id
+      `)).rows[0]!.id;
+      const account = async (name: string, groups: [string, string][]) => {
+        const id = (await db.execute<{ id: string }>(sql`
+          insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
+          values (${org.orgId}, ${`GRX-${randomUUID().slice(0, 8)}`}, ${name}, 'expense', false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
+          returning id
+        `)).rows[0]!.id;
+        for (const [groupId, dimension] of groups) {
+          const pinned = await db.execute<{ id: string }>(sql`
+            insert into account_group_members (org_id, group_id, account_id, dimension, created_by, updated_by)
+            values (${org.orgId}, ${groupId}, ${id}, ${dimension}, ${actorId}, ${actorId}) returning id
+          `);
+          assert.equal(pinned.rows.length, 1);
+        }
+        return id;
+      };
+      const exclusionGroup = await group("grant_mtdc_exclusions", "Equipment and Capital");
+      const subawardGroup = await group("grant_mtdc_subawards", "Subawards");
+      return {
+        exclusionGroup,
+        subawardGroup,
+        equipmentAccount: await account("Equipment", [[groupId, "grant_allowable_costs"], [exclusionGroup, "grant_mtdc_exclusions"]]),
+        subawardAccount: await account("Subaward Costs", [[groupId, "grant_allowable_costs"], [subawardGroup, "grant_mtdc_subawards"]]),
+      };
+    });
+    const postCost = (accountId: string, amount: string, partyId: string | null = null) =>
+      withOrgTransaction(org.orgId, () => postEntry(db, {
+        orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+        entryNumber: `GRANT-MTDC-COST-${randomUUID().slice(0, 8)}`,
+        postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
+        lines: [
+          { accountId, amount, partyId, extraDims: { fund: mtdcFund.id } },
+          { accountId: org.accounts.bank, amount: `-${amount}`, extraDims: { fund: mtdcFund.id } },
+        ],
+      }));
+    const mtdcTerms = {
+      orgId: org.orgId, sponsorPartyId: org.customerId, sponsorKind: "government" as const,
+      determination: "contribution_unconditional" as const, awardAmount: "1000000.00", periodFrom: "2026-01-01",
+      periodTo: "2026-12-31", indirectRate: "30", indirectBase: "modified_total_direct" as const,
+      fundId: mtdcFund.id, allowableAccountGroupId: groupId, actorId,
+    };
+    await assert.rejects(
+      createGrant({ ...mtdcTerms, code: "GRANT-MTDC-SAME-DIM", name: "Same dimension", mtdcExclusionAccountGroupId: groupId }),
+      (error: unknown) => error instanceof NonprofitError && error.code === "grant_mtdc_group_dimension_conflict",
+    );
+    await assert.rejects(
+      createGrant({ ...mtdcTerms, code: "GRANT-MTDC-DIRECT", name: "Direct base", indirectBase: "direct_costs", mtdcExclusionAccountGroupId: exclusionGroup }),
+      (error: unknown) => error instanceof NonprofitError && error.code === "grant_mtdc_config_base_invalid",
+    );
+    const mtdcDraft = await createGrant({ ...mtdcTerms, code: "GRANT-MTDC", name: "Research Award" });
+    await awardGrant({ orgId: org.orgId, grantId: mtdcDraft.id, accounts, postingDate: org.date, actorId });
+    await activateGrant({ orgId: org.orgId, grantId: mtdcDraft.id, actorId });
+    await postCost(org.accounts.cogs, "60000.00");
+    await postCost(equipmentAccount, "40000.00");
+    await assert.rejects(reimburse(mtdcDraft.id, "1.00"), (error: unknown) =>
+      error instanceof NonprofitError && error.code === "grant_mtdc_exclusions_unconfigured" &&
+      error.message.includes("GRANT-MTDC") && error.remedy.includes("excluded-cost account group"));
+    assert.equal((await getGrantBudget(org.orgId, mtdcDraft.id)).measurementRefusal?.code, "grant_mtdc_exclusions_unconfigured");
+    const mtdcGrant = await amendGrant({
+      orgId: org.orgId, grantId: mtdcDraft.id, reason: "Name the award's excluded cost categories.",
+      changes: { mtdcExclusionAccountGroupId: exclusionGroup }, accounts, postingDate: org.date, actorId,
+    });
+    assert.equal(mtdcGrant.mtdcExclusionAccountGroupId, exclusionGroup);
+    await assert.rejects(reimburse(mtdcGrant.id, "118000.01"), overAllowable(/remaining of 118000\.0000/));
+    await reimburse(mtdcGrant.id, "118000.00");
+
+    const withSubawards = await amendGrant({
+      orgId: org.orgId, grantId: mtdcGrant.id, reason: "Add the subaward base limit.",
+      changes: { mtdcSubawardAccountGroupId: subawardGroup, mtdcSubawardThreshold: "25000" }, accounts, postingDate: org.date, actorId,
+    });
+    await postCost(subawardAccount, "70000.00", org.vendorId);
+    const subawardBudget = await getGrantBudget(org.orgId, withSubawards.id);
+    // 60k ordinary + 25k of the 70k subaward stay in the base: 85k at 30% is 25.5k.
+    assert.deepEqual(
+      [subawardBudget.allowableDirectCosts, subawardBudget.indirectCostBase, subawardBudget.allowableSpend],
+      ["170000.0000", "85000.0000", "195500.0000"],
+    );
+    await postCost(subawardAccount, "10.00");
+    await assert.rejects(reimburse(withSubawards.id, "1.00"), (error: unknown) =>
+      error instanceof NonprofitError && error.code === "grant_mtdc_subaward_party_missing" &&
+      /10\.0000 of subaward cost posted without a subrecipient \(entries GRANT-MTDC-COST-/.test(error.message) &&
+      error.remedy.includes("subrecipient as the line's party"));
   } finally {
     await dropScratchOrg(org.orgId);
   }

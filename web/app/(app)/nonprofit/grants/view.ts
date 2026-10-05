@@ -47,6 +47,20 @@ export interface GrantAccountOption {
   type: string
 }
 
+export interface GrantGroupOption {
+  id: string
+  name: string
+  dimension: string
+}
+
+/** Active account groups: the allowable-cost group and the MTDC excluded-cost and subaward groups. */
+function loadGroupOptions(orgId: string) {
+  return db.execute<GrantGroupOption>(sql`
+    select id::text as id, name, dimension from account_groups
+     where org_id = ${orgId} and is_active
+     order by dimension, name limit 500`)
+}
+
 export interface GrantRecordDrawer {
   mode: 'record'
   remountKey: string
@@ -56,6 +70,7 @@ export interface GrantRecordDrawer {
   reports: Awaited<ReturnType<typeof listGrantReports>>
   activity: Awaited<ReturnType<typeof listGrantActivity>>
   accountOptions: GrantAccountOption[]
+  groupOptions: GrantGroupOption[]
   asOf: string
   canManage: boolean
   closeHref: string
@@ -64,7 +79,7 @@ export interface GrantRecordDrawer {
 export interface GrantCreateDrawer {
   mode: 'create'
   fundOptions: { id: string; code: string; name: string }[]
-  groupOptions: { id: string; name: string }[]
+  groupOptions: GrantGroupOption[]
   sponsorOptions: { id: string; displayName: string }[]
   canManage: boolean
   closeHref: string
@@ -123,10 +138,7 @@ export async function loadGrants(
           join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
          where f.org_id = ${orgId} and sv.is_active
          order by sv.code limit 200`),
-      db.execute<{ id: string; name: string }>(sql`
-        select id::text as id, name from account_groups
-         where org_id = ${orgId} and is_active
-         order by name limit 200`),
+      loadGroupOptions(orgId),
       db.execute<{ id: string; display_name: string }>(sql`
         select id::text as id, display_name from parties
          where org_id = ${orgId} and is_active
@@ -159,13 +171,14 @@ export async function loadGrants(
                       'liability_current_other', 'liability_long_term', 'liability_payable',
                       'income', 'income_other')
        order by number nulls last, name limit 500`),
+    loadGroupOptions(orgId),
   ]).catch((error) => {
     // A missing or cross-org grant is not a drawer: the register stays.
     if (error?.code === 'grant_not_found' || error?.code === 'grant_version_missing') return null
     throw error
   })
   if (!detail) return base
-  const [terms, budget, drawdowns, reports, activity, accounts] = detail
+  const [terms, budget, drawdowns, reports, activity, accounts, groups] = detail
 
   return {
     ...base,
@@ -178,6 +191,7 @@ export async function loadGrants(
       reports,
       activity,
       accountOptions: accounts.rows,
+      groupOptions: groups.rows,
       asOf,
       canManage: can(authz, 'grants.manage'),
       closeHref: '/nonprofit/grants',
