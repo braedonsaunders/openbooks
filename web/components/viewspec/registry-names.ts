@@ -217,6 +217,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   // HR-19 begin
   'hrm-documents-drawer',
   'hrm-documents-generate-dialog',
+  'hrm-install-app',
   'hrm-me-document-actions',
   'hrm-me-export-dialog',
   'hrm-me-export-download',

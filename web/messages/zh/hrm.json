@@ -1825,6 +1825,16 @@
       "earnings": "收入项",
       "deductions": "扣除项",
       "contributions": "雇主缴纳"
+    },
+    "installApp": {
+      "action": "安装应用",
+      "title": "在设备上使用OpenBooks",
+      "close": "关闭",
+      "ios": "在Safari中打开共享菜单，选择“添加到主屏幕”，然后确认“添加”。如果此页面在其他应用中打开，请先在Safari中打开。",
+      "mac": "在Safari中打开“文件”菜单并选择“添加到程序坞”。在其他浏览器中，打开菜单并选择“安装OpenBooks”或“安装应用”。",
+      "browser": "打开浏览器菜单，选择“安装OpenBooks”或“安装应用”。如果无法安装，请使用支持安装网页应用的最新浏览器。",
+      "online": "OpenBooks需要互联网连接。请照常登录以查看当前员工信息。",
+      "failed": "浏览器无法开始安装。请按照浏览器提示将OpenBooks添加到设备。"
     }
   },
   "options": {

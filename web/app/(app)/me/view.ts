@@ -48,6 +48,7 @@ export function meSpec(data: MeOverviewData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
+          widget('hrm-install-app', {}),
           widget('link-button', { href: f('profileHref'), label: f('editProfile') }),
           widget('link-button', {
             href: f('checklistsHref'),

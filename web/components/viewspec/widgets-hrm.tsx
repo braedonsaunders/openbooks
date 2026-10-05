@@ -41,6 +41,7 @@ import { AwardPortfolioTable, ProgramPortfolioTable, BenefitDeliveryTable } from
 import { ProgramBuilderDrawer } from '../../app/(app)/hrm/benefits/ProgramBuilderDrawer'
 import { ProgramDrawer } from '../../app/(app)/hrm/benefits/ProgramDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
+import { InstallEmployeeApp } from '../../app/(app)/me/InstallEmployeeApp'
 // HR-21 begin: the Explain drawer (verbatim adapter only).
 import { ExplainDrawer } from '../../app/(app)/me/sections'
 import { AiDraftDrawer } from '../../app/(app)/hrm/ai/AiDraftDrawer'
@@ -76,6 +77,7 @@ import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
+  'hrm-install-app': () => <InstallEmployeeApp />,
   'hrm-comp-workspace': (props) => <CompensationWorkspace data={props.data as ComponentProps<typeof CompensationWorkspace>['data']} />,
   'hrm-comp-equity-workspace': (props) => <EquityWorkspace data={props.data as ComponentProps<typeof EquityWorkspace>['data']} />,
   'hrm-conversation-create':(props)=><ConversationCreate employees={props.employees as ComponentProps<typeof ConversationCreate>['employees']} closeHref={str(props,'closeHref')??'/hrm/performance/conversations'}/>,

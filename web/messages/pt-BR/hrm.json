@@ -1825,6 +1825,16 @@
       "earnings": "Proventos",
       "deductions": "Descontos",
       "contributions": "Contribuições do empregador"
+    },
+    "installApp": {
+      "action": "Instalar aplicativo",
+      "title": "OpenBooks no seu dispositivo",
+      "close": "Fechar",
+      "ios": "No Safari, abra Compartilhar, escolha Adicionar à Tela de Início e confirme Adicionar. Se esta página estiver em outro aplicativo, abra-a primeiro no Safari.",
+      "mac": "No Safari, abra Arquivo e escolha Adicionar ao Dock. Em outro navegador, abra o menu e escolha Instalar OpenBooks ou Instalar aplicativo.",
+      "browser": "Abra o menu do navegador e escolha Instalar OpenBooks ou Instalar aplicativo. Se a instalação não estiver disponível, use um navegador atualizado que ofereça suporte a aplicativos web instalados.",
+      "online": "O OpenBooks requer conexão com a internet. Entre normalmente para acessar suas informações atuais.",
+      "failed": "O navegador não conseguiu abrir a instalação. Siga as instruções do navegador para adicionar o OpenBooks ao seu dispositivo."
     }
   },
   "options": {

@@ -1825,6 +1825,16 @@
       "earnings": "Bezüge",
       "deductions": "Abzüge",
       "contributions": "Arbeitgeberbeiträge"
+    },
+    "installApp": {
+      "action": "App installieren",
+      "title": "OpenBooks auf Ihrem Gerät",
+      "close": "Schließen",
+      "ios": "Öffnen Sie in Safari das Teilen-Menü, wählen Sie Zum Home-Bildschirm und bestätigen Sie Hinzufügen. Ist diese Seite in einer anderen App geöffnet, öffnen Sie sie zuerst in Safari.",
+      "mac": "Öffnen Sie in Safari Ablage und wählen Sie Zum Dock hinzufügen. Öffnen Sie in einem anderen Browser dessen Menü und wählen Sie OpenBooks installieren oder App installieren.",
+      "browser": "Öffnen Sie das Browsermenü und wählen Sie OpenBooks installieren oder App installieren. Falls die Installation nicht verfügbar ist, verwenden Sie einen aktuellen Browser, der installierte Web-Apps unterstützt.",
+      "online": "OpenBooks benötigt eine Internetverbindung. Melden Sie sich wie gewohnt an, um auf Ihre aktuellen Mitarbeiterinformationen zuzugreifen.",
+      "failed": "Der Browser konnte die Installation nicht öffnen. Folgen Sie den Browseranweisungen, um OpenBooks auf Ihrem Gerät hinzuzufügen."
     }
   },
   "options": {
