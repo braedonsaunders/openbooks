@@ -134,6 +134,15 @@ export async function loadEntityOptions(
        where p.org_id = ${orgId} and p.is_active order by p.display_name`))
     return employees.rows as RefOption[]
   }
+  if (source === 'pdf-templates') {
+    // Active quote templates for the order-form picker. The PDF template
+    // designer owns these rows; Setup only references them.
+    const templates = (await db.execute(sql`
+      select id as value, name as label from pdf_templates
+       where org_id = ${orgId} and is_active and record_type = 'quote'
+       order by is_default desc, name`))
+    return templates.rows as RefOption[]
+  }
   if (source === 'equipment-units') {
     // The chargeable unit register. Like `trades`, a legitimate scope key with
     // no setup-registry entry of its own — equipment is managed under Assets.

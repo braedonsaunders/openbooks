@@ -5938,6 +5938,26 @@
           "disconnectFailed": "The account could not be parked."
         }
       }
+    },
+    "quoteCashPolicy": "Quote-to-cash policy",
+    "quoteCashPolicyFields": {
+      "description": "Discount approval threshold, auto-activation, term defaults, and signing-link expiry for SaaS quotes.",
+      "approval": "Approval",
+      "terms": "Terms",
+      "maxDiscountPercent": "Discount approval threshold (%)",
+      "maxDiscountPercentHelp": "Discounts above this route through Flows approval before a quote can be sent.",
+      "autoActivateOnSign": "Activate automatically on signature",
+      "autoActivateOnSignHelp": "Create the subscription the moment the customer signs, without a manual activation step.",
+      "defaultBillingTiming": "Default billing",
+      "timingAdvance": "In advance",
+      "timingArrears": "In arrears",
+      "defaultStartRule": "Default start rule",
+      "startQuoteDate": "Quote date",
+      "startNextMonth": "First of next month",
+      "startCustom": "Custom date",
+      "signatureExpiryDays": "Signing-link expiry (days)",
+      "orderFormTemplateId": "Order-form template",
+      "orderFormTemplateHelp": "PDF template rendering the signing presentation. Empty keeps the quote default."
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "Billing history import",
       "description": "Import customers, plans, subscriptions, invoices, payments and usage from Chargebee, Recurly, Maxio or Zuora with MRR, AR and deferred-revenue reconciliation."
+    },
+    "quoteToCash": {
+      "title": "Quote-to-cash",
+      "description": "Ramp-priced SaaS quotes with discount approval, e-signature, and one-click subscription activation."
     }
   },
   "backupsManager": {

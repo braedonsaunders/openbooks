@@ -21,6 +21,7 @@ import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { issueSalesOrder, SalesOrderIssueError } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { DocumentVoidError, requestDocumentVoid } from '@openbooks/engine/src/ledger/document-void.ts'
+import { QUOTE_SUBJECT_TABLE, voidSignatureRequestsForSubject } from '@openbooks/engine/billing/quote-to-cash'
 export type { OrderHandlerConfig } from '../../../lib/order-draft-edit'
 
 export const orderEditServices: OrderEditServices = {
@@ -35,6 +36,7 @@ export const orderEditServices: OrderEditServices = {
   flows: { submitAndReleaseIfUngated },
   sales: { issueSalesOrder, SalesOrderIssueError },
   documentVoid: { DocumentVoidError, requestDocumentVoid },
+  signing: { voidSignatureRequestsForSubject, QUOTE_SUBJECT_TABLE },
 }
 
 /**

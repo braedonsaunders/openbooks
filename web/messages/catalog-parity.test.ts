@@ -309,6 +309,17 @@ const COGNATES = new Set<string>([
   'fr:storedValue.labels.code|Code',
   'fr:storedValue.labels.document|Document',
   'pt-BR:storedValue.labels.status|Status',
+  // The quote ramp line is an ICU-only template ({price} × {qty} = {amount})
+  // with no translatable words, identical in every locale.
+  'de:estimates.quoteCash.periodLine|{price} × {qty} = {amount}',
+  'es:estimates.quoteCash.periodLine|{price} × {qty} = {amount}',
+  'fr:estimates.quoteCash.periodLine|{price} × {qty} = {amount}',
+  'ja:estimates.quoteCash.periodLine|{price} × {qty} = {amount}',
+  'pt-BR:estimates.quoteCash.periodLine|{price} × {qty} = {amount}',
+  'zh:estimates.quoteCash.periodLine|{price} × {qty} = {amount}',
+  // “Plan” is spelled identically in German and Spanish.
+  'de:estimates.quoteCash.plan|Plan',
+  'es:estimates.quoteCash.plan|Plan',
   // Per-area reviewed identical terms (the local identicalByFact sets across the area backfills).
   'de:agents.drawer.assignment.roles.administrator|Administrator',
   'de:agents.drawer.assignment.roles.controller|Controller',

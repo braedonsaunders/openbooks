@@ -5938,6 +5938,26 @@
           "disconnectFailed": "Le compte n’a pas pu être mis en pause."
         }
       }
+    },
+    "quoteCashPolicy": "Stratégie quote-to-cash",
+    "quoteCashPolicyFields": {
+      "description": "Seuil d’approbation des remises, activation automatique, conditions par défaut et durée des liens pour les devis SaaS.",
+      "approval": "Approbation",
+      "terms": "Conditions",
+      "maxDiscountPercent": "Seuil d’approbation des remises (%)",
+      "maxDiscountPercentHelp": "Les remises supérieures passent par l’approbation Flows avant envoi.",
+      "autoActivateOnSign": "Activer automatiquement à la signature",
+      "autoActivateOnSignHelp": "Crée l’abonnement dès la signature du client, sans étape manuelle.",
+      "defaultBillingTiming": "Facturation par défaut",
+      "timingAdvance": "D’avance",
+      "timingArrears": "À terme échu",
+      "defaultStartRule": "Règle de début par défaut",
+      "startQuoteDate": "Date du devis",
+      "startNextMonth": "Premier du mois suivant",
+      "startCustom": "Date libre",
+      "signatureExpiryDays": "Durée du lien (jours)",
+      "orderFormTemplateId": "Modèle de bon de commande",
+      "orderFormTemplateHelp": "Modèle PDF de la vue de signature. Vide conserve celui du devis."
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "Importer l'historique de facturation",
       "description": "Importez clients, offres, abonnements, factures, paiements et usage depuis Chargebee, Recurly, Maxio ou Zuora avec rapprochement du MRR, des créances et des produits constatés d'avance."
+    },
+    "quoteToCash": {
+      "title": "Du devis à l’abonnement",
+      "description": "Devis SaaS à paliers tarifaires avec approbation des remises, signature électronique et activation en un clic."
     }
   },
   "backupsManager": {

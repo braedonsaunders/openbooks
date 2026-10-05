@@ -74,6 +74,8 @@ class OrderRouteHarness {
   headerWrites = 0
   deleteCalls = 0
   convertCalls = 0
+  /** Quote signature voids requested by draft saves (runner, org, table, quote). */
+  signatureVoids: Array<{ orgId: string; table: string; quoteId: string }> = []
   deleted = false
   submitFlowError: string | null = null
   voidFailure: string | null = null
@@ -110,6 +112,7 @@ class OrderRouteHarness {
     }
     this.auditLog = []
     this.flowEffects = []
+    this.signatureVoids = []
     this.submitCalls = 0
     this.voidCalls = 0
     this.voidReservations = 0
@@ -586,6 +589,14 @@ const mockSources = new Map<string, string>([
       })
     }
   `],
+  ['mock:quote-to-cash', `
+    const state = ${stateExpression}
+    export const QUOTE_SUBJECT_TABLE = 'documents'
+    export async function voidSignatureRequestsForSubject(_runner, orgId, table, quoteId) {
+      state.signatureVoids.push({ orgId, table, quoteId })
+      return { voided: 1 }
+    }
+  `],
 ])
 
 const resolutionMocks = new Map<string, string>([
@@ -605,6 +616,7 @@ const resolutionMocks = new Map<string, string>([
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
   ['@openbooks/engine/src/sales/sales-orders.ts', 'mock:sales-orders'],
   ['@openbooks/engine/src/ledger/document-void.ts', 'mock:document-void'],
+  ['@openbooks/engine/billing/quote-to-cash', 'mock:quote-to-cash'],
 ])
 
 const hooks = registerHooks({
@@ -1516,6 +1528,18 @@ test('an exact revision token admits draft save, issue, and discard', async () =
   assert.deepEqual(await discarded.json(), { ok: true })
   assert.equal(harness.deleteCalls, 1)
   assert.equal(harness.deleted, true)
+})
+
+test('a quote content edit voids open signature requests; a content-free touch does not', async () => {
+  harness.reset('draft')
+  const edited = await patch({ memo: 'repriced scope' })
+  assert.equal(edited.status, 200)
+  assert.deepEqual(harness.signatureVoids, [{ orgId: ORG_ID, table: 'documents', quoteId: DOCUMENT_ID }])
+
+  harness.reset('draft')
+  const touched = await patch({})
+  assert.equal(touched.status, 200)
+  assert.deepEqual(harness.signatureVoids, [])
 })
 
 test('a populated line with no quantity fails the draft save before any write', async () => {

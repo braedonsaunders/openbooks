@@ -5938,6 +5938,26 @@
           "disconnectFailed": "Não foi possível pausar a conta."
         }
       }
+    },
+    "quoteCashPolicy": "Política de quote-to-cash",
+    "quoteCashPolicyFields": {
+      "description": "Limite de aprovação de descontos, ativação automática, condições padrão e validade de links para orçamentos SaaS.",
+      "approval": "Aprovação",
+      "terms": "Condições",
+      "maxDiscountPercent": "Limite de aprovação do desconto (%)",
+      "maxDiscountPercentHelp": "Descontos maiores exigem aprovação de Flows antes do envio.",
+      "autoActivateOnSign": "Ativar automaticamente ao assinar",
+      "autoActivateOnSignHelp": "Cria a assinatura assim que o cliente assina, sem etapa manual.",
+      "defaultBillingTiming": "Cobrança padrão",
+      "timingAdvance": "Antecipado",
+      "timingArrears": "Postecipado",
+      "defaultStartRule": "Regra de início padrão",
+      "startQuoteDate": "Data do orçamento",
+      "startNextMonth": "Primeiro dia do próximo mês",
+      "startCustom": "Data personalizada",
+      "signatureExpiryDays": "Validade do link (dias)",
+      "orderFormTemplateId": "Modelo do formulário",
+      "orderFormTemplateHelp": "Modelo PDF da tela de assinatura. Vazio mantém o padrão do orçamento."
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "Importar histórico de cobrança",
       "description": "Importe clientes, planos, assinaturas, faturas, pagamentos e uso do Chargebee, Recurly, Maxio ou Zuora com conciliação de MRR, contas a receber e receita diferida."
+    },
+    "quoteToCash": {
+      "title": "Do orçamento à assinatura",
+      "description": "Orçamentos SaaS com preços em rampa, aprovação de descontos, assinatura eletrônica e ativação em um clique."
     }
   },
   "backupsManager": {

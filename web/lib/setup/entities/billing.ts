@@ -248,4 +248,34 @@ export const BILLING_ENTITIES: SetupEntity[] = [
       { key: 'isActive', kind: 'boolean', defaultValue: true },
     ],
   },
+  {
+    key: 'quote-to-cash-policy', table: 'quote_to_cash_settings', groupKey: 'billing',
+    featureKey: 'quoteToCash', iconKey: 'file', orgScoped: true, hasActive: false,
+    singularTitleKey: 'quoteCashPolicy', writePermission: 'ar.create', mutationPath: '/api/quote-to-cash/settings',
+    drawerSize: 'lg', formDescriptionKey: 'quoteCashPolicyFields.description',
+    formSections: [
+      { titleKey: 'quoteCashPolicyFields.approval', fields: ['maxDiscountPercent', 'autoActivateOnSign'] },
+      { titleKey: 'quoteCashPolicyFields.terms', fields: ['defaultBillingTiming', 'defaultStartRule', 'signatureExpiryDays', 'orderFormTemplateId'] },
+    ],
+    columns: [
+      { key: 'maxDiscountPercent', kind: 'percent' },
+      { key: 'autoActivateOnSign', kind: 'badge-active' },
+      { key: 'signatureExpiryDays', kind: 'number' },
+    ],
+    fields: [
+      { key: 'maxDiscountPercent', labelKey: 'quoteCashPolicyFields.maxDiscountPercent', kind: 'percent', required: true, min: 0, max: 100, defaultValue: '10', helpTextKey: 'quoteCashPolicyFields.maxDiscountPercentHelp' },
+      { key: 'autoActivateOnSign', labelKey: 'quoteCashPolicyFields.autoActivateOnSign', kind: 'boolean', defaultValue: false, booleanStyle: 'switch', fullWidth: true, helpTextKey: 'quoteCashPolicyFields.autoActivateOnSignHelp' },
+      { key: 'defaultBillingTiming', labelKey: 'quoteCashPolicyFields.defaultBillingTiming', kind: 'select', defaultValue: 'advance', options: [
+        { value: 'advance', labelKey: 'quoteCashPolicyFields.timingAdvance' },
+        { value: 'arrears', labelKey: 'quoteCashPolicyFields.timingArrears' },
+      ] },
+      { key: 'defaultStartRule', labelKey: 'quoteCashPolicyFields.defaultStartRule', kind: 'select', defaultValue: 'quote_date', options: [
+        { value: 'quote_date', labelKey: 'quoteCashPolicyFields.startQuoteDate' },
+        { value: 'first_of_next_month', labelKey: 'quoteCashPolicyFields.startNextMonth' },
+        { value: 'custom', labelKey: 'quoteCashPolicyFields.startCustom' },
+      ] },
+      { key: 'signatureExpiryDays', labelKey: 'quoteCashPolicyFields.signatureExpiryDays', kind: 'integer', required: true, min: 1, max: 90, defaultValue: 14 },
+      { key: 'orderFormTemplateId', labelKey: 'quoteCashPolicyFields.orderFormTemplateId', kind: 'ref', ref: 'pdf-templates', helpTextKey: 'quoteCashPolicyFields.orderFormTemplateHelp' },
+    ],
+  },
 ]

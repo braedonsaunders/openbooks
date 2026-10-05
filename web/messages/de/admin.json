@@ -5938,6 +5938,26 @@
           "disconnectFailed": "Das Konto konnte nicht geparkt werden."
         }
       }
+    },
+    "quoteCashPolicy": "Quote-to-Cash-Richtlinie",
+    "quoteCashPolicyFields": {
+      "description": "Genehmigungsgrenze für Rabatte, automatische Aktivierung, Standardkonditionen und Linklaufzeit für SaaS-Angebote.",
+      "approval": "Genehmigung",
+      "terms": "Konditionen",
+      "maxDiscountPercent": "Genehmigungsgrenze Rabatt (%)",
+      "maxDiscountPercentHelp": "Höhere Rabatte brauchen vor dem Versand die Flows-Genehmigung.",
+      "autoActivateOnSign": "Bei Signatur automatisch aktivieren",
+      "autoActivateOnSignHelp": "Erstellt das Abonnement sofort bei der Unterschrift des Kunden, ohne manuellen Schritt.",
+      "defaultBillingTiming": "Standardabrechnung",
+      "timingAdvance": "Im Voraus",
+      "timingArrears": "Rückwirkend",
+      "defaultStartRule": "Standard-Startregel",
+      "startQuoteDate": "Angebotsdatum",
+      "startNextMonth": "Monatserster",
+      "startCustom": "Freies Datum",
+      "signatureExpiryDays": "Linklaufzeit (Tage)",
+      "orderFormTemplateId": "Auftragsvorlage",
+      "orderFormTemplateHelp": "PDF-Vorlage für die Signaturansicht. Leer behält den Angebotsstandard."
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "Abrechnungsverlauf importieren",
       "description": "Kunden, Pläne, Abonnements, Rechnungen, Zahlungen und Nutzung aus Chargebee, Recurly, Maxio oder Zuora importieren, mit Abstimmung von MRR, Forderungen und abgegrenzten Erlösen."
+    },
+    "quoteToCash": {
+      "title": "Angebot-zu-Abo",
+      "description": "SaaS-Angebote mit Rampenpreisen, Rabattgenehmigung, E-Signatur und Aktivierung per Klick."
     }
   },
   "extensions": {
