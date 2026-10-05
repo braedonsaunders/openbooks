@@ -6,6 +6,7 @@ import {
   completeShopifyOAuth,
   SHOPIFY_OAUTH_COOKIE,
 } from '@openbooks/engine/commerce'
+import { guardUnrestrictedScope } from '@/lib/authz';
 
 export const maxDuration = 300
 
@@ -44,6 +45,10 @@ export const GET = defineRoute({
   feature: 'salesChannels',
   scope: 'unrestricted',
   handler: async ({ request: req, authz: gate }) => {
+    // Spans every channel of the organization, including ones assigned to
+    // subsidiaries outside a restricted caller's scope.
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
     const url = new URL(req.url)
     if (url.searchParams.get('error')) return bounce('denied')
     const query: Record<string, string | undefined> = {}

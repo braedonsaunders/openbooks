@@ -10,6 +10,7 @@ import {
   upsertAccountMap,
 } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { channelAccountsRefusal, guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     // An unknown channel reads as an empty map list: the channel GET above
     // already answers 404, so this list never oracles existence. Proposals
     // exist only for Shopify channels; other kinds read as no proposals.
@@ -49,6 +52,10 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
+    const accountRefused = await channelAccountsRefusal(gate, [body.accountId]);
+    if (accountRefused) return accountRefused;
     try {
       const map = await upsertAccountMap(gate.user.orgId, gate.user.id, {
         channelId: id,

@@ -11,6 +11,7 @@ import {
   unlinkExternal,
 } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,8 @@ export const GET = defineRoute({
   handler: async ({ request, authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     const objectType = new URL(request.url).searchParams.get("objectType") ?? "";
     if (!(EXTERNAL_LINK_OBJECT_TYPES as readonly string[]).includes(objectType)) {
       return NextResponse.json(
@@ -72,6 +75,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       const channel = await getChannel(gate.user.orgId, id);
       const key = { provider: channel.kind, externalAccount: channel.externalAccount };

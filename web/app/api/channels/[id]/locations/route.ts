@@ -9,6 +9,7 @@ import {
   upsertChannelLocation,
 } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       const locations = await listChannelLocations(gate.user.orgId, id);
       return NextResponse.json({ locations });
@@ -59,6 +62,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       if (body.action === "unlink") {
         await unlinkChannelLocation(gate.user.orgId, gate.user.id, id, body.externalLocationId, body.reason);

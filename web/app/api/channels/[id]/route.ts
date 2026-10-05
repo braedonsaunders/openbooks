@@ -11,6 +11,7 @@ import {
 } from "@openbooks/engine/commerce";
 import { can } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
+import { channelAssignmentRefusal, guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     const channel = await loadOr404(gate.user.orgId, id);
     if (!channel) return notFound("channel");
     // The workspace header also wants match counts, webhook topics and the
@@ -60,8 +63,14 @@ export const PATCH = defineRoute({
   handler: async ({ authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     const before = await loadOr404(gate.user.orgId, id);
     if (!before) return notFound("channel");
+    if (routeBody.subsidiaryId !== undefined) {
+      const refused = channelAssignmentRefusal(gate, routeBody.subsidiaryId);
+      if (refused) return refused;
+    }
     const channel = await updateChannel(gate.user.orgId, gate.user.id, id, {
       name: routeBody.name,
       subsidiaryId: routeBody.subsidiaryId,

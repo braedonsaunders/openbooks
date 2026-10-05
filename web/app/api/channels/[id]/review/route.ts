@@ -9,6 +9,7 @@ import {
   shopifyReview,
 } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { channelAccountsRefusal, guardChannelScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       return NextResponse.json(await shopifyReview(gate.user.orgId, id));
     } catch (error) {
@@ -56,6 +59,10 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("channel");
+    const outOfScope = await guardChannelScope(gate, id);
+    if (outOfScope) return outOfScope;
+    const accountRefused = await channelAccountsRefusal(gate, body.accountMaps.map((map) => map.accountId));
+    if (accountRefused) return accountRefused;
     try {
       const accepted = await acceptShopifyReview(gate.user.orgId, gate.user.id, id, {
         accountMaps: body.accountMaps,

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { postChannelOrder } from "@openbooks/engine/commerce";
 import { CommerceError } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
+import { guardChannelOrderScope } from "@/lib/channel-scope";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,8 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("order");
+    const outOfScope = await guardChannelOrderScope(gate, id);
+    if (outOfScope) return outOfScope;
     try {
       const outcome = await postChannelOrder(gate.user.orgId, gate.user.id, id, { forcePerOrder: true });
       return NextResponse.json({ status: outcome.status, documentId: outcome.documentId });

@@ -9,6 +9,7 @@ import {
   shopifyReview,
   startShopifyConnect,
 } from "@openbooks/engine/commerce";
+import { guardUnrestrictedScope } from "@/lib/authz";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,10 @@ export const POST = defineRoute({
   feature: "salesChannels",
   body: connectBodySchema,
   handler: async ({ authz: gate, body }) => {
+    // Spans every channel of the organization, including ones assigned to
+    // subsidiaries outside a restricted caller's scope.
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
     try {
       const started = await startShopifyConnect(gate.user.orgId, gate.user.id, {
         shop: body.shop,

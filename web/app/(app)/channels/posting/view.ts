@@ -12,6 +12,7 @@ import {
 import { isoDateOf } from '@openbooks/engine/platform/civil-date'
 import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
+import { channelsInScope } from '../../../../lib/channel-scope'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { channelTabs, countChannelExceptions } from '../orders/view'
 import type { ChannelTab } from '../ChannelWidgets'
@@ -57,12 +58,12 @@ export async function loadChannelPosting(): Promise<ChannelPostingData> {
   const today = isoDateOf(new Date())
 
   const [channels, customers, exceptionCount] = await Promise.all([
-    listChannels(orgId),
+    listChannels(orgId).then((rows) => channelsInScope(authz, rows)),
     db.execute<{ value: string; label: string }>(sql`
       select p.id as value, p.display_name as label from parties p
         join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
        where p.org_id = ${orgId} and p.is_active order by p.display_name`),
-    countChannelExceptions(orgId),
+    countChannelExceptions(orgId, authz.allowedSubsidiaryIds),
   ])
 
   const policies: Record<string, ChannelPostingPolicyView | null> = {}
