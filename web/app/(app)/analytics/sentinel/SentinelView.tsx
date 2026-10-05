@@ -67,6 +67,16 @@ function useRatioPct() {
   )
 }
 
+/** Locale-aware decimal with fixed fraction digits (MAD, seconds) — never toFixed. */
+function useDecimals() {
+  const locale = useLocale()
+  return useCallback(
+    (n: number, digits: number) =>
+      new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n),
+    [locale],
+  )
+}
+
 /** Locale-aware calendar-day label for an ISO date — never raw ISO. */
 function useDayLabel() {
   const locale = useLocale()
@@ -246,6 +256,7 @@ function useConformLabel() {
 export function SentinelView({ data: initialData, canConfigure }: { data: SentinelData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
+  const dec = useDecimals()
   // Translated consolidations render in the presentation currency they were
   // translated into; transaction evidence renders in its own currency below.
   const presFmt = useMoney(data.meta.presentationCurrency)
@@ -263,7 +274,7 @@ export function SentinelView({ data: initialData, canConfigure }: { data: Sentin
       <p className="flex items-center gap-2 rounded-lg bg-slate-50 px-3.5 py-2 text-xs text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
         <Database size={13} className="shrink-0 text-teal-500" />
         {t('banner.pre')}<span className="font-semibold text-slate-700 dark:text-slate-200">{t('banner.ledger')}</span>
-        {` `}{t('banner.stats', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: (data.meta.queryMs / 1000).toFixed(1) })}
+        {` `}{t('banner.stats', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: dec(data.meta.queryMs / 1000, 1) })}
       </p>
       <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
         <Info size={14} className="mt-0.5 shrink-0" />
@@ -302,6 +313,8 @@ export function SentinelView({ data: initialData, canConfigure }: { data: Sentin
 function OverviewTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
+  const dec = useDecimals()
+  const pct = useRatioPct()
   const conformLabel = useConformLabel()
   const words = useCodeWords()
   const s = data.summary
@@ -310,15 +323,15 @@ function OverviewTab({ data }: { data: SentinelData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Panel title={t('panels.benfordFirstDigit')} icon={BarChart3} hint={t('panels.benfordHint', { amounts: num(b.totalTransactions), mad: b.mad.toFixed(4), conformity: conformLabel(b.conformity) })}>
+          <Panel title={t('panels.benfordFirstDigit')} icon={BarChart3} hint={t('panels.benfordHint', { amounts: num(b.totalTransactions), mad: dec(b.mad, 4), conformity: conformLabel(b.conformity) })}>
             <Chart
               height={230}
               option={{
                 grid: { top: 24, bottom: 24, left: 45, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${(Number(v) * 100).toFixed(1)}%` },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => pct(Number(v)) },
                 xAxis: { type: 'category', data: b.digits.map((d) => String(d.digit)) },
-                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
+                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => pct(v, 0) } },
                 series: [
                   { name: t('chart.observed'), type: 'bar', data: b.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly ? '#ef4444' : '#14b8a6' } })) },
                   { name: t('chart.expectedBenford'), type: 'line', data: b.digits.map((d) => d.expected), symbolSize: 6, lineStyle: { width: 2, type: 'dashed', color: '#64748b' }, itemStyle: { color: '#64748b' } },
@@ -382,6 +395,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
   const presFmt = useMoney(data.meta.presentationCurrency)
   const txnMoney = useTxnMoney()
   const ratioPct = useRatioPct()
+  const dec = useDecimals()
   // Digit amounts are transaction sums in the slice currency; trap totals
   // are translated consolidations in the presentation currency.
   const digitMoney = (n: MoneyValue, ccy: string) => txnMoney(n, ccy)
@@ -414,7 +428,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b1.totalTransactions)} sub={t('sub.everyDocument')} />
-            <KpiCard icon={Scale} accent={b1.conformity === 'nonConforming' ? 'red' : b1.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b1.conformity)} sub={`MAD ${b1.mad.toFixed(4)}`} />
+            <KpiCard icon={Scale} accent={b1.conformity === 'nonConforming' ? 'red' : b1.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b1.conformity)} sub={t('sub.madValue', { value: dec(b1.mad, 4) })} />
             <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.deviatingDigits')} value={num(b1.digits.filter((d) => d.isAnomaly).length)} sub={t('sub.offExpected25')} />
             <KpiCard icon={BarChart3} accent="violet" label={t('kpi.digit1Share')} value={ratioPct(b1.digits[0]?.observed ?? 0)} sub={t('sub.expected301')} />
           </div>
@@ -467,7 +481,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b2.totalTransactions)} sub={t('sub.twoDigitPairs')} />
-            <KpiCard icon={Scale} accent={b2.conformity === 'nonConforming' ? 'red' : b2.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b2.conformity)} sub={`MAD ${b2.mad.toFixed(4)}`} />
+            <KpiCard icon={Scale} accent={b2.conformity === 'nonConforming' ? 'red' : b2.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b2.conformity)} sub={t('sub.madValue', { value: dec(b2.mad, 4) })} />
             <KpiCard icon={AlertTriangle} accent={b2.anomalies.length > 0 ? 'amber' : 'emerald'} label={t('kpi.anomalousPairs')} value={num(b2.anomalies.length)} sub={t('sub.offExpected50')} />
             <KpiCard icon={FileWarning} accent={data.summary.approvalLimitRisk ? 'red' : 'emerald'} label={t('kpi.approvalLimitRisk')} value={data.summary.approvalLimitRisk ? t('yes') : t('no')} sub={t('sub.seeThresholdTrap')} />
           </div>
@@ -1027,6 +1041,7 @@ function ScoringPanel({ data }: { data: SentinelData }) {
   const root = useTranslations()
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
+  const pct = useRatioPct()
   const ccy = data.meta.presentationCurrency
   const cfg = data.config as unknown as Record<string, string | number>
   const rowLabel = (rule: {
@@ -1048,8 +1063,8 @@ function ScoringPanel({ data }: { data: SentinelData }) {
       p.count = num(Number(cfg[p.countKey] ?? 0))
       delete p.countKey
     }
-    if (rule.confidence != null) p.pct = `${Math.round(rule.confidence * 100)}%`
-    if (rule.share != null) p.pct = `${Math.round(rule.share * 100)}%`
+    if (rule.confidence != null) p.pct = pct(rule.confidence, 0)
+    if (rule.share != null) p.pct = pct(rule.share, 0)
     return root(rule.labelKey, p)
   }
   return (
@@ -1076,6 +1091,7 @@ function ScoringPanel({ data }: { data: SentinelData }) {
 function ConfigTab({ data, canEdit }: { data: SentinelData; canEdit: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
+  const dec = useDecimals()
   const presFmt = useMoney(data.meta.presentationCurrency)
   const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const c = data.config
@@ -1123,7 +1139,7 @@ function ConfigTab({ data, canEdit }: { data: SentinelData; canEdit: boolean }) 
             <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('flag.sequential')}</span>{t('coverage.sequentialItem')}</li>
             <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('detectors.duplicates')}</span>{t('coverage.duplicatesItem')}</li>
           </ul>
-          <p>{t('coverage.outro', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: (data.meta.queryMs / 1000).toFixed(1) })}</p>
+          <p>{t('coverage.outro', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: dec(data.meta.queryMs / 1000, 1) })}</p>
         </div>
       </Panel>
     </div>

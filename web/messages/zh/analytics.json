@@ -3882,7 +3882,8 @@
       "seeThresholdTrap": "见阈值陷阱",
       "sumPairAmounts": "按折算价值的超额部分",
       "twoD": "2D：{value}",
-      "twoDigitPairs": "前两位数字对"
+      "twoDigitPairs": "前两位数字对",
+      "madValue": "MAD {value}"
     },
     "tabs": {
       "analysis": "分析",

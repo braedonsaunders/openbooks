@@ -3882,7 +3882,8 @@
       "seeThresholdTrap": "しきい値トラップ参照",
       "sumPairAmounts": "換算後の超過分",
       "twoD": "2D：{value}",
-      "twoDigitPairs": "上位二桁ペア"
+      "twoDigitPairs": "上位二桁ペア",
+      "madValue": "MAD {value}"
     },
     "tabs": {
       "analysis": "分析",
