@@ -1825,7 +1825,7 @@
     },
     "chart": {
       "spend": "支出",
-      "tooltipOnTime": "按时：{pct}%",
+      "tooltipOnTime": "按时：{pct}",
       "tooltipSpend": "支出：{amount}",
       "xAxis": "支出（对数）→",
       "yAxis": "按时率"
@@ -3243,9 +3243,9 @@
       "anomaly": "{month}偏离均值{sigma}σ",
       "cliff": "差距{gap}%，比率{ratio}倍",
       "cliffItem": "采购与销售速率",
-      "concentration": "占支出的{share}%，{trend}",
+      "concentration": "占支出的{share}，{trend}",
       "fragmentation": "{txns}笔/月，均值{avg}",
-      "frog": "{months}个月+{rate}%/月",
+      "frog": "{months}个月+{rate}/月",
       "seasonal": "较平均月{deviation}%",
       "zombie": "{months}个月{amount}/月不变",
       "cliffNoVelocity": "比率{ratio}倍——速率不可测"
@@ -3347,9 +3347,9 @@
       "txnsMonths": "{txns}笔 · {months}个月"
     },
     "scatter": {
-      "tooltipAccel": "加速度：{pct}%",
+      "tooltipAccel": "加速度：{pct}",
       "tooltipSpend": "支出：{amount}",
-      "tooltipVelocity": "速率：{pct}%",
+      "tooltipVelocity": "速率：{pct}",
       "xAxis": "速率%",
       "yAxis": "加速度"
     },

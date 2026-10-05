@@ -1825,7 +1825,7 @@
     },
     "chart": {
       "spend": "Gasto",
-      "tooltipOnTime": "A tiempo: {pct} %",
+      "tooltipOnTime": "A tiempo: {pct}",
       "tooltipSpend": "Gasto: {amount}",
       "xAxis": "Gasto (log) →",
       "yAxis": "% a tiempo"
@@ -3243,9 +3243,9 @@
       "anomaly": "{sigma}σ de la media en {month}",
       "cliff": "brecha {gap} %, ratio {ratio}×",
       "cliffItem": "Velocidad pedidos a proveedores vs pedidos de clientes",
-      "concentration": "{share} % del gasto, {trend}",
+      "concentration": "{share} del gasto, {trend}",
       "fragmentation": "{txns} trans./mes, prom. {avg}",
-      "frog": "+{rate} %/mes durante {months} meses",
+      "frog": "+{rate}/mes durante {months} meses",
       "seasonal": "{deviation} % vs mes promedio",
       "zombie": "{amount}/mes sin cambios durante {months} meses",
       "cliffNoVelocity": "ratio {ratio}× — velocidades no medibles"
@@ -3347,9 +3347,9 @@
       "txnsMonths": "{txns} trans. · {months} meses"
     },
     "scatter": {
-      "tooltipAccel": "Acél.: {pct} %",
+      "tooltipAccel": "Acél.: {pct}",
       "tooltipSpend": "Gasto: {amount}",
-      "tooltipVelocity": "Velocidad: {pct} %",
+      "tooltipVelocity": "Velocidad: {pct}",
       "xAxis": "Velocidad %",
       "yAxis": "Acél."
     },

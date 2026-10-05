@@ -1825,7 +1825,7 @@
     },
     "chart": {
       "spend": "Gastos",
-      "tooltipOnTime": "Em dia: {pct}%",
+      "tooltipOnTime": "Em dia: {pct}",
       "tooltipSpend": "Gastos: {amount}",
       "xAxis": "Gastos (log) →",
       "yAxis": "% em dia"
@@ -3243,9 +3243,9 @@
       "anomaly": "{sigma}σ da média em {month}",
       "cliff": "diferença {gap}%, razão {ratio}×",
       "cliffItem": "Velocidade de PC vs PV",
-      "concentration": "{share}% dos gastos, {trend}",
+      "concentration": "{share} dos gastos, {trend}",
       "fragmentation": "{txns} transações/mês, méd. {avg}",
-      "frog": "+{rate}%/mês por {months} meses",
+      "frog": "+{rate}/mês por {months} meses",
       "seasonal": "{deviation}% vs mês médio",
       "zombie": "{amount}/mês inalterado por {months} meses",
       "cliffNoVelocity": "razão {ratio}× — velocidades não mensuráveis"
@@ -3347,9 +3347,9 @@
       "txnsMonths": "{txns} transações · {months} meses"
     },
     "scatter": {
-      "tooltipAccel": "Acel.: {pct}%",
+      "tooltipAccel": "Acel.: {pct}",
       "tooltipSpend": "Gastos: {amount}",
-      "tooltipVelocity": "Velocidade: {pct}%",
+      "tooltipVelocity": "Velocidade: {pct}",
       "xAxis": "Velocidade %",
       "yAxis": "Aceleração"
     },
