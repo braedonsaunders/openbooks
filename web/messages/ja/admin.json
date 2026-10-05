@@ -4031,7 +4031,9 @@
       "lastSyncedAt": "最終同期",
       "nativeId": "OpenBooksレコード",
       "bufferQuantity": "引き当て在庫",
-      "stopSellingAtZero": "ゼロで販売停止"
+      "stopSellingAtZero": "ゼロで販売停止",
+      "scheme": "スキーム",
+      "identificationState": "識別加盟国"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",

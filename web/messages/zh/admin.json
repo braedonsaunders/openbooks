@@ -3986,7 +3986,9 @@
       "lastSyncedAt": "上次同步",
       "nativeId": "OpenBooks记录",
       "bufferQuantity": "预留库存",
-      "stopSellingAtZero": "为零时停止销售"
+      "stopSellingAtZero": "为零时停止销售",
+      "scheme": "方案",
+      "identificationState": "识别成员国"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",

@@ -3986,7 +3986,9 @@
       "lastSyncedAt": "Last synced",
       "nativeId": "OpenBooks record",
       "bufferQuantity": "Keep-back buffer",
-      "stopSellingAtZero": "Stop selling at zero"
+      "stopSellingAtZero": "Stop selling at zero",
+      "scheme": "Scheme",
+      "identificationState": "Member state of identification"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",

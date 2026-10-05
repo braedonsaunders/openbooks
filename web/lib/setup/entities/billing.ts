@@ -314,9 +314,9 @@ export const BILLING_ENTITIES: SetupEntity[] = [
       { titleKey: 'quoteCashPolicyFields.terms', fields: ['defaultBillingTiming', 'defaultStartRule', 'signatureExpiryDays', 'orderFormTemplateId'] },
     ],
     columns: [
-      { key: 'maxDiscountPercent', kind: 'percent' },
-      { key: 'autoActivateOnSign', kind: 'badge-active' },
-      { key: 'signatureExpiryDays', kind: 'number' },
+      { key: 'maxDiscountPercent', labelKey: 'quoteCashPolicyFields.maxDiscountPercent', kind: 'percent' },
+      { key: 'autoActivateOnSign', labelKey: 'quoteCashPolicyFields.autoActivateOnSign', kind: 'badge-active' },
+      { key: 'signatureExpiryDays', labelKey: 'quoteCashPolicyFields.signatureExpiryDays', kind: 'number' },
     ],
     fields: [
       { key: 'maxDiscountPercent', labelKey: 'quoteCashPolicyFields.maxDiscountPercent', kind: 'percent', required: true, min: 0, max: 100, defaultValue: '10', helpTextKey: 'quoteCashPolicyFields.maxDiscountPercentHelp' },

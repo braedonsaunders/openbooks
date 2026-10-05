@@ -125,9 +125,9 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     hasActive: false,
     columns: [
-      { key: 'portalName', kind: 'text' },
+      { key: 'portalName', labelKey: 'customerPortalFields.portalName', kind: 'text' },
       { key: 'effectiveFrom', kind: 'date' },
-      { key: 'returnWindowDays', kind: 'text' },
+      { key: 'returnWindowDays', labelKey: 'customerPortalFields.returnWindowDays', kind: 'text' },
     ],
     // Effective-dated portal rules: every save opens a new effective row (or
     // rewrites today's), so past portal requests keep the rules they ran
