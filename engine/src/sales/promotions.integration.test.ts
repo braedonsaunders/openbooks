@@ -486,8 +486,19 @@ test('unknown registry precision refuses before any line is written', { skip: !D
       withOrg(org.orgId, () => db.transaction((tx) => applyPromotion(tx, org.orgId, actorId, {
         documentId, code: 'ZZZTEN', allowedSubsidiaryIds: null,
       }))),
-      (error: unknown) => error instanceof PromotionRefusal && error.code === 'currency_precision_unknown'
-        && error.status === 422 && /platform currency seed/.test(error.remedy ?? ''),
+      (error: unknown) => {
+        if (!(error instanceof PromotionRefusal) || error.code !== 'currency_precision_unknown' || error.status !== 422) {
+          return false;
+        }
+        const remedy = error.remedy ?? '';
+        // Both conditional arms are named: seed restoration for a supported
+        // row, evidence review for anything else. No choose/replace-currency
+        // advice may reach an existing document through this shared helper.
+        return /platform currency seed/.test(remedy)
+          && /review the original currency evidence/.test(remedy)
+          && !/choose a supported currency code/.test(remedy)
+          && !/must be replaced/.test(remedy);
+      },
     )
     assert.deepEqual(await withOrg(org.orgId, () => discountLines(org.orgId, documentId)), [])
     assert.equal(await withOrg(org.orgId, () => usageCount(org.orgId, promotion.id)), 0)
