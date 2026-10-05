@@ -91,12 +91,15 @@ interface Activity {
   totalDiscountWrittenOff: bigint;
   totalAmortized: bigint;
   totalAllowanceTopUp: bigint;
+  totalAllowanceUsed: bigint;
 }
 interface Marker {
   operation?: string;
   pledgeId?: string;
   amount?: string;
   discount?: string;
+  allowanceApplied?: string;
+  allowanceReleased?: string;
   month?: string;
   allocations?: { installmentId?: string; amount?: string }[];
 }
@@ -445,6 +448,7 @@ async function activity(orgId: string, pledgeId: string, asOfDate?: string): Pro
     writeOffsByMonth: new Map(), discountWrittenOffByMonth: new Map(),
     amortizedByMonth: new Map(), amortizedMonths: new Set(), totalCollected: 0n,
     totalWrittenOff: 0n, totalDiscountWrittenOff: 0n, totalAmortized: 0n, totalAllowanceTopUp: 0n,
+    totalAllowanceUsed: 0n,
   };
   const addTo = (map: Map<string, bigint>, key: string, value: bigint) =>
     map.set(key, (map.get(key) ?? 0n) + value);
@@ -479,8 +483,23 @@ async function activity(orgId: string, pledgeId: string, asOfDate?: string): Pro
     if (marker?.operation === "allowance_top_up" && marker.amount) {
       out.totalAllowanceTopUp += toUnits(marker.amount);
     }
+    if (marker?.operation === "write_off" && marker.amount) {
+      out.totalAllowanceUsed += marker.allowanceApplied !== undefined
+        ? toUnits(marker.allowanceApplied) : toUnits(marker.amount) - toUnits(marker.discount ?? "0");
+    }
+    if (marker?.allowanceReleased) out.totalAllowanceUsed += toUnits(marker.allowanceReleased);
   }
   return out;
+}
+function pledgeAllowanceBalance(current: Activity): bigint {
+  const balance = current.totalAllowanceTopUp - current.totalAllowanceUsed;
+  if (balance < 0n) throw fail({
+    message: "The pledge's active allowance postings release more than its recorded top-ups.",
+    code: "pledge_allowance_postings_inconsistent",
+    remedy: "Review the pledge's allowance postings and correct inconsistent entries through the journal correction workflow.",
+    status: 409,
+  });
+  return balance;
 }
 async function postPledge(input: {
   orgId: string; pledge: PledgeRow; postingDate: string; preferred: string; memo: string;
@@ -698,7 +717,7 @@ export async function topUpPledgeAllowance(input: {
     }
     const current = await activity(input.orgId, pledge.id);
     const outstanding = toUnits(pledge.total_amount) - current.totalCollected - current.totalWrittenOff;
-    const next = toUnits(pledge.allowance_amount) + toUnits(amount);
+    const next = pledgeAllowanceBalance(current) + toUnits(amount);
     if (next > outstanding) throw fail({
       message: "The allowance top-up exceeds the outstanding pledge balance of " + fromUnits(outstanding) + ".",
       code: "pledge_allowance_exceeds_outstanding",
@@ -805,9 +824,9 @@ export async function writeOffPledge(input: {
       unamortizedDiscount: fromUnits(position.unamortizedDiscount), installments: remaining,
     }));
     const applied = toUnits(amount) - discount;
-    const allowance = toUnits(pledge.allowance_amount);
+    const allowance = pledgeAllowanceBalance(current);
     if (applied > allowance) throw fail({
-      message: "Pledge " + pledge.pledge_number + " has an allowance balance of " + pledge.allowance_amount +
+      message: "Pledge " + pledge.pledge_number + " has an allowance balance of " + fromUnits(allowance) +
         ", below the " + fromUnits(applied) + " net carrying amount of the requested write-off of " + amount +
         " (less its unamortized discount of " + fromUnits(discount) + ").",
       code: "pledge_writeoff_exceeds_allowance",
@@ -866,11 +885,14 @@ export async function writeOffPledge(input: {
 export async function collectPledgeInstallments(input: {
   orgId: string; pledgeId: string; allocations: readonly { installmentId: string; amount: string }[];
   postingDate: string; bankAccountId: string; receivableAccountId: string;
+  allowanceAccountId?: string; contributionsAccountId?: string;
   idempotencyKey: string; reason: string; actorId?: string | null;
-}): Promise<{ entryId: string; status: string; collectedAmount: string }> {
+}): Promise<{ entryId: string; status: string; collectedAmount: string; allowanceReleased: string; allowanceBalance: string }> {
   uuid(input.pledgeId, "pledgeId");
   uuid(input.bankAccountId, "bankAccountId");
   uuid(input.receivableAccountId, "receivableAccountId");
+  if (input.allowanceAccountId !== undefined) uuid(input.allowanceAccountId, "allowanceAccountId");
+  if (input.contributionsAccountId !== undefined) uuid(input.contributionsAccountId, "contributionsAccountId");
   date(input.postingDate, "postingDate");
   if (!input.idempotencyKey.trim()) throw fail({
     message: "A collection idempotency key is required.", code: "pledge_collection_key_required",
@@ -885,9 +907,12 @@ export async function collectPledgeInstallments(input: {
   return withOrgTransaction(input.orgId, async () => {
     await lockFeature(input.orgId);
     const pledge = await readPledge(input.orgId, input.pledgeId, true);
-    if (!pledge || !pledge.booking_entry_id || !["booked", "collecting"].includes(pledge.status)) {
+    if (!pledge || !pledge.booking_entry_id || !["booked", "collecting", "fulfilled", "written_off"].includes(pledge.status)
+        || !(await db.execute(sql`select 1 from journal_entries
+          -- Live entries only: a reversed booking cannot authorize a new collection.
+          where org_id = ${input.orgId} and id = ${pledge.booking_entry_id} and status = 'posted'`)).rows[0]) {
       throw fail({
-        message: "Only a booked or collecting pledge can receive a collection.",
+        message: "Only a pledge with an active booking and uncollected installments can receive a collection.",
         status: 409, code: "pledge_state_conflict", remedy: "Book the pledge before recording a collection.",
       });
     }
@@ -922,23 +947,58 @@ export async function collectPledgeInstallments(input: {
     });
     const collectionTotal = allocations.reduce((sum, row) => sum + toUnits(row.amount), 0n);
     const afterCollected = current.totalCollected + collectionTotal;
-    const closed = afterCollected + current.totalWrittenOff === toUnits(pledge.total_amount);
+    const remaining = toUnits(pledge.total_amount) - afterCollected - current.totalWrittenOff;
+    const closed = remaining === 0n;
+    // Posted, unreversed allowance movements are authoritative after a journal correction.
+    const allowance = pledgeAllowanceBalance(current);
+    const released = allowance > remaining ? allowance - remaining : 0n;
+    if (released > 0n && (!input.allowanceAccountId || !input.contributionsAccountId)) throw fail({
+      message: "This collection must release " + fromUnits(released) + " of pledge allowance that no longer covers an outstanding receivable.",
+      code: "pledge_collection_allowance_accounts_required",
+      remedy: "Provide the allowance and contributions accounts used for this pledge's allowance when recording the collection.",
+      field: "allowanceAccountId",
+    });
+    if (released > 0n) {
+      const accounts = (await db.execute<{ allowance_id: string; contributions_id: string }>(sql`
+        select distinct a.account_id as allowance_id, c.account_id as contributions_id
+          from journal_entries e
+          join journal_lines a on a.org_id = e.org_id and a.entry_id = e.id and a.line_number = 2
+          join journal_lines c on c.org_id = e.org_id and c.entry_id = e.id and c.line_number = 1
+         -- Live entries only: reversed allowance top-ups cannot authorize collection release accounts.
+         where e.org_id = ${input.orgId} and e.status = 'posted' and e.origin = 'pledge'
+           and e.reverses_entry_id is null
+           and e.custom #>> '{nonprofitPledge,pledgeId}' = ${pledge.id}
+           and e.custom #>> '{nonprofitPledge,operation}' = 'allowance_top_up'`)).rows;
+      if (accounts.length !== 1 || accounts[0]?.allowance_id !== input.allowanceAccountId
+          || accounts[0]?.contributions_id !== input.contributionsAccountId) throw fail({
+        message: "The collection's allowance and contributions accounts do not match this pledge's active allowance postings.",
+        code: "pledge_collection_allowance_accounts_mismatch",
+        remedy: "Use the accounts from this pledge's allowance postings; correct inconsistent postings through the journal correction workflow before retrying.",
+      });
+    }
+    const allowanceReleased = fromUnits(released);
+    const allowanceBalance = fromUnits(allowance - released);
     const nextStatus = closed ? (current.totalWrittenOff > 0n ? "written_off" : "fulfilled") : "collecting";
     const total = fromUnits(collectionTotal);
     const posted = await postPledge({
       orgId: input.orgId, pledge, postingDate: input.postingDate,
       preferred: pledge.pledge_number + "-COLLECT", memo: "Collect pledge " + pledge.pledge_number,
       actorId: input.actorId, idempotencyKey: input.idempotencyKey,
-      custom: { [MARKER]: { pledgeId: pledge.id, operation: "collection", amount: total, allocations } },
-      auditChanges: { pledgeId: pledge.id, amount: total, reason: why },
+      custom: { [MARKER]: { pledgeId: pledge.id, operation: "collection", amount: total, allocations, allowanceReleased } },
+      auditChanges: { pledgeId: pledge.id, amount: total, allowanceReleased, allowanceBalance, reason: why },
       lines: [
         { accountId: input.bankAccountId, amount: total },
         { accountId: input.receivableAccountId, amount: fromUnits(-collectionTotal) },
+        ...(released > 0n ? [
+          { accountId: input.allowanceAccountId!, amount: allowanceReleased },
+          { accountId: input.contributionsAccountId!, amount: fromUnits(-released) },
+        ] : []),
       ],
     });
     const updated = (await db.execute<{ id: string }>(sql`
-      update pledges set status = ${nextStatus}, updated_at = now(), updated_by = ${input.actorId ?? null}
+      update pledges set status = ${nextStatus}, allowance_amount = ${allowanceBalance}, updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${pledge.id} and status = ${pledge.status}
+         and allowance_amount = ${pledge.allowance_amount}
       returning id`)).rows[0];
     if (!updated) throw fail({
       message: "Pledge changed before its collection could be recorded.",
@@ -946,11 +1006,11 @@ export async function collectPledgeInstallments(input: {
     });
     await audit({
       orgId: input.orgId, id: pledge.id, action: "collect", actorId: input.actorId,
-      before: { status: pledge.status, collectedAmount: fromUnits(current.totalCollected) },
-      after: { status: nextStatus, collectedAmount: fromUnits(afterCollected), entryId: posted.entryId },
+      before: { status: pledge.status, collectedAmount: fromUnits(current.totalCollected), allowanceAmount: pledge.allowance_amount },
+      after: { status: nextStatus, collectedAmount: fromUnits(afterCollected), allowanceAmount: allowanceBalance, allowanceReleased, entryId: posted.entryId },
       reason: why,
     });
-    return { entryId: posted.entryId, status: nextStatus, collectedAmount: total };
+    return { entryId: posted.entryId, status: nextStatus, collectedAmount: total, allowanceReleased, allowanceBalance };
   });
 }
 

@@ -209,6 +209,44 @@ test("pledges book and reverse through the ledger while gifts receive engine num
     assert.deepEqual(pledgeBalances.rows.map((row) => row.amount), ["0.0000", "0.0000", "0.0000"],
       "a written-off pledge leaves no receivable, discount or allowance balance standing");
 
+    const collectible = await createPledge({ ...pledgeInput, discountRate: "0", totalAmount: "1000.0000",
+      installments: [{ dueOn: "2027-07-15", amount: "1000.0000" }] });
+    await bookPledge({ orgId: org.orgId, pledgeId: collectible.id, postingDate: org.date,
+      receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
+      contributionsAccountId: org.accounts.revenue, reason: "Recognize the reserved promise", actorId });
+    await topUpPledgeAllowance({ orgId: org.orgId, pledgeId: collectible.id, amount: "200.0000",
+      postingDate: org.date, contributionsAccountId: org.accounts.revenue, allowanceAccountId: accounts.allowance,
+      reason: "Reserve the doubtful balance", actorId });
+    const collectibleSchedule = await getPledgeSchedule({ orgId: org.orgId, pledgeId: collectible.id, asOfDate: org.date });
+    const pledgeReceipt = { orgId: org.orgId, pledgeId: collectible.id,
+      allocations: [{ installmentId: collectibleSchedule.installments[0]!.id, amount: "900.0000" }],
+      postingDate: org.date, bankAccountId: org.accounts.bank, receivableAccountId: accounts.receivable,
+      idempotencyKey: randomUUID(), reason: "Record the donor receipt and release excess allowance", actorId };
+    await assert.rejects(collectPledgeInstallments(pledgeReceipt), (error) => error instanceof NonprofitError &&
+      error.code === "pledge_collection_allowance_accounts_required" && error.message.includes("100.0000") &&
+      error.remedy.includes("allowance and contributions accounts"));
+    await assert.rejects(collectPledgeInstallments({ ...pledgeReceipt, allowanceAccountId: org.accounts.bank,
+      contributionsAccountId: org.accounts.revenue }), (error) => error instanceof NonprofitError &&
+      error.code === "pledge_collection_allowance_accounts_mismatch");
+    const partial = await collectPledgeInstallments({ ...pledgeReceipt, allowanceAccountId: accounts.allowance,
+      contributionsAccountId: org.accounts.revenue });
+    assert.deepEqual([partial.status, partial.allowanceReleased, partial.allowanceBalance],
+      ["collecting", "100.0000", "100.0000"]);
+    await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
+      org.orgId, actorId, partial.entryId, "Correct the donor receipt", reversalDate));
+    const finalReceipt = await collectPledgeInstallments({ ...pledgeReceipt, postingDate: reversalDate,
+      allocations: [{ installmentId: pledgeReceipt.allocations[0]!.installmentId, amount: "1000.0000" }],
+      idempotencyKey: randomUUID(), allowanceAccountId: accounts.allowance, contributionsAccountId: org.accounts.revenue });
+    assert.deepEqual([finalReceipt.status, finalReceipt.allowanceReleased, finalReceipt.allowanceBalance],
+      ["fulfilled", "200.0000", "0.0000"], "a corrected collection restores the full active allowance before closing");
+    const remainingAllowance = (await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
+      select sum(l.amount)::text as amount from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
+       where l.org_id = ${org.orgId} and l.account_id = ${accounts.allowance}
+         and e.status in ('posted', 'reversed') and coalesce(e.reverses_entry_id, e.id) in (
+           select j.id from journal_entries j where j.org_id = ${org.orgId}
+             and j.custom #>> '{nonprofitPledge,pledgeId}' = ${collectible.id})`))).rows[0]!.amount;
+    assert.equal(remainingAllowance, "0.0000", "a collected pledge leaves no allowance standing in the ledger");
+
     const cancelled = await cancelPledge({
       orgId: org.orgId,
       pledgeId: pledge.id,
