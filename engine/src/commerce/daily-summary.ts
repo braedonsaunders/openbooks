@@ -267,6 +267,17 @@ export async function postSummaryBatch(
       for (const orderId of resolvedIds) {
         await maybeCloseGoverningOrder(orgId, actor, orderId);
       }
+      // The batch's issues belong to the summary cash sale: every summarized
+      // order restates its margin share from the posted batch, on the scan's
+      // restatement queue rather than inside this posting. A retried mark
+      // collides on (org, order) and the first mark wins.
+      await db.execute(sql`
+        insert into channel_order_economics_pending (org_id, order_id, reason)
+        select ${orgId}, o.id, 'daily summary posted'
+          from channel_orders o
+         where o.org_id = ${orgId}
+           and o.id in (${sql.join(resolvedIds.map((orderId) => sql`${orderId}::uuid`), sql`, `)})
+        on conflict (org_id, order_id) do nothing`);
       // Tonight's refunds join the batch they belong to: one refund document
       // beside the sales document, each event on its own lines. The batch
       // unit is still open, so the refund effects run inside it — a rollback

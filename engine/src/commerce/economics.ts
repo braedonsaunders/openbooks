@@ -6,6 +6,7 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
+import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { apportion, roundDiv, toUnits } from "../money/money.ts";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import type { ChannelOrderLine } from "./contracts.ts";
@@ -67,7 +68,11 @@ export interface OrderEconomics {
   /** CM2 as a 4dp percent of revenue, derived from stored sums, never stored. */
   marginPct: string | null;
   estimatedAny: boolean;
-  /** A cost arrived in another currency and stays out of the CM sums. */
+  /**
+   * A cost arrived in another currency that no rate could price, so it stays
+   * out of the CM sums until its rate exists. Converted costs join the sums
+   * with their original currency kept as evidence on the source ref.
+   */
   mixedCurrency: boolean;
 }
 
@@ -106,11 +111,106 @@ export function decimalToMinorUnits(amount: string, minorUnits: number): bigint 
   return roundDiv(toUnits(amount), 10n ** BigInt(4 - minorUnits));
 }
 
+/** Ten decimal places: the storage scale of every fx rate this file applies. */
+const RATE_SCALE_UNITS = 10n ** 10n;
+
 /**
- * Convert a cost to minor units, keeping its own currency. Same-currency
- * costs convert at the order precision; a foreign-currency cost converts at
- * its own precision and stays out of the single-currency CM sums, shown
- * beside them instead of forced through a rate the order never agreed.
+ * Parse a decimal rate into exact ten-decimal units. Commerce refuses its
+ * own rate vocabulary (a CommerceError naming the cost), because a coerced
+ * rate would silently reprice the margin.
+ */
+function parseRateUnits(rate: string, label: string): bigint {
+  const match = /^\+?(\d+)(?:\.(\d{1,10}))?$/.exec(rate.trim());
+  if (!match) {
+    refuse(
+      "economics_rate_invalid",
+      `Order economics cannot price ${label} at exchange rate ${JSON.stringify(rate)}.`,
+      "Record the rate as a positive decimal with at most ten places, then recompute the order's economics.",
+    );
+  }
+  const units = BigInt(match[1]!) * RATE_SCALE_UNITS + BigInt((match[2] ?? "").padEnd(10, "0"));
+  if (units <= 0n) {
+    refuse(
+      "economics_rate_invalid",
+      `Order economics cannot price ${label} at a zero exchange rate.`,
+      "Record the rate as a positive decimal, then recompute the order's economics.",
+    );
+  }
+  return units;
+}
+
+/**
+ * Apply a rate to foreign minor units, exact bigint math, halves away from
+ * zero like the ledger: value = amount × rate ÷ 10^10, restated from the
+ * cost precision into the order precision.
+ */
+function convertAtRate(amountMinor: bigint, amountExponent: number, rateUnits: bigint, targetExponent: number): bigint {
+  return roundDiv(
+    amountMinor * rateUnits * 10n ** BigInt(targetExponent),
+    RATE_SCALE_UNITS * 10n ** BigInt(amountExponent),
+  );
+}
+
+export interface ConvertedCost {
+  minor: bigint;
+  currency: string;
+  /** Original currency and rate evidence, appended to the source ref when converted. */
+  evidenceSuffix: string | null;
+}
+
+async function foreignExponent(cache: Map<string, number>, code: string): Promise<number> {
+  let exponent = cache.get(code);
+  if (exponent === undefined) {
+    exponent = await minorUnitsForCurrency(code);
+    cache.set(code, exponent);
+  }
+  return exponent;
+}
+
+/** Convert foreign minor units at a document rate or the business-date spot (see convertCostAmount). */
+async function convertMinorCost(
+  foreignMinor: bigint,
+  amountCurrency: string,
+  orderCurrency: string,
+  orderMinorUnits: number,
+  cache: Map<string, number>,
+  fx: { orgId: string; asOf: string; documentRate: string | null },
+): Promise<ConvertedCost> {
+  const code = amountCurrency.toUpperCase();
+  if (code === orderCurrency || foreignMinor === 0n) {
+    return { minor: foreignMinor, currency: orderCurrency, evidenceSuffix: null };
+  }
+  const exponent = await foreignExponent(cache, code);
+  const documentRate = fx.documentRate?.trim() ? fx.documentRate.trim() : null;
+  if (documentRate) {
+    const units = parseRateUnits(documentRate, `the ${code} cost`);
+    return {
+      minor: convertAtRate(foreignMinor, exponent, units, orderMinorUnits),
+      currency: orderCurrency,
+      evidenceSuffix: `${code}@${documentRate}`,
+    };
+  }
+  const spot = await lookupSpotRate(db, fx.orgId, code, orderCurrency, fx.asOf);
+  if (!spot) {
+    return { minor: foreignMinor, currency: code, evidenceSuffix: null };
+  }
+  const units = parseRateUnits(spot, `the ${code} cost on ${fx.asOf}`);
+  return {
+    minor: convertAtRate(foreignMinor, exponent, units, orderMinorUnits),
+    currency: orderCurrency,
+    evidenceSuffix: `${code}@${spot}`,
+  };
+}
+
+/**
+ * Convert a cost into the order's currency. Same-currency costs convert at
+ * the order precision; a foreign-currency cost converts at its source
+ * document's rate when that rate quotes cost→order directly, else at the
+ * business-date spot (the order's day) from the fx module — and the CM sums
+ * include it, with the original currency and rate kept as evidence on the
+ * source ref. When no rate exists the cost keeps its own currency and stays
+ * out of the sums (flagged by mixedCurrency) instead of blocking the
+ * posting: recording the rate restates the order.
  */
 async function convertCostAmount(
   amountText: string,
@@ -118,17 +218,14 @@ async function convertCostAmount(
   orderCurrency: string,
   orderMinorUnits: number,
   cache: Map<string, number>,
-): Promise<{ minor: bigint; currency: string }> {
+  fx: { orgId: string; asOf: string; documentRate: string | null },
+): Promise<ConvertedCost> {
   const code = (amountCurrency ?? orderCurrency).toUpperCase();
   if (code === orderCurrency) {
-    return { minor: decimalToMinorUnits(amountText, orderMinorUnits), currency: orderCurrency };
+    return { minor: decimalToMinorUnits(amountText, orderMinorUnits), currency: orderCurrency, evidenceSuffix: null };
   }
-  let exponent = cache.get(code);
-  if (exponent === undefined) {
-    exponent = await minorUnitsForCurrency(code);
-    cache.set(code, exponent);
-  }
-  return { minor: decimalToMinorUnits(amountText, exponent), currency: code };
+  const exponent = await foreignExponent(cache, code);
+  return convertMinorCost(decimalToMinorUnits(amountText, exponent), code, orderCurrency, orderMinorUnits, cache, fx);
 }
 
 /** Tenant minor-unit precision; an unknown currency refuses instead of converting dust. */
@@ -350,6 +447,7 @@ type SettlementRow = {
   currency: string | null;
   meta: unknown;
   batch_id: string;
+  batch_currency: string;
 };
 
 interface SettledFee {
@@ -357,6 +455,9 @@ interface SettledFee {
   currency: string;
   marketplace: boolean;
   sourceRef: string;
+  /** The line's evidenced rate into the batch currency, when the provider reported one. */
+  exchangeRate: string | null;
+  batchCurrency: string;
 }
 
 /**
@@ -368,7 +469,7 @@ interface SettledFee {
 async function loadSettledOrderFees(orgId: string, orderExternalId: string): Promise<SettledFee[]> {
   const rows = (await db.execute<SettlementRow>(sql`
     select l.line_number, l.kind, l.external_ref, l.amount::text as amount, l.currency,
-           l.meta, l.batch_id
+           l.meta, l.batch_id, b.currency as batch_currency
       from psp_settlement_lines l
       join psp_settlement_batches b on b.id = l.batch_id and b.org_id = l.org_id
      where l.org_id = ${orgId}
@@ -379,17 +480,21 @@ async function loadSettledOrderFees(orgId: string, orderExternalId: string): Pro
     if (!row.external_ref) continue;
     const siblings = (await db.execute<SettlementRow>(sql`
       select l.line_number, l.kind, l.external_ref, l.amount::text as amount, l.currency,
-             l.meta, l.batch_id
+             l.meta, l.batch_id, b.currency as batch_currency
         from psp_settlement_lines l
+        join psp_settlement_batches b on b.id = l.batch_id and b.org_id = l.org_id
        where l.org_id = ${orgId} and l.batch_id = ${row.batch_id}
          and l.kind = 'fee' and l.external_ref = ${`${row.external_ref}_fee`}`)).rows;
     for (const sibling of siblings) {
       const meta = (sibling.meta ?? {}) as Record<string, unknown>;
+      const exchangeRate = typeof meta["exchangeRate"] === "string" ? meta["exchangeRate"] : null;
       fees.push({
         amountText: sibling.amount,
         currency: (sibling.currency ?? row.currency ?? "").toUpperCase(),
         marketplace: isMarketplaceFeeType(typeof meta["shopifyType"] === "string" ? meta["shopifyType"] : undefined),
         sourceRef: `settle:${sibling.batch_id}:${sibling.line_number}`,
+        exchangeRate,
+        batchCurrency: sibling.batch_currency.toUpperCase(),
       });
     }
   }
@@ -447,6 +552,90 @@ type IssueRow = {
   item_id: string;
   total: string;
 };
+
+type SummaryOrderWeight = { orderId: string; weight: bigint };
+
+/**
+ * Every summarized order's quantity weight per item, for splitting the
+ * summary cash sale's issue costs back to the orders it summarizes. Items
+ * resolve exactly like the per-order path (variant link, then SKU), settled
+ * set-wise instead of line by line; an unreadable quantity takes no
+ * quantity share. Siblings read oldest first so the largest-remainder split
+ * below is deterministic for identical data.
+ */
+async function loadSummaryItemWeights(
+  orgId: string,
+  channel: { kind: string; externalAccount: string },
+  summaryId: string,
+): Promise<Map<string, SummaryOrderWeight[]>> {
+  const siblings = (await db.execute<{ id: string; lines: unknown }>(sql`
+    select id, lines from channel_orders
+     where org_id = ${orgId} and summary_id = ${summaryId}
+     order by id`)).rows;
+  type ParsedLine = { orderId: string; sku: string | null; variantExternalId: string | null; quantity: string };
+  const parsed: ParsedLine[] = [];
+  for (const sibling of siblings) {
+    if (!Array.isArray(sibling.lines)) continue;
+    for (const raw of sibling.lines as Record<string, unknown>[]) {
+      if (raw["giftCard"] === true) continue;
+      const quantity = typeof raw["quantity"] === "string" ? raw["quantity"] : null;
+      if (!quantity) continue;
+      const sku = typeof raw["sku"] === "string" && raw["sku"].trim() !== "" ? raw["sku"].trim() : null;
+      const variantExternalId = typeof raw["variantExternalId"] === "string" && raw["variantExternalId"].trim() !== ""
+        ? raw["variantExternalId"].trim()
+        : null;
+      parsed.push({ orderId: sibling.id, sku, variantExternalId, quantity });
+    }
+  }
+  const itemByVariant = new Map<string, string>();
+  const variantIds = [...new Set(parsed.map((line) => line.variantExternalId).filter((id): id is string => id !== null))];
+  if (variantIds.length > 0) {
+    const links = (await db.execute<{ external_id: string; native_id: string }>(sql`
+      select l.external_id, l.native_id from external_links l
+      join items i on i.org_id = l.org_id and i.id = l.native_id and i.is_active
+     where l.org_id = ${orgId} and l.provider = ${channel.kind}
+       and l.external_account = ${channel.externalAccount}
+       and l.object_type = 'variant' and l.native_table = 'items'
+       and l.external_id in (${sql.join(variantIds.map((id) => sql`${id}`), sql`, `)})`)).rows;
+    for (const link of links) itemByVariant.set(link.external_id, link.native_id);
+  }
+  const itemBySku = new Map<string, string>();
+  const skus = [...new Set(parsed.map((line) => line.sku).filter((sku): sku is string => sku !== null))];
+  if (skus.length > 0) {
+    const found = (await db.execute<{ code: string; id: string }>(sql`
+      select distinct on (code) code, id from items
+       where org_id = ${orgId} and is_active and code in (${sql.join(skus.map((sku) => sql`${sku}`), sql`, `)})
+       order by code, created_at`)).rows;
+    for (const row of found) itemBySku.set(row.code, row.id);
+  }
+  // One entry per order: an order spreading an item across priced lines still
+  // takes a single quantity share, split across its own lines afterwards.
+  const combined = new Map<string, Map<string, bigint>>();
+  for (const line of parsed) {
+    const itemId = (line.variantExternalId && itemByVariant.get(line.variantExternalId))
+      ?? (line.sku && itemBySku.get(line.sku))
+      ?? null;
+    if (!itemId) continue;
+    const weight = parseQuantityWeight(line.quantity) ?? 0n;
+    if (weight === 0n) continue;
+    const perOrder = combined.get(itemId) ?? new Map<string, bigint>();
+    perOrder.set(line.orderId, (perOrder.get(line.orderId) ?? 0n) + weight);
+    combined.set(itemId, perOrder);
+  }
+  const weights = new Map<string, SummaryOrderWeight[]>();
+  for (const [itemId, perOrder] of combined) {
+    weights.set(itemId, [...perOrder].map(([orderId, weight]) => ({ orderId, weight })));
+  }
+  return weights;
+}
+
+/** The summary batch's posted cash sale carrying a summarized order's issues, if posted. */
+async function summaryPostingDocument(orgId: string, summaryId: string): Promise<string | null> {
+  const row = (await db.execute<{ posting_document_id: string | null }>(sql`
+    select posting_document_id from channel_daily_summaries
+     where org_id = ${orgId} and id = ${summaryId}`)).rows[0];
+  return row?.posting_document_id ?? null;
+}
 
 /**
  * Actual issue cost per item for the posted document, summed across every
@@ -594,49 +783,89 @@ async function buildDesiredFacts(
       });
     }
   }
-  // Actual issue cost, per item apportioned across the lines that sold it.
-  for (const issue of await loadIssueCosts(orgId, order.postingDocumentId)) {
-    const total = decimalToMinorUnits(issue.total, minorUnits);
-    if (total === 0n) continue;
-    const takers = revenueLines.filter((line) => line.itemId !== null && line.itemId === issue.item_id);
-    if (takers.length === 0) continue;
-    const parts = apportion(total < 0n ? -total : total, takers.map((taker) => taker.qtyWeight));
+  // Actual issue cost. A per-order sale attributes its own document's issues;
+  // a summarized order takes its quantity-proportioned share of the summary
+  // cash sale's issues — an exact minor-unit split (largest remainder) first
+  // across the summarized orders, then across this order's own lines.
+  const pushCogsShare = (share: bigint, sourceRef: string, takers: RevenueLine[]): void => {
+    if (share === 0n || takers.length === 0) return;
+    const magnitude = share < 0n ? -share : share;
+    const parts = apportion(magnitude, takers.map((taker) => taker.qtyWeight));
     takers.forEach((taker, at) => {
       if (parts[at] === 0n) return;
       desired.push({
-        lineKey: taker.key, component: "cogs", sourceKind: "posting",
-        sourceRef: `posting:${order.postingDocumentId}`,
-        currency, amountMinor: total < 0n ? -parts[at]! : parts[at]!,
+        lineKey: taker.key, component: "cogs", sourceKind: "posting", sourceRef,
+        currency, amountMinor: share < 0n ? -parts[at]! : parts[at]!,
         itemId: taker.itemId, sku: taker.sku, promotionCode: taker.promotionCode, estimated: false,
       });
     });
+  };
+  const issueDocumentId = order.postingDocumentId
+    ?? (order.summaryId ? await summaryPostingDocument(orgId, order.summaryId) : null);
+  if (issueDocumentId) {
+    const summaryShares = order.postingDocumentId || !order.summaryId
+      ? null
+      : await loadSummaryItemWeights(orgId, await channelProvider(orgId, order.channelId), order.summaryId);
+    for (const issue of await loadIssueCosts(orgId, issueDocumentId)) {
+      const total = decimalToMinorUnits(issue.total, minorUnits);
+      if (total === 0n) continue;
+      const takers = revenueLines.filter((line) => line.itemId !== null && line.itemId === issue.item_id);
+      if (takers.length === 0) continue;
+      if (!summaryShares) {
+        pushCogsShare(total, `posting:${issueDocumentId}`, takers);
+        continue;
+      }
+      const vector = summaryShares.get(issue.item_id) ?? [];
+      const at = vector.findIndex((entry) => entry.orderId === order.id);
+      if (at < 0) continue;
+      if (vector.every((entry) => entry.weight === 0n)) continue;
+      const parts = apportion(total < 0n ? -total : total, vector.map((entry) => entry.weight));
+      pushCogsShare(total < 0n ? -parts[at]! : parts[at]!, `posting:${issueDocumentId}`, takers);
+    }
   }
+  const orderDay = order.orderedAt.slice(0, 10);
+  const fxFor = (documentRate: string | null): { orgId: string; asOf: string; documentRate: string | null } =>
+    ({ orgId, asOf: orderDay, documentRate });
   const fxCache = new Map<string, number>();
   // Carrier labels arrive in minor units already, each allocated across the
-  // order's lines by value; a foreign-currency label keeps its currency and
-  // stays out of the single-currency CM sums.
+  // order's lines by value. A foreign-currency label converts at the
+  // business-date spot into the order currency; only a label no rate can
+  // price keeps its currency and stays out of the sums.
   for (const label of await loadLabelCosts(orgId, order.postingDocumentId)) {
     if (label.rate_minor === 0n) continue;
-    for (const row of allocateAcrossLines(-label.rate_minor, revenueLines, (line, amount) => ({
+    const converted = await convertMinorCost(
+      label.rate_minor, label.rate_currency, currency, minorUnits, fxCache, fxFor(null),
+    );
+    if (converted.minor === 0n) continue;
+    const sourceRef = converted.evidenceSuffix
+      ? `label:${label.id}:${converted.evidenceSuffix}`
+      : `label:${label.id}:${label.rate_currency}`;
+    for (const row of allocateAcrossLines(-converted.minor, revenueLines, (line, amount) => ({
       lineKey: line?.key ?? "order", component: "shipping_label", sourceKind: "label",
-      sourceRef: `label:${label.id}:${label.rate_currency}`, currency: label.rate_currency, amountMinor: amount,
+      sourceRef, currency: converted.currency, amountMinor: amount,
       itemId: line?.itemId ?? null, sku: line?.sku ?? null,
       promotionCode: line?.promotionCode ?? null, estimated: false,
     }))) {
       desired.push(row);
     }
   }
-  // Settled payout fees, or the channel's realized rate until they settle.
+  // Settled payout fees, or the channel's realized rate until they settle. A
+  // fee in another currency converts at its settlement line's evidenced rate
+  // when that rate quotes into the order currency, else at the spot.
   const settled = await loadSettledOrderFees(orgId, order.externalId);
   let settledFeeMinor = 0n;
   for (const fee of settled) {
-    const converted = await convertCostAmount(fee.amountText, fee.currency, currency, minorUnits, fxCache);
+    const documentRate = fee.exchangeRate && fee.batchCurrency === currency ? fee.exchangeRate : null;
+    const converted = await convertCostAmount(fee.amountText, fee.currency, currency, minorUnits, fxCache, fxFor(documentRate));
     if (converted.minor === 0n) continue;
     const component = fee.marketplace ? "marketplace_fee" : "processor_fee";
     if (!fee.marketplace && converted.currency === currency) settledFeeMinor += converted.minor;
+    const sourceRef = converted.evidenceSuffix
+      ? `${fee.sourceRef}:${converted.evidenceSuffix}`
+      : `${fee.sourceRef}:${converted.currency}`;
     for (const row of allocateAcrossLines(-converted.minor, revenueLines, (line, amount) => ({
       lineKey: line?.key ?? "order", component, sourceKind: "payout",
-      sourceRef: `${fee.sourceRef}:${converted.currency}`, currency: converted.currency, amountMinor: amount,
+      sourceRef, currency: converted.currency, amountMinor: amount,
       itemId: line?.itemId ?? null, sku: line?.sku ?? null,
       promotionCode: line?.promotionCode ?? null, estimated: false,
     }))) {
@@ -662,8 +891,8 @@ async function buildDesiredFacts(
     }
   }
   // Posted refunds with restocking income, attributed to the lines returned.
-  // Each refund converts in its own document currency, so a cross-currency
-  // refund keeps its currency instead of joining the order's sums.
+  // A refund in another currency converts at the business-date spot; only a
+  // refund no rate can price keeps its currency instead of joining the sums.
   const refundRows = await loadRefundLines(orgId, order.id);
   if (refundRows.length > 0) {
     const byCurrency = new Map<string, RefundDocRow[]>();
@@ -671,10 +900,14 @@ async function buildDesiredFacts(
       const code = row.currency.toUpperCase();
       byCurrency.set(code, [...(byCurrency.get(code) ?? []), row]);
     }
-    for (const [refundCurrency, group] of byCurrency) {
+    for (const group of byCurrency.values()) {
       const inputs: RefundLineInput[] = [];
+      let groupCurrency = currency;
+      let groupSuffix: string | null = null;
       for (const row of group) {
-        const converted = await convertCostAmount(row.amount, row.currency, currency, minorUnits, fxCache);
+        const converted = await convertCostAmount(row.amount, row.currency, currency, minorUnits, fxCache, fxFor(null));
+        groupCurrency = converted.currency;
+        groupSuffix = converted.evidenceSuffix;
         inputs.push({
           docLineId: row.line_id,
           itemId: row.item_id,
@@ -686,7 +919,8 @@ async function buildDesiredFacts(
         const taker = revenueLines.find((line) => line.key === attributed.lineKey) ?? null;
         desired.push({
           lineKey: attributed.lineKey, component: attributed.component, sourceKind: "refund",
-          sourceRef: attributed.sourceRef, currency: refundCurrency, amountMinor: attributed.amountMinor,
+          sourceRef: groupSuffix ? `${attributed.sourceRef}:${groupSuffix}` : attributed.sourceRef,
+          currency: groupCurrency, amountMinor: attributed.amountMinor,
           itemId: taker?.itemId ?? null, sku: taker?.sku ?? null,
           promotionCode: taker?.promotionCode ?? null, estimated: false,
         });
@@ -694,7 +928,7 @@ async function buildDesiredFacts(
     }
   }
   // The day's imported ad spend, shared across the day's orders by revenue.
-  const orderDay = order.orderedAt.slice(0, 10);
+  // Foreign-currency spend converts at the day's spot like every other cost.
   const spends = await loadDayAdSpend(orgId, order.channelId, orderDay);
   if (spends.length > 0) {
     const dayRevenue = await loadDayRevenue(orgId, order.channelId, orderDay);
@@ -708,9 +942,16 @@ async function buildDesiredFacts(
         // unallocated rather than invented on a line.
         const share = roundDiv(spend.amount_minor * ownRevenue, weightTotal);
         if (share === 0n) continue;
-        for (const row of allocateAcrossLines(-share, revenueLines, (line, amount) => ({
+        const converted = await convertMinorCost(
+          share, spend.currency, currency, minorUnits, fxCache, fxFor(null),
+        );
+        if (converted.minor === 0n) continue;
+        const sourceRef = converted.evidenceSuffix
+          ? `adspend:${spend.id}:${converted.evidenceSuffix}`
+          : `adspend:${spend.id}`;
+        for (const row of allocateAcrossLines(-converted.minor, revenueLines, (line, amount) => ({
           lineKey: line?.key ?? "order", component: "ad_spend", sourceKind: "import",
-          sourceRef: `adspend:${spend.id}`, currency: spend.currency, amountMinor: amount,
+          sourceRef, currency: converted.currency, amountMinor: amount,
           itemId: line?.itemId ?? null, sku: line?.sku ?? null,
           promotionCode: line?.promotionCode ?? null, estimated: false,
         }))) {

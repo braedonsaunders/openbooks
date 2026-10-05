@@ -385,7 +385,7 @@
     "marginPct": "毛利率{pct}%",
     "estimated": "估计",
     "storedValueNote": "{amount}以储值支付：该款结清礼品卡负债，仅作背景显示，不计入成本。",
-    "mixedCurrencyNote": "有一笔成本以其他货币到达，保留在合计旁显示，不按订单未合意的汇率折算。",
+    "mixedCurrencyNote": "一笔其他货币的费用没有可用的转换汇率，因此显示在合计旁边。录入汇率后可重新计算订单。",
     "noEconomicsTitle": "尚未计算毛利",
     "noEconomicsBody": "刷新以根据明细、成本与费用构建本订单的毛利。迟到成本将保留历史重述毛利。",
     "refreshEconomics": "刷新毛利",

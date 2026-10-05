@@ -385,7 +385,7 @@
     "marginPct": "{pct}% margin",
     "estimated": "Estimated",
     "storedValueNote": "{amount} was paid with stored value: it settles the gift liability, so it reads here as context and never as a cost.",
-    "mixedCurrencyNote": "A cost arrived in another currency and stays beside the totals instead of converting through a rate the order never agreed.",
+    "mixedCurrencyNote": "A cost arrived in another currency that no rate can price, so it stays beside the totals. Record the rate to restate the order.",
     "noEconomicsTitle": "Margin not computed yet",
     "noEconomicsBody": "Refresh to build this order’s margin from its lines, costs, and fees. Late costs restate the margin with history.",
     "refreshEconomics": "Refresh margin",
