@@ -66,7 +66,9 @@ export function providerCodeForDocument(documentNumber: string, orgId: string): 
 
 type Runner = Pick<SqlExecutor, "execute">;
 
-export interface ProviderCommitRow {
+// A type alias, not an interface: execute<T extends Record<string, unknown>>
+// rejects interfaces (no implicit index signature).
+export type ProviderCommitRow = {
   id: string;
   orgId: string;
   documentId: string;

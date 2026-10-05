@@ -21,6 +21,8 @@ const stubRunner = (rows: unknown[], onQuery?: () => void): Runner =>
 const component = (over: Partial<TaxPostingComponent> = {}): TaxPostingComponent => ({
   taxCodeId: "GST",
   sequence: 1,
+  collectedBy: "merchant",
+  facilitatorName: null,
   taxAmount: "13.0000",
   recoverableAmount: "13.0000",
   nonrecoverableAmount: "0.0000",
