@@ -1,9 +1,10 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { Flame, TrendingDown } from 'lucide-react'
+import { Flame, ShieldCheck, TrendingDown } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
+import { formatExactRatio } from '../analytics/_ui/format'
 import { MetricTile, type WidgetCardProps } from './_widget-tiles'
 
 const HREF = '/analytics/cashflow'
@@ -73,6 +74,30 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
           href={HREF}
           tone="amber"
           hint={t('widgets.cashBurnNet', { net: money(burn.value.netChange, { currency: data.baseCurrency }) })}
+        />
+      )
+    }
+    case 'kpi-cash-coverage': {
+      const coverage = data.cashCoverage
+      if (!coverage || !coverage.available) {
+        return (
+          <MetricTile
+            icon={<ShieldCheck size={15} />}
+            label={t('widgets.cashCoverage')}
+            value="—"
+            href={HREF}
+            tone="slate"
+            hint={coverage?.available === false ? coverage.reason : t('analytics.loading')}
+          />
+        )
+      }
+      return (
+        <MetricTile
+          icon={<ShieldCheck size={15} />}
+          label={t('widgets.cashCoverage')}
+          value={`${formatExactRatio(coverage.value.ratio)}×`}
+          href={HREF}
+          tone={coverage.value.covered ? 'emerald' : 'amber'}
         />
       )
     }

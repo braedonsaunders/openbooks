@@ -1008,6 +1008,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
   'kpi-cash-lowest-point': ['baseCurrency', 'cashLowest', 'asOfDate'],
   'kpi-cash-burn': ['baseCurrency', 'cashBurn', 'asOfDate'],
+  'kpi-cash-coverage': ['cashCoverage', 'asOfDate'],
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   'kpi-customer-concentration': ['concentration'],

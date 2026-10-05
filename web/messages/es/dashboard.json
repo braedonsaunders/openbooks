@@ -49,6 +49,7 @@
     "runway": "Autonomía de caja",
     "cashLowestPoint": "Efectivo mínimo previsto",
     "cashBurn": "Consumo semanal de caja",
+    "cashCoverage": "Cobertura de caja",
     "cashBurnNet": "Neto {net} en el horizonte",
     "inboxList": "Mis tareas",
     "payTile": "Nómina",
@@ -160,6 +161,7 @@
     "runway": "Saldo proyectado y autonomía de las próximas semanas, en moneda base.",
     "cashLowestPoint": "Efectivo mínimo previsto en el horizonte de previsión y la semana en que ocurre.",
     "cashBurn": "Salida semanal promedio en el horizonte de previsión, con el cambio neto previsto.",
+    "cashCoverage": "Caja más cuentas por cobrar sobre cuentas por pagar, de la previsión de caja.",
     "inboxList": "Sus tareas principales con enlace a la bandeja.",
     "payTile": "Próxima nómina y último recibo.",
     "balanceTile": "Saldos con enlace de solicitud.",
@@ -335,6 +337,7 @@
   "churnScore": "puntuación de fuga {score}",
   "analytics": {
     "loading": "Las cifras aún no están disponibles.",
+    "noPayables": "Sin cuentas por pagar pendientes — nada que cubrir.",
     "nothingFlagged": "Nada señalado en este período.",
     "grade": "Calificación {grade}",
     "target": "Objetivo {target}",

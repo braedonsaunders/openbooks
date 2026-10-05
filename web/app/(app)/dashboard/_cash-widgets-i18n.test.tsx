@@ -75,6 +75,48 @@ test('burn tile renders the weekly outflow with the projected net change', async
   }
 })
 
+function coverageData() {
+  return {
+    baseCurrency: 'USD',
+    asOfDate: '2026-09-16',
+    cashCoverage: { available: true, value: { ratio: '1.8000', covered: true } },
+  } as unknown as DashboardMetrics
+}
+
+// The coverage tile shows (cash + AR) / AP as a multiple — the cockpit's
+// own ratio — and names it when there is nothing to cover.
+test('coverage tile renders the position ratio as a multiple', async () => {
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-coverage" data={coverageData()} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('Cash coverage'), 'the tile title resolves through dashboard.widgets copy')
+    assert.ok(html.includes('1.80×'), 'the ratio renders as a multiple, never raw')
+  } finally {
+    await unmount()
+  }
+})
+
+test('coverage tile names it when no payables are outstanding', async () => {
+  const data = {
+    ...coverageData(),
+    cashCoverage: { available: false, reason: 'No payables outstanding — nothing to cover.' },
+  } as unknown as DashboardMetrics
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-coverage" data={data} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('No payables outstanding'), 'the tile names the missing input')
+    assert.ok(!html.includes('×'), 'no ratio renders beside the refusal')
+  } finally {
+    await unmount()
+  }
+})
+
 test('lowest-point tile refuses by name when the rate is missing', async () => {
   const data = {
     ...lowestData(),

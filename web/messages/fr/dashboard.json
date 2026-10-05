@@ -49,6 +49,7 @@
     "runway": "Autonomie de trésorerie",
     "cashLowestPoint": "Trésorerie prévisionnelle la plus basse",
     "cashBurn": "Consommation hebdomadaire de trésorerie",
+    "cashCoverage": "Couverture de trésorerie",
     "cashBurnNet": "Net {net} sur l’horizon",
     "inboxList": "Mes tâches",
     "payTile": "Paie",
@@ -160,6 +161,7 @@
     "runway": "Trésorerie projetée et autonomie des prochaines semaines, en devise de référence.",
     "cashLowestPoint": "Trésorerie prévisionnelle la plus basse sur l’horizon de prévision et la semaine où elle survient.",
     "cashBurn": "Sortie hebdomadaire moyenne sur l’horizon de prévision, avec la variation nette prévue.",
+    "cashCoverage": "Trésorerie plus créances sur dettes, issue de la prévision de trésorerie.",
     "inboxList": "Vos tâches principales avec lien vers la boîte.",
     "payTile": "Prochaine paie et dernier bulletin.",
     "balanceTile": "Soldes avec lien de demande.",
@@ -335,6 +337,7 @@
   "churnScore": "score d’attrition {score}",
   "analytics": {
     "loading": "Les chiffres ne sont pas encore disponibles.",
+    "noPayables": "Aucune dette fournisseur — rien à couvrir.",
     "nothingFlagged": "Rien à signaler sur cette période.",
     "grade": "Note {grade}",
     "target": "Objectif {target}",
