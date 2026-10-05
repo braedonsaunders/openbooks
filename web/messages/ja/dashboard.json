@@ -95,6 +95,8 @@
     "agentClear": "問題なし",
     "monthToDate": "月初来",
     "periodToDate": "{label}（当日まで）",
+    "noAccountingPeriod": "営業日{date}は最初の会計期間{period}より前です — Close Setupで対象期間を設定してください",
+    "consolidatedScope": "{name}（連結）",
     "noData": "データなし",
     "noBaseCurrency": "基準通貨が設定されていません",
     "next30Days": "今後30日間",

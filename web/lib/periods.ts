@@ -26,6 +26,34 @@ export type ResolvedPeriod = {
   to: string
   /** Descriptive label for headers/PDF (e.g. "FY 2026", "2026-07"). */
   label: string
+  /**
+   * Structured form of `label` for presets that qualify a window ("2026-07
+   * to date"): the bare window name plus whether it runs to the business
+   * day, so readers render the qualifier through the catalog instead of
+   * parsing English. Absent for presets with a plain label.
+   */
+  windowName?: string
+  toDate?: boolean
+}
+
+/**
+ * No configured accounting period covers the business day: today precedes
+ * the first period, so no period-to-date window exists. Carries the date
+ * and the first period's name so presenters refuse through the catalog
+ * instead of matching the message text.
+ */
+export class MissingAccountingPeriodError extends Error {
+  readonly code = 'missing-accounting-period'
+  readonly businessDate: string
+  readonly firstPeriodName: string
+  constructor(businessDate: string, firstPeriodName: string) {
+    super(
+      `business date '${businessDate}' precedes the first configured accounting period '${firstPeriodName}' — configure an accounting period covering this date in Close Setup`,
+    )
+    this.name = 'MissingAccountingPeriodError'
+    this.businessDate = businessDate
+    this.firstPeriodName = firstPeriodName
+  }
 }
 
 const PERIOD_FAMILY: Record<string, number> = {
@@ -60,9 +88,7 @@ async function accountingPeriodWindow(
     }
   }
   if (idx < 0) {
-    throw new Error(
-      `business date '${today}' precedes the first configured accounting period '${rows[0]!.name}' — configure an accounting period covering this date in Close Setup`,
-    )
+    throw new MissingAccountingPeriodError(today, rows[0]!.name)
   }
   const target = idx + offset
   if (target < 0 || target >= rows.length) return null
@@ -119,7 +145,9 @@ export async function resolvePeriod(
   }
   if (id === 'this_period_to_date') {
     const win = await accountingPeriodWindow(0, today, orgId)
-    if (win) return { presetId: id, from: win.from, to: today, label: `${win.label} to date` }
+    if (win) {
+      return { presetId: id, from: win.from, to: today, label: `${win.label} to date`, windowName: win.label, toDate: true }
+    }
   }
 
   const range = resolvePreset(id, { startMonth, today, customFrom: opts.customFrom, customTo: opts.customTo })

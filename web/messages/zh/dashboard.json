@@ -95,6 +95,8 @@
     "agentClear": "一切正常",
     "monthToDate": "本月至今",
     "periodToDate": "{label}至今",
+    "noAccountingPeriod": "业务日期{date}早于第一个会计期间{period} — 请在Close Setup中配置覆盖期间",
+    "consolidatedScope": "{name}（合并）",
     "noData": "暂无数据",
     "noBaseCurrency": "未配置本位币",
     "next30Days": "未来30天",

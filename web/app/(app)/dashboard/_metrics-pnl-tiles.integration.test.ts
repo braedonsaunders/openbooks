@@ -14,15 +14,19 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     // Server copy ('next-intl') is stubbed at the boundary so the assertions
     // pin the reader, not the catalog — the same boundary the pay-tile suite
-    // draws. The stub renders the English catalog line for the one key under
-    // test, so the hint assertions still pin the reader's strip-and-route
+    // draws. The stub renders the English catalog lines for the keys under
+    // test, so the hint and refusal assertions still pin the reader's route
     // through t(); the translations themselves are covered by catalog-parity.
     if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,
         url: "data:text/javascript," + encodeURIComponent(
           "export async function getLocale() { return \"en\" }"
-          + "export async function getTranslations() { return (key, values) => key === \"metricContext.periodToDate\" && values && typeof values.label === \"string\" ? `${values.label} to date` : key }",
+          + "export async function getTranslations() { return (key, values) => {"
+          + " if (key === \"metricContext.periodToDate\" && values && typeof values.label === \"string\") return `${values.label} to date`;"
+          + " if (key === \"metricContext.noAccountingPeriod\" && values) return `Business date ${values.date} precedes the first accounting period ${values.period} — configure a covering period in Close Setup`;"
+          + " if (key === \"metricContext.consolidatedScope\" && values && typeof values.name === \"string\") return `${values.name} (consolidated)`;"
+          + " return key } }",
         ),
       };
     }
@@ -73,6 +77,25 @@ function authzFor(orgId: string, userId: string, permissions: string[], allowedS
 }
 
 const PNL_IDS = ["kpi-revenue-mtd", "kpi-net-income-mtd", "kpi-gross-margin-mtd"] as const;
+
+/**
+ * One pinned clock, one org context, one call log: every P&L case below
+ * loads the same three tiles through denial-proof readers, so the tests
+ * assert figures and refusals — never boilerplate.
+ */
+async function loadPlTiles(
+  org: ScratchOrg,
+  allowedSubsidiaryIds: Set<string> | null,
+  calls: string[],
+  widgetIds: readonly string[] = [...PNL_IDS],
+) {
+  const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
+  const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"], allowedSubsidiaryIds);
+  for (const id of PNL_IDS) assert.equal(canSeeWidget(authz, id), true);
+  return pinClock(TODAY, () =>
+    withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...widgetIds], denialProofReaders(calls))),
+  );
+}
 
 /** Post a balanced manual entry; legs are [accountId, amount] (credit-negative). */
 async function post(
@@ -133,12 +156,7 @@ test("P&L tiles read one consolidated period-to-date call and exclude out-of-win
     await withBypass(() => post(org, { date: "2026-06-20", period: june, legs: [[org.accounts.bank, "200"], [org.accounts.revenue, "-200"]] }));
 
     const calls: string[] = [];
-    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
-    for (const id of PNL_IDS) assert.equal(canSeeWidget(authz, id), true);
-    const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
-    );
+    const metrics = await loadPlTiles(org, null, calls);
     assert.deepEqual(calls, ["profitAndLoss"], "revenue, income and margin share a single P&L read");
     assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1000"), "period revenue, June excluded");
     assert.equal(toUnits(metrics.grossProfitMtd ?? "0"), toUnits("600"), "revenue minus COGS only");
@@ -166,11 +184,7 @@ test("a multi-functional scope without derived rates refuses by name, never zero
       await post(org, { sub: usSub, currency: "USD", legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
     });
     const calls: string[] = [];
-    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
-    const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
-    );
+    const metrics = await loadPlTiles(org, null, calls);
     // The reader ran (denial is not the story here) and refused; the loader
     // caught the declared refusal into nulls plus the message, so the tiles
     // render the remedy instead of "—".
@@ -203,43 +217,50 @@ test("derived consolidated rates translate a multi-functional scope into figures
       await post(org, { sub: usSub, currency: "USD", legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
     });
     const calls: string[] = [];
-    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
-    const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
-    );
+    const metrics = await loadPlTiles(org, null, calls);
     assert.deepEqual(calls, ["profitAndLoss"]);
     assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1135"), "USD 100 at 1.35 joins CAD 1000");
     assert.equal(metrics.plCurrency, "CAD");
+    assert.ok(metrics.plScopeLabel?.endsWith(" (consolidated)"), `the tile names the consolidated scope it covers: ${metrics.plScopeLabel}`);
     assert.equal(metrics.plUnavailable, null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("a subsidiary-scoped caller tiles their subtree, labelled with its name", { skip: !DB }, async () => {
+test("a subsidiary-scoped caller tiles exactly the named scope", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const east = randomUUID();
+    const west = randomUUID();
     await withBypass(async () => {
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${east},${org.orgId},${org.subsidiaryId},'East Co','CAD','CA')`);
-      // Root revenue 1000 plus East revenue 100: the scoped caller tiles
-      // East only, and the scope label names it — never as the company.
+        values(${east},${org.orgId},${org.subsidiaryId},'East Co','CAD','CA'),
+              (${west},${org.orgId},${org.subsidiaryId},'West Co','CAD','CA')`);
+      // Root revenue 1000 (invisible to both callers below), East revenue
+      // 100, West revenue 200.
       await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
       await post(org, { sub: east, legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
+      await post(org, { sub: west, legs: [[org.accounts.bank, "200"], [org.accounts.revenue, "-200"]] });
     });
-    const calls: string[] = [];
-    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"], new Set([east]));
-    const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
-    );
-    assert.deepEqual(calls, ["profitAndLoss"]);
-    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("100"), "the scoped caller tiles their subtree only");
-    assert.equal(metrics.plScopeLabel, "East Co", "the tile hint names the visible subtree");
-    assert.equal(metrics.plCurrency, "CAD");
-    assert.equal(metrics.plUnavailable, null);
+    // One subtree: the caller tiles East only, named — never as the company.
+    const singleCalls: string[] = [];
+    const single = await loadPlTiles(org, new Set([east]), singleCalls);
+    assert.deepEqual(singleCalls, ["profitAndLoss"]);
+    assert.equal(toUnits(single.revenueMtd ?? "0"), toUnits("100"), "the scoped caller tiles their subtree only");
+    assert.equal(single.plScopeLabel, "East Co", "the tile hint names the visible subtree");
+    assert.equal(single.plCurrency, "CAD");
+    assert.equal(single.plUnavailable, null);
+    // Two sibling subtrees: the tile shows the first visible one, and the
+    // label agrees with the figures either way — picker order decides which
+    // sibling shows, but a partial figure never reads as the company.
+    const pairCalls: string[] = [];
+    const pair = await loadPlTiles(org, new Set([east, west]), pairCalls);
+    assert.deepEqual(pairCalls, ["profitAndLoss"]);
+    const expected = pair.plScopeLabel === "West Co" ? "200" : "100";
+    assert.ok(pair.plScopeLabel === "East Co" || pair.plScopeLabel === "West Co", `the tile names the shown subtree: ${pair.plScopeLabel}`);
+    assert.equal(toUnits(pair.revenueMtd ?? "0"), toUnits(expected), "the figures cover the named subtree only");
+    assert.equal(pair.plUnavailable, null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
