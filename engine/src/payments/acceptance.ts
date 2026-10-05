@@ -149,7 +149,7 @@ export type FetchFn = (url: string, init: {
 // Pure delegation: the FetchFn type above requires redirect: "error" on every
 // call site, so the refusal is enforced structurally rather than here.
 // fetch-redirect-audit: allow
-const defaultFetch: FetchFn = (url, init) => fetch(url, init);
+export const defaultFetch: FetchFn = (url, init) => fetch(url, init);
 
 const DEFAULT_ACCEPTANCE_API_BASES = {
   stripe: "https://api.stripe.com",
