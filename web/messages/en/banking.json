@@ -1118,6 +1118,7 @@
     "accruedToast": "Accrual run complete",
     "adjustConfirmTitle": "Mark as adjustment?",
     "adjustConfirmMessage": "The {kind} line of {amount} becomes a provider adjustment, and the batch refoots. Posted batches cannot be reclassified.",
+    "adjustMissingCurrency": "The {kind} line has no currency, so the adjustment amount cannot be shown. Reload the payout and try again.",
     "accrueConfirmMessage": "Accrue untied posted payouts as of {date}, reversing the next day?",
     "accrueResultMessage": "{accrued} accrued · {reversed} reversed · {skipped} skipped",
     "drawerTitle": "{provider} payout {ref}",

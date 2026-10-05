@@ -1118,6 +1118,7 @@
     "accruedToast": "Abgrenzungslauf abgeschlossen",
     "adjustConfirmTitle": "Als Korrektur markieren?",
     "adjustConfirmMessage": "Die Zeile {kind} über {amount} wird eine Provider-Korrektur, und die Abrechnung wird neu summiert. Gebuchte Abrechnungen können nicht umgegliedert werden.",
+    "adjustMissingCurrency": "Die Zeile {kind} hat keine Währung, daher kann der Korrekturbetrag nicht angezeigt werden. Laden Sie die Auszahlung neu und versuchen Sie es erneut.",
     "accrueConfirmMessage": "Nicht zugeordnete gebuchte Auszahlungen zum {date} abgrenzen, mit Storno am Folgetag?",
     "accrueResultMessage": "{accrued} abgegrenzt · {reversed} storniert · {skipped} übersprungen",
     "drawerTitle": "{provider}-Auszahlung {ref}",

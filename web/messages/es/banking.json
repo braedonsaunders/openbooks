@@ -1118,6 +1118,7 @@
     "accruedToast": "Provisión calculada",
     "adjustConfirmTitle": "¿Marcar como ajuste?",
     "adjustConfirmMessage": "La línea {kind} de {amount} pasa a ser un ajuste del proveedor y el lote se recalcula. Un lote contabilizado no se puede reclasificar.",
+    "adjustMissingCurrency": "La línea {kind} no tiene moneda, por lo que no se puede mostrar el importe del ajuste. Vuelva a cargar el pago e inténtelo de nuevo.",
     "accrueConfirmMessage": "¿Provisionar los pagos contabilizados sin vincular al {date}, con reversión al día siguiente?",
     "accrueResultMessage": "{accrued} provisionados · {reversed} revertidos · {skipped} omitidos",
     "drawerTitle": "Pago {provider} {ref}",

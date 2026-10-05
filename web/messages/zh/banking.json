@@ -1118,6 +1118,7 @@
     "accruedToast": "计提已完成",
     "adjustConfirmTitle": "记为调整？",
     "adjustConfirmMessage": "{kind}明细 {amount} 将成为支付机构调整项，批次将重新汇总。已记账批次不可重分类。",
+    "adjustMissingCurrency": "{kind}行没有币种，无法显示调整金额。请重新加载该笔付款并重试。",
     "accrueConfirmMessage": "将截至 {date} 未关联的已记账付款计提，并在次日冲回？",
     "accrueResultMessage": "计提 {accrued} · 冲回 {reversed} · 跳过 {skipped}",
     "drawerTitle": "{provider}付款 {ref}",
