@@ -147,7 +147,10 @@
   },
   "tabs": {
     "products": "Produkte",
-    "locations": "Standorte"
+    "locations": "Standorte",
+    "orders": "Bestellungen",
+    "exceptions": "Ausnahmen",
+    "posting": "Buchung"
   },
   "actions": {
     "connect": "Shopify verbinden",
@@ -246,5 +249,81 @@
   },
   "toast": {
     "loadFailed": "Konnte nicht geladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+  },
+  "title": "Bestellungen aus Kanälen",
+  "description": "Jede Shop-Bestellung mit Buchungsstatus und Belegverknüpfung.",
+  "exceptionsTitle": "Bestellungsausnahmen",
+  "exceptionsDescription": "Bestellungen, die nicht gebucht werden können, jeweils mit Lösung. Nichts wird gebucht, bis es behoben ist.",
+  "postingTitle": "Kanalbuchung",
+  "postingDescription": "Wie jeder Kanal Shop-Bestellungen in Buchhaltung verwandelt, und ab wann.",
+  "orderStatus": {
+    "pending": "Offen",
+    "posted": "Gebucht",
+    "summarized": "In Tagessumme",
+    "exception": "Handlungsbedarf",
+    "excluded": "Ausgeschlossen"
+  },
+  "exceptionCodes": {
+    "unmapped_item": "Artikel fehlt",
+    "unmapped_location": "Standort fehlt",
+    "unmapped_account": "Konto fehlt",
+    "closed_period": "Periode geschlossen",
+    "tax_mismatch": "Summen stimmen nicht",
+    "currency_unsupported": "Währung nicht unterstützt"
+  },
+  "columns": {
+    "number": "Bestellung",
+    "channel": "Kanal",
+    "ordered": "Bestellt",
+    "customer": "Kunde",
+    "document": "Beleg",
+    "code": "Ursache",
+    "reason": "Grund",
+    "remedy": "Lösung"
+  },
+  "empty": {
+    "ordersTitle": "Noch keine Kanalbestellungen",
+    "ordersDescription": "Bestellungen erscheinen hier, sobald ein verbundener Shop sie sendet. Verbinden Sie zuerst einen Kanal.",
+    "exceptionsTitle": "Kein Handlungsbedarf",
+    "exceptionsDescription": "Jede Bestellung ist gebucht oder wartet auf ihre Tagessumme."
+  },
+  "drawer": {
+    "lines": "Positionen",
+    "tenders": "Zahlungen",
+    "posting": "Buchung",
+    "document": "Beleg",
+    "summary": "Tagessumme",
+    "customer": "Kunde",
+    "gateway": "Zahlweg",
+    "reference": "Referenz",
+    "giftCard": "Geschenkkarte",
+    "replay": "Bestellung erneut buchen",
+    "replayAll": "Alle mit dieser Ursache erneut buchen",
+    "replayed": "{count} Bestellung(en) erneut gebucht: {posted} gebucht, {parked} weiter blockiert.",
+    "noDocument": "Noch kein Beleg. Die Bestellung wird gebucht, sobald es geht.",
+    "filterByCause": "Alle mit dieser Ursache zeigen",
+    "item": "Artikel",
+    "quantity": "Menge",
+    "price": "Preis",
+    "amount": "Betrag"
+  },
+  "posting": {
+    "mode": "Buchungsmodus",
+    "modePerOrder": "Pro Bestellung",
+    "modePerOrderDescription": "Jede bezahlte Bestellung bucht sofort ihren eigenen Barverkauf.",
+    "modeDailySummary": "Tagessumme",
+    "modeDailySummaryDescription": "Ein Barverkauf pro Kanal, Tag, Standort und Währung zum Stichtag.",
+    "unpaidCreatesSalesOrder": "Unbezahlte Bestellungen als Verkaufsaufträge anlegen",
+    "guestCustomer": "Laufkunde für Gastbestellungen",
+    "guestCustomerDescription": "Leer lassen, um pro Bestellung einen Kunden anzulegen.",
+    "createPromotion": "Aktionen aus Rabattcodes anlegen",
+    "cutoffTz": "Zeitzone für den Tagessummen-Stichtag",
+    "excludedTags": "Ausgeschlossene Bestell-Tags",
+    "excludedSources": "Ausgeschlossene Bestellquellen",
+    "effectiveFrom": "Gültig ab",
+    "save": "Buchungsregel speichern",
+    "saved": "Buchungsregel gespeichert, gültig ab {date}. Bereits gebuchte Bestellungen behalten ihre Belege.",
+    "history": "Regelverlauf",
+    "noPolicy": "Dieser Kanal hat noch keine Buchungsregel. Bestellungen warten, bis Sie einen Modus wählen."
   }
 }

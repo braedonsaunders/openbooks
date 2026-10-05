@@ -1084,6 +1084,76 @@ const WEBHOOK_ENDPOINT: RecordTypeMeta = {
   ],
 };
 
+const CHANNEL_ORDER_STATUSES = ["pending", "posted", "summarized", "exception", "excluded"];
+const CHANNEL_EXCEPTION_CODES = [
+  "unmapped_item",
+  "unmapped_location",
+  "unmapped_account",
+  "closed_period",
+  "tax_mismatch",
+  "currency_unsupported",
+];
+
+const CHANNEL_ORDER: RecordTypeMeta = {
+  key: "channel_order",
+  labelKey: "customization.recordTypes.channel_order",
+  category: "entity",
+  featureKey: "salesChannels",
+  supportsForms: false,
+  customFieldTable: null,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "channels.columns.number", kind: "text", sortable: true, sortKey: "number", locked: true },
+    { key: "channel", labelKey: "channels.columns.channel", kind: "text", sortable: true, sortKey: "channel" },
+    { key: "ordered", labelKey: "channels.columns.ordered", kind: "date", sortable: true, sortKey: "ordered" },
+    { key: "customer", labelKey: "channels.columns.customer", kind: "text", sortable: false },
+    { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "document_number", labelKey: "channels.columns.document", kind: "text", sortable: false },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+  ],
+  listFilters: [
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: CHANNEL_ORDER_STATUSES.map((value) => ({ value, labelKey: `channels.orderStatus.${value}` })),
+    },
+  ],
+};
+
+const CHANNEL_EXCEPTION: RecordTypeMeta = {
+  key: "channel_exception",
+  labelKey: "customization.recordTypes.channel_exception",
+  category: "entity",
+  featureKey: "salesChannels",
+  supportsForms: false,
+  customFieldTable: null,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "channels.columns.number", kind: "text", sortable: true, sortKey: "number", locked: true },
+    { key: "channel", labelKey: "channels.columns.channel", kind: "text", sortable: true, sortKey: "channel" },
+    { key: "code", labelKey: "channels.columns.code", kind: "status", sortable: true, sortKey: "status" },
+    { key: "reason", labelKey: "channels.columns.reason", kind: "text", sortable: false },
+    { key: "remedy", labelKey: "channels.columns.remedy", kind: "text", sortable: false },
+    { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "ordered", labelKey: "channels.columns.ordered", kind: "date", sortable: true, sortKey: "ordered" },
+  ],
+  listFilters: [
+    {
+      key: "code",
+      labelKey: "channels.columns.code",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: CHANNEL_EXCEPTION_CODES.map((value) => ({ value, labelKey: `channels.exceptionCodes.${value}` })),
+    },
+  ],
+};
+
 const INVENTORY_ONHAND: RecordTypeMeta = {
   key: "inventory_onhand",
   labelKey: "customization.recordTypes.inventory_onhand",
@@ -2658,6 +2728,8 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   INVENTORY_ONHAND,
   INVENTORY_MOVEMENT,
   DEMAND_SUGGESTION,
+  CHANNEL_ORDER,
+  CHANNEL_EXCEPTION,
   WEBHOOK_ENDPOINT,
   BUDGET_SCENARIO,
   HRM_PROCESS_TEMPLATE,

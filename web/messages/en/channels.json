@@ -147,7 +147,10 @@
   },
   "tabs": {
     "products": "Products",
-    "locations": "Locations"
+    "locations": "Locations",
+    "orders": "Orders",
+    "exceptions": "Exceptions",
+    "posting": "Posting"
   },
   "actions": {
     "connect": "Connect Shopify",
@@ -246,5 +249,81 @@
   },
   "toast": {
     "loadFailed": "Could not load. Check your connection and try again."
+  },
+  "title": "Channel orders",
+  "description": "Every storefront order with its posting status and document link.",
+  "exceptionsTitle": "Order exceptions",
+  "exceptionsDescription": "Orders that cannot post, with the fix for each. Nothing here posts until it is fixed.",
+  "postingTitle": "Channel posting",
+  "postingDescription": "How each channel turns storefront orders into accounting, and from which date.",
+  "orderStatus": {
+    "pending": "Pending",
+    "posted": "Posted",
+    "summarized": "In daily summary",
+    "exception": "Needs attention",
+    "excluded": "Excluded"
+  },
+  "exceptionCodes": {
+    "unmapped_item": "Missing item",
+    "unmapped_location": "Missing location",
+    "unmapped_account": "Missing account",
+    "closed_period": "Closed period",
+    "tax_mismatch": "Totals disagree",
+    "currency_unsupported": "Unsupported currency"
+  },
+  "columns": {
+    "number": "Order",
+    "channel": "Channel",
+    "ordered": "Ordered",
+    "customer": "Customer",
+    "document": "Document",
+    "code": "Cause",
+    "reason": "Reason",
+    "remedy": "Fix"
+  },
+  "empty": {
+    "ordersTitle": "No channel orders yet",
+    "ordersDescription": "Orders appear here when a connected storefront sends them. Connect a channel first.",
+    "exceptionsTitle": "Nothing needs attention",
+    "exceptionsDescription": "Every order posted or is waiting for its daily summary."
+  },
+  "drawer": {
+    "lines": "Lines",
+    "tenders": "Tenders",
+    "posting": "Posting",
+    "document": "Document",
+    "summary": "Daily summary",
+    "customer": "Customer",
+    "gateway": "Gateway",
+    "reference": "Reference",
+    "giftCard": "Gift card",
+    "replay": "Replay order",
+    "replayAll": "Replay all with this cause",
+    "replayed": "Replayed {count} order(s): {posted} posted, {parked} still blocked.",
+    "noDocument": "No document yet. The order posts when it can.",
+    "filterByCause": "Show all with this cause",
+    "item": "Item",
+    "quantity": "Qty",
+    "price": "Price",
+    "amount": "Amount"
+  },
+  "posting": {
+    "mode": "Posting mode",
+    "modePerOrder": "Per order",
+    "modePerOrderDescription": "Each paid order posts its own cash sale immediately.",
+    "modeDailySummary": "Daily summary",
+    "modeDailySummaryDescription": "One cash sale per channel, day, location and currency at the cut-off.",
+    "unpaidCreatesSalesOrder": "Create a sales order for unpaid orders we fulfil",
+    "guestCustomer": "Walk-in customer for guest orders",
+    "guestCustomerDescription": "Leave blank to create a customer per order.",
+    "createPromotion": "Create promotions from discount codes",
+    "cutoffTz": "Summary cut-off time zone",
+    "excludedTags": "Excluded order tags",
+    "excludedSources": "Excluded order sources",
+    "effectiveFrom": "Effective from",
+    "save": "Save posting policy",
+    "saved": "Posting policy saved, effective {date}. Orders already posted keep their documents.",
+    "history": "Policy history",
+    "noPolicy": "This channel has no posting policy yet. Orders wait until you choose a mode."
   }
 }

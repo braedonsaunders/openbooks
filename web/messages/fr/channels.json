@@ -147,7 +147,10 @@
   },
   "tabs": {
     "products": "Produits",
-    "locations": "Emplacements"
+    "locations": "Emplacements",
+    "orders": "Commandes",
+    "exceptions": "Exceptions",
+    "posting": "Comptabilisation"
   },
   "actions": {
     "connect": "Connecter Shopify",
@@ -246,5 +249,81 @@
   },
   "toast": {
     "loadFailed": "Chargement impossible. Vérifiez votre connexion et réessayez."
+  },
+  "title": "Commandes des canaux",
+  "description": "Chaque commande de la boutique avec son statut de comptabilisation et son document.",
+  "exceptionsTitle": "Exceptions de commandes",
+  "exceptionsDescription": "Commandes qui ne peuvent pas être comptabilisées, chacune avec sa solution. Rien n'est comptabilisé avant correction.",
+  "postingTitle": "Comptabilisation des canaux",
+  "postingDescription": "Comment chaque canal transforme les commandes en comptabilité, et depuis quelle date.",
+  "orderStatus": {
+    "pending": "En attente",
+    "posted": "Comptabilisée",
+    "summarized": "En récapitulatif",
+    "exception": "À traiter",
+    "excluded": "Exclue"
+  },
+  "exceptionCodes": {
+    "unmapped_item": "Article manquant",
+    "unmapped_location": "Emplacement manquant",
+    "unmapped_account": "Compte manquant",
+    "closed_period": "Période clôturée",
+    "tax_mismatch": "Totaux incohérents",
+    "currency_unsupported": "Devise non prise en charge"
+  },
+  "columns": {
+    "number": "Commande",
+    "channel": "Canal",
+    "ordered": "Passée le",
+    "customer": "Client",
+    "document": "Document",
+    "code": "Cause",
+    "reason": "Motif",
+    "remedy": "Solution"
+  },
+  "empty": {
+    "ordersTitle": "Aucune commande de canal pour l'instant",
+    "ordersDescription": "Les commandes apparaissent ici quand une boutique connectée les envoie. Connectez d'abord un canal.",
+    "exceptionsTitle": "Rien à traiter",
+    "exceptionsDescription": "Chaque commande est comptabilisée ou attend son récapitulatif quotidien."
+  },
+  "drawer": {
+    "lines": "Lignes",
+    "tenders": "Encaissements",
+    "posting": "Comptabilisation",
+    "document": "Document",
+    "summary": "Récapitulatif quotidien",
+    "customer": "Client",
+    "gateway": "Passerelle",
+    "reference": "Référence",
+    "giftCard": "Carte cadeau",
+    "replay": "Rejouer la commande",
+    "replayAll": "Rejouer toutes celles de cette cause",
+    "replayed": "{count} commande(s) rejouée(s) : {posted} comptabilisée(s), {parked} toujours bloquée(s).",
+    "noDocument": "Pas encore de document. La commande sera comptabilisée dès que possible.",
+    "filterByCause": "Afficher toutes celles de cette cause",
+    "item": "Article",
+    "quantity": "Qté",
+    "price": "Prix",
+    "amount": "Montant"
+  },
+  "posting": {
+    "mode": "Mode de comptabilisation",
+    "modePerOrder": "Par commande",
+    "modePerOrderDescription": "Chaque commande payée comptabilise aussitôt sa propre vente au comptant.",
+    "modeDailySummary": "Récapitulatif quotidien",
+    "modeDailySummaryDescription": "Une vente au comptant par canal, jour, emplacement et devise à la clôture.",
+    "unpaidCreatesSalesOrder": "Créer un bon de commande pour les impayées que nous préparons",
+    "guestCustomer": "Client comptoir pour les commandes invitées",
+    "guestCustomerDescription": "Laissez vide pour créer un client par commande.",
+    "createPromotion": "Créer des promotions depuis les codes de remise",
+    "cutoffTz": "Fuseau horaire de clôture quotidienne",
+    "excludedTags": "Étiquettes de commande exclues",
+    "excludedSources": "Sources de commande exclues",
+    "effectiveFrom": "En vigueur depuis",
+    "save": "Enregistrer la règle de comptabilisation",
+    "saved": "Règle enregistrée, en vigueur depuis {date}. Les commandes déjà comptabilisées gardent leurs documents.",
+    "history": "Historique des règles",
+    "noPolicy": "Ce canal n'a pas encore de règle de comptabilisation. Les commandes attendent votre choix de mode."
   }
 }

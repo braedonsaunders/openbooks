@@ -29,6 +29,8 @@
     "demand_suggestion": "Planungsvorschlag",
     "inventory_onhand": "Lagerbestand",
     "inventory_movement": "Lagerbewegung",
+    "channel_order": "Kanalbestellung",
+    "channel_exception": "Bestellungsausnahme",
     "webhook_endpoint": "Webhook-Endpunkt",
     "payment_dispute_review": "Zahlungsdisputprüfung",
     "budget_scenario": "Budget",

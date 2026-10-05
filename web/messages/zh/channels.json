@@ -147,7 +147,10 @@
   },
   "tabs": {
     "products": "商品",
-    "locations": "地点"
+    "locations": "地点",
+    "orders": "订单",
+    "exceptions": "异常",
+    "posting": "过账"
   },
   "actions": {
     "connect": "连接 Shopify",
@@ -246,5 +249,81 @@
   },
   "toast": {
     "loadFailed": "加载失败。请检查连接后重试。"
+  },
+  "title": "渠道订单",
+  "description": "每个网店订单的过账状态及凭证链接。",
+  "exceptionsTitle": "订单异常",
+  "exceptionsDescription": "无法过账的订单及其处理办法。修复之前不会过账。",
+  "postingTitle": "渠道过账",
+  "postingDescription": "各渠道如何将网店订单转为会计分录，以及自何日起生效。",
+  "orderStatus": {
+    "pending": "待处理",
+    "posted": "已过账",
+    "summarized": "已入日报",
+    "exception": "需处理",
+    "excluded": "已排除"
+  },
+  "exceptionCodes": {
+    "unmapped_item": "缺少物料",
+    "unmapped_location": "缺少地点",
+    "unmapped_account": "缺少科目",
+    "closed_period": "期间已关闭",
+    "tax_mismatch": "金额不平",
+    "currency_unsupported": "不支持的币种"
+  },
+  "columns": {
+    "number": "订单",
+    "channel": "渠道",
+    "ordered": "下单日期",
+    "customer": "客户",
+    "document": "凭证",
+    "code": "原因",
+    "reason": "说明",
+    "remedy": "处理办法"
+  },
+  "empty": {
+    "ordersTitle": "暂无渠道订单",
+    "ordersDescription": "已连接的网店发送订单后会显示在这里。请先连接一个渠道。",
+    "exceptionsTitle": "没有需要处理事项",
+    "exceptionsDescription": "所有订单均已过账或正在等待日报。"
+  },
+  "drawer": {
+    "lines": "明细",
+    "tenders": "收款",
+    "posting": "过账",
+    "document": "凭证",
+    "summary": "日报",
+    "customer": "客户",
+    "gateway": "支付网关",
+    "reference": "参考号",
+    "giftCard": "礼品卡",
+    "replay": "重新过账",
+    "replayAll": "重新过账所有相同原因订单",
+    "replayed": "已重新过账{count}笔:{posted}笔已过账,{parked}笔仍被阻止。",
+    "noDocument": "尚无凭证。订单在可以过账时会自动过账。",
+    "filterByCause": "查看所有相同原因订单",
+    "item": "商品",
+    "quantity": "数量",
+    "price": "单价",
+    "amount": "金额"
+  },
+  "posting": {
+    "mode": "过账模式",
+    "modePerOrder": "逐笔过账",
+    "modeDailySummary": "日报汇总",
+    "modePerOrderDescription": "每个已付款订单立即过账一笔现金销售。",
+    "modeDailySummaryDescription": "在截止时间按渠道、天、地点和币种过账一笔现金销售。",
+    "unpaidCreatesSalesOrder": "为我方履行的未付款订单创建销售订单",
+    "guestCustomer": "散客订单的默认客户",
+    "guestCustomerDescription": "留空则按订单创建客户。",
+    "createPromotion": "从折扣码创建促销",
+    "cutoffTz": "日报截止时区",
+    "excludedTags": "排除的订单标签",
+    "excludedSources": "排除的订单来源",
+    "effectiveFrom": "生效日期",
+    "save": "保存过账策略",
+    "saved": "过账策略已保存,自{date}起生效。已过账订单的凭证保持不变。",
+    "history": "策略历史",
+    "noPolicy": "该渠道尚无过账策略。请选择模式后订单才会处理。"
   }
 }
