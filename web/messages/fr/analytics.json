@@ -2974,7 +2974,7 @@
         "title": "Déséquilibre des types de transactions",
         "fasterBills": "Les factures",
         "fasterExpenses": "Les notes de frais",
-        "message": "{faster} croissent {pct} % plus vite que l'autre type",
+        "message": "{faster} croissent {pct, number} % plus vite que l'autre type",
         "action": "Revoir les workflows d'approbation et les contrôles de dépenses"
       },
       "anomalies": {
@@ -2989,7 +2989,7 @@
       },
       "concentration": {
         "title": "Forte concentration des dépenses",
-        "message": "La principale catégorie de dépenses représente {pct} % des dépenses",
+        "message": "La principale catégorie de dépenses représente {pct, number} % des dépenses",
         "action": "Étudier les pistes d'optimisation des coûts"
       },
       "zombies": {
@@ -3004,12 +3004,12 @@
       },
       "opexRatio": {
         "title": "Ratio charges d'exploitation / chiffre d'affaires élevé",
-        "message": "Les charges d'exploitation représentent {pct} % du chiffre d'affaires",
+        "message": "Les charges d'exploitation représentent {pct, number} % du chiffre d'affaires",
         "action": "Revoir la structure des coûts et identifier des gains d'efficacité"
       },
       "cliff": {
         "title": "Déséquilibre des vélocités achats-ventes",
-        "message": "Vélocité des commandes fournisseurs ({po} %/mois) supérieure à celle des commandes clients ({so} %/mois) de {gap} % — ratio CF/CC : {ratio}×",
+        "message": "Vélocité des commandes fournisseurs ({po, number} %/mois) supérieure à celle des commandes clients ({so, number} %/mois) de {gap, number} % — ratio CF/CC : {ratio}×",
         "actionWithMonths": "Risque de tension de trésorerie dans ~{months, plural, one {# période} other {# périodes}}. Revoir les engagements d'achat.",
         "actionBreached": "Le ratio dépasse déjà la cible — la pression est immédiate. Revoir les engagements d'achat sans attendre.",
         "actionMonitor": "Surveiller la vélocité des achats et l'aligner avec le pipeline des ventes.",
@@ -3020,7 +3020,8 @@
       "shadowItReason": "Les lignes de notes de frais ne portent ni commerçant ni fournisseur — seul le compte de charges et une description libre — il est donc impossible de tracer l'adoption virale de logiciels par les employés.",
       "fragmentationUnconfigured": "Renseignez le plafond de fragmentation dans Vélocité des dépenses → Configuration",
       "annualizedUnknown": "Les chiffres annualisés exigent la fin de période dans un exercice déclaré",
-      "cliffUnconfigured": "Renseignez la base minimale dans Vélocité des dépenses → Configuration"
+      "cliffUnconfigured": "Renseignez la base minimale dans Vélocité des dépenses → Configuration",
+      "cliffNoSalesBase": "Aucune commande client sur la période, la couverture des achats est donc inconnue"
     },
     "banner": {
       "count": "{total} alertes au total",
@@ -3312,7 +3313,7 @@
       "concentration": "{share} des dépenses, {trend}",
       "fragmentation": "{txns} trans./mois, moy. {avg}",
       "frog": "+{rate}/mois pendant {months} mois",
-      "seasonal": "{deviation} % vs mois moyen",
+      "seasonal": "{sign}{deviation, number} % vs mois moyen",
       "zombie": "{amount}/mois inchangé pendant {months} mois",
       "cliffNoVelocity": "ratio {ratio}× — vélocités non mesurables"
     },
@@ -3445,7 +3446,7 @@
       "li2Bold": "Falaise d’engagements",
       "li2Tail": " compare la vélocité mensuelle des commandes fournisseurs et des commandes clients.",
       "li3Bold": "Normalisation par le chiffre d’affaires",
-      "li3Tail": " utilise le revenu du grand livre pour le ratio OpEx ({ratio} %).",
+      "li3Tail": " utilise le revenu du grand livre pour le ratio OpEx ({ratio, number} %).",
       "li4Bold": "Informatique fantôme",
       "li4Tail": " — indisponible : {reason}",
       "outro": "Les détails extraient toute l’activité du compte ou du fournisseur sur la période au clic (consultable, avec tendance mensuelle et ventilation) ; chaque ligne renvoie à l’enregistrement réel dans son module natif."
@@ -3499,7 +3500,7 @@
       "stable": "Stable"
     },
     "unit": {
-      "months": "mois"
+      "months": "{count, plural, one {# mois} other {# mois}}"
     },
     "labels": {
       "unknownParty": "Inconnu",

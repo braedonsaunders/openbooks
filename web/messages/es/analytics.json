@@ -2974,7 +2974,7 @@
         "title": "Desequilibrio entre tipos de transacción",
         "fasterBills": "Las facturas",
         "fasterExpenses": "Los informes de gastos",
-        "message": "{faster} crecen un {pct} % más rápido que el otro tipo",
+        "message": "{faster} crecen un {pct, number} % más rápido que el otro tipo",
         "action": "Revisar los flujos de aprobación y los controles de gasto"
       },
       "anomalies": {
@@ -2989,7 +2989,7 @@
       },
       "concentration": {
         "title": "Alta concentración del gasto",
-        "message": "La principal categoría de gastos representa el {pct} % del gasto",
+        "message": "La principal categoría de gastos representa el {pct, number} % del gasto",
         "action": "Buscar oportunidades de optimización de costos"
       },
       "zombies": {
@@ -3004,12 +3004,12 @@
       },
       "opexRatio": {
         "title": "Ratio alto de gastos operativos sobre ingresos",
-        "message": "Los gastos operativos representan el {pct} % de los ingresos",
+        "message": "Los gastos operativos representan el {pct, number} % de los ingresos",
         "action": "Revisar la estructura de costos e identificar eficiencias"
       },
       "cliff": {
         "title": "Desequilibrio entre velocidad de compras y ventas",
-        "message": "La velocidad de OC ({po} %/mes) supera la de OV ({so} %/mes) en un {gap} % — ratio OC/OV: {ratio}×",
+        "message": "La velocidad de OC ({po, number} %/mes) supera la de OV ({so, number} %/mes) en un {gap, number} % — ratio OC/OV: {ratio}×",
         "actionWithMonths": "Riesgo de presión de caja en ~{months, plural, one {# período} other {# períodos}}. Revisar los compromisos de compra.",
         "actionBreached": "La ratio ya supera el objetivo — la presión es ahora. Revisar los compromisos de compra de inmediato.",
         "actionMonitor": "Vigilar la velocidad de compras y alinearla con el pipeline de ventas.",
@@ -3020,7 +3020,8 @@
       "shadowItReason": "Las líneas de informes de gastos no llevan comercio ni proveedor — solo la cuenta de gastos y una descripción libre — por lo que la adopción viral de software entre empleados no se puede rastrear.",
       "fragmentationUnconfigured": "Configure el tope de fragmentación en Velocidad de gasto → Configuración",
       "annualizedUnknown": "Las cifras anualizadas necesitan el fin del período dentro de un período fiscal declarado",
-      "cliffUnconfigured": "Configure la base mínima en Velocidad de gasto → Configuración"
+      "cliffUnconfigured": "Configure la base mínima en Velocidad de gasto → Configuración",
+      "cliffNoSalesBase": "Sin pedidos de venta en el período, por lo que la cobertura de compras es desconocida"
     },
     "banner": {
       "count": "{total} alertas en total",
@@ -3312,7 +3313,7 @@
       "concentration": "{share} del gasto, {trend}",
       "fragmentation": "{txns} trans./mes, prom. {avg}",
       "frog": "+{rate}/mes durante {months} meses",
-      "seasonal": "{deviation} % vs mes promedio",
+      "seasonal": "{sign}{deviation, number} % vs mes promedio",
       "zombie": "{amount}/mes sin cambios durante {months} meses",
       "cliffNoVelocity": "ratio {ratio}× — velocidades no medibles"
     },
@@ -3445,7 +3446,7 @@
       "li2Bold": "Abismo de compromisos",
       "li2Tail": " compara la velocidad mensual de pedidos a proveedores vs pedidos de clientes.",
       "li3Bold": "Normalización por ingresos",
-      "li3Tail": " usa los ingresos del libro mayor para el ratio OpEx ({ratio} %).",
+      "li3Tail": " usa los ingresos del libro mayor para el ratio OpEx ({ratio, number} %).",
       "li4Bold": "Informática en la sombra",
       "li4Tail": " — no disponible: {reason}",
       "outro": "Los detalles traen toda la actividad de esa cuenta o proveedor en el período al hacer clic (consultable, con tendencia mensual y desglose); cada fila enlaza al registro real en su módulo nativo."
@@ -3499,7 +3500,7 @@
       "stable": "Estable"
     },
     "unit": {
-      "months": "meses"
+      "months": "{count, plural, one {# mes} other {# meses}}"
     },
     "labels": {
       "unknownParty": "Desconocido",

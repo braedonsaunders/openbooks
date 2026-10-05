@@ -83,10 +83,10 @@ function Spark({ values }: { values: number[] }) {
   )
 }
 
-/** Health gauge (Risk-meter): score 0-100 → colour + grade, from the org's own grade cutoffs. */
-function HealthGauge({ score, grade, b, c, d, notice }: { score: number; grade: string; b: number; c: number; d: number; notice?: string }) {
+/** Health gauge (Risk-meter): score 0-100 → colour + grade, from the org's own grade cutoffs. Muted (slate) while omitted detectors caveat the score. */
+function HealthGauge({ score, grade, b, c, d, notice, muted }: { score: number; grade: string; b: number; c: number; d: number; notice?: string; muted?: boolean }) {
   const t = useTranslations('analytics.spendVelocity')
-  const color = score >= b ? '#10b981' : score >= c ? '#f59e0b' : score >= d ? '#f97316' : '#ef4444'
+  const color = muted ? '#64748b' : score >= b ? '#10b981' : score >= c ? '#f59e0b' : score >= d ? '#f97316' : '#ef4444'
   const label = score >= b ? t('health.healthy') : score >= c ? t('health.watch') : score >= d ? t('health.elevated') : t('health.atRisk')
   const arcLength = 141.37
   const offset = arcLength * (1 - Math.min(score, 100) / 100)
@@ -133,11 +133,11 @@ export function SpendVelocityView({ data: initialData, canConfigure }: { data: S
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} notice={caveat ?? undefined} />
+        <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} notice={caveat ?? undefined} muted={caveat !== null && s.totalAlerts === 0} />
         <KpiCard icon={Coins} accent="sky" label={t('kpi.totalSpend')} value={money(s.totalSpend)} sub={t('sub.accountsCount', { count: s.accountCount })} />
         <KpiCard icon={GaugeIcon} accent={vel === null ? 'slate' : vel > data.config.velocityMediumThreshold ? 'red' : vel < -data.config.velocityMediumThreshold ? 'emerald' : 'slate'} label={t('kpi.avgVelocity')} value={vel === null ? '—' : `${vel > 0 ? '↑' : vel < 0 ? '↓' : ''} ${formatPercent01(Math.abs(vel) / 100, locale, 1)}`} sub={t('sub.acceleratingCount', { count: s.acceleratingCount })} tone={vel === null ? 'neutral' : vel > data.config.velocityMediumThreshold ? 'negative' : vel < -data.config.velocityMediumThreshold ? 'positive' : 'neutral'} />
         <KpiCard icon={PiggyBank} accent="violet" label={t('kpi.savingsPotential')} value={s.savingsPotential === null ? '—' : money(s.savingsPotential)} sub={s.savingsPotential === null ? t('insights.annualizedUnknown') : toChartNumber(s.savingsPotential) > 0 ? t('sub.creepAndZombies') : t('sub.noIssues')} />
-        <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={caveat ?? t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : caveat !== null ? 'slate' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={caveat ?? t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : caveat !== null ? 'neutral' : 'positive'} />
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detectors' ? s.totalAlerts : undefined }))} active={tab} onChange={setTab}>
@@ -296,7 +296,7 @@ function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVeloci
     { key: 'zombie', label: t('detectors.zombie.label'), icon: Ghost, tone: 'text-slate-400', count: String(data.zombies.summary.count), active: data.zombies.summary.count > 0, metric: data.zombies.summary.totalAnnualCost === null ? '—' : money(data.zombies.summary.totalAnnualCost), sub: data.zombies.summary.totalAnnualCost === null ? t('insights.annualizedUnknown') : t('detectors.zombie.sub'), desc: t('detectors.zombie.desc') },
     { key: 'fragmentation', label: t('detectors.fragmentation.label'), icon: Puzzle, tone: 'text-orange-500', count: data.fragmentation.summary.configured ? String(data.fragmentation.summary.fragmentedCategories) : '—', active: data.fragmentation.summary.fragmentedCategories > 0, metric: data.fragmentation.summary.configured ? money(data.fragmentation.summary.totalFragmentedSpend) : '—', sub: data.fragmentation.summary.configured ? t('detectors.fragmentation.sub') : data.fragmentation.summary.reason, desc: t('detectors.fragmentation.desc') },
     { key: 'concentration', label: t('detectors.concentration.label'), icon: PieIcon, tone: 'text-amber-500', count: formatPercent01(data.concentration.summary.top1Share / 100, locale, 0), active: data.concentration.summary.top1Share > data.config.concentrationTop1Warning, metric: formatPercent01(data.concentration.summary.top5Share / 100, locale, 0), sub: t('detectors.concentration.sub'), desc: t('detectors.concentration.desc') },
-    { key: 'cliff', label: t('detectors.cliff.label'), icon: Mountain, tone: 'text-sky-500', count: cliff.velocityGap === null ? '—' : `${cliff.velocityGap}%`, active: cliff.status !== 'healthy', metric: cliff.poVelocity === null ? '—' : `${cliff.poVelocity}%`, sub: !cliff.configured ? cliff.reason : cliff.poVelocity === null ? t('detectors.cliff.insufficientHistory') : t('detectors.cliff.sub'), desc: t('detectors.cliff.desc') },
+    { key: 'cliff', label: t('detectors.cliff.label'), icon: Mountain, tone: 'text-sky-500', count: cliff.status === 'unknown' || cliff.velocityGap === null ? '—' : formatPercent01(cliff.velocityGap / 100, locale, 0), active: cliff.status === 'critical' || cliff.status === 'warning', metric: cliff.status === 'unknown' || cliff.poVelocity === null ? '—' : formatPercent01(cliff.poVelocity / 100, locale, 0), sub: !cliff.configured || cliff.status === 'unknown' ? cliff.reason : cliff.poVelocity === null ? t('detectors.cliff.insufficientHistory') : t('detectors.cliff.sub'), desc: t('detectors.cliff.desc') },
     { key: 'seasonal', label: t('detectors.seasonal.label'), icon: Snowflake, tone: 'text-teal-500', count: String(data.seasonal.insights.length), active: data.seasonal.insights.length > 0, metric: String(data.seasonal.patterns.filter((p) => p.isHigh || p.isLow).length), sub: t('detectors.seasonal.sub'), desc: t('detectors.seasonal.desc') },
     { key: 'shadow', label: t('detectors.shadow.label'), icon: Bug, tone: 'text-pink-500', count: '—', active: false, metric: '—', sub: t('detectors.shadow.sub'), desc: t('detectors.shadow.desc') },
   ]
@@ -349,6 +349,7 @@ function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVeloci
 
 function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number | string) => fmtMoney(n)
   return (
@@ -375,7 +376,7 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
                       <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txnsMonths', { txns: a.transactionCount, months: a.monthCount })}</p>
                     </SharedTableCell>
                     <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{a.billPct}% / {a.expensePct}%</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{formatPercent01(a.billPct / 100, locale, 0)} / {formatPercent01(a.expensePct / 100, locale, 0)}</SharedTableCell>
                     <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
                     <SharedTableCell className="px-4 py-2 text-center"><Accel a={a.acceleration} mild={data.config.accelMild} strong={data.config.accelStrong} /></SharedTableCell>
                     <SharedTableCell className="px-4 py-2"><Spark values={a.monthlyAmounts} /></SharedTableCell>
@@ -446,8 +447,8 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
     if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost, details: t('details.zombie', { amount: fmtMoney(z.amount), months: z.monthCount }), vendorId: z.vendorId })
     if (want('concentration')) for (const cc of data.concentration.accounts) out.push({ detector: 'concentration', label: t('detectors.concentration.label'), item: cc.name, severity: cc.spendShare > c.concentrationHighShare ? 'High' : 'Medium', impact: cc.totalSpend, details: t('details.concentration', { share: formatPercent01(cc.spendShare / 100, locale, 1), trend: t(`trend.${cc.trend}`) }), accountId: cc.id })
     if (want('fragmentation')) for (const f of data.fragmentation.categories) out.push({ detector: 'fragmentation', label: t('detectors.fragmentation.label'), item: f.accountName, severity: f.txnsPerMonth > c.fragmentationHighTxns ? 'High' : 'Medium', impact: f.totalSpend, details: t('details.fragmentation', { txns: f.txnsPerMonth, avg: fmtMoney(f.avgTransactionSize) }), accountId: f.accountId })
-    if (want('seasonal')) for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow)) out.push({ detector: 'seasonal', label: t('detectors.seasonal.label'), item: p.monthName, severity: Math.abs(p.deviation) > c.seasonalCriticalDeviation ? 'High' : 'Low', impact: p.totalSpend, details: t('details.seasonal', { deviation: `${p.deviation > 0 ? '+' : ''}${p.deviation}` }) })
-    if (want('cliff') && data.commitmentCliff.summary.status !== 'healthy') {
+    if (want('seasonal')) for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow)) out.push({ detector: 'seasonal', label: t('detectors.seasonal.label'), item: p.monthName, severity: Math.abs(p.deviation) > c.seasonalCriticalDeviation ? 'High' : 'Low', impact: p.totalSpend, details: t('details.seasonal', { sign: p.deviation > 0 ? '+' : '', deviation: p.deviation }) })
+    if (want('cliff') && (data.commitmentCliff.summary.status === 'critical' || data.commitmentCliff.summary.status === 'warning')) {
       const cliff = data.commitmentCliff.summary
       const ratioText = cliff.ratio === null ? '—' : String(cliff.ratio)
       out.push({ detector: 'cliff', label: t('detectors.cliff.label'), item: t('details.cliffItem'), severity: cliff.status === 'critical' ? 'Critical' : 'High', impact: cliff.totalPO, details: cliff.velocityGap === null ? t('details.cliffNoVelocity', { ratio: ratioText }) : t('details.cliff', { gap: formatPercent01(cliff.velocityGap / 100, locale, 1), ratio: ratioText }) })
@@ -688,7 +689,7 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
                   />
                   <div className="absolute inset-y-0 left-1/2 w-px bg-slate-300 dark:bg-slate-600" />
                 </div>
-                <span className="w-10 text-right tabular-nums text-slate-500 dark:text-slate-400">{p.deviation > 0 ? '+' : ''}{p.deviation}%</span>
+                <span className="w-10 text-right tabular-nums text-slate-500 dark:text-slate-400">{p.deviation > 0 ? '+' : ''}{formatPercent01(Math.abs(p.deviation) / 100, locale, 0)}</span>
               </div>
             ))}
           </div>
@@ -764,8 +765,8 @@ function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolea
   const items = [
     { label: t('config.velocityThresholds.label'), value: `${formatPercent01(c.velocityMediumThreshold / 100, locale, 1)} / ${formatPercent01(c.velocityHighThreshold / 100, locale, 1)}`, note: t('config.velocityThresholds.note') },
     { label: t('config.anomalyThreshold.label'), value: `${decimalLabel(c.anomalyStdDevThreshold, locale, 1, 1)}σ`, note: t('config.anomalyThreshold.note', { critical: c.anomalyStdDevThreshold + c.anomalyCriticalOffset }) },
-    { label: t('config.boilingFrog.label'), value: `${c.boilingFrogMonths} ${t('unit.months')}`, note: t('config.boilingFrog.note', { stepCap: c.boilingFrogStepCap }) },
-    { label: t('config.zombieWindow.label'), value: `${c.zombieMinMonths} ${t('unit.months')}`, note: t('config.zombieWindow.note', { maxDeviation: c.zombieMaxDeviation }) },
+    { label: t('config.boilingFrog.label'), value: t('unit.months', { count: c.boilingFrogMonths }), note: t('config.boilingFrog.note', { stepCap: c.boilingFrogStepCap }) },
+    { label: t('config.zombieWindow.label'), value: t('unit.months', { count: c.zombieMinMonths }), note: t('config.zombieWindow.note', { maxDeviation: c.zombieMaxDeviation }) },
     { label: t('config.fragmentation.label'), value: c.fragmentationMaxAvgSize === '' ? t('config.unsetMinimum') : t('config.fragmentation.value', { txns: c.fragmentationMinTxns, max: fmtMoney(c.fragmentationMaxAvgSize) }), note: t('config.fragmentation.note') },
     { label: t('config.velocityEngine.label'), value: t('config.velocityEngine.value'), note: c.minBaseAmount === '' ? t('config.velocityEngine.noteUnset') : t('config.velocityEngine.note', { minBase: fmtMoney(c.minBaseAmount) }) },
   ]

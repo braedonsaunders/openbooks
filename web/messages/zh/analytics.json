@@ -2974,7 +2974,7 @@
         "title": "交易类型失衡",
         "fasterBills": "账单",
         "fasterExpenses": "费用报销",
-        "message": "{faster}增速比另一类型快{pct}%",
+        "message": "{faster}增速比另一类型快{pct, number}%",
         "action": "请复核审批流程和支出管控"
       },
       "anomalies": {
@@ -2989,7 +2989,7 @@
       },
       "concentration": {
         "title": "支出集中度过高",
-        "message": "最大的费用类别占总支出的{pct}%",
+        "message": "最大的费用类别占总支出的{pct, number}%",
         "action": "请寻找成本优化机会"
       },
       "zombies": {
@@ -3004,12 +3004,12 @@
       },
       "opexRatio": {
         "title": "运营费用占营收比过高",
-        "message": "运营费用占营收的{pct}%",
+        "message": "运营费用占营收的{pct, number}%",
         "action": "请复核成本结构并寻找效率提升空间"
       },
       "cliff": {
         "title": "采购与销售增速失衡",
-        "message": "采购订单增速（{po}%/月）超过销售订单增速（{so}%/月）{gap}%——采购/销售比率：{ratio}倍",
+        "message": "采购订单增速（{po, number}%/月）超过销售订单增速（{so, number}%/月）{gap, number}%——采购/销售比率：{ratio}倍",
         "actionWithMonths": "约{months}期间后存在现金压力风险，请复核采购承诺。",
         "actionBreached": "比率已突破目标 — 压力就在眼前。请立即复核采购承诺。",
         "actionMonitor": "请监控采购增速并与销售管道保持一致。",
@@ -3020,7 +3020,8 @@
       "shadowItReason": "费用报销行没有商户/供应商信息——只有费用科目和自由文本说明——因此无法追踪员工之间病毒式传播的软件采用情况。",
       "fragmentationUnconfigured": "请在支出增速 → 配置 中设置碎片化金额上限",
       "annualizedUnknown": "年化数据需要报告期末落在已申报的财政期间内",
-      "cliffUnconfigured": "请在支出增速 → 配置 中设置最小基数"
+      "cliffUnconfigured": "请在支出增速 → 配置 中设置最小基数",
+      "cliffNoSalesBase": "本期无销售订单，因此采购覆盖率未知"
     },
     "banner": {
       "count": "共{total}条预警",
@@ -3312,7 +3313,7 @@
       "concentration": "占支出的{share}，{trend}",
       "fragmentation": "{txns}笔/月，均值{avg}",
       "frog": "{months}个月+{rate}/月",
-      "seasonal": "较平均月{deviation}%",
+      "seasonal": "较平均月{sign}{deviation, number}%",
       "zombie": "{months}个月{amount}/月不变",
       "cliffNoVelocity": "比率{ratio}倍——速率不可测"
     },
@@ -3445,7 +3446,7 @@
       "li2Bold": "承诺断崖",
       "li2Tail": " 比较采购订单与销售订单的月度速率。",
       "li3Bold": "营收归一化",
-      "li3Tail": " 采用总账营收计算运营费用率（{ratio}%）。",
+      "li3Tail": " 采用总账营收计算运营费用率（{ratio, number}%）。",
       "li4Bold": "影子IT",
       "li4Tail": " ——不可用：{reason}",
       "outro": "点击下钻将获取该科目或供应商本期的全部活动（可搜索，含月度趋势与明细）；每行均链接到其所属模块的真实记录。"
@@ -3499,7 +3500,7 @@
       "stable": "平稳"
     },
     "unit": {
-      "months": "个月"
+      "months": "{count}个月"
     },
     "labels": {
       "unknownParty": "未知",

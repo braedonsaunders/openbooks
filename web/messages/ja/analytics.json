@@ -2974,7 +2974,7 @@
         "title": "取引種別の不均衡",
         "fasterBills": "請求書",
         "fasterExpenses": "経費精算",
-        "message": "{faster}が他の種別より{pct}%速く増加しています",
+        "message": "{faster}が他の種別より{pct, number}%速く増加しています",
         "action": "承認ワークフローと支出管理を見直してください"
       },
       "anomalies": {
@@ -2989,7 +2989,7 @@
       },
       "concentration": {
         "title": "支出の集中度が高い",
-        "message": "最大の経費カテゴリが支出の{pct}%を占めています",
+        "message": "最大の経費カテゴリが支出の{pct, number}%を占めています",
         "action": "コスト最適化の余地を確認してください"
       },
       "zombies": {
@@ -3004,12 +3004,12 @@
       },
       "opexRatio": {
         "title": "売上高販管費率が高い",
-        "message": "販管費は売上の{pct}%です",
+        "message": "販管費は売上の{pct, number}%です",
         "action": "コスト構造を見直し効率化の余地を特定してください"
       },
       "cliff": {
         "title": "購買・販売速度の不均衡",
-        "message": "購買発注速度（月{po}%）が販売受注速度（月{so}%）を{gap}%上回っています — 発注/受注比率：{ratio}倍",
+        "message": "購買発注速度（月{po, number}%）が販売受注速度（月{so, number}%）を{gap, number}%上回っています — 発注/受注比率：{ratio}倍",
         "actionWithMonths": "約{months}期間後に資金圧迫のリスク。購買コミットメントを見直してください。",
         "actionBreached": "比率はすでに目標を突破しています — 圧力は目前です。購買コミットメントを直ちに見直してください。",
         "actionMonitor": "購買速度を監視し販売パイプラインと整合させてください。",
@@ -3020,7 +3020,8 @@
       "shadowItReason": "経費精算の明細には店舗名や仕入先名が含まれず、費用勘定と自由記述のみのため、従業員間でのソフトウェアのバイラルな普及を追跡できません。",
       "fragmentationUnconfigured": "支出速度 → 設定 で断片化のサイズ上限を設定してください",
       "annualizedUnknown": "年換算値には、宣言された会計期間内の報告終了日が必要です",
-      "cliffUnconfigured": "支出速度 → 設定 で最小基準額を設定してください"
+      "cliffUnconfigured": "支出速度 → 設定 で最小基準額を設定してください",
+      "cliffNoSalesBase": "期間内に販売受注がないため、購買カバー率は不明"
     },
     "banner": {
       "count": "アラート総数{total}件",
@@ -3312,7 +3313,7 @@
       "concentration": "支出の{share}、{trend}",
       "fragmentation": "月{txns}件、平均{avg}",
       "frog": "{months}か月間+{rate}/月",
-      "seasonal": "平均月比{deviation}%",
+      "seasonal": "平均月比{sign}{deviation, number}%",
       "zombie": "{months}か月間{amount}/月で不変",
       "cliffNoVelocity": "比率{ratio}倍 — 速度測定不可"
     },
@@ -3445,7 +3446,7 @@
       "li2Bold": "コミットメントクリフ",
       "li2Tail": " 発注と受注の月次速度を比較します。",
       "li3Bold": "売上正規化",
-      "li3Tail": " 販管費率には総勘定元帳の収益を使用（{ratio}%）。",
+      "li3Tail": " 販管費率には総勘定元帳の収益を使用（{ratio, number}%）。",
       "li4Bold": "シャドーIT",
       "li4Tail": " — 利用不可：{reason}",
       "outro": "ドリルダウンではクリックでその勘定・仕入先の当期全取引を取得します（検索可能、月次トレンドと内訳付き）。各行は本来モジュールの実レコードにリンクします。"
@@ -3499,7 +3500,7 @@
       "stable": "安定"
     },
     "unit": {
-      "months": "か月"
+      "months": "{count}か月"
     },
     "labels": {
       "unknownParty": "不明",
