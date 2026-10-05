@@ -57,14 +57,16 @@ const PNL_COST_TYPES_SQL = sql.join(
 export interface MonthPoint {
   month: string; // YYYY-MM
   label: string; // "Jan '25"
-  /** Exact decimal strings; ratios stay display numbers computed from integer units below. */
+  /** Exact decimal strings; margins stay display numbers computed from integer units below. */
   revenue: string;
   cogs: string;
   grossProfit: string;
-  grossMarginPct: number;
+  /** Null without revenue: a share of nothing does not exist, never 0. */
+  grossMarginPct: number | null;
   opex: string;
   operatingIncome: string;
-  operatingMarginPct: number;
+  /** Null without revenue: a share of nothing does not exist, never 0. */
+  operatingMarginPct: number | null;
   netIncome: string;
 }
 
@@ -96,11 +98,12 @@ export interface SegmentRow {
   revenue: string;
   sharePct: number;
   grossProfit: string;
-  grossMarginPct: number;
+  grossMarginPct: number | null;
   operatingIncome: string;
-  operatingMarginPct: number;
+  operatingMarginPct: number | null;
   yoyPct: number | null;
-  health: "good" | "warn" | "bad";
+  /** Null without revenue: no margin exists to grade, so no dot is claimed. */
+  health: "good" | "warn" | "bad" | null;
 }
 
 export interface DriverRow {
@@ -137,7 +140,8 @@ export interface BudgetRow {
   budget: string;
   actual: string;
   variance: string; // actual − budget (income sign-normalised positive)
-  variancePct: number | null;
+  /** Exact fraction of the budget magnitude; null without a budget. */
+  variancePct: string | null;
   favorable: boolean;
   status: "on-track" | "watch" | "over" | "under" | "no-budget";
 }
@@ -190,6 +194,14 @@ export interface HealthForecastParams {
   confidences: number[];
   adjustments: ForecastAdjustmentOption[];
   defaultAdjustment: string;
+  /**
+   * Declared future period names after the period end on non-monthly
+   * calendars, capped at the longest offered horizon. Null on monthly cadence, where
+   * the client labels calendar months in the viewer's locale. Empty when a
+   * non-monthly calendar declares no future periods: the tab refuses by
+   * name instead of labelling buckets it cannot reconcile.
+   */
+  futurePeriodNames: string[] | null;
   model: {
     alpha: number;
     beta: number;
@@ -439,10 +451,10 @@ async function monthlySeries(
       revenue,
       cogs,
       grossProfit,
-      grossMarginPct: revPositive ? amountRatio(grossProfit, revenue) : 0,
+      grossMarginPct: revPositive ? amountRatio(grossProfit, revenue) : null,
       opex,
       operatingIncome,
-      operatingMarginPct: revPositive ? amountRatio(operatingIncome, revenue) : 0,
+      operatingMarginPct: revPositive ? amountRatio(operatingIncome, revenue) : null,
       netIncome,
     });
   }
@@ -529,19 +541,33 @@ async function fiscalPeriodSeries(
       revenue,
       cogs,
       grossProfit,
-      grossMarginPct: revPositive ? amountRatio(grossProfit, revenue) : 0,
+      grossMarginPct: revPositive ? amountRatio(grossProfit, revenue) : null,
       opex,
       operatingIncome,
-      operatingMarginPct: revPositive ? amountRatio(operatingIncome, revenue) : 0,
+      operatingMarginPct: revPositive ? amountRatio(operatingIncome, revenue) : null,
       netIncome,
     };
   });
 }
 
 /** Operating-margin target and warning share behind the segment health dot, exact fractions. */
-interface SegmentHealthPolicy {
+export interface SegmentHealthPolicy {
   target: string;
   warningShare: string;
+}
+
+/**
+ * Grade one segment's operating margin against the organization's own
+ * target: at or above target is good, within the configured warning share
+ * of target is warn, below that is bad. Without revenue there is no margin
+ * to grade, so the segment carries no health — never a stand-in dot.
+ * Exported for unit tests.
+ */
+export function gradeSegmentHealth(opMargin: string | null, policy: SegmentHealthPolicy): SegmentRow["health"] {
+  if (opMargin === null) return null;
+  if (cmp(opMargin, policy.target) >= 0) return "good";
+  if (cmp(opMargin, mulDecimal(policy.target, policy.warningShare)) >= 0) return "warn";
+  return "bad";
 }
 
 /** Segment breakdown for one dimension (department/class/location) with YoY. */
@@ -633,21 +659,11 @@ async function segmentsBy(
       const grossProfit = sum([revenue, neg(cogs)]);
       const operatingIncome = sum([operatingRevenue, neg(cogs), neg(opex)]);
       const revPositive = cmp(revenue, "0") > 0;
-      const gmPct = revPositive ? amountRatio(grossProfit, revenue) : 0;
-      const opPct = revPositive ? amountRatio(operatingIncome, revenue) : 0;
+      const gmPct = revPositive ? amountRatio(grossProfit, revenue) : null;
+      const opPct = revPositive ? amountRatio(operatingIncome, revenue) : null;
       const yoyPct = cmp(priorRev, "0") > 0 ? amountRatio(sum([revenue, neg(priorRev)]), priorRev) : null;
-      // Segment health grades against the organization's own operating-margin
-      // target: at or above target is good, within the configured warning
-      // share of target is warn, below that is bad. Without revenue there is
-      // no margin to grade, so the segment keeps the neutral warn.
       const opMargin = revPositive ? decimalRatio(operatingIncome, revenue) : null;
-      const health: SegmentRow["health"] = opMargin === null
-        ? "warn"
-        : cmp(opMargin, healthPolicy.target) >= 0
-          ? "good"
-          : cmp(opMargin, mulDecimal(healthPolicy.target, healthPolicy.warningShare)) >= 0
-            ? "warn"
-            : "bad";
+      const health = gradeSegmentHealth(opMargin, healthPolicy);
       return {
         id: x.id,
         name: strings.displaySegmentName(x.id, x.name),
@@ -920,8 +936,12 @@ function buildInsights(
     if (cmp(f.revenueGrowth, neg(policy.revenueDecline)) < 0) out.push(strings.revFalling(points(abs(f.revenueGrowth))));
     else if (cmp(f.revenueGrowth, "0") < 0) out.push(strings.revDeclined(points(abs(f.revenueGrowth))));
   }
-  // Trend rules over the trailing months: revenue slope and margin compression.
-  const recent = monthly.filter((m) => cmp(m.revenue, "0") > 0).slice(-3);
+  // Trend rules over the trailing three periods: revenue slope and margin
+  // compression. On non-monthly calendars the series holds fiscal periods,
+  // never calendar months — the rule counts periods either way.
+  const recent = monthly
+    .filter((m): m is MonthPoint & { grossMarginPct: number } => cmp(m.revenue, "0") > 0 && m.grossMarginPct !== null)
+    .slice(-3);
   if (recent.length === 3) {
     const [a, b, c] = recent;
     const floor = mulDecimal(a!.revenue, add("1", neg(policy.revenueTrend)));
@@ -949,9 +969,11 @@ function buildInsights(
   if (f.rule40 !== null && T.rule_of_40 !== null && cmp(f.rule40, T.rule_of_40) >= 0)
     out.push(strings.rule40(new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 0 }).format(f.rule40 as unknown as number)));
 
-  // Anomalies: months deviating beyond the configured number of standard
+  // Anomalies: periods deviating beyond the configured number of standard
   // deviations. Dimensionless statistics read the bounded display projection.
-  const withRev = monthly.filter((m) => cmp(m.revenue, "0") > 0);
+  const withRev = monthly.filter(
+    (m): m is MonthPoint & { grossMarginPct: number } => cmp(m.revenue, "0") > 0 && m.grossMarginPct !== null,
+  );
   if (withRev.length >= 4) {
     const margins = withRev.map((m) => m.grossMarginPct);
     const mean = margins.reduce((a, x) => a + x, 0) / margins.length;
@@ -1005,8 +1027,10 @@ export async function healthData(
   const prior = await priorFiscalWindow(orgId, from, to);
 
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
-  // One configuration read serves the segment health dots, the client-side
-  // bands and the budget tolerance below — no tab keeps its own copy.
+  // One healthBands read serves the segment health dots, the client-side
+  // bands and — threaded through — the budget tolerance below, so no tab
+  // keeps its own copy. The forecast parameters and the insight policy read
+  // their own slices beside it.
   const configured = await healthBands(orgId);
   const emptyBudget = (tolerance: BudgetTolerance): BudgetVariance =>
     ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance });
@@ -1024,7 +1048,7 @@ export async function healthData(
     analyticsSection('financial-health', ['drivers']) ? drivers(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ revenue: [], cost: [] }),
     analyticsSection('financial-health', ['items']) ? itemAnalysis(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ rows: [], gainers: [], decliners: [], totalCurrent: '0', totalChange: '0' }),
     budgetsOn && analyticsSection('financial-health', ['budget'])
-      ? budgetVariance(orgId, from, to, allowedSubsidiaryIds)
+      ? budgetVariance(orgId, from, to, allowedSubsidiaryIds, configured.tolerance)
       : Promise.resolve(emptyBudget(configured.tolerance)),
     insightPolicy(orgId),
   ]);
@@ -1044,9 +1068,6 @@ export async function healthData(
   };
 }
 
-/** The starting budget tolerance bands, matching the configuration defaults. */
-const DEFAULT_BUDGET_TOLERANCE: BudgetTolerance = { onTrack: 10, watch: 25 };
-
 /**
  * Budget-line status rule: on-track when favorable or within the configured
  * tolerance, watch to the configured watch band, and beyond that the
@@ -1054,19 +1075,25 @@ const DEFAULT_BUDGET_TOLERANCE: BudgetTolerance = { onTrack: 10, watch: 25 };
  * revenue lines read "under". Flagging a revenue shortfall as over-budget
  * spend inverts the story, so income and cost have distinct
  * unfavorable-beyond-tolerance statuses while sharing the neutral watch
- * band. Exported for unit tests.
+ * band. The tolerance comes from the caller (the organization's configured
+ * bands) — the rule keeps no starting percentages of its own. Band edges
+ * compare exact decimals: a float product like 0.07*100 prints
+ * 7.000000000000001, which would grade an exactly-on-band line as watch.
+ * Exported for unit tests.
  */
 export function budgetLineStatus(
   type: string,
   variance: string,
-  variancePct: number | null,
   budget: string,
-  tolerance: BudgetTolerance = DEFAULT_BUDGET_TOLERANCE,
+  tolerance: BudgetTolerance,
 ): BudgetRow["status"] {
   const favorable = type === "income" || type === "income_other" ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
   if (isZero(budget)) return "no-budget";
-  if (favorable || Math.abs(variancePct ?? 0) * 100 <= tolerance.onTrack) return "on-track";
-  if (Math.abs(variancePct ?? 0) * 100 <= tolerance.watch) return "watch";
+  const ratio = decimalRatio(variance, abs(budget));
+  const magnitude = ratio === null ? null : abs(ratio);
+  if (magnitude === null) return favorable ? "on-track" : type === "income" || type === "income_other" ? "under" : "over";
+  if (favorable || cmp(magnitude, decimalRatio(String(tolerance.onTrack), "100")!) <= 0) return "on-track";
+  if (cmp(magnitude, decimalRatio(String(tolerance.watch), "100")!) <= 0) return "watch";
   return type === "income" || type === "income_other" ? "under" : "over";
 }
 
@@ -1080,12 +1107,36 @@ async function fiscalPeriodsPerYear(orgId: string, asOf: string): Promise<number
   return count > 0 ? count : 12;
 }
 
-/** Macro-adjustment factors behind the forecast adjustment codes (single source for the mapping). */
-function forecastAdjustmentValue(code: string): number {
-  const values: Record<string, number> = { neg10: -0.1, neg05: -0.05, zero: 0, pos05: 0.05, pos10: 0.1 };
-  const value = values[code];
-  if (value === undefined) throw new Error(`unknown forecast adjustment code "${code}"`);
-  return value;
+/**
+ * Macro-adjustment factor behind a forecast adjustment code, derived from
+ * the code itself (`neg10` is −10%, `pos05` is +5%, `zero` is none): a new
+ * spec option following the same naming prices without a code change. A
+ * code outside the naming fails loudly, naming the convention, rather than
+ * pricing a band the organization never asked for. Exported for unit tests.
+ */
+export function forecastAdjustmentValue(code: string): number {
+  if (code === "zero") return 0;
+  const match = /^(neg|pos)(\d+)$/.exec(code);
+  if (!match) throw new Error(`unknown forecast adjustment code "${code}" — use neg<percent>, pos<percent> or zero`);
+  const magnitude = Number(match[2]) / 100;
+  return match[1] === "neg" ? -magnitude : magnitude;
+}
+
+/**
+ * Declared future period names after `asOf` on the organization's own
+ * calendar, capped at `need`. Null when the calendar is monthly or
+ * undeclared (the client labels calendar months); an empty array when a
+ * non-monthly calendar declares no future periods, which the tab refuses
+ * by name instead of labelling buckets it cannot reconcile.
+ */
+async function upcomingFiscalPeriodNames(orgId: string, asOf: string, need: number): Promise<string[] | null> {
+  const declared = await defaultFiscalCalendarPeriods(orgId);
+  if (!declared || declared.cadence === "monthly" || declared.periods.length === 0) return null;
+  return declared.periods
+    .filter((p) => p.from > asOf)
+    .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
+    .slice(0, need)
+    .map((p) => p.name);
 }
 
 /** The forecast model as configured, with offered choices from the threshold spec. */
@@ -1096,6 +1147,7 @@ async function forecastParams(orgId: string, asOf: string): Promise<HealthForeca
   ]);
   const fields = new Map(analyticsConfigSpec("financialHealth").fields.map((f) => [f.key, f]));
   const codes = (key: string): string[] => [...(fields.get(key)?.options ?? [])];
+  const horizons = codes("forecastHorizon").map(Number);
   return {
     periodsPerYear,
     defaultMethod: String(c.forecastMethod),
@@ -1104,10 +1156,11 @@ async function forecastParams(orgId: string, asOf: string): Promise<HealthForeca
     defaultConfidence: Number(c.forecastConfidence),
     defaultSeasonality: String(c.forecastSeasonality),
     seasonalities: codes("forecastSeasonality"),
-    horizons: codes("forecastHorizon").map(Number),
+    horizons,
     confidences: codes("forecastConfidence").map(Number),
     adjustments: codes("forecastAdjustment").map((code) => ({ code, value: forecastAdjustmentValue(code) })),
     defaultAdjustment: String(c.forecastAdjustment),
+    futurePeriodNames: await upcomingFiscalPeriodNames(orgId, asOf, Math.max(...horizons)),
     model: {
       alpha: c.forecastEtsAlpha,
       beta: c.forecastEtsBeta,
@@ -1134,16 +1187,17 @@ async function healthBands(orgId: string): Promise<{ tolerance: BudgetTolerance;
   };
 }
 
-/** Preserve ledger amounts through budget variance arithmetic; only the
- * dimensionless tolerance ratio is projected to a number for status bands. */
-export function exactBudgetVariance(budget: string, actual: string): { variance: string; variancePct: number | null } {
+/**
+ * Preserve ledger amounts through budget variance arithmetic: the variance
+ * stays an exact string and its share of the budget an exact fraction —
+ * never a float the status bands would misread at an edge.
+ */
+export function exactBudgetVariance(budget: string, actual: string): { variance: string; variancePct: string | null } {
   const variance = add(actual, neg(budget));
-  const variancePct = isZero(budget) ? null : evaluateAnalyticsRatio(variance, abs(budget), "ratio", 12);
-  if (!isZero(budget) && variancePct === null) throw new Error("BUDGET_VARIANCE_RATIO_UNDEFINED");
-  return {
-    variance,
-    variancePct: variancePct === null ? null : Number(variancePct),
-  };
+  if (isZero(budget)) return { variance, variancePct: null };
+  const variancePct = decimalRatio(variance, abs(budget));
+  if (variancePct === null) throw new Error("BUDGET_VARIANCE_RATIO_UNDEFINED");
+  return { variance, variancePct };
 }
 
 /**
@@ -1154,8 +1208,16 @@ export function exactBudgetVariance(budget: string, actual: string): { variance:
  * Statuses follow budgetLineStatus above; income favours actual ≥ budget,
  * cost accounts the reverse.
  */
-export async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
-  const tolerance = (await healthBands(orgId)).tolerance;
+export async function budgetVariance(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+  tolerance?: BudgetTolerance,
+): Promise<BudgetVariance> {
+  // The dashboard threads its one healthBands read through here; direct
+  // callers without configured bands read them, exactly once, below.
+  const bands = tolerance ?? (await healthBands(orgId)).tolerance;
   const scen = (await analyticsQuery(sql`
     select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
     from budget_scenarios bs
@@ -1170,7 +1232,7 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
     limit 1
   `)) as unknown as { rows: BudgetScenarioSqlRow[] };
   const s = scen.rows[0];
-  if (!s) return { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance };
+  if (!s) return { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: bands };
 
   // Both sides arrive per (account, functional) and translate to
   // presentation before the variance compares them — the same second leg as
@@ -1254,10 +1316,9 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
     .map(([accountId, v]): BudgetRow => {
       const budget = v.budget;
       const actual = v.actual;
-      const variance = sum([actual, neg(budget)]);
-      const variancePct = cmp(budget, "0") !== 0 ? amountRatio(variance, abs(budget)) : null;
+      const { variance, variancePct } = exactBudgetVariance(budget, actual);
       const favorable = isIncome(v.type) ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
-      const status = budgetLineStatus(v.type, variance, variancePct, budget, tolerance);
+      const status = budgetLineStatus(v.type, variance, budget, bands);
       return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
     })
     .sort((a, b) => cmp(abs(b.variance), abs(a.variance)));
@@ -1269,6 +1330,6 @@ export async function budgetVariance(orgId: string, from: string, to: string, al
       actual: sum(rows.map((x) => x.actual)),
       variance: sum(rows.map((x) => x.variance)),
     },
-    tolerance,
+    tolerance: bands,
   };
 }
