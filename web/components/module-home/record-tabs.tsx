@@ -3,7 +3,7 @@
 import { useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { DrawerTabStrip } from '../drawer-tab-strip'
 import { SubtabNav } from '@braedonsaunders/appkit-ui'
-import { switchView } from '@openbooks/ui'
+import { switchView, viewSwitchTypes } from '@openbooks/ui'
 
 /** The house record selector, with keyboard focus and optional panel ownership. */
 export function RecordTabs<T extends string>({ label, active, tabs, onChange, children, panelId, className }: {
@@ -19,7 +19,8 @@ export function RecordTabs<T extends string>({ label, active, tabs, onChange, ch
   const root = useRef<HTMLDivElement>(null)
   const contentId = panelId ?? (children !== undefined ? `${id}-panel` : undefined)
   // Every selection is a view switch, so the panel change animates like a page change.
-  const select = (key: T) => switchView(() => onChange(key))
+  const select = (key: T) => switchView(() => onChange(key), viewSwitchTypes(
+    tabs.findIndex((tab) => tab.key === active), tabs.findIndex((tab) => tab.key === key)))
   useLayoutEffect(() => {
     const buttons = root.current?.querySelectorAll<HTMLElement>('button')
     buttons?.forEach((button, index) => {

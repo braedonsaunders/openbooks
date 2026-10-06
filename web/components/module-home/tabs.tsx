@@ -4,7 +4,8 @@ import { useContext, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
-import { cn, Popover, VIEW_SWITCH_TRANSITION } from "@openbooks/ui";
+import { cn, Popover, ViewTransition, viewSwitchTypes } from "@openbooks/ui";
+import { stableTransitionName } from "../route-transitions";
 import { visibleTopNavGroupCount } from "../../lib/top-nav-overflow";
 import { configureInlineTabs } from "./inline-tabs";
 import { ViewTabsContext, useManagedLocalNavigation } from "./navigation-context";
@@ -40,12 +41,12 @@ function Count({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-function Pill({ tab }: { tab: ModuleHomeTab }) {
+function Pill({ tab, types, pillName }: { tab: ModuleHomeTab; types: string[]; pillName: string }) {
   const active = tab.active === true;
-  return (
+  const link = (
     <Link
       href={tab.href as never}
-      transitionTypes={[VIEW_SWITCH_TRANSITION]}
+      transitionTypes={types}
       aria-current={active ? "page" : undefined}
       className={cn(PILL, active ? PILL_ACTIVE : PILL_IDLE)}
     >
@@ -55,6 +56,11 @@ function Pill({ tab }: { tab: ModuleHomeTab }) {
       ) : null}
     </Link>
   );
+  // The active pill carries the strip's name, so selecting another tab
+  // glides the pill from the old tab to the new one.
+  return active ? (
+    <ViewTransition name={pillName} share="tab-pill" default="none">{link}</ViewTransition>
+  ) : link;
 }
 
 export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
@@ -155,6 +161,8 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
   const visible = primary.slice(0, visibleCount);
   const overflow = [...primary.slice(visibleCount), ...secondary];
   const activeOverflow = overflow.find((tab) => tab === activeTab);
+  const activeIndex = activeTab ? tabs.indexOf(activeTab) : 0;
+  const pillName = stableTransitionName("tab-pill", `${tabs.map((tab) => tab.label).join("|")}`);
 
   return (
     <div
@@ -206,7 +214,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
         className="flex h-[calc(var(--page-control-height)+0.25rem)] min-w-0 max-w-full flex-none items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800"
       >
         {visible.map((tab) => (
-          <Pill key={tab.href} tab={tab} />
+          <Pill key={tab.href} tab={tab} types={viewSwitchTypes(activeIndex, tabs.indexOf(tab))} pillName={pillName} />
         ))}
         {overflow.length > 0 ? (
           <Popover
@@ -259,7 +267,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
                   role="menuitem"
                   tabIndex={-1}
                   href={tab.href as never}
-                  transitionTypes={[VIEW_SWITCH_TRANSITION]}
+                  transitionTypes={viewSwitchTypes(activeIndex, tabs.indexOf(tab))}
                   onClick={() => setOpen(false)}
                   aria-current={tab.active ? "page" : undefined}
                   className={cn(

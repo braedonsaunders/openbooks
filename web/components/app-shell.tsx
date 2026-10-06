@@ -23,6 +23,7 @@ import { MobileTabBar } from './mobile-tab-bar'
 import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-menu'
 import { GlobalPartyDrawerHost } from './global-party-drawer-host'
 import { GlobalReportDrawerHost } from './global-report-drawer-host'
+import { MotionLab } from './motion-lab'
 import { ReportReloadIndicator } from './navigation-provider'
 import { AppLauncherLink, HeaderNavLink } from './header-nav-link'
 
@@ -122,6 +123,7 @@ export function AppShell({
 
           <MobileTabBar groups={navigationGroups} />
           <GlobalReportDrawerHost />
+          <MotionLab />
           {canReadParties ? (
             <GlobalPartyDrawerHost
               canManage={canManageParties}

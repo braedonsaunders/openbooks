@@ -35,14 +35,24 @@ export const ViewTransition: React.ComponentType<ViewTransitionProps> =
  */
 export const VIEW_SWITCH_TRANSITION = 'view-switch'
 
+/** Which way a view switch moves along its tab strip, so the incoming view
+ *  can arrive from the side the reader moved toward. */
+export const VIEW_FORWARD_TRANSITION = 'view-forward'
+export const VIEW_BACK_TRANSITION = 'view-back'
+
+/** The transition types for moving from tab `from` to tab `to` in a strip. */
+export function viewSwitchTypes(from: number, to: number): string[] {
+  return [VIEW_SWITCH_TRANSITION, to < from ? VIEW_BACK_TRANSITION : VIEW_FORWARD_TRANSITION]
+}
+
 /**
  * Applies a view selection (the state change or navigation a tab click
  * makes) as an animated view switch. A navigation started inside `update`
  * joins the same transition and carries the same type.
  */
-export function switchView(update: () => void) {
+export function switchView(update: () => void, types: string[] = [VIEW_SWITCH_TRANSITION]) {
   React.startTransition(() => {
-    canary.addTransitionType?.(VIEW_SWITCH_TRANSITION)
+    for (const type of types) canary.addTransitionType?.(type)
     update()
   })
 }

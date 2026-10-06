@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { switchView } from '@openbooks/ui'
+import { switchView, viewSwitchTypes } from '@openbooks/ui'
 
 /**
  * A labelled group of pressed buttons for drawer panels. These panels do not
@@ -28,7 +28,8 @@ export function DrawerTabStrip<T extends string>({
           type="button"
           disabled={tab.disabled}
           aria-pressed={activeKey === tab.key}
-          onClick={() => switchView(() => onSelect(tab.key))}
+          onClick={() => switchView(() => onSelect(tab.key), viewSwitchTypes(
+            tabs.findIndex((candidate) => candidate.key === activeKey), tabs.indexOf(tab)))}
           className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
             activeKey === tab.key
               ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
