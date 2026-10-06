@@ -68,6 +68,8 @@ stubModules({
 })
 
 const { loadBenefits } = await import("../../../../lib/hrm/benefits.ts");
+const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-workspace.ts')
+const { benefitsSpec } = await import('./view.ts')
 
 const gap = globalThis as Record<string, unknown>;
 beforeEach(() => {
@@ -126,7 +128,6 @@ test("the benefits copy ships with translated statuses in every section", () => 
   }
 });
 
-const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-workspace.ts')
 test('loaded portfolio keeps all rows searchable beyond 500 and totals exact values', async () => {
   gap.__portfolioReads = { programs: [], awards: Array.from({ length: 501 }, (_, index) => ({
     id: `award-${index}`, programId: 'program', employmentId: 'employment', value: '0.01', currency: 'USD', status: 'approved',
@@ -146,7 +147,6 @@ test('refused source read travels into the edit refusal and never implies a clea
   assert.equal(data.optionsRefusal?.message, data.editSourcesRefusal?.message)
 })
 
-const { benefitsSpec } = await import('./view.ts')
 test('Programs has one catalog and Delivery has one existing-obligation queue', async () => {
   const programs = benefitsSpec(await loadBenefits(HR_BENEFITS, { view:'programs' }))
   const header = programs.header?.find(block => block.kind === 'page-header')

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
@@ -212,6 +213,10 @@ stubModules({
   },
 });
 
+// Engine custom-field, segment and feature-state readers import the transport relatively.
+const ENGINE_READERS = /\/engine\/src\/(records\/custom-fields|organization\/(segments|feature-state))\.ts$/;
+registerHooks({ resolve: (specifier, context, next) => next(specifier === "../platform/db.ts" &&
+  ENGINE_READERS.test(context.parentURL ?? "") ? "@openbooks/engine/src/platform/db.ts" : specifier, context) });
 const routeUrl = "./route.ts?reports-entry-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 

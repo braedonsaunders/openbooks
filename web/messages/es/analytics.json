@@ -2238,7 +2238,9 @@
       "unreadableAmount": "«{category}» contiene un importe guardado ilegible — corrige el importe de la categoría en Setup → Overhead Model → Configuration."
     },
     "formats": {
-      "perHour": "{amount}/h"
+      "perHour": "{amount}/h",
+      "perFte": "{amount}/FTE",
+      "perUnit": "{amount}/unidad"
     },
     "tabs": {
       "overview": "Resumen",

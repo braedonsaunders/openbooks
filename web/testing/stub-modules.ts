@@ -153,6 +153,7 @@ export function withPlatformDbTestSurface(source: string): string {
   const sharedExports: Array<[string, string]> = [
     ["inExecutorTransaction", `export async function inExecutorTransaction(executor, fn) { return fn(executor) }`],
     ["ambientTenantOrgId", `export function ambientTenantOrgId() { return null }`],
+    ["ambientBypassWithoutTransaction", `export function ambientBypassWithoutTransaction() { return false }`],
     ["withBypass", `export async function withBypass(fn) { return fn() }`],
     ["withBypassContext", `export async function withBypassContext(fn) { return fn() }`],
     ["currentRequestOrgResolver", `export function currentRequestOrgResolver() { return null }`],

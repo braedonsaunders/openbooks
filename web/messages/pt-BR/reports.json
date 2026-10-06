@@ -2500,7 +2500,8 @@
         "currency": "Moeda",
         "amount": "Valor",
         "entry_id": "Lançamento",
-        "asset_id": "Chave do ativo"
+        "asset_id": "Chave do ativo",
+        "book_id": "ID do livro"
       },
       "billing_import_reconciliation": {
         "run_id": "Importação (id)",

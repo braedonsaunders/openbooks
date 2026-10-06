@@ -2238,7 +2238,9 @@
       "unreadableAmount": "« {category} » contient un montant enregistré illisible — corrige le montant de la catégorie dans Setup → Overhead Model → Configuration."
     },
     "formats": {
-      "perHour": "{amount}/h"
+      "perHour": "{amount}/h",
+      "perFte": "{amount}/ETP",
+      "perUnit": "{amount}/unité"
     },
     "tabs": {
       "overview": "Vue d’ensemble",

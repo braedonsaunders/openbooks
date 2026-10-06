@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { stubModules } from '../../testing/stub-modules.ts'
+import { stubModules, withPlatformDbTestSurface } from '../../testing/stub-modules.ts'
 import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 /**
@@ -47,10 +47,12 @@ const hooks = registerHooks({
         url: 'data:text/javascript,export async function listActiveExtensionContributions() { return [] }',
       }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier === '@openbooks/engine/platform/database') {
+    // Engine modules (the feature-state resolver among them) import the pool
+    // by relative path, so every spelling of the platform pool loads the double.
+    if (specifier.endsWith('/platform/db.ts') || specifier === '@openbooks/engine/platform/database') {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,${encodeURIComponent(`
+        url: `data:text/javascript,${encodeURIComponent(withPlatformDbTestSurface(`
           const state = globalThis[Symbol.for('openbooks.nav-app-placement-test')]
           const sqlText = ${sqlText.toString()}
           export const db = {
@@ -58,10 +60,16 @@ const hooks = registerHooks({
               const text = sqlText(query)
               if (text.includes('from org_nav_configs')) return { rows: state.configRows }
               if (text.includes('from apps a')) return { rows: state.appRows }
+              if (text.includes("settings->'features'")) return { rows: [{ f: {} }] }
               return { rows: [] }
             },
           }
-        `)}`,
+          const unexpected = () => { throw new Error('unexpected database transaction while resolving navigation') }
+          export const withOrgTransaction = unexpected, withOrgContext = unexpected, withOrg = unexpected,
+            withMaintenanceTransaction = unexpected, inDbTransaction = unexpected, withTransactionSavepoint = unexpected,
+            connectGovernedReadClient = unexpected, assertSafeRuntimeDatabaseRole = unexpected
+          export const env = {}, pool = {}, longPool = {}, schema = {}, orgContext = { getStore: () => undefined }
+        `))}`,
       }
     }
     if (specifier === 'sonner') {

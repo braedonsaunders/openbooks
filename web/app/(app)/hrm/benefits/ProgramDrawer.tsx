@@ -237,7 +237,7 @@ export function ProgramDrawer({
           {adding ? (
             <div className="mt-2 flex flex-col gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <div>
-                <Label htmlFor="program-member-employment">{t('portfolio.builder.fields.recipient')}</Label>
+                <Label htmlFor="program-member-employment">{t('portfolio.awardFields.recipient')}</Label>
                 <Select
                   id="program-member-employment"
                   value={member.employmentId}

@@ -311,9 +311,11 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
       "Storefront orders by channel, day, item, location and tender — one row per order line with the order's posting status and document. The location is the summary's stock location for summarized orders, else the channel's single fulfilment location.",
     // One row per normalized order line. Stored minors are JSON strings, so
     // every money column scales through the shop currency's own minor units;
-    // every join stays inside the base organization so a restricted
-    // subsidiary scope cannot leak rows. Channel orders carry no subsidiary,
-    // so this entity is org-scoped by design.
+    // every join stays inside the base organization. A channel posts its
+    // orders into the ledger of the subsidiary it is assigned to, so rows are
+    // scoped by the channel's subsidiary; an organization-level channel (no
+    // subsidiary) is visible only to unrestricted callers, matching the
+    // channel order list and API.
     from: `channel_orders o join sales_channels c on c.org_id=o.org_id and c.id=o.channel_id
       left join documents d on d.org_id=o.org_id and d.id=o.posting_document_id
       left join channel_daily_summaries s on s.org_id=o.org_id and s.id=o.summary_id
@@ -322,6 +324,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
       left join currencies cur on cur.code=o.shop_currency
       left join lateral jsonb_to_recordset(o.lines) as li(title text, sku text, quantity text, "priceMinor" text, "discountMinor" text) on true`,
     orgColumn: "o.org_id",
+    subsidiaryScope: { column: "c.subsidiary_id" },
     defaultSort: { column: "ordered_day", direction: "desc" },
     columns: [
       { key: "channel", label: "Channel", kind: "text", expr: "c.name" },
@@ -383,13 +386,13 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
       "Stored contribution-margin facts per channel order line — net revenue, discounts, actual issue cost, processor and marketplace fees, carrier labels, returns with restocking income, and allocated ad spend — with margin as formula measures, never stored ratios.",
     // One row per current margin fact. Only current facts read: restated
     // history stays in the table for audit, out of the sums. Every join
-    // stays inside the base organization so a restricted subsidiary scope
-    // cannot leak rows. Channel orders carry no subsidiary, so this entity
-    // is org-scoped by design, like channel sales.
+    // stays inside the base organization, and rows are scoped by the
+    // channel's subsidiary exactly like channel sales.
     from: `channel_order_economics f join channel_orders o on o.org_id=f.org_id and o.id=f.order_id and f.is_current
       join sales_channels c on c.org_id=f.org_id and c.id=f.channel_id
       join currencies cur on cur.code=f.currency`,
     orgColumn: "f.org_id",
+    subsidiaryScope: { column: "c.subsidiary_id" },
     timeKey: "ordered_day",
     defaultSort: { column: "ordered_day", direction: "desc" },
     columns: [

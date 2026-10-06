@@ -19,6 +19,11 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const { AwardDrawer } = await import('./AwardDrawer')
+const { AwardBuilderDrawer } = await import('./AwardBuilderDrawer')
+const { ProgramDrawer } = await import('./ProgramDrawer')
+const { ProgramBuilderDrawer } = await import('./ProgramBuilderDrawer')
+const { MoneyProvider } = await import('../../../../components/money-provider')
+const { emptyProgramDraft } = await import('../../../../lib/hrm/benefits-portfolio')
 const messages = Object.fromEntries(['hrm', 'common', 'ui'].map((name) => [name, JSON.parse(readFileSync(new URL(`../../../../messages/en/${name}.json`, import.meta.url), 'utf8'))]))
 const drawer = { award: {
   id: 'award', programName: 'Recognition', programCode: 'THANKS', valueLabel: '$25.00', recipientLabel: 'Ada',
@@ -92,8 +97,6 @@ test('finance selects an editable scoped native run and the server refusal prese
   assert.deepEqual((globalThis as Record<string, unknown>).__benefitAwardErrors, ['Choose a pay run whose pay date is on or after the award payable date.'])
 })
 
-const { AwardBuilderDrawer } = await import('./AwardBuilderDrawer')
-
 for (const family of ['reward', 'allowance'] as const) test(`a fixed ${family} carries its denomination and one request identity survives a network retry`, async (t) => {
   const requests: Record<string, unknown>[] = []
   const fetcher = (async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -119,7 +122,6 @@ for (const family of ['reward', 'allowance'] as const) test(`a fixed ${family} c
   assert.match(String(requests[0]!.sourceKey), /^award:[0-9a-f-]{36}$/)
   assert.equal(requests[0]!.sourceKey, requests[1]!.sourceKey)
 })
-
 
 test('pending rewards use native Approvals rather than a local approval bypass', async (t) => {
   const seed = drawer as unknown as { award: Record<string, unknown>; timelineEmpty: string }
@@ -149,8 +151,6 @@ test('external rewards queue a linked native pay run instead of inventing a fulf
   assert.deepEqual((globalThis as Record<string, unknown>).__benefitAwardErrors, ['Select a non-cash earning component before queueing this reward.'])
 })
 
-
-const { ProgramDrawer } = await import('./ProgramDrawer')
 for (const canConfigureApprovalPolicies of [false, true]) {
   test(`approval policy editor actions follow workflow grant ${canConfigureApprovalPolicies}`, async (t) => {
     const programDrawer = {
@@ -167,10 +167,6 @@ for (const canConfigureApprovalPolicies of [false, true]) {
     assert.equal(document.body.textContent?.includes('Ask your company workflow administrator'), !canConfigureApprovalPolicies)
   })
 }
-
-const { ProgramBuilderDrawer } = await import('./ProgramBuilderDrawer')
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { emptyProgramDraft } = await import('../../../../lib/hrm/benefits-portfolio')
 
 for (const approvalMode of ['none', 'flows'] as const) {
   test(`program approval controls default to none and persist ${approvalMode}`, async (t) => {

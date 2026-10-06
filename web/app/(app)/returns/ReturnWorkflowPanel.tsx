@@ -85,7 +85,7 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
         body: JSON.stringify({ lines }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('fee.previewFailed')))
+        toast.error(await readApiErrorMessage(res, t('workflow.fee.previewFailed')))
         return
       }
       setFeePreview((await res.json()) as FeePreview)
@@ -172,19 +172,19 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
       </div>)}</div>
       <div className="space-y-2 rounded-md border p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">{t('fee.title')}</span>
-          <Button variant="outline" size="sm" disabled={busy || previewBusy} onClick={previewFee}>{t('fee.preview')}</Button>
+          <span className="text-sm font-medium">{t('workflow.fee.title')}</span>
+          <Button variant="outline" size="sm" disabled={busy || previewBusy} onClick={previewFee}>{t('workflow.fee.preview')}</Button>
         </div>
         {feePreview && feePreview.lines.length > 0 ? (
           <DisclosureSection
-            title={t('fee.detail', { count: feePreview.lines.length })}
-            summary={t('fee.total', { amount: feeTotal })}
+            title={t('workflow.fee.detail', { count: feePreview.lines.length })}
+            summary={t('workflow.fee.total', { amount: feeTotal })}
             defaultOpen={false}
           >
             <ul className="space-y-1 text-sm">
               {feePreview.lines.map((line) => (
                 <li key={line.key} className="flex items-center justify-between gap-2">
-                  <span>{line.policyName ?? t('fee.noPolicy')}{line.capped ? ` · ${t('fee.capped')}` : ''}</span>
+                  <span>{line.policyName ?? t('workflow.fee.noPolicy')}{line.capped ? ` · ${t('workflow.fee.capped')}` : ''}</span>
                   <span>{money(minorToMajorText(line.feeMinor), { currency: feePreview.currency })}</span>
                 </li>
               ))}
@@ -193,14 +193,14 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, canW
         ) : null}
         {feePreview && BigInt(feePreview.totalMinor) > 0n && canWaiveFee ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Switch on={waiveFee} disabled={busy} label={t('fee.waive')} onToggle={() => setWaiveFee((current) => !current)} />
+            <Switch on={waiveFee} disabled={busy} label={t('workflow.fee.waive')} onToggle={() => setWaiveFee((current) => !current)} />
             {waiveFee ? (
               <Input
                 value={waiveReason}
                 onChange={(event) => setWaiveReason(event.target.value)}
-                placeholder={t('fee.reasonPlaceholder')}
+                placeholder={t('workflow.fee.reasonPlaceholder')}
                 className="min-w-52 flex-1"
-                aria-label={t('fee.reason')}
+                aria-label={t('workflow.fee.reason')}
               />
             ) : null}
           </div>

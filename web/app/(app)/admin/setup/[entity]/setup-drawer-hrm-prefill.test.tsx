@@ -61,20 +61,11 @@ const storedDocumentRow = {
   is_active: true,
 }
 
-async function renderEditDrawer(entityKey: string, row: Record<string, unknown>, seedFetch?: (url: string) => unknown) {
+async function renderEditDrawer(entityKey: string, row: Record<string, unknown>) {
   globalThis.__setupQuery = `row=${row.id}`
-  const pushes: string[] = []
-  const posts: { url: string; method: string; body: Record<string, unknown> }[] = []
-  globalThis.__setupRouter = { push(url: string) { pushes.push(url) }, replace() {}, refresh() {} }
+  globalThis.__setupRouter = { push() {}, replace() {}, refresh() {} }
   const priorFetch = globalThis.fetch
-  ;(globalThis as Record<string, unknown>).fetch = async (input: unknown, init?: { method?: string; body?: string }) => {
-    const url = String(input)
-    if (url.includes('/api/admin/setup/')) {
-      posts.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body) : {} })
-    }
-    return { ok: true, status: 200, json: async () => ({}), clone: () => ({ json: async () => ({}) }) }
-  }
-  void seedFetch
+  ;(globalThis as Record<string, unknown>).fetch = async () => ({ ok: true, status: 200, json: async () => ({}), clone: () => ({ json: async () => ({}) }) })
   const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
   assert.ok(entity, `the registry must declare ${entityKey}`)
   // sections.tsx projects the stored row before handing it to the drawer.
@@ -90,10 +81,9 @@ async function renderEditDrawer(entityKey: string, row: Record<string, unknown>,
     )
     await tick()
   })
-  await tick()
+  // A stored record opens read-only; Edit exposes the prefilled controls a Save would submit.
+  await act(async () => { [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Edit')!.click(); await tick() })
   return {
-    pushes,
-    posts,
     async unmount() {
       await act(async () => {
         root.unmount()

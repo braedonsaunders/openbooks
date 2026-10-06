@@ -65,6 +65,8 @@ const mockSources = new Map<string, string>([
       export async function withBypassContext(_opts, work) { return work() }
       export function inDbTransaction(_work) { throw new Error('unexpected inDbTransaction') }
       export function registerRequestOrgResolver() {}
+      export function ambientTenantOrgId() { return null }
+      export async function withTransactionSavepoint(_tx, work) { return work() }
       export const pool = {}
       export const env = {}
     `,
@@ -117,11 +119,14 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/journals', 'mock:journals-loader'],
 ])
 
+const ENGINE_READERS = /\/engine\/src\/(records\/custom-fields|organization\/(segments|feature-state))\.ts$/
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as documents.test.ts).
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
+    // Engine custom-field, segment and feature-state readers import the transport relatively.
+    if (specifier === '../platform/db.ts' && ENGINE_READERS.test(context.parentURL ?? '')) return { url: 'mock:db', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

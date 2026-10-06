@@ -2500,7 +2500,8 @@
         "currency": "币种",
         "amount": "金额",
         "entry_id": "日记账分录",
-        "asset_id": "资产键"
+        "asset_id": "资产键",
+        "book_id": "账簿ID"
       },
       "billing_import_reconciliation": {
         "run_id": "导入记录 (ID)",

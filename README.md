@@ -238,6 +238,10 @@ SG and US. **A country name is not a universal compliance claim.** Loaded tax
 years, regional calculations, required employer/employee inputs, filing formats,
 corrections and remittance schedules have distinct scopes.
 
+A 51-pack return-workpaper library spans 41 installable country tax packs. Tax
+packs are configurable preparation workpapers, not a promise of direct
+electronic filing, government approval or complete local coverage.
+
 Generate the source-labelled capability inventory with:
 
 ```bash
@@ -251,6 +255,22 @@ marks an uncommitted workspace explicitly. Follow the
 [localization adoption guide](docs/operations/localization.md) before statutory use.
 The interface has English, German, Spanish, French, Japanese, Brazilian Portuguese
 and Chinese message catalogs; statutory coverage is independent of interface language.
+
+### Migrating from another system
+
+Source connectors and migration services exist for:
+
+- NetSuite
+- QuickBooks Online
+- QuickBooks Desktop Web Connector
+- Xero
+- ERPNext
+- Odoo
+- Microsoft Dynamics
+
+Coverage differs by source and record type. Treat a migration as a controlled
+project: use an isolated target, review exceptions, reconcile subledgers and
+statements, and retain migration evidence before cutover.
 
 ### Honest limits
 

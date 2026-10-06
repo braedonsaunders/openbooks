@@ -2500,7 +2500,8 @@
         "currency": "Devise",
         "amount": "Montant",
         "entry_id": "Écriture",
-        "asset_id": "Clé d’actif"
+        "asset_id": "Clé d’actif",
+        "book_id": "ID du livre"
       },
       "billing_import_reconciliation": {
         "run_id": "Import (id)",

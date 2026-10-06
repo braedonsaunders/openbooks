@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules, withPlatformDbTestSurface } from '../testing/stub-modules.ts'
 
 // Consolidated shared behavior for every "exists but gated" refusal; each
 // case below pins its explanation page. A gated route names its feature or
@@ -37,12 +37,12 @@ const AVAILABILITY_MOCK = `
   export async function extensionPermissionAvailability() { return { active: [], inactive: [] } }
   export function denyInactiveExtensionPermissions(set) { return set }
 `;
-const DB_MOCK = `
+const DB_MOCK = withPlatformDbTestSurface(`
   export const db = { execute: async () => ({ rows: [] }) }
-  export async function withBypassContext(fn) { return fn() }
-  export function registerRequestOrgResolver() {}
   export async function withOrgContext(_org, fn) { return fn() }
-`;
+  export async function withOrgTransaction(_org, fn) { return fn(db) }
+  export async function withTransactionSavepoint(_tx, fn) { return fn() }
+`);
 const FEATURES_MOCK = `
   export async function isFeatureEnabled(_orgId, key) { return globalThis.__gateFeatures[key] !== false }
 `;
@@ -53,15 +53,16 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       (specifier === "./auth" || specifier === "./subsidiaries") &&
-      context.parentURL?.includes("lib/authz.ts")
+      /lib\/authz(-core)?\.ts$/.test(context.parentURL ?? "")
     ) {
       const source = specifier === "./auth" ? AUTH_MOCK : SUBSIDIARIES_MOCK;
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(source) };
     }
-    if (specifier === "@openbooks/engine/src/organization/extension-permission-availability.ts") {
+    if (specifier.endsWith("/extension-permission-availability.ts")) {
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(AVAILABILITY_MOCK) };
     }
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    // authz-core reads grants through the public database facade.
+    if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier === "@openbooks/engine/platform/database") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(DB_MOCK) };
     }
     if (

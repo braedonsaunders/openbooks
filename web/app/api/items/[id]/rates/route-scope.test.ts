@@ -2,10 +2,9 @@ import assert from 'node:assert/strict'
 import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
-// H-ITEMCATALOG: POST /api/items/[id]/rates writes org-wide project billing
-// rates under items.manage. A subsidiary-scoped caller now gets the named
-// org-wide-policy refusal before the item lookup, the feature checks, or any
-// write; an unrestricted caller proceeds past the guard exactly as before.
+// POST /api/items/[id]/rates writes org-wide project billing rates under items.manage. A
+// subsidiary-scoped caller gets the named org-wide-policy refusal before the item lookup, the
+// feature checks, or any write; an unrestricted caller proceeds past the guard.
 interface RatesState {
   restricted: boolean
   dbCalls: number
@@ -41,6 +40,8 @@ stubModules({
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
+    // Stored feature state: Inventory and Equipment off, so item-kind checks reach the database.
+    "../../../../../lib/features": `export async function isFeatureEnabled() { return false }`,
     "@/lib/feature-gates": `
       const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
       export async function guardFeaturePermission() {

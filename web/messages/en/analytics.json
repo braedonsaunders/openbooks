@@ -2238,7 +2238,9 @@
       "unreadableAmount": "“{category}” contains an unreadable stored amount — correct the category amount in Setup → Overhead Model → Configuration."
     },
     "formats": {
-      "perHour": "{amount}/hr"
+      "perHour": "{amount}/hr",
+      "perFte": "{amount}/FTE",
+      "perUnit": "{amount}/unit"
     },
     "tabs": {
       "overview": "Overview",

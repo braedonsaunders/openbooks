@@ -223,6 +223,7 @@ test("adding an option backfills existing variants with its default value", { sk
     );
     const detail = (await withBypassContext(() => getItemFamily(org.orgId, family.id)))!;
     assert.equal(detail.options.length, 3);
+    assert.equal(detail.variants.length, 4, "every existing variant survives the option change");
     for (const variant of detail.variants) {
       assert.equal(variant.optionValues.Material, "Cotton");
       assert.ok(variant.name.includes("Cotton"));

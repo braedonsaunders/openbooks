@@ -3,16 +3,16 @@ import test from "node:test";
 
 // Behaviour contract for the recruiting depth tabs: Interviews, Offers,
 // Postings, and Pools ride /hrm/recruiting as ?tab= sub-tabs of the
-// Recruiting module. Unknown tabs fall back to Openings (absent, never an
+// Recruiting module. Unknown tabs fall back to Applications (never an
 // error) and selection hrefs are stable. The Hiring strip is the view-tab
 // registry's and is covered with it; the tab services behind each surface
 // stay covered by the engine recruiting tests, not doubled here.
 const { hrefForDepth, resolveDepthTab } = await import("./depth-view.ts");
 
-test("an unknown tab falls back to Openings", () => {
-  assert.equal(resolveDepthTab("bogus"), "openings", "unknown tabs fall back");
-  assert.equal(resolveDepthTab(undefined), "openings", "an absent tab is Openings");
-  assert.equal(resolveDepthTab(123), "openings", "a non-string tab is Openings");
+test("an unknown tab falls back to Applications", () => {
+  assert.equal(resolveDepthTab("bogus"), "applications", "unknown tabs fall back");
+  assert.equal(resolveDepthTab(undefined), "applications", "an absent tab is Applications");
+  assert.equal(resolveDepthTab(123), "applications", "a non-string tab is Applications");
   assert.equal(resolveDepthTab("interviews"), "interviews", "a known tab resolves");
 });
 

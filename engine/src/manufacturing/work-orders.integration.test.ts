@@ -17,7 +17,7 @@ import { upsertItemPolicy } from "./item-policies.ts";
 import { createSandbox } from "../sandbox/lifecycle.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-type Fixture = { org: ScratchOrg; actorId: string };
+type Fixture = { org: ScratchOrg; actorId: string; departmentId: string };
 type Case = { name: string; run: (fixture: Fixture) => Promise<void> };
 const itemPolicy = { supplyMethod: "buy" as const, leadTimeDays: null, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0" };
 function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
@@ -39,13 +39,15 @@ async function setup(): Promise<Fixture> {
     const result = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`);
     assert.equal(result.rows.length, 1);
   });
-  return { org, actorId };
+  // Releasing a work order snapshots its work centers' department rates.
+  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id);
+  return { org, actorId, departmentId };
 }
 
 async function route(f: Fixture, itemId: string, from = "2026-01-01", to: string | null = null) {
   const code = `WC-${randomUUID()}`;
   const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
-    code, name: code, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
+    code, name: code, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false, departmentId: f.departmentId,
   }));
   const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: itemId, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: from, effectiveTo: to,

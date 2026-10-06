@@ -13,11 +13,11 @@ function leaves(value: unknown, prefix: string, out: Array<[string, string]>) {
 function at(locale: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((node, key) => node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined, locale)
 }
-// Technical tokens and words shared by the target languages remain unchanged.
+// Technical tokens and shared words remain unchanged; a locale: prefix limits the exemption to that language.
 const LOCALE_INVARIANT = new Set([
   'recurring.templateDocPlaceholder', 'recurring.cronLabel', 'recurring.cadenceLabel', 'recurring.table.cadence', 'recurring.no',
   'subscriptions.plansTable.plan', 'subscriptions.subsTable.plan', 'subscriptions.subsTable.mrr', 'subscriptions.planPlaceholder',
-  'subscriptions.advanced.colVersion', 'subscriptions.advanced.colNumber', 'dunning.tokensHint',
+  'subscriptions.advanced.colVersion', 'subscriptions.advanced.colNumber', 'fr:subscriptions.advanced.entitlements.colType', 'es:subscriptions.advanced.entitlements.sourcePlan', 'dunning.tokensHint',
 ])
 for (const locale of ['fr', 'es', 'de', 'pt-BR', 'ja', 'zh']) {
   test(`Collections record actions and forms are translated in ${locale}`, () => {
@@ -30,7 +30,7 @@ for (const locale of ['fr', 'es', 'de', 'pt-BR', 'ja', 'zh']) {
         const value = at(target, `collections.${section}.${path}`)
         assert.equal(typeof value, 'string', `${locale} collections.${section}.${path} must be translated`)
         assert.ok((value as string).trim(), `${locale} collections.${section}.${path} must not be empty`)
-        if (!LOCALE_INVARIANT.has(`${section}.${path}`)) assert.notEqual(value, english, `${locale} collections.${section}.${path} must not be the English fallback`)
+        if (!LOCALE_INVARIANT.has(`${section}.${path}`) && !LOCALE_INVARIANT.has(`${locale}:${section}.${path}`)) assert.notEqual(value, english, `${locale} collections.${section}.${path} must not be the English fallback`)
       }
     }
   })

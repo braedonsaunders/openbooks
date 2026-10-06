@@ -190,12 +190,12 @@ const mockSources = new Map<string, string>([
           // Recently opened documents re-resolve by id through the same
           // kind allowlist and subsidiary fence as a search.
           if (query.text.includes('and d.id = any(')) {
-            const idsIndex = (query.text.slice(0, query.text.indexOf('and d.id = any(')).match(/\?/g) ?? []).length
+            const idsIndex = (query.text.slice(0, query.text.indexOf('and d.id = any(')).match(/\\?/g) ?? []).length
             const ids = new Set(String(query.values[idsIndex]).slice(1, -1).split(','))
             const knownKinds = new Set(state.documents.map((row) => row.kind))
             const boundKinds = new Set(query.values.filter((value) => knownKinds.has(value)))
             const subsidiaryIds = new Set(query.values
-              .filter((value, index) => index !== idsIndex && typeof value === 'string' && /^\{.*\}$/.test(value))
+              .filter((value, index) => index !== idsIndex && typeof value === 'string' && /^\\{.*\\}$/.test(value))
               .flatMap((value) => value.slice(1, -1).split(',').filter(Boolean)))
             let rows = state.documents.filter((row) => ids.has(row.id) && boundKinds.has(row.kind))
             if (query.text.includes('and false')) rows = []

@@ -2500,7 +2500,8 @@
         "currency": "Moneda",
         "amount": "Importe",
         "entry_id": "Asiento",
-        "asset_id": "Clave de activo"
+        "asset_id": "Clave de activo",
+        "book_id": "ID del libro"
       },
       "billing_import_reconciliation": {
         "run_id": "Importación (id)",

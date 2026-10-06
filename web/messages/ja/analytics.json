@@ -2238,7 +2238,9 @@
       "unreadableAmount": "「{category}」に読み取れない保存済み金額があります — Setup → Overhead Model → Configurationでカテゴリ金額を修正してください。"
     },
     "formats": {
-      "perHour": "{amount}/時間"
+      "perHour": "{amount}/時間",
+      "perFte": "{amount}/FTE",
+      "perUnit": "{amount}/単位"
     },
     "tabs": {
       "overview": "概要",

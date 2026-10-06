@@ -46,26 +46,28 @@ import { can, type Authz } from '../../../../lib/authz'
 
 /**
  * Recruiting depth tabs: Interviews, Offers, Postings, and Pools ride the
- * /hrm/recruiting route as `?tab=` sub-tabs beside the Openings table.
+ * /hrm/recruiting route as `?tab=` sub-tabs beside Applications and Openings.
  * Every loader resolves through the canonical depth services (blind rule,
  * signature state, disposition log included) — the page renders data,
  * never queries. The tabs are part of Recruiting: they render whenever
- * the module is on, and an unknown tab param falls back to Openings.
+ * the module is on, and an absent or unknown tab param falls back to
+ * Applications, the default tab.
  */
 
 export const DEPTH_TABS = ['applications', 'openings', 'interviews', 'offers', 'postings', 'pools'] as const
 export type DepthTab = (typeof DEPTH_TABS)[number]
+const DEFAULT_DEPTH_TAB: DepthTab = 'applications'
 
 type T = Awaited<ReturnType<typeof getTranslations>>
 
 export function resolveDepthTab(tab: unknown): DepthTab {
-  if (typeof tab !== 'string' || !(DEPTH_TABS as readonly string[]).includes(tab)) return 'applications'
+  if (typeof tab !== 'string' || !(DEPTH_TABS as readonly string[]).includes(tab)) return DEFAULT_DEPTH_TAB
   return tab as DepthTab
 }
 
 function hrefForTab(tab: DepthTab, status: string | null): string {
   const params = new URLSearchParams()
-  if (tab !== 'openings') params.set('tab', tab)
+  if (tab !== DEFAULT_DEPTH_TAB) params.set('tab', tab)
   if (status) params.set('status', status)
   const query = params.toString()
   return query ? `/hrm/recruiting?${query}` : '/hrm/recruiting'
