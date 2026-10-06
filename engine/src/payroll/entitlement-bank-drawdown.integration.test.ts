@@ -316,7 +316,7 @@ test('an hours bank funds from negative deposit lines and pays from positive one
 test('one payout component settling two plans refuses naming both', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {
-    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52,subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
     const { partyId } = await employee(fx, 'Shared Component Employee');
     const payout = await earningComponent(fx, 'VACPAY3');
     for (const code of ['VACA', 'VACB']) {
