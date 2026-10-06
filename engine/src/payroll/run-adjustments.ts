@@ -125,6 +125,7 @@ type ScheduleMember = {
   display_name: string | null;
   party_active: boolean;
   profile_active: boolean | null;
+  terminated_on: string | null;
 } | undefined;
 
 /**
@@ -134,12 +135,13 @@ type ScheduleMember = {
  * no profile on this schedule, or an inactive profile — each with the remedy
  * that fixes it.
  */
-function inactiveMemberRefusal(member: ScheduleMember, employeeId: string): string {
+function inactiveMemberRefusal(member: ScheduleMember, employeeId: string, periodStart: string): string {
   if (!member) {
     return `employee "${employeeId}" is not an active member of this pay run's schedule — no employee with that id; check the id and try again`;
   }
   const name = member.display_name ?? employeeId;
-  if (!member.party_active) {
+  if (!member.party_active && !(typeof member.terminated_on === 'string' && member.terminated_on >= periodStart)) {
+    if (member.terminated_on) return `employee "${name}" is not eligible for this historical period — recorded employment ended ${member.terminated_on}; review their employment dates and the pay run period before importing`;
     return `employee "${name}" is not an active member of this pay run's schedule — they are deactivated; reactivate them before adding them to a pay run`;
   }
   if (member.profile_active === null) {
@@ -190,8 +192,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
   const { orgId, documentId, actorId, mutation } = input;
   if (validateOnly && mutation.action !== "add") throw new PayrollError("adjustment preflight only supports adding a line");
   return db.transaction(async (tx) => {
-    const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; document_status: string; subsidiary_id: string | null }>(sql`
-      select r.run_status, r.pay_schedule_id, d.status as document_status, d.subsidiary_id
+    const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; period_start: string; document_status: string; subsidiary_id: string | null }>(sql`
+      select r.run_status, r.pay_schedule_id, r.period_start::text, d.status as document_status, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
@@ -221,10 +223,11 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       // exact failed predicate — on a roster of up to 2000 an unnamed refusal
       // is unactionable.
       const membership = (await tx.execute<{
-        display_name: string | null; party_active: boolean; profile_active: boolean | null;
+        display_name: string | null; party_active: boolean; profile_active: boolean | null; terminated_on: string | null;
       }>(sql`
-        select p.display_name, p.is_active as party_active, prof.is_active as profile_active
+        select p.display_name, p.is_active as party_active, prof.is_active as profile_active, er.terminated_on::text
           from parties p
+          left join employee_roles er on er.org_id=p.org_id and er.party_id=p.id
           left join employee_payroll_profiles prof
             on prof.org_id = p.org_id
            and prof.employee_party_id = p.id
@@ -235,8 +238,11 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       const member = membership.rows[0];
       // A validity precondition belongs on the state being moved TOWARD, not
       // the state being moved AWAY FROM. Adding someone (include, or a line
-      // adjustment for them) moves toward paying them, so active membership
-      // is required. Removing someone (exclude) moves away: the inactive
+      // adjustment for them) moves toward paying them, so a configured active
+      // payroll profile is required. A former employee can still receive a
+      // historical cheque for a period covered by their recorded termination;
+      // their current inactive party status must remain unchanged. Removing
+      // someone (exclude) moves away: the inactive
       // member is exactly who must stay removable — refusing to remove them
       // bars the only exit from the invalid state the check detects
       // (deactivating an employee once bricked scope editing on every run
@@ -248,8 +254,9 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         if (!member || member.profile_active === null) {
           throw new PayrollError(excludeStrangerRefusal(member?.display_name, employeeId));
         }
-      } else if (!member || !member.party_active || member.profile_active !== true) {
-        throw new PayrollError(inactiveMemberRefusal(member, employeeId));
+      } else if (!member || member.profile_active !== true || !member.party_active
+          && !(typeof member.terminated_on === 'string' && member.terminated_on >= run.period_start)) {
+        throw new PayrollError(inactiveMemberRefusal(member, employeeId, run.period_start));
       }
     }
 
