@@ -1,5 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
-import { dirname, resolve as resolvePath } from 'node:path'
+import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import pg from 'pg'
 
@@ -11,8 +12,37 @@ const CSS_MODULE = 'openbooks:test-hooks:css-module'
 // per-file mock hooks registered later still take precedence).
 const WEB_ROOT = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', 'web')
 
+// Per-file hooks pin `@openbooks/engine/*` to their own checkout by joining
+// the subpath onto `<checkout>/engine/`. Implementation paths are files, but
+// a named contract (`@openbooks/engine/money`) is an export-map entry, so the
+// joined path names no file. Resolve it through that checkout's own engine
+// export map, which keeps the pin and makes contract imports load.
+const engineExportMaps = new Map()
+function engineContractUrl(specifier) {
+  let path
+  if (specifier.startsWith('file:')) {
+    try { path = fileURLToPath(specifier) } catch { return null }
+  } else if (specifier.startsWith('/')) path = specifier
+  else return null
+  const match = /^(.*\/engine)\/(?!src\/)([^?#]+)$/.exec(path)
+  if (!match || existsSync(path)) return null
+  const [, engineDir, subpath] = match
+  if (!engineExportMaps.has(engineDir)) {
+    let exportsMap = null
+    try {
+      const manifest = JSON.parse(readFileSync(join(engineDir, 'package.json'), 'utf8'))
+      if (manifest.name === '@openbooks/engine') exportsMap = manifest.exports ?? null
+    } catch {}
+    engineExportMaps.set(engineDir, exportsMap)
+  }
+  const target = engineExportMaps.get(engineDir)?.[`./${subpath}`]
+  return typeof target === 'string' ? pathToFileURL(resolvePath(engineDir, target)).href : null
+}
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    const contract = engineContractUrl(specifier)
+    if (contract) return nextResolve(contract, context)
     if (specifier.endsWith('.module.css')) {
       return { url: CSS_MODULE, shortCircuit: true }
     }

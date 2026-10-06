@@ -1079,6 +1079,10 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   // Amortization rows are immutable posted history with no sandbox-wipe
   // escape; scratch reset/drop disables the guard for the one transaction.
   { table: "contract_cost_amortization", trigger: "contract_cost_amortization_immutable_trigger" },
+  // Stored-value entries are immutable posted history; their guard honors only
+  // full teardown's org flag, so pooled reset disables it for the one
+  // transaction (deleting a card cascades into its entries).
+  { table: "stored_value_entries", trigger: "stored_value_entries_immutable_trigger" },
 ];
 
 /**
