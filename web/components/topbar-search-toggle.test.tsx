@@ -28,7 +28,7 @@ function mount() {
       await act(async () => {
         root.render(
           <NextIntlClientProvider locale="en" messages={{ shell }} timeZone="UTC">
-            <TopbarSearchToggle navGroups={[]} />
+            <TopbarSearchToggle navGroups={[]} recentScope="org-1:user-1" />
           </NextIntlClientProvider>,
         );
       });

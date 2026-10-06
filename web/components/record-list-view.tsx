@@ -26,6 +26,7 @@ import { enabledListSource, listOrderClause, listSource } from '../lib/list/sour
 import { RelatedPartyLink } from './related-party-link'
 import { ListDrawerLink } from './list-drawer-link'
 import { ListDrawerHost } from './list-drawer-host'
+import { statusLabel as sharedStatusLabel } from '../lib/status-label'
 import { listDrawerRoute, type NativeListDrawerData } from '../lib/list/drawer-routes'
 
 /**
@@ -53,21 +54,6 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
   reversed: 'outline',
   cancelled: 'outline',
   rejected: 'outline',
-}
-
-const STATUS_KEYS: Record<string, string> = {
-  draft: 'draft',
-  calculated: 'calculated',
-  committed: 'committed',
-  pending_approval: 'pendingApproval',
-  approved: 'approved',
-  rejected: 'rejected',
-  posted: 'posted',
-  paid: 'paid',
-  partially_paid: 'partiallyPaid',
-  voided: 'voided',
-  reversed: 'reversed',
-  cancelled: 'cancelled',
 }
 
 export async function RecordListView({
@@ -119,10 +105,8 @@ export async function RecordListView({
       return key
     }
   }
-  const statusLabel = (status: string) => {
-    const key = STATUS_KEYS[status]
-    return key ? tCommon(`status.${key}`) : status.replace(/_/g, ' ')
-  }
+  const statusLabel = (status: string) =>
+    sharedStatusLabel(status, (key) => tCommon(key as never), (key) => tCommon.has(key as never))
 
   // Custom (cf_*) list columns come from the field defs with showInList set.
   const headerDefs = await loadFieldDefs('documents', recordType)

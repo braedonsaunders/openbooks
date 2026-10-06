@@ -1,0 +1,1 @@
+Index-only migration (trigram search indexes built concurrently); indexes validate no row content.

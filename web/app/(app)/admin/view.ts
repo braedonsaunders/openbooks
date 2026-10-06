@@ -2,9 +2,9 @@ import 'server-only'
 
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { getAuthz, can } from '../../../lib/authz'
+import { getAuthz, can, type Authz } from '../../../lib/authz'
 import { accessDeniedHref } from '../../../lib/gate-targets'
-import { featureEnabled, resolvedFeatureState } from '../../../lib/features'
+import { featureEnabled, resolvedFeatureState, type FeatureState } from '../../../lib/features'
 import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 // The admin hub. Every card is gated by the permission of the surface it opens;
@@ -150,21 +150,45 @@ export interface AdminHubData {
   groups: AdminHubGroup[]
 }
 
+/**
+ * The hub cards this reader may open, grouped and translated. The hub page
+ * renders them and global search offers the same cards, so an Administration
+ * surface is findable exactly when its card is visible.
+ */
+export function visibleAdminHubGroups(
+  authz: Authz,
+  featureState: FeatureState,
+  t: (key: string) => string,
+): AdminHubGroup[] {
+  return GROUPS.map((g) => ({
+    ...g,
+    cards: g.cards.filter(
+      (c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey)),
+    ),
+  }))
+    .filter((g) => g.cards.length > 0)
+    .map((g) => ({
+      key: g.key,
+      label: t(g.labelKey),
+      cards: g.cards.map((c) => ({
+        href: c.href,
+        iconKey: c.iconKey,
+        title: t(`hub.cards.${c.cardKey}.title`),
+        description: t(`hub.cards.${c.cardKey}.description`),
+        accent: g.accent,
+      })),
+    }))
+}
+
 export async function loadAdminHub(): Promise<AdminHubData> {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const t = await getTranslations('admin')
   const featureState = await resolvedFeatureState(authz.user.orgId)
-
-  const groups = GROUPS.map((g) => ({
-    ...g,
-    cards: g.cards.filter(
-      (c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey)),
-    ),
-  })).filter((g) => g.cards.length > 0)
+  const groups = visibleAdminHubGroups(authz, featureState, (key) => t(key as never))
 
   // No admin-ish permission at all → the house refusal, not a silent bounce
-  // home (F1T-10). An OR-denial: the hub names itself and the full key set
+  // home. An OR-denial: the hub names itself and the full key set
   // any one of which admits, DERIVED from the same GROUPS source the hub
   // uses to decide visibility — never a hand list.
   if (groups.length === 0) {
@@ -175,17 +199,7 @@ export async function loadAdminHub(): Promise<AdminHubData> {
   return {
     title: t('hub.title'),
     description: t('hub.subtitle'),
-    groups: groups.map((g) => ({
-      key: g.key,
-      label: t(g.labelKey),
-      cards: g.cards.map((c) => ({
-        href: c.href,
-        iconKey: c.iconKey,
-        title: t(`hub.cards.${c.cardKey}.title`),
-        description: t(`hub.cards.${c.cardKey}.description`),
-        accent: g.accent,
-      })),
-    })),
+    groups,
   }
 }
 

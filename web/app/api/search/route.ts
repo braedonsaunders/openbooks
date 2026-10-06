@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { getAuthz } from '../../../lib/authz'
-import { globalSearch } from '../../../lib/search'
+import { searchEverything } from '../../../lib/search-all'
 import { unexpectedServerError } from '../../../lib/api/unexpected'
 
 export const runtime = 'nodejs'
@@ -9,9 +9,9 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Global search endpoint backing the always-on header search bar. Fans out
- * across contacts, transactions, accounts, items, and projects (see
- * lib/search.ts), org-scoped and permission-filtered. Returns grouped, ranked
- * hits for the instant results panel.
+ * across records, reports, settings and help (see lib/search-all.ts),
+ * org-scoped and permission-filtered. Returns grouped, ranked hits for the
+ * instant results panel.
  */
 async function legacyGET(req: Request) {
   const authz = await getAuthz()
@@ -21,7 +21,7 @@ async function legacyGET(req: Request) {
   if (!q.trim()) return NextResponse.json({ q: '', groups: [], total: 0 })
 
   try {
-    const result = await globalSearch(authz, q)
+    const result = await searchEverything(authz, q)
     return NextResponse.json(result, { headers: { 'cache-control': 'no-store' } })
   } catch (e) {
     return unexpectedServerError('search', e)

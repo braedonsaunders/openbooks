@@ -108,6 +108,8 @@
     "clear": "Clear search",
     "searching": "Searching…",
     "noMatches": "No matches for “{query}”",
+    "failed": "Search is unavailable right now. Try again in a moment.",
+    "recentFailed": "Recent results couldn't be loaded. Start typing to search.",
     "navigate": "navigate",
     "open": "open",
     "close": "close",
@@ -118,7 +120,22 @@
       "transactions": "Transactions",
       "accounts": "Accounts",
       "items": "Items",
-      "projects": "Projects"
+      "projects": "Projects",
+      "recent": "Recent",
+      "reports": "Reports",
+      "settings": "Settings",
+      "help": "Help",
+      "opportunities": "Opportunities",
+      "activities": "Activities",
+      "subscriptions": "Subscriptions",
+      "assets": "Fixed assets",
+      "equipment": "Equipment",
+      "timesheets": "Timesheets",
+      "records": "Custom records",
+      "files": "Files",
+      "dashboards": "Dashboards",
+      "locations": "Locations",
+      "warehouses": "Warehouses"
     }
   },
   "meta": {

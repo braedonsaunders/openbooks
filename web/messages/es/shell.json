@@ -108,6 +108,8 @@
     "clear": "Borrar búsqueda",
     "searching": "Buscando…",
     "noMatches": "No hay resultados para «{query}»",
+    "failed": "La búsqueda no está disponible en este momento. Inténtelo de nuevo en un momento.",
+    "recentFailed": "No se pudieron cargar los resultados recientes. Empiece a escribir para buscar.",
     "navigate": "navegar",
     "open": "abrir",
     "close": "cerrar",
@@ -118,7 +120,22 @@
       "transactions": "Transacciones",
       "accounts": "Cuentas",
       "items": "Artículos",
-      "projects": "Proyectos"
+      "projects": "Proyectos",
+      "recent": "Recientes",
+      "reports": "Informes",
+      "settings": "Configuración",
+      "help": "Ayuda",
+      "opportunities": "Oportunidades",
+      "activities": "Actividades",
+      "subscriptions": "Suscripciones",
+      "assets": "Activos fijos",
+      "equipment": "Equipos",
+      "timesheets": "Hojas de horas",
+      "records": "Registros personalizados",
+      "files": "Archivos",
+      "dashboards": "Paneles",
+      "locations": "Ubicaciones",
+      "warehouses": "Almacenes"
     }
   },
   "meta": {

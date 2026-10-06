@@ -13,7 +13,7 @@ import type { SidebarNavGroup } from './sidebar-nav'
  * strip under the header; the desktop inline input owns lg and up, so the
  * trigger hides there. Button styling mirrors the notifications bell.
  */
-export function TopbarSearchToggle({ navGroups }: { navGroups: readonly SidebarNavGroup[] }) {
+export function TopbarSearchToggle({ navGroups, recentScope }: { navGroups: readonly SidebarNavGroup[]; recentScope: string }) {
   const t = useTranslations('shell.globalSearch')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -50,7 +50,7 @@ export function TopbarSearchToggle({ navGroups }: { navGroups: readonly SidebarN
       </button>
       {open ? (
         <div className="absolute inset-x-0 top-full z-50 border-b border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-          <GlobalSearch className="w-full" navGroups={navGroups} />
+          <GlobalSearch className="w-full" navGroups={navGroups} recentScope={recentScope} />
         </div>
       ) : null}
     </div>

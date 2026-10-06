@@ -120,6 +120,7 @@ test("platform workspace switcher lives in the account menu, not the header", as
           }}
           environments={{ ...environments, isSuperAdmin: true }}
           groups={[]}
+          searchScope="org-1:user-1"
           createPermissions={{
             accountsReceivable: false,
             accountsPayable: false,

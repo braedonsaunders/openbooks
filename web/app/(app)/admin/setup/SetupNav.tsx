@@ -35,7 +35,7 @@ import {
   Workflow,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { SETUP_GROUPS, setupEntitiesByGroup } from '../../../../lib/setup/registry'
+import { setupRail, type SetupRailFlags } from '../../../../lib/setup/rail'
 
 // iconKey → lucide component. Keys come from the registry (SETUP_GROUPS / entities).
 const ICONS: Record<string, ReactNode> = {
@@ -73,75 +73,20 @@ const ICONS: Record<string, ReactNode> = {
 /** Index pages whose per-record builder pages live beneath them. */
 const BUILDER_INDEXES = new Set(['/admin/setup/review-templates', '/admin/setup/hiring-pipelines'])
 
-type NavItem = { href: string; label: string; iconKey: string }
-
 /**
  * Left rail for the Setup workspace — grouped list of tabs, one per registry
  * entity plus the special-cased Company tab, followed by the Import & Export
  * links (permission-gated). Client component (needs the active pathname).
- * Setup labels resolve under `admin.setup`; the data links under `data`.
+ * The entries come from the shared rail model (lib/setup/rail.ts), which
+ * global search also reads, so a Setup page is findable exactly when it is
+ * on this rail.
  */
-export function SetupNav({
-  canExport,
-  canImport,
-  canManageSetup,
-  canManagePerformance = false,
-  canManageCompensation = false,
-  canReadPayrollPackages = false,
-  canManageCrm = false,
-  canManagePeriods,
-  hiddenEntityKeys = [],
-  projectsEnabled = true,
-  currencyEnabled = true,
-  fixedAssetsEnabled = true,
-  crmEnabled = true,
-  bankFeedsEnabled = false,
-  onlinePaymentsEnabled = false,
-  shippingEnabled = false,
-  payrollEnabled = false,
-  hrmEnabled = false,
-}: {
-  canExport: boolean
-  canImport: boolean
-  canManageSetup: boolean
-  canManagePerformance?: boolean
-  canManageCompensation?: boolean
-  canReadPayrollPackages?: boolean
-  canManageCrm?: boolean
-  canManagePeriods?: boolean
-  hiddenEntityKeys?: string[]
-  projectsEnabled?: boolean
-  currencyEnabled?: boolean
-  fixedAssetsEnabled?: boolean
-  crmEnabled?: boolean
-  bankFeedsEnabled?: boolean
-  onlinePaymentsEnabled?: boolean
-  shippingEnabled?: boolean
-  payrollEnabled?: boolean
-  hrmEnabled?: boolean
-}) {
+export function SetupNav(flags: SetupRailFlags) {
   const t = useTranslations('admin.setup')
-  const tClose = useTranslations('close.setup')
-  const td = useTranslations('data')
-  const tHrm = useTranslations('hrm')
-  const tCrm = useTranslations('crm')
-  const tProjectTypes = useTranslations('projectTypes')
-  const tLaborPricing = useTranslations('laborPricing')
+  const tAll = useTranslations()
   const pathname = usePathname()
-  // Drop feature-gated entities (e.g. subsidiary tabs when multi-subsidiary is off).
-  const hidden = new Set(hiddenEntityKeys)
-  const byGroup = setupEntitiesByGroup()
-  if (hidden.size) for (const [g, list] of byGroup) byGroup.set(g, list.filter((e) => !hidden.has(e.key)))
-
-  const dataItems: NavItem[] = [
-    ...(canExport ? [{ href: '/data/export', label: td('nav.export'), iconKey: 'download' }] : []),
-    ...(canImport
-      ? [
-          { href: '/data/import', label: td('nav.import'), iconKey: 'upload' },
-          { href: '/data/import/history', label: td('nav.history'), iconKey: 'history' },
-        ]
-      : []),
-  ]
+  const rail = setupRail(flags)
+  const label = (key: string) => tAll(key as never)
 
   return (
     <nav className="w-full" aria-label={t('title')}>
@@ -149,158 +94,14 @@ export function SetupNav({
           sit side by side and scroll sideways instead of squeezing the
           panel. sm and up restore the grouped vertical rail exactly. */}
       <div className="flex flex-row items-start gap-6 overflow-x-auto pb-1 sm:flex-col sm:gap-0 sm:space-y-5 sm:overflow-visible sm:pb-0">
-        {SETUP_GROUPS.map((group) => {
-          if (!canManageSetup && group.key !== 'company' && !(group.key === 'workforce' && (canManagePerformance || canManageCompensation || canReadPayrollPackages))) return null
-          const items: NavItem[] =
-            group.key === 'accounting'
-              ? [
-                  ...(canManagePeriods
-                    ? [{ href: '/admin/setup/period-close', label: tClose('title'), iconKey: 'calendar' }]
-                    : []),
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                ]
-              : group.key === 'company'
-              ? [
-                  { href: '/admin/setup/readiness', label: t('readiness.navTitle'), iconKey: 'gauge' },
-                  { href: '/admin/setup/wizard', label: t('features.runWizard'), iconKey: 'sparkles' },
-                  { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
-                  { href: '/admin/setup/company#sample-companies', label: td('import.sample.industry'), iconKey: 'sparkles' },
-                  { href: '/admin/setup/features', label: t('features.navTitle'), iconKey: 'layers' },
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                  ...(bankFeedsEnabled
-                    ? [{ href: '/admin/setup/bank-feeds', label: t('bankFeeds.navTitle'), iconKey: 'landmark' }]
-                    : []),
-                  ...(onlinePaymentsEnabled
-                    ? [{ href: '/admin/setup/payment-providers', label: t('paymentProviders.navTitle'), iconKey: 'payments' }]
-                    : []),
-                  { href: '/admin/setup/payment-operations', label: t('entities.payment-operations.title'), iconKey: 'payments' },
-                  ...(crmEnabled
-                    ? [{ href: '/admin/setup/crm', label: tCrm('setup.title'), iconKey: 'users' }]
-                    : []),
-                ]
-              : group.key === 'currency'
-              ? [
-                  ...(currencyEnabled
-                    ? [{ href: '/admin/setup/fx-provider', label: t('fxProvider.title'), iconKey: 'coins' }]
-                    : []),
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                ]
-              : group.key === 'projects'
-              ? [
-                  ...(projectsEnabled
-                    ? [
-                        { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
-                        { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
-                        { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
-                        { href: '/admin/setup/labor-pricing', label: tLaborPricing('navTitle'), iconKey: 'tag' },
-                        // Overhead rates live as a subtab of the Overhead workspace, not
-                        // a standalone rail entry — filter it out of the generic group.
-                        ...(byGroup.get(group.key) ?? [])
-                          .filter((e) => e.key !== 'overhead-rates')
-                          .map((e) => ({
-                            href: `/admin/setup/${e.key}`,
-                            label: t(`entities.${e.key}.title`),
-                            iconKey: e.iconKey,
-                          })),
-                      ]
-                    : []),
-                ]
-              : group.key === 'billing'
-              ? [
-                  { href: '/admin/setup/invoicing', label: t('invoicing.navTitle'), iconKey: 'receipt' },
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                ]
-              : group.key === 'taxes'
-              ? [
-                  { href: '/admin/setup/tax-setup', label: t('taxSetup.navTitle'), iconKey: 'landmark' },
-                  { href: '/admin/setup/tax-provider', label: t('taxProvider.title'), iconKey: 'cloud-upload' },
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                ]
-              : group.key === 'workforce'
-              ? [
-                  ...(canManageCompensation ? [{ href: '/admin/setup/compensation', label: tHrm('compensation.settings.title'), iconKey: 'coins' }] : []),
-                  ...(canManagePerformance ? [{ href: '/admin/setup/performance', label: tHrm('performance.workspace.setupTitle'), iconKey: 'clipboard-list' }] : []),
-                  // The review-form and hiring-funnel builders: one page per
-                  // template/pipeline behind these index pages.
-                  ...(hrmEnabled
-                    ? [
-                        { href: '/admin/setup/review-templates', label: t('reviewBuilder.navTitle'), iconKey: 'clipboard-list' },
-                        { href: '/admin/setup/hiring-pipelines', label: t('pipelineBuilder.navTitle'), iconKey: 'workflow' },
-                      ]
-                    : []),
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                  ...(payrollEnabled
-                    ? [{ href: '/admin/setup/payroll', label: t('payroll.navTitle'), iconKey: 'payments' }]
-                    : []),
-                ]
-              : group.key === 'inventory'
-              ? [
-                  ...(shippingEnabled
-                    ? [{ href: '/admin/setup/shipping', label: t('shipping.navTitle'), iconKey: 'package' }]
-                    : []),
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                ]
-              : group.key === 'assets'
-              ? fixedAssetsEnabled
-                ? [
-                    ...(byGroup.get(group.key) ?? []).map((e) => ({
-                      href: `/admin/setup/${e.key}`,
-                      label: t(`entities.${e.key}.title`),
-                      iconKey: e.iconKey,
-                    })),
-                    { href: '/admin/setup/depreciation', label: t('assetDepreciationSetup.navTitle'), iconKey: 'percent' },
-                    { href: '/admin/setup/tax-depreciation', label: t('taxDepreciationSetup.navTitle'), iconKey: 'landmark' },
-                  ]
-                : []
-              : group.key === 'agents'
-              ? [
-                  { href: '/admin/setup/agents', label: t('agents.nav.overview'), iconKey: 'sparkles' },
-                  { href: '/admin/setup/agents/library', label: t('agents.nav.library'), iconKey: 'book-open' },
-                  { href: '/admin/setup/agents/activity', label: t('agents.nav.activity'), iconKey: 'history' },
-                ]
-              : (byGroup.get(group.key) ?? []).map((e) => ({
-                  href: `/admin/setup/${e.key}`,
-                  label: t(`entities.${e.key}.title`),
-                  iconKey: e.iconKey,
-                }))
-          const authorizedItems = group.key === 'workforce' && canReadPayrollPackages && !canManageSetup ? [...items, { href: '/admin/setup/payroll?tab=compensation-packages', label: t('entities.payroll-compensation-packages.title'), iconKey: 'coins' }] : items
-          const visibleItems = canManageSetup ? authorizedItems : authorizedItems.filter((item) => (canManageCrm && item.href === '/admin/setup/crm') || (canManagePerformance && item.href === '/admin/setup/performance') || (canManageCompensation && item.href === '/admin/setup/compensation') || (canReadPayrollPackages && item.href === '/admin/setup/payroll?tab=compensation-packages'))
-          if (visibleItems.length === 0) return null
+        {rail.groups.map((group) => {
           return (
             <div key={group.key} className="shrink-0 space-y-1">
               <h3 className="hidden px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500">
-                {t(`groups.${group.key}`)}
+                {label(group.labelKey)}
               </h3>
               <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
-                {visibleItems.map((item) => {
+                {group.items.map((item) => {
                   // Builder index pages stay highlighted on their per-record pages.
                   const active = pathname === item.href || (BUILDER_INDEXES.has(item.href) && pathname.startsWith(`${item.href}/`))
                   return (
@@ -318,7 +119,7 @@ export function SetupNav({
                         <span className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}>
                           {ICONS[item.iconKey] ?? <Tag size={15} />}
                         </span>
-                        <span className="truncate">{item.label}</span>
+                        <span className="truncate">{label(item.labelKey)}</span>
                       </Link>
                     </li>
                   )
@@ -328,13 +129,13 @@ export function SetupNav({
           )
         })}
 
-        {dataItems.length > 0 && (
+        {rail.data.items.length > 0 && (
           <div className="shrink-0 space-y-1">
             <h3 className="hidden px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500">
-              {td('nav.group')}
+              {label(rail.data.labelKey)}
             </h3>
             <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
-              {dataItems.map((item) => {
+              {rail.data.items.map((item) => {
                 const active = pathname === item.href
                 return (
                   <li key={item.href} className="shrink-0">
@@ -351,7 +152,7 @@ export function SetupNav({
                       <span className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}>
                         {ICONS[item.iconKey] ?? <Tag size={15} />}
                       </span>
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{label(item.labelKey)}</span>
                     </Link>
                   </li>
                 )

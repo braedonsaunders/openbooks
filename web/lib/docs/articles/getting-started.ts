@@ -93,8 +93,8 @@ export const navigationAndRecords: DocArticle = {
   category: 'getting-started',
   order: 3,
   summary: 'Learn the shared interaction patterns used throughout the application.',
-  updated: '2026-07-19',
-  keywords: ['navigation', 'top navigation', 'sidebar', 'search', 'filter', 'pagination', 'drawer', 'draft', 'autosave', 'actions'],
+  updated: '2026-10-05',
+  keywords: ['navigation', 'top navigation', 'sidebar', 'search', 'global search', 'recent', 'filter', 'pagination', 'drawer', 'draft', 'autosave', 'actions'],
   related: ['quick-start', 'transaction-lifecycle'],
   body: `# Navigation, Lists, and Record Drawers
 
@@ -126,6 +126,26 @@ apps. The global create button and global search remain available beside them.
 If a guide names a page that is missing from your navigation, first check your
 role with an administrator. A hidden module does not imply that its records were
 deleted.
+
+## Global search
+
+The search box in the header (**⌘K** or **Ctrl+K**) finds:
+
+- **Pages** from your menu and the tabs inside each workspace, by the names
+  your organization uses;
+- **Records**: customers, vendors and employees (including by a contact
+  person, phone number or a migrated system's id), transactions (by number,
+  amount, memo, an integrator's reference or a line description), accounts,
+  items (including barcodes and customer part numbers), projects,
+  opportunities, activities, subscriptions, fixed assets, equipment,
+  timesheets, custom records, files, dashboards, locations and warehouses;
+- **Reports**, **Settings** and **Help** articles.
+
+Results follow the same permissions, Features switches and subsidiary access as
+the pages that open them, so search never shows something you could not open.
+With the box empty, **Recent** lists results you opened from search. Recent
+results are checked again each time, so a renamed record shows its current
+name and anything you can no longer open drops off the list.
 
 ## Lists
 

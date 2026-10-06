@@ -13,6 +13,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
+import { documentsPageViewer } from '../../../lib/file-cabinet/page-viewer'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
 import {
@@ -122,10 +123,8 @@ export async function loadDocuments(
   const authz = await requirePermission('documents.read')
   const canManage = can(authz, 'documents.manage')
   const orgId = authz.user.orgId
-  // Access control: '*' admins get Manager everywhere; otherwise the org-role
-  // baseline (Manager for documents.manage, else Viewer) plus resource_grants.
-  const baseline: AccessLevel = canManage ? 'manager' : 'viewer'
-  const viewer = { userId: authz.user.id, isAdmin: can(authz, '*'), baseline, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
+  const viewer = documentsPageViewer(authz)
+  const baseline: AccessLevel = viewer.baseline ?? 'viewer'
   const t = await getTranslations('documents')
 
   const fileId = typeof sp.file === 'string' ? sp.file : undefined
