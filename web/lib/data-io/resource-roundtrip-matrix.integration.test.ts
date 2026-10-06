@@ -266,7 +266,8 @@ test(
             k !== 'extension-settings' &&
             !k.startsWith('txn:') &&
             !k.startsWith('record:') &&
-            !['payroll-opening-balances', 'payroll-opening-entitlements', 'prior-payroll-register'].includes(k) &&
+            // Corrections name existing tenant-local source stubs; they cannot create them in another organization.
+            !['payroll-opening-balances', 'payroll-opening-entitlements', 'prior-payroll-register', 'prior-payroll-identities'].includes(k) &&
             !k.startsWith('properties') &&
             k !== 'property-units' &&
             k !== 'property-leases' &&
