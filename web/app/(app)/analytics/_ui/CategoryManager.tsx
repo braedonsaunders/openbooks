@@ -214,9 +214,11 @@ export function CategoryManager({
   const businessToday = useBusinessToday()
   const openEditor = (idx: number) => {
     setEditIdx(idx)
-    // A new draft names its frequency explicitly: the select shows Weekly
-    // when nothing is chosen, and the API now refuses a missing frequency
-    // instead of assuming monthly — what the draft shows is what saves.
+    // A new draft names its frequency explicitly (weekly), so what the
+    // select shows is what saves. An edited legacy row with no frequency
+    // shows the placeholder instead — the API refuses a missing frequency,
+    // so the operator must choose a real cadence before the save goes
+    // through.
     setDraft(idx === -1
       ? { id: '', name: '', direction: 'outflow', method: 'gl_history_average', frequency: 'weekly' }
       : { ...cats[idx]! })
@@ -407,7 +409,7 @@ export function CategoryManager({
                 </div>
                 <div>
                   <label className={labelCls}>{tForm('frequency')}</label>
-                  <Select value={draft.frequency ?? 'weekly'} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} triggerClassName="h-8 text-sm">
+                  <Select value={draft.frequency ?? ''} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} placeholder={tForm('frequencyPlaceholder')} triggerClassName="h-8 text-sm">
                     <option value="weekly">{tForm('frequencyWeekly')}</option>
                     <option value="biweekly">{tForm('frequencyBiweekly')}</option>
                     <option value="monthly">{tForm('frequencyMonthly')}</option>

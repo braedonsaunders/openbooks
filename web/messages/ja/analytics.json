@@ -4241,6 +4241,7 @@
       "subsidiaries": "子会社",
       "subsidiariesHelp": "ここで帰属付けした場合のみ、制限付き子会社ビューにこのカテゴリが表示されます。帰属のない手動・数式カテゴリは非表示になります。",
       "searchSubsidiaries": "子会社を検索…",
+      "frequencyPlaceholder": "頻度を選択…",
       "frequencyWeekly": "毎週",
       "glAccounts": "総勘定元帳勘定",
       "historyMonths": "履歴月数",

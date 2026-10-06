@@ -4241,6 +4241,7 @@
       "subsidiaries": "Filiales",
       "subsidiariesHelp": "Les vues filiales restreintes n’affichent cette catégorie qu’en cas d’attribution ici — les catégories manuelles et de formule non attribuées y sont masquées.",
       "searchSubsidiaries": "Rechercher des filiales…",
+      "frequencyPlaceholder": "Choisir une fréquence…",
       "frequencyWeekly": "Hebdomadaire",
       "glAccounts": "Comptes du grand livre",
       "historyMonths": "Mois d’historique",
