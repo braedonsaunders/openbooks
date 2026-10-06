@@ -70,6 +70,7 @@ export * from "./psp-settlements";
 export * from "./income-tax";
 export * from "./payroll";
 export * from "./payroll-period-openings";
+export * from "./payroll-employer-assignments";
 export * from "./payroll-entitlements";
 export * from "./work-schedules";
 export * from "./leases";

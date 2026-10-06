@@ -40,7 +40,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, compensationPackages: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, compensationPackages: false, roster: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {
@@ -72,5 +72,26 @@ test('legacy payroll evidence treats absent package terms as empty and detects n
 test('a malformed optional package source is refused rather than treated as an empty legacy population', () => {
   for (const compensationPackages of [null, false, '[]', {}]) {
     assert.equal(parsePayRunCalculationSource({ ...snapshot(), compensationPackages }), null);
+  }
+});
+
+
+test('dated employer assignment evidence detects added, removed and changed historical sources while legacy evidence remains unchanged', () => {
+  const legacy = snapshot();
+  const legacyDigest = payRunCalculationSourceDigest(legacy);
+  assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, employerAssignments: [] }).roster, false);
+  assert.equal(payRunCalculationSourceDigest(parsePayRunCalculationSource(legacy)!), legacyDigest);
+  const source = { id: 'assignment', employeePartyId: 'employee', subsidiaryId: 'employer', kind: 'filing_account' as const,
+    effectiveFrom: '2026-01-09', effectiveTo: '2026-01-09', filingAccountId: 'reduced-account',
+    workerCompGroupId: null, createdAt: '2026-10-06', sourceReference: 'Original dated provider card' };
+  const current = { ...snapshot(), employerAssignments: [source] };
+  assert.equal(payRunCalculationSourceChanges(legacy, current).roster, true);
+  assert.equal(payRunCalculationSourceChanges(current, legacy).roster, true);
+  for (const change of [{ filingAccountId: 'standard-account' }, { subsidiaryId: 'other-employer' },
+    { effectiveTo: '2026-01-10' }, { sourceReference: 'Another source' }]) {
+    assert.equal(payRunCalculationSourceChanges(current, { ...current, employerAssignments: [{ ...source, ...change }] }).roster, true);
+  }
+  for (const employerAssignments of [null, false, '[]', {}]) {
+    assert.equal(parsePayRunCalculationSource({ ...legacy, employerAssignments }), null);
   }
 });

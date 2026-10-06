@@ -124,6 +124,8 @@ export interface PayrollEmployerLevyContext {
   payDate?: string;
   /** Paying legal employer, for employer-level facts. Absent refuses where a pack needs it. */
   subsidiaryId?: string | null;
+  /** Explicit dated classification; absent retains the current role assignment. */
+  workerCompGroupId?: string;
 }
 
 /** Verified share of current-period wages sourced to one subregion. */

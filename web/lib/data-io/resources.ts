@@ -20,6 +20,7 @@ import {
   priorPayrollRegisterResource,
 } from './prior-payroll-register-resource'
 import { PAYROLL_RUN_INPUTS_DESCRIPTOR, PAYROLL_RUN_INPUTS_KEY, payrollRunInputsResource } from './payroll-run-inputs-resource'
+import { PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR, PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_KEY, payrollHistoricalEmployerAssignmentsResource } from './payroll-historical-employer-assignments-resource'
 import { PAYROLL_HISTORICAL_WITHHOLDING_DESCRIPTOR, PAYROLL_HISTORICAL_WITHHOLDING_KEY, payrollHistoricalWithholdingResource } from './payroll-historical-withholding-resource'
 import { PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR, PAYROLL_EMPLOYMENT_LINKS_KEY, payrollEmploymentLinksResource } from './payroll-employment-links-resource'
 import { PAYROLL_PERIOD_OPENINGS_DESCRIPTOR, PAYROLL_PERIOD_OPENINGS_KEY, payrollPeriodOpeningsResource } from './payroll-period-openings-resource'
@@ -269,6 +270,7 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
         PAYROLL_RUN_INPUTS_DESCRIPTOR,
         PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR,
         PAYROLL_HISTORICAL_WITHHOLDING_DESCRIPTOR,
+        PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR,
         EMPLOYEE_WORKER_COMP_DESCRIPTOR,
       ]
     : []
@@ -300,6 +302,10 @@ export async function getResource(
   if (key === PAYROLL_RUN_INPUTS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(payrollRunInputsResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
+    return bindReadScope(payrollHistoricalEmployerAssignmentsResource(orgId), orgId, allowedSubsidiaryIds)
   }
   if (key === PAYROLL_HISTORICAL_WITHHOLDING_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null

@@ -81,6 +81,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   'payroll_period_openings.contract_hash',
   'payroll_period_openings.country',
   'payroll_period_openings.currency',
+  'payroll_employee_employer_assignments.assignment_kind',
   // Training configuration codes, lifecycle states, IANA zones and content digests identify no person.
   "hrm_training_courses.code",
   "hrm_training_courses.status",

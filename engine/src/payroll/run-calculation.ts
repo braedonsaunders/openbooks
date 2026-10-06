@@ -1,4 +1,5 @@
 import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
+import { applyEmployeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { recurringBenefitsRunSource } from './benefit-plan-inputs.ts';
 import { payrollPeriodOpeningPriors } from './period-opening-source.ts';
 import { mergePeriodOpeningPriors } from './period-opening-contract.ts';
@@ -470,6 +471,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       tx,
       employees.rows.map((e) => employeeTaxYearFenceKey(orgId, e.party_id, runContext.taxYear)),
     );
+    await lockEmployerAssignmentProfiles(tx, orgId, employees.rows.map(e => e.party_id!));
 
     if (input.simulate) await tx.execute(sql`set constraints pay_run_benefit_allocations_line_tenant_fkey deferred`);
     if (!input.simulate) await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
@@ -505,6 +507,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
          and adjustment_type = 'exclude'
     `));
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
+    await applyEmployeeEmployerAssignmentHistory(tx, orgId, run.pay_date!, employees.rows.filter(e => !excluded.has(e.party_id!)));
 
     const openingPriors = await payrollPeriodOpeningPriors(tx, { orgId, pack: calcPack,
       employeePartyIds: employees.rows.filter((employee) => !excluded.has(employee.party_id!)).map((employee) => employee.party_id!), periodic: PERIODIC_RUN_TYPES.has(runType),

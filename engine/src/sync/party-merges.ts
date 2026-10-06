@@ -65,6 +65,7 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   // retaining them while moving their employment would split the identity.
   ["payroll_compensation_assignments", "employee_party_id"],
   ["payroll_period_openings", "employee_party_id"],
+  ["payroll_employee_employer_assignments", "employee_party_id"],
   ["hrm_training_courses", "author_party_id"],
   ["hrm_shift_templates", "author_party_id"],
   ["hrm_shift_assignments", "author_party_id"],
@@ -76,6 +77,7 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   pay_run_benefit_allocations: "native benefit payroll evidence",
   payroll_compensation_assignments: "compensation assignment history",
   payroll_period_openings: "prior-provider payroll period balances",
+  payroll_employee_employer_assignments: "dated payroll employer assignments",
   hrm_training_courses: "training course authorship evidence",
   hrm_shift_templates: "shift template authorship evidence",
   hrm_shift_assignments: "shift assignment authorship evidence",

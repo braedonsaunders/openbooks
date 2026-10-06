@@ -1679,6 +1679,7 @@ export async function payRunStaleness(
   let exactTimeTypesChanged = false;
   let exactWagesChanged = false;
   let exactItemsChanged = false;
+  let exactRosterChanged = false;
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
   // timestamp display intact; commit itself refuses the missing evidence and
@@ -1701,8 +1702,9 @@ export async function payRunStaleness(
       exactTimeTypesChanged = changes.timeTypes;
       exactWagesChanged = changes.wages;
       exactItemsChanged = changes.items;
+      exactRosterChanged = changes.roster;
       exactCompensationPackagesChanged = changes.compensationPackages;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.roster;
     }
   }
   const reasons = [
@@ -1713,7 +1715,7 @@ export async function payRunStaleness(
     row.schedule_changed ? "schedule" : null,
     row.statutory_rates_changed ? "statutoryRates" : null,
     row.union_fringes_changed ? "unionFringes" : null,
-    row.roster_changed || row.employment_changed ? "roster" : null,
+    row.roster_changed || row.employment_changed || exactRosterChanged ? "roster" : null,
     row.components_changed ? "components" : null,
     row.component_definitions_changed ? "componentDefinitions" : null,
     exactCompensationPackagesChanged ? "compensationPackages" : null,
