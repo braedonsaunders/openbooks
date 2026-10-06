@@ -66,7 +66,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
     { href: '/hrm/org-chart', iconKey: 'network', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read'] },
     { href: '/hrm/processes', iconKey: 'workflow', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
-    { href: '/hrm/processes/templates', iconKey: 'clipboard-check', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', prefix: true },
+    { href: '/hrm/processes/templates', iconKey: 'clipboard-check', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', menuParent: 'hrm-processes', prefix: true },
     { href: '/hrm/documents', iconKey: 'files', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
     { href: '/hrm/qualifications', iconKey: 'badge-check', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
     { href: '/hrm/training', label: 'Training', iconKey: 'graduation-cap', ns: 'admin', key: 'setup.training.title', permission: 'hrm.certifications.read', feature: 'hrmTraining' },
@@ -82,7 +82,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   ],
   timeOff: [
     { href: '/hrm/leave', iconKey: 'calendar-days', ns: 'hrm', key: 'leave.listTitle', permission: 'hrm.leave.read', carry: ['segment'] },
-    { href: '/hrm/leave?view=calendar', iconKey: 'calendar-clock', menuKey: 'hrm-leave-calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', carry: ['segment'] },
+    { href: '/hrm/leave?view=calendar', iconKey: 'calendar-clock', menuKey: 'hrm-leave-calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', menuParent: 'hrm-leave', carry: ['segment'] },
   ],
   talent: [
     { href: '/hrm/performance', iconKey: 'chart-no-axes-combined', ns: 'hrm', key: 'talentWorkspace.reviews', feature: 'hrmPerformance' },
@@ -107,6 +107,8 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     ] as const).map(([view, label, iconKey]) => ({
       href: `/hrm/compensation?view=${view}`, label, iconKey, menuKey: `hrm-compensation-${view}`,
       ns: 'hrm', key: `compensation.workspace.${view}`, permission: 'hrm.compensation.read', feature: 'hrmCompensation' as const,
+      // Job architecture is setup data; it stays on the Compensation strip, not the main menu.
+      ...(view === 'families' || view === 'levels' || view === 'bands' ? { menuParent: 'hrm-compensation' } : {}),
     })),
     { href: '/hrm/compensation/equity', iconKey: 'scale', ns: 'hrm', key: 'equity.title', permission: 'hrm.compensation.read', feature: 'hrmCompensation' },
   ],

@@ -100,7 +100,7 @@ test('custom URLs and local choices cannot grant access around permission or fea
   }
 })
 
-test('checklist templates are discoverable beside checklists only with the management grant', async () => {
+test('checklist templates sit beside checklists only with the management grant and stay off the main menu', async () => {
   reset()
   const authz = { user: { orgId: 'company-one' }, permissions: new Set(['parties.read', 'hrm.process.read']) } as Parameters<typeof resolveLocalNavigation>[0]
   let local = await resolveLocalNavigation(authz)
@@ -112,7 +112,9 @@ test('checklist templates are discoverable beside checklists only with the manag
   assert.equal(people.findIndex((tab) => tab.href === '/hrm/processes/templates'), people.findIndex((tab) => tab.href === '/hrm/processes') + 1)
   assert.equal(people.find((tab) => tab.href === '/hrm/processes/templates')!.label, 'Checklist templates')
   const groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(authz.permissions, key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
-  assert.ok(groups.flatMap((group) => group.items).some((item) => item.href === '/hrm/processes/templates' && item.subgroup === 'Workforce'))
+  const items = groups.flatMap((group) => group.items)
+  assert.ok(items.some((item) => item.href === '/hrm/processes'), 'the Checklists parent remains in the menu')
+  assert.ok(!items.some((item) => item.href === '/hrm/processes/templates'), 'templates are reached from the Checklists strip, not the main menu')
 })
 
 test('installed local contributions require a placed shortcut and their native permission', async () => {
