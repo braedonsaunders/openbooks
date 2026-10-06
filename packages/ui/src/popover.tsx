@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { OverlayExit } from './overlay-exit'
 import { cn } from './utils'
 import { useHydrated } from './use-hydrated'
 
@@ -95,9 +96,12 @@ export function Popover({
         ? createPortal(
             <AnimatePresence>
               {open ? (
+                <OverlayExit key="panel">
+                {(exiting) => (
                 <motion.div
                   ref={panelRef}
                   data-ui-overlay
+                  data-overlay-exiting={exiting || undefined}
                   initial={{
                     opacity: 0,
                     x: side === 'right' ? -4 : side === 'left' ? 4 : 0,
@@ -146,6 +150,8 @@ export function Popover({
                 >
                   {children}
                 </motion.div>
+                )}
+                </OverlayExit>
               ) : null}
             </AnimatePresence>,
             document.body,
