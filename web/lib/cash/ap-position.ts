@@ -30,7 +30,6 @@ import {
 import { buildTimeline, type ApSettings } from "./cash-position";
 import { isCategoryVisibleInScope } from "./core";
 import { agingBasisDate } from "../aging-basis";
-import { fiscalStartMonth } from "../fiscal";
 import { defaultFiscalCalendarPeriods, fiscalStartMonth } from "../fiscal";
 
 export interface ApWeek {
