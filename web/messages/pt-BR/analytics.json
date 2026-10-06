@@ -2074,7 +2074,7 @@
       "runwayCritical": "Crítica",
       "runwayCaution": "Atenção",
       "runwayHealthy": "Saudável",
-      "refusedNote": "A previsão exclui {names} — sem previsão disponível, os indicadores subestimam as saídas.",
+      "refusedNote": "A previsão exclui {names} — sem previsão disponível, os indicadores subestimam as saídas."
     },
     "panels": {
       "bridge": "Ponte de caixa",

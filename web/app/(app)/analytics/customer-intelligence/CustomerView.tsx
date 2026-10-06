@@ -49,7 +49,6 @@ import type {
   ProfitTier,
 } from '../../../../lib/analytics/customer-data'
 import { compareAtRiskCustomers } from '../../../../lib/analytics/customer-profitability-money'
-import { Gauge } from '../_ui/Gauge'
 import { Gauge, NEUTRAL_GAUGE_BANDS } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
