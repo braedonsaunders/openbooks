@@ -984,7 +984,7 @@ export async function spendVelocityData(
   // A total over partly unmeasurable annuals is unknown, never a sum that
   // silently drops the unmeasured share.
   const sumMeasured = (amounts: (string | null)[]): string | null =>
-    amounts.some((a) => a === null) ? null : amounts.reduce((s, a) => add(s, a as string), ZERO);
+    amounts.some((a) => a === null) ? null : amounts.reduce<string>((s, a) => add(s, a as string), ZERO);
   const boilingFrog = {
     summary: {
       count: frogAccounts.length,

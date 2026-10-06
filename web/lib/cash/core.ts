@@ -767,7 +767,7 @@ export function percentToFractionExact(ratePercent: string): Money {
   if (point <= 0) out = `0.${"0".repeat(-point)}${digits}`;
   else if (point >= digits.length) out = `${digits}${"0".repeat(point - digits.length)}`;
   else out = `${digits.slice(0, point)}.${digits.slice(point)}`;
-  const [w, f = ""] = out.split(".");
+  const [w = "0", f = ""] = out.split(".");
   const trimmed = f.replace(/0+$/, "");
   const wNorm = w.replace(/^0+(?=\d)/, "") || "0";
   return trimmed ? `${wNorm}.${trimmed}` : wNorm;

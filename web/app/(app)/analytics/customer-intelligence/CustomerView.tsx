@@ -215,7 +215,7 @@ export function CustomerView({
       },
     })
 
-  const weightsError = data.weightsError ?? profitability.weightsError ?? null
+  const weightsError = data.weightsError ?? profitability?.weightsError ?? null
   return (
     <div className="space-y-5">
       {weightsError ? (

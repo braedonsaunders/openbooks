@@ -23,8 +23,7 @@ function stat(hours: number) {
     nonBillableHours: hours,
     percentBilled: 0,
     nonBillableCost: '0.0000',
-    nonBillableCostPerDay: '0.0000',
-    nonBillableCostPerHour: '0.0000',
+    unratedHours: '0',
   }
 }
 

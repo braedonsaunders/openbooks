@@ -266,14 +266,14 @@ export function SentinelView({ data: initialData, canConfigure }: { data: Sentin
   const locale = useLocale()
   const num = useNum()
   const dec = useDecimals()
-  // Translated consolidations render in the presentation currency they were
-  // translated into; transaction evidence renders in its own currency below.
-  const presFmt = useMoney(data.meta.presentationCurrency)
-  const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const conformLabel = useConformLabel()
   const read = useAnalyticsTab('sentinel', { data: initialData }, TABS)
   const { tab, setTab } = read
   const { data } = read.props
+  // Translated consolidations render in the presentation currency they were
+  // translated into; transaction evidence renders in its own currency below.
+  const presFmt = useMoney(data.meta.presentationCurrency)
+  const money = (n: MoneyValue) => presFmt.moneyCompact(n)
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const s = data.summary
 

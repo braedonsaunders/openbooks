@@ -37,7 +37,7 @@ test('vendor drilldown is a named keyboard-operable button inside its table cell
               summary: { outstanding: '10.00', scheduled: '0.00', pctCurrent: '1.0000', avgDays: 0, buckets: [], unplaced: { count: 0, total: '0.00' } },
               weeks: [], byVendor: [{ partyId: 'party-1', partyName: 'Ada Supplies', amount: '10.00', count: 1, overdue: '0.00', oldestDue: null }],
               worklist: [], payPlan: { weeklyCap: '0.00', restrictToSafe: false, scheduling: false, capacity: null, startingCash: '0.00', recommended: [], recommendedTotal: '0.00', deferredThisWeek: '0.00', deferredBeyondHorizon: '0.00' },
-              categories: [], timeline: [],
+              categories: [], unavailableCategories: [], timeline: [],
             }}
           />
         </MoneyProvider>

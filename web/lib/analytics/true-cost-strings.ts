@@ -13,7 +13,7 @@
  * reads the table keys for validation, so the table labels render nowhere.
  */
 
-import type { CatalogMessageFn } from "./catalog-strings";
+import type { CatalogMessageFn, CatalogMessageKey } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
 
@@ -90,8 +90,8 @@ export function trueCostStrings(t: CatalogMessageFn, locale: string, currency = 
     displayEmployeeName: (name) => (name === "Unknown" ? t("trueCost.labels.unknownEmployee") : name),
     displayProfileName: (name) => (name === "Default" ? t("trueCost.labels.defaultProfile") : name),
     timeCategoryName: t("trueCost.labels.timeCategory"),
-    rateFormatLabel: (format) => t(`trueCost.allocation.${RATE_FORMAT_CATALOG_KEY[format] ?? format}`, { currency }),
-    allocationBaseLabel: (base) => t(`trueCost.bases.${base}`),
+    rateFormatLabel: (format) => t(`trueCost.allocation.${RATE_FORMAT_CATALOG_KEY[format] ?? format}` as CatalogMessageKey, { currency }),
+    allocationBaseLabel: (base) => t(`trueCost.bases.${base}` as CatalogMessageKey),
     refusalMixedUnits: (formats, categories) => t("trueCost.refusals.mixedUnits", { formats, categories }),
     refusalCascadingNoLabor: () => t("trueCost.refusals.cascadingNoLabor"),
     refusalCascadingNoLaborDept: (dept) => t("trueCost.refusals.cascadingNoLaborDept", { dept }),

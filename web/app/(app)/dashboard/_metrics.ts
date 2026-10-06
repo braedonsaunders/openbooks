@@ -631,8 +631,7 @@ export async function loadDashboardMetrics(
           margin: null as string | null,
           currency: null as string | null,
           periodLabel,
-          scopeName: null as string | null,
-          scopeConsolidated: false,
+          scopeLabel: null as string | null,
           unavailable,
         })
         // The subsidiary scope the figures cover, qualifier rendered

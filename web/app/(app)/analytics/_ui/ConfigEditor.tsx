@@ -193,7 +193,7 @@ export function ConfigEditor({
     const value = config.defaults[f.key]
     if (value === '' || value === undefined) return te('notSet')
     if (f.kind === 'toggle') return value === 1 ? te('on') : te('off')
-    if (f.kind === 'select' && (f.optionsKey || f.optionsFormat)) return optionLabel(f, value)
+    if (f.kind === 'select' && (f.optionsKey || f.optionsFormat)) return optionLabel(f, String(value))
     return String(value)
   }
 

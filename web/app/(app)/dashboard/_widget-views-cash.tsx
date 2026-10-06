@@ -52,7 +52,7 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
         <MetricTile
           icon={<TrendingDown size={15} />}
           label={t('widgets.cashLowestPoint')}
-          value={money(lowest.value.amount, { currency: data.baseCurrency })}
+          value={money(lowest.value.amount, { currency: data.baseCurrency ?? undefined })}
           href={HREF}
           tone={tone}
           hint={`${t('metricContext.weekOf', { date: fmtDay(lowest.value.week) })}${refusedSuffix(lowest.value.refused)}`}
@@ -77,10 +77,10 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
         <MetricTile
           icon={<Flame size={15} />}
           label={t('widgets.cashBurn')}
-          value={money(burn.value.weeklyOutflow, { currency: data.baseCurrency })}
+          value={money(burn.value.weeklyOutflow, { currency: data.baseCurrency ?? undefined })}
           href={HREF}
           tone="amber"
-          hint={`${t('widgets.cashBurnNet', { net: money(burn.value.netChange, { currency: data.baseCurrency }) })}${refusedSuffix(burn.value.refused)}`}
+          hint={`${t('widgets.cashBurnNet', { net: money(burn.value.netChange, { currency: data.baseCurrency ?? undefined }) })}${refusedSuffix(burn.value.refused)}`}
         />
       )
     }
@@ -190,7 +190,7 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
       return (
         <ForecastChart
           forecast={forecast.value}
-          currency={data.baseCurrency}
+          currency={data.baseCurrency ?? undefined}
           title={t('widgets.cashForecast')}
         />
       )
@@ -205,7 +205,7 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
  * own forecast chart (same option builder, same rows) inside a chart tile.
  * The headline is the projected end; the context names the horizon.
  */
-function ForecastChart({ forecast, currency, title }: { forecast: CashForecast; currency: string; title: string }) {
+function ForecastChart({ forecast, currency, title }: { forecast: CashForecast; currency: string | undefined; title: string }) {
   const t = useTranslations('dashboard')
   const tCharts = useTranslations('analytics.charts')
   const { money } = useMoney()

@@ -10,7 +10,7 @@ import { defaultFiscalCalendarPeriods } from "../fiscal";
 import type { FiscalPeriod } from "@openbooks/reports";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import { financialHealth, type FinancialHealth, type HealthFigures, type HealthPnlFigures } from "./financial-health";
+import { financialHealth, priorFiscalWindow, type FinancialHealth, type HealthFigures, type HealthPnlFigures } from "./financial-health";
 import { healthStrings, type HealthStrings } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";

@@ -41,7 +41,7 @@ export interface TrueCostOrgSpec {
   journals?: { entry: string; origin?: string; lines: TrueCostJournalLine[] }[];
   cards?: { dept: number; category: string; rate: string }[];
   wageRates?: { emp: number; currency?: string; rate?: number; basis?: string; annualHours?: number | null }[];
-  schedules?: { emp: number; cycleDays?: number; dailyHours?: number[] };
+  schedules?: { emp: number; cycleDays?: number; dailyHours?: number[] }[];
   profile?: {
     name?: string;
     compositeMethod?: string;

@@ -50,7 +50,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   useEffect(() => {
     if (!enabled) return
     const cached = generation.get(key)
-    let timer: ReturnType<typeof window.setTimeout> | undefined
+    let timer: number | undefined
     const schedule = (until: number) => {
       // Slow reads may finish after the source observation expires. Keep its
       // timestamp and wait a freshness window before another read, rather
