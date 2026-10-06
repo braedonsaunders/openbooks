@@ -4,7 +4,7 @@
 // paper treatment in the running app. Remove with app/drawer-paper-lab.css
 // (imported by the (app) layout) once a treatment is chosen.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
 const LOOKS = [
   { key: 'dog-ear', label: 'Dog-ear', blurb: 'Current: turned-down top corner on a fanned stack of two sheets.' },
@@ -25,6 +25,9 @@ const TONES = [
 type Settings = { look: string; tone: string; grain: boolean }
 const DEFAULTS: Settings = { look: 'dog-ear', tone: 'white', grain: false }
 const STORAGE_KEY = 'openbooks.drawer-paper-lab'
+const subscribeNothing = () => () => {}
+const browserReady = () => true
+const serverReady = () => false
 
 function readSettings(): Settings {
   try {
@@ -35,23 +38,20 @@ function readSettings(): Settings {
 }
 
 export function DrawerPaperLab() {
-  const [settings, setSettings] = useState<Settings | null>(null)
+  const mounted = useSyncExternalStore(subscribeNothing, browserReady, serverReady)
+  const [settings, setSettings] = useState<Settings>(readSettings)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    setSettings(readSettings())
-  }, [])
-
-  useEffect(() => {
-    if (!settings) return
+    if (!mounted) return
     const root = document.documentElement
     root.dataset.drawerLook = settings.look
     root.dataset.drawerTone = settings.tone
     root.dataset.drawerGrain = settings.grain ? 'on' : 'off'
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-  }, [settings])
+  }, [mounted, settings])
 
-  if (!settings) return null
+  if (!mounted) return null
   const update = (patch: Partial<Settings>) => setSettings({ ...settings, ...patch })
   const current = LOOKS.find((look) => look.key === settings.look) ?? LOOKS[0]
 
