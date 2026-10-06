@@ -326,7 +326,7 @@ export async function calculateStub(
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, country, currency: run.doc_currency!,
     periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
     hourlyWage: payRate ? payRate.basis === 'hour' ? payRate.rate : divideMoney(payRate.rate, String(payRate.annualHours), 4) : null,
-    payScheduleId: run.pay_schedule_id!, oneOffRun, simulate: !!ctx.simulate,
+    payScheduleId: run.pay_schedule_id!, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
     assignedRows: assigned.rows, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     unionAgreementId: emp.union_agreement_id ?? null, unionClassificationId: emp.union_classification_id ?? null,
   }, lines);

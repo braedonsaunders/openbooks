@@ -197,7 +197,8 @@ test('foreign employee, actor and schedule references refuse and tenant reads ca
     const exported = await exportedPayrollEvidence({ orgId: f.org.orgId, actorId: f.authorId, partyId: f.workerPartyId });
     assert.deepEqual(exported.periodOpenings.map(row => [row.id, row.source_reference, row.amounts, row.revision]),
       [[saved.record.id, input(f).sourceReference, saved.record.amounts, 1]]);
-    assert.ok(exported.periodOpenings.every(row => row.id !== otherSaved.record.id && row.id !== neighborSaved.record.id));
+    const otherId = otherSaved.record.id, neighborId = neighborSaved.record.id;
+    assert.ok(exported.periodOpenings.every(row => row.id !== otherId && row.id !== neighborId));
     for (const row of exported.periodOpenings) for (const key of ['org_id', 'employee_party_id', 'created_by', 'updated_by']) {
       assert.equal(Object.hasOwn(row, key), false, `period export excludes ${key}`);
     }

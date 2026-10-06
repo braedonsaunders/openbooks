@@ -362,7 +362,7 @@ async function runtimeContext(f: Fixture, effectiveFrom = "2026-01-01"): Promise
     values(${documentId},${f.org.orgId},${f.scheduleId},'2026-01-01','2026-01-31','2026-01-31',2026,${f.authorId},${f.authorId})`);
   return { orgId: f.org.orgId, actorId: f.authorId, documentId, employeePartyId: f.workerPartyId, employmentId: f.employmentId,
     subsidiaryId: f.org.subsidiaryId, country: 'CA', currency: 'CAD', periodStart: '2026-01-01', periodEnd: '2026-01-31',
-    taxYear: 2026, hourlyWage: '25', payScheduleId: f.scheduleId, oneOffRun: false, simulate: false, assignedRows: [], unionAgreementId: null, unionClassificationId: null };
+    taxYear: 2026, hourlyWage: '25', payScheduleId: f.scheduleId, oneOffRun: false, terminationRun: false, simulate: false, assignedRows: [], unionAgreementId: null, unionClassificationId: null };
 }
 function nativeWages(): Line[] {
   return [{ componentId: null, kind: 'earning', description: 'Native wages', amount: parseMoney('1000'), hours: '40', sequence: 10 }];

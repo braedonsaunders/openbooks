@@ -215,8 +215,8 @@ test('an overdraw refuses naming the balance unless the plan allows negatives', 
 test('an hours bank funds from negative deposit lines and pays from positive ones', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {
-    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
-    const { partyId } = await employee(fx, 'Banked Time Employee');
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52,subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const { partyId } = await employee(fx, 'Banked Time Employee', fx.subsidiaryId);
     const overtime = await earningComponent(fx, 'OTBANK');
     const take = await earningComponent(fx, 'BANKTAKE');
     const store = await earningComponent(fx, 'BANKSTORE');
@@ -228,7 +228,7 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     await hours(fx, partyId, ['2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17']);
     const first = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId,
-      allowedSubsidiaryIds: [fx.subsidiaryId] };
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]) };
     const depositInput = { ...input, mutation: { action: 'add' as const, employeePartyId: partyId,
       componentId: store, amount: '-240', hours: '-8', note: 'Overtime transferred to the bank', idempotencyKey: randomUUID() } };
     await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
@@ -316,7 +316,7 @@ test('an hours bank funds from negative deposit lines and pays from positive one
 test('one payout component settling two plans refuses naming both', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {
-    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52,subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.scheduleId}`);
     const { partyId } = await employee(fx, 'Shared Component Employee');
     const payout = await earningComponent(fx, 'VACPAY3');
     for (const code of ['VACA', 'VACB']) {

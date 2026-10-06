@@ -23,7 +23,7 @@ type ComponentWindow = { componentId: string; from: string; to: string; basis: s
 export interface CompensationPackagePayrollContext {
   orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string;
   subsidiaryId: string | null; country: string; currency: string; periodStart: string; periodEnd: string;
-  taxYear: number; hourlyWage: string | null; payScheduleId: string; oneOffRun: boolean; simulate: boolean;
+  taxYear: number; hourlyWage: string | null; payScheduleId: string; oneOffRun: boolean; terminationRun: boolean; simulate: boolean;
   assignedRows: Record<string, unknown>[]; unionAgreementId: string | null; unionClassificationId: string | null;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
