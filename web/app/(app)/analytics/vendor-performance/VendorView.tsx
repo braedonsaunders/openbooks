@@ -1,6 +1,7 @@
 'use client'
 
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
@@ -24,7 +25,7 @@ import { exportCsv } from '../_ui/exportCsv'
 import { escapeTooltipHtml, useAnalyticsMoney, toChartNumber } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
-const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors', 'configuration'] as const
+const TABS = ANALYTICS_TABS['vendor-performance']
 type Tab = (typeof TABS)[number]
 
 const TIER_STYLE: Record<SpendTier, string> = {
