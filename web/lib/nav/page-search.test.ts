@@ -24,7 +24,6 @@ const MENU: SidebarNavGroup[] = [
     id: 'operations',
     label: 'Operations',
     iconKey: 'grid',
-    // The organization renamed this entry; readers search by the name they see.
     items: [{ href: '/banking/feeds', label: 'Bank Connections', iconKey: 'bank' }],
   },
 ]

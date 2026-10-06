@@ -260,7 +260,7 @@ const fileLeg: Leg = {
   validId: isUuid,
   async run(ctx, match) {
     if (!ctx.navigable('/documents')) return []
-    const visibility = await fileReadPredicate(ctx.orgId, documentsPageViewer(ctx.authz))
+    const visibility = await fileReadPredicate(ctx.orgId, documentsPageViewer({ userId: ctx.authz.user.id, isAdmin: can(ctx.authz, '*'), canManage: can(ctx.authz, 'documents.manage'), allowedSubsidiaryIds: ctx.authz.allowedSubsidiaryIds }))
     const predicate = match.kind === 'ids'
       ? sql`fi.id = any(${uuidArray(match.ids)})`
       : sql`fi.name ilike ${match.like}`

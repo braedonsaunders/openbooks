@@ -123,7 +123,7 @@ export async function loadDocuments(
   const authz = await requirePermission('documents.read')
   const canManage = can(authz, 'documents.manage')
   const orgId = authz.user.orgId
-  const viewer = documentsPageViewer(authz)
+  const viewer = documentsPageViewer({ userId: authz.user.id, isAdmin: can(authz, '*'), canManage, allowedSubsidiaryIds: authz.allowedSubsidiaryIds })
   const baseline: AccessLevel = viewer.baseline ?? 'viewer'
   const t = await getTranslations('documents')
 

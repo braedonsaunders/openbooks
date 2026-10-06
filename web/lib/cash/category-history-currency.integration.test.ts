@@ -36,6 +36,7 @@ async function seedOutflow(
   periodId: string,
   amount: string,
 ): Promise<void> {
+  return withBypass(async () => {
   const entry = randomUUID();
   await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
     values (${entry},${org.orgId},${org.bookId},${subsidiaryId},${entry},${postingDate},${periodId},'draft','manual')`);
@@ -43,6 +44,7 @@ async function seedOutflow(
     values (${org.orgId},${entry},1,${org.accounts.adjustment},${subsidiaryId},${`-${amount}`},${currency},${`-${amount}`},1),
       (${org.orgId},${entry},2,${org.accounts.bank},${subsidiaryId},${amount},${currency},${amount},1)`);
   await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+  });
 }
 
 /**
