@@ -16,6 +16,21 @@ application, source synchronization, tunnels, and databases running. Available
 memory or a scheduler slot does not authorize independent verification. Pass
 this rule to current workers and successors before they begin work.
 
+## Shared database migrations
+
+Apply migrations to shared evaluation and deployed databases only through the
+authorized native bootstrap/migration runner, which records each published
+filename and digest in the migration ledger. Do not execute migration files or
+ad-hoc schema DDL directly through a database client on those databases.
+
+If schema objects exist without a matching ledger entry, stop the rollout and
+preserve the objects and tenant data. Compare every affected column, constraint,
+index, function and trigger with the exact published migration before proposing
+ledger reconciliation. Obtain the database owner's approval for that
+reconciliation; do not invent an application record, rewrite published bytes,
+or drop and recreate existing objects to make the runner proceed. Pass this
+rule to current workers and successors.
+
 ## Financial-institution-grade ERP standard
 
 All product, domain, data-model, code, API, UI, security, workflow, and architecture decisions in this repository must meet financial-institution-grade enterprise ERP standards. Prefer financial integrity, explicit controls, auditability, deterministic behavior, and long-term operability over implementation convenience.
