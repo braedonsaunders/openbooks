@@ -43,7 +43,7 @@ export async function seedHourlyPayrollOrg(): Promise<HourlyPayrollFixture> {
     wagesTo: "expense",
   });
   await seedPayrollComponents(org.orgId, actorId, "CA");
-  await seedOntarioEhtHourlyPayrollFixture(org.orgId, actorId);
+  await seedOntarioEhtFixture(org.orgId, actorId);
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
     name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18',
@@ -52,9 +52,9 @@ export async function seedHourlyPayrollOrg(): Promise<HourlyPayrollFixture> {
   return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts };
 }
 
-export async function seedHourlyPayrollEmployee(fx: HourlyPayrollFixture, name: string): Promise<{ partyId: string; employmentId: string }> {
+export async function seedHourlyPayrollEmployee(fx: HourlyPayrollFixture, name: string, subsidiaryId: string | null = null): Promise<{ partyId: string; employmentId: string }> {
   const id = randomUUID();
-  await seedPayrollPerson(fx.orgId, id, name);
+  await seedPayrollPerson(fx.orgId, id, name, { subsidiaryId });
   await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null });
   await seedPayrollWage(fx.orgId, id, fx.actorId, {
     currency: "CAD", rate: "30", basis: "hour",
