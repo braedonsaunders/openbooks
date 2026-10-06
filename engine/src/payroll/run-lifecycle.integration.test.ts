@@ -437,9 +437,11 @@ describe("calculation-rollback", () => {
         assert.ok(blocked, "commit must reach projection replacement after its initial freshness checks");
         await db.transaction(async (tx) => {
           await tx.execute(sql`set local lock_timeout='2s'`);
-          // Org settings are locked by the feature gate; a payroll profile is
-          // still an independent input whose late change must roll commit back.
-          await tx.execute(sql`update employee_payroll_profiles set updated_at=clock_timestamp() where org_id=${fx.orgId}`);
+          // Commit locks org settings and payroll profiles. Employee-role input
+          // remains independently editable and must trip the final freshness gate.
+          const changed = await tx.execute(sql`update employee_roles set updated_at=clock_timestamp()
+            where org_id=${fx.orgId} and party_id=${fx.employeeId} returning id`);
+          assert.equal(changed.rows.length, 1);
         });
         await blocker.query("commit");
         const result = await pending;

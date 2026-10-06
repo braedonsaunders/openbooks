@@ -1481,6 +1481,21 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year
       `)).rows;
+      // These are the subject's reviewed adoption and employer-assignment
+      // facts. Preserve their source, dates and revision without disclosing
+      // the operator's identity or another employee's evidence.
+      payload.periodOpenings = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_period_openings", PAYROLL_OPENING_BALANCES_DENIED_COLUMNS)}
+          from payroll_period_openings
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by tax_year, period_start, paid_through, id
+      `)).rows;
+      payload.employerAssignments = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_employee_employer_assignments", PAYROLL_OPENING_BALANCES_DENIED_COLUMNS)}
+          from payroll_employee_employer_assignments
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by effective_from, assignment_kind, id
+      `)).rows;
       payload.openingProgramBases = (await db.execute<Record<string, unknown>>(sql`
         select ${await heldDataProjection("payroll_opening_program_bases", PAYROLL_PROGRAM_BASES_DENIED_COLUMNS)}
           from payroll_opening_program_bases

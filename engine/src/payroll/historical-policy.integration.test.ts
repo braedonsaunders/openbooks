@@ -1,6 +1,6 @@
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPostingAccount, seedPayrollProfile,
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile,
   seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
@@ -49,22 +49,7 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
 
-  const account = seedPostingAccount.bind(null, org.orgId);
-  const wageExpense = await account("6000", "Wages expense", "expense");
-  const burdenExpense = await account("6010", "Payroll burden", "expense");
-  const netPayable = await account("2300", "Wages payable", "liability_current_other");
-  const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
-  const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
-  await seedPayrollAccountingConfiguration(org.orgId, {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
-        wagesTo: "expense",
-      });
+  const { craPayable } = await seedCanadianPostingAccounts(org.orgId, { liabilityType: "liability_current_other", enablePayroll: false });
   await seedPayrollComponents(org.orgId, actorId);
   // Québec legs need their classifications (HSF sector, CNT exemption class,
   // CNT liability slot): an unclassified Québec employer refuses by name.

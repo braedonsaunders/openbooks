@@ -11,8 +11,9 @@ import { saveOpeningBalances } from './opening-balances.ts';
 import { savePayrollPeriodOpening } from './period-opening-store.ts';
 import { payrollPeriodOpeningForEmployee } from './period-opening-reader.ts';
 import { CA_PERIOD_OPENING_TREATMENT } from './canada/period-openings.ts';
+import { exportedPayrollEvidence } from '../testing/dsar-fixture.ts';
 
-import { setupPeriodOpeningFixture as setup, periodOpeningInput as input } from '../testing/payroll-period-openings-fixture.ts';
+import { setupPeriodOpeningFixture as setup, periodOpeningInput as input, seedPeriodOpeningEmployee } from '../testing/payroll-period-openings-fixture.ts';
 async function counts(orgId: string) {
   return (await db.execute<{ openings: number; audits: number; stubs: number; ledger: number }>(sql`select
     (select count(*)::int from payroll_period_openings where org_id=${orgId}) as openings,
@@ -190,5 +191,16 @@ test('foreign employee, actor and schedule references refuse and tenant reads ca
     assert.deepEqual(hidden.rows, []);
     assert.deepEqual(await counts(f.org.orgId), { openings: 1, audits: 1, stubs: 0, ledger: 0 });
     assert.deepEqual(await counts(other.org.orgId), { openings: 0, audits: 0, stubs: 0, ledger: 0 });
+    const otherSaved = await savePayrollPeriodOpening(input(other)); assert.ok(otherSaved.record);
+    const neighbor = await seedPeriodOpeningEmployee(f.org, f.authorId, f.scheduleId);
+    const neighborSaved = await savePayrollPeriodOpening(input({ ...f, ...neighbor })); assert.ok(neighborSaved.record);
+    const exported = await exportedPayrollEvidence({ orgId: f.org.orgId, actorId: f.authorId, partyId: f.workerPartyId });
+    assert.deepEqual(exported.periodOpenings.map(row => [row.id, row.source_reference, row.amounts, row.revision]),
+      [[saved.record.id, input(f).sourceReference, saved.record.amounts, 1]]);
+    assert.ok(exported.periodOpenings.every(row => row.id !== otherSaved.record.id && row.id !== neighborSaved.record.id));
+    for (const row of exported.periodOpenings) for (const key of ['org_id', 'employee_party_id', 'created_by', 'updated_by']) {
+      assert.equal(Object.hasOwn(row, key), false, `period export excludes ${key}`);
+    }
+
   }));
 });

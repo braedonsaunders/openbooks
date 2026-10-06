@@ -2,9 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readZipJson, withZipFixture } from "../../testing/zip-fixture.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
@@ -285,72 +283,71 @@ test("an export carries every new domain and the manifest names them all", { ski
     const built = listed.find((e) => e.id === requested.id);
     assert.equal(built?.status, "ready", `export failed, error: ${built?.error}, scope: ${JSON.stringify(built?.scope)}`);
     const { bytes } = await downloadExport({ orgId: h.org.orgId, actorId: h.adminId, exportId: requested.id });
-    const dir = mkdtempSync(join(tmpdir(), "dsar-dom-"));
-    const path = join(dir, "export.zip");
-    writeFileSync(path, bytes);
-    const manifest = JSON.parse(execFileSync("unzip", ["-p", path, "export.json"], { encoding: "utf8" })) as {
-      taxCertificates: { certificate_key: string }[];
-      payrollProfiles: Record<string, unknown>[];
-      workLocationAllocations: Record<string, unknown>[];
-      roeSeparationEvents: Record<string, unknown>[];
-      roeSeparationPayments: Record<string, unknown>[];
-      itAddizionaliOpeningBalances: Record<string, unknown>[];
-      priorExports: { id: string }[];
-      benefitAwards: { value: string; program_name: string; evidence: Record<string, unknown> }[];
-      manifest: { gathered: { module: string; status: string }[]; excluded: { table: string; reason: string }[] };
-    };
-    // One generic loop over every seeded payload key: each newly gathered
-    // table asserts through this table, never a per-table test. Keys read
-    // through a Record cast because export.json is dynamic — a typo still
-    // fails loudly (undefined has no length).
-    for (const [key, want] of [
-      ["candidates", 1], ["applications", 1], ["interviews", 1], ["scorecards", 1],
-      ["scorecardRatings", 1], ["offers", 1], ["qualifications", 1], ["compStatements", 1],
-      ["surveyInvitations", 1], ["surveyResponses", 1], ["clockEvents", 1], ["addresses", 1],
-      ["contacts", 1], ["processSteps", 1], ["employeeRoles", 1], ["reportingRelationships", 1],
-      ["feedback", 3], ["oneOnOnes", 1], ["oneOnOneItems", 1], ["successionPlans", 1],
-      ["documentSigners", 1], ["entitlementMovements", 1], ["entitlementPlanLimits", 1],
-      ["crewTimeBatchLines", 1], ["timesheetWeeks", 1], ["fieldTicketLaborLines", 1],
-      ["employeePayComponents", 1], ["openingBalances", 1], ["openingProgramBases", 1], ["openingAccountBases", 1],
-      ["priorStubs", 1], ["retroSettlements", 1], ["parallelFindings", 1], ["anomalyFlags", 1],
-      ["runAdjustments", 1], ["holidayAssertions", 1], ["laborCostRates", 1], ["workSchedules", 1],
-      ["goals", 1], ["reviews", 1], ["reviewAnswers", 1],
-      ["benefitProgramMemberships", 1], ["benefitAwards", 1], ["benefitAwardEvents", 1],
-    ] as const) {
-      assert.equal(
-        (manifest as unknown as Record<string, unknown[]>)[key]?.length,
-        want,
-        `${key} must carry the seeded row`,
+    await withZipFixture(bytes, path => {
+      const manifest = readZipJson<{
+        taxCertificates: { certificate_key: string }[];
+        payrollProfiles: Record<string, unknown>[];
+        workLocationAllocations: Record<string, unknown>[];
+        roeSeparationEvents: Record<string, unknown>[];
+        roeSeparationPayments: Record<string, unknown>[];
+        itAddizionaliOpeningBalances: Record<string, unknown>[];
+        priorExports: { id: string }[];
+        benefitAwards: { value: string; program_name: string; evidence: Record<string, unknown> }[];
+        manifest: { gathered: { module: string; status: string }[]; excluded: { table: string; reason: string }[] };
+      }>(path);
+      // One generic loop over every seeded payload key: each newly gathered
+      // table asserts through this table, never a per-table test. Keys read
+      // through a Record cast because export.json is dynamic — a typo still
+      // fails loudly (undefined has no length).
+      for (const [key, want] of [
+        ["candidates", 1], ["applications", 1], ["interviews", 1], ["scorecards", 1],
+        ["scorecardRatings", 1], ["offers", 1], ["qualifications", 1], ["compStatements", 1],
+        ["surveyInvitations", 1], ["surveyResponses", 1], ["clockEvents", 1], ["addresses", 1],
+        ["contacts", 1], ["processSteps", 1], ["employeeRoles", 1], ["reportingRelationships", 1],
+        ["feedback", 3], ["oneOnOnes", 1], ["oneOnOneItems", 1], ["successionPlans", 1],
+        ["documentSigners", 1], ["entitlementMovements", 1], ["entitlementPlanLimits", 1],
+        ["crewTimeBatchLines", 1], ["timesheetWeeks", 1], ["fieldTicketLaborLines", 1],
+        ["employeePayComponents", 1], ["openingBalances", 1], ["openingProgramBases", 1], ["openingAccountBases", 1],
+        ["priorStubs", 1], ["retroSettlements", 1], ["parallelFindings", 1], ["anomalyFlags", 1],
+        ["runAdjustments", 1], ["holidayAssertions", 1], ["laborCostRates", 1], ["workSchedules", 1],
+        ["goals", 1], ["reviews", 1], ["reviewAnswers", 1],
+        ["benefitProgramMemberships", 1], ["benefitAwards", 1], ["benefitAwardEvents", 1],
+      ] as const) {
+        assert.equal(
+          (manifest as unknown as Record<string, unknown[]>)[key]?.length,
+          want,
+          `${key} must carry the seeded row`,
+        );
+      }
+      const priorIds = manifest.priorExports.map((e) => e.id);
+      assert.equal(manifest.benefitAwards[0]?.value, "25.0100");
+      assert.equal(manifest.benefitAwards[0]?.program_name, "Annual sharing");
+      assert.deepEqual(manifest.benefitAwards[0]?.evidence, { kind: "incentive-settlement", programRevision: 1 });
+      assert.doesNotMatch(JSON.stringify(manifest), /PRIVATE_FINANCIAL_SOURCE|PRIVATE_POOL|postingFacts|percentRate/,
+        "personal exports exclude employer financial measurements and allocation policy");
+      assert.ok(priorIds.includes(prior.id), "the ledger carries the earlier export, never its bytes");
+      assert.deepEqual(manifest.taxCertificates.map((c) => c.certificate_key), ["ca_td1_ON"]);
+      const profile = manifest.payrollProfiles[0] ?? {};
+      assert.equal(profile.sin_last3, "123");
+      assert.ok(!("sin_encrypted" in profile), "the sealed SIN envelope is never exported");
+      assert.equal(profile.es_contrato_temporal, "false");
+      assert.equal(profile.br_salario_familia_filhos, 2);
+      assert.deepEqual(manifest.workLocationAllocations.map((r) => r.region), ["ON"]);
+      assert.deepEqual(manifest.roeSeparationEvents.map((r) => r.status), ["confirmed"]);
+      assert.deepEqual(manifest.roeSeparationPayments.map((r) => r.amount), ["2500.0000"]);
+      assert.deepEqual(manifest.itAddizionaliOpeningBalances.map((r) => r.tax_year), [2025]);
+      const gathered = new Map(manifest.manifest.gathered.map((g) => [g.module, g.status]));
+      for (const module of ["recruiting", "qualifications", "statements", "surveys", "clock_events", "exports"]) {
+        assert.equal(gathered.get(module), "included", `${module} must be gathered`);
+      }
+      assert.ok(
+        manifest.manifest.excluded.some((e) => e.table === "worker_clock_pins" && e.reason.length > 0),
+        "the manifest names the reviewed exclusions",
       );
-    }
-    const priorIds = manifest.priorExports.map((e) => e.id);
-    assert.equal(manifest.benefitAwards[0]?.value, "25.0100");
-    assert.equal(manifest.benefitAwards[0]?.program_name, "Annual sharing");
-    assert.deepEqual(manifest.benefitAwards[0]?.evidence, { kind: "incentive-settlement", programRevision: 1 });
-    assert.doesNotMatch(JSON.stringify(manifest), /PRIVATE_FINANCIAL_SOURCE|PRIVATE_POOL|postingFacts|percentRate/,
-      "personal exports exclude employer financial measurements and allocation policy");
-    assert.ok(priorIds.includes(prior.id), "the ledger carries the earlier export, never its bytes");
-    assert.deepEqual(manifest.taxCertificates.map((c) => c.certificate_key), ["ca_td1_ON"]);
-    const profile = manifest.payrollProfiles[0] ?? {};
-    assert.equal(profile.sin_last3, "123");
-    assert.ok(!("sin_encrypted" in profile), "the sealed SIN envelope is never exported");
-    assert.equal(profile.es_contrato_temporal, "false");
-    assert.equal(profile.br_salario_familia_filhos, 2);
-    assert.deepEqual(manifest.workLocationAllocations.map((r) => r.region), ["ON"]);
-    assert.deepEqual(manifest.roeSeparationEvents.map((r) => r.status), ["confirmed"]);
-    assert.deepEqual(manifest.roeSeparationPayments.map((r) => r.amount), ["2500.0000"]);
-    assert.deepEqual(manifest.itAddizionaliOpeningBalances.map((r) => r.tax_year), [2025]);
-    const gathered = new Map(manifest.manifest.gathered.map((g) => [g.module, g.status]));
-    for (const module of ["recruiting", "qualifications", "statements", "surveys", "clock_events", "exports"]) {
-      assert.equal(gathered.get(module), "included", `${module} must be gathered`);
-    }
-    assert.ok(
-      manifest.manifest.excluded.some((e) => e.table === "worker_clock_pins" && e.reason.length > 0),
-      "the manifest names the reviewed exclusions",
-    );
-    const listing = execFileSync("unzip", ["-l", path], { encoding: "utf8" });
-    assert.match(listing, /statements\//);
-    assert.match(listing, /clock-photos\//);
+      const listing = execFileSync("unzip", ["-l", path], { encoding: "utf8" });
+      assert.match(listing, /statements\//);
+      assert.match(listing, /clock-photos\//);
+    });
   } finally {
     await dropScratchOrg(h.org.orgId);
   }

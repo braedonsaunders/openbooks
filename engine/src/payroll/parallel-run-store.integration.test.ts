@@ -24,6 +24,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents, seedHiredEmployee } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { grantPermissions } from "../testing/hrm-harness.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -67,6 +68,7 @@ async function seedEarningComponent(orgId: string, code: string): Promise<string
 async function importFixture(): Promise<ImportFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await grantPermissions(org.orgId, actorId, ["payroll.manage"]);
   const [salaryId, bonusId] = [
     await seedEarningComponent(org.orgId, "SALARY"),
     await seedEarningComponent(org.orgId, "BONUS"),
