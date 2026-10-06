@@ -16,6 +16,7 @@ import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
 import { requirePayrollFeature } from "./feature-gate.ts";
 import { US_STATES } from "./us/rates.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { annualPeriodOpeningBounds, assertAnnualPeriodOpeningBounds } from './period-opening-bounds.ts';
 
 function openingSubsidiaryScopeFilter(
   column: SQL,
@@ -1079,6 +1080,7 @@ export async function saveOpeningBalances(input: {
       storedSuiByRow.set(row.opening_balance_id, amounts);
     }
 
+    const periodBounds = await annualPeriodOpeningBounds(tx, input.orgId, employeeIds, year);
     const seen = new Set<string>();
     const planned: {
       employeePartyId: string;
@@ -1224,9 +1226,14 @@ export async function saveOpeningBalances(input: {
             );
           }
         }
+        const admittedPeriod = periodBounds.get(row.employeePartyId);
+        if (admittedPeriod) assertAnnualPeriodOpeningBounds({ bounds: admittedPeriod, programs,
+          annualColumns: Object.fromEntries(OPENING_BALANCE_FIELDS.map((field) => [field.column, amounts[field.key]!])),
+          columnLabels: Object.fromEntries(OPENING_BALANCE_FIELDS.map((field) => [field.column, field.label])),
+        });
         planned.push({
           employeePartyId: row.employeePartyId,
-          amounts: isEmptyOpeningBalance(amounts, components, programs, suiStates, accountBases) ? null : amounts,
+          amounts: !admittedPeriod && isEmptyOpeningBalance(amounts, components, programs, suiStates, accountBases) ? null : amounts,
           components,
           programs,
           suiStates,

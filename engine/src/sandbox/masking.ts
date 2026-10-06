@@ -323,6 +323,8 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // Participant observations and feedback can contain personal or medical information.
   { tableName: "hrm_training_participants", columnName: "notes", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "name", transform: "redact" },
+  { tableName: 'payroll_period_openings', columnName: 'source_reference', transform: 'redact' },
+  { tableName: 'payroll_period_openings', columnName: 'reason', transform: 'redact' },
   { tableName: "payroll_compensation_packages", columnName: "description", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "reason", transform: "redact" },
   { tableName: "payroll_compensation_versions", columnName: "definition", transform: "null_out" },

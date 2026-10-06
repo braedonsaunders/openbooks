@@ -69,6 +69,7 @@ export * from "./qbd";
 export * from "./psp-settlements";
 export * from "./income-tax";
 export * from "./payroll";
+export * from "./payroll-period-openings";
 export * from "./payroll-entitlements";
 export * from "./work-schedules";
 export * from "./leases";
