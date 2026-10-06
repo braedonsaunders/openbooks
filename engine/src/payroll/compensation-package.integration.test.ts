@@ -481,6 +481,7 @@ test('approved packages calculate and post natively only after changed employmen
     await seedEnabledPayrollConfiguration(f.org.orgId, { wageExpenseAccountId:wageExpense,burdenExpenseAccountId:burdenExpense,
       netPayAccountId:netPayable,cppPayableAccountId:craPayable,eiPayableAccountId:craPayable,taxPayableAccountId:craPayable,
       vacationPayableAccountId:vacationPayable,wagesTo:'expense' });
+    await setFeatures(f.org.orgId, { compensationPackages: true });
     await seedCanadianPayrollComponentsForTest(f.org.orgId,f.authorId);
     await seedVacationTerms(f.org.orgId,f.employmentId,f.authorId);
     await seedPayrollWage(f.org.orgId,f.workerPartyId,f.authorId, { currency:'CAD',rate:'25',basis:'hour',effectiveFrom:'2026-01-01' });
