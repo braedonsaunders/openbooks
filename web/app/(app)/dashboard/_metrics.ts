@@ -479,6 +479,12 @@ export async function loadDashboardMetrics(
    */
   widgetIds: readonly string[] = Object.keys(WIDGETS),
   readers: DashboardMoneyReaders = canonicalMoneyReaders,
+  /**
+   * Request locale for the cash position's week labels (chart-cash-forecast
+   * renders them). Defaults to en-US like the position reader — direct
+   * callers without a request scope keep the historical labels.
+   */
+  locale = 'en-US',
 ): Promise<DashboardMetrics> {
   const orgId = authz.user.orgId
   const userId = authz.user.id
@@ -537,6 +543,7 @@ export async function loadDashboardMetrics(
           subIds,
           authz.allowedSubsidiaryIds,
           subIds === undefined,
+          locale,
         ),
       ))
   // The staffing pulse reads the resourcing cockpit loader — the same vitals
