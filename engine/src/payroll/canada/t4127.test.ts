@@ -3,7 +3,7 @@
  *
  * Every row is either a figure the CRA publishes (the Chapter 8 claim-code
  * K1/K1P columns) or a full stub hand-worked through the guide's formulas
- * (round at each parenthesis), independent of the engine code. Rows differ by
+ * (retain annual credit precision), independent of the engine code. Rows differ by
  * year and edition; one loop prices them all.
  */
 import assert from "node:assert/strict";
@@ -14,7 +14,7 @@ import "../packs.ts";
 import { unfilledPaths } from "../unfilled.ts";
 import { computeCaStatutory } from "./compute-statutory.ts";
 import { calculateT4127, periodTaxLegs, type T4127Input, type T4127Result } from "./t4127.ts";
-import { U } from "../../money/payroll-decimal.ts";
+import { D, r2, U } from "../../money/payroll-decimal.ts";
 import { RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate, type Province } from "./rates.ts";
 import { RATES_2024_JAN } from "./rates-2024.ts";
 import { RATES_2025_JAN, RATES_2025_JUL } from "./rates-2025.ts";
@@ -29,6 +29,8 @@ interface Golden {
   /** Trace factors; null asserts the factor is absent. */
   expectedFactors?: Record<string, string | null>;
   citation: string;
+  /** Published credit columns display cents; calculation factors retain four places. */
+  tabulatedCredits?: boolean;
 }
 
 const ED = {
@@ -46,7 +48,7 @@ const federalK1 = (year: number, edition: Edition, payDate: string, k1s: string[
     year, label: `federal CC${i + 1} K1 (${edition}th ed.)`, citation: `${ED[edition]} Table 8.9`,
     input: { payDate, province: "ON", periodsPerYear: 26, income: "1.00", federalClaimCode: i + 1,
       provincialClaimCode: 0, cppExempt: true, eiExempt: true },
-    expectedFactors: { K1 },
+    expectedFactors: { K1 }, tabulatedCredits: true,
   }));
 
 /** Provincial claim-code endpoints: published TCP and K1P per jurisdiction. */
@@ -57,7 +59,7 @@ const provincialK1P = (
   citation: `${ED[edition]} Chapter 8 ${province} claim codes`,
   input: { payDate, province, periodsPerYear: 26, income: "1.00", federalClaimCode: 0,
     provincialClaimCode: code, cppExempt: true, eiExempt: true },
-  expectedFactors: { TCP, K1P },
+  expectedFactors: { TCP, K1P }, tabulatedCredits: true,
 }));
 
 const cc1 = { federalClaimCode: 1, provincialClaimCode: 1 } as const;
@@ -154,16 +156,16 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2024-02-13", ...on26, income: "2000.00" },
     expected: { cpp: "110.99", cpp2: "0.00", ei: "33.20", eiEmployer: "46.48", periodicTax: "272.33" },
     // K2 = 0.15 × 2400.74 + 0.15 × 863.20; V2 = min(600, 450 + 0.25 × 3515.10); S = 0 as 2 × 286 < T4.
-    expectedFactors: { F5: "18.6538", A: "51515.0012", K1: "2355.75", K2: "489.59", K4: "214.95",
-      T3: "4666.9602", T1: "4666.9602", K1P: "626.15", K2P: "164.83", T4: "1813.6426", V1: "0.00",
-      V2: "600.00", S: "0.00", T2: "2413.6426" } },
+    expectedFactors: { F5: "18.6538", A: "51515.0012", K1: "2355.75", K2: "489.5913", K4: "214.95",
+      T3: "4666.9589", T1: "4666.9589", K1P: "626.1495", K2P: "164.8291", T4: "1813.6440", V1: "0.00",
+      V2: "600.00", S: "0.00", T2: "2413.6440" } },
   { year: 2024, label: "PEI biweekly $2,500, claim code 1 (new five-bracket system, no surtax)",
     citation: `hand-worked, ${ED[119]}`,
     input: { payDate: "2024-03-14", province: "PE", periodsPerYear: 26, ...cc1, income: "2500.00" },
     expected: { cpp: "140.74", ei: "41.50", eiEmployer: "58.10", periodicTax: "489.29" },
     // EI annualizes past the 1049.12 maximum: K2 = 0.15 × 3044.24 + 0.15 × 1049.12.
-    expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2355.75", K2: "614.01", T3: "6941.2152",
-      K1P: "1302.75", K2P: "395.01", T4: "5780.3427", V1: "0.00", T2: "5780.3427" } },
+    expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2355.75", K2: "614.0043", T3: "6941.2209",
+      K1P: "1302.75", K2P: "395.0094", T4: "5780.3433", V1: "0.00", T2: "5780.3433" } },
   { year: 2024, label: "Manitoba high earner keeps the flat BPA (BPAMB phase-out starts 2025)",
     citation: `hand-worked, ${ED[119]}`,
     input: { payDate: "2024-03-14", province: "MB", periodsPerYear: 26, income: "11538.46" },
@@ -175,8 +177,8 @@ const GOLDENS: Golden[] = [
   { year: 2025, label: "Manitoba biweekly $2,500, claim code 1", citation: `hand-worked, ${ED[120]}`,
     input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, ...cc1, income: "2500.00" },
     expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.68" },
-    expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2419.35", K2: "616.54", K4: "220.65",
-      T3: "6786.3852", T1: "6786.3852", K1P: "1724.65", K2P: "443.91", T4: "5113.5277", T2: "5113.5277" } },
+    expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2419.35", K2: "616.5363", K4: "220.65",
+      T3: "6786.3889", T1: "6786.3889", K1P: "1724.6520", K2P: "443.9061", T4: "5113.5296", T2: "5113.5296" } },
   { year: 2025, label: "Manitoba no-TD1 default uses the January BPAMB", citation: `hand-worked, ${ED[120]}`,
     input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, income: "2500.00" },
     expectedFactors: { TCP: "15969.00", TC: "16129.00" } },
@@ -186,15 +188,15 @@ const GOLDENS: Golden[] = [
   { year: 2025, label: "Alberta biweekly $3,000, claim code 1", citation: `hand-worked, ${ED[121]}`,
     input: { payDate: "2025-08-14", province: "AB", periodsPerYear: 26, ...cc1, income: "3000.00" },
     expected: { cpp: "170.49", ei: "49.20", eiEmployer: "68.88", periodicTax: "490.14" },
-    // CPP base share 3687.74 caps at 3356.10; EI annualizes past 1077.48.
-    expectedFactors: { F5: "28.6538", A: "77255.0012", K1: "2258.06", K2: "620.70", K4: "205.94",
-      T3: "9023.5752", K1P: "1339.38", K2P: "266.02", K5P: "0.00", T4: "3720.1001" } },
+    // Annual CPP credit caps at 3356.10; EI annualizes past 1077.48.
+    expectedFactors: { F5: "28.6538", A: "77255.0012", K1: "2258.06", K2: "620.7012", K4: "205.94",
+      T3: "9023.5740", K1P: "1339.38", K2P: "266.0148", K5P: "0.00", T4: "3720.1053" } },
   { year: 2025, label: "Alberta July K5P supplemental credit (provincial claim 60,000)",
     citation: `hand-worked, ${ED[121]}`,
     input: { payDate: "2025-08-14", province: "AB", periodsPerYear: 26, federalClaimCode: 1,
       provincialClaim: "60000.00", income: "3000.00" },
-    // K5P = (3600.00 + 266.02 − 3600) × 0.666667 = 177.3466… → 177.35.
-    expected: { periodicTax: "396.37" }, expectedFactors: { K5P: "177.35", T4: "1282.1301" } },
+    // K5P = (3600.00 + 266.0148 − 3600) × (2/3) = 177.3432.
+    expected: { periodicTax: "396.37" }, expectedFactors: { K5P: "177.3432", T4: "1282.1421" } },
   nsPhaseOut("2025-01-30", "10244.00", 120),
   nsPhaseOut("2025-07-30", "11744.00", 121),
 
@@ -204,24 +206,24 @@ const GOLDENS: Golden[] = [
     expected: { cpp: "110.99", cpp2: "0.00", ei: "32.60", eiEmployer: "45.64", f5: "18.65",
       periodicTax: "254.83", totalTax: "254.83" },
     // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45) + 0.14 × min(26 × 32.60, 1123.07).
-    expectedFactors: { A: "51515.0012", K2: "454.76", T3: "4243.9202", T1: "4243.9202", T4: "1781.5276",
-      V2: "600.00", T2: "2381.5276" } },
+    expectedFactors: { A: "51515.0012", K2: "454.7678", T3: "4243.9124", T1: "4243.9124", T4: "1781.5218",
+      V2: "600.00", T2: "2381.5218" } },
   { year: 2026, label: "Ontario biweekly $2,000 with a $28.85 labour-sponsored funds credit (capped at $750/yr)",
     citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", ...on26, income: "2000.00", labourFundsCreditFederal: "28.85" },
-    expected: { periodicTax: "225.98" }, expectedFactors: { T1: "3493.9202" } },
+    expected: { periodicTax: "225.98" }, expectedFactors: { T1: "3493.9124" } },
   { year: 2026, label: "BC biweekly $2,000, claim code 1, June", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-06-15", province: "BC", periodsPerYear: 26, ...cc1, income: "2000.00" },
-    expected: { edition: 122, periodicTax: "232.60" }, expectedFactors: { T4: "1803.5551" } },
+    expected: { edition: 122, periodicTax: "232.60" }, expectedFactors: { T4: "1803.5594" } },
   { year: 2026, label: "BC biweekly $2,000, claim code 1, July (prorated deduction)",
     citation: `hand-worked, ${ED[123]}`,
     input: { payDate: "2026-07-15", province: "BC", periodsPerYear: 26, ...cc1, income: "2000.00" },
-    expected: { edition: 123, periodicTax: "246.68" }, expectedFactors: { T4: "2169.7451" } },
+    expected: { edition: 123, periodicTax: "246.68" }, expectedFactors: { T4: "2169.7446" } },
   { year: 2026, label: "CPP annual maximum and CPP2 band boundary", citation: `hand-worked, ${ED[123]}`,
     input: { payDate: "2026-11-06", province: "AB", periodsPerYear: 52, ...cc1, income: "3000.00",
       ytd: { cpp: "4200.00", pensionable: "73000.00" } },
     // C2: W = max(73,000, 74,600) = 74,600; band 76,000 − 74,600 = 1,400 → 0.04 × 1,400.
-    expected: { cpp: "30.45", cpp2: "56.00", cppEmployer: "86.45" }, expectedFactors: { K2: "649.95" } },
+    expected: { cpp: "30.45", cpp2: "56.00", cppEmployer: "86.45" }, expectedFactors: { K2: "649.9528" } },
   { year: 2026, label: "EI annual maximum stops the premium at the cap", citation: `hand-worked, ${ED[123]}`,
     input: { payDate: "2026-11-06", province: "AB", periodsPerYear: 52, ...cc1, income: "3000.00",
       ytd: { ei: "1120.00" } },
@@ -248,12 +250,12 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2026-01-30", province: "AB", periodsPerYear: 12, provincialClaimCode: 1,
       income: "20000.00" },
     // BPAF = 16452 − (237,635.04 − 181,440) × 1623/77042 = 15,268.17.
-    expectedFactors: { TC: "15268.17", K1: "2137.54" } },
+    expectedFactors: { TC: "15268.17", K1: "2137.5438" } },
   { year: 2026, label: "Quebec employment: QPP + QPIP + 16.5% abatement, no provincial T2",
     citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00" },
     expected: { cpp: "117.52", ei: "26.00", qpip: "8.60", qpipEmployer: "12.04" },
-    expectedFactors: { T2: null, T3: "4212.8694", T1: "3517.7459" } },
+    expectedFactors: { T2: null, T3: "4212.8630", T1: "3517.7406" } },
   { year: 2026, label: "QPIP prices off its own insurable base below the EI leg", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00",
       insurable: "2000.00", qpipInsurable: "1500.00" },
@@ -285,12 +287,12 @@ const GOLDENS: Golden[] = [
   { year: 2026, label: "Alberta K5P supplemental credit (provincial claim 60,000)", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-01-30", province: "AB", periodsPerYear: 26, federalClaimCode: 1,
       provincialClaim: "60000.00", income: "8000.00" },
-    // K5P = (0.08 × 60000 + 371.41 − 4896) × 0.25.
-    expectedFactors: { K5P: "68.85" } },
+    // K5P = (0.08 × 60000 + 371.4016 − 4896) × 0.25.
+    expectedFactors: { K5P: "68.8504" } },
   { year: 2026, label: "outside Canada (ZZ): 48% federal surtax, no provincial tax",
     citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", province: "ZZ", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00" },
-    expectedFactors: { T3: "4243.9202", T1: "6281.0019", T2: null } },
+    expectedFactors: { T3: "4243.9124", T1: "6280.9904", T2: null } },
   { year: 2026, label: "tiny weekly income yields no negative deductions", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00" },
     // Below the $67.30 weekly CPP exemption; EI is first-dollar.
@@ -302,7 +304,7 @@ const GOLDENS: Golden[] = [
     citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-01-15", ...on26, cppMonths: 1, income: "2000.00" },
     // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45/12) + 0.14 × 847.60: prorated, not zeroed.
-    expected: { cpp: "110.99", periodicTax: "270.27" }, expectedFactors: { K2: "159.72" } },
+    expected: { cpp: "110.99", periodicTax: "270.27" }, expectedFactors: { K2: "159.7243" } },
   // Ontario surtax is strictly above its $5,818 / $7,446 thresholds.
   { year: 2026, label: "Ontario surtax: T4 exactly on the first threshold", citation: `hand-worked, ${ED[122]}`,
     input: { ...onSurtax, income: "3374.5271" }, expectedFactors: { T4: "5818.00", V1: "0.00" } },
@@ -324,10 +326,37 @@ for (const row of GOLDENS) {
       assert.equal(result[key as ResultKey], money(want), where(key));
     }
     for (const [key, want] of Object.entries(row.expectedFactors ?? {})) {
-      assert.equal(result.factors[key], money(want), where(key));
+      const actual = row.tabulatedCredits && (key === "K1" || key === "K1P")
+        ? D(r2(U(result.factors[key]!))) : result.factors[key];
+      assert.equal(actual, money(want), where(key));
     }
   });
 }
+
+
+test("annual provincial credits retain precision through the low-income reduction", () => {
+  // T4127 Chapter 4: K1P = 12989 × .0505 = 655.9445. The K2P terms
+  // retain their annual rate-ratio precision; rounding these credits before
+  // applying Ontario's reduction changes the eventual period deduction.
+  for (const [income, insurable, cppWithheld, eiWithheld, K2P, provincial, total] of [
+    ["394.25", "388.64", "23.46", "6.33", "67.8746", "0.38", "3.07"],
+    ["410.60", "381.76", "20.43", "6.22", "60.9662", "3.36", "8.78"],
+  ]) {
+    const result = calculateT4127({ payDate: "2026-01-09", province: "ON", periodsPerYear: 52,
+      ...cc1, income, insurable, cppWithheld, eiWithheld });
+    assert.equal(result.factors.K1P, "655.9445");
+    assert.equal(result.factors.K2P, K2P);
+    assert.equal(result.factors.TP, money(provincial));
+    assert.equal(result.totalTax, money(total));
+  }
+});
+
+test("the supplemental Alberta credit keeps the published repeating rate ratio", () => {
+  const result = calculateT4127({ payDate: "2025-08-14", province: "AB", periodsPerYear: 26,
+    federalClaimCode: 1, provincialClaim: "90000.00", income: "3000.00" });
+  // (5400 + 266.0148 - 3600) × 2/3, not a six-place approximation.
+  assert.equal(result.factors.K5P, "1377.3432");
+});
 
 test("a reduced employer EI multiple prices the employee premium times the multiple", () => {
   // The 2024 Ontario biweekly $2,000 hand-worked stub prices EI 33.20 and

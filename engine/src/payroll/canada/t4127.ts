@@ -8,7 +8,8 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
  * V1, V2, S, TB…) and its rounding rule: the guide rounds the deductions
  * themselves (CPP, EI, the per-period tax) half-up to the cent and nothing
  * in between, so F5, A and the annual tax keep full precision while the
- * credits (K values) stay the cent amounts CRA tabulates; rate ratios are
+ * annual credits retain unit precision; the printed credit tables are display
+ * amounts, not intermediate rounding instructions. Rate ratios are
  * never rounded; the CPP per-period exemption truncates. Rounding F5 per
  * period and annualizing it moved withholding by a cent on about one
  * paycard in twenty against bureau payroll. All arithmetic is exact bigint via
@@ -315,7 +316,7 @@ function cppExemptionForP(periods: number): bigint {
 
 /** Statutory credit share of C (base CPP via the unrounded rate ratio). */
 function baseShare(amount: bigint, plan: PensionPlanRates): bigint {
-  return mulRatioCents(amount, rate6(plan.baseRate), rate6(plan.totalRate));
+  return mulRatioUnits(amount, rate6(plan.baseRate), rate6(plan.totalRate));
 }
 
 export function calculateT4127(input: T4127Input): T4127Result {
@@ -472,7 +473,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
   trace("TC", TC); trace("TCP", TCP);
 
   // ---- K2 credits (base CPP + EI [+ QPIP], at the lowest rate) -------------
-  const maxBaseProrated = mulRatioCents(U(plan.maxBase), BigInt(PM), 12n);
+  const maxBaseProrated = mulRatioUnits(U(plan.maxBase), BigInt(PM), 12n);
   const k2Ytd = input.k2Method === "ytd";
   const PR = input.periodsRemaining ?? P;
   let cppCreditBasis: bigint;
@@ -480,17 +481,17 @@ export function calculateT4127(input: T4127Input): T4127Result {
   if (averaging) {
     const projectedPe=project(PI-opt(input.pensionableNonPeriodic)+U(averaging.pensionablePeriodic))+U(averaging.pensionableNonPeriodic);
     const projectedIe=project(IE-opt(input.insurableNonPeriodic)+U(averaging.insurablePeriodic))+U(averaging.insurableNonPeriodic);
-    cppCreditBasis=input.cppExempt||PM===0?ZERO:bmin(maxBaseProrated,mulRateCents(max0(projectedPe-mulRatioCents(U("3500"),BigInt(PM),12n)),plan.baseRate));
-    eiCreditBasis=input.eiExempt?ZERO:bmin(eiMax,mulRateCents(max0(projectedIe),eiRate));
+    cppCreditBasis=input.cppExempt||PM===0?ZERO:bmin(maxBaseProrated,mulRateUnits(max0(projectedPe-mulRatioUnits(U("3500"),BigInt(PM),12n)),plan.baseRate));
+    eiCreditBasis=input.eiExempt?ZERO:bmin(eiMax,mulRateUnits(max0(projectedIe),eiRate));
   } else if (k2Ytd) {
-    // (D × base/total) + (PR × C × base/total): two parentheses, each rounded once.
+    // Keep both annual credit terms at unit precision; neither is a withheld contribution.
     cppCreditBasis = bmin(
       maxBaseProrated,
       baseShare(priorCpp, plan) + baseShare(mulInt(creditCpp, PR), plan),
     );
     eiCreditBasis = bmin(eiMax, priorEi + mulInt(creditEi, PR));
   } else {
-    // (P × C × base/total): one parenthesis — multiply through, round once.
+    // Annualize the withheld contribution before applying the unrounded base-rate ratio.
     const maxReached = priorCpp + creditCpp >= maxTotalProrated && maxTotalProrated > ZERO;
     cppCreditBasis = input.cppExempt || PM === 0
       ? ZERO
@@ -499,11 +500,11 @@ export function calculateT4127(input: T4127Input): T4127Result {
     eiCreditBasis = input.eiExempt ? ZERO : eiMaxReached ? eiMax : bmin(mulInt(creditEi, P), eiMax);
   }
   const projectedQpip=averaging?project((input.qpipInsurable===undefined?IE:U(input.qpipInsurable))-opt(input.qpipNonPeriodic)+U(averaging.qpipPeriodic))+U(averaging.qpipNonPeriodic):ZERO;
-  const qpipCreditBasis = isQuebec ? bmin(averaging?mulRateCents(max0(projectedQpip),rates.qpip.employeeRate):mulInt(creditQpip,P), U(rates.qpip.maxEmployee)) : ZERO;
+  const qpipCreditBasis = isQuebec ? bmin(averaging?mulRateUnits(max0(projectedQpip),rates.qpip.employeeRate):mulInt(creditQpip,P), U(rates.qpip.maxEmployee)) : ZERO;
 
   function k2At(lowestRate: string): bigint {
-    let credit = mulRateCents(cppCreditBasis, lowestRate) + mulRateCents(eiCreditBasis, lowestRate);
-    if (isQuebec) credit += mulRateCents(qpipCreditBasis, lowestRate);
+    let credit = mulRateUnits(cppCreditBasis, lowestRate) + mulRateUnits(eiCreditBasis, lowestRate);
+    if (isQuebec) credit += mulRateUnits(qpipCreditBasis, lowestRate);
     return credit;
   }
 
@@ -521,20 +522,20 @@ export function calculateT4127(input: T4127Input): T4127Result {
         (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0))
     : ZERO;
 
-  // The guide rounds only the deduction itself. The credits (K values) are
-  // the cent amounts CRA tabulates; everything built from A (bracket
-  // products, T1–T4, surtax, health premium) keeps full unit precision, and
-  // only the per-period legs round to the cent.
+  // T4127 Chapter 1 rounds the pay-period deduction, not the annual credit
+  // products in Chapters 4–5. Keep K values at unit precision through tax
+  // reduction and surtax; rounding the printed table values first can move
+  // a low-income provincial deduction across a half-cent boundary.
   const annualTax = (A: bigint): { t1: bigint; t2: bigint; parts: Record<string, bigint> } => {
     const parts: Record<string, bigint> = {};
     const { TC, TCP } = claimsFor(A);
     // Federal
     const fed = bracketFor(rates.federal.brackets, A);
-    const K1 = mulRateCents(TC, rates.federal.lowestRate);
+    const K1 = mulRateUnits(TC, rates.federal.lowestRate);
     const K2 = k2At(rates.federal.lowestRate);
     const K4 = bmin(
-      mulRateCents(max0(A), rates.federal.lowestRate),
-      mulRateCents(U(rates.federal.cea), rates.federal.lowestRate),
+      mulRateUnits(max0(A), rates.federal.lowestRate),
+      mulRateUnits(U(rates.federal.cea), rates.federal.lowestRate),
     );
     let T3 = max0(mulRateUnits(A, fed.rate) - U(fed.k) - K1 - K2 - K3 - K4);
     if (input.taxExempt) T3 = ZERO;
@@ -548,13 +549,16 @@ export function calculateT4127(input: T4127Input): T4127Result {
     let T2 = ZERO;
     if (prov) {
       const pb = bracketFor(prov.brackets, A);
-      const K1P = mulRateCents(TCP, prov.lowestRate);
+      const K1P = mulRateUnits(TCP, prov.lowestRate);
       const K2P = k2At(prov.lowestRate);
       const K4P = prov.hasK4p
-        ? bmin(mulRateCents(max0(A), prov.lowestRate), mulRateCents(U(rates.federal.cea), prov.lowestRate))
+        ? bmin(mulRateUnits(max0(A), prov.lowestRate), mulRateUnits(U(rates.federal.cea), prov.lowestRate))
         : ZERO;
+      const K5Basis = prov.k5p ? max0(K1P + K2P - U(prov.k5p.threshold)) : ZERO;
       const K5P = prov.k5p
-        ? mulRateCents(max0(K1P + K2P - U(prov.k5p.threshold)), prov.k5p.rate)
+        ? prov.k5p.ratio
+          ? mulRatioUnits(K5Basis, BigInt(prov.k5p.ratio.numerator), BigInt(prov.k5p.ratio.denominator))
+          : mulRateUnits(K5Basis, prov.k5p.rate)
         : ZERO;
       let T4 = max0(mulRateUnits(A, pb.rate) - U(pb.k) - K1P - K2P - K3P - K4P - K5P);
       if (input.taxExempt) T4 = ZERO;
