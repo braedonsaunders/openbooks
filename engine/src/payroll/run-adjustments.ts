@@ -5,6 +5,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { invalidateCalculatedRun } from "./run-lifecycle.ts";
+import { assertBankDepositAdjustment } from "./run-bank-input.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 
 /**
@@ -70,15 +71,15 @@ function persistAdjustmentMoney(value: unknown): string {
 /**
  * Adjustment hours persist into numeric(12,2): at most 2dp and ten whole
  * digits. Anything past 2dp was silently rounded by the column; anything
- * wider died at storage. Negative hours are refused — a correction is a
- * separate adjustment, not a sign flip smuggled into one cell.
+ * wider died at storage. Signed bank-deposit candidates are validated against
+ * their native plan before a fresh write; ordinary worked hours stay non-negative.
  */
-function persistAdjustmentHours(value: unknown): string {
+function persistAdjustmentHours(value: unknown, amount: string): string {
   const exact = canonicalDecimal(value, 2);
-  if (exact === null || exact.startsWith("-")) {
+  if (exact === null || exact.startsWith("-") && !amount.startsWith("-")) {
     throw new PayrollError("adjustment hours must be a non-negative decimal of at most 2 decimal places");
   }
-  if (exact.replace(/^[+]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) {
+  if (exact.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) {
     throw new PayrollError("adjustment hours are out of range — at most 10 whole digits fit the ledger");
   }
   return exact;
@@ -86,16 +87,20 @@ function persistAdjustmentHours(value: unknown): string {
 
 /**
  * Canonicalize API-supplied adjustment hours for the numeric(12,2) column:
- * at most 2dp, non-negative, ten whole digits. Returns null for absent input
- * (no hours) and for anything unpersistable. HTTP seams must use this — NOT
+ * at most 2dp and ten whole digits. Negative hours require a negative amount
+ * to become a deposit candidate; the writer must still validate the bank.
+ * With no amount supplied, only non-negative hours are accepted. Returns null
+ * for absent input (no hours) and for anything unpersistable. HTTP seams must use this — NOT
  * the 4dp money normalizer, which pads every value past the column scale so
  * the engine gate below rejects even whole hours.
  */
-export function canonicalAdjustmentHours(value: unknown): string | null {
+export function canonicalAdjustmentHours(value: unknown, bankDepositAmount?: unknown): string | null {
   if (value == null || value === "") return null;
   const exact = canonicalDecimal(value, 2);
-  if (exact === null || exact.startsWith("-")) return null;
-  if (exact.replace(/^[+]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) return null;
+  if (exact === null) return null;
+  const amount = canonicalDecimal(bankDepositAmount, 4);
+  if (exact.startsWith("-") && (amount === null || !amount.startsWith("-"))) return null;
+  if (exact.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) return null;
   return exact;
 }
 
@@ -198,8 +203,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
   }
   if (validateOnly && mutation.action !== "add") throw new PayrollError("adjustment preflight only supports adding a line");
   return db.transaction(async (tx) => {
-    const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; period_start: string; document_status: string; subsidiary_id: string | null }>(sql`
-      select r.run_status, r.pay_schedule_id, r.period_start::text, d.status as document_status, d.subsidiary_id
+    const runRows = (await tx.execute<{ run_status: string; run_type: string; pay_schedule_id: string; period_start: string; document_status: string; subsidiary_id: string | null }>(sql`
+      select r.run_status, r.run_type, r.pay_schedule_id, r.period_start::text, d.status as document_status, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
@@ -278,7 +283,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       const amount = persistAdjustmentMoney(mutation.amount);
       const hours = mutation.hours == null || mutation.hours === ""
         ? null
-        : persistAdjustmentHours(mutation.hours);
+        : persistAdjustmentHours(mutation.hours, amount);
       const replaceComponent = mutation.replaceComponent === true;
       const note = mutation.note ?? null;
       // Idempotent add: the key becomes the row id (the document-create
@@ -307,7 +312,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
             && prior.employee_party_id === mutation.employeePartyId
             && prior.component_id === mutation.componentId
             && normalizeMoney(prior.amount ?? "0") === amount
-            && (prior.hours ?? null) === hours
+            && canonicalAdjustmentHours(prior.hours, prior.amount) === hours
             && prior.replace_component === replaceComponent
             && (prior.note ?? null) === note;
           if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
@@ -322,6 +327,11 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
+      await assertBankDepositAdjustment(tx, { orgId, componentId: mutation.componentId, amount, hours,
+        terminationRun: run.run_type === "termination" });
+      if (hours?.startsWith("-") && !(input.reason ?? note)?.trim()) {
+        throw new PayrollError("a bank deposit needs a supporting reason — enter the source or reason in the adjustment note");
+      }
       if (validateOnly) return { changed: false, replayed: false };
       if (key != null) {
         const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`

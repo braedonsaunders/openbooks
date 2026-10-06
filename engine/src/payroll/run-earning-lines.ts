@@ -21,6 +21,7 @@ import { type Line, programApplicabilityFromExclusions, statutoryHolidayLinesFor
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 import { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";
+import { assertBankDepositAdjustment } from "./run-bank-input.ts";
 export async function appendPeriodicEarnings(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -491,12 +492,12 @@ export async function applyRunLineAdjustments(
   tx: Pick<typeof db, "execute">,
   args: {
     orgId: string; documentId: string; employeePartyId: string;
-    bonusRun: boolean; retroRun: boolean;
+    bonusRun: boolean; retroRun: boolean; terminationRun: boolean;
     country: string;
     lines: Line[];
   },
 ): Promise<ReadonlySet<string>> {
-  const { orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines } = args;
+  const { orgId, documentId, employeePartyId, bonusRun, retroRun, terminationRun, country, lines } = args;
   const replacedComponentIds = new Set<string>();
   const adjustments = (await tx.execute<Record<string, unknown>>(sql`
     select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
@@ -510,6 +511,10 @@ export async function applyRunLineAdjustments(
      order by c.sequence, a.created_at
   `));
   for (const adj of adjustments.rows) {
+    // A saved deposit must still settle through the current native bank;
+    // retiring or rebinding a plan cannot turn it into negative worked time.
+    await assertBankDepositAdjustment(tx, { orgId, componentId: String(adj.id),
+      amount: String(adj.adj_amount), hours: adj.adj_hours == null ? null : String(adj.adj_hours), terminationRun });
     // A queued provider valuation must not lose its non-cash representation
     // when its component is retired before this run is calculated.
     if (adj.payment_kind === "non_cash" && adj.is_active !== true) {

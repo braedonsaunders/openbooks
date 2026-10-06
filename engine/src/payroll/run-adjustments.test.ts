@@ -20,6 +20,12 @@ test("adjustment hours refuse over-precise, negative, and out-of-range input", (
   assert.equal(canonicalAdjustmentHours("-1"), null);
   assert.equal(canonicalAdjustmentHours("nope"), null);
   assert.equal(canonicalAdjustmentHours("12345678901"), null);
+  assert.equal(canonicalAdjustmentHours("-8", "-240"), "-8");
+  assert.equal(canonicalAdjustmentHours("-8", "240"), null);
+  assert.equal(canonicalAdjustmentHours("-8", "0"), null);
+  assert.equal(canonicalAdjustmentHours("-8", "invalid"), null);
+  assert.equal(canonicalAdjustmentHours("-7.255", "-240"), null);
+  assert.equal(canonicalAdjustmentHours("-12345678901", "-240"), null);
 });
 
 test("adjustment hours treat absent input as no hours", () => {

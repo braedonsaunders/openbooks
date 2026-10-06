@@ -31,11 +31,9 @@ interface RouteState {
 const routeState: RouteState = { ownedSubsidiaryId: 'sub-1', adjustmentCalls: [], excludedIds: [] }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = routeState
 
-// The route canonicalizes hours through the engine's real helper, so the mock
-// provides a verbatim copy of engine/src/payroll/run-adjustments.ts
-// canonicalAdjustmentHours wired to the real canonicalDecimal (pure, no
-// imports of its own). The copy is deliberate: the mock must refuse exactly
-// what the engine refuses.
+// The route canonicalizes hours through the engine's real pure helper.
+// Only the mutation boundary is doubled; bank ownership belongs to its native
+// database properties, rather than a permissive copy of the validator.
 
 const mockSources = new Map<string, string>([
   [
@@ -273,6 +271,18 @@ test('add-adjustment passes canonical hours to the engine', async () => {
   const calls = routeState.adjustmentCalls as Array<{ mutation: { hours: unknown } }>
   assert.equal(calls.length, 1)
   assert.equal(calls[0]?.mutation.hours, '7.5')
+  reset()
+  const deposit = await post(validAdd({ amount: '-240', hours: '-8.00', note: 'Overtime bank deposit' }))
+  assert.equal(deposit.status, 200)
+  const deposits = routeState.adjustmentCalls as Array<{ mutation: { hours: unknown; amount: unknown } }>
+  assert.equal(deposits.length, 1)
+  assert.equal(deposits[0]?.mutation.hours, '-8')
+  assert.equal(deposits[0]?.mutation.amount, '-240.0000')
+  reset()
+  const tooWide = await errorOf(validAdd({ amount: '-240', hours: '-12345678901' }))
+  assert.equal(tooWide.status, 422)
+  assert.match(tooWide.error, /hours is out of range/)
+  assert.equal(routeState.adjustmentCalls.length, 0)
 })
 
 // ---------------------------------------------------------------------------

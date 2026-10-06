@@ -344,6 +344,7 @@ export async function calculateStub(
   // statutory math below sees the adjusted inputs, never edited outputs.
   const replacedComponentIds = await applyRunLineAdjustments(tx, {
     orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines,
+    terminationRun: runType === "termination",
   });
 
 

@@ -16,6 +16,7 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { entitlementBalances } from "./entitlements-db.ts";
 import { validateEntitlementPlanConfiguration } from "./entitlement-plan-config.ts";
+import { mutatePayRunAdjustment, preflightPayRunAdjustment } from "./run-adjustments.ts";
 
 /**
  * Bank drawdown on ordinary runs: a plan's payout component withdraws from
@@ -298,9 +299,63 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     // Week one: 8 overtime hours banked instead of paid (cash nets to zero).
     await hours(fx, partyId, ['2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17']);
     const first = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
-    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
-      values(${fx.orgId},${first.documentId},${partyId},'line',${overtime},'240','8'),
-            (${fx.orgId},${first.documentId},${partyId},'line',${store},'-240','-8')`);
+    const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId,
+      allowedSubsidiaryIds: [fx.subsidiaryId] };
+    const depositInput = { ...input, mutation: { action: 'add' as const, employeePartyId: partyId,
+      componentId: store, amount: '-240', hours: '-8', note: 'Overtime transferred to the bank', idempotencyKey: randomUUID() } };
+    await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
+      mutation: { ...depositInput.mutation, componentId: overtime, amount: '240' } }), /non-negative/);
+    await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
+      mutation: { ...depositInput.mutation, componentId: overtime } }), /OTBANK.*no active entitlement bank/);
+    await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
+      mutation: { ...depositInput.mutation, componentId: take } }), /BANKTAKE.*BANKOT.*deposit component/);
+    await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
+      mutation: { ...depositInput.mutation, amount: '-0.001' } }), /negative cash amount/);
+    await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
+      mutation: { ...depositInput.mutation, note: '' } }), /supporting reason/);
+    await db.execute(sql`update entitlement_plans set direction='owe' where org_id=${fx.orgId} and id=${planId}`);
+    await assert.rejects(() => preflightPayRunAdjustment(depositInput), /BANKSTORE.*BANKOT.*accrued bank/);
+    await db.execute(sql`update entitlement_plans set direction='accrue' where org_id=${fx.orgId} and id=${planId}`);
+    await db.execute(sql`update pay_runs set run_type='termination' where org_id=${fx.orgId} and document_id=${first.documentId}`);
+    await assert.rejects(() => preflightPayRunAdjustment(depositInput), /BANKSTORE.*termination run.*ordinary editable run/);
+    await db.execute(sql`update pay_runs set run_type='regular' where org_id=${fx.orgId} and document_id=${first.documentId}`);
+    const conflictingPlan = randomUUID();
+    await db.execute(sql`insert into entitlement_plans(id,org_id,code,name,unit,direction,accrual_method,deposit_component_id,
+      liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${conflictingPlan},${fx.orgId},'BANKALT','Alternate overtime bank','hours','accrue','manual',${store},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await assert.rejects(() => preflightPayRunAdjustment(depositInput), /BANKSTORE.*multiple entitlement banks \(BANKALT, BANKOT\)/);
+    await db.execute(sql`delete from entitlement_plans where org_id=${fx.orgId} and id=${conflictingPlan}`);
+    assert.deepEqual(await preflightPayRunAdjustment(depositInput), { replayed: false });
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_run_adjustments
+      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`)).rows[0]!.count, 0);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log
+      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`)).rows[0]!.count, 0);
+    await mutatePayRunAdjustment({ ...input, mutation: { action: 'add', employeePartyId: partyId,
+      componentId: overtime, amount: '240', hours: '8' } });
+    assert.deepEqual(await mutatePayRunAdjustment(depositInput), { changed: true, replayed: false });
+    // A money bank retains signed cash and source hours, but its ledger unit is money.
+    const cash = await earningComponent(fx, 'BANKCASH');
+    const cashPlan = randomUUID();
+    await db.execute(sql`insert into entitlement_plans(id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+      liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${cashPlan},${fx.orgId},'CASHBANK','Banked cash','money','accrue','manual',${cash},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await mutatePayRunAdjustment({ ...input, mutation: { action: 'add', employeePartyId: partyId,
+      componentId: cash, amount: '-60', hours: '-2', note: 'Cash earnings transferred to the money bank' } });
+    // Replays keep the original input; fresh writes and calculation recheck the bank.
+    await db.execute(sql`update entitlement_plans set is_active=false where org_id=${fx.orgId} and id=${planId}`);
+    assert.deepEqual(await mutatePayRunAdjustment(depositInput), { changed: false, replayed: true });
+    await assert.rejects(() => preflightPayRunAdjustment({ ...depositInput,
+      mutation: { ...depositInput.mutation, idempotencyKey: randomUUID() } }), /BANKSTORE.*no active entitlement bank/);
+    const retired = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId });
+    assert.equal(retired.errors.length, 1);
+    assert.match(retired.errors[0]!.message, /BANKSTORE.*no active entitlement bank/);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from entitlement_ledger
+      where org_id=${fx.orgId} and plan_id=${planId}`)).rows[0]!.count, 0);
+    await db.execute(sql`update entitlement_plans set is_active=true where org_id=${fx.orgId} and id=${planId}`);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log
+      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`)).rows[0]!.count, 1);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
     const deposit = (await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text as amount,hours::text
       from entitlement_ledger where org_id=${fx.orgId} and plan_id=${planId} and kind='bank_in'`)).rows;
@@ -308,17 +363,22 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     assert.equal(deposit[0]!.amount, '8.0000');
     assert.equal(cmp(deposit[0]!.hours ?? '0', '8'), 0);
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '8.0000');
+    const cashDeposit = (await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text, hours::text
+      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${cashPlan} and kind='bank_in'`)).rows;
+    assert.equal(cashDeposit.length, 1);
+    assert.equal(cashDeposit[0]!.amount, '60.0000');
+    assert.equal(cashDeposit[0]!.hours, null);
     // Week two: 5 hours taken as cash; a further 5 would overdraw the 3 left.
     await hours(fx, partyId, ['2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24']);
     const second = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-19', periodEnd: '2026-07-25' });
-    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
-      values(${fx.orgId},${second.documentId},${partyId},'line',${take},'150','5')`);
+    await mutatePayRunAdjustment({ ...input, documentId: second.documentId, mutation: { action: 'add', employeePartyId: partyId,
+      componentId: take, amount: '150', hours: '5' } });
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId })).errors, []);
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-28'), '3.0000');
     await hours(fx, partyId, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);
     const third = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-26', periodEnd: '2026-08-01' });
-    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
-      values(${fx.orgId},${third.documentId},${partyId},'line',${take},'150','5')`);
+    await mutatePayRunAdjustment({ ...input, documentId: third.documentId, mutation: { action: 'add', employeePartyId: partyId,
+      componentId: take, amount: '150', hours: '5' } });
     const refused = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: third.documentId });
     assert.equal(refused.errors.length, 1);
     assert.match(refused.errors[0]!.message, /Banked Time Employee.*Banked overtime payout of 5.*exceeds the available 3/);

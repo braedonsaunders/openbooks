@@ -411,18 +411,18 @@ export const POST = defineRoute({
         // Hours persist into numeric(12,2): canonicalize at that scale, never
         // through the 4dp money normalizer (its padding fails the engine gate
         // for every hours value). The engine re-validates before persisting.
-        // Every malformed shape refuses by name below — same accept/refuse set
-        // as the old collapsed 'invalid
-        // adjustment', split causes.
+        // Malformed shapes refuse by name; signed bank candidates additionally
+        // need the native writer's plan and component validation.
         let hoursRaw: string | null = null
         if (hours != null && hours !== '') {
-          hoursRaw = canonicalAdjustmentHours(hours)
+          // A signed candidate still needs the writer's active-bank validation.
+          hoursRaw = canonicalAdjustmentHours(hours, amountRaw)
           if (hoursRaw === null) {
             const hoursExact = canonicalDecimal(hours, 2)
-            if (hoursExact !== null && hoursExact.startsWith('-')) {
+            if (hoursExact !== null && hoursExact.startsWith('-') && !amountRaw?.startsWith('-')) {
               return NextResponse.json({ error: `hours must not be negative — got "${suppliedValue(hours)}"; pass zero or more hours, or omit hours` }, { status: 422 })
             }
-            if (hoursExact !== null && hoursExact.replace(/^[+]/, '').split('.')[0]!.replace(/^0+/, '').length > 10) {
+            if (hoursExact !== null && hoursExact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 10) {
               return NextResponse.json({ error: `hours is out of range — at most 10 whole digits fit; got "${suppliedValue(hours)}"; enter fewer hours and try again` }, { status: 422 })
             }
             return NextResponse.json({ error: decimalNullRefusal('hours', 'a number of hours', hours, 2) }, { status: 422 })
