@@ -228,15 +228,15 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2026-11-06", province: "AB", periodsPerYear: 52, ...cc1, income: "3000.00",
       ytd: { ei: "1120.00" } },
     expected: { ei: "3.07" } },
-  // The federal (TF) and provincial (TP) period legs round separately, as
-  // bureau payroll withholds them; the period tax is their sum, a cent above
-  // rounding (T1 + T2) / 12 once.
+  // Unrounded annual credits give T1 = 5212.0183 and T2 = 2935.7756
+  // without the bonus. Dividing each by 12 and rounding the period legs
+  // gives TF = 434.33 and TP = 244.65; annual credits are not cents.
   { year: 2026, label: "bonus method: Ontario monthly $5,000 + $10,000 bonus", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, ...cc1, income: "5000.00",
       nonPeriodic: "10000.00" },
-    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.99", bonusTax: "2935.93",
-      totalTax: "3614.92" },
-    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", TF: "434.34", TP: "244.65" } },
+    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.98", bonusTax: "2935.93",
+      totalTax: "3614.91" },
+    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", K2: "649.9528", K2P: "234.4472", TF: "434.33", TP: "244.65" } },
   { year: 2026, label: "bonus flat 15% when annual income is $5,000 or less", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00",
       nonPeriodic: "400.00" },
@@ -459,14 +459,14 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
 test("a bonus never reduces the default basic personal amount of the step without it", () => {
   // No TD1 on file: BPAF phases out on each step's own net income (NI = A + HD).
   // Step 2 (A 178,255.20) sits below the 181,440 phase-out start and keeps the full
-  // 16,452, so the periodic tax only moves by the enhanced-CPP split the bonus changes;
-  // step 1 (A 237,673.60) takes the phased 15,267.36. Pricing step 2 on step 1's
+  // 16,452; its annual T1 = 32941.9792 and T2 = 20164.5673 give 2745.16 + 1680.38.
+  // Step 1 (A 237,673.60) takes the phased 15,267.36. Pricing step 2 on step 1's
   // claim would cost the periodic tax 1,184.64 × 14% / 12 ≈ 13.82 more.
   const base = { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, income: "15000.00" } as const;
   const plain = calculateT4127(base);
   const withBonus = calculateT4127({ ...base, nonPeriodic: "60000.00" });
   assert.equal(plain.periodicTax, "4424.7900");
-  assert.equal(withBonus.periodicTax, "4425.5500");
+  assert.equal(withBonus.periodicTax, "4425.5400");
   assert.equal(withBonus.bonusTax, "28997.9800");
   assert.equal(withBonus.factors.TC, "15267.3600");
 });
