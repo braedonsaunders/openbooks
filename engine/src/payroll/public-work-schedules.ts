@@ -2,6 +2,7 @@
 export {
   loadWorkSchedules,
   pickWorkSchedule,
+  scheduledHoursBetween,
   scheduledHoursPerWeek,
   type ResolvedWorkSchedule,
   type WorkScheduleScopeKeys,
