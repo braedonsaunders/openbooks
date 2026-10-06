@@ -949,6 +949,14 @@ async function loadEmployeeScope(
   };
 }
 
+/** Resolve the same employee admission used by calculation, including configured rules that owe no units. */
+export async function applicableDerivedRules(
+  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, rules: DerivedRule[],
+): Promise<{ employee: DerivedEmployeeScope; rules: DerivedRule[] }> {
+  const employee = await loadEmployeeScope(tx, orgId, employeePartyId);
+  return { employee, rules: rules.filter(rule => ruleAdmitsEmployee(rule, employee)) };
+}
+
 /**
  * The month's equipment charge lines — the second fact source, read once for
  * the WHOLE ORG rather than per employee.
@@ -1092,10 +1100,9 @@ export async function resolveDerivedEarnings(
   const { orgId, employeePartyId, periodStart, periodEnd, rules } = params;
   if (rules.length === 0) return [];
 
-  const employee = await loadEmployeeScope(tx, orgId, employeePartyId);
+  const { employee, rules: applicable } = await applicableDerivedRules(tx, orgId, employeePartyId, rules);
   // Cheap exit before any further reads: an excluded PM is excluded from every
   // rule that names their title, whatever time they booked.
-  const applicable = rules.filter((rule) => ruleAdmitsEmployee(rule, employee));
   if (applicable.length === 0) return [];
 
   const window = derivedEntryWindow(applicable, periodStart, periodEnd);

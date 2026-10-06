@@ -98,6 +98,7 @@
         "missing": "der Lauf selbst",
         "components": "Mitarbeiter-Lohnbestandteile",
         "componentDefinitions": "Lohnbestandteil-Einrichtung",
+        "compensationPackages": "genehmigte Vergütungsbedingungen",
         "derivedRules": "abgeleitete Bezugsregeln",
         "entitlements": "Lohnkonten",
         "workerComp": "Unfallversicherungs-Beitragssätze",
@@ -1410,6 +1411,29 @@
       "moneyHelp": "Der vorgetragene Saldo, in Dollar. Konten werden als das Geld gespeichert, als das es verdient wurde, und in Stunden zum aktuellen Lohn des Mitarbeiters angezeigt.",
       "hoursHelp": "Der vorgetragene Saldo, in Stunden.",
       "oweHelp": "Ein Saldo, den DER MITARBEITER dem Arbeitgeber schuldet, daher negativ — geben Sie −1200 für einen offenen Betrag von 1 200 ein. Er wird aus künftigem Lohn einbehalten, bis er genau null erreicht."
+    },
+    "period": {
+      "title": "Zeitraum beim bisherigen Anbieter",
+      "description": "Erfassen Sie Zahlungen, die Ihr bisheriger Anbieter für denselben Abrechnungszeitraum bereits geleistet hat. Diese Beträge müssen in den jährlichen Eröffnungssalden enthalten sein und erzeugen keine weitere Zahlung oder Buchung.",
+      "loadFailed": "Die Zahlungen konnten nicht geladen werden. Versuchen Sie es erneut, um den aktuellen Datensatz zu prüfen.",
+      "saveFailed": "Die Zahlungen wurden nicht gespeichert. Prüfen Sie die Ablehnung und versuchen Sie es erneut.",
+      "annualRequired": "Speichern Sie zuerst die geprüften jährlichen Eröffnungssalden im Jahreskumulator und laden Sie dann diesen Zeitraum erneut.",
+      "annualDirty": "Speichern Sie zuerst Ihre Änderungen an den jährlichen Eröffnungssalden. Laden und prüfen Sie anschließend die Beträge des Zeitraums.",
+      "loading": "Zahlungen werden geladen…",
+      "reload": "Aktuellen Datensatz neu laden",
+      "schedule": "Abrechnungsplan",
+      "chooseSchedule": "Abrechnungsplan des Mitarbeiters wählen",
+      "currency": "Währung",
+      "periodStart": "Zeitraumbeginn",
+      "periodEnd": "Zeitraumende",
+      "paidThrough": "Bisheriger Anbieter bezahlt bis",
+      "explicitZeros": "Geben Sie jeden geprüften Betrag ein, einschließlich einer ausdrücklichen 0, wenn nichts gezahlt wurde. Leere Felder gelten nicht als null.",
+      "sourceReference": "Referenz des Quelldokuments oder Registers",
+      "reason": "Grund für Erfassung oder Korrektur",
+      "preview": "Beträge prüfen",
+      "save": "Beträge speichern",
+      "previewPassed": "Prüfung erfolgreich. Zahlungen und Salden wurden nicht geändert. Prüfen Sie die Beträge vor dem Speichern.",
+      "saved": "Beträge mit Quellenbeleg gespeichert. Berechnen Sie betroffene Abrechnungsentwürfe vor der Verbuchung neu."
     }
   },
   "readiness": {

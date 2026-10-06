@@ -98,6 +98,7 @@
         "missing": "the run itself",
         "components": "employee pay components",
         "componentDefinitions": "pay component setup",
+        "compensationPackages": "approved compensation terms",
         "derivedRules": "derived earnings rules",
         "entitlements": "pay banks",
         "workerComp": "workers' compensation rates",
@@ -1410,6 +1411,29 @@
       "moneyHelp": "The balance carried in, in dollars. Banks are stored as the money they were earned at, and displayed as hours at the employee's current wage.",
       "hoursHelp": "The balance carried in, in hours.",
       "oweHelp": "A balance the EMPLOYEE owes the employer, so it is negative — enter −1200 for an outstanding 1,200. It is recouped from future pay until it reaches exactly zero."
+    },
+    "period": {
+      "title": "Prior-provider period",
+      "description": "Record payments your previous provider already made for this same pay period. These amounts must be included in annual opening balances; they do not create another payment or ledger entry.",
+      "loadFailed": "Could not load period payments. Retry to review the current record.",
+      "saveFailed": "Period payments were not saved. Review the refusal and retry.",
+      "annualRequired": "Record and save the verified annual opening balances in Year-to-date first, then reload this period.",
+      "annualDirty": "Save your annual opening-balance edits first, then reload and preview the period amounts.",
+      "loading": "Loading period payments…",
+      "reload": "Reload current record",
+      "schedule": "Payroll schedule",
+      "chooseSchedule": "Choose the employee’s payroll schedule",
+      "currency": "Currency",
+      "periodStart": "Period start",
+      "periodEnd": "Period end",
+      "paidThrough": "Previous provider paid through",
+      "explicitZeros": "Enter every verified amount, including an explicit 0 when none was paid. Blank fields are not treated as zero.",
+      "sourceReference": "Source document or register reference",
+      "reason": "Reason for recording or correcting these amounts",
+      "preview": "Preview period amounts",
+      "save": "Save period amounts",
+      "previewPassed": "Preview passed. No payments or balances were changed. Review these amounts, then save.",
+      "saved": "Period amounts saved with source evidence. Recalculate affected draft payrolls before committing."
     }
   },
   "readiness": {

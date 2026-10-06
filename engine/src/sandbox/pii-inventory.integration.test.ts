@@ -75,6 +75,12 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payroll_compensation_versions.definition_hash",
   "payroll_compensation_versions.status",
   "payroll_compensation_assignments.status",
+  // Exact statutory amounts and their declared numeric bounds contain no prose or personal identifiers.
+  'payroll_period_openings.amounts',
+  'payroll_period_openings.annual_bounds',
+  'payroll_period_openings.contract_hash',
+  'payroll_period_openings.country',
+  'payroll_period_openings.currency',
   // Training configuration codes, lifecycle states, IANA zones and content digests identify no person.
   "hrm_training_courses.code",
   "hrm_training_courses.status",

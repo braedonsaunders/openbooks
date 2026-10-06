@@ -98,6 +98,7 @@
         "missing": "el ciclo mismo",
         "components": "componentes de nómina de empleados",
         "componentDefinitions": "configuración de componentes de nómina",
+        "compensationPackages": "condiciones de remuneración aprobadas",
         "derivedRules": "reglas de percepciones derivadas",
         "entitlements": "bancos de pago",
         "workerComp": "tasas de compensación laboral",
@@ -1410,6 +1411,29 @@
       "moneyHelp": "El saldo arrastrado, en dólares. Los bancos se guardan como el dinero a la tarifa a la que se ganó, y se muestran en horas a la tarifa vigente del empleado.",
       "hoursHelp": "El saldo arrastrado, en horas.",
       "oweHelp": "Un saldo que EL EMPLEADO debe al empleador, así que es negativo — ingrese −1200 para un descubierto de 1 200. Se recupera de pagos futuros hasta llegar exactamente a cero."
+    },
+    "period": {
+      "title": "Período del proveedor anterior",
+      "description": "Registre los pagos que su proveedor anterior ya realizó para este mismo período de nómina. Estos importes deben estar incluidos en los saldos iniciales anuales y no crean otro pago ni asiento.",
+      "loadFailed": "No se pudieron cargar los pagos del período. Reintente para revisar el registro actual.",
+      "saveFailed": "Los pagos del período no se guardaron. Revise el rechazo y reintente.",
+      "annualRequired": "Guarde primero los saldos iniciales anuales verificados en Acumulado anual y vuelva a cargar este período.",
+      "annualDirty": "Guarde primero los cambios de los saldos anuales y luego vuelva a cargar y previsualizar los importes del período.",
+      "loading": "Cargando pagos del período…",
+      "reload": "Recargar el registro actual",
+      "schedule": "Calendario de nómina",
+      "chooseSchedule": "Elija el calendario de nómina del empleado",
+      "currency": "Moneda",
+      "periodStart": "Inicio del período",
+      "periodEnd": "Fin del período",
+      "paidThrough": "Proveedor anterior pagó hasta",
+      "explicitZeros": "Introduzca cada importe verificado, incluido un 0 explícito cuando no se pagó nada. Los campos vacíos no se consideran cero.",
+      "sourceReference": "Referencia del documento o registro de origen",
+      "reason": "Motivo del registro o corrección",
+      "preview": "Previsualizar importes",
+      "save": "Guardar importes",
+      "previewPassed": "Previsualización correcta. No se modificaron pagos ni saldos. Revise los importes antes de guardarlos.",
+      "saved": "Importes guardados con evidencia de origen. Recalcule las nóminas en borrador afectadas antes de contabilizarlas."
     }
   },
   "readiness": {

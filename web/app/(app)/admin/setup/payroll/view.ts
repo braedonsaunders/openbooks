@@ -11,6 +11,7 @@ import {
 import { can, requirePermission } from '../../../../../lib/authz'
 import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { notFound } from 'next/navigation'
+import { isFeatureEnabled } from '@/lib/features'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
@@ -126,10 +127,12 @@ export async function loadPayrollSetup(
   if (!requestedPackages && await guardRootSubsidiaryScope(authz)) notFound()
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
+  if (requestedPackages) await requireFeatureEnabled(orgId, 'compensationPackages')
   // A subtab backed by a registry entity only exists while that entity is
   // registered, so the workspace never links at a 404.
   const canConfigure = can(authz, 'payroll.manage') && authz.allowedSubsidiaryIds === null
-  const available = TABS.filter((key) => (canConfigure || key === 'compensation-packages') && (!isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key])))
+  const packagesEnabled = await isFeatureEnabled(orgId, 'compensationPackages')
+  const available = TABS.filter((key) => (canConfigure || key === 'compensation-packages') && (key !== 'compensation-packages' || packagesEnabled) && (!isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key])))
   const requested = pickString(sp.tab)
   // Legacy alias: readiness slot items link `?tab=<country>` (ca, us, …);
   // those slots are mapped on the accounts tab.

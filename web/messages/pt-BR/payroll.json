@@ -98,6 +98,7 @@
         "missing": "a própria folha",
         "components": "componentes de remuneração dos funcionários",
         "componentDefinitions": "cadastro de componentes de remuneração",
+        "compensationPackages": "condições de remuneração aprovadas",
         "derivedRules": "regras de proventos derivados",
         "entitlements": "bancos da folha",
         "workerComp": "alíquotas do seguro de acidentes de trabalho",
@@ -1410,6 +1411,29 @@
       "moneyHelp": "O saldo trazido, em dinheiro. Bancos guardam o dinheiro da época em que foi ganho e exibem em horas ao salário vigente do funcionário.",
       "hoursHelp": "O saldo trazido, em horas.",
       "oweHelp": "Saldo que o FUNCIONÁRIO deve ao empregador, portanto negativo — informe −1200 para 1.200 pendentes. É recuperado dos próximos pagamentos até zerar exatamente."
+    },
+    "period": {
+      "title": "Período do fornecedor anterior",
+      "description": "Registre os pagamentos que o fornecedor anterior já fez para este mesmo período da folha. Esses valores devem estar incluídos nos saldos iniciais anuais e não criam outro pagamento ou lançamento.",
+      "loadFailed": "Não foi possível carregar os pagamentos do período. Tente novamente para revisar o registro atual.",
+      "saveFailed": "Os pagamentos do período não foram salvos. Revise a recusa e tente novamente.",
+      "annualRequired": "Salve primeiro os saldos iniciais anuais verificados em Acumulado anual e recarregue este período.",
+      "annualDirty": "Salve primeiro as alterações dos saldos anuais e depois recarregue e visualize os valores do período.",
+      "loading": "Carregando pagamentos do período…",
+      "reload": "Recarregar registro atual",
+      "schedule": "Calendário da folha",
+      "chooseSchedule": "Escolha o calendário da folha do funcionário",
+      "currency": "Moeda",
+      "periodStart": "Início do período",
+      "periodEnd": "Fim do período",
+      "paidThrough": "Fornecedor anterior pagou até",
+      "explicitZeros": "Informe cada valor verificado, incluindo um 0 explícito quando nada foi pago. Campos vazios não são considerados zero.",
+      "sourceReference": "Referência do documento ou registro de origem",
+      "reason": "Motivo do registro ou correção",
+      "preview": "Visualizar valores",
+      "save": "Salvar valores",
+      "previewPassed": "Prévia validada. Nenhum pagamento ou saldo foi alterado. Revise os valores antes de salvar.",
+      "saved": "Valores salvos com evidência de origem. Recalcule as folhas em rascunho afetadas antes de contabilizá-las."
     }
   },
   "readiness": {

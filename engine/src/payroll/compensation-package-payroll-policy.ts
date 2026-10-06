@@ -76,3 +76,13 @@ export function compensationPackageNativeSettlement(definition: CompensationPack
   }
   return settlement;
 }
+
+/** Approved money must be payable in its registered currency, including every dependent rule result. */
+export function validateCompensationPackageCurrencyRounding(definition: CompensationPackageDefinition, minorUnits: number): void {
+  if (!Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    throw new PayrollError(`Currency ${definition.currency} has no supported payable precision — complete its currency registry before approving or calculating compensation packages.`);
+  }
+  for (const rule of definition.rules) if (rule.rounding.scale > minorUnits) {
+    throw new PayrollError(`Package rule ${rule.key} rounds to ${rule.rounding.scale} places, but ${definition.currency} supports ${minorUnits} — use at most ${minorUnits} decimal places; correct the draft, or approve and assign a replacement version before recalculating.`);
+  }
+}

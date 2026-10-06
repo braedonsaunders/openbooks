@@ -5,7 +5,7 @@ import { fromUnits, toUnits } from "../money/money.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PayrollError } from "./error.ts";
-import { applyBasisCaps, type BasisCapContext } from './limits.ts';
+import { applyBasisCaps, PayrollLimitError, type BasisCapContext } from './limits.ts';
 
 /** Employer component formulas and their explicit rounding policies. */
 export interface CompensationRule {
@@ -100,7 +100,7 @@ export function compensationRuleDefinitionHash(definition: CompensationRuleDefin
 }
 
 function namedRuleError(key: string, error: unknown): never {
-  if (error instanceof ExpressionError) throw new PayrollError(`Compensation rule ${JSON.stringify(key)}: ${error.message}`);
+  if (error instanceof ExpressionError || error instanceof PayrollLimitError) throw new PayrollError(`Compensation rule ${JSON.stringify(key)}: ${error.message}`);
   throw error;
 }
 
@@ -237,6 +237,7 @@ export function compileCompensationRules(
           const amountCaps = configuredCaps ? Object.freeze({
             hoursCap: configuredCaps.hoursCap ?? null, periodCap: configuredCaps.periodCap ?? null, yearCap: configuredCaps.yearCap ?? null,
             context: Object.freeze({
+              ...(Object.hasOwn(configuredCaps.context, 'currencyMinorUnits') ? { currencyMinorUnits: configuredCaps.context.currencyMinorUnits } : {}),
               ...(configuredCaps.hoursCap != null ? { lines: configuredCaps.context.lines ? Object.freeze(configuredCaps.context.lines.map(line => Object.freeze({ hours: line.hours,
                 ...(line.amount !== undefined ? { amount: line.amount } : {}), ...(line.exemptFromHoursCap !== undefined ? { exemptFromHoursCap: line.exemptFromHoursCap } : {}) }))) : undefined } : {}),
               ...(configuredCaps.periodCap != null ? { periodToDate: configuredCaps.context.periodToDate } : {}),

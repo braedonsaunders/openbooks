@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "../money/money.ts";
+import { add, cmp, mulDecimal, mulPercent, neg, normalizeMoney, roundMoney, sum } from "../money/money.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import {
@@ -620,4 +620,45 @@ test("a protection class the pack does not declare, or a floor wage nobody recor
     /Dana: Card debt order \(Ordinary creditor garnishment\) may not reach the protected base below 30 × the minimum hourly wage for garnishment protection per week, and no minimum hourly wage for garnishment protection is recorded for 2026-07-21\. Record it in Payroll Setup → Employer facts/);
   await assert.rejects(resolveProtectionExemptFloors(input(recorded("7.25"), "ca_family_support")),
     /protection class "ca_family_support", which the US payroll pack does not declare \(it declares: Ordinary creditor garnishment, Child or spousal support order\)/);
+});
+
+test('explicit currency quanta preserve payable cap room while legacy callers retain whole-cent ceilings', () => {
+  const component = { basis: 'fixed_amount' as const, basisCapAmountPerYear: '130.0099' };
+  const expected = ['29.0000', '29.8000', '29.8800', '29.8860', '29.8865'];
+  for (let currencyMinorUnits = 0; currencyMinorUnits <= 4; currencyMinorUnits++) {
+    assert.equal(applyBasisCaps(component, '100', { yearToDate: '100.1234', currencyMinorUnits }), expected[currencyMinorUnits]);
+  }
+  assert.equal(applyBasisCaps(component, '100', { yearToDate: '100.1234' }), '29.8800');
+});
+
+test('invalid explicit payable precision refuses before zero-rate or unconfigured-cap work', () => {
+  for (const currencyMinorUnits of [null, undefined, -1, 5, NaN, 1.5]) {
+    for (const component of [{ basis: 'fixed_amount' as const }, { basis: 'per_hour' as const, value: '0' }]) {
+      assert.throws(() => applyBasisCaps(component, '100', {
+        currencyMinorUnits: currencyMinorUnits as number,
+      }), /money cap needs supported currency precision.*registered payable quantum/);
+    }
+  }
+});
+
+test('exact rate inversion respects the tighter period or annual room at every supported payable quantum', () => {
+  for (const currencyMinorUnits of [0, 3, 4]) {
+    for (const basis of ['per_hour', 'percent_of_gross'] as const) {
+      for (const value of ['0.1234567891', '7.3333333333', '987654.3219876543']) {
+        for (const tighter of ['period', 'year'] as const) {
+          const periodRoom = tighter === 'period' ? '29.8865' : '49.8765';
+          const yearRoom = tighter === 'year' ? '29.8865' : '49.8765';
+          const component = { basis, value, basisCapAmountPerPeriod: add('70.1234', periodRoom),
+            basisCapAmountPerYear: add('900.0123', yearRoom) };
+          const capped = applyBasisCaps(component, '99999999', {
+            periodToDate: '70.1234', yearToDate: '900.0123', currencyMinorUnits,
+          });
+          const payable = basis === 'per_hour' ? roundMoney(mulDecimal(capped, value), currencyMinorUnits)
+            : mulPercent(capped, value, currencyMinorUnits);
+          assert.ok(cmp(payable, periodRoom) <= 0 && cmp(payable, yearRoom) <= 0,
+            `${basis} at ${value}, precision ${currencyMinorUnits}, and tighter ${tighter} cap paid ${payable} above remaining room`);
+        }
+      }
+    }
+  }
 });

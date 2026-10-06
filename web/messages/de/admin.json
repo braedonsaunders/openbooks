@@ -6247,7 +6247,7 @@
       "inputName": "Eingabename",
       "inputType": "Werttyp",
       "source": "Wertquelle",
-      "sourceHint": "Wählen Sie eine genehmigte Konstante, einen mitarbeiterspezifischen Wert oder eine native Abrechnungsangabe. Native Angaben können in Zuweisungen nicht überschrieben werden.",
+      "sourceHint": "Wählen Sie eine genehmigte Konstante, einen Mitarbeiterwert oder eine native Abrechnungsangabe. Native Angaben können nicht überschrieben werden. Verdienstregeln verwenden den Bruttobetrag vor Paketverdiensten; spätere Regeln verwenden den vollständigen Bruttobetrag. Datierte Arbeit behält ihre Daten; undatierte Periodenbeträge werden nach abgedeckten Kalendertagen verteilt.",
       "value": "Konstanter Wert",
       "minimum": "Untergrenze",
       "maximum": "Obergrenze",
@@ -6998,6 +6998,10 @@
     "hrmCompensation": {
       "title": "Vergütung",
       "description": "Stellenarchitektur und Gehaltsbänder, Leistungsrunden, kalkulierte Personalpläne und Entgelttransparenz. Leistungsrunden erfordern zusätzlich die Lohnabrechnung."
+    },
+    "compensationPackages": {
+      "title": "Vergütungspakete",
+      "description": "Optionale wiederverwendbare Vergütungspakete, genehmigte Versionen und Mitarbeiterzuordnungen. Das Deaktivieren der Bearbeitung erhält genehmigte Zahlungsverpflichtungen."
     },
     "hrmTraining": {
       "title": "Schulungen",

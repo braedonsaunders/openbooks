@@ -1,0 +1,1 @@
+This additive migration creates empty operational roster and device-attendance tables with tenant-coherent references, immutable source evidence and controlled lifecycle transitions. It changes no employment history, leave, qualifications, payroll inputs or posted financial records; supporting unique indexes cover existing primary-key identities.

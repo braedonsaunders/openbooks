@@ -6247,7 +6247,7 @@
       "inputName": "Input name",
       "inputType": "Value type",
       "source": "Value source",
-      "sourceHint": "Choose an approved constant, an employee-specific value, or a native payroll fact. Native facts cannot be overridden on assignments.",
+      "sourceHint": "Choose an approved constant, employee value or native payroll fact. Native facts cannot be overridden. Earning rules read gross before package earnings; later rules read completed gross. Dated work retains its dates; undated period amounts use covered calendar days.",
       "value": "Constant value",
       "minimum": "Minimum",
       "maximum": "Maximum",
@@ -6998,6 +6998,10 @@
     "hrmCompensation": {
       "title": "Compensation",
       "description": "Job architecture and pay bands, merit cycles, costed headcount plans, and pay transparency. Merit cycles also need Payroll."
+    },
+    "compensationPackages": {
+      "title": "Compensation packages",
+      "description": "Optional reusable employer pay packages, approved versions and employee assignments. Disabling authoring preserves approved payroll obligations."
     },
     "hrmTraining": {
       "title": "Training delivery",

@@ -1,9 +1,11 @@
+import { lockCompensationPackageConfiguration } from "./compensation-package-store.ts";
+import type { SqlExecutor } from "../platform/db.ts";
 import assert from "node:assert/strict";
-import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
+import { CompensationPackageUnavailableError, compensationPackageSchemaRefusal } from './compensation-package-error.ts';
 import test from "node:test";
 import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
 import { PayrollError } from "./error.ts";
-import { validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
+import { validateCompensationPackagePayrollPolicy, validateCompensationPackageCurrencyRounding } from './compensation-package-payroll-policy.ts';
 
 const orgId = "10000000-0000-4000-8000-000000000001";
 const componentId = "10000000-0000-4000-8000-000000000002";
@@ -105,3 +107,29 @@ test('an absent package schema names server maintenance without masking unrelate
   const cycle: { cause?: unknown } = {}; cycle.cause = cycle
   assert.equal(compensationPackageSchemaRefusal(cycle), null)
 })
+
+test('native currency precision admits zero through four payable places and refuses finer or unknown quanta', () => {
+  for (const minorUnits of [0,2,3,4]) {
+    const valid={...definition,rules:definition.rules.map(rule=>({...rule,rounding:{...rule.rounding,scale:minorUnits}}))};
+    assert.doesNotThrow(()=>validateCompensationPackageCurrencyRounding(valid,minorUnits));
+    if (minorUnits<4) assert.throws(()=>validateCompensationPackageCurrencyRounding({...valid,rules:valid.rules.map(rule=>({...rule,
+      rounding:{...rule.rounding,scale:minorUnits+1}}))},minorUnits),/rule travel.*correct the draft.*approve and assign a replacement/);
+  }
+  for (const invalid of [-1,5,NaN]) assert.throws(()=>validateCompensationPackageCurrencyRounding(definition,invalid),/CAD has no supported payable precision/);
+});
+
+test("unused pre-upgrade packages preserve payroll while adopted and partial storage refuse", async () => {
+  for (const [enabled, present, mode, expected] of [
+    [false, 0, "read", null], [true, 0, "read", "refuse"], [false, 0, "write", "refuse"],
+    [false, 1, "read", "refuse"], [false, 4, "read", "refuse"], [false, undefined, "read", "refuse"],
+    [false, 5, "read", "7"], [true, 5, "read", "7"],
+  ] as const) {
+    const responses = [[{ features: { payroll: true, compensationPackages: enabled } }], [{ present }], [{ revision: "7" }]];
+    let calls = 0;
+    const tx = { execute: async () => ({ rows: responses[calls++] ?? [] }) } as unknown as SqlExecutor;
+    const result = lockCompensationPackageConfiguration(tx, orgId, mode);
+    if (expected === "refuse") await assert.rejects(result, CompensationPackageUnavailableError);
+    else assert.equal(await result, expected);
+    assert.equal(calls, present === 5 ? 3 : 2, "absent package storage must not be queried");
+  }
+});

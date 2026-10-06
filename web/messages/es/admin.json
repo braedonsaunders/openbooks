@@ -6247,7 +6247,7 @@
       "inputName": "Nombre del dato de entrada",
       "inputType": "Tipo de valor",
       "source": "Origen del valor",
-      "sourceHint": "Elija una constante aprobada, un valor específico del empleado o un dato nativo de nómina. Las asignaciones no pueden sustituir los datos nativos.",
+      "sourceHint": "Elija una constante aprobada, un valor del empleado o un dato nativo de nómina. Los datos nativos no pueden sustituirse. Las reglas de ingresos usan el bruto anterior a los ingresos del paquete; las reglas posteriores usan el bruto completo. El trabajo fechado conserva sus fechas; los importes del período sin fecha se distribuyen por los días naturales cubiertos.",
       "value": "Valor constante",
       "minimum": "Valor mínimo",
       "maximum": "Valor máximo",
@@ -6998,6 +6998,10 @@
     "hrmCompensation": {
       "title": "Retribución",
       "description": "Arquitectura de puestos y bandas salariales, ciclos de méritos, planes de plantilla costeados y transparencia salarial. Los ciclos de méritos también requieren Nómina."
+    },
+    "compensationPackages": {
+      "title": "Paquetes de remuneración",
+      "description": "Paquetes de remuneración reutilizables, versiones aprobadas y asignaciones opcionales. Desactivar la configuración conserva las obligaciones de nómina aprobadas."
     },
     "hrmTraining": {
       "title": "Formación",
