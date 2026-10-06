@@ -141,14 +141,16 @@ export function shiftOccurrence(input: { onDate: string; timeZone: string; slot:
   return { startsAt, endsAt, startsOn: input.onDate, endsOn, timeZone, durationSeconds, plannedBreakSeconds: declared.plannedBreakSeconds, qualificationTypeIds: declared.qualificationTypeIds };
 }
 
+export interface ShiftOccurrenceSelection { readonly startsAt?: string; readonly endsAt?: string; readonly omitReason?: string }
+export interface RecurringShiftOccurrence extends ShiftOccurrence { readonly slotIndex: number }
 export function recurringShiftOccurrences(input: {
   pattern: ShiftPattern; from: string; through: string;
-  occurrences?: Readonly<Record<string, { startsAt?: string; endsAt?: string }>>;
-}): readonly ShiftOccurrence[] {
+  occurrences?: Readonly<Record<string, ShiftOccurrenceSelection>>;
+}): readonly RecurringShiftOccurrence[] {
   if (!isIsoCalendarDate(input.from) || !isIsoCalendarDate(input.through) || input.through < input.from || inclusiveCalendarDays(input.from, input.through) > 366) {
     throw new ShiftError("Shift publication needs an ordered window of at most 366 days — choose a shorter calendar range.");
   }
-  const pattern = shiftPattern(input.pattern), result: ShiftOccurrence[] = [], consumed = new Set<string>();
+  const pattern = shiftPattern(input.pattern), result: RecurringShiftOccurrence[] = [], consumed = new Set<string>();
   for (let date = input.from; date <= input.through;) {
     const position = cyclePositionOn(pattern.schedule, date);
     for (const [index, value] of pattern.slots.entries()) {
@@ -156,7 +158,14 @@ export function recurringShiftOccurrences(input: {
         const key = `${date}:${index}`;
         const selected = input.occurrences?.[key];
         consumed.add(key);
-        result.push(shiftOccurrence({ onDate: date, timeZone: pattern.timeZone, slot: value, startsAt: selected?.startsAt, endsAt: selected?.endsAt }));
+        if (selected?.omitReason !== undefined) {
+          if (typeof selected.omitReason !== "string" || !selected.omitReason.trim() || selected.omitReason.length > 2000 || selected.startsAt !== undefined || selected.endsAt !== undefined) {
+            throw new ShiftError(`Omitted occurrence ${key} needs a reason and no selected instants — explain the omission or choose its actual clock-time occurrence.`);
+          }
+          continue;
+        }
+        result.push({ ...shiftOccurrence({ onDate: date, timeZone: pattern.timeZone, slot: value, startsAt: selected?.startsAt, endsAt: selected?.endsAt }), slotIndex: index });
+        if (result.length > 10000) throw new ShiftError("Publication would exceed 10000 shifts — choose a shorter calendar window before publishing.");
       }
     }
     if (date === input.through) break;
@@ -191,12 +200,13 @@ export interface AttendanceObservation {
   readonly leftEarly: boolean | null;
   readonly evidenceHash: string;
 }
-function instant(value: unknown, name: string): number {
+export function requireShiftInstant(value: unknown, name: string): number {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || !isIsoCalendarDate(value.slice(0, 10)) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) {
     throw new ShiftError(`${name} needs an exact canonical UTC instant with milliseconds — preserve the source time zone when converting its timestamp.`);
   }
   return Date.parse(value);
 }
+const instant = requireShiftInstant;
 export function attendancePolicy(input: AttendancePolicy): AttendancePolicy {
   return {
     captureBeforeSeconds: whole(input.captureBeforeSeconds, "Capture before seconds", 12 * 3600),
