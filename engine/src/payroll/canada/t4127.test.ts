@@ -229,14 +229,14 @@ const GOLDENS: Golden[] = [
       ytd: { ei: "1120.00" } },
     expected: { ei: "3.07" } },
   // Unrounded annual credits give T1 = 5212.0183 and T2 = 2935.7756
-  // without the bonus. Dividing each by 12 and rounding the period legs
-  // gives TF = 434.33 and TP = 244.65; annual credits are not cents.
+  // without the bonus. Step 6 rounds their combined deduction to 678.99;
+  // TF = 434.33 and the provincial remainder is 244.66.
   { year: 2026, label: "bonus method: Ontario monthly $5,000 + $10,000 bonus", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, ...cc1, income: "5000.00",
       nonPeriodic: "10000.00" },
-    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.98", bonusTax: "2935.93",
-      totalTax: "3614.91" },
-    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", K2: "649.9528", K2P: "234.4472", TF: "434.33", TP: "244.65" } },
+    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.99", bonusTax: "2935.93",
+      totalTax: "3614.92" },
+    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", K2: "649.9528", K2P: "234.4472", TF: "434.33", TP: "244.66" } },
   { year: 2026, label: "bonus flat 15% when annual income is $5,000 or less", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00",
       nonPeriodic: "400.00" },
@@ -459,23 +459,27 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
 test("a bonus never reduces the default basic personal amount of the step without it", () => {
   // No TD1 on file: BPAF phases out on each step's own net income (NI = A + HD).
   // Step 2 (A 178,255.20) sits below the 181,440 phase-out start and keeps the full
-  // 16,452; its annual T1 = 32941.9792 and T2 = 20164.5673 give 2745.16 + 1680.38.
+  // 16,452; Step 6 rounds (32941.9792 + 20164.5673) / 12 to 4425.55.
   // Step 1 (A 237,673.60) takes the phased 15,267.36. Pricing step 2 on step 1's
   // claim would cost the periodic tax 1,184.64 × 14% / 12 ≈ 13.82 more.
   const base = { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, income: "15000.00" } as const;
   const plain = calculateT4127(base);
   const withBonus = calculateT4127({ ...base, nonPeriodic: "60000.00" });
   assert.equal(plain.periodicTax, "4424.7900");
-  assert.equal(withBonus.periodicTax, "4425.5400");
+  assert.equal(withBonus.periodicTax, "4425.5500");
   assert.equal(withBonus.bonusTax, "28997.9800");
   assert.equal(withBonus.factors.TC, "15267.3600");
 });
 
-test("federal and provincial tax round to the cent separately before they add", () => {
-  // 0.26 a year over 52 periods is half a cent on each leg: each leg rounds
-  // up to 0.01, so the period owes 0.02 where rounding the combined 0.52
-  // once would owe 0.01.
-  const legs = periodTaxLegs(U("0.26"), U("0.26"), 52);
-  assert.equal(legs.federal + legs.provincial, U("0.02"));
-  assert.equal(legs.federal, U("0.01"));
+test("period tax rounds the combined deduction and reconciles its displayed legs", () => {
+  // T4127 Chapter 4 Step 6: the half-cent boundary and a realistic Ontario
+  // annual-tax pair both distinguish combined from independent rounding.
+  for (const [t1, t2, federal, provincial, total] of [
+    ["0.26", "0.26", "0.01", "0.00", "0.01"],
+    ["15438.4409", "7903.7376", "296.89", "152.00", "448.89"],
+  ] as const) {
+    const legs = periodTaxLegs(U(t1), U(t2), 52);
+    assert.equal(legs.federal + legs.provincial, U(total));
+    assert.equal(legs.federal, U(federal)); assert.equal(legs.provincial, U(provincial));
+  }
 })
