@@ -19,6 +19,7 @@
     "typescript": "6.0.3"
   },
   "overrides": {
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@ai-sdk/gateway": "3.0.150",
     "@ai-sdk/provider-utils": "4.0.39",
     "exceljs": {
